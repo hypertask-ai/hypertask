@@ -84,7 +84,9 @@ for (const enabled of [true, false]) {
         window.history[method]();
       });
     });
+    let followHistory = true;
     window.addEventListener("popstate", () => {
+      if (!followHistory) return;
       nextPath = window.location.pathname;
       serverChildren = React.createElement(Detail, { initialTask: nextPath === href(parent) ? parent : child });
       render();
@@ -141,6 +143,98 @@ for (const enabled of [true, false]) {
       await traverse("back");
       assertContent(parent);
       await traverse("forward");
+      assertContent(child);
+      // Keep both markers intact to isolate a stale Next update from RSC views.
+      for (const target of [parent, child]) {
+        await React.act(async () => {
+          cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: target.projectId, uniqueIndex: target.uniqueIndex, href: href(target), task: target });
+          nextPath = href(target);
+          serverChildren = React.createElement(Detail, { initialTask: target });
+          render();
+        });
+      }
+      followHistory = false;
+      await traverse("back");
+      assertContent(parent);
+      await traverse("forward");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(Detail, { initialTask: parent });
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "a Next update older than Forward must keep the child in the address");
+      await React.act(async () => {
+        nextPath = href(child);
+        serverChildren = React.createElement(Detail, { initialTask: child });
+        render();
+      });
+      assertContent(child);
+      followHistory = true;
+      // Next may also strip the marker while history waits for new RSC children.
+      await React.act(async () => {
+        cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
+        nextPath = href(parent);
+        serverChildren = React.createElement(Detail, { initialTask: parent });
+        render();
+      });
+      await React.act(async () => {
+        window.history.replaceState({ ...window.history.state, cachedTaskDetail: undefined }, "", href(parent));
+        nextPath = href(child);
+        serverChildren = React.createElement(Detail, { initialTask: child });
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, child.title + child.description_.content + child.comments, "Next Link renders before pushState even after native opens");
+      await React.act(async () => window.history.pushState(window.history.state, "", href(child)));
+      assertContent(child);
+      followHistory = false;
+      await traverse("back");
+      assertContent(parent);
+      await traverse("forward");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(Detail, { initialTask: parent });
+        render();
+      });
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(child);
+        serverChildren = React.createElement(Detail, { initialTask: child });
+        render();
+      });
+      assertContent(child);
+      // Acknowledgement releases history precedence for the next ordinary Link.
+      await React.act(async () => {
+        nextPath = href(related);
+        serverChildren = React.createElement(Detail, { initialTask: related });
+        render();
+      });
+      assert.equal(document.querySelector("article").textContent, related.title + related.description_.content + related.comments);
+      await React.act(async () => window.history.pushState(window.history.state, "", href(related)));
+      assertContent(related);
+      await traverse("back");
+      assertContent(child);
+      await React.act(async () => {
+        cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: parent.projectId, uniqueIndex: parent.uniqueIndex, href: href(parent), task: parent });
+        nextPath = href(child);
+        serverChildren = React.createElement(Detail, { initialTask: child });
+        render();
+      });
+      assertContent(parent);
+      await React.act(async () => {
+        nextPath = href(parent);
+        serverChildren = React.createElement(Detail, { initialTask: parent });
+        render();
+      });
+      assertContent(parent);
+      await traverse("back");
+      assertContent(child);
+      await React.act(async () => {
+        nextPath = href(related);
+        serverChildren = React.createElement(Detail, { initialTask: related });
+        render();
+      });
       assertContent(child);
     }
   });

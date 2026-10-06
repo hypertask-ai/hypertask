@@ -16,11 +16,11 @@ const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTas
   return module;
 });
 
-const subscribeToLocation = (notify: () => void) => {
-  window.addEventListener("popstate", notify);
+const subscribeToLocation = (notify: (event: Event) => void, capture = false) => {
+  window.addEventListener("popstate", notify, capture);
   window.addEventListener("cached-task-detail-navigation", notify);
   return () => {
-    window.removeEventListener("popstate", notify);
+    window.removeEventListener("popstate", notify, capture);
     window.removeEventListener("cached-task-detail-navigation", notify);
   };
 };
@@ -54,18 +54,28 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  // Next renders its new pathname before committing history. Native events can
-  // override that route for cached opens, but not outlive a subsequent Next route.
+  const historyLocation = useMemo(() => ({
+    pathname: null as string | null,
+    nextPathname: null as string | null,
+    views: new Map<string, ReactNode>(),
+  }), [accountId]);
+  if (pathname !== historyLocation.nextPathname) {
+    historyLocation.nextPathname = pathname;
+    if (pathname === historyLocation.pathname) historyLocation.pathname = null;
+  }
+  // A history traversal owns the address until Next acknowledges it. Otherwise
+  // Next Links must still render their new route before committing pushState.
   const routeLocation = useMemo(() => {
-    let currentPathname = pathname;
+    let currentPathname = historyLocation.pathname ?? pathname;
     return {
-      getSnapshot: () => currentPathname,
-      subscribe: (notify: () => void) => subscribeToLocation(() => {
+      getSnapshot: () => historyLocation.pathname === null ? currentPathname : browserPathname(),
+      subscribe: (notify: () => void) => subscribeToLocation((event) => {
         currentPathname = browserPathname();
+        if (event.type === "popstate" || historyLocation.pathname !== null) historyLocation.pathname = currentPathname;
         notify();
-      }),
+      }, true),
     };
-  }, [pathname]);
+  }, [pathname, historyLocation]);
   const nativePathname = useSyncExternalStore(
     subtaskLink ? routeLocation.subscribe : subscribeToLocation,
     subtaskLink ? routeLocation.getSnapshot : browserPathname,
@@ -149,9 +159,17 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     });
     return () => { cancelled = true; };
   }, [showDetail, EmbeddedTaskDetail, router]);
+  // Next can discard the marker and leave the previous route's children mounted
+  // during RSC loading. Reuse only a visited view for the exact address/account.
+  if (!showDetail || !EmbeddedTaskDetail) {
+    if (subtaskLink && instantTicketOpen && currentUser?.id === accountId && nativePathname) {
+      if (nativePathname !== pathname) return historyLocation.views.get(nativePathname) ?? null;
+      historyLocation.views.set(nativePathname, children);
+    }
+    return children;
+  }
   // A Suspense fallback would remount the board and replay its startup navigation.
-  if (!showDetail || !EmbeddedTaskDetail) return children;
-  return (
+  const detail = (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}
       taskId={location.taskId}
@@ -161,4 +179,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
+  if (subtaskLink && nativePathname) historyLocation.views.set(nativePathname, detail);
+  return detail;
 }
