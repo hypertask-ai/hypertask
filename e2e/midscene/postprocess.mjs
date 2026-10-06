@@ -2,6 +2,7 @@
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
+import path from 'node:path';
 
 export function escapeHtml(value) {
   return String(value).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -96,6 +97,12 @@ export function main(argv) {
   const startedAt = Date.parse(payload.startedAt) / 1000;
   if (!Number.isFinite(startedAt) || startedAt < runStartUnix - 5 || !Array.isArray(payload.results) || !payload.results.length) {
     throw new Error('Missing, invalid or STALE results; refusing to reprocess an earlier nightly run');
+  }
+  // Older runners stored paths relative to e2e/midscene, not the reporter's cwd.
+  for (const result of payload.results) {
+    if (result.screenshotPath && !path.isAbsolute(result.screenshotPath)) {
+      result.screenshotPath = path.resolve(path.dirname(resultsPath), '..', result.screenshotPath);
+    }
   }
   const dryRun = dryRunArg === '1';
   const targetState = dryRun ? `${statePath}.dry-run` : statePath;

@@ -77,10 +77,36 @@ test('both creation flows fill inline Title, save it, and verify the card after 
     assert.equal(flow.steps[saveIndex].value, input.value);
     const reloadIndex = flow.steps.findIndex((item, index) => index > saveIndex && item.action === 'goto');
     assert.ok(reloadIndex > saveIndex);
-    assert.ok(flow.steps.slice(reloadIndex + 1).some((item) => item.action === 'aiAssert' && item.arg.includes(input.value)));
+    const assertionIndex = flow.steps.findIndex((item, index) => index > reloadIndex && item.action === 'aiAssert');
+    const readinessIndex = flow.steps.findIndex((item, index) => index > reloadIndex && item.action === 'waitForTaskCard');
+    assert.ok(readinessIndex > reloadIndex && readinessIndex < assertionIndex);
+    assert.equal(flow.steps[readinessIndex].arg, input.value);
+    assert.ok(flow.steps[assertionIndex].arg.includes(input.value));
   }
   const shortcutIndex = signedIn.steps.findIndex((item) => item.action === 'aiKeyboardPress' && item.arg === 'c');
   assert.ok(shortcutIndex > 0);
   assert.match(signedIn.steps[shortcutIndex + 1].arg, /full new task editor.*Save & close/);
   assert.equal(signedIn.steps[shortcutIndex + 2].arg, 'Escape');
+});
+
+test('card readiness waits for a rendered, visible card with the exact title, not just persisted data', async () => {
+  let waiting = false;
+  const text = (textContent) => ({ textContent });
+  const card = (visible, title) => ({ getClientRects: () => visible ? [{}] : [], querySelectorAll: () => [text(title)] });
+  await runStep({ waitForFunction: async (fn, options, title) => {
+    assert.equal(options.timeout, 30_000);
+    assert.equal(title, step.value);
+    let cards = [];
+    const predicate = vm.runInNewContext(`(${fn.toString()})`, { document: { querySelectorAll: (selector) => {
+      assert.equal(selector, '.kanban-task-card');
+      return cards;
+    } } });
+    assert.equal(predicate(title), false, 'an empty/loading board must not pass');
+    cards = [card(true, `${title} extra`), card(false, title)];
+    assert.equal(predicate(title), false, 'a different or hidden card must not pass');
+    cards.push(card(true, title));
+    assert.equal(predicate(title), true);
+    waiting = true;
+  } }, {}, { action: 'waitForTaskCard', arg: step.value });
+  assert.equal(waiting, true);
 });
