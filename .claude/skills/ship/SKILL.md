@@ -39,7 +39,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Only if Valentin asked for a wireframe (ticket or chat; Valentin, 2026-10-03) | repo `wireframe` | Wireframe page on the ticket, one `Question:`, Valentin Review, remaining gates `ABANDON`ed "waiting for Valentin: wireframe choice". Without his request, skip this row: build behind a flag |
 | Before coding, `valentin-review` lane only (money, login and access, security, data that cannot be undone) | repo `interrogate`; ordinary `ai-review` work must not use it | Three design reviews judged, blockers resolved, required Valentin decision recorded |
 | Before writing UI code | repo `reuse-existing-ui` | You know which existing components you reuse |
-| The fix | repo `fix-slow-page` for speed tickets; otherwise `fix-bug` (restores intended behaviour, no flag) or `ship-feature-behind-flag` (new behaviour, flag named after the ticket) | Tests pass locally |
+| The fix | repo `fix-slow-page` for speed tickets; otherwise `fix-bug` (restores intended behaviour, bugfix flag default Everyone except saved-data/security/crash fixes) or `ship-feature-behind-flag` (new behaviour, flag named after the ticket) | Tests pass locally |
 | Before the PR | repo `simplify-before-pr`; `blast-radius` for anything outside the usual lane; plus `design-compliance` and `verify-on-phone` for UI; `update-docs` when users see a change | Each skill's own check passes |
 | Open the PR | the PR rule below, then bind it: `~/.agents/skills/ship/scripts/ship-check bind HTPR-NNNN <pr number>` | `ship-check pr HTPR-NNNN` prints `title ok` |
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |

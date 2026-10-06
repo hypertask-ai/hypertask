@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.1 - 2026-10-06
+
+- Bug fixes now use ticket-named flags defaulting to Everyone with the same
+  14-day cleanup. Saved-data, security and crash fixes remain flag-free.
+  Feature and improvement flags still default Owner + QA; developers never
+  widen feature flags. Synchronize skills, registry defaults and CI validation.
+  https://app.hypertask.ai/detail/project-4060/201
+
 ## 1.1.0 - 2026-10-04
 
 Adopt selected pstack rules for the Agent Kit:

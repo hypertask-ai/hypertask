@@ -744,7 +744,7 @@ const FEATURE_FLAG_DEFINITIONS = [
   // writes the date they expect to merge, so it can be a day early if the pull request sits
   // overnight; run the same command after merging to correct it. Upgrade path if that ever
   // matters: generate this map from git at build time.
-] as const satisfies readonly { key: string; description: string; shippedOn: string }[];
+] as const satisfies readonly { key: string; description: string; shippedOn: string; kind?: "feature" | "bugfix" | "improvement" }[];
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
 // HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
@@ -864,10 +864,18 @@ export function featureFlagModeEnabled(
   return false;
 }
 
-// HTPR-6192: a flag with no stored row is on for the owner and the QA account, never owner-only,
+// HTPR-6192: a feature flag with no stored row is on for the owner and QA, never owner-only,
 // so the QA agent can verify a feature before Valentin looks at it. Choosing Only me stays possible,
 // but it has to be set on the admin page on purpose.
 const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";
+const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
+
+function defaultFeatureFlagMode(key: string): FeatureFlagMode {
+  const definition = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
+  return definition && "kind" in definition && definition.kind === "bugfix"
+    ? DEFAULT_BUGFIX_FLAG_MODE
+    : DEFAULT_FEATURE_FLAG_MODE;
+}
 
 /**
  * The user ids a flag can possibly be on for, or null when it is on for
@@ -879,7 +887,7 @@ export async function featureFlagCandidateUserIds(
 ): Promise<number[] | null> {
   if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return [];
   const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
-  const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
+  const mode = row?.mode ?? defaultFeatureFlagMode(key);
   if (mode === "EVERYONE") return null;
   if (mode === "OFF") return [];
   return mode === "OWNER_AND_QA"
@@ -899,7 +907,7 @@ export async function isFeatureEnabled(
   });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
-  const mode = row?.mode ?? DEFAULT_FEATURE_FLAG_MODE;
+  const mode = row?.mode ?? defaultFeatureFlagMode(key);
   const includesOwner = mode === "OWNER_ONLY" || mode === "OWNER_AND_QA";
   return featureFlagModeEnabled(
     mode,
@@ -926,7 +934,7 @@ export async function listFeatureFlagModes(
     FEATURE_FLAG_KEYS.map((key) => [
       key,
       withFeatureFlagMetadata(
-        { key, mode: DEFAULT_FEATURE_FLAG_MODE, updatedAt: null, releasedAt: null, keep: false, removalTaskId: null },
+        { key, mode: defaultFeatureFlagMode(key), updatedAt: null, releasedAt: null, keep: false, removalTaskId: null },
         ticketTitleByNumber,
       ),
     ]),
@@ -1018,7 +1026,7 @@ export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<Fe
   const [row, ticketTitleByNumber] = await Promise.all([
     prisma.featureFlag.upsert({
       where: { key },
-      create: { key, mode: DEFAULT_FEATURE_FLAG_MODE, keep },
+      create: { key, mode: defaultFeatureFlagMode(key), keep },
       update: { keep },
       select: FEATURE_FLAG_ROW_SELECT,
     }),
