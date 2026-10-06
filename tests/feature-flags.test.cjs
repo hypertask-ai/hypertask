@@ -103,13 +103,24 @@ test("every declared flag without a stored row is on for the owner and QA, nobod
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
-  for (const key of flags.FEATURE_FLAG_KEYS) {
+  // HTPR-6926: a definition may set its own defaultMode; those flags are checked separately below.
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper"]);
+  for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
       [true, true, false],
       `${key} should default to owner and QA`,
     );
   }
+});
+
+test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wrapper starts Off)", async () => {
+  const key = "htpr-6926-mcp-route-wrapper";
+  assert.deepEqual(
+    await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
+    [false, false, false],
+  );
+  assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
 });
 
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {

@@ -184,6 +184,8 @@ export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
 type FeatureFlagDefinition = {
   key: string;
   kind?: FeatureFlagKind;
+  // HTPR-6926: mode used when no row is saved; wins over kind.
+  defaultMode?: FeatureFlagMode;
   description: string;
   shippedOn: string;
   related?: readonly string[];
@@ -241,9 +243,12 @@ const FEATURE_FLAG_DEFINITIONS = [
   },
   {
     key: HTPR_6926_MCP_ROUTE_WRAPPER_FLAG,
-    shippedOn: "2026-10-04",
+    shippedOn: "2026-10-06",
     description:
-      "Uses shared REST MCP scaffolding with request-local auth reuse and bounded auth logging for selected routes. Decisions refresh within 30 seconds per instance.",
+      "MCP API calls run through one shared route wrapper that checks the login once per call and keeps auth logs short. Switching takes up to 30 seconds to apply.",
+    // Off until switched on: every agent token resolves to its human owner, so Owner + QA would
+    // move all of Valentin's agents onto the new path at deploy (Infra Manager, 2026-10-06).
+    defaultMode: "OFF",
   },
   {
     key: HTPR_6927_MCP_V2_FLAG,
@@ -982,6 +987,7 @@ const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
 function defaultFeatureFlagMode(key: string): FeatureFlagMode {
   const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
+  if (definition && definition.defaultMode) return definition.defaultMode;
   return definition && "kind" in definition && definition.kind === "bugfix"
     ? DEFAULT_BUGFIX_FLAG_MODE
     : DEFAULT_FEATURE_FLAG_MODE;
