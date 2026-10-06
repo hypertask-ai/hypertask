@@ -10,7 +10,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-test("Agent Chat skill UI is always available without a feature flag lookup", async () => {
+test("Agent Chat skill UI stays available with typed transport OFF and slash skills never read flags", async () => {
   const stubs = new Map();
   const globals = ["window", "document", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
   const previousGlobals = new Map(
@@ -31,9 +31,10 @@ test("Agent Chat skill UI is always available without a feature flag lookup", as
   try {
     global.React = React;
     stubModule("src/hooks/useFlag.tsx", {
-      useFlag: () => {
+      useFlag: (key) => {
         flagChecks += 1;
-        assert.fail("Skill UI must not read a feature flag");
+        assert.equal(key, "htpr-6925-typed-api-client", "Only the settings read transport may be flagged");
+        return false;
       },
     });
     stubModule("src/components/Modals/Settings/SettingsToggle.tsx", {
@@ -97,6 +98,9 @@ test("Agent Chat skill UI is always available without a feature flag lookup", as
     for (const html of [renderSettings(SkillsSection), renderSettings(BoardSkillsSection)]) {
       assert.match(html, /@hyperai \/slug in a comment/);
     }
+
+    assert.ok(flagChecks > 0, "Settings renders exercise the typed transport flag while keeping skill UI visible");
+    flagChecks = 0;
 
     dom = new JSDOM('<div id="root"></div>', {
       url: "https://app.hypertask.ai/agent-chat",

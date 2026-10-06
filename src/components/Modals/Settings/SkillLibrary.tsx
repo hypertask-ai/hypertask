@@ -3,6 +3,10 @@
 import axios from "axios";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6925_TYPED_API_CLIENT_FLAG } from "@/lib/flags/keys";
+import { listSkills } from "@/lib/api/typedClient";
+
 import SettingsCard from "./SettingsCard";
 import SettingsToggle from "./SettingsToggle";
 
@@ -35,6 +39,7 @@ export default function SkillLibrary({
   projectId?: number;
   teamId?: string | null;
 }) {
+  const typedClient = useFlag(HTPR_6925_TYPED_API_CLIENT_FLAG);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -51,13 +56,22 @@ export default function SkillLibrary({
     [projectId, teamId]
   );
 
+  let readSkills;
+  if (typedClient) {
+    readSkills = () => listSkills(params);
+  } else {
+    readSkills = () => axios.get<{ skills: Skill[] }>("/api/ai/skills", {
+      params,
+    });
+  }
+  // Memoize by request inputs so the selected callback does not trigger a reload every render.
+  const fetchSkills = useMemo(() => readSkills, [params, typedClient]);
+
   const loadSkills = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await axios.get<{ skills: Skill[] }>("/api/ai/skills", {
-        params,
-      });
+      const response = await fetchSkills();
       setSkills(
         response.data.skills.filter((skill) =>
           scope === "project" ? skill.projectId === projectId : skill.userId !== null
@@ -68,7 +82,7 @@ export default function SkillLibrary({
     } finally {
       setLoading(false);
     }
-  }, [params, projectId, scope]);
+  }, [fetchSkills, projectId, scope]);
 
   useEffect(() => {
     void loadSkills();

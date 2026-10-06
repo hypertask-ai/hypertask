@@ -142,6 +142,18 @@ test("stable layout has its own dated Owner + QA flag and respects OFF", async (
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
 });
 
+test("typed settings API client defaults to Owner + QA and respects OFF", async () => {
+  const key = flags.HTPR_6925_TYPED_API_CLIENT_FLAG;
+  assert.equal(key, "htpr-6925-typed-api-client");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(entry.shippedOn, "2026-10-06");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6925");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+});
+
 test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", async () => {
   const key = flags.HTPR_6936_ASK_AI_FULLSCREEN_FLAG;
   assert.equal(key, "htpr-6936-ask-ai-fullscreen");
@@ -476,6 +488,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6911-search-row-highlight", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6921-slack-marketplace", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6934-server-first-screen", mode: "OWNER_AND_QA", updatedAt: null },
