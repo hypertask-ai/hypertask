@@ -22,6 +22,7 @@ import {
   toAssigneeRows,
   useAssignTaskUser,
 } from "@/hooks/Task Detail/useAssignTaskUser";
+import { beginTaskAssigneeWrite } from "@/lib/realtime/taskDetailRefresh";
 import { isAgentOption } from "@/lib/assignees";
 import { preserveHiddenAssignedOptions } from "@/lib/assignees";
 import {
@@ -167,6 +168,7 @@ const AssignModal = ({
       setFilteredUsers(flip);
       onClose(completeAssigneeRows(optimistic), true);
       const request = (lastRequest.current += 1);
+      const finishAssigneeWrite = beginTaskAssigneeWrite(task.id);
       try {
         const updatedAssignees = await assignTaskUser(user, task.id, intent);
         // Reconcile with the authoritative rows, but only from the newest
@@ -185,6 +187,8 @@ const AssignModal = ({
         applyList(rolledBack);
         setFilteredUsers(flip);
         onClose(completeAssigneeRows(rolledBack), true);
+      } finally {
+        finishAssigneeWrite();
       }
     }
   };

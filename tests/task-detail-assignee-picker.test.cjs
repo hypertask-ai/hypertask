@@ -25,7 +25,7 @@ function load(relative, dependencies, exportName = "default") {
   return exportName ? exports[exportName] : exports;
 }
 
-async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave = false, loadPath = "realtime" } = {}) {
+async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave = false, holdSave = false, loadPath = "realtime" } = {}) {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-6859/61" });
   const previous = new Map();
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document,
@@ -40,6 +40,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     return new Promise(resolve => { resolveLoad = resolve; });
   };
   t.after(async () => {
+    if (resolveSave) await React.act(async () => resolveSave());
     if (mounted) await React.act(async () => mounted.unmount());
     global.fetch = originalFetch;
     dom.window.close();
@@ -56,7 +57,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   const cachedQueryKey = ["cached-task-detail", user.id, task.id];
   const cachedQueryClient = new reactQuery.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   t.after(() => cachedQueryClient.clear());
-  let resolveReaction, pendingReaction;
+  let resolveReaction, pendingReaction, resolveSave;
   const requests = [], handlers = new Map();
   const queryClient = { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {}, refetchQueries: noop };
   const shared = { COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed", taskChannel: id => `private-task-${id}` };
@@ -75,6 +76,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   const assign = load("src/hooks/Task Detail/useAssignTaskUser.ts", {
     "axios": { default: { post: async (url, body) => {
       requests.push({ url, body });
+      if (holdSave) await new Promise(resolve => { resolveSave = resolve; });
       if (rejectSave) throw new Error("Save rejected");
       serverRows = body.intent === "unassign" ? serverRows.filter(row => row.userId !== user.id)
         : [...serverRows, { id: 1, taskId: task.id, userId: user.id, user, agentId: null, agent: null }];
@@ -100,6 +102,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     "@/hooks/General/useHandleMouse": { default: () => ({ handleMouseEnter: noop, handleMouseLeave: noop, handleMouseMove: noop }) },
     "@/lib/constants/keyboard-handler": { KeyCodes: keyCodes },
     "@/hooks/Task Detail/useAssignTaskUser": assign,
+    "@/lib/realtime/taskDetailRefresh": refresh,
     "@/lib/assignees": assignees,
     "@/lib/assigneeRecency": { getAssigneeRecencyStorage: noop, getAssigneeRecencyLockManager: noop,
       readRecentAssigneeKeys: () => [], recordRecentAssigneeUse: noop, sortAssigneeOptionsByRecency: list => list },
@@ -183,15 +186,16 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
       await React.act(async () => document.dispatchEvent(new dom.window.KeyboardEvent("keydown", { key: "Escape", keyCode: 27, bubbles: true, cancelable: true })));
       assert.equal(document.querySelector("[role=dialog]"), null);
     },
-    async completeLoad(rows = initialAssignees) {
-      assert.ok(loadStarted, "the refetch starts before selecting a person");
+    async completeSave() { await React.act(async () => { assert.ok(resolveSave, "the write is pending"); resolveSave(); }); },
+    async completeLoad(rows = initialAssignees, title = task.title) {
+      assert.ok(loadStarted, "the task fetch has started");
       await React.act(async () => {
         const loaded = loadPath === "initial" ? new Promise(resolve => {
           const unsubscribe = cachedQueryClient.getQueryCache().subscribe(event => {
             if (event.type === "updated" && event.action.type === "success") { unsubscribe(); resolve(); }
           });
         }) : undefined;
-        resolveLoad({ ok: true, status: 200, json: async () => ({ ...task, section: "Doing", assignees: rows }) });
+        resolveLoad({ ok: true, status: 200, json: async () => ({ ...task, title, section: "Doing", assignees: rows }) });
         await loaded;
       });
       await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -225,6 +229,54 @@ for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, fal
       await picker.completeLoad([]);
       assert.equal(picker.row(), "AssigneesThe Assignees", "a later remote removal without a local toggle still applies");
     }
+  });
+}
+
+for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, false]) for (const intent of ["assign", "unassign"]) {
+  test(`${loadPath}: refetch started while ${intent} is pending ${enabled ? "keeps the local row" : "retains flag-off behavior"}`, async t => {
+    const assigned = [{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }];
+    const initialAssignees = intent === "assign" ? [] : assigned;
+    const picker = await withPicker(t, { enabled, initialAssignees, holdSave: true, loadPath });
+    await picker.completeLoad();
+    await picker.open();
+    await picker.select();
+    await picker.escape();
+    const localRows = picker.state().currentTask.assignees;
+    const expected = intent === "assign" ? "AssigneesQA user" : "AssigneesThe Assignees";
+    assert.equal(picker.row(), expected);
+    assert.equal(picker.requests[0].body.intent, intent);
+    assert.deepEqual(picker.serverRows(), initialAssignees, "the outbound write has not committed");
+    await picker.refresh();
+    await picker.completeLoad(initialAssignees, "Remote title while save pending");
+    assert.equal(picker.row(), enabled ? expected : intent === "assign" ? "AssigneesThe Assignees" : "AssigneesQA user");
+    if (enabled) assert.equal(picker.state().currentTask.assignees, localRows, "no assignee reference change occurred during this fetch");
+    assert.equal(picker.state().currentTask.section, "Doing");
+    await picker.completeSave();
+    assert.equal(picker.row(), expected, "the authoritative response still applies after Escape");
+    assert.equal(picker.state().currentTask.assignees, picker.serverRows());
+    await picker.refresh();
+    await picker.completeLoad(initialAssignees);
+    assert.equal(picker.row(), intent === "assign" ? "AssigneesThe Assignees" : "AssigneesQA user", "after acknowledgement, remote changes apply normally");
+  });
+}
+
+for (const intent of ["assign", "unassign"]) {
+  test(`a failed pending ${intent} rolls back and clears refresh protection`, async t => {
+    const originalError = console.error;
+    console.error = noop;
+    t.after(() => { console.error = originalError; });
+    const assigned = [{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }];
+    const initialAssignees = intent === "assign" ? [] : assigned;
+    const picker = await withPicker(t, { initialAssignees, holdSave: true, rejectSave: true });
+    await picker.completeLoad();
+    await picker.open();
+    await picker.select();
+    await picker.escape();
+    await picker.completeSave();
+    assert.equal(picker.row(), intent === "assign" ? "AssigneesThe Assignees" : "AssigneesQA user");
+    await picker.refresh();
+    await picker.completeLoad(intent === "assign" ? assigned : []);
+    assert.equal(picker.row(), intent === "assign" ? "AssigneesQA user" : "AssigneesThe Assignees", "a failed write cannot leave a pending marker behind");
   });
 }
 
@@ -333,6 +385,28 @@ test("the shared assignee rule preserves empty removals and formerly undefined r
   assert.equal(preserve({ ...current, projectId: 3 }, fetched, start, true), fetched);
   assert.equal(preserve(null, fetched, start, true), fetched);
   assert.equal(preserve(current, fetched, start, true).title, "Server title");
+});
+
+test("pending assignee writes are counted per task and cleared only after every write finishes", () => {
+  const { beginTaskAssigneeWrite, preserveTaskAssigneesChangedDuringFetch: preserve } = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": {} }, null);
+  const current = { id: 1, projectId: 2, assignees: [] };
+  const fetched = { ...current, assignees: [{ userId: 2343 }] };
+  const finishFirst = beginTaskAssigneeWrite(current.id);
+  const finishSecond = beginTaskAssigneeWrite(current.id);
+  const finishOther = beginTaskAssigneeWrite(3);
+  try {
+    assert.equal(preserve(current, fetched, current.assignees, true).assignees, current.assignees);
+    assert.equal(preserve(current, fetched, current.assignees, false), fetched);
+    assert.equal(preserve({ ...current, id: 3 }, fetched, current.assignees, true), fetched);
+    assert.equal(preserve({ ...current, projectId: 3 }, fetched, current.assignees, true), fetched);
+    assert.equal(preserve(null, fetched, current.assignees, true), fetched);
+    finishSecond();
+    assert.equal(preserve(current, fetched, current.assignees, true).assignees, current.assignees, "an older pending write still needs protection");
+    finishFirst();
+    assert.equal(preserve(current, fetched, current.assignees, true), fetched, "a different task's pending write cannot block this refresh");
+  } finally {
+    finishOther();
+  }
 });
 
 for (const enabled of [true, false]) {
