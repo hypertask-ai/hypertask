@@ -489,7 +489,7 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
 
     // Copying a literal string cannot expose a mutable alias to its const binding.
     // Keep assignment detection, including destructuring, but allow normal reads.
-    if (name === "DEFAULT_FEATURE_FLAG_MODE" &&
+    if ((name === "DEFAULT_FEATURE_FLAG_MODE" || name === "DEFAULT_BUGFIX_FLAG_MODE") &&
         typescript.isStringLiteral(unwrapExpr(declaration.initializer))) {
       if (isBindingWrite(target)) mark(target);
       return;
@@ -658,6 +658,7 @@ function parseDefinitions(ref) {
     throw new Error("FEATURE_FLAG_DEFINITIONS must be an array literal");
   }
 
+  const kinds = [];
   const keys = definitions.elements.map((element) => {
     if (!typescript.isObjectLiteralExpression(element)) {
       throw new Error("feature flag definitions must be direct object literals");
@@ -680,6 +681,21 @@ function parseDefinitions(ref) {
       throw new Error("feature flag definition key must be a property assignment");
     }
 
+    const kindProperties = element.properties.filter((property) =>
+      property.name &&
+      ((typescript.isIdentifier(property.name) || typescript.isStringLiteral(property.name)) &&
+       property.name.text === "kind"));
+    if (kindProperties.length > 1 ||
+        (kindProperties.length === 1 && !typescript.isPropertyAssignment(kindProperties[0]))) {
+      throw new Error("feature flag kind must be one literal property assignment");
+    }
+    const kind = kindProperties.length ? unwrapExpr(kindProperties[0].initializer) : null;
+    if (kind && (!typescript.isStringLiteral(kind) ||
+        !["feature", "bugfix", "improvement"].includes(kind.text))) {
+      throw new Error("feature flag kind must be feature, bugfix or improvement");
+    }
+    kinds.push(kind?.text ?? "feature");
+
     let value = keyProperties[0].initializer;
     while (typescript.isParenthesizedExpression(value) || typescript.isAsExpression(value) ||
            typescript.isTypeAssertionExpression(value) || typescript.isSatisfiesExpression(value)) {
@@ -701,7 +717,17 @@ function parseDefinitions(ref) {
   if (!mode || !typescript.isStringLiteral(mode)) {
     throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
   }
-  return { keys, defaultMode: mode.text };
+  if (mode.text !== "OWNER_AND_QA") throw new Error("Feature flags must default to Owner + QA.");
+  const bugfixModeBinding = declarations.get("DEFAULT_BUGFIX_FLAG_MODE");
+  if (bugfixModeBinding || kinds.includes("bugfix")) {
+    if (!bugfixModeBinding?.isConst) throw new Error("DEFAULT_BUGFIX_FLAG_MODE must be declared const");
+    assertPolicyBindingImmutable(sourceFile, "DEFAULT_BUGFIX_FLAG_MODE", bugfixModeBinding.declaration);
+    const bugfixMode = unwrapExpr(bugfixModeBinding.declaration.initializer);
+    if (!bugfixMode || !typescript.isStringLiteral(bugfixMode) || bugfixMode.text !== "EVERYONE") {
+      throw new Error("Bugfix flags must default to Everyone.");
+    }
+  }
+  return { keys };
 }
 
 function parseImports(source) {
@@ -1855,6 +1881,15 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
+  // Title exemptions never permit widening a feature default to Everyone.
+  if (changedFiles.includes("src/lib/flags.ts")) {
+    try {
+      parseDefinitions(headSha);
+    } catch (error) {
+      return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);
+    }
+  }
+
   if (/^YPER4-\d+ \[[^\]]+\] \S/.test(title)) {
     return { pass: true, ownerReview: "exempt-ui", reason: "Infra ticket: no flag required" };
   }
@@ -1923,9 +1958,6 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     const ticketPrefix = `${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-`;
     if (added.length > 0 && added.some((key) => !key.startsWith(ticketPrefix))) {
       return failure(`New feature flag keys must start with ${ticketPrefix} to match this pull request.`);
-    }
-    if (headDefinitions.defaultMode !== "OWNER_AND_QA") {
-      return failure("Feature flags must default to Owner + QA.");
     }
     const ticketKeys = new Set(headDefinitions.keys.filter((key) => key.startsWith(ticketPrefix)));
     const requiredUiFiles = uiFiles.filter((path) => {

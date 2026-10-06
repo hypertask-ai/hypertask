@@ -723,3 +723,27 @@ test("the removed new-task draft flag is hidden, disabled and cannot be restored
   await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
   await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
 });
+
+test("bugfix defaults enable everyone, respect stored Off and list the same runtime mode", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "bugfix-flags-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const fixture = path.join(dir, "flags.ts");
+  // Classify one real definition only in this module fixture, not in the production registry.
+  fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+    .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", 'key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix",'));
+  const bugfixFlags = jiti(fixture);
+  const key = "htpr-6950-tooltip-top-layer";
+  assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
+  assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
+  assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
+  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-6136-figma-connect", 2343), false);
+  row = { key, mode: "OFF" };
+  assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), false);
+  assert.deepEqual(await bugfixFlags.featureFlagCandidateUserIds(key), []);
+  row = null;
+  const released = await bugfixFlags.setFeatureFlagMode(key, "EVERYONE");
+  assert.equal(released.mode, "EVERYONE");
+  assert.ok(released.releasedAt instanceof Date, "persisting the release starts the normal cleanup countdown");
+});

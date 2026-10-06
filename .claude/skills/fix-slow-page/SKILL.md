@@ -7,7 +7,7 @@ description: The fix step for a speed ticket, reproduces with speed-check, trace
 
 Use at `/ship`'s fix step for a slow board, inbox or task view. This is the how-to, not another ship map. Board writes go through `vcc`. Product Bot's speed facet measures read-only and reports one ticket; this developer session fixes it.
 
-**Flag rule (matches `fix-bug` and `INDEX.md`):** speed work with identical intended behavior is a bug fix, no flag, even when the improvement is visible. A behavior change is a feature: load `ship-feature-behind-flag`, not a disguised flag-free speed fix. Existing Merge Rules row 4 still governs speed rollout: one speed change at a time, never automatically switched on in working hours. No flag does not bypass review, deployment or QA gates.
+**Flag rule (matches `fix-bug` and `INDEX.md`):** performance work with identical output keeps its existing no-flag exemption. Other bug fixes use a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes (Valentin, 2026-10-06). A behavior change is a feature: load `ship-feature-behind-flag`, not a disguised flag-free speed fix. Existing Merge Rules row 4 still governs speed rollout: one speed change at a time, never automatically switched on in working hours. No flag does not bypass review, deployment or QA gates.
 
 ## Check each measured number
 

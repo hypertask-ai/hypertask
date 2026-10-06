@@ -43,10 +43,10 @@ ones, so older comments that cite them still point at the same rule.
 | 82 | Every new feature, screen, control, shortcut, API route, or deliberate behaviour change needs one flag named `htpr-<ticket>-<slug>`. | ship-feature-behind-flag |
 | 83 | New flags default to Owner + QA. Only Valentin widens one. | ship-feature-behind-flag |
 | 84 | Gate protected behaviour on the server. `useFlag` only hides client UI. | ship-feature-behind-flag |
-| 85 | A bug fix never gets a flag and ships to everyone, even when visible. | fix-bug |
+| 85 | A bug fix gets a ticket-named bugfix flag default Everyone, except saved-data, security and crash fixes; same 14-day cleanup. | fix-bug |
 | 86 | No flag for performance work with the same output, security fixes, dependency or CI changes, spelling fixes, or an AI CHAT ticket. | ship-feature-behind-flag |
 | 87 | A `[BUGFIX]` title is not proof. New visible behaviour dressed as a fix needs a flag. | fix-bug, INDEX.md |
-| 88 | The mechanical flag check may pass a `[BUGFIX]` or `[INFRA]` title within 150 added UI lines. The reviewer still decides from the diff. | ship-feature-behind-flag |
+| 88 | The mechanical flag check may pass a `[BUGFIX]` or `[INFRA]` title within 150 added UI lines. The reviewer still decides from the diff and enforces required bugfix flags; mechanical exemptions do not waive policy. | ship-feature-behind-flag |
 | 89 | After a flag has been on Everyone for 14 days, open a ticket to remove the flag and the dead branch. | ship-feature-behind-flag |
 | 90 | When a flagged feature is live, comment on the ticket, @mention Valentin, name the flag, and link `https://app.hypertask.ai/admin/flags`. | ship-feature-behind-flag |
 | 92 | Pull request title is `HTPR-NNNN [TYPE] ...`. | fix-bug |
@@ -69,8 +69,8 @@ ones, so older comments that cite them still point at the same rule.
 | 113 | Changelog text is user-facing. No private cross-tenant bugs, no test tickets. | update-docs |
 | 114 | Changelog entries are newest first, each linked to its ticket URL. | update-docs |
 | 116 | A user-visible change updates the matching docs page in `hypertask-ai/docs` before or alongside the app pull request. | update-docs, fix-bug, ship-feature-behind-flag |
-| 117 | New behaviour ships behind Owner + QA. Bug fixes do not. A pull request that widens a flag goes to Valentin Review. | fix-bug, ship-feature-behind-flag |
-| 118 | `verify-qa` checks flag mode for flagged features and verifies bug fixes on production with no flag. | verify-qa |
+| 117 | New behaviour defaults Owner + QA; developers never widen a feature flag. Bugfix flags default Everyone except saved-data/security/crash fixes. Widening an existing flag goes to Valentin Review. | fix-bug, ship-feature-behind-flag |
+| 118 | `verify-qa` checks Owner + QA for features and Everyone for bugfix flags; saved-data/security/crash fixes have no flag. | verify-qa |
 | 119 | UI work reuses an existing component. A new component needs a reason on the ticket and in the pull request summary. | reuse-existing-ui |
 | 120 | After the change works, simplify the diff in a separate commit. Do not change behaviour. | simplify-before-pr |
 | 123 | A scanner finding is a candidate until you confirm it by reading the route or curling a local build. A confirmed security fix uses `--lane valentin-review`. | fix-bug, `reference/security-findings.md` |

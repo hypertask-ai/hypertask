@@ -1315,3 +1315,49 @@ test('returned callback liveness rejects rebinding without confusing shadowed sy
   writeFile(fixture.dir,'src/hooks/usePreview.ts','import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork();\nexport function usePreview(){const enabled=useFlag(OTHER_FLAG);function onSave(){if(enabled)doWork();}onSave=()=>doWork();return {onSave};}\n');
   assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function callback'),fixture.dir)).pass,false);
 });
+
+test("bugfix registry kind permits Everyone while feature and improvement defaults stay restricted", async (t) => {
+  for (const kind of [undefined, "feature", "improvement", "bugfix"]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    const source = flagsSource(["OTHER_FLAG"])
+      .replace('description: "fixture"', `description: "fixture"${kind ? `, kind: "${kind}"` : ""}`) +
+      'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n';
+    writeFile(dir, "src/lib/flags.ts", source);
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "kind defaults");
+    assert.equal((await evaluate("HTPR-1 [FEATURE] gated widget", base, head, dir)).pass, true, kind);
+    // Neither a feature nor an exempt bugfix title may widen the feature default.
+    writeFile(dir, "src/lib/flags.ts", source.replace('DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"', 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE"'));
+    const widened = commit(git, "invalid feature default");
+    for (const tag of ["FEATURE", "BUGFIX", "INFRA"]) {
+      const result = await evaluate(`HTPR-1 [${tag}] gated widget`, base, widened, dir);
+      assert.equal(result.pass, false, `${kind}: ${tag}`);
+      assert.match(result.reason, /Feature flags must default to Owner \+ QA/);
+    }
+  }
+});
+
+test("bugfix kind and default must be immutable literal declarations", async (t) => {
+  for (const suffix of [
+    'const DEFAULT_BUGFIX_FLAG_MODE = "OWNER_AND_QA";',
+    'let DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";',
+    'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE"; DEFAULT_BUGFIX_FLAG_MODE = "OFF";',
+    '',
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", flagsSource().replace('description: "fixture"', 'description: "fixture", kind: "bugfix"') + suffix);
+    writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+    const head = commit(git, "invalid bugfix default");
+    assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, head, dir)).pass, false, suffix);
+  }
+  for (const kind of ['"bug"', 'someKind', '"bugfix", kind: "feature"']) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", flagsSource().replace('description: "fixture"', `description: "fixture", kind: ${kind}`) + 'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";');
+    writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+    const head = commit(git, "invalid kind");
+    assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, head, dir)).pass, false, kind);
+  }
+});

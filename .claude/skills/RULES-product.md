@@ -14,12 +14,10 @@ is not done.
 ## Flags
 
 New behaviour ships behind a flag named after the ticket, default Owner + QA.
-Bug fixes that restore behaviour that used to work ship to everyone with no
-flag, even when the fix is visible (Valentin, 2026-09-22). A `[BUGFIX]` title
-is only a hint. Only Valentin widens a flag to Everyone.
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and new-behaviour flags still default Owner + QA; developers never switch a feature flag to Everyone. A `[BUGFIX]` title is only a hint.
 
 Check the mode before judging a flagged feature. `OWNER_AND_QA` is the
-expected mode. `OWNER_ONLY` and an unapproved `EVERYONE` are failures.
+expected feature/improvement mode. Bugfix flags default to `EVERYONE`. `OWNER_ONLY` and an unapproved feature `EVERYONE` are failures.
 User 985 (`~/.config/hypertask-videos/storageState-qa.json`) sees Owner + QA
 flags. User 2343 (`storageState-qa-normal.json`) is the flag-off account.
 Pass the file with `--state`. Never print it. Never use Valentin's account.

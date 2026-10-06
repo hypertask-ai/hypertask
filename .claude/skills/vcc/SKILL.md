@@ -29,7 +29,7 @@ This skill also lives in `~/.agents/skills/vcc` so Codex sessions load it (type 
 
 ## Doing the work
 
-- Bugs ship without a flag (title `[BUGFIX]`), new behaviour behind a flag (see below).
+- Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and new-behaviour flags still default Owner + QA; developers never switch a feature flag to Everyone. Bugs use title `[BUGFIX]`; new behaviour uses the feature flow below.
 - Follow the repo CLAUDE.md and the board-15 contracts in hypertask-ai/company-skills `agents/Hypertask Product/` (merge rules, QA and safety, ticket communication). Branch off `origin/production` in your own worktree, one ticket one PR, title `HTPR-NNNN [FEATURE] ...` (or the honest type), PR body starts "Summary for non-engineers".
 - New behaviour ships behind a flag named after the ticket, default Owner + QA. Valentin judges the real thing on the live site behind the flag; never park the ticket for a mockup.
 - Product questions go on the ticket as one `Question:` comment that @mentions Valentin (via `vcc`), and the ticket moves to Valentin Review. Everything else you decide.
