@@ -603,56 +603,92 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   // CONFIRM DELETE
   const confirmDelete = async () => {
     if (instantColumnDelete && editSection && currentProject) {
+      const projectId = currentProject.id;
       const queryKey = [
         globalConstants.GetAllManageColumnsPrefixKey,
-        currentProject.id,
+        projectId,
         currentUser.id,
       ];
-      // Cancel stale reads synchronously, then remove the column before waiting
-      // for queued saves or the server. All board section lists need the patch.
-      void queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true });
-      void queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] });
-      void queryClient.cancelQueries({ queryKey, exact: true });
-      const previousProjects = queryClient.getQueryData<IProjectsAll>(["projectsAll"]);
-      const previousMinimal = queryClient.getQueriesData<IProject[]>({
-        queryKey: ["projectsAllMinimal"],
-      });
-      const previousColumns = queryClient.getQueryData<ISection[]>(queryKey);
-      const removeSection = (list?: ISection[]) =>
-        list?.filter((section) =>
-          (section.id ?? section.sectionId) !== editSection.id
-        );
-      const patch = (project: IProject) =>
-        project.id === currentProject.id
+      const matches = (section: ISection) =>
+        (section.id ?? section.sectionId) === editSection.id;
+      const removeSection = (list?: ISection[]) => list?.filter((section) => !matches(section));
+      // Put back only the deleted column, at its old place, so edits saved
+      // meanwhile survive a failed delete.
+      const restoreSection = (list?: ISection[], original?: ISection[]) => {
+        const index = original?.findIndex(matches) ?? -1;
+        if (!list || !original || index < 0 || list.some(matches)) return list;
+        return [...list.slice(0, index), original[index], ...list.slice(index)];
+      };
+      const editProject = (
+        project: IProject,
+        edit: (list?: ISection[], original?: ISection[]) => ISection[] | undefined,
+        original?: IProject
+      ) =>
+        project.id === projectId
           ? {
               ...project,
-              section: removeSection(project.section),
-              sections: removeSection(project.sections) ?? project.sections,
-              filteredSections: removeSection(project.filteredSections) ?? project.filteredSections,
+              section: edit(project.section, original?.section),
+              sections: edit(project.sections, original?.sections) ?? project.sections,
+              filteredSections:
+                edit(project.filteredSections, original?.filteredSections) ?? project.filteredSections,
             }
           : project;
-      const rollback = () => {
-        setCurrentProject(currentProject);
-        if (previousProjects) queryClient.setQueryData(["projectsAll"], previousProjects);
-        for (const [key, data] of previousMinimal) {
-          if (data) queryClient.setQueryData(key, data);
-        }
-        if (previousColumns) queryClient.setQueryData(queryKey, previousColumns);
-      };
-      setCurrentProject(patch(currentProject));
-      queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
-        cached ? { ...cached, updatedProjects: cached.updatedProjects.map(patch) } : cached
-      );
-      queryClient.setQueriesData<IProject[]>(
-        { queryKey: ["projectsAllMinimal"] },
-        (cached) => cached?.map(patch)
-      );
-      queryClient.setQueryData<ISection[]>(queryKey, (cached) => removeSection(cached));
       setEditMode(false);
       setDeleteModal(false);
-      await queueSave(() =>
-        handleSectionUpdateVis(editSection, "DELETE", undefined, undefined, rollback)
-      );
+      // Removal runs inside the save queue, after any pending rename, so it
+      // patches the latest data and no earlier save can bring the column back.
+      await queueSave(async () => {
+        void queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true });
+        void queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] });
+        void queryClient.cancelQueries({ queryKey, exact: true });
+        const previousProject = queryClient
+          .getQueryData<IProjectsAll>(["projectsAll"])
+          ?.updatedProjects.find((project) => project.id === projectId) ?? currentProject;
+        const previousMinimal = queryClient.getQueriesData<IProject[]>({
+          queryKey: ["projectsAllMinimal"],
+        });
+        const previousColumns = queryClient.getQueryData<ISection[]>(queryKey);
+        const rollback = () => {
+          setCurrentProject((project) =>
+            project ? editProject(project, restoreSection, previousProject) : project
+          );
+          queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
+            cached
+              ? {
+                  ...cached,
+                  updatedProjects: cached.updatedProjects.map((project) =>
+                    editProject(project, restoreSection, previousProject)
+                  ),
+                }
+              : cached
+          );
+          for (const [key, data] of previousMinimal) {
+            const original = data?.find((project) => project.id === projectId);
+            queryClient.setQueryData<IProject[]>(key, (cached) =>
+              cached?.map((project) => editProject(project, restoreSection, original))
+            );
+          }
+          queryClient.setQueryData<ISection[]>(queryKey, (cached) =>
+            restoreSection(cached, previousColumns)
+          );
+        };
+        setCurrentProject((project) => (project ? editProject(project, removeSection) : project));
+        queryClient.setQueryData<IProjectsAll>(["projectsAll"], (cached) =>
+          cached
+            ? {
+                ...cached,
+                updatedProjects: cached.updatedProjects.map((project) =>
+                  editProject(project, removeSection)
+                ),
+              }
+            : cached
+        );
+        queryClient.setQueriesData<IProject[]>({ queryKey: ["projectsAllMinimal"] }, (cached) =>
+          cached?.map((project) => editProject(project, removeSection))
+        );
+        queryClient.setQueryData<ISection[]>(queryKey, (cached) => removeSection(cached));
+        await handleSectionUpdateVis(editSection, "DELETE", undefined, undefined, rollback);
+      });
       return;
     }
     // Queued and awaited: firing this while a row save is still in flight used to
