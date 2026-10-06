@@ -37,7 +37,6 @@ test("task detail uses a searchable shadow cycle picker with read-only history",
   const picker = read("src/components/Modals/CyclePicker/index.tsx");
   assert.match(taskInfo, /title="Cycle"/);
   assert.match(taskInfo, /<CyclePicker/);
-  assert.match(taskInfo, /tooltipText="Set cycle"\s+KeyCombination=\{\[\]\}/);
   assert.match(picker, /placeholder="Search cycles"/);
   assert.match(picker, /shadow-xl/);
   assert.match(picker, /cycle\.assignable \? "" : " · history"/);

@@ -56,9 +56,6 @@ import { CommandMode } from "@/models/enums";
 import { RECURRENCE_LABELS, type RecurrenceRule } from "@/lib/recurrence";
 import { useGetAllMembersForAssign } from "@/hooks/MultiPages/useGetMembersForAssignees";
 import CyclePicker from "@/components/Modals/CyclePicker";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
-import { getTaskCycle } from "@/lib/api/typedClient";
 import {
   formatWaitingOnAge,
   WAITING_ON_OVERDUE_MS,
@@ -129,7 +126,6 @@ export interface ITaskInfoContainer {
 }
 
 const TaskInfo = (props: ITaskInfoContainer) => {
-  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const {
     dynamicTopValue,
     showAssignModal,
@@ -410,7 +406,7 @@ const TaskInfo = (props: ITaskInfoContainer) => {
             left={0}
             bottom={-40}
             tooltipText="Set cycle"
-            KeyCombination={[]}
+            KeyCombination={null}
           />
           <TaskInfoValue
             onClick={() => setShowCyclePicker(true)}
@@ -420,7 +416,6 @@ const TaskInfo = (props: ITaskInfoContainer) => {
           </TaskInfoValue>
           {showCyclePicker && (
             <CyclePicker
-              readCycle={typedClient ? getTaskCycle : undefined}
               assignedCycle={currentTask.cycle ?? null}
               closeHandler={() => setShowCyclePicker(false)}
               onChange={updateCycle}

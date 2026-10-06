@@ -13,7 +13,9 @@ import {
 } from "@/components/Common/CommonModalComponents";
 import type { ICycle } from "@/models/model";
 import { cycleDateRange } from "@/lib/cycles";
-import type { getTaskCycle } from "@/lib/api/typedClient";
+import { getTaskCycle } from "@/lib/api/typedClient";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6967_TYPED_TASK_READS_FLAG } from "@/lib/flags/keys";
 
 const CYCLE_API_PATH = "/api/tasks/cycle";
 
@@ -33,14 +35,13 @@ export default function CyclePicker({
   closeHandler,
   onChange,
   taskId,
-  readCycle,
 }: {
   assignedCycle: ICycle | null;
   closeHandler: () => void;
   onChange: (cycle: ICycle | null) => void;
   taskId: number;
-  readCycle?: typeof getTaskCycle;
 }) {
+  const typedClient = useFlag(HTPR_6967_TYPED_TASK_READS_FLAG);
   const [cycles, setCycles] = useState<ICycle[]>([]);
   const [enabled, setEnabled] = useState(true);
   const [keyword, setKeyword] = useState("");
@@ -52,8 +53,8 @@ export default function CyclePicker({
     const timer = window.setTimeout(async () => {
       try {
         let body: CycleListResponse;
-        if (readCycle) {
-          body = await readCycle({ taskId, ...(keyword.trim() ? { query: keyword.trim() } : {}) }, controller.signal);
+        if (typedClient) {
+          body = await getTaskCycle({ taskId, ...(keyword.trim() ? { query: keyword.trim() } : {}) }, controller.signal);
         } else {
           const params = new URLSearchParams({ taskId: String(taskId) });
           if (keyword.trim()) params.set("query", keyword.trim());
@@ -73,7 +74,7 @@ export default function CyclePicker({
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [keyword, taskId, readCycle]);
+  }, [keyword, taskId, typedClient]);
 
   const assign = async (cycle: ICycle | null) => {
     if (saving || (cycle && !cycle.assignable)) return;
