@@ -12,6 +12,8 @@ import { extractBearerToken, validateMcpAuth } from '@/lib/mcp/auth'
 import { hasAnyManagementPermission } from '@/lib/mcp/managementPermissions'
 import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
+import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
+import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
@@ -117,6 +119,8 @@ export async function mcpHandler(request: Request): Promise<Response> {
 
     const userId = Number(authInfo.clientId)
     if (Number.isFinite(userId)) telemetryUserId = userId
+    const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
+    const v2 = await isMcpV2Enabled(ctx.user.id)
     const portableTools = selectMcpTools(
       resolvePortableTools(MCP_TOOLS as PortableTool[]),
       Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId),
@@ -124,10 +128,12 @@ export async function mcpHandler(request: Request): Promise<Response> {
         managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
         teamScoped: authInfo.extra?.teamScoped === true,
         agent: authInfo.extra?.agent === true,
+        ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
       },
+      v2,
     )
     if (isLegacySseRequest(working)) {
-      return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]))
+      return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]), v2 ? portableTools : undefined)
     }
 
     return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>

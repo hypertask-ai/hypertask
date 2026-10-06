@@ -7,6 +7,8 @@ import crypto from 'node:crypto'
 import Redis from 'ioredis'
 import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from './stateless-http'
 import { selectMcpTools } from './consolidated-tools'
+import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
+import { getAgentRole } from '@/lib/mcp/agents/scopes'
 import { HTPR_6804_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
@@ -35,7 +37,8 @@ export function isLegacySseRequest(request: Request): boolean {
 export async function handleLegacySseRequest(
   request: Request,
   authInfo: AuthInfo,
-  tools: readonly PortableTool[]
+  tools: readonly PortableTool[],
+  initialTools: readonly PortableTool[] = tools,
 ): Promise<Response> {
   const url = new URL(request.url)
   const isStream = url.pathname === '/sse'
@@ -113,22 +116,28 @@ export async function handleLegacySseRequest(
     const response = Object.assign(stream, { writeHead: () => response })
     const transport = new SSEServerTransport('/message', response as unknown as ServerResponse)
     const server = new McpServer(MCP_SERVER_INFO)
-    for (const tool of tools) {
-      server.registerTool(tool.name, {
-        description: tool.description,
-        inputSchema: tool.parameters,
-      }, async (args, extra) => {
-        const token = extra.authInfo?.token
-        if (!token) throw new Error('Missing MCP bearer token')
-        return {
-          content: [{ type: 'text', text: await withMcpExecutionContext(token, extra.authInfo?.extra?.mcpAuthContext as McpAuthContext | undefined, () => tool.execute(args, token, {
-            requestId: String(extra.requestId),
-            sessionId: transport.sessionId,
-            clientFingerprint: crypto.createHash('sha256').update(token).digest('hex'),
-          })) }],
-        }
-      })
+    const registered: { remove: () => void }[] = []
+    let registeredWithV2 = initialTools.some((tool) => tool.annotations)
+    const register = (catalog: readonly PortableTool[]) => {
+      for (const tool of catalog) {
+        registered.push(server.registerTool(tool.name, {
+          description: tool.description,
+          inputSchema: tool.parameters,
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
+        }, async (args, extra) => {
+          const token = extra.authInfo?.token
+          if (!token) throw new Error('Missing MCP bearer token')
+          return {
+            content: [{ type: 'text', text: await withMcpExecutionContext(token, extra.authInfo?.extra?.mcpAuthContext as McpAuthContext | undefined, () => tool.execute(args, token, {
+              requestId: String(extra.requestId),
+              sessionId: transport.sessionId,
+              clientFingerprint: crypto.createHash('sha256').update(token).digest('hex'),
+            })) }],
+          }
+        }))
+      }
     }
+    register(initialTools)
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
     const cleanup = () => {
@@ -161,13 +170,16 @@ export async function handleLegacySseRequest(
             const userId = Number(incoming.authInfo.clientId)
             const enabled = (method === 'tools/list' || method === 'tools/call') &&
               Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
-            if (enabled) {
+            const ctx = incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined
+            const v2 = (method === 'tools/list' || method === 'tools/call') && Boolean(ctx && await isMcpV2Enabled(ctx.user.id))
+            if (enabled || v2) {
               // Resolve per message; flag changes and same-owner credentials must not reuse the opening scope.
-              const catalog = selectMcpTools(tools, true, {
+              const catalog = selectMcpTools(tools, enabled, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
-              })
+                ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
+              }, v2)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -175,6 +187,12 @@ export async function handleLegacySseRequest(
               }), incoming.authInfo, catalog, { sessionId: transport.sessionId }))
               if (rpcResponse.status !== 202) await transport.send(await rpcResponse.json())
             } else {
+              if (registeredWithV2 && (method === 'tools/list' || method === 'tools/call')) {
+                for (const tool of registered) tool.remove()
+                registered.length = 0
+                register(tools)
+                registeredWithV2 = false
+              }
               await transport.handleMessage(incoming.body, { authInfo: incoming.authInfo })
             }
           } catch {

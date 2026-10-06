@@ -9,6 +9,7 @@ export function bindMcpTools(tools: readonly PortableTool[]) {
         server.registerTool(tool.name, {
           description: tool.description,
           inputSchema: tool.parameters,
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
         }, async (args, extra) => {
           const token = extra.http?.authInfo?.token
           if (!token) throw new Error('Missing MCP bearer token')
