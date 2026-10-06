@@ -1,10 +1,11 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Define the API route
 
 import leaveProject from '@/utils/controllers/projects/leave';
 import { NextApiRequest, NextApiResponse } from 'next';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   // Check if the request is a POST request
   if (req.method === 'POST') {
     const session = await getSessionUser(
@@ -31,3 +32,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(405).json({ error: 'Method not allowed' });
   }
 }
+
+
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/leave")).POST,
+);

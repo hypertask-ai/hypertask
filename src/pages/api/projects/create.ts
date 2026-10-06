@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler } from "next";
 import create from "@/utils/controllers/projects/create";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -17,4 +18,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/create")).POST,
+);
