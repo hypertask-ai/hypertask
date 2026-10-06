@@ -263,3 +263,91 @@ for (const enabled of [true, false]) {
     }
   });
 }
+
+test("an acknowledged Next task page keeps its composer mounted when its authorized cache is seeded", async (t) => {
+  const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title", description_: { content: "Parent description" } };
+  const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title" };
+  const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
+  const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
+  const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
+  const previous = Object.fromEntries(names.map(name => [name, global[name]]));
+  Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
+  const client = new QueryClient();
+  const renderer = createRoot(document.getElementById("root"));
+  t.after(async () => {
+    await React.act(async () => renderer.unmount());
+    client.clear();
+    dom.window.close();
+    for (const name of names) global[name] = previous[name];
+  });
+  let nextPath = href(parent);
+  const NextDetail = () => React.createElement("article", null,
+    nextPath === href(parent) ? parent.title : child.title,
+    React.createElement("textarea", { "data-testid": "comment-composer", defaultValue: "Draft stays here" }));
+  const CachedDetail = ({ initialTask }) => React.createElement("article", null, initialTask.title);
+  const relativePath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
+  const baseline = process.env.SUBTASK_LINK_BASELINE === "1" ? "origin/production" : process.env.SUBTASK_LINK_BASELINE;
+  const source = baseline
+    ? execFileSync("git", ["show", `${baseline}:${relativePath}`], { cwd: root, encoding: "utf8" })
+    : fs.readFileSync(path.join(root, relativePath), "utf8");
+  const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
+  const mocks = {
+    react: React,
+    "react/jsx-runtime": require("react/jsx-runtime"),
+    "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: () => assert.fail("cached history must not fetch"), refresh: () => assert.fail("cached history must not refresh") }) },
+    "@tanstack/react-query": { useQueryClient: () => client },
+    "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
+    "@/store": { currentUserAtom: {} },
+    "@/hooks/useFlag": { useFlag: () => true },
+    "@/lib/flags/keys": flags,
+    "@/lib/navigation/cachedTaskDetail": cache,
+    "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: CachedDetail },
+  };
+  const exports = {};
+  new Function("require", "exports", compiled)(name => {
+    assert.ok(name in mocks, `Unexpected dependency: ${name}`);
+    return mocks[name];
+  }, exports);
+  const render = () => renderer.render(React.createElement(React.StrictMode, null,
+    React.createElement(exports.default, { accountId: 2343 }, React.createElement(NextDetail))));
+  await React.act(async () => render());
+  const composer = document.querySelector('[data-testid="comment-composer"]');
+  assert.ok(composer);
+  composer.value = "Unsent comment";
+  await React.act(async () => {
+    client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parent);
+    render();
+  });
+  assert.equal(composer.isConnected, true, "seeding an acknowledged route must not detach its composer");
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer);
+  assert.equal(composer.value, "Unsent comment");
+  await React.act(async () => {
+    render();
+    window.dispatchEvent(new Event("cached-task-detail-navigation"));
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "a same-address notification must not replace Next children");
+  await React.act(async () => {
+    client.setQueryData(cache.cachedTaskDetailKey(2343, child.id), child);
+    window.history.pushState({}, "", href(child));
+    nextPath = href(child);
+    render();
+  });
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), composer, "preseeded ordinary Next navigation must retain its child tree");
+  const traverse = method => React.act(async () => {
+    await new Promise(resolve => {
+      window.addEventListener("popstate", () => setImmediate(resolve), { once: true });
+      window.history[method]();
+    });
+  });
+  await traverse("back");
+  assert.equal(document.querySelector("article").textContent, parent.title, "unacknowledged Back uses the route cache, not stale Next children");
+  await React.act(async () => { nextPath = href(parent); render(); });
+  const acknowledgedComposer = document.querySelector('[data-testid="comment-composer"]');
+  assert.ok(acknowledgedComposer, "Next acknowledgement retires the cached fallback");
+  await React.act(async () => render());
+  assert.equal(document.querySelector('[data-testid="comment-composer"]'), acknowledgedComposer);
+  await traverse("forward");
+  assert.equal(document.querySelector("article").textContent, child.title, "unacknowledged Forward still uses the cached subtask");
+  await React.act(async () => { nextPath = href(child); render(); });
+  assert.ok(document.querySelector('[data-testid="comment-composer"]'), "Forward acknowledgement returns ownership to Next");
+});

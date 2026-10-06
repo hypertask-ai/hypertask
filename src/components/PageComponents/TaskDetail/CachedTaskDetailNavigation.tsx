@@ -93,13 +93,16 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     },
   );
   const route = (nativePathname ?? pathname)?.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-  const routeTask = subtaskLink && !markedLocation && instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
+  // Seeding an acknowledged Next page must not replace its mounted children.
+  const routeTask = subtaskLink && historyLocation.pathname !== null && nativePathname !== pathname &&
+    !markedLocation && instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
     ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
     : undefined;
   const location = markedLocation ?? (routeTask && accountId !== null ? {
     accountId, taskId: routeTask.id, projectId: routeTask.projectId, uniqueIndex: routeTask.uniqueIndex,
   } : undefined);
-  previousLocation.current = location;
+  // A temporary history fallback must not become a retained cached-open marker.
+  previousLocation.current = markedLocation;
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
