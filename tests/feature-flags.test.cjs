@@ -99,7 +99,7 @@ test("feature flag modes enforce owner, QA, everyone, and off access", () => {
   assert.equal(flags.featureFlagModeEnabled("OFF", true, true), false);
 });
 
-test("every feature flag without a stored row is on for the owner and QA, nobody else", async () => {
+test("declared flags default to Owner + QA, except Everyone-default bugfix flags", async () => {
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
@@ -108,8 +108,8 @@ test("every feature flag without a stored row is on for the owner and QA, nobody
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, false],
-      `${key} should default to owner and QA`,
+      [true, true, key === flags.HTPR_6962_KEEP_ASSIGNEE_FLAG],
+      `${key} should use its declared rollout default`,
     );
   }
 });
@@ -121,6 +121,15 @@ test("an explicit defaultMode wins when no row is stored (HTPR-6926 MCP route wr
     [false, false, false],
   );
   assert.equal((await flags.listFeatureFlagModes()).find((row) => row.key === key).mode, "OFF");
+});
+
+test("keep-assignee bugfix defaults to Everyone for plain QA and respects OFF", async () => {
+  const { HTPR_6962_KEEP_ASSIGNEE_FLAG: key } = flags;
+  assert.equal(key, "htpr-6962-keep-assignee");
+  assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
 });
 
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
@@ -518,6 +527,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6950-tooltip-top-layer", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-6962-keep-assignee", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
     ],

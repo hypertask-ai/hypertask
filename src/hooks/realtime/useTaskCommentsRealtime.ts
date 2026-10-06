@@ -8,6 +8,7 @@ import {
 import { taskChannel, COMMENT_EVENT, TASK_EVENT } from "@/lib/realtime/shared";
 import {
   mergeRealtimeTaskDetail,
+  preserveTaskAssigneesChangedDuringFetch,
   refreshTaskDetailQueryCache,
   shouldApplyRealtimeTaskDetail,
   shouldRefetchTaskDetail,
@@ -27,6 +28,8 @@ type UseTaskCommentsRealtimeOptions = {
   taskProjectId?: number | null;
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
+  currentTaskAssignees?: ITask["assignees"];
+  keepAssignee?: boolean;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -72,11 +75,14 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee = false,
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
   const currentTaskTitleRef = useRef(options.currentTaskTitle);
   currentTaskTitleRef.current = options.currentTaskTitle;
+  const currentTaskAssigneesRef = useRef(options.currentTaskAssignees);
+  currentTaskAssigneesRef.current = options.currentTaskAssignees;
 
   useEffect(() => {
     if (taskId == null) return;
@@ -106,6 +112,7 @@ export function useTaskCommentsRealtime(
       const includeTaskRefetch = shouldRefetchTask.current;
       const includeTaskContentSync = shouldSyncTaskContent.current;
       const titleAtFetchStart = currentTaskTitleRef.current;
+      const assigneesAtFetchStart = currentTaskAssigneesRef.current;
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
 
@@ -138,10 +145,11 @@ export function useTaskCommentsRealtime(
             })
           ) {
             setCurrentTask?.((currentTask) => {
-              const refreshed = mergeRealtimeTaskDetail(
+              const refreshed = preserveTaskAssigneesChangedDuringFetch(
                 currentTask,
-                task,
-                includeTaskContentSync
+                mergeRealtimeTaskDetail(currentTask, task, includeTaskContentSync),
+                assigneesAtFetchStart,
+                keepAssignee,
               );
               // A pre-rename response must not reset the title and feed the
               // old value into the title editor's pending autosave.
@@ -368,6 +376,7 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee,
     preserveEditorContent,
     hasPullRequests,
   ]);

@@ -83,6 +83,24 @@ export function mergeRealtimeTaskDetail<T extends RealtimeTaskStaleness>(
   };
 }
 
+export function preserveTaskAssigneesChangedDuringFetch<
+  T extends RealtimeTaskIdentity & { assignees?: unknown },
+>(
+  currentTask: T | null,
+  fetchedTask: T,
+  assigneesAtFetchStart: T["assignees"],
+  keepAssignee: boolean,
+): T {
+  // Assignment saves independently of detail reads, including the first load.
+  return keepAssignee &&
+    currentTask &&
+    currentTask.id === fetchedTask.id &&
+    currentTask.projectId === fetchedTask.projectId &&
+    currentTask.assignees !== assigneesAtFetchStart
+    ? { ...fetchedTask, assignees: currentTask.assignees }
+    : fetchedTask;
+}
+
 type TaskDetailSatelliteFields = {
   id?: number | null;
   priority?: unknown;

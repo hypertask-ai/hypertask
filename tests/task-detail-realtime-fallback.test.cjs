@@ -125,6 +125,7 @@ test("fallback reconciliation refreshes the task detail without replacing an act
         refreshTaskComments: async () => {},
       },
       "@/lib/realtime/taskDetailRefresh": {
+        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
         mergeRealtimeTaskDetail(current, fetched, includeTaskContent) {
           merges.push(includeTaskContent);
           return {
@@ -219,6 +220,7 @@ test("linked PR tasks reconcile on subscription so a pre-mount GitHub update is 
       },
       "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
       "@/lib/realtime/taskDetailRefresh": {
+        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
         refreshTaskDetailQueryCache: ({ fetchTask }) => fetchTask(),
         mergeRealtimeTaskDetail: (_current, fetched) => fetched,
         shouldApplyRealtimeTaskDetail: () => true,
