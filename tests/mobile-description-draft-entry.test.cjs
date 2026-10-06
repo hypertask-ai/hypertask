@@ -171,6 +171,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const navigationCleanups = [];
   const Navigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
     react: {
+      useMemo: factory => factory(),
       useRef: () => previousLocation,
       useState: () => [() => null],
       useSyncExternalStore: () => dom.window.location.pathname,
