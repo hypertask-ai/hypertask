@@ -226,13 +226,19 @@ case "$*" in
   *) exit 1 ;;
 esac
 MOCK
+cat > "$E/worker-bin/npx" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == wrangler ]] || exit 1
+shift
+exec "$(dirname "$0")/wrangler" "$@"
+MOCK
 chmod +x "$E/worker-bin/"*
 worker_sha=f2619e33637f2577b609be8b52234910ee61b802
 worker_deployment='{"versions":[{"version_id":"worker-version","percentage":100}]}'
 worker_version="{\"annotations\":{\"workers/message\":\"$worker_sha\"}}"
 W() {
   local want=$1 expected=$2 out got; shift 2
-  out=$(env PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent SHIP_WRANGLER=wrangler WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version" "$@" ./ship-check deployed YPER4-999); got=$?
+  out=$(env PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version" "$@" ./ship-check deployed YPER4-999); got=$?
   if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "worker: $out"
   else bad "worker: want $want $expected got $got $out"; fi
 }

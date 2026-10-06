@@ -128,8 +128,7 @@ check_deployed() {
           || fail "SHIP_WORKER must be a relative worker directory inside SHIP_CHECKOUT"
         [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "invalid merge sha for worker deployment: $sha"
         local deployment version worker="$SHIP_CHECKOUT/$SHIP_WORKER"
-        local -a wrangler
-        read -r -a wrangler <<<"${SHIP_WRANGLER:-npx wrangler}"
+        local -a wrangler=(npx wrangler)
         deployment=$(cd "$worker" && "${wrangler[@]}" deployments status --json 2>/dev/null) \
           || fail "could not read worker deployment in $worker"
         id=$(jq -er '.versions | select(type == "array" and length == 1) | .[0]
