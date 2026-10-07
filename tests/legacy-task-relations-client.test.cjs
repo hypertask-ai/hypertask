@@ -33,6 +33,12 @@ const mocks = {
   "lucide-react": { Check: icon("check"), Reply: icon("reply"), Unlink: icon("unlink"), Plus: icon("plus") },
   "next/link": { __esModule: true, default: (props) => React.createElement("a", props) },
   "next/navigation": { useSearchParams: () => new URLSearchParams("inboxFlow=true") },
+  "@tanstack/react-query": { useQueryClient: () => ({}) },
+  "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
+  "@/hooks/useFlag": { useFlag: () => false },
+  "@/lib/state": { useRecoilValue: () => null },
+  "@/store": { currentUserAtom: {} },
+  "@/lib/navigation/cachedTaskDetail": { openCachedTaskDetail: () => assert.fail("flag-off links must use Next") },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
 };
@@ -88,7 +94,7 @@ test("task-detail parent link preserves navigation/inbox flow and unlink callbac
     markup.push(renderToStaticMarkup(tree));
     const anchor = elements(tree).find((element) => element.props?.href);
     assert.equal(anchor.props.href, "/detail/project-15/40?inboxFlow=true");
-    elements(tree).find((element) => element.props?.onClick).props.onClick();
+    elements(tree).find((element) => element.type === "span" && element.props?.onClick).props.onClick();
     assert.equal(unlinked, 1);
     assert.equal(Link({ parentTask: rows[1].parentTask, projectId: 15 }), null);
   }
@@ -110,7 +116,7 @@ test("task-detail subtasks retain identical links, archive colors, playlist, and
       "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
       "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask: rows[0], editMode: "", cachedLayout: false, toggleSubtaskLinkingModal: () => linking++ }) },
       "@/store": { tasksPlayListAtom: {} },
-      "@/lib/state": { useRecoilState: () => [[], (value) => playlist.push(value)] },
+      "@/lib/state": { useRecoilState: () => [[], (value) => playlist.push(value)], useRecoilValue: () => null },
       "../../../TopRow/CreateSummaryButton": { __esModule: true, default: () => null },
       "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },
       "./TaskPagesContext": { useTaskPages: () => ({ loading: false, hasPages: false, createAndOpenPage: () => pages++ }) },

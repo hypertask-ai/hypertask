@@ -6,7 +6,14 @@ import { Unlink } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useSearchParams } from "next/navigation";
-import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
+import { preserveInboxFlowOnTaskHref, shouldFollowLinkNatively } from "@/lib/taskDetailInboxFlow";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/General/useAuth";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
+import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
+import { useRecoilValue } from "@/lib/state";
+import { currentUserAtom } from "@/store";
 
 interface SubTaskLinkProps {
   parentTask?: ITask | null;
@@ -21,6 +28,11 @@ const SubTaskLink: React.FC<SubTaskLinkProps> = ({
 }) => {
   const { callBackHandlerRemoveParent } = useUpdateSubtask()
   const inboxFlow = useSearchParams()?.get("inboxFlow");
+  const queryClient = useQueryClient();
+  const { authenticatedUserId } = useAuth();
+  const currentUser = useRecoilValue(currentUserAtom);
+  const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   if (!parentTask) {
     return null;
   }
@@ -32,6 +44,14 @@ const SubTaskLink: React.FC<SubTaskLinkProps> = ({
           `/detail/project-${projectId}/${parentTask.uniqueIndex}`,
           inboxFlow,
         )}
+        onClick={(event) => {
+          if (!subtaskLink || !instantTicketOpen || event.defaultPrevented || shouldFollowLinkNatively(event) ||
+              !currentUser?.id || authenticatedUserId !== currentUser.id || projectId === undefined) return;
+          if (openCachedTaskDetail({
+            queryClient, accountId: currentUser.id, projectId, uniqueIndex: parentTask.uniqueIndex,
+            task: parentTask, href: event.currentTarget.getAttribute("href")!,
+          })) event.preventDefault();
+        }}
         className="text-hypertasks-header-blue font-medium hover:underline cursor-pointer"
       >
         {parentTask.ticketNumber}&nbsp;{parentTask.title}

@@ -54,68 +54,38 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  const historyLocation = useMemo(() => ({
-    pathname: null as string | null,
-    nextPathname: null as string | null,
-  }), [accountId]);
-  if (pathname !== historyLocation.nextPathname) {
-    historyLocation.nextPathname = pathname;
-    if (historyLocation.pathname !== null && typeof window !== "undefined" && pathname === browserPathname()) {
-      historyLocation.pathname = null;
-    }
-  }
-  // A history traversal owns the address until Next acknowledges it. Otherwise
-  // Next Links must still render their new route before committing pushState.
-  const routeLocation = useMemo(() => {
-    let currentPathname = historyLocation.pathname ?? pathname;
-    return {
-      getSnapshot: () => historyLocation.pathname === null ? currentPathname : browserPathname(),
-      subscribe: (notify: () => void) => subscribeToLocation((event) => {
-        currentPathname = browserPathname();
-        if (event.type === "popstate" || historyLocation.pathname !== null || !window.history.state?.cachedTaskDetail) {
-          historyLocation.pathname = currentPathname;
-        }
-        // Next can acknowledge the pathname before React renders this traversal,
-        // while its RSC children still show the previous task.
-        if (event.type === "popstate" && currentPathname !== pathname && instantTicketOpen &&
-            accountId !== null && currentUser?.id === accountId) {
-          const route = currentPathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-          const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-          if (task) previousLocation.current = {
-            accountId, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-          };
-        }
-        notify();
-      }, true),
-    };
-  }, [pathname, historyLocation, instantTicketOpen, accountId, currentUser?.id, queryClient]);
+  const subscribeToTaskHistory = useMemo(() => (notify: () => void) => {
+    let currentPathname = browserPathname();
+    return subscribeToLocation((event) => {
+      const nextPathname = browserPathname();
+      // Direct Next pages have no cached marker. Recover them only on traversal,
+      // before Next acknowledges the URL with potentially stale RSC children.
+      if (event.type === "popstate" && nextPathname !== currentPathname && instantTicketOpen &&
+          accountId !== null && currentUser?.id === accountId) {
+        const route = nextPathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
+        if (task) previousLocation.current = {
+          accountId, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+        };
+      }
+      currentPathname = nextPathname;
+      notify();
+    }, true);
+  }, [instantTicketOpen, accountId, currentUser?.id, queryClient]);
+  // Cached opens retain Next's source tree, so popstate updates independently.
   const nativePathname = useSyncExternalStore(
-    subtaskLink ? routeLocation.subscribe : subscribeToLocation,
-    subtaskLink ? routeLocation.getSnapshot : browserPathname,
+    subtaskLink ? subscribeToTaskHistory : subscribeToLocation,
+    browserPathname,
     serverPathname,
   );
   // Next can replace custom history state while refreshing the same route.
-  const markedLocation = cachedTaskDetailLocation(
+  const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
     instantTicketOpen && currentUser?.id === accountId ? accountId : null,
     typeof window === "undefined" ? null : {
       cachedTaskDetail: window.history.state?.cachedTaskDetail ?? previousLocation.current,
     },
   );
-  const route = (nativePathname ?? pathname)?.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-  // Seeding an acknowledged Next page must not replace its mounted children.
-  const routeTask = subtaskLink && historyLocation.pathname !== null && nativePathname !== pathname &&
-    !markedLocation && instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
-    ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
-    : undefined;
-  // An already mounted cached view can hand off a Link before its new RSC arrives.
-  const cachedTask = routeTask ?? (subtaskLink && previousLocation.current?.accountId === accountId && !markedLocation &&
-    instantTicketOpen && accountId !== null && currentUser?.id === accountId && route
-    ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]))
-    : undefined);
-  const location = markedLocation ?? (cachedTask && accountId !== null ? {
-    accountId, taskId: cachedTask.id, projectId: cachedTask.projectId, uniqueIndex: cachedTask.uniqueIndex,
-  } : undefined);
   previousLocation.current = location;
   useEffect(() => {
     if (!location) return;
@@ -169,9 +139,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (timer !== undefined) window.clearTimeout(timer);
     };
   }, [instantTicketOpen, accountId, currentUser?.id, pathname]);
-  const task = location && (queryClient.getQueryData<ITask>(
+  const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
-  ) ?? cachedTask);
+  );
   useEffect(() => {
     if (location && !task) router.replace(window.location.pathname + window.location.search + window.location.hash);
   }, [location, task, router]);
@@ -187,10 +157,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     return () => { cancelled = true; };
   }, [showDetail, EmbeddedTaskDetail, router]);
   // A Suspense fallback would remount the board and replay its startup navigation.
-  if (!showDetail || !EmbeddedTaskDetail) {
-    if (subtaskLink && historyLocation.pathname !== null && nativePathname !== pathname) return null;
-    return children;
-  }
+  if (!showDetail || !EmbeddedTaskDetail) return children;
   return (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}
