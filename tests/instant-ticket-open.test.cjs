@@ -15,7 +15,7 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => true },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
@@ -77,9 +77,10 @@ new Function("require", "exports", "ChatRuntimeHost", "AIChatClosedLayout", "Ful
 for (const mobile of [true, false]) {
   test(`${mobile ? "phone" : "desktop"} ticket shell renders immediately while chat is pending and does not remount when it resolves`, async () => {
     const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/project?id=6859" });
-    const previous = { window: global.window, document: global.document, act: global.IS_REACT_ACT_ENVIRONMENT };
+    const previous = { window: global.window, document: global.document, Event: global.Event, act: global.IS_REACT_ACT_ENVIRONMENT };
     global.window = dom.window;
     global.document = dom.window.document;
+    global.Event = dom.window.Event;
     window.requestAnimationFrame = () => 1;
     window.cancelAnimationFrame = () => {};
     global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -120,6 +121,7 @@ for (const mobile of [true, false]) {
       await React.act(async () => reactRoot.unmount());
       global.window = previous.window;
       global.document = previous.document;
+      global.Event = previous.Event;
       global.IS_REACT_ACT_ENVIRONMENT = previous.act;
       dom.window.close();
     }

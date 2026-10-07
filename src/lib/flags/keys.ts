@@ -17,6 +17,7 @@ export const HTPR_6899_STABLE_LAYOUT_FLAG = "htpr-6899-stable-layout";
 export const HTPR_6950_TOOLTIP_TOP_LAYER_FLAG = "htpr-6950-tooltip-top-layer";
 export const HTPR_6962_KEEP_ASSIGNEE_FLAG = "htpr-6962-keep-assignee";
 export const HTPR_6972_SUBTASK_LINK_FLAG = "htpr-6972-subtask-link";
+export const HTPR_7000_INBOX_NEXT_OPEN_FLAG = "htpr-7000-inbox-next-open";
 export const HTPR_6978_SIZE_LABEL_CLICK_FLAG = "htpr-6978-size-label-click";
 export const HTPR_6980_INSTANT_COLUMN_DELETE_FLAG = "htpr-6980-instant-column-delete";
 export const HTPR_6985_DELETE_VIEW_ONCE_FLAG = "htpr-6985-delete-view-once";

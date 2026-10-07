@@ -46,8 +46,8 @@ function navigationMocks(client, enabled, pathname, react = React) {
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6972-subtask-link") return false; assert.equal(key, flag); return enabled(); } },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6972-subtask-link") return false; if (key === "htpr-7000-inbox-next-open") return true; assert.equal(key, flag); return enabled(); } },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ initialTask }) => React.createElement("article", { id: "ticket" }, initialTask.title, initialTask.description_.content) },
     "@/lib/navigation/cachedTaskDetail": cache,
   };

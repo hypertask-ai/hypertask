@@ -8,7 +8,7 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
@@ -48,6 +48,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
 }) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
+  const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -57,6 +58,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
   // Cached opens retain Next's source tree, so popstate must update the view independently.
   const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
+  useEffect(() => {
+    // Next commits router push/replace in an insertion effect without a native location event.
+    if (inboxNextOpen) window.dispatchEvent(new Event("cached-task-detail-navigation"));
+  }, [inboxNextOpen, pathname]);
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
