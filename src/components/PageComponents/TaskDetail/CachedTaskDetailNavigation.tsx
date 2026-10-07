@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
@@ -25,7 +26,6 @@ const subscribeToLocation = (notify: () => void) => {
   };
 };
 const browserPathname = () => window.location.pathname;
-const browserCachedLocation = () => JSON.stringify([window.location.pathname, window.history.state?.cachedTaskDetail?.taskId ?? null]);
 const serverPathname = () => null;
 
 const warmTaskDetail = () => Promise.all([
@@ -53,12 +53,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const router = useRouter();
   const currentUser = useRecoilValue(currentUserAtom);
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
-  const sourcePath = useRef(pathname);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  // Include the marker: Next can publish the popstate pathname before we restore its cached task.
-  const nativeLocation = useSyncExternalStore(subscribeToLocation, subtaskLink ? browserCachedLocation : browserPathname, serverPathname);
-  const nativePathname: string | null = subtaskLink && nativeLocation ? JSON.parse(nativeLocation)[0] : nativeLocation;
+  // Cached opens retain Next's source tree, so popstate must update the view independently.
+  const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
@@ -69,34 +67,23 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
-    if (!subtaskLink) return;
-    // Next may commit during popstate before our listener runs; retain the source until dispatch ends.
-    queueMicrotask(() => { sourcePath.current = window.location.pathname; });
-  }, [subtaskLink, nativePathname]);
-  useEffect(() => {
     if (!subtaskLink || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
-    const recordSourcePath = () => { sourcePath.current = window.location.pathname; };
-    const restoreCachedTask = (event: PopStateEvent) => {
-      const changedTask = window.location.pathname !== sourcePath.current;
-      recordSourcePath();
-      if (!changedTask) return;
+    const restoreCachedTask = (event: Event) => {
+      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
+      if (window.location.pathname === sourcePath) return;
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
       if (!task) return;
-      // Next can discard the marker or remount this wrapper; traversal cannot depend on either.
-      event.stopImmediatePropagation();
-      openCachedTaskDetail({
+      // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
+      (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
+      flushSync(() => openCachedTaskDetail({
         queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
         task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
-      });
+      }));
     };
-    window.addEventListener("popstate", restoreCachedTask, true);
-    window.addEventListener("cached-task-detail-navigation", recordSourcePath);
-    return () => {
-      window.removeEventListener("popstate", restoreCachedTask, true);
-      window.removeEventListener("cached-task-detail-navigation", recordSourcePath);
-    };
-  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient]);
+    window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
+    return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
+  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {

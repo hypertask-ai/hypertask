@@ -244,7 +244,8 @@ test("background history refreshes preserve the mounted cached detail, but route
   const previousLocation = { current: undefined };
   const Detail = () => null;
   const mocks = {
-    "react": { useMemo: (factory) => factory(), useRef: () => previousLocation, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
+    "react-dom": { flushSync: callback => callback() },
+    "react": { useMemo: (factory) => factory(), useRef: value => value === undefined ? previousLocation : { current: value }, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
     "@tanstack/react-query": { useQueryClient: () => queryClient },

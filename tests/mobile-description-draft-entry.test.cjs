@@ -170,6 +170,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const previousLocation = { current: undefined };
   const navigationCleanups = [];
   const Navigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
+    "react-dom": { flushSync: callback => callback() },
     react: {
       useMemo: factory => factory(),
       useRef: value => value === undefined ? previousLocation : { current: value },

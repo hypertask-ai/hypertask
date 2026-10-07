@@ -62,6 +62,7 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     },
   };
   const Navigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
+    "react-dom": require("react-dom"),
     react: React,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => nextPath, useRouter: () => router },

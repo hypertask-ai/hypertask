@@ -17,6 +17,8 @@ const inbox = jiti(path.join(root, "src/lib/taskDetailInboxFlow.ts"));
 const navigationFile = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
 const descriptionFile = "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionSubTasks/DescriptionSubTasks.tsx";
 const parentFile = "src/components/PageComponents/TaskDetail/TopRow/SubtaskLink.tsx";
+const historyBootScript = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8").match(/id="ht-cached-task-history"\s+dangerouslySetInnerHTML=\{\{\s+__html: "([^"]+)"/)?.[1];
+assert.ok(historyBootScript, "the root must register cached history before Next hydration");
 const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title", description_: { content: "Parent body" }, subTasks: [] };
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" }, parentTask: parent };
 child.parentTask = { ...parent, subTasks: [{ ...child, parentTask: null }] };
@@ -27,10 +29,10 @@ function load(file, mocks, ref = process.env.SUBTASK_LINK_BASELINE) {
   const source = ref ? execFileSync("git", ["show", `${ref}:${file}`], { cwd: root, encoding: "utf8" }) : fs.readFileSync(path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
-  new Function("require", "exports", compiled)(name => {
+  new Function("require", "exports", "queueMicrotask", compiled)(name => {
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
-  }, exports);
+  }, exports, mocks.queueMicrotask ?? queueMicrotask);
   return exports.default;
 }
 
@@ -52,9 +54,11 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   let settleTraversal;
   let nextTraversals = 0;
   let restoreNextRoute = () => {};
+  let nativeCheckpoints = false;
   window.addEventListener("popstate", () => {
     if (settleTraversal) { const resolve = settleTraversal; settleTraversal = null; setImmediate(resolve); }
   }, true);
+  new Function("window", "CustomEvent", historyBootScript)(window, window.CustomEvent);
   // Native Window popstate runs in registration order, unlike jsdom's synthetic capture ordering.
   window.addEventListener("popstate", () => { nextTraversals++; restoreNextRoute(); }, true);
   const renderer = createRoot(document.getElementById("root"));
@@ -69,7 +73,10 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   let instant = true, account = 2343, authenticated = 2343;
   const playlists = [];
   const router = { replace: () => assert.fail("cached task history must not fetch a Next route"), refresh: () => assert.fail("cached task history must not refresh") };
+  let syncCommits = 0;
   const mocks = {
+    "react-dom": { flushSync: callback => { syncCommits++; return flushSync(callback); } },
+    queueMicrotask: callback => nativeCheckpoints ? callback() : queueMicrotask(callback),
     react: React, "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => nextPath, useRouter: () => router, useSearchParams: () => new URLSearchParams("inboxFlow=true") },
     "next/link": { __esModule: true, default: ({ children, ...props }) => React.createElement("a", props, children) },
@@ -130,6 +137,8 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
     server(task) { serverTask = task; children = React.createElement(ServerDetail); nextPath = href(task); render(); },
     remount() { navigationKey++; render(); },
     nativeNext() {
+      // Native dispatch flushes microtasks before invoking the next listener.
+      nativeCheckpoints = true;
       restoreNextRoute = () => flushSync(() => {
         window.history.replaceState({}, "", window.location.href);
         nextPath = window.location.pathname;
@@ -137,7 +146,7 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
       });
     },
     instant(value) { instant = value; }, account(value) { account = value; }, authenticated(value) { authenticated = value; },
-    nextTraversals: () => nextTraversals };
+    nextTraversals: () => nextTraversals, syncCommits: () => syncCommits };
 }
 
 for (const direct of [false, true]) {
@@ -166,7 +175,8 @@ for (const direct of [false, true]) {
     await React.act(async () => f.next(child)); f.assertContent(parent);
     await React.act(async () => f.next(parent)); f.assertContent(parent);
     await f.traverse("forward"); f.assertContent(child);
-    assert.equal(f.nextTraversals(), nextTraversalsBefore + 2, "Next's native listener runs before cached Back/Forward recovery");
+    assert.equal(f.nextTraversals(), nextTraversalsBefore, "cached Back/Forward must run before Next's native listener");
+    assert.equal(f.syncCommits(), 2, "cached Back/Forward must commit before the native listener returns");
     await React.act(async () => f.next(parent)); f.assertContent(child);
     await React.act(async () => f.next(child)); f.assertContent(child);
     await f.click(parent); f.assertContent(parent);
@@ -194,7 +204,7 @@ test("cached traversal survives an unmarked matching Next page without a remembe
   assert.equal(window.history.state.cachedTaskDetail?.taskId, parent.id, "cached Back must survive losing the remembered location");
   f.assertContent(parent);
   await f.traverse("forward"); f.assertContent(child);
-  assert.equal(f.nextTraversals(), 2);
+  assert.equal(f.nextTraversals(), 0);
 });
 
 test("native Next popstate cannot remove cached recovery or hide a same-path marker change", async t => {

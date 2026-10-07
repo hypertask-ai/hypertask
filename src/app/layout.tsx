@@ -98,6 +98,13 @@ export default async function RootLayout(
       data-theme={themeValue}
     >
       <head>
+        {/* Window popstate follows registration order even for capture listeners. */}
+        <script
+          id="ht-cached-task-history"
+          dangerouslySetInnerHTML={{
+            __html: "window.addEventListener('popstate',function(event){window.dispatchEvent(new CustomEvent('cached-task-detail-popstate',{detail:event}));},true);",
+          }}
+        />
         {firstScreen && ["amoled", "graphite", "porcelain"].includes(firstScreen.display.theme) && (
           <link rel="preload" href={IBM_PLEX_SANS_LATIN_FONT_HREF} as="font" type="font/woff2" crossOrigin="anonymous" />
         )}
