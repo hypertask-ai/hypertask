@@ -141,14 +141,20 @@ async function runStep(page, agent, step, fixture) {
       return;
     }
     case 'goto': {
-      try {
-        await page.goto(step.arg, { waitUntil: 'networkidle2', timeout: 60_000 });
-        return { resolvedUrl: step.arg };
-      } catch (err) {
-        const message = err?.message || String(err);
-        if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;
-        await page.goto(step.fallback, { waitUntil: 'networkidle2', timeout: 60_000 });
-        return { resolvedUrl: step.fallback };
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await page.goto(step.arg, { waitUntil: 'networkidle2', timeout: 60_000 });
+          return { resolvedUrl: step.arg };
+        } catch (err) {
+          const message = err?.message || String(err);
+          if (step.retryNetworkChange && attempt === 0 && /\bnet::ERR_NETWORK_CHANGED\b/.test(message)) {
+            console.warn(`Navigation interrupted by a network change; retrying ${step.arg} once`);
+            continue;
+          }
+          if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;
+          await page.goto(step.fallback, { waitUntil: 'networkidle2', timeout: 60_000 });
+          return { resolvedUrl: step.fallback };
+        }
       }
     }
     case 'aiWaitFor':

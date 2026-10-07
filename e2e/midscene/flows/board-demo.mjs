@@ -6,7 +6,7 @@ export default {
   description: 'Opens the anonymous demo board and checks the kanban columns load with cards.',
   safe: true,
   steps: [
-    { action: 'goto', arg: 'https://app.hypertask.ai/demo' },
+    { action: 'goto', arg: 'https://app.hypertask.ai/demo', retryNetworkChange: true },
     {
       action: 'aiWaitFor',
       arg: 'a kanban board with at least one column and one task card is visible',
