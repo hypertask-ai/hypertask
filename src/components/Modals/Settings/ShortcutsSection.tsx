@@ -12,7 +12,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG, HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
   const isApple = useDeviceContext();
@@ -21,7 +21,6 @@ const ShortcutsSection = () => {
   const consistentCommentShortcuts = useFlag(
     "htpr-5913-consistent-comment-shortcuts",
   );
-  const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
@@ -38,7 +37,6 @@ const ShortcutsSection = () => {
     isApple,
     appShellRailOn,
     consistentCommentShortcuts,
-    keepDirectTaskOpen,
     historyToggleLabel,
     includeComposeTaskShortcut,
     newTaskWindow,

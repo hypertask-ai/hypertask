@@ -117,8 +117,6 @@ export const HTPR_6555_IDLE_COMMENT_MIC_FLAG = "htpr-6555-idle-comment-mic";
 export const HTPR_6553_AGENT_CHAT_POLLING_FLAG =
   "htpr-6553-agent-chat-polling";
 export const HTPR_6557_AGENT_ROOMS_FLAG = "htpr-6557-agent-rooms";
-export const HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG =
-  "htpr-6559-keep-direct-task-open-after-comment";
 export const HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG =
   "htpr-6556-mobile-description-first";
 export const HTPR_6561_DESCRIPTION_STRUCTURE_FLAG =

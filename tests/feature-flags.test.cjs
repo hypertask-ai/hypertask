@@ -528,11 +528,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
         updatedAt: null,
       },
       {
-        key: "htpr-6559-keep-direct-task-open-after-comment",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
         key: "htpr-6561-preserve-ai-edited-description-structure",
         mode: "OWNER_AND_QA",
         updatedAt: null,

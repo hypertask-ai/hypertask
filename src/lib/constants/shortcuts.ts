@@ -25,7 +25,6 @@ export const getKeyboardShortcuts = (
   isApple: boolean,
   appShellRailOn = false,
   consistentCommentShortcuts = false,
-  keepDirectTaskOpen = false,
   historyToggleLabel = "Toggle history events",
   composeTaskWriter = false,
   newTaskWindow = false,
@@ -155,9 +154,7 @@ export const getKeyboardShortcuts = (
         ...(consistentCommentShortcuts
           ? [
               {
-                shortTitle: keepDirectTaskOpen
-                  ? "Send comment and advance in Inbox"
-                  : "Send comment and move to next task",
+                shortTitle: "Send comment and advance in Inbox",
                 pressKey: [cmdControl, "ENTER"],
               },
               { shortTitle: "Send comment and stay on task", pressKey: [cmdControl, "SHIFT", "ENTER"] },
