@@ -78,8 +78,17 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
       if (pending.size && frame === null) frame = window.requestAnimationFrame(restore);
     };
     const onScroll = (event: Event) => {
-      const scroller = [...getScrollers().values()].find(({ element }) => element === event.target || (element === document.scrollingElement && event.target === document));
-      if (!scroller) return;
+      const entry = [...getScrollers()].find(([, { element }]) => element === event.target || (element === document.scrollingElement && event.target === document));
+      if (!entry) return;
+      const [key, scroller] = entry;
+      const target = targets.get(key);
+      // Refocusing an already-active card emits no focusin, but can explicitly scroll it.
+      if (protectFocus && !pending.has(key) && target !== undefined && Math.abs(scroller.element[scroller.axis] - target) >= 1) {
+        pending.set(key, target);
+        applied.delete(scroller.element);
+        scheduleRestore();
+        return;
+      }
       // Mount-time focus can scroll before the first restoration frame.
       if (pending.size && (!applied.has(scroller.element) || applied.get(scroller.element) === scroller.element[scroller.axis])) return;
       stopRestore();
