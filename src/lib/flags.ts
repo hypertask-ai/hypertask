@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG,
   HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
   HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
@@ -305,6 +306,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-10-05",
     description: "Shows the Task Writer's current step in the New Task window instead of only a spinner. Requires the New Task window flag.",
     related: [HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG],
+  },
+  {
+    key: HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
+    shippedOn: "2026-10-07",
+    description: "Quick add inherits the open board view labels, assignees, priority and size so the new card stays visible immediately.",
+    kind: "bugfix",
   },
   {
     key: HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG,

@@ -649,6 +649,7 @@ const handler: NextApiHandler = async (
         priority: priorityCreated,
         estimate: estimateCreated,
         taskLabels: tagsCreated,
+        assignees: assignmentsCreated,
         relatedTasks,
       },
       error: false,

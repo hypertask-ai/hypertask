@@ -28,6 +28,7 @@ import { useEffect } from "react";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { shouldShowGuestWriterIntro } from "@/lib/demo/guestBoardBuild";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useGetAllProjectsMinimal } from "../useGetAllProjectsMinimal";
 import { useHyperMention } from "./useHyperMention";
@@ -201,9 +202,7 @@ const useCreateTaskModalGlobalStates = () => {
         createTaskModal.duplicate?.taskLabels.map(
           (taskLabel: any) => taskLabel.label
         ) ??
-        getActiveFiltersFromProject(_currentProject).addedFilters.find(
-          (filter) => filter.type === "Labels"
-        )?.searchPayload,
+        getNewTaskViewDefaults(getActiveFiltersFromProject(_currentProject)).tags,
       currentProject: _currentProject ?? undefined,
     }),
     [
@@ -414,9 +413,7 @@ const useCreateTaskModalGlobalStates = () => {
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
     const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
-    const tags = getActiveFiltersFromProject(project).addedFilters.find(
-      (filter) => filter.type === "Labels"
-    )?.searchPayload;
+    const tags = getNewTaskViewDefaults(getActiveFiltersFromProject(project)).tags;
     formValuesRef.current = {
       ...formValuesRef.current,
       title: clearGeneratedTitle ? "" : formValuesRef.current.title,

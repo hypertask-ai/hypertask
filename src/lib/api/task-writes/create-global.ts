@@ -502,6 +502,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         priority: priorityCreated,
         estimate: estimateCreated,
         taskLabels: tagsCreated,
+        assignees: assignmentsCreated,
         relatedTasks,
       },
       error: false,

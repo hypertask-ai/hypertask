@@ -148,3 +148,5 @@ export const HTPR_6926_MCP_ROUTE_WRAPPER_FLAG = "htpr-6926-mcp-route-wrapper";
 
 export const HTPR_6975_TYPED_WRITES_FLAG = "htpr-6975-typed-writes";
 export const HTPR_6979_TYPED_WRITES_FLAG = "htpr-6979-typed-writes-sections-notifications";
+
+export const HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG = "htpr-6993-quick-add-view-context";
