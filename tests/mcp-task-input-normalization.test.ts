@@ -3,7 +3,8 @@ import test from 'node:test'
 
 import { UpdateTaskInputSchema } from '../src/lib/mcp-server/validations/task.validation'
 import { normalizeTaskInput } from '../src/lib/mcp-server/utils/normalize-task-input'
-import { isAcceptedRichTextInput } from '../src/utils/helperFunctions/markdownToHtml'
+import { validateTaskUpdateFields } from '../src/lib/mcp/tasks/fields/validateFields'
+import { NextResponse } from 'next/server'
 
 test('update_task keeps descriptions that link to another Hypertask ticket', () => {
   const input = {
@@ -20,11 +21,21 @@ test('update_task keeps descriptions that link to another Hypertask ticket', () 
   assert.deepEqual(normalized, input)
 })
 
-test('plain text is distinguishable from the previously accepted rich-text contract', () => {
-  assert.equal(isAcceptedRichTextInput('Plain API description'), false)
-  assert.equal(isAcceptedRichTextInput('<p>HTML description</p>', 'html'), true)
-  assert.equal(isAcceptedRichTextInput('**Markdown description**'), true)
-  assert.equal(isAcceptedRichTextInput('Plain markdown description', 'markdown'), true)
+test('task update accepts plain text and stores editor paragraphs without a flag', async () => {
+  for (const dryRun of [false, true]) {
+    const body = { description: 'Problem context\n\nAdd to cart is restricted.' }
+    const result = await validateTaskUpdateFields(body, dryRun)
+
+    assert.ok(!(result instanceof NextResponse))
+    assert.equal(body.description, '<p>Problem context</p><p>Add to cart is restricted.</p>')
+  }
+})
+
+test('task update still rejects empty descriptions without a flag', async () => {
+  const result = await validateTaskUpdateFields({ description: '   ' }, false)
+
+  assert.ok(result instanceof NextResponse)
+  assert.equal(result.status, 400)
 })
 
 test('task reference normalization still accepts a Hypertask URL as ticket_number', () => {

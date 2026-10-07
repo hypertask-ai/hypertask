@@ -12,10 +12,6 @@ import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } 
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
 
-import { isFeatureEnabled } from '@/lib/flags';
-import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys';
-import { isAcceptedRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
-
 export interface CreateTaskResponse {
     success: boolean;
     idempotent_replayed?: true;
@@ -96,24 +92,6 @@ export async function POST(request: NextRequest) {
             return NextResponse.json(
                 {
                     ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
-                    ...(dryRun && { valid: false }),
-                    ...(correlationId && { correlationId })
-                },
-                { status: 400 }
-            );
-        }
-        if (
-            body.description !== undefined &&
-            !isAcceptedRichTextInput(body.description, body.content_type) &&
-            !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
-        ) {
-            return NextResponse.json(
-                {
-                    ...buildFieldError(
-                        'invalid_field',
-                        'description',
-                        'Description must be HTML or structural markdown. Plain text is not enabled.'
-                    ),
                     ...(dryRun && { valid: false }),
                     ...(correlationId && { correlationId })
                 },

@@ -1,8 +1,6 @@
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { assertSafeWebhookTarget } from "@/lib/mcp/webhooks/ssrfGuard";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
 
 // Load the full content (title, description, all comments) of specific tickets so
 // AI surfaces always have the ticket the user is looking at — instead of relying on
@@ -59,18 +57,8 @@ export async function loadCurrentTaskContext(
   });
   if (tasks.length === 0) return "";
 
-  const preserveDescriptionStructure = await isFeatureEnabled(
-    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-    userId
-  );
   return tasks
-    .map((task) =>
-      formatTaskContext(
-        task,
-        options?.role ?? "primary",
-        preserveDescriptionStructure
-      )
-    )
+    .map((task) => formatTaskContext(task, options?.role ?? "primary"))
     .join("\n\n");
 }
 
@@ -206,13 +194,9 @@ export function formatTaskContext(
       creator: { displayName: string | null; email: string | null } | null;
     }>;
   },
-  role: "primary" | "related" = "primary",
-  preserveDescriptionStructure = false
+  role: "primary" | "related" = "primary"
 ): string {
-  const descriptionHtml = task.description_?.content?.trim() ?? "";
-  const description = preserveDescriptionStructure
-    ? descriptionHtml
-    : htmlToText(descriptionHtml);
+  const description = task.description_?.content?.trim() ?? "";
   const comments = task.comments
     .map((c) => {
       const text = htmlToText(
@@ -240,9 +224,7 @@ export function formatTaskContext(
   return [
     heading,
     `Title: ${task.title}`,
-    preserveDescriptionStructure
-      ? `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`
-      : `Description: ${description || "(empty)"}`,
+    `Description HTML (preserve this block structure when editing): ${description || "(empty)"}`,
     "",
     "Comments (oldest first):",
     comments.length ? comments.join("\n") : "(no comments)",

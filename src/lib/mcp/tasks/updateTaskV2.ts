@@ -19,7 +19,7 @@ async function validate(options: ExecuteTaskUpdateOptions) {
     const denied = await requireRole(ctx, 'write')
     if (denied) return denied
   }
-  const fields = await validateTaskUpdateFields(requestBody, dryRun, ctx.user)
+  const fields = await validateTaskUpdateFields(requestBody, dryRun)
   if (fields instanceof NextResponse) return fields
   const identifiers = validateTaskUpdateIdentifiers(requestBody, dryRun, fields)
   if (identifiers instanceof NextResponse) return identifiers

@@ -6,7 +6,6 @@ import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
 import prisma from '@/lib/prisma'
@@ -21,10 +20,7 @@ import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
 import { CONTENT_TYPE_ALLOWED_VALUES } from '@/lib/mcp/tasks/validators'
-import {
-  formatRichTextInput,
-  isAcceptedRichTextInput,
-} from '@/utils/helperFunctions/markdownToHtml'
+import { formatRichTextInput } from '@/utils/helperFunctions/markdownToHtml'
 
 export interface McpMentionInput {
   user_id: number
@@ -127,19 +123,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
           success: false,
           error: 'Invalid content_type. Must be one of: html, markdown',
           allowedValues: CONTENT_TYPE_ALLOWED_VALUES
-        },
-        { status: 400 }
-      )
-    }
-
-    if (
-      !isAcceptedRichTextInput(text, content_type) &&
-      !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
-    ) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: 'Comment text must be HTML or structural markdown. Plain text is not enabled.'
         },
         { status: 400 }
       )

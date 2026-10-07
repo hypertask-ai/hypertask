@@ -5,7 +5,7 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-function loadDescriptionService(featureEnabled = true) {
+function loadDescriptionService() {
   const calls = [];
   const transaction = {
     $executeRaw: async () => {},
@@ -29,7 +29,6 @@ function loadDescriptionService(featureEnabled = true) {
     "src/utils/controllers/description/common-description-create.ts",
     "src/lib/prisma.ts",
     "src/lib/mcp/tasks/agentMutationFence.ts",
-    "src/lib/flags.ts",
   ]) {
     delete require.cache[modulePath(relativePath)];
   }
@@ -46,12 +45,6 @@ function loadDescriptionService(featureEnabled = true) {
     loaded: true,
     exports: { assertAgentAssignmentChangeAllowed: async () => {} },
   };
-  require.cache[modulePath("src/lib/flags.ts")] = {
-    id: modulePath("src/lib/flags.ts"),
-    filename: modulePath("src/lib/flags.ts"),
-    loaded: true,
-    exports: { isFeatureEnabled: async () => featureEnabled },
-  };
 
   const jiti = require("jiti")(
     path.join(root, `tests/task-description-save-${Date.now()}-${Math.random()}.cjs`),
@@ -60,6 +53,20 @@ function loadDescriptionService(featureEnabled = true) {
   const loaded = jiti(modulePath("src/utils/controllers/description/common-description-create.ts"));
   return { upsertTaskDescription: loaded.default, calls };
 }
+
+test("the shared description save path preserves headings, lists, and bold text", async () => {
+  const { upsertTaskDescription, calls } = loadDescriptionService();
+  const content = "<h2>Problem Context</h2><p>Checkout is restricted.</p><ul><li><p><strong>Cart</strong> is restricted.</p></li></ul>";
+
+  await upsertTaskDescription({
+    taskId: 1705,
+    creatorId: 7,
+    actingUserId: 7,
+    content,
+  });
+
+  assert.equal(calls[0].create.content, content);
+});
 
 test("the shared description save path wraps bare text in editor blocks", async () => {
   const { upsertTaskDescription, calls } = loadDescriptionService();
@@ -74,21 +81,5 @@ test("the shared description save path wraps bare text in editor blocks", async 
   assert.equal(
     calls[0].create.content,
     "<p>Problem context</p><p>Add to cart is also restricted.</p>",
-  );
-});
-
-test("the shared description save path keeps the previous behavior when the flag is off", async () => {
-  const { upsertTaskDescription, calls } = loadDescriptionService(false);
-
-  await upsertTaskDescription({
-    taskId: 1705,
-    creatorId: 7,
-    actingUserId: 7,
-    content: "Problem context\n\nAdd to cart is also restricted.",
-  });
-
-  assert.equal(
-    calls[0].create.content,
-    "Problem context\n\nAdd to cart is also restricted.",
   );
 });

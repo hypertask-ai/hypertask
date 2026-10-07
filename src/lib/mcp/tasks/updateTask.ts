@@ -36,7 +36,7 @@ export async function executeTaskUpdate({
         if (scopeError) return scopeError
     }
 
-    const fields = await validateTaskUpdateFields(requestBody, dryRun, user);
+    const fields = await validateTaskUpdateFields(requestBody, dryRun);
     if (fields instanceof NextResponse) return fields;
     const identifiers = validateTaskUpdateIdentifiers(requestBody, dryRun, fields);
     if (identifiers instanceof NextResponse) return identifiers;
