@@ -460,6 +460,7 @@ export const Section = ({
             style={{ scrollBehavior: "unset" }}
             ref={provided.innerRef}
             data-title={section.section_title}
+            data-board-scroll-ready={taskModuleReady || taskModuleFailed}
             className={`
               ${isMbl ? "" : "overflow-y-auto "}
               w-full sm:pb-20 h-full  max-h-inherit 
