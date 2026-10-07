@@ -163,6 +163,7 @@ for (const cachedParent of [true, false]) {
       assert.equal(f.observed().title, child.title);
       assert.equal(f.observed().body, child.description_.content);
       assert.throws(() => assertDestination(f.observed(), parent), assert.AssertionError);
+      assert.deepEqual(f.routerCalls, [href(parent)], "detail replace must not queue a refresh of the child URL");
     }
     assert.equal(f.observed().loading, undefined);
   });

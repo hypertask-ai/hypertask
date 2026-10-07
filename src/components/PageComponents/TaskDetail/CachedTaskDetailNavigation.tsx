@@ -109,7 +109,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
       router.replace(window.location.pathname + window.location.search + window.location.hash);
-      router.refresh();
+      // A refresh here would race the detail replace and restore the old task URL.
+      if (!/^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) router.refresh();
       window.dispatchEvent(new Event("cached-task-detail-navigation"));
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
