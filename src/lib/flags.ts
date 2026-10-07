@@ -9,6 +9,7 @@ import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model"
 import {
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
+  HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
   HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG,
   HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
   HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
@@ -322,6 +323,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
     shippedOn: "2026-10-07",
     description: "The New Task window opened with C or Ctrl+J inherits the view's assignees, priority and size without replacing caller values or user selections.",
+    kind: "bugfix",
+  },
+  {
+    key: HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
+    shippedOn: "2026-10-07",
+    description: "The Ctrl+J AI ticket writer inherits the open board view's labels, assignees, priority and size for new tickets on that board without replacing explicit values.",
     kind: "bugfix",
   },
   {
