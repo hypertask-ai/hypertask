@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
@@ -199,17 +199,17 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       historyDestination?.pathname === nativePathname) {
     return (
       <>
-        <div hidden>{children}</div>
+        {/* Pending native RSC must not suspend the visible protection. */}
+        <div hidden><Suspense fallback={null}>{children}</Suspense></div>
         <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
           Loading task…
         </div>
       </>
     );
   }
-  // A Suspense fallback would remount the board and replay its startup navigation.
   if (backFirstOpen && showDetail && !EmbeddedTaskDetail) return null;
   if (!showDetail || !EmbeddedTaskDetail) return children;
-  return (
+  const detail = (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}
       taskId={location.taskId}
@@ -219,4 +219,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
+  // A nested suspension must not retain the previous task or remount the source board.
+  return backFirstOpen ? <Suspense key={`${location.accountId}:${location.taskId}`} fallback={null}>{detail}</Suspense> : detail;
 }

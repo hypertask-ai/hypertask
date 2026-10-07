@@ -245,7 +245,7 @@ test("background history refreshes preserve the mounted cached detail, but route
   const Detail = () => null;
   const mocks = {
     "react-dom": { flushSync: callback => callback() },
-    "react": { useMemo: (factory) => factory(), useRef: value => value === undefined ? previousLocation : { current: value }, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
+    "react": { Suspense: require("react").Suspense, useMemo: (factory) => factory(), useRef: value => value === undefined ? previousLocation : { current: value }, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
     "@tanstack/react-query": { useQueryClient: () => queryClient },
@@ -267,11 +267,12 @@ test("background history refreshes preserve the mounted cached detail, but route
   queryClient.setQueryData(cache.cachedTaskDetailKey(2343, 42), task);
   history.state.cachedTaskDetail = { accountId: 2343, taskId: 42, projectId: 6859, uniqueIndex: 43 };
   const first = render();
-  assert.equal(first.type, Detail);
+  assert.equal(first.type, require("react").Suspense);
+  assert.equal(first.props.children.type, Detail);
   flagEnabled = false;
   assert.equal(render(), "Original route", "disabled rollout never displays an existing cached marker");
   flagEnabled = true;
-  assert.equal(render().type, Detail);
+  assert.equal(render().props.children.type, Detail);
   delete history.state.cachedTaskDetail;
   assert.equal(render().key, first.key, "a background RSC refresh must not remount editors or lose drafts");
   assert.equal(render(985), "Original route");
@@ -280,7 +281,7 @@ test("background history refreshes preserve the mounted cached detail, but route
   pathname = "/project";
   assert.equal(render(), "Original route");
   pathname = "/detail/project-6859/43";
-  assert.equal(render().type, Detail);
+  assert.equal(render().props.children.type, Detail);
   currentAccountId = 985;
   assert.equal(render(), "Original route", "a stale client account cannot show the signed account's cached task");
 });

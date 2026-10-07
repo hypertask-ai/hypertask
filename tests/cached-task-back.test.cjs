@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -40,9 +40,12 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
   new Function("window", "CustomEvent", historyScript)(window, window.CustomEvent);
   let nextTraversals = 0;
   window.addEventListener("popstate", () => { nextTraversals++; }, true);
-  const visible = selector => [...document.querySelectorAll(selector)].find(el => !el.closest("[hidden]"));
+  const visible = selector => [...document.querySelectorAll(selector)].find(el => el.getClientRects().length > 0);
   const observed = () => ({ title: visible("h1")?.textContent, body: visible("p")?.textContent, loading: visible('[role="status"]')?.getAttribute("data-task-path") });
+  let suspendNative = false, suspendCachedParent = false, resolveSuspension;
+  const suspension = new Promise(resolve => { resolveSuspension = resolve; });
   const Detail = ({ initialTask, native = false }) => {
+    if ((native && suspendNative) || (!native && suspendCachedParent && initialTask.id === parent.id)) throw suspension;
     React.useEffect(() => {
       if (native && seedNative) client.setQueryData(cache.cachedTaskDetailKey(2343, initialTask.id), initialTask);
     }, [initialTask, native]);
@@ -71,7 +74,10 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     return mocks[name];
   }, exports);
   const Navigation = exports.default;
-  const render = () => renderer.render(React.createElement(Navigation, { accountId: 2343 }, children));
+  const render = () => {
+    const navigation = React.createElement(Navigation, { accountId: 2343 }, children);
+    renderer.render(outerSuspense ? React.createElement(React.Suspense, { fallback: React.createElement("h1", null, "Outer fallback") }, navigation) : navigation);
+  };
   const NativeRoute = () => React.createElement(Detail, { initialTask: React.useSyncExternalStore(notify => { routeSubscribers.add(notify); return () => routeSubscribers.delete(notify); }, () => nativeTask), native: true });
   const routeChildren = React.createElement(NativeRoute);
   const server = task => {
@@ -101,6 +107,9 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     await new Promise(resolve => { settleTraversal = resolve; window.history[method](); });
   });
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
+    suspendNative: () => { suspendNative = true; },
+    suspendCachedParent: () => { suspendCachedParent = true; },
+    resolveSuspension: () => React.act(async () => { suspendNative = false; suspendCachedParent = false; resolveSuspension(); }),
     initializeNativeStaleRoot: async () => {
       await React.act(async () => server(parent));
       await React.act(async () => {
@@ -246,6 +255,25 @@ test("cache-miss Back protects a nested native child despite the root layout ret
   await f.server(parent);
   assert.equal(f.observed().title, parent.title);
   assert.equal(f.observed().loading, undefined);
+});
+
+test("a suspended hidden native route cannot block cache-miss protection", async t => {
+  const f = fixture(t, { cachedParent: false, stableChildren: true, outerSuspense: true });
+  await f.initialize(); f.suspendNative(); await f.traverse("back");
+  assert.equal(f.observed().loading, href(parent));
+  assert.equal(f.observed().title, undefined);
+  await f.resolveSuspension(); await f.server(parent);
+  assert.equal(f.observed().title, parent.title);
+  assert.equal(f.observed().loading, undefined);
+});
+
+test("a suspended cached parent cannot expose an outer fallback or the previous task", async t => {
+  const f = fixture(t, { outerSuspense: true });
+  await f.initialize(); f.suspendCachedParent(); await f.traverse("back");
+  assert.equal(f.observed().title, undefined);
+  assert.equal(f.observed().loading, undefined);
+  await f.resolveSuspension();
+  assert.equal(f.observed().title, parent.title);
 });
 
 test("same-task modal popstate keeps the task and unsent composer mounted", async t => {
