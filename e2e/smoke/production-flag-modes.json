@@ -87,6 +87,7 @@
     "htpr-6929-compose-task-writer": "OWNER_AND_QA",
     "htpr-6937-new-task-window": "OWNER_AND_QA",
     "htpr-6993-quick-add-view-context": "EVERYONE",
-    "htpr-6997-new-task-window-view-context": "EVERYONE"
+    "htpr-6997-new-task-window-view-context": "EVERYONE",
+    "htpr-6999-ctrl-j-view-context": "EVERYONE"
   }
 }

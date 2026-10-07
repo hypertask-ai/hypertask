@@ -9,6 +9,8 @@ import { escapeHtml } from "@/utils/htmlEscape";
 import { extractTaskWriterMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia } from "./taskWriterMedia";
 import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, retryCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
+import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
 
 export function composeTaskBoardId(
   url: string,
@@ -36,8 +38,13 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress,
-}: { text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number; onProgress?: (stage: ComposeTaskStage) => void }): Promise<{ task: ITask; writerFailed: boolean }> {
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields,
+}: {
+  text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
+  onProgress?: (stage: ComposeTaskStage) => void;
+  viewProject?: IProject;
+  fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
+}): Promise<{ task: ITask; writerFailed: boolean }> {
   // Resolve the destination before spending AI credits; omitting sectionId uses
   // the same first active column as the regular create-task form.
   const defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
@@ -123,11 +130,23 @@ export async function createComposedTask({
     writerFailed = true;
   }
   onProgress?.("Saving the ticket");
+  const filters = !existingTaskId && viewProject?.id === project.id
+    ? getActiveFiltersFromProject(viewProject) : undefined;
+  const viewDefaults = filters?.addedFilters.length ? getNewTaskViewDefaults(filters) : undefined;
+  const taskFields = { assignees: [], ...fields };
+  if (viewDefaults) {
+    const tags = [...(taskFields.tags ?? []), ...(viewDefaults.tags ?? [])];
+    if (tags.length) taskFields.tags = tags.filter((tag, index) => tags.findIndex((other) => other.id === tag.id) === index);
+    const assignees = [...taskFields.assignees, ...viewDefaults.assignees];
+    taskFields.assignees = assignees.filter((person, index) => assignees.findIndex((other) => other.id === person.id) === index);
+    if (taskFields.priority == null && viewDefaults.priority) taskFields.priority = viewDefaults.priority;
+    if (taskFields.estimate == null && viewDefaults.estimate) taskFields.estimate = viewDefaults.estimate;
+  }
   const created = await createNewTaskGloballyAPIHandler({
     userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
     title, ...{ description },
     sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
-    ranking: defaults?.data.ranking, assignees: [], requestKind: "compose-task",
+    ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
     ...(existingTaskId ? { existingTaskId } : {}),
   });
   const task = created?.resposne?.newTask;
