@@ -60,7 +60,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
   useEffect(() => {
     // Next commits router push/replace in an insertion effect without a native location event.
-    if (inboxNextOpen) window.dispatchEvent(new Event("cached-task-detail-navigation"));
+    if (inboxNextOpen) window.dispatchEvent(new window.Event("cached-task-detail-navigation"));
   }, [inboxNextOpen, pathname]);
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
