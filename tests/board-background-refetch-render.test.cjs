@@ -129,6 +129,7 @@ const moduleMocks = {
     "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant-ticket-open" },
   "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailLocation: () => undefined },
+  "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: noopComponent },
   "lucide-react": { ChevronLeft: noopComponent },
   "@/components/Common/Tooltip": { __esModule: true, default: noopComponent },

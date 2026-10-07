@@ -73,6 +73,8 @@ test("real history Back replaces Next's stale source tree after detail RSC; Forw
     "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: () => React.createElement("article", { id: "cached-detail" }, "Cached detail") },
     "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/TopRow/DescriptionEmojiButton": {},
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions": {},
     "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions": {},

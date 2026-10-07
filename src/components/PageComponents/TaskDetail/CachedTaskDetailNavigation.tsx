@@ -8,8 +8,11 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
+
+import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
+import { REACT_QUERY_KEYS } from "@/lib/constants/constants";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
 const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").then((module) => {
@@ -50,9 +53,82 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    if (!inboxEFirstPress) return;
+    let keyboard: { path: string; ready: boolean; handleKeyDown?: (event: KeyboardEvent) => void } | undefined;
+    let pending: { path: string; event: KeyboardEvent } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let poll: ReturnType<typeof setTimeout> | undefined;
+    let slow = false;
+    const clearPending = () => {
+      pending = undefined;
+      slow = false;
+      if (timer !== undefined) clearTimeout(timer);
+      if (poll !== undefined) clearTimeout(poll);
+      timer = poll = undefined;
+    };
+    const onNavigation = () => {
+      if (pending && (window.location.pathname !== pending.path ||
+          new URLSearchParams(window.location.search).get("inboxFlow") !== "true")) clearPending();
+    };
+    const release = () => {
+      if (poll !== undefined) clearTimeout(poll);
+      poll = undefined;
+      onNavigation();
+      if (!pending) return;
+      // The detail navigator blocks uploads; do not archive until it can also advance.
+      if (keyboard?.path === pending.path && keyboard.handleKeyDown && (keyboard.ready || slow) &&
+          !queryClient.getQueryData(REACT_QUERY_KEYS.uploadStates)) {
+        const event = pending.event;
+        const handleKeyDown = keyboard.handleKeyDown;
+        clearPending();
+        handleKeyDown(event);
+      } else {
+        poll = setTimeout(() => { poll = undefined; release(); }, 16);
+      }
+    };
+    const onReady = (event: Event) => {
+      const detail = (event as CustomEvent<typeof keyboard>).detail;
+      if (detail?.handleKeyDown || detail?.path === keyboard?.path) keyboard = detail;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.keyCode !== 69 || event.ctrlKey || event.metaKey || returnIfModalOrInputActive(true)) return;
+      const path = window.location.pathname;
+      if (!path.startsWith("/detail/project-") || new URLSearchParams(window.location.search).get("inboxFlow") !== "true") return;
+      if (keyboard?.path === path && keyboard.ready && !queryClient.getQueryData(REACT_QUERY_KEYS.uploadStates)) return;
+      // The Inbox listener can outlive its URL, or disappear before the detail listener mounts.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (pending?.path === path) return;
+      clearPending();
+      pending = { path, event };
+      timer = setTimeout(() => {
+        timer = undefined;
+        onNavigation();
+        if (!pending || keyboard?.path !== pending.path || !keyboard.handleKeyDown) return clearPending();
+        // A mounted slow detail can use its Inbox-cache membership before the fetch resolves.
+        slow = true;
+        timer = setTimeout(() => { timer = undefined; clearPending(); }, 4000);
+        release();
+      }, 2000);
+      poll = setTimeout(() => { poll = undefined; release(); }, 16);
+    };
+    window.addEventListener("htpr-7002-detail-keyboard", onReady);
+    window.addEventListener("popstate", onNavigation);
+    window.addEventListener("cached-task-detail-navigation", onNavigation);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      clearPending();
+      window.removeEventListener("htpr-7002-detail-keyboard", onReady);
+      window.removeEventListener("popstate", onNavigation);
+      window.removeEventListener("cached-task-detail-navigation", onNavigation);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [inboxEFirstPress, queryClient]);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const pathname = usePathname();
-  const queryClient = useQueryClient();
   const router = useRouter();
   const currentUser = useRecoilValue(currentUserAtom);
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);

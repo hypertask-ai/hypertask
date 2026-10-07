@@ -54,11 +54,14 @@ function fixture(t, enabled, sourcePath = "/inbox") {
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
       if (key === HTPR_7000_INBOX_NEXT_OPEN_FLAG) return enabled;
+      if (key === flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG) return false;
       assert.ok([HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG].includes(key));
       return true;
     } },
     "@/lib/flags/keys": flags,
     "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
   };
   const source = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx"), "utf8");

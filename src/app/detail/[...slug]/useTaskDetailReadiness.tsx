@@ -1,5 +1,7 @@
 
 import { useEffect, useLayoutEffect } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
 import { focusManager } from "@tanstack/react-query";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance";
@@ -8,6 +10,7 @@ import { consumeTaskDetailReadinessSample, TASK_DETAIL_READINESS_MAX_MS, taskDet
 import { markTaskDetailPhase, readTaskDetailPhaseTimings, TASK_DETAIL_USABLE_MARK } from "@/lib/analytics/taskDetailPhaseTimings";
 import type { useTaskDetailInitialScrollValue } from "./useTaskDetailInitialScroll";
 export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue) {
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const { embedded, _currentTask, _parsedTask, handleKeyDown, handleKeyUp, sharedLink, isRecording, showMentionList, currentTask, carousalItems, getTask, setNonEssentialReady, readinessTaskRef, currentUser, updateActiveItemAndItemInView, setStickyElementHeight, showAiChatInterface, onWindowFocus } = context;
 
   useEffect(() => {
@@ -16,11 +19,18 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     // Add event listeners when the component mounts
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
+    const path = `/detail/project-${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
+    if (inboxEFirstPress) window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
+      detail: { path, handleKeyDown, ready: currentTask?._count?.notifications !== undefined },
+    }));
 
     // Remove event listeners when the component unmounts
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
+      if (inboxEFirstPress) window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
+        detail: { path, ready: false },
+      }));
     };
   }, [
     handleKeyDown,
@@ -31,6 +41,7 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     currentTask,
     carousalItems,
     embedded,
+    inboxEFirstPress,
   ]);
 
   useEffect(() => {
