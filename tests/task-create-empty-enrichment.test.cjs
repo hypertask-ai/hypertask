@@ -273,6 +273,7 @@ function loadNotificationRoute() {
   return execute(
     compile("src/pages/api/notifications/getAll.ts"),
     {
+      "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
       "@/utils/controllers/notifications/getAll": {
         __esModule: true,
         default: async () => ({ status: 200, json: [] }),

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import notificationGetCount from "@/utils/controllers/notifications/getCount";
@@ -24,4 +25,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/notification-writes/count-read")).GET,
+);

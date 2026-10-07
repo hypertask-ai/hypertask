@@ -1,7 +1,7 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-
-import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { taskReadQuery } from "@/lib/api/task-writes/read-query";
+import { notificationWriteJson } from "./response";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { notificationInboxInclude } from "@/utils/controllers/notifications/getAll";
@@ -147,20 +147,13 @@ const getArchivedInboxMeta = async (
   };
 };
 
-async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
- 
-  try {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+const getRoute = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Invalid request",
+  allowNullBody: true,
+  operation: async (body, session) => {
     const userId = session.userId;
-    const {cursor, mode, projectId, boardScope: rawBoardScope, q} = req.query
+    const {cursor, mode, projectId, boardScope: rawBoardScope, q} = body
     const parsedCursor = parseOptionalInt(cursor);
     const parsedProjectId = parseOptionalInt(projectId);
     const boardScope = parseBoardScope(rawBoardScope);
@@ -172,7 +165,7 @@ async function handler(
         parsedProjectId,
         boardScope
       );
-      return res.status(200).json(meta);
+      return notificationWriteJson(meta, 200);
     }
 
     const notificationsToReturn = await prisma.notification.findMany({
@@ -189,15 +182,18 @@ async function handler(
       ),
     });
 
-    return res.status(200).json(notificationsToReturn)
+    return notificationWriteJson(notificationsToReturn, 200)
+  },
+});
+
+export const GET: TaskWriteRoute = async (request, authenticatedSession) => {
+  try {
+    const session = authenticatedSession ?? await getSessionUser(request.headers);
+    if (!session) return notificationWriteJson({ message: "Unauthorized" }, 401);
+    const body = taskReadQuery(request);
+    return await getRoute({ ...request, headers: request.headers, json: async () => body }, session);
   } catch (error) {
-      console.log(error)
-      return res.status(500).json(error)
+    console.error(error);
+    return notificationWriteJson(error, 500);
   }
-}
-
-
-export default ((req, res) => withTaskWriteFlag(
-  handler, req.method ?? "", async () =>
-    (await import("@/lib/api/notification-writes/archived-read")).GET,
-)(req, res)) satisfies NextApiHandler;
+};

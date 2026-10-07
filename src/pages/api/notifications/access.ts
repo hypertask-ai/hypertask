@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiHandler } from "next";
 
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -27,4 +28,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/notification-writes/access")).GET,
+);

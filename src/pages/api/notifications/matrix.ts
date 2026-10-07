@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiRequest, NextApiResponse } from "next";
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -107,4 +108,8 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/notification-writes/matrix")).GET,
+), "POST", async () =>
+  (await import("@/lib/api/notification-writes/matrix")).POST,
+);
