@@ -106,7 +106,6 @@ import {
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
-  HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
   HTPR_6557_AGENT_ROOMS_FLAG,
   HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
@@ -386,12 +385,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-18",
     description:
       "Preserves description headings, paragraphs, lists, and bold text when AI Chat edits a task, and stores bare API text as editor paragraphs.",
-  },
-  {
-    key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,
-    shippedOn: "2026-09-18",
-    description:
-      "Adds a quiet outline around posted comments in the Porcelain theme so adjacent comments stay distinct on phone and desktop.",
   },
   {
     key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
@@ -958,7 +951,6 @@ export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
 const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
   [HTPR_6951_TASK_WRITING_PROGRESS_FLAG]: "bugfix",
   [HTPR_6561_DESCRIPTION_STRUCTURE_FLAG]: "bugfix",
-  [HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG]: "bugfix",
   [HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG]: "bugfix",
   [HTPR_6553_AGENT_CHAT_POLLING_FLAG]: "bugfix",
   [HTPR_6516_AGENT_ATTRIBUTION_FLAG]: "bugfix",

@@ -10,34 +10,25 @@ const read = (relativePath) =>
 const comments = read(
   "src/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentsContainer.tsx",
 );
-const flags = read("src/lib/flags.ts");
-const flagKeys = read("src/lib/flags/keys.ts");
 const porcelain = read("src/styles/tailwindThemes/porcelain.css");
 
-test("Porcelain comment separation is declared as an Owner and QA feature flag", () => {
+test("desktop posted comment cards are separated, excluding collapsed and activity rows", () => {
   assert.match(
-    flagKeys,
-    /HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG\s*=\s*"htpr-6554-light-comment-separation"/,
-  );
-  assert.match(
-    flags,
-    /key: HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,[\s\S]*?description:\s*"Adds a quiet outline around posted comments in the Porcelain theme so adjacent comments stay distinct on phone and desktop\."/,
+    comments,
+    /comment-container \$\{\s*!isStacked && !comment\.activity\s*\? "comment-separation-card"\s*:\s*""/,
   );
 });
 
-test("the flag marks both mobile and desktop posted comment cards", () => {
+test("mobile posted comment bubbles always have separation", () => {
   assert.match(
     comments,
-    /useFlag\(\s*HTPR_6554_LIGHT_COMMENT_SEPARATION_FLAG,?\s*\)/,
+    /const commentBubble = \([\s\S]*?rounded-sm\s*\$\{styles\.hellow\}\s*comment-separation-card\s*\$\{/,
   );
-  assert.match(
-    comments,
-    /lightCommentSeparationEnabled && !isStacked && !comment\.activity/,
-  );
-  assert.equal(comments.match(/"comment-separation-card"/g)?.length, 2);
+  assert.match(comments, /return !comment\.activity \?/);
+  assert.equal(comments.match(/comment-separation-card/g)?.length, 2);
 });
 
-test("Porcelain gives enabled posted comments a visible hairline without changing layout", () => {
+test("Porcelain gives posted comments a visible hairline without changing layout", () => {
   const rule = porcelain.match(
     /\.porcelain \.comment-separation-card\s*\{(?<declarations>[\s\S]*?)\}/,
   );
