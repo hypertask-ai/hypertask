@@ -71,6 +71,7 @@ import {
 } from "@/lib/contexts/Kanban/BulkSelectionContext";
 import KanbanBulkActionBar from "./KanbanBulkActionBar";
 import { useBoardEdgeAutoScroll } from "@/hooks/Kanban/useBoardEdgeAutoScroll";
+import { useBoardScrollRestore } from "@/hooks/Kanban/useBoardScrollRestore";
 import { useMobileBoardZoom } from "@/hooks/Kanban/useMobileBoardZoom";
 import { useLongPressTouchSensor } from "@/hooks/Kanban/useLongPressTouchSensor";
 import { BOARD_OVERVIEW_SCALE } from "@/hooks/Kanban/mobileBoardGestures";
@@ -855,6 +856,7 @@ const HomePage = ({
   // undefined during the hydration window; treating that as "empty" flashed the
   // remove-filters / create-task prompt before the real board rendered.
   const tasksHydrated = Array.isArray(_currentProject?.tasks)
+  useBoardScrollRestore(_mbl, tasksHydrated);
   const isEmptyBoard = tasksHydrated && sectionsToDisplay.length === 0
 
   const emptyStateDetection = isEmptyBoard

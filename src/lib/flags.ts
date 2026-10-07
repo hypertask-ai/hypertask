@@ -28,6 +28,7 @@ import {
   HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
   HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
   HTPR_6994_SEARCH_ESC_LEAVES_FLAG,
+  HTPR_6998_BOARD_SCROLL_RESTORE_FLAG,
   HTPR_6924_REST_COMPAT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -217,6 +218,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-07",
     description: "Escape in search returns to the page you opened search from, even while the empty-box tips are showing.",
+  },
+  {
+    key: HTPR_6998_BOARD_SCROLL_RESTORE_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Keeps the board and each column at their previous scroll positions when you return from search or another page.",
   },
   {
     key: HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
