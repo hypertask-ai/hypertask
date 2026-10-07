@@ -118,6 +118,8 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
     "@/components/Common/Tooltip": { default: noop },

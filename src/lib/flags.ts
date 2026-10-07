@@ -23,6 +23,7 @@ import {
   HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
   HTPR_6985_DELETE_VIEW_ONCE_FLAG,
   HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
+  HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
   HTPR_6924_REST_COMPAT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -209,6 +210,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-07",
     description: "Restores every selected inbox item after undoing a bulk archive, including after reload.",
+  },
+  {
+    key: HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Keeps ticket comments visible in narrow desktop windows by overlaying AI chat when its sidebar would squeeze the page.",
   },
   {
     key: HTPR_6985_DELETE_VIEW_ONCE_FLAG,

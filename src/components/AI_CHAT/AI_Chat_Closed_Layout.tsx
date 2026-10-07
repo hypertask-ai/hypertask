@@ -1,4 +1,6 @@
-import React, { useContext } from "react";
+import React, { useContext, useLayoutEffect, useState } from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
@@ -37,6 +39,19 @@ export default function AIChatClosedLayout({
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
+  const narrowSidebarWidth = useFlag(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
+  const [sidebarOverlays, setSidebarOverlays] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!narrowSidebarWidth || isMobile || sidebarWidthPx <= 0) return;
+    // Match the sidebar's md breakpoint and leave at least 340px for the page.
+    const update = () => setSidebarOverlays(
+      window.innerWidth < Math.max(768, sidebarWidthPx + 340)
+    );
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [narrowSidebarWidth, isMobile, sidebarWidthPx]);
 
   const workspaceClasses = cn(
     "outline-none",
@@ -80,7 +95,13 @@ export default function AIChatClosedLayout({
       {/* Keep the page width stable while the open sidebar's chunks load. */}
       <div
         data-ai-chat-slot
-        className={sidebarWidthPx > 0 && !isMobile ? "shrink-0" : "contents"}
+        className={sidebarWidthPx > 0 && !isMobile
+          ? narrowSidebarWidth
+            ? sidebarOverlays
+              ? "fixed right-0 top-0 z-[51]"
+              : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
+            : "shrink-0"
+          : "contents"}
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >
         {panels}
