@@ -26,9 +26,18 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
   Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
   window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, "", href(parent));
   window.scrollTo = () => {};
+  Object.defineProperty(window.navigator, "connection", { value: { saveData: true } });
   dom.window.HTMLElement.prototype.getClientRects = function () {
     return this.closest('[hidden], [style="display: none;"]') ? [] : [{}];
   };
+  let recoveryTimer;
+  const nativeSetTimeout = window.setTimeout.bind(window);
+  window.setTimeout = (callback, delay, ...args) => {
+    if (delay === 4000) { recoveryTimer = callback; return -1; }
+    return nativeSetTimeout(callback, delay, ...args);
+  };
+  const nativeClearTimeout = window.clearTimeout.bind(window);
+  window.clearTimeout = id => { if (id === -1) recoveryTimer = undefined; else nativeClearTimeout(id); };
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   let nextPath = href(parent), children, nativeTask = parent, seedNative = false, settleTraversal, observeMount = false;
@@ -106,7 +115,29 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     window.addEventListener("cached-task-detail-popstate", checkpoint);
     await new Promise(resolve => { settleTraversal = resolve; window.history[method](); });
   });
+  let boardMounts = 0;
+  const Board = () => {
+    React.useEffect(() => { boardMounts++; }, []);
+    return React.createElement("section", { id: "source-board" }, React.createElement("input", { defaultValue: "Board filter" }));
+  };
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
+    boardMounts: () => boardMounts,
+    openFromBoard: async () => {
+      window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["board"] }, "", "/project");
+      nextPath = "/project"; children = React.createElement(Board);
+      await React.act(async () => render());
+      const source = document.getElementById("source-board");
+      source.querySelector("input").value = "Local unsaved filter";
+      await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: child.projectId, uniqueIndex: child.uniqueIndex, href: href(child), task: child }));
+      return source;
+    },
+    serverError: message => React.act(async () => {
+      nextPath = href(parent); children = React.createElement("div", { role: "alert" }, message); render();
+    }),
+    expireRecovery: () => React.act(async () => {
+      assert.equal(typeof recoveryTimer, "function", "neutral protection must have a bounded recovery timer");
+      recoveryTimer();
+    }),
     suspendNative: () => { suspendNative = true; },
     suspendCachedParent: () => { suspendCachedParent = true; },
     resolveSuspension: () => React.act(async () => { suspendNative = false; suspendCachedParent = false; resolveSuspension(); }),
@@ -191,13 +222,62 @@ for (const cachedParent of [true, false]) {
   });
 }
 
-test("a pending cached viewer shows neither the child nor Loading on cold Back", async t => {
+test("cold Back retains already-correct source children while the cached viewer is pending", async t => {
   const f = fixture(t, { coldViewer: true });
-  await f.initialize({ refreshChild: false }); await f.traverse("back");
-  assert.equal(f.checkpoints.at(-1).title, undefined);
+  await f.initialize({ refreshChild: false });
+  const source = document.querySelector("article");
+  await f.traverse("back");
+  assert.equal(f.checkpoints.at(-1).title, parent.title);
   assert.equal(f.observed().loading, undefined);
-  assert.equal(f.observed().title, undefined);
+  assert.equal(document.querySelector("article"), source);
   await React.act(async () => f.resolveViewer());
+  assert.equal(document.querySelector("article"), source, "an aborted import must not replace the source");
+});
+
+for (const enabled of [true, false]) {
+  test(`cold cached board open and immediate Back keep source children mounted (flag=${enabled})`, async t => {
+    const f = fixture(t, { enabled, coldViewer: true });
+    const source = await f.openFromBoard();
+    assert.equal(document.getElementById("source-board"), source);
+    assert.equal(f.boardMounts(), 1);
+    assert.equal(f.observed().loading, undefined);
+    await f.traverse("back");
+    assert.equal(window.location.pathname, "/project");
+    assert.equal(document.getElementById("source-board"), source);
+    assert.equal(source.querySelector("input").value, "Local unsaved filter");
+    await React.act(async () => f.resolveViewer());
+    assert.equal(document.getElementById("source-board"), source);
+    assert.equal(f.boardMounts(), 1, "Back must not replay board startup effects");
+  });
+}
+
+test("cross-task cold cached Back suppresses the wrong native children until the viewer loads", async t => {
+  const f = fixture(t, { coldViewer: true });
+  await f.initialize(); await f.traverse("back");
+  assert.equal(f.observed().title, undefined);
+  assert.equal(f.observed().loading, undefined);
+  await React.act(async () => f.resolveViewer());
+  assert.equal(f.observed().title, parent.title);
+});
+
+for (const message of ["Task unavailable", "Could not load task"]) {
+  test(`neutral state exposes route error within four seconds: ${message}`, async t => {
+    const f = fixture(t, { cachedParent: false });
+    await f.initialize(); await f.traverse("back");
+    await f.serverError(message);
+    assert.equal(f.observed().loading, href(parent));
+    await f.expireRecovery();
+    assert.equal(f.observed().loading, undefined);
+    assert.equal(document.querySelector('[role="alert"]').textContent, message);
+    assert.equal(document.querySelector('[role="alert"]').closest("[hidden]"), null);
+  });
+}
+
+test("neutral state clears when the destination route renders without waiting for the timeout", async t => {
+  const f = fixture(t, { cachedParent: false });
+  await f.initialize(); await f.traverse("back");
+  assert.equal(f.observed().loading, href(parent));
+  await f.server(parent);
   assert.equal(f.observed().title, parent.title);
   assert.equal(f.observed().loading, undefined);
 });
