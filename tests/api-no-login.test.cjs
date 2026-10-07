@@ -112,8 +112,9 @@ function rewriteLoadedSource(file, data, options) {
   if (!/\.(?:ts|tsx|js|mjs|cjs)$/.test(file)) return data
   const encoding = typeof options === 'string' ? options : options && options.encoding
   const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data)
-  if (!text.includes('@/lib/prisma') && !text.includes('next/headers') && !text.includes('/lib/prisma')) return data
+  if (!text.includes('@/lib/prisma') && !text.includes('next/headers') && !text.includes('/lib/prisma') && !text.includes('@/lib/api/task-writes/route')) return data
   const rewritten = text
+    .replace(/(['"])@\/lib\/api\/task-writes\/route\1/g, `'${path.join(root, 'tests/task-write-legacy-stub.cjs')}'`)
     .replace(/(['"])@\/lib\/prisma(?:\.ts)?\1/g, `'${prismaStubPath}'`)
     .replace(/(['"])next\/headers\1/g, `'${headersStubPath}'`)
     .replace(/(['"])(?:\.\.\/)+lib\/prisma(?:\.ts)?\1/g, `'${prismaStubPath}'`)

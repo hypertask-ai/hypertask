@@ -12,10 +12,12 @@ export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   query?: NextApiRequest["query"];
   url?: string;
 };
+// Pages view writes retain historical 101 errors, which Web Response rejects.
+export type TaskWriteResponse = Pick<NextResponse, "status" | "headers" | "text" | "json">;
 export type TaskWriteRoute = (
   request: TaskWriteRequest,
   session?: SessionUser,
-) => Promise<NextResponse | undefined>;
+) => Promise<TaskWriteResponse | undefined>;
 
 export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   schema: z.ZodType<Body>;
@@ -24,7 +26,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   // Some legacy handlers catch null-body destructuring with nonstandard JSON.
   allowNullBody?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
-  operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<NextResponse | undefined>;
+  operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
   return async (request, authenticatedSession) => {
     let session = authenticatedSession;

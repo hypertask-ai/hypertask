@@ -1,10 +1,11 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import type { NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 
 import { scheduleBackfillAiLabel } from "@/lib/ai/labelClassifier";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
@@ -26,7 +27,7 @@ class SmartSplitError extends Error {
   }
 }
 
-const validateFields = (body: NextApiRequest["body"]) => {
+const validateFields = (body: Record<string, any>) => {
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const rawPrompt = typeof body.prompt === "string" ? body.prompt : "";
   const prompt = rawPrompt.trim();
@@ -448,66 +449,68 @@ const deleteSmartSplit = async (
     await tx.label.delete({ where: { id: label.id } });
   });
 
-async function handler(req: NextApiRequest, res: NextApiResponse) {
-  const session = await getSessionUser(
-    new Headers(req.headers as Record<string, string>)
-  );
-  if (!session) {
-    return res.status(401).json({
-      message: "Sign in to manage smart splits",
-      code: "SESSION_REQUIRED",
-    });
-  }
-  const userId = session.userId;
 
-  const projectId = Number(req.body?.projectId);
-  if (!Number.isInteger(projectId) || projectId <= 0) {
-    return res.status(400).json({ message: "A valid board is required" });
-  }
-
-  try {
-    await requireProjectAccess(projectId, userId);
-
-    if (req.method === "POST") {
-      const { name, prompt } = validateFields(req.body);
-      const result = await createSmartSplit(projectId, userId, name, prompt);
-      scheduleBackfillAiLabel(result.label.id);
-      void broadcastBoardChange(projectId, { originUserId: userId });
-      return res.status(201).json(result);
+const route = (method: string) => taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const req = { body, method };
+    const userId = session.userId;
+    const projectId = Number(req.body?.projectId);
+    if (!Number.isInteger(projectId) || projectId <= 0) {
+      return viewWriteJson({ message: "A valid board is required" }, 400);
     }
 
-    if (req.method === "PATCH") {
-      const viewId = typeof req.body.viewId === "string" ? req.body.viewId : "";
-      if (!viewId) throw new SmartSplitError("Smart split view is required");
-      const { name, prompt } = validateFields(req.body);
-      const result = await editSmartSplit(projectId, userId, viewId, name, prompt);
-      if (result.promptChanged) scheduleBackfillAiLabel(result.labelId);
-      void broadcastBoardChange(projectId, { originUserId: userId });
-      return res.status(200).json({ success: true, slug: result.slug });
+    try {
+      await requireProjectAccess(projectId, userId);
+
+      if (req.method === "POST") {
+        const { name, prompt } = validateFields(req.body);
+        const result = await createSmartSplit(projectId, userId, name, prompt);
+        scheduleBackfillAiLabel(result.label.id);
+        void broadcastBoardChange(projectId, { originUserId: userId });
+        return viewWriteJson(result, 201);
+      }
+
+      if (req.method === "PATCH") {
+        const viewId = typeof req.body.viewId === "string" ? req.body.viewId : "";
+        if (!viewId) throw new SmartSplitError("Smart split view is required");
+        const { name, prompt } = validateFields(req.body);
+        const result = await editSmartSplit(projectId, userId, viewId, name, prompt);
+        if (result.promptChanged) scheduleBackfillAiLabel(result.labelId);
+        void broadcastBoardChange(projectId, { originUserId: userId });
+        return viewWriteJson({ success: true, slug: result.slug }, 200);
+      }
+
+      if (req.method === "DELETE") {
+        const viewId = typeof req.body.viewId === "string" ? req.body.viewId : "";
+        if (!viewId) throw new SmartSplitError("Smart split view is required");
+        await deleteSmartSplit(projectId, userId, viewId);
+        void broadcastBoardChange(projectId, { originUserId: userId });
+        return viewWriteJson({ success: true }, 200);
+      }
+
+      return viewWriteJson({ message: "Method not allowed" }, 405);
+    } catch (error) {
+      if (error instanceof SmartSplitError) {
+        return viewWriteJson({ message: error.message }, error.status);
+      }
+      console.error("smart split mutation failed", error);
+      return viewWriteJson({ message: "Could not save the smart split" }, 500);
     }
 
-    if (req.method === "DELETE") {
-      const viewId = typeof req.body.viewId === "string" ? req.body.viewId : "";
-      if (!viewId) throw new SmartSplitError("Smart split view is required");
-      await deleteSmartSplit(projectId, userId, viewId);
-      void broadcastBoardChange(projectId, { originUserId: userId });
-      return res.status(200).json({ success: true });
-    }
+  },
+});
 
-    return res.status(405).json({ message: "Method not allowed" });
-  } catch (error) {
-    if (error instanceof SmartSplitError) {
-      return res.status(error.status).json({ message: error.message });
-    }
-    console.error("smart split mutation failed", error);
-    return res.status(500).json({ message: "Could not save the smart split" });
-  }
-}
+const authenticated: (method: string) => TaskWriteRoute = (method) => async (request, session) => {
+  session ??= (await getSessionUser(request.headers)) ?? undefined;
+  if (!session) return viewWriteJson({ message: "Sign in to manage smart splits", code: "SESSION_REQUIRED" }, 401);
+  return route(method)(request, session);
+};
 
-export default withTaskWriteFlag(withTaskWriteFlag(withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/smart-split")).POST,
-), "PATCH", async () =>
-  (await import("@/lib/api/project-writes/views/smart-split")).PATCH,
-), "DELETE", async () =>
-  (await import("@/lib/api/project-writes/views/smart-split")).DELETE,
-);
+export const POST = authenticated("POST");
+
+export const PATCH = authenticated("PATCH");
+
+export const DELETE = authenticated("DELETE");

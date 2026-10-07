@@ -1,10 +1,11 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { Prisma } from "@prisma/client";
-import type { NextApiHandler } from "next";
 
 type ResetMode = "ResetCurrent" | "ResetToDefault";
 const SERIALIZABLE_ATTEMPTS = 3;
@@ -113,43 +114,42 @@ export async function runSerializableViewReset(
   }
 }
 
-const handler: NextApiHandler = async (req, res) => {
-  if (req.method !== "POST") {
-    return res.status(405).json({ message: "Method not allowed" });
-  }
 
-  const session = await getSessionUser(
-    new Headers(req.headers as Record<string, string>),
-  );
-  if (!session) {
-    return res.status(401).json({ message: "Authentication required" });
-  }
-
-  const projectId = Number(req.body?.projectId);
-  const mode = req.body?.mode;
-  if (!Number.isInteger(projectId) || projectId <= 0 || !isResetMode(mode)) {
-    return res
-      .status(400)
-      .json({ message: "A valid board and reset mode are required" });
-  }
-
-  const userId = session.userId;
-
-  try {
-    await runSerializableViewReset(projectId, userId, mode);
-
-    const projectViewUpdated = await getProjectView(projectId, userId);
-    broadcastBoardChange(projectId, { originUserId: userId });
-    return res.status(200).json(projectViewUpdated);
-  } catch (error) {
-    if (error instanceof ViewResetAccessError) {
-      return res.status(403).json({ message: "Board access required" });
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const req = { body };
+    const projectId = Number(req.body?.projectId);
+    const mode = req.body?.mode;
+    if (!Number.isInteger(projectId) || projectId <= 0 || !isResetMode(mode)) {
+      return viewWriteJson({ message: "A valid board and reset mode are required" }, 400);
     }
-    console.error("reset active view failed", error);
-    return res.status(500).json({ message: "Unable to reset the active view" });
-  }
+
+    const userId = session.userId;
+
+    try {
+      await runSerializableViewReset(projectId, userId, mode);
+
+      const projectViewUpdated = await getProjectView(projectId, userId);
+      broadcastBoardChange(projectId, { originUserId: userId });
+      return viewWriteJson(projectViewUpdated, 200);
+    } catch (error) {
+      if (error instanceof ViewResetAccessError) {
+        return viewWriteJson({ message: "Board access required" }, 403);
+      }
+      console.error("reset active view failed", error);
+      return viewWriteJson({ message: "Unable to reset the active view" }, 500);
+    }
+
+  },
+});
+
+const authenticated: TaskWriteRoute = async (request, session) => {
+  session ??= (await getSessionUser(request.headers)) ?? undefined;
+  if (!session) return viewWriteJson({ message: "Authentication required" }, 401);
+  return route(request, session);
 };
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/reset-to-default")).POST,
-);
+export const POST = authenticated;

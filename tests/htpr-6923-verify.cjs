@@ -426,6 +426,116 @@ function slice5b() {
   slice5(); // Includes the unchanged getAll route/controller compatibility pins.
   console.log("slice5b structural verification passed");
 }
+const projectViewRoutes = {
+  "create-view": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "5a6c0939ce91e81220e4341f60c7bfb3ed7bfd3b10759b2207ab36eecbcae90b",
+    "export": "export default handler;"
+  },
+  "update-view": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "2b3b0dbcfa576f5a36b880a840604456d87afbee3de0e32259489f9c21953dd5",
+    "export": "export default handler;"
+  },
+  "delete-rename-view": {
+    "methods": [
+      "POST",
+      "DELETE"
+    ],
+    "hash": "b48f85c4e89e320d3ac07c04ecdd232669ee142de322af58cf7266c052c92ff6",
+    "export": "export default handler"
+  },
+  "switch-view": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "4074f0cdba73472d5e4c021f0acbe0f934bf02387834540688325f942fcef9f5",
+    "export": "export default handler"
+  },
+  "unsaved-view": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "f717f6eaf695114f3debbadf6267b061bd54adb56efcaea9e45627e17bd7de06",
+    "export": "export default handler;"
+  },
+  "reset-to-default": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "b4eded269799550b856001b4ab8a633f0f508a67137b828c4b7bd5866d3dc016",
+    "export": "export default handler;"
+  },
+  "update-order": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "5d52aa7ec42d11c28d374f78051e91fbe01b7043507cce29a51fe69b4cd55cd7",
+    "export": "export default handler;"
+  },
+  "reset-order": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "9dc200e3f057a283719c252f73506e856e7f6bc7037b22384de6c0c9d261f4ea",
+    "export": "export default handler;"
+  },
+  "set-default-order": {
+    "methods": [
+      "POST"
+    ],
+    "hash": "9224d69f050562000e615c15a6e926e1fcd11ad346d263b1288f90790da3dc71",
+    "export": "export default handler;"
+  },
+  "smart-split": {
+    "methods": [
+      "POST",
+      "PATCH",
+      "DELETE"
+    ],
+    "hash": "55b18e41b5fbb0362f16e4aee217ceb06695e97308996a684f275421285674c1",
+    "export": "function"
+  }
+};
+function projectViewLegacySources() {
+  return Object.fromEntries(Object.entries(projectViewRoutes).map(([name, entry]) => {
+    let source = read(`src/pages/api/projects/views/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "");
+    if (entry.export === "function") {
+      source = source.slice(0, source.indexOf("\nexport default withTaskWriteFlag"))
+        .replace("async function handler(", "export default async function handler(");
+    } else {
+      const start = source.indexOf("export default withTaskWriteFlag");
+      const end = source.indexOf("\n", source.indexOf("\n);", start) + 1);
+      source = source.slice(0, start) + entry.export + source.slice(end);
+    }
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), entry.hash, name + " independent legacy bytes");
+    return [name, source];
+  }));
+}
+function projectViews() {
+  const sources = projectViewLegacySources();
+  for (const [name, { hash, methods }] of Object.entries(projectViewRoutes)) {
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+    const page = read(`src/pages/api/projects/views/${name}.ts`);
+    for (const method of methods) {
+      assert.ok(page.includes(`(await import("@/lib/api/project-writes/views/${name}")).${method}`));
+      assert.ok(read(`src/lib/api/project-writes/views/${name}.ts`).includes(`export const ${method}`));
+    }
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/projects/views/${name}/route.ts`)), "no URL twin");
+  }
+  assert.equal(crypto.createHash("sha256").update(read("src/pages/api/projects/views/sync-view.ts")).digest("hex"), "451a5e8060edeea344f51e405b890ced8d43fb56d87f88711df41b10aa1cc516", "sync-view stays unchanged for slice 12 review");
+  const sync = inventory().find(row => row.endpoint === "projects/views/sync-view");
+  assert.deepEqual(sync.callers, [0, 0, 0], "sync-view has no tracked app/CLI/e2e callers; external-use review remains slice 12");
+  const injected = [{ file: "fixture.ts", text: 'fetch("/api/projects/views/sync-view")' }];
+  assert.equal(callerFiles(sync.endpoint, injected).length, 1, "caller scanner positive control");
+  assert.throws(() => assert.equal(callerFiles(sync.endpoint, injected).length, 0), "absence control rejects an injected sync-view caller");
+  console.log("project views structural verification passed; sync-view callers 0/0/0 (retained)");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -564,9 +674,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }
