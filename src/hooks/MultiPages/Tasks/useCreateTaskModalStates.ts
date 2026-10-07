@@ -28,6 +28,9 @@ import { useEffect } from "react";
 import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilStates";
 import { shouldShowGuestWriterIntro } from "@/lib/demo/guestBoardBuild";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG } from "@/lib/flags/keys";
 import useCurrentUser from "@/hooks/General/useCurrentUserCheckFromCookies";
 import { useGetAllProjectsMinimal } from "../useGetAllProjectsMinimal";
 import { useHyperMention } from "./useHyperMention";
@@ -167,6 +170,7 @@ const useCreateTaskModalGlobalStates = () => {
   const { goToProjectShortcut } = useProjectQuery()
   const pathname = usePathname();
 
+  const quickAddViewContextEnabled = useFlag(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG);
   const defaultFormValues: IForm = useMemo(
     () => ({
       title:
@@ -201,15 +205,18 @@ const useCreateTaskModalGlobalStates = () => {
         createTaskModal.duplicate?.taskLabels.map(
           (taskLabel: any) => taskLabel.label
         ) ??
-        getActiveFiltersFromProject(_currentProject).addedFilters.find(
-          (filter) => filter.type === "Labels"
-        )?.searchPayload,
+        (quickAddViewContextEnabled
+          ? getNewTaskViewDefaults(getActiveFiltersFromProject(_currentProject)).tags
+          : getActiveFiltersFromProject(_currentProject).addedFilters.find(
+              (filter) => filter.type === "Labels"
+            )?.searchPayload),
       currentProject: _currentProject ?? undefined,
     }),
     [
       createTaskModal.duplicate, // Added missing dependency
       createTaskModal.column_payload, // Existing dependency
       _currentProject, // Added missing dependency
+      quickAddViewContextEnabled,
     ]
   );
 
@@ -414,9 +421,11 @@ const useCreateTaskModalGlobalStates = () => {
     setIsGeneratingTitle(false);
     generatedTitleTrackerRef.current.reset();
     const clearGeneratedTitle = autoTitleCoordinator.boardChanged();
-    const tags = getActiveFiltersFromProject(project).addedFilters.find(
-      (filter) => filter.type === "Labels"
-    )?.searchPayload;
+    const tags = quickAddViewContextEnabled
+      ? getNewTaskViewDefaults(getActiveFiltersFromProject(project)).tags
+      : getActiveFiltersFromProject(project).addedFilters.find(
+          (filter) => filter.type === "Labels"
+        )?.searchPayload;
     formValuesRef.current = {
       ...formValuesRef.current,
       title: clearGeneratedTitle ? "" : formValuesRef.current.title,

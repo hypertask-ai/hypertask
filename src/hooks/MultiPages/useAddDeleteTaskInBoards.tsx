@@ -9,6 +9,12 @@ import axios from 'axios';
 import UpdateKanban from './useUpdateTaskInBoards';
 import { returnSortedItems } from "@/utils/helperFunctions/helperFunctions";
 import { ITask } from "@/models/model";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG } from "@/lib/flags/keys";
+import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
+import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { PriorityConstants } from "@/lib/constants/constants";
+import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 
 
 interface CreateItemParams {
@@ -43,6 +49,7 @@ const useAddDeleteTaskInBoards = () => {
   const store = useStore();
   const _currentProject = useRecoilValue(currentProjectAtom)
   const currentUser = useRecoilValue(currentUserAtom);
+  const quickAddViewContextEnabled = useFlag(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG);
   const getActiveSection = () => store.get(activeSectionAtom);
 
   const { updateActiveItemAndItemInView, mutationHandler, getProjectIdxAndAllData } = UpdateKanban()
@@ -132,20 +139,61 @@ const useAddDeleteTaskInBoards = () => {
     );
 
     console.log("🚀 ~ createItem ~ ranking:", ranking)
-      const res = await axios.post("/api/tasks/create", {
-        ...item,
-        sectionId,
-        section,
-        assignees: [],
-        userId: currentUser?.id,
-        projectId,
-        ranking,
-      index: _currentProject?.sorting_mode === "Priority" && position === "top" ? 0 : sections[sectionIndex]?.items.length,
-      });
+      const defaults = quickAddViewContextEnabled
+        ? getNewTaskViewDefaults(getActiveFiltersFromProject(_currentProject))
+        : undefined;
+      const useViewContext = Boolean(defaults && (
+        defaults.tags?.length || defaults.assignees.length || defaults.priority || defaults.estimate
+      ));
+      let task: ITask;
+      if (useViewContext && defaults) {
+        // The title-only endpoint drops labels and assignees. Use the modal's
+        // validated creation path and insert its fully populated card below.
+        if (!currentUser?.id) return false;
+        const result = await createNewTaskGloballyAPIHandler({
+          ...item,
+          ...defaults,
+          // The legacy priority-sorted top insert creates an Urgent priority.
+          priority: defaults.priority ?? (
+            _currentProject.sorting_mode === "Priority" && position === "top" && sections[sectionIndex]?.items.length
+              ? PriorityConstants.find((priority) => priority.priority_index === 1)
+              : undefined
+          ),
+          userId: currentUser.id,
+          projectId,
+          projectIdentifier: _currentProject.uniqueIdentifier ?? "TASK",
+          sectionId,
+          section_title: section,
+          ranking,
+        });
+        if (result?.error || !result?.resposne?.newTask) return false;
+        task = {
+          ...result.resposne.newTask,
+          // Create responses omit assignments; hydrate only the inserted card.
+          assignees: defaults.assignees.map((assignee) => "uid" in assignee
+            ? { userId: assignee.id, user: assignee }
+            : { userId: assignee.userId, agentId: assignee.id, agent: assignee }
+          ) as ITask["assignees"],
+        };
+        queryClient.setQueryData(["taskLabels", task.id], task.taskLabels ?? []);
+        if (task.priority) queryClient.setQueryData(["priority", task.id], task.priority);
+        if (task.estimate) queryClient.setQueryData(["estimate", task.id], task.estimate);
+      } else {
+        const res = await axios.post("/api/tasks/create", {
+          ...item,
+          sectionId,
+          section,
+          assignees: [],
+          userId: currentUser?.id,
+          projectId,
+          ranking,
+          index: _currentProject?.sorting_mode === "Priority" && position === "top" ? 0 : sections[sectionIndex]?.items.length,
+        });
 
-      if (res.status !== 200) return false;
+        if (res.status !== 200) return false;
 
-      const task = res.data;
+        task = res.data;
+      }
       try {
       const targetSection = sections[sectionIndex];
 
