@@ -132,7 +132,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG].includes(key)],
+      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG].includes(key)],
       `${key} should use its declared rollout default`,
     );
   }
@@ -593,6 +593,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6989-bulk-archive-undo", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6990-narrow-sidebar-width", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6993-quick-add-view-context", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6994-search-esc-leaves", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

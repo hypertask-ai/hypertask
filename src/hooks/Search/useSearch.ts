@@ -1,7 +1,7 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -94,6 +94,7 @@ export function useSearch(
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && searchLayoutEnabled;
+  const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
   function handleProjectsFromCache() {
@@ -483,7 +484,7 @@ export function useSearch(
       !event.ctrlKey && !event.metaKey && !event.altKey &&
       ["ArrowDown", "ArrowUp"].includes(event.key);
     if (searchChipsEnabled && ((event.defaultPrevented && !resultArrow) ||
-      (event.key === "Escape" && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
+      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
       !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
       tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
@@ -501,7 +502,7 @@ export function useSearch(
 
     if (event.keyCode === KeyCodes.ESCAPE && !showCommands.show) {
       event.preventDefault();
-      if (searchEscBackEnabled) {
+      if (searchEscBackEnabled && !searchEscLeavesEnabled) {
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
@@ -847,6 +848,7 @@ export function useSearch(
     searchAutocompleteEnabled,
     searchLayoutEnabled,
     searchEscBackEnabled,
+    searchEscLeavesEnabled,
     isSearchDraft,
     activeSplit,
     tabs,
