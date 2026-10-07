@@ -1,5 +1,8 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
+const fs = require("node:fs");
+const path = require("node:path");
+const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 const { load } = require("./task-route-loader.cjs");
 
@@ -14,6 +17,7 @@ function makeFlow(t, {
   playlist = [task, nextTask], mobile = false, routerPathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
   nativePathname = `/detail/project-${task.projectId}/${task.uniqueIndex}`,
 } = {}) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const queryClient = new QueryClient();
   const buildInboxQueryCache = notifications => ({
     notifications,
@@ -37,6 +41,7 @@ function makeFlow(t, {
     usePathname: () => routerPathname,
     useSearchParams: () => new URLSearchParams(inboxFlow ? { inboxFlow } : {}),
     useRouter: () => ({
+      push: href => navigations.push(["Push", href]),
       replace: href => {
         navigations.push(["Replace", href]);
         global.window.location = new URL(href, "https://app.hypertask.ai");
@@ -51,7 +56,7 @@ function makeFlow(t, {
   const originalWindow = global.window;
   const originalFetch = global.fetch;
   global.window = {
-    location: new URL(nativePathname, "https://app.hypertask.ai"),
+    location: new URL(nativePathname + (inboxFlow ? `?inboxFlow=${inboxFlow}` : ""), "https://app.hypertask.ai"),
     dispatchEvent: () => {},
   };
   global.fetch = async url => {
@@ -163,6 +168,7 @@ function makeFlow(t, {
   }
   return { queryClient, archived, navigations, toasts, context, activeElement, keyboard, pressE,
     archiveNotification: (...args) => useFocus().archiveNotificationGetter(...args),
+    ...useNavigate(),
   };
 }
 
@@ -178,8 +184,8 @@ test("E immediately after an Inbox cached open archives before detail membership
 
 for (const mobile of [false, true]) {
   const surface = mobile ? "phone" : "desktop";
-  test(`early ${surface} E archives and advances while Next still reports the Inbox source path`, t => {
-    const flow = makeFlow(t, { mobile, routerPathname: "/inbox" });
+  test(`ready ${surface} E archives and advances after the Inbox keyboard handoff`, t => {
+    const flow = makeFlow(t, { mobile });
     flow.pressE();
     assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
     assert.deepEqual(flow.queryClient.getQueryData(inboxKey).notifications, []);
@@ -190,7 +196,7 @@ for (const mobile of [false, true]) {
   });
 
   test(`early ${surface} E on the last Inbox ticket archives and returns to Inbox`, t => {
-    const flow = makeFlow(t, { mobile, routerPathname: "/inbox", playlist: [task] });
+    const flow = makeFlow(t, { mobile, playlist: [task] });
     flow.pressE();
     assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
     assert.deepEqual(flow.navigations, [["Back"]]);
@@ -319,5 +325,165 @@ for (const [name, focus] of [
     flow.pressE();
     assert.deepEqual(flow.archived, []);
     assert.deepEqual(flow.navigations, []);
+  });
+}
+
+function sourceCallback(file, env, name) {
+  const source = fs.readFileSync(path.resolve(__dirname, "..", file), "utf8");
+  const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let callback;
+  function visit(node) {
+    if (name && ts.isVariableDeclaration(node) && node.name.getText(tree) === name) callback = node.initializer;
+    if (!name && ts.isCallExpression(node) && node.expression.getText(tree) === "useEffect" &&
+        node.arguments[0]?.getText(tree).includes('"htpr-7002-detail-keyboard"')) callback ??= node.arguments[0];
+    ts.forEachChild(node, visit);
+  }
+  visit(tree);
+  assert.ok(callback, `${file}: real ${name ?? "keyboard handoff effect"}`);
+  const compiled = ts.transpileModule(`const callback = ${callback.getText(tree)};`, {
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  }).outputText;
+  return new Function(...Object.keys(env), `${compiled}\nreturn callback;`)(...Object.values(env));
+}
+
+function queuedFlow(t, { enabled = true, ...options } = {}) {
+  const flow = makeFlow(t, { enabled, ...options });
+  const listeners = new Map();
+  const frames = new Map();
+  let frameId = 0;
+  for (const target of [window, document]) {
+    target.addEventListener = (type, handler, capture) => listeners.set(`${type}:${!!capture}`, handler);
+    target.removeEventListener = (type, handler, capture) => listeners.delete(`${type}:${!!capture}`);
+  }
+  const cleanup = sourceCallback("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
+    inboxEFirstPress: enabled, window, document,
+    returnIfModalOrInputActive: () => ["INPUT", "TEXTAREA"].includes(flow.activeElement.tagName) ||
+      !!flow.activeElement.closest(".ProseMirror") || !!flow.activeElement.closest(".chatwindow"),
+    requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
+    cancelAnimationFrame: id => frames.delete(id),
+  })();
+  t.after(() => cleanup?.());
+  let readinessCleanup;
+  const originalCustomEvent = global.CustomEvent;
+  global.CustomEvent = class { constructor(type, { detail }) { this.type = type; this.detail = detail; } };
+  window.dispatchEvent = event => listeners.get(`${event.type}:false`)?.(event);
+  t.after(() => { readinessCleanup?.(); global.CustomEvent = originalCustomEvent; });
+  function mountKeyboard() {
+    readinessCleanup?.();
+    readinessCleanup = sourceCallback("src/app/detail/[...slug]/useTaskDetailReadiness.tsx", {
+      embedded: false, inboxEFirstPress: enabled, currentTask: flow.context.currentTask, window, document, CustomEvent,
+      ...flow.keyboard(),
+    })();
+  }
+  function press() {
+    const event = { key: "e", keyCode: 69, ctrlKey: false, metaKey: false, shiftKey: false, altKey: false,
+      prevented: false, stopped: false, preventDefault() { this.prevented = true; }, stopImmediatePropagation() { this.stopped = true; } };
+    listeners.get("keydown:true")?.(event);
+    if (!event.stopped) listeners.get("keydown:false")?.(event);
+    return event;
+  }
+  function frame() {
+    const queued = [...frames.values()]; frames.clear();
+    for (const callback of queued) callback();
+  }
+  return { ...flow, mountKeyboard, press, frame };
+}
+
+for (const mobile of [false, true]) {
+  test(`queued early ${mobile ? "phone" : "desktop"} E cannot reach the stale Inbox listener or archive before detail is ready`, t => {
+    const flow = queuedFlow(t, { mobile });
+    const event = flow.press();
+    assert.equal(event.stopped, true, "capture must stop the still-mounted Inbox bubble handler");
+    assert.equal(event.prevented, true);
+    flow.frame();
+    assert.deepEqual(flow.archived, []);
+    assert.deepEqual(flow.navigations, []);
+    flow.mountKeyboard();
+    flow.frame();
+    assert.deepEqual(flow.archived, [], "mount alone does not mean notification membership has loaded");
+    flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
+    flow.mountKeyboard();
+    flow.frame();
+    assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+    assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+    flow.frame();
+    assert.equal(flow.archived.length, 1);
+  });
+}
+
+
+test("the queued last-ticket E archives and returns to Inbox", t => {
+  const flow = queuedFlow(t, { playlist: [task] });
+  flow.press();
+  flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
+  flow.mountKeyboard(); flow.frame();
+  assert.equal(flow.archived.length, 1);
+  assert.deepEqual(flow.navigations, [["Back"]]);
+});
+
+for (const reason of ["timeout", "navigation", "unmount"]) {
+  test(`a queued E cancelled by ${reason} never archives without advancing`, t => {
+    const flow = queuedFlow(t);
+    flow.press();
+    if (reason === "timeout") t.mock.timers.tick(2000);
+    else if (reason === "navigation") window.location = new URL("/my-tasks", window.location.origin);
+    else window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", { detail: { path: window.location.pathname, ready: false } }));
+    flow.frame();
+    assert.deepEqual(flow.archived, []);
+    assert.deepEqual(flow.navigations, []);
+  });
+}
+
+test("repeated early E queues only one archive-and-advance action", t => {
+  const flow = queuedFlow(t);
+  flow.press(); flow.press();
+  flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
+  flow.mountKeyboard(); flow.frame();
+  assert.equal(flow.archived.length, 1);
+  assert.equal(flow.navigations.length, 1);
+});
+
+test("a fully ready E stays on the existing detail keyboard path", t => {
+  const flow = queuedFlow(t, { currentTask: { ...task, _count: { notifications: 1 }, notifications: [notification] } });
+  flow.mountKeyboard();
+  assert.equal(flow.press().stopped, false);
+  assert.equal(flow.archived.length, 1);
+  assert.equal(flow.navigations.length, 1);
+});
+
+test("flag off installs no handoff and preserves the early detail no-op", t => {
+  const flow = queuedFlow(t, { enabled: false });
+  flow.mountKeyboard();
+  assert.equal(flow.press().stopped, false);
+  assert.deepEqual(flow.archived, []);
+  assert.deepEqual(flow.navigations, []);
+});
+
+for (const focus of [
+  { tagName: "INPUT" }, { tagName: "TEXTAREA" },
+  { closest: selector => selector === ".ProseMirror" ? {} : null },
+  { closest: selector => selector === ".chatwindow" ? {} : null },
+]) {
+  test("the early queue leaves typing E untouched", t => {
+    const flow = queuedFlow(t); Object.assign(flow.activeElement, focus);
+    const event = flow.press();
+    assert.equal(event.stopped, false); assert.equal(event.prevented, false);
+    assert.deepEqual(flow.archived, []);
+  });
+}
+
+for (const enabled of [false, true]) {
+  test(`cached Inbox mount refresh ${enabled ? "on" : "off"}: prevents replaying the source URL only behind the bugfix flag`, async t => {
+    const flow = makeFlow(t, { enabled });
+    window.history = { state: { cachedTaskDetail: { taskId: task.id } } };
+    const getTask = sourceCallback("src/app/detail/[...slug]/useTaskDetailModalActions.tsx", {
+      inboxEFirstPress: enabled, navigate: flow.navigate, _parsedTask: task, setCurrentProject: () => {},
+      taskDetailConfig: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } },
+    }, "getTask");
+    await getTask();
+    assert.deepEqual(flow.navigations, enabled ? [] : [["Refresh"]]);
+    window.history.state = {};
+    await getTask();
+    assert.deepEqual(flow.navigations.at(-1), ["Refresh"], "native detail still refreshes normally");
   });
 }

@@ -8,8 +8,10 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
+
+import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
 const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").then((module) => {
@@ -50,6 +52,54 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  useEffect(() => {
+    if (!inboxEFirstPress) return;
+    let keyboard: { path: string; ready: boolean; handleKeyDown?: (event: KeyboardEvent) => void } | undefined;
+    let pending: { path: string; event: KeyboardEvent } | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let frame = 0;
+    const clearPending = () => {
+      pending = undefined;
+      clearTimeout(timer);
+      cancelAnimationFrame(frame);
+    };
+    const release = () => {
+      if (!pending) return;
+      if (window.location.pathname !== pending.path) return clearPending();
+      if (keyboard?.path === pending.path && keyboard.ready) {
+        const event = pending.event;
+        clearPending();
+        keyboard.handleKeyDown?.(event);
+      } else {
+        frame = requestAnimationFrame(release);
+      }
+    };
+    const onReady = (event: Event) => {
+      keyboard = (event as CustomEvent<typeof keyboard>).detail;
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.keyCode !== 69 || event.ctrlKey || event.metaKey || returnIfModalOrInputActive(true)) return;
+      const path = window.location.pathname;
+      if (!path.startsWith("/detail/project-") || new URLSearchParams(window.location.search).get("inboxFlow") !== "true") return;
+      if (keyboard?.path === path && keyboard.ready) return;
+      // The Inbox listener can outlive its URL, or disappear before the detail listener mounts.
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      if (pending?.path === path) return;
+      clearPending();
+      pending = { path, event };
+      timer = setTimeout(clearPending, 2000);
+      frame = requestAnimationFrame(release);
+    };
+    window.addEventListener("htpr-7002-detail-keyboard", onReady);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      clearPending();
+      window.removeEventListener("htpr-7002-detail-keyboard", onReady);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [inboxEFirstPress]);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const pathname = usePathname();
   const queryClient = useQueryClient();

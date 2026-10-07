@@ -3,7 +3,10 @@ import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import type { TaskDetailContext } from "./TaskDetailContext";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
 export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
 
 
@@ -88,7 +91,11 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
 
   // ---------------------- GET TASK
   const getTask = async () => {
-    navigate(taskDetailConfig.navigation.refresh);
+    // Cached Inbox detail already revalidates via its task query. A mount refresh can replay the source URL after E advances.
+    if (!(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
+      new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {
+      navigate(taskDetailConfig.navigation.refresh);
+    }
     if (_parsedTask && _parsedTask.id !== taskDetailConfig.taskIds.newTask) {
       setCurrentProject(_parsedTask.project);
       // setCurrentTask(task)

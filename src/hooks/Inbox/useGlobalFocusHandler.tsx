@@ -1,6 +1,6 @@
 import { archiveNotifications, toggleNotificationArchive } from "@/lib/api/typedClient";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import {
   globalNotificationFocusAtom,
   currentUserAtom,
@@ -57,7 +57,6 @@ const isWaitingOnSynthetic = (notification: unknown) => {
 };
 
 const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
-  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedArchive: typeof toggleNotificationArchive | undefined;
   let typedBulkArchive: typeof archiveNotifications | undefined;
@@ -292,10 +291,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     // task; a refresh here races that replace and can restore the old URL,
     // parking the user on the snoozed task (HTPR-4234/HTPR-4570). The inbox
     // list is client-cache driven (updated above), so only refresh off-detail.
-    // Cached detail opens retain Next's Inbox pathname until the route catches up.
-    const activePathname = inboxEFirstPress && typeof window !== "undefined"
-      ? window.location.pathname : pathname;
-    if (!activePathname?.startsWith("/detail")) router.refresh();
+    if (!pathname?.startsWith("/detail")) router.refresh();
 
     return newState;
   };
@@ -487,9 +483,7 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     }
 
     const tab = newNotifications?.structuredData?.tabs?.[newValue];
-    const activePathname = inboxEFirstPress && typeof window !== "undefined"
-      ? window.location.pathname : pathname;
-    if (tab && activePathname?.startsWith("/inbox")) {
+    if (tab && pathname?.startsWith("/inbox")) {
       const isProjectSplit = tab?.projectId != null;
       const projectIdParam = isProjectSplit
         ? `&projectId=${tab.projectId}`
