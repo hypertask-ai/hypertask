@@ -2,13 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const http = require("node:http");
 const crypto = require("node:crypto");
-const { execFileSync } = require("node:child_process");
 const ts = require("typescript");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
 const { projectViewRoutes } = require("./htpr-6923-verify.cjs");
 
-const legacySource = execFileSync("git", ["show", "d08ea2a01:src/pages/api/projects/views/delete-rename-view.ts"], { encoding: "utf8" });
+const legacySource = require("node:fs").readFileSync(require("node:path").join(__dirname, "fixtures/htpr-6968-delete-rename-view.legacy.ts.txt"), "utf8");
 assert.equal(crypto.createHash("sha256").update(legacySource).digest("hex"), projectViewRoutes["delete-rename-view"].hash);
 const actor = { userId: 985, source: "better-auth" };
 const query = { viewId: "deleted-view", projectId: "7641" };
