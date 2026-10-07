@@ -28,8 +28,9 @@ function navigateHook(queryClient, router, userId = 2343, authenticatedId = user
     "@/lib/state": { useRecoilValue: () => ({ id: userId }) },
     "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/General/useAuth": { useAuth: () => ({ currentUser: null, authenticatedUserId: authenticatedId }) },
+    "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/lib/analytics/taskDetailReadiness": { taskDetailEntryPathForRoute: () => "board", markTaskDetailNavigationStart: () => {} },
   };
@@ -200,7 +201,7 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": { __esModule: true, default: "a" },
     "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
