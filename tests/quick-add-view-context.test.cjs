@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const { load } = require("./helpers/create-view-context.cjs");
 
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-6993-quick-add-view-context";
@@ -16,18 +17,6 @@ const assignees = [{ id: 42, uid: "human-42", displayName: "Member", photoURL: "
 const priority = constants.PriorityConstants.find(value => value.priority_index === 2);
 const estimate = constants.EstimateConstants.find(value => value.estimate_index === 4);
 const filters = (entries) => ({ matchFilters: "ALL", addedFilters: Object.entries(entries).map(([type, searchPayload]) => ({ type, searchPayload, match: "ALL" })) });
-
-function load(file, mocks) {
-  const compiled = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
-    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
-  }).outputText;
-  const loaded = { exports: {} };
-  new Function("require", "module", "exports", compiled)(
-    (specifier) => Object.hasOwn(mocks, specifier) ? { __esModule: true, ...mocks[specifier] } : require(specifier),
-    loaded, loaded.exports,
-  );
-  return loaded.exports;
-}
 
 const viewHelpers = load("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", {
   "@/lib/firstScreen/boardView": {},
