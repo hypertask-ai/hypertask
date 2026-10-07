@@ -48,6 +48,12 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   window.requestAnimationFrame = () => 1;
   window.cancelAnimationFrame = () => {};
   const client = new QueryClient();
+  let settleTraversal;
+  let nextTraversals = 0;
+  window.addEventListener("popstate", () => {
+    if (settleTraversal) { const resolve = settleTraversal; settleTraversal = null; setImmediate(resolve); }
+  }, true);
+  window.addEventListener("popstate", () => nextTraversals++);
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
     await React.act(async () => renderer.unmount());
@@ -111,14 +117,15 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   });
   const traverse = method => React.act(async () => {
     await new Promise(resolve => {
-      window.addEventListener("popstate", () => setImmediate(resolve), { once: true });
+      settleTraversal = resolve;
       window.history[method]();
     });
   });
   return { client, render, open, assertContent, click, traverse, playlists,
     next(task) { nextPath = href(task); render(); },
     server(task) { serverTask = task; children = React.createElement(ServerDetail); nextPath = href(task); render(); },
-    instant(value) { instant = value; }, account(value) { account = value; }, authenticated(value) { authenticated = value; } };
+    instant(value) { instant = value; }, account(value) { account = value; }, authenticated(value) { authenticated = value; },
+    nextTraversals: () => nextTraversals };
 }
 
 for (const direct of [false, true]) {
@@ -131,6 +138,10 @@ for (const direct of [false, true]) {
     const composer = document.querySelector("textarea");
     await React.act(async () => { window.dispatchEvent(new Event("cached-task-detail-navigation")); f.render(); });
     assert.equal(document.querySelector("textarea"), composer, "same-address notification never replaces the mounted page");
+    await React.act(async () => window.dispatchEvent(new window.PopStateEvent("popstate", { state: window.history.state })));
+    assert.equal(document.querySelector("textarea"), composer, "same-task modal history retains the composer");
+    assert.equal(f.nextTraversals(), 1, "same-task modal popstate still reaches its listeners");
+    const nextTraversalsBefore = f.nextTraversals();
     await React.act(async () => {
       const { cachedTaskDetail, ...state } = window.history.state;
       window.history.replaceState(state, "", window.location.href);
@@ -143,6 +154,7 @@ for (const direct of [false, true]) {
     await React.act(async () => f.next(child)); f.assertContent(parent);
     await React.act(async () => f.next(parent)); f.assertContent(parent);
     await f.traverse("forward"); f.assertContent(child);
+    assert.equal(f.nextTraversals(), nextTraversalsBefore, "cached Back/Forward must not replay Next's stale route tree");
     await React.act(async () => f.next(parent)); f.assertContent(child);
     await React.act(async () => f.next(child)); f.assertContent(child);
     await f.click(parent); f.assertContent(parent);

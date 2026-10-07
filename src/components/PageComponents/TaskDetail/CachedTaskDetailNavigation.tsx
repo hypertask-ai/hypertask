@@ -68,21 +68,26 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
+      if (subtaskLink && accountId !== null && window.location.pathname !==
+          `/detail/project-${location.projectId}/${location.uniqueIndex}`) {
+        const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
+        if (task) {
+          // Publish the cached traversal without replaying Next's stale route tree.
+          event.stopImmediatePropagation();
+          openCachedTaskDetail({
+            queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+            task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+          });
+          return;
+        }
+      }
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
           // Same-task modal Back must reach its dismiss listener even if Next
           // stripped the cached marker, just as rendering retains that location.
           cachedTaskDetailLocation(window.location.pathname, accountId, {
             cachedTaskDetail: event.state?.cachedTaskDetail ?? previousLocation.current,
           })) return;
-      if (subtaskLink && accountId !== null) {
-        const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-        // Unmarked Next entries need a durable marker before stale RSC can render.
-        if (task && openCachedTaskDetail({
-          queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-          task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
-        })) return;
-      }
       // Next's native-history restore can cache detail RSC in the source route's slot.
       // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
