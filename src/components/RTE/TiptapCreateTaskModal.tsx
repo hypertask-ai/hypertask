@@ -506,9 +506,9 @@ const TiptapCreateTaskModal = () => {
         return;
       }
     }
-    const attachmentsAtSave = [
-      ...(formValuesOverride?.attachments ?? createTaskAttachmentsRef.current),
-    ];
+    const attachmentsAtSave = (
+      formValuesOverride?.attachments ?? createTaskAttachmentsRef.current
+    ).map((attachment, id) => "file" in attachment ? attachment : { id, file: attachment });
     const releaseSubmission = () => {
       createSubmissionRef.current = false;
       releaseCreateTaskUploadReservations(attachmentsAtSave);

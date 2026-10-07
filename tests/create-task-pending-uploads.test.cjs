@@ -201,6 +201,15 @@ test('dropping an already-attached file does not leave an unresolvable wait', as
   assert.equal(fixture.context.pendingAttachmentUploadsRef.current.size, 0);
 });
 
+test('a settled ordinary upload still saves the unwrapped preview metadata', async () => {
+  const fixture = mount(false);
+  const uploaded = { name: 'settled.txt', source: 'https://files.example/settled.txt', size: 5, type: 'text/plain' };
+  fixture.context.createTaskAttachmentsRef.current = [uploaded];
+  await fixture.CtrlEnterHandler('SaveAndClose');
+  await nextTurn();
+  assert.equal(fixture.created[0].attachments[0].file, uploaded);
+});
+
 test('the create window wires selection and upload-failure reports through the shared uploader', () => {
   const state = fs.readFileSync(path.join(root, 'src/components/Common/AttachmentsUpload/useAttachmentUploadState.ts'), 'utf8');
   const uploader = fs.readFileSync(path.join(root, 'src/components/Common/AttachmentsUpload/index.tsx'), 'utf8');
