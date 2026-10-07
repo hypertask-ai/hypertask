@@ -16,6 +16,7 @@ import {
   HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,
   HTPR_6962_KEEP_ASSIGNEE_FLAG,
   HTPR_6972_SUBTASK_LINK_FLAG,
+  HTPR_6991_BACK_FIRST_OPEN_FLAG,
   HTPR_7000_INBOX_NEXT_OPEN_FLAG,
   HTPR_6978_SIZE_LABEL_CLICK_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
@@ -281,6 +282,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6923_APP_ROUTER_WRITES_FLAG,
     shippedOn: "2026-10-06",
     description: "Uses shared App-style handlers for legacy task writes while keeping the original URLs and responses.",
+  },
+  {
+    key: HTPR_6991_BACK_FIRST_OPEN_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Clears the previous task immediately on Back or Forward before restoring cached detail or waiting for the destination route.",
   },
   {
     key: HTPR_7000_INBOX_NEXT_OPEN_FLAG,
