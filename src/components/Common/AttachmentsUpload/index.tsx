@@ -341,6 +341,7 @@ const AttachmentsUpload = (props: IProps) => {
               handleRemove={removeAttachment}
               mode="Creating task"
               callbackAttachments={returnUploadedAttachments}
+              onUploadFailed={props.onUploadFailed}
               backgroundTaskUploads={backgroundTaskUploads}
             />
           ) : (

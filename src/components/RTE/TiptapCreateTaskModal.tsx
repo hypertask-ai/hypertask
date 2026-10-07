@@ -19,7 +19,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { EditorContent } from "@tiptap/react";
 import { useContextCreateTaskModal } from "@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal";
 import { useContextCreateTaskInfoColumn } from "@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskGloballyInfoColumn";
-import AttachmentsUpload from "../Common/AttachmentsUpload";
+import AttachmentsUpload, { type FileItem } from "../Common/AttachmentsUpload";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import type { IForm } from "@/models/CreateTaskModalModels/model";
 import { TSendBackButtonParam } from "@/models/CreateTaskModalModels/model";
@@ -133,6 +133,44 @@ const TiptapCreateTaskModal = () => {
   const [newCommentAttachments, setNewCommentAttachments] = useState<any[]>(
     formValues.attachments
   );
+  const pendingAttachmentUploadsRef = useRef(new Map<string, {
+    promise: Promise<void>;
+    resolve: () => void;
+    reject: (error: Error) => void;
+    failed: boolean;
+    seen: boolean;
+  }>());
+  // Register before file preparation or the lazy preview can yield to Save.
+  const onFilesSelected = (files: File[], preparation: Promise<FileItem[]>) => {
+    files.forEach((file) => {
+      const existing = pendingAttachmentUploadsRef.current.get(file.name);
+      if (existing && !existing.failed) return;
+      let resolve!: () => void;
+      let reject!: (error: Error) => void;
+      const promise = new Promise<void>((done, fail) => {
+        resolve = done;
+        reject = fail;
+      });
+      void promise.catch(() => undefined);
+      pendingAttachmentUploadsRef.current.set(file.name, { promise, resolve, reject, failed: false, seen: false });
+    });
+    void preparation.then((prepared) => {
+      prepared.forEach(({ file }, index) => {
+        const name = files[index].name;
+        const pending = pendingAttachmentUploadsRef.current.get(name);
+        if (!pending || name === file.name) return;
+        // Image preparation can rename the file when it converts to WebP.
+        pendingAttachmentUploadsRef.current.delete(name);
+        pendingAttachmentUploadsRef.current.set(file.name, pending);
+      });
+    }).catch(() => undefined);
+  };
+  const onUploadFailed = (fileName: string) => {
+    const pending = pendingAttachmentUploadsRef.current.get(fileName);
+    if (!pending) return;
+    pending.failed = true;
+    pending.reject(new Error(`Could not upload "${fileName}". Please try again.`));
+  };
   const createTaskAttachmentsRef = useRef(newCommentAttachments);
   useEffect(() => {
     createTaskAttachmentsRef.current = newCommentAttachments;
@@ -330,7 +368,15 @@ const TiptapCreateTaskModal = () => {
   };
   // ==================== get attachments from the componetn =============
   const getAttachments = async (files: File[]) => {
-    // console.log("🚀 ~ file: TipTap.tsx:376 ~ getAttachments ~ files:", files)
+    // A deliberately removed preview must not leave Save waiting forever.
+    const names = new Set(files.map((file) => file.name));
+    pendingAttachmentUploadsRef.current.forEach((pending, name) => {
+      if (names.has(name)) pending.seen = true;
+      else if (pending.seen && !pending.failed) {
+        pending.resolve();
+        pendingAttachmentUploadsRef.current.delete(name);
+      }
+    });
     setNewCommentAttachments(files);
   };
 
@@ -359,6 +405,12 @@ const TiptapCreateTaskModal = () => {
     // console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // this is confirmation that attachments are uploaded.
     // setTotalChecks(prev=>prev+1)
+    createTaskAttachmentsRef.current = attachmentsReturned;
+    attachmentsReturned.forEach(({ file }) => {
+      if (!file.source) return;
+      pendingAttachmentUploadsRef.current.get(file.name)?.resolve();
+      pendingAttachmentUploadsRef.current.delete(file.name);
+    });
     handleChange("attachments", attachmentsReturned);
     setNewCommentAttachments(attachmentsReturned)
     setTrigger(prev=>!prev)
@@ -384,6 +436,8 @@ const TiptapCreateTaskModal = () => {
     setCurrentFocusedElement("Title");
     setShowConfirmationModal(false);
     setFilesDropped([]);
+    pendingAttachmentUploadsRef.current.clear();
+    createTaskAttachmentsRef.current = [];
     setNewCommentAttachments([]);
     setTrigger((current) => !current);
     handleSetUserInput("");
@@ -422,12 +476,30 @@ const TiptapCreateTaskModal = () => {
     // starting title generation or flipping the upload flag.
     if (!param) return;
     if (uploadInProgress) return toast("Please wait for the task to upload");
-    if (!backgroundTaskUploadsEnabled && canSave && !canSave?.canUpload)
-      return toast(
-        `Please wait for the upload to finish before submitting your ticket.`
-      );
-    if (backgroundTaskUploadsEnabled && createSubmissionRef.current) return;
-    if (backgroundTaskUploadsEnabled) createSubmissionRef.current = true;
+    if (createSubmissionRef.current) return;
+    createSubmissionRef.current = true;
+    const epochBeforeUploads = saveEpochRef.current;
+    if (pendingAttachmentUploadsRef.current.size) {
+      setUploadInProgress(true);
+      try {
+        while (pendingAttachmentUploadsRef.current.size) {
+          await Promise.all([...pendingAttachmentUploadsRef.current.values()].map(({ promise }) => promise));
+        }
+      } catch (error) {
+        pendingAttachmentUploadsRef.current.forEach((pending, name) => {
+          if (pending.failed) pendingAttachmentUploadsRef.current.delete(name);
+        });
+        setUploadInProgress(false);
+        createSubmissionRef.current = false;
+        toast.error((error as Error).message);
+        return;
+      }
+      if (saveEpochRef.current !== epochBeforeUploads) {
+        setUploadInProgress(false);
+        createSubmissionRef.current = false;
+        return;
+      }
+    }
     const attachmentsAtSave = [
       ...(formValuesOverride?.attachments ?? createTaskAttachmentsRef.current),
     ];
@@ -435,13 +507,11 @@ const TiptapCreateTaskModal = () => {
       createSubmissionRef.current = false;
       releaseCreateTaskUploadReservations(attachmentsAtSave);
     };
-    const formValuesAtSave = backgroundTaskUploadsEnabled
-      ? {
-          ...formValues,
-          ...formValuesOverride,
-          attachments: attachmentsAtSave,
-        }
-      : formValuesOverride;
+    const formValuesAtSave = {
+      ...formValues,
+      ...formValuesOverride,
+      attachments: attachmentsAtSave,
+    };
     const backgroundUploadCount = backgroundTaskUploadsEnabled
       ? createTaskUploadCount(attachmentsAtSave ?? [])
       : 0;
@@ -1088,6 +1158,8 @@ const TiptapCreateTaskModal = () => {
               sendOnClick={CtrlEnterHandler}
               editor={editor}
               returnUploadedAttachments={callbackAttachments}
+              onFilesSelected={onFilesSelected}
+              onUploadFailed={onUploadFailed}
               audioTiptapCallback={audioTiptapCallback}
               audioDefaultContent={editor?.getText()}
               toggleRecording={toggleRecording}

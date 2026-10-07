@@ -21,6 +21,8 @@ export interface IProps {
   sendOnClick?: TSendBackAttachmentButton;
   editor: Editor | null;
   returnUploadedAttachments?: (attachmentsReturned: any[]) => Promise<void>;
+  onFilesSelected?: (files: File[], preparation: Promise<FileItem[]>) => void;
+  onUploadFailed?: (fileName: string) => void;
   inInbox?: boolean;
   handleCallback?: (
     mode_?: "moveToNext",
