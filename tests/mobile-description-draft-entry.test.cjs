@@ -172,9 +172,9 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const Navigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
     react: {
       useMemo: factory => factory(),
-      useRef: () => previousLocation,
+      useRef: value => value === undefined ? previousLocation : { current: value },
       useState: () => [() => null],
-      useSyncExternalStore: () => dom.window.location.pathname,
+      useSyncExternalStore: (_subscribe, getSnapshot) => getSnapshot(),
       useEffect: callback => { const cleanup = callback(); if (cleanup) navigationCleanups.push(cleanup); },
     },
     "next/navigation": { usePathname: () => taskHref, useRouter: () => ({ replace: href => navigationCalls.push(href), refresh: () => navigationCalls.push("refresh") }) },

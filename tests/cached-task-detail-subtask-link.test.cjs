@@ -5,6 +5,7 @@ const test = require("node:test");
 const { execFileSync } = require("node:child_process");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
+const { flushSync } = require("react-dom");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
@@ -50,10 +51,12 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   const client = new QueryClient();
   let settleTraversal;
   let nextTraversals = 0;
+  let restoreNextRoute = () => {};
   window.addEventListener("popstate", () => {
     if (settleTraversal) { const resolve = settleTraversal; settleTraversal = null; setImmediate(resolve); }
   }, true);
-  window.addEventListener("popstate", () => nextTraversals++);
+  // Native Window popstate runs in registration order, unlike jsdom's synthetic capture ordering.
+  window.addEventListener("popstate", () => { nextTraversals++; restoreNextRoute(); }, true);
   const renderer = createRoot(document.getElementById("root"));
   t.after(async () => {
     await React.act(async () => renderer.unmount());
@@ -126,6 +129,13 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
     next(task) { nextPath = href(task); render(); },
     server(task) { serverTask = task; children = React.createElement(ServerDetail); nextPath = href(task); render(); },
     remount() { navigationKey++; render(); },
+    nativeNext() {
+      restoreNextRoute = () => flushSync(() => {
+        window.history.replaceState({}, "", window.location.href);
+        nextPath = window.location.pathname;
+        render();
+      });
+    },
     instant(value) { instant = value; }, account(value) { account = value; }, authenticated(value) { authenticated = value; },
     nextTraversals: () => nextTraversals };
 }
@@ -156,7 +166,7 @@ for (const direct of [false, true]) {
     await React.act(async () => f.next(child)); f.assertContent(parent);
     await React.act(async () => f.next(parent)); f.assertContent(parent);
     await f.traverse("forward"); f.assertContent(child);
-    assert.equal(f.nextTraversals(), nextTraversalsBefore, "cached Back/Forward must not replay Next's stale route tree");
+    assert.equal(f.nextTraversals(), nextTraversalsBefore + 2, "Next's native listener runs before cached Back/Forward recovery");
     await React.act(async () => f.next(parent)); f.assertContent(child);
     await React.act(async () => f.next(child)); f.assertContent(child);
     await f.click(parent); f.assertContent(parent);
@@ -184,7 +194,20 @@ test("cached traversal survives an unmarked matching Next page without a remembe
   assert.equal(window.history.state.cachedTaskDetail?.taskId, parent.id, "cached Back must survive losing the remembered location");
   f.assertContent(parent);
   await f.traverse("forward"); f.assertContent(child);
-  assert.equal(f.nextTraversals(), 0);
+  assert.equal(f.nextTraversals(), 2);
+});
+
+test("native Next popstate cannot remove cached recovery or hide a same-path marker change", async t => {
+  const f = fixture(t, { direct: true });
+  await React.act(async () => f.render());
+  f.client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parentWithChild);
+  await f.click(child);
+  await React.act(async () => f.server(child));
+  f.nativeNext();
+  await f.traverse("back");
+  assert.equal(window.history.state.cachedTaskDetail?.taskId, parent.id, "native Next must not remove cached recovery before its listener runs");
+  f.assertContent(parent);
+  await f.traverse("forward"); f.assertContent(child);
 });
 
 test("an unmarked matching Next page retains its composer after seeding and same-task modal popstate", async t => {
@@ -196,6 +219,20 @@ test("an unmarked matching Next page retains its composer after seeding and same
   assert.equal(document.querySelector("textarea"), composer);
   assert.equal(composer.isConnected, true);
   assert.equal(composer.value, "Unsent draft");
+});
+
+test("same-task modal history after a normal Next navigation does not replace the composer with cached content", async t => {
+  const f = fixture(t, { direct: true });
+  await React.act(async () => f.render());
+  f.client.setQueryData(cache.cachedTaskDetailKey(2343, child.id), child);
+  await React.act(async () => {
+    window.history.pushState({}, "", href(child));
+    f.server(child);
+  });
+  const composer = document.querySelector("textarea");
+  await React.act(async () => window.dispatchEvent(new window.PopStateEvent("popstate", { state: window.history.state })));
+  assert.equal(document.querySelector("textarea"), composer);
+  assert.equal(window.history.state.cachedTaskDetail, undefined);
 });
 
 for (const ref of [undefined, "3a35c08e7~1"]) {

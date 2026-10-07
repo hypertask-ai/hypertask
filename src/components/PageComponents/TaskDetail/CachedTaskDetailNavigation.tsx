@@ -25,6 +25,7 @@ const subscribeToLocation = (notify: () => void) => {
   };
 };
 const browserPathname = () => window.location.pathname;
+const browserCachedLocation = () => JSON.stringify([window.location.pathname, window.history.state?.cachedTaskDetail?.taskId ?? null]);
 const serverPathname = () => null;
 
 const warmTaskDetail = () => Promise.all([
@@ -52,10 +53,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const router = useRouter();
   const currentUser = useRecoilValue(currentUserAtom);
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
+  const sourcePath = useRef(pathname);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  // Cached opens retain Next's source tree, so popstate must update the view independently.
-  const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
+  // Include the marker: Next can publish the popstate pathname before we restore its cached task.
+  const nativeLocation = useSyncExternalStore(subscribeToLocation, subtaskLink ? browserCachedLocation : browserPathname, serverPathname);
+  const nativePathname: string | null = subtaskLink && nativeLocation ? JSON.parse(nativeLocation)[0] : nativeLocation;
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
@@ -66,10 +69,17 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
+    if (!subtaskLink) return;
+    // Next may commit during popstate before our listener runs; retain the source until dispatch ends.
+    queueMicrotask(() => { sourcePath.current = window.location.pathname; });
+  }, [subtaskLink, nativePathname]);
+  useEffect(() => {
     if (!subtaskLink || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
+    const recordSourcePath = () => { sourcePath.current = window.location.pathname; };
     const restoreCachedTask = (event: PopStateEvent) => {
-      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
-      if (window.location.pathname === sourcePath) return;
+      const changedTask = window.location.pathname !== sourcePath.current;
+      recordSourcePath();
+      if (!changedTask) return;
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
       if (!task) return;
@@ -81,8 +91,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       });
     };
     window.addEventListener("popstate", restoreCachedTask, true);
-    return () => window.removeEventListener("popstate", restoreCachedTask, true);
-  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
+    window.addEventListener("cached-task-detail-navigation", recordSourcePath);
+    return () => {
+      window.removeEventListener("popstate", restoreCachedTask, true);
+      window.removeEventListener("cached-task-detail-navigation", recordSourcePath);
+    };
+  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
