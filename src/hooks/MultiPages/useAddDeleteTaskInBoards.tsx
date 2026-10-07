@@ -167,7 +167,14 @@ const useAddDeleteTaskInBoards = () => {
           ranking,
         });
         if (result?.error || !result?.resposne?.newTask) return false;
-        task = result.resposne.newTask;
+        task = {
+          ...result.resposne.newTask,
+          // Create responses omit assignments; hydrate only the inserted card.
+          assignees: defaults.assignees.map((assignee) => "uid" in assignee
+            ? { userId: assignee.id, user: assignee }
+            : { userId: assignee.userId, agentId: assignee.id, agent: assignee }
+          ) as ITask["assignees"],
+        };
         queryClient.setQueryData(["taskLabels", task.id], task.taskLabels ?? []);
         if (task.priority) queryClient.setQueryData(["priority", task.id], task.priority);
         if (task.estimate) queryClient.setQueryData(["estimate", task.id], task.estimate);

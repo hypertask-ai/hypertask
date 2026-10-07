@@ -12,7 +12,7 @@ const constants = load("src/lib/constants/constants.ts", {
   "@/lib/aiModelOptions": { aiModelOptions: [], defaultAiModelOption: {} },
 });
 const labels = [{ id: "11111111-1111-4111-8111-111111111111", value: "Urgent" }, { id: "22222222-2222-4222-8222-222222222222", value: "Phone" }];
-const assignees = [{ id: 42, uid: "human-42", displayName: "Member" }, { id: "33333333-3333-4333-8333-333333333333", displayName: "Agent", userId: 42, revokedAt: null }];
+const assignees = [{ id: 42, uid: "human-42", displayName: "Member", photoURL: "member.png" }, { id: "33333333-3333-4333-8333-333333333333", displayName: "Agent", photoURL: "agent.png", userId: 42, revokedAt: null }];
 const priority = constants.PriorityConstants.find(value => value.priority_index === 2);
 const estimate = constants.EstimateConstants.find(value => value.estimate_index === 4);
 const filters = (entries) => ({ matchFilters: "ALL", addedFilters: Object.entries(entries).map(([type, searchPayload]) => ({ type, searchPayload, match: "ALL" })) });
@@ -49,7 +49,7 @@ const conditions = load("src/utils/helperFunctions/Views/FilterHelperFunctions.t
   "@/lib/constants/builtinViews": {},
 });
 
-async function create({ activeFilters = emptyFilters, flag = true, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual", responseAssignees } = {}) {
+async function create({ activeFilters = emptyFilters, flag = true, position = "bottom", view = "appliedView", fail = false, existing = true, sorting = "Manual" } = {}) {
   const project = {
     id: 15, uniqueIdentifier: "HTPR", sorting_mode: sorting, sections: [{ sectionId: 7 }],
     project_view: { user_project_views: [{ [view]: { board_filters: activeFilters } }] },
@@ -83,11 +83,12 @@ async function create({ activeFilters = emptyFilters, flag = true, position = "b
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async (body) => {
       posts.push({ url: "modal-create", body });
       if (fail) return { error: true };
-      return { error: false, resposne: { newTask: {
+      const newTask = {
         ...body, id: 101, section: body.section_title,
         taskLabels: (body.tags ?? []).map(label => ({ label })),
-        assignees: responseAssignees ?? body.assignees.map(person => "uid" in person ? { userId: person.id, user: person } : { userId: person.userId, agentId: person.id, agent: person }),
-      } } };
+      };
+      delete newTask.assignees;
+      return { error: false, resposne: { newTask } };
     } },
   }).default();
   const originalLog = console.log;
@@ -152,12 +153,11 @@ test("flag off preserves the exact legacy request even in a filtered view", asyn
   assert.equal(result.cached.size, 0);
 });
 
-test("both modal creation routes return committed assignee responses for immediate filter visibility", () => {
-  for (const file of ["src/pages/api/tasks/createGlobally.ts", "src/lib/api/task-writes/create-global.ts"]) {
-    const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /assignmentsCreated = created\.result\.assignments/);
-    assert.match(source, /newTask: \{[\s\S]*taskLabels: tagsCreated,\s*assignees: assignmentsCreated,/);
-  }
+test("label-only quick add inserts an empty assignee list without response assignments", async () => {
+  const result = await create({ activeFilters: filters({ Labels: labels }) });
+  assert.equal(result.success, true);
+  assert.deepEqual(result.posts[0].body.assignees, []);
+  assert.deepEqual(result.inserted.at(-1).assignees, []);
 });
 
 test("excluded-match filters contribute no defaults, while absent, ANY and ALL matches apply", async () => {
@@ -234,24 +234,21 @@ test("priority-top position preserves ranking and legacy Urgent unless a view pr
   }
 });
 
-test("committed assignee response rows render human and agent avatars without counting the agent owner twice", async () => {
-  const responseAssignees = assignees.map((person, index) => ({
-    id: index + 1, assignerId: 6, assigner: { id: 6 }, taskId: 101,
-    userId: 42, user: { id: 42, displayName: "Member", photoURL: "member.png" },
-    agentId: "uid" in person ? null : person.id,
-    agent: "uid" in person ? null : { id: person.id, userId: 42, displayName: "Agent", photoURL: "agent.png", revokedAt: null },
-  }));
-  const result = await create({ activeFilters: filters({ Assignees: assignees }), responseAssignees });
-  const card = result.inserted.at(-1);
-  assert.deepEqual(card.assignees, responseAssignees);
-  const rendered = splitAssignees(card.assignees);
-  assert.deepEqual(rendered.humanAssignees, [responseAssignees[0].user]);
-  assert.deepEqual(rendered.agentAssignees, [responseAssignees[1].agent]);
-  assert.equal(conditions.assigneeFilterCondition(card, assignees, undefined, "ALL"), true);
-  const effects = fs.readFileSync(path.join(root, "src/lib/api/task-writes/create-global-effects.ts"), "utf8");
-  const persist = effects.slice(effects.indexOf("async function persistAssignee("), effects.indexOf("async function createAssigneeActivityAndNotification("));
-  assert.match(persist, /include: \{\s*assigner: true,\s*agent: \{/);
-  assert.match(persist, /user: \{\s*select: assignmentActivityUserSelect/);
+test("client defaults render human and agent avatars without response assignments or counting the agent owner twice", async () => {
+  for (const people of [[assignees[0]], [assignees[1]], assignees]) for (const position of ["top", "bottom"]) {
+    const result = await create({ activeFilters: filters({ Assignees: people }), position });
+    assert.equal(result.success, true);
+    assert.deepEqual(result.posts[0].body.assignees, people);
+    const card = position === "top" ? result.inserted[0] : result.inserted.at(-1);
+    assert.deepEqual(card.assignees, people.map(person => "uid" in person
+      ? { userId: person.id, user: person }
+      : { userId: person.userId, agentId: person.id, agent: person }
+    ));
+    const rendered = splitAssignees(card.assignees);
+    assert.deepEqual(rendered.humanAssignees, people.filter(person => "uid" in person));
+    assert.deepEqual(rendered.agentAssignees, people.filter(person => !("uid" in person)));
+    assert.equal(conditions.assigneeFilterCondition(card, people, undefined, "ALL"), true);
+  }
 });
 
 test("modal stays tags-only with flag off preserving raw legacy defaults and board switches", () => {
