@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { startTransition, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
@@ -87,18 +87,15 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
       (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
       flushSync(() => {
-        // Commit a cheap neutral view before the destination's potentially expensive mount.
-        if (backFirstOpen) setHistoryDestination({ pathname: window.location.pathname, source: children });
         openCachedTaskDetail({
           queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
           task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
         });
       });
-      if (backFirstOpen && EmbeddedTaskDetail) startTransition(() => setHistoryDestination(null));
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname, children, EmbeddedTaskDetail]);
+  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname, children]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
@@ -164,14 +161,18 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     void loadTaskDetail().then(({ default: Detail }) => {
       if (!cancelled) {
         setTaskDetail(() => Detail);
-        if (backFirstOpen) startTransition(() => setHistoryDestination(null));
       }
     }).catch(() => {
       if (!cancelled) router.replace(window.location.pathname + window.location.search + window.location.hash);
     });
     return () => { cancelled = true; };
-  }, [showDetail, EmbeddedTaskDetail, router, backFirstOpen]);
-  if (backFirstOpen && instantTicketOpen && currentUser?.id === accountId &&
+  }, [showDetail, EmbeddedTaskDetail, router]);
+  useEffect(() => {
+    if (historyDestination && pathname === historyDestination.pathname && children !== historyDestination.source) {
+      setHistoryDestination(null);
+    }
+  }, [historyDestination, pathname, children]);
+  if (!showDetail && backFirstOpen && instantTicketOpen && currentUser?.id === accountId &&
       historyDestination?.pathname === nativePathname &&
       (pathname !== nativePathname || children === historyDestination.source)) {
     return (

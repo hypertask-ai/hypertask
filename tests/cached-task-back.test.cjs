@@ -70,13 +70,13 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } 
     client.clear(); dom.window.close();
     for (const name of names) global[name] = previous[name];
   });
-  const initialize = async () => {
+  const initialize = async ({ refreshChild = true } = {}) => {
     await React.act(async () => server(parent));
     if (cachedParent) client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parent);
     await React.act(async () => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: child.projectId, uniqueIndex: child.uniqueIndex, href: href(child), task: child }));
     // The background Next refresh has replaced the original server tree with the child.
-    await React.act(async () => server(child));
-    assert.equal(observed().title, child.title);
+    if (refreshChild) await React.act(async () => server(child));
+    if (!coldViewer) assert.equal(observed().title, child.title);
     observeMount = true;
   };
   const checkpoint = () => checkpoints.push(observed());
@@ -102,7 +102,7 @@ function assertDestination(observed, task) {
 }
 
 for (const cachedParent of [true, false]) {
-  test(`Back after cached subtask open clears the child before ${cachedParent ? "cached parent mount" : "the parent route arrives"}`, async t => {
+  test(`Back after cached subtask open ${cachedParent ? "commits the parent without Loading" : "hides the child until the parent route arrives"}`, async t => {
     const f = fixture(t, { cachedParent });
     await f.initialize(); await f.traverse("back");
     assert.equal(window.location.pathname, href(parent));
@@ -113,7 +113,8 @@ for (const cachedParent of [true, false]) {
       assert.equal(f.nextTraversals(), 0);
       assert.deepEqual(f.routerCalls, []);
       assert.ok(f.mounts.length > 0);
-      for (const mount of f.mounts) assertDestination(mount, parent);
+      assert.ok(f.mounts.every(mount => mount.destination === href(parent)));
+      assert.equal(f.checkpoints.at(-1).loading, undefined);
     } else {
       assert.equal(f.observed().loading, href(parent));
       // A URL update alone is not proof that the old route content was replaced.
@@ -125,7 +126,7 @@ for (const cachedParent of [true, false]) {
     await f.traverse("forward");
     assertDestination(f.checkpoints.at(-1), child);
     assert.equal(f.observed().title, child.title);
-    for (const mount of f.mounts) assertDestination(mount, child);
+    assert.equal(f.checkpoints.at(-1).loading, undefined);
   });
 }
 
@@ -140,13 +141,12 @@ test("Forward with an evicted child keeps neutral loading until the child route 
 });
 
 for (const cachedParent of [true, false]) {
-  test(`flag off preserves the old ${cachedParent ? "synchronous mount" : "wrong-task fallback"} and is a negative control`, async t => {
+  test(`flag off preserves ${cachedParent ? "the synchronous cache hit" : "the wrong-task cache-miss fallback as a negative control"}`, async t => {
     const f = fixture(t, { enabled: false, cachedParent });
     await f.initialize(); await f.traverse("back");
     if (cachedParent) {
       assert.equal(f.observed().title, parent.title);
-      assert.ok(f.mounts.some(mount => mount.title === child.title && mount.body === child.description_.content));
-      assert.throws(() => assertDestination(f.mounts[0], parent), assert.AssertionError);
+      assert.equal(f.checkpoints.at(-1).title, parent.title);
     } else {
       assert.equal(f.observed().title, child.title);
       assert.equal(f.observed().body, child.description_.content);
@@ -156,14 +156,40 @@ for (const cachedParent of [true, false]) {
   });
 }
 
-test("a cold cached viewer keeps neutral loading until the destination module resolves", async t => {
+test("cold Back uses the native parent without Loading while the embedded viewer imports", async t => {
   const f = fixture(t, { coldViewer: true });
-  await f.initialize(); await f.traverse("back");
+  await f.initialize({ refreshChild: false }); await f.traverse("back");
   assertDestination(f.checkpoints.at(-1), parent);
-  assert.equal(f.observed().loading, href(parent));
+  assert.equal(f.observed().loading, undefined);
+  assert.equal(f.observed().title, parent.title);
   await React.act(async () => f.resolveViewer());
   assert.equal(f.observed().title, parent.title);
-  for (const mount of f.mounts) assertDestination(mount, parent);
+  assert.equal(f.observed().loading, undefined);
+});
+
+test("a late viewer import cannot clear cache-miss protection before the native parent renders", async t => {
+  const f = fixture(t, { cachedParent: false, coldViewer: true });
+  await f.initialize(); await f.traverse("back");
+  assert.equal(f.observed().loading, href(parent));
+  await React.act(async () => f.resolveViewer());
+  assert.equal(f.observed().loading, href(parent));
+  await f.nextPath(parent);
+  assert.equal(f.observed().loading, href(parent));
+  await f.server(parent);
+  assert.equal(f.observed().title, parent.title);
+  assert.equal(f.observed().loading, undefined);
+});
+
+test("cached Forward bypasses an outstanding cache-miss Back destination", async t => {
+  const f = fixture(t, { cachedParent: false });
+  await f.initialize(); await f.traverse("back");
+  assert.equal(f.observed().loading, href(parent));
+  await f.traverse("forward");
+  assert.equal(f.observed().title, child.title);
+  assert.equal(f.observed().loading, undefined);
+  await f.server(parent);
+  assert.equal(f.observed().title, child.title);
+  assert.equal(f.observed().loading, undefined);
 });
 
 test("same-task modal popstate keeps the task and unsent composer mounted", async t => {
