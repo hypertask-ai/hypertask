@@ -1,5 +1,4 @@
 const assert = require('node:assert/strict')
-const fs = require('node:fs')
 const path = require('node:path')
 const { test } = require('node:test')
 const React = require('react')
@@ -76,11 +75,9 @@ async function withSearch(t, config, check) {
     stub(require.resolve('next/navigation'), { useSearchParams: () => new URLSearchParams(dom.window.location.search), useRouter: () => ({ replace(url) { navigations.push(url) }, push() {}, back() { navigations.push('back') } }) })
     stub(require.resolve('@tanstack/react-query'), { useQueryClient: () => ({ invalidateQueries() {}, setQueryData(_key, data) { cache.history = data.history } }) })
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, jsx: { runtime: 'automatic' } })
-    const baseline = config.baseline && process.env.SEARCH_ESC_BASELINE_DIR
-    if (baseline) stub(path.join(baseline, 'search-autocomplete.css'), {})
-    const { useSearch } = jiti(baseline ? path.join(baseline, 'useSearch.ts') : path.join(root, 'src/hooks/Search/useSearch.ts'))
+    const { useSearch } = jiti(path.join(root, 'src/hooks/Search/useSearch.ts'))
     source('src/hooks/Search/useSearch.ts', { useSearch: (...args) => { state = useSearch(...args); return state } })
-    const SearchComp = jiti(baseline ? path.join(baseline, 'SearchComp.tsx') : path.join(root, 'src/app/search/SearchComp.tsx')).default
+    const SearchComp = jiti(path.join(root, 'src/app/search/SearchComp.tsx')).default
     reactRoot = require('react-dom/client').createRoot(document.getElementById('root'))
     let counter = 0
     const render = async (query = config.query ?? '', reset = false) => React.act(async () => {
@@ -98,12 +95,9 @@ async function withSearch(t, config, check) {
     const press = async (key, extra = {}) => React.act(async () => input().dispatchEvent(new dom.window.KeyboardEvent('keydown', { key, keyCode: key === 'Escape' ? 27 : 0, bubbles: true, cancelable: true, ...extra })))
     const tick = async (ms = 1000) => React.act(async () => t.mock.timers.tick(ms))
     const complete = async (request = requests.at(-1), tasks = [{ taskId: 1, projectId: 7, projectTitle: 'Product Board', uniqueIndex: 1, taskTitle: 'Result', highlight: {} }]) => React.act(async () => request.resolve({ status: 200, data: { processedData: { All: tasks }, tabs: ['All'] } }))
-    const capture = (name) => {
-      if (process.env.SEARCH_ESC_EVIDENCE_DIR) fs.writeFileSync(path.join(process.env.SEARCH_ESC_EVIDENCE_DIR, `${name}.html`), document.getElementById('root').innerHTML)
-    }
     const options = () => [...document.querySelectorAll('[role="option"]')]
     const selected = () => document.querySelector('[role="option"][aria-selected="true"]')
-    await check({ input, type, press, tick, complete, options, selected, requests, lookups, prompts, navigations, flags, render, capture, state: () => state, aiOpened: () => aiOpened, dom })
+    await check({ input, type, press, tick, complete, options, selected, requests, lookups, prompts, navigations, flags, render, state: () => state, aiOpened: () => aiOpened, dom })
   } finally {
     t.mock.timers.reset()
     if (reactRoot) await React.act(async () => reactRoot.unmount())

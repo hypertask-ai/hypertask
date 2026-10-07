@@ -848,6 +848,7 @@ export function useSearch(
     searchAutocompleteEnabled,
     searchLayoutEnabled,
     searchEscBackEnabled,
+    searchEscLeavesEnabled,
     isSearchDraft,
     activeSplit,
     tabs,
