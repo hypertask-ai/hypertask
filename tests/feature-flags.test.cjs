@@ -86,6 +86,21 @@ test("quick-add view context defaults to Everyone as a bugfix and respects OFF",
   assert.equal(snapshot.modes[key], "EVERYONE");
 });
 
+test("new-task window view context defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG;
+  assert.equal(key, "htpr-6997-new-task-window-view-context");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(snapshot.modes[key], "EVERYONE");
+});
+
 test("admin access requires the signed, active owner", async () => {
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
   sessionUserId = 7;
@@ -128,7 +143,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context"]);
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context"]);
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
@@ -594,6 +609,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6990-narrow-sidebar-width", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6993-quick-add-view-context", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6994-search-esc-leaves", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6997-new-task-window-view-context", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

@@ -254,20 +254,28 @@ test("client defaults render human and agent avatars without response assignment
 test("modal stays tags-only with flag off preserving raw legacy defaults and board switches", () => {
   const source = fs.readFileSync(path.join(root, "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts"), "utf8");
   assert.match(source, /quickAddViewContextEnabled = useFlag\(HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG\)/);
-  const expression = source.match(/const defaultFormValues: IForm = useMemo\(\s*(\(\) => \(\{[\s\S]*?\}\)),\s*\[/)?.[1];
+  const parsed = ts.createSourceFile("modal.ts", source, ts.ScriptTarget.Latest, true);
+  let expression;
+  const visit = (node) => {
+    if (ts.isVariableDeclaration(node) && node.name.getText(parsed) === "defaultFormValues") {
+      expression = node.initializer.arguments[0].getText(parsed);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(parsed);
   assert.ok(expression);
-  const switchExpression = source.match(/const tags = ([\s\S]*?);\s*formValuesRef.current =/)[1];
+  const switchExpression = source.match(/const tags = ([\s\S]*?);/)[1];
   const activeFilters = filters({ Labels: [{ id: "no-label" }, ...labels], Assignees: assignees, Priority: [priority], Size: [estimate] });
   const project = { project_view: { user_project_views: [{ appliedView: { board_filters: activeFilters } }] } };
   for (const flag of [false, true]) {
-    const evaluate = new Function("createTaskModal", "_currentProject", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
+    const evaluate = new Function("createTaskModal", "_currentProject", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", "normalizeCreateTaskFormDate", ts.transpileModule(`const newTaskWindowViewContextEnabled = false; return (${expression})();`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText);
     const form = evaluate({}, project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);
     const expectedTags = flag ? labels : activeFilters.addedFilters[0].searchPayload;
     assert.deepEqual(form.tags, expectedTags);
     assert.deepEqual(form.assignees, []);
     assert.equal(form.priority, undefined);
     assert.equal(form.estimate, undefined);
-    const switchTags = new Function("project", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", `return (${switchExpression});`);
+    const switchTags = new Function("project", "quickAddViewContextEnabled", "getNewTaskViewDefaults", "getActiveFiltersFromProject", `const newTaskWindowViewContextEnabled = false; const viewDefaults = getNewTaskViewDefaults(getActiveFiltersFromProject(project)); return (${switchExpression});`);
     assert.deepEqual(switchTags(project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject), expectedTags);
     const duplicate = { taskLabels: [{ label: labels[0] }], priority, estimate };
     const duplicateForm = evaluate({ duplicate }, project, flag, defaults.getNewTaskViewDefaults, viewHelpers.getActiveFiltersFromProject, value => value);

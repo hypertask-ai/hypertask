@@ -88,6 +88,8 @@ export type TSectionPayload= {
     sectionId: number;
     sectionTitle:string;
     priority?:IPrioritiesConstants;
+    assignees?:IForm["assignees"];
+    estimate?:IEstimateConstants;
     position: "top"| "bottom";
     parentTask?: IParentTask;
     prefilledTitle?:string;
