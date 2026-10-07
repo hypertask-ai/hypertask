@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 import prisma from '@/lib/prisma';
 import { IUser } from '@/models/model';
@@ -57,4 +58,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     return res.status(405).json({ message: "Method Not Allowed" });
 }
 
-export default handler
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/section-writes/create")).POST
+);
