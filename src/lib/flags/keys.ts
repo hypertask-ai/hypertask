@@ -20,6 +20,7 @@ export const HTPR_6972_SUBTASK_LINK_FLAG = "htpr-6972-subtask-link";
 export const HTPR_6978_SIZE_LABEL_CLICK_FLAG = "htpr-6978-size-label-click";
 export const HTPR_6980_INSTANT_COLUMN_DELETE_FLAG = "htpr-6980-instant-column-delete";
 export const HTPR_6985_DELETE_VIEW_ONCE_FLAG = "htpr-6985-delete-view-once";
+export const HTPR_6989_BULK_ARCHIVE_UNDO_FLAG = "htpr-6989-bulk-archive-undo";
 export const HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG = "htpr-6964-flags-page-type-search";
 export const HTPR_6934_SERVER_FIRST_SCREEN_FLAG = "htpr-6934-server-first-screen";
 export const HTPR_6924_REST_COMPAT_FLAG = "htpr-6924-rest-compat";

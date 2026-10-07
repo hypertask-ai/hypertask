@@ -22,6 +22,7 @@ import {
   HTPR_6979_TYPED_WRITES_FLAG,
   HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
   HTPR_6985_DELETE_VIEW_ONCE_FLAG,
+  HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
   HTPR_6924_REST_COMPAT_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -203,6 +204,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Restores every selected inbox item after undoing a bulk archive, including after reload.",
+  },
   {
     key: HTPR_6985_DELETE_VIEW_ONCE_FLAG,
     kind: "bugfix",

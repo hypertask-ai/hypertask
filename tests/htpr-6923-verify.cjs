@@ -637,7 +637,7 @@ const notificationRoutes = {
     "module": "archive-bulk",
     "method": "POST",
     "path": "src/pages/api/notifications/(un)archiveBulk.ts",
-    "hash": "f891e1628c58b24c5f32fbaa702c5e5c953b905aa2775d511b7c431a1e8f4281"
+    "hash": "a3552ed3b0d610be8ff01133f3839b551d479856d2783469b5a2c266d24818ac"
   },
   "getByTask": {
     "module": "task-seen",
@@ -830,8 +830,8 @@ const notificationSettingsRoutes = {
   }
 };
 const notificationSettingsProtectedHashes = {
-  "src/pages/api/notifications/(un)archiveBulk.ts": "3bb77e79016fc91745321a6546ae9632d22c9a2291ccb23302dd808ec2c2fc5e",
-  "src/lib/api/notification-writes/archive-bulk.ts": "abeee0c2918e21012d2e663dd4813b94151fbcdb0f0b4356cee60c52dbb51bbb",
+  "src/pages/api/notifications/(un)archiveBulk.ts": "5231633ec7af300889024826c3db09fd92493766828dfbaa1b7c4239e4cff948",
+  "src/lib/api/notification-writes/archive-bulk.ts": "0983b8f07136fc4628d5d389370d852543d6e76265c8fc6dbe97cf8643e58735",
   "src/pages/api/notifications/getByTask.ts": "d56c67ba3ebd2f9d88cff42295a574b3748e52ad7cafb7ff917415577ea0db2d",
   "src/lib/api/notification-writes/task-seen.ts": "e8adc63197620bb1c8eb5be561672b9556e4784a15591aaff6b46b1ccb95da8e",
   "src/pages/api/notifications/markAsDone.ts": "176b0984cb340de89d2b850d1273a7f62d18582b64a89349cc9174c9cf6f5f9c",
