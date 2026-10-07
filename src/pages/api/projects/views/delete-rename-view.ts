@@ -73,7 +73,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     project_view: { select: { id: true, projectId: true } }
                 }
             })
-            if (!viewToDelete) throw new Error("View does not exist")
+            if (!viewToDelete) return res.status(404).json({ message: "View does not exist" })
             const project_View = viewToDelete.project_view
             const projectId_ = project_View.projectId
             await prisma.$transaction(async (tx) => {
@@ -105,6 +105,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
                 return res.status(error.status).json({ message: error.message })
+            }
+            if ((error as { code?: string })?.code === "P2025") {
+                return res.status(404).json({ message: "View does not exist" })
             }
             return res.status(500).json(error)
         }

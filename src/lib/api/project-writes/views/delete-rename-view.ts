@@ -72,7 +72,7 @@ const route = (method: string) => taskWriteRoute({
                     project_view: { select: { id: true, projectId: true } }
                 }
             })
-            if (!viewToDelete) throw new Error("View does not exist")
+            if (!viewToDelete) return viewWriteJson({ message: "View does not exist" }, 404)
             const project_View = viewToDelete.project_view
             const projectId_ = project_View.projectId
             await prisma.$transaction(async (tx) => {
@@ -104,6 +104,9 @@ const route = (method: string) => taskWriteRoute({
             console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
                 return viewWriteJson({ message: error.message }, error.status)
+            }
+            if ((error as { code?: string })?.code === "P2025") {
+                return viewWriteJson({ message: "View does not exist" }, 404)
             }
             return viewWriteJson(error, 500)
         }

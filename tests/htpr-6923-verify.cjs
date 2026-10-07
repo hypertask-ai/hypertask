@@ -446,7 +446,8 @@ const projectViewRoutes = {
       "POST",
       "DELETE"
     ],
-    "hash": "b48f85c4e89e320d3ac07c04ecdd232669ee142de322af58cf7266c052c92ff6",
+    // HTPR-6985 intentionally changes missing-view DELETE errors from 500 to 404.
+    "hash": "c0e68cda0ca822dc2c46c23e8314b755d58058288b300b8fe4acec202177ad13",
     "export": "export default handler"
   },
   "switch-view": {
