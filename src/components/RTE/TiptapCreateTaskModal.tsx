@@ -130,6 +130,8 @@ const TiptapCreateTaskModal = () => {
   const titleGenerationForSaveRef = useRef(false);
   const [toggleHighlight, setToggleHighlight] = useState<boolean>(false);
   const [trigger, setTrigger] = useState(false);
+  const [attachmentComposerEpoch, setAttachmentComposerEpoch] = useState(0);
+  const attachmentComposerEpochRef = useRef(0);
   const [newCommentAttachments, setNewCommentAttachments] = useState<any[]>(
     formValues.attachments
   );
@@ -142,6 +144,7 @@ const TiptapCreateTaskModal = () => {
   }>());
   // Register before file preparation or the lazy preview can yield to Save.
   const onFilesSelected = (files: File[], preparation?: Promise<FileItem[]>) => {
+    if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     files.forEach((file) => {
       const existing = pendingAttachmentUploadsRef.current.get(file.name);
       if (existing && !existing.failed) return;
@@ -155,6 +158,7 @@ const TiptapCreateTaskModal = () => {
       pendingAttachmentUploadsRef.current.set(file.name, { promise, resolve, reject, failed: false, seen: false });
     });
     void preparation?.then((prepared) => {
+      if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
       prepared.forEach(({ file }, index) => {
         const name = files[index].name;
         const pending = pendingAttachmentUploadsRef.current.get(name);
@@ -166,6 +170,7 @@ const TiptapCreateTaskModal = () => {
     }).catch(() => undefined);
   };
   const onUploadFailed = (fileName: string) => {
+    if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     const pending = pendingAttachmentUploadsRef.current.get(fileName);
     if (!pending) return;
     pending.failed = true;
@@ -368,6 +373,7 @@ const TiptapCreateTaskModal = () => {
   };
   // ==================== get attachments from the componetn =============
   const getAttachments = async (files: File[]) => {
+    if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     // A deliberately removed preview must not leave Save waiting forever.
     const names = new Set(files.map((file) => file.name));
     pendingAttachmentUploadsRef.current.forEach((pending, name) => {
@@ -406,6 +412,7 @@ const TiptapCreateTaskModal = () => {
   // whenever attachments are ALL uploaded, this function runs.
   // it runs as the FINAL call, not on each upload
   const callbackAttachments = async (attachmentsReturned: { id: number; file: { name: string; size: number; type: string; source: string } }[]) => {
+    if (attachmentComposerEpoch !== attachmentComposerEpochRef.current) return;
     console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
     // get all the urls back
     // console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
@@ -437,6 +444,9 @@ const TiptapCreateTaskModal = () => {
   );
 
   const resetComposerAfterCreate = () => {
+    // Clear the uploader's gallery history and invalidate callbacks from this draft.
+    attachmentComposerEpochRef.current += 1;
+    setAttachmentComposerEpoch(attachmentComposerEpochRef.current);
     resetFormValues();
     setEditMode("title");
     setCurrentFocusedElement("Title");
@@ -1154,6 +1164,7 @@ const TiptapCreateTaskModal = () => {
               <div className="h-[21px]"></div>
             )}
             <AttachmentsUpload
+              key={attachmentComposerEpoch}
               hasTitle={formValues.title.trim().length > 0}
               filesFromParent={newCommentAttachments}
               trigger={trigger}
