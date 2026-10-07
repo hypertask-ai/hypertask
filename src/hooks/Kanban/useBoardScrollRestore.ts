@@ -15,7 +15,8 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
     if (!board || !strip) return;
     // The board remounts on return, so browser document-scroll restoration
     // cannot restore its nested scrollers. Exact-URL link revisits also benefit.
-    const storageKey = `htpr-6998-board-scroll:${pathname}?${query}`;
+    // Quick cached Back can mount the board while Next still reports the ticket URL.
+    const storageKey = `htpr-6998-board-scroll:${window.location.pathname}?${new URLSearchParams(window.location.search).toString()}`;
     const getScrollers = () => {
       const scrollers = new Map<string, { element: HTMLElement; axis: "scrollTop" | "scrollLeft" }>([
         ["strip", { element: strip, axis: "scrollLeft" }],

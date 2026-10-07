@@ -165,7 +165,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
         // The background refresh can leave ticket RSC in the board's source slot.
         (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
         router.replace(window.location.pathname + window.location.search + window.location.hash);
-        router.refresh();
         flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
         return;
       }
@@ -285,14 +284,19 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     return unsubscribe;
   }, [historyDestination, accountId, currentUser?.id, queryClient, showDetail]);
   useEffect(() => {
-    if (!historyDestination) return;
+    if (!historyDestination || (boardBack && historyDestination.pathname === "/project")) return;
     // Error/unavailable routes may never seed the task cache. Let their children surface.
     const timer = window.setTimeout(() => setHistoryDestination(null), 4000);
     return () => window.clearTimeout(timer);
-  }, [historyDestination]);
+  }, [boardBack, historyDestination]);
   useEffect(() => {
     if (!boardBack || historyDestination?.pathname !== "/project" || !protectedSource.current) return;
     const source = protectedSource.current;
+    const boardUrl = window.location.pathname + window.location.search + window.location.hash;
+    // A failed board response must never uncover the stale ticket children.
+    const timer = window.setTimeout(() => {
+      if (window.location.pathname + window.location.search + window.location.hash === boardUrl) window.location.replace(boardUrl);
+    }, 6000);
     const revealBoard = () => {
       if (window.location.pathname === historyDestination.pathname &&
           source.querySelector("#kanban-page-container") && !source.querySelector("#title-input")) {
@@ -303,7 +307,10 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     const observer = new window.MutationObserver(revealBoard);
     observer.observe(source, { childList: true, subtree: true });
     revealBoard();
-    return () => observer.disconnect();
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
   }, [boardBack, historyDestination]);
   const suppressPreviousTask = (backFirstOpen || (boardBack && historyDestination?.pathname === "/project")) && instantTicketOpen && currentUser?.id === accountId &&
     historyDestination?.pathname === nativePathname;

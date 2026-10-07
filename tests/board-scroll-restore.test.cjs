@@ -109,12 +109,12 @@ async function fixture(run, { mobile = false, enabled = true, pageScroll = false
     window.history.pushState({}, "", "/search?q=test&fromProject=15");
     await React.act(async () => reactRoot.render(null));
   };
-  const back = async (props = {}) => {
+  const back = async (props = {}, nextUrl) => {
     await new Promise(resolve => {
       window.addEventListener("popstate", resolve, { once: true });
       window.history.back();
     });
-    boardUrl = window.location.pathname + window.location.search;
+    boardUrl = nextUrl ?? window.location.pathname + window.location.search;
     await render(props);
   };
   try {
@@ -150,6 +150,24 @@ for (const mobile of [false, true]) {
       if (mobile) assert.equal(document.getElementById("droppable-section-container-10").scrollTop, 0);
     }, { mobile, enabled }));
   }
+
+  test(`${mobile ? "phone" : "desktop"}: quick Back restores the browser board URL while Next still reports the ticket`, async () => fixture(async f => {
+    await f.render();
+    const before = f.scrollers();
+    f.scroll(before.columns[0], "scrollTop", 420);
+    f.scroll(before.strip, "scrollLeft", 140);
+    await f.leave();
+    await f.back({}, "/detail/project-15/7003");
+    assert.equal(window.location.pathname, "/project");
+    const after = f.scrollers();
+    assert.notEqual(after.columns[0], before.columns[0]);
+    assert.equal(after.columns[0].scrollTop, 420);
+    assert.equal(after.strip.scrollLeft, 140);
+    f.scroll(after.columns[0], "scrollTop", 0);
+    await f.flush();
+    assert.equal(after.columns[0].scrollTop, 420, "late card focus is protected under the board key");
+    assert.equal(window.sessionStorage.getItem("htpr-6998-board-scroll:/detail/project-15/7003?"), null);
+  }, { mobile }));
 
   test(`${mobile ? "phone" : "desktop"}: late active-card focus after completed restoration cannot erase saved scroll`, async () => fixture(async f => {
     await f.render();

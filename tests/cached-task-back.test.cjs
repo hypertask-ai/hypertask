@@ -34,6 +34,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
   const nativeSetTimeout = window.setTimeout.bind(window);
   window.setTimeout = (callback, delay, ...args) => {
     if (delay === 4000) { recoveryTimer = callback; return -1; }
+    if (delay === 6000) return -2;
     return nativeSetTimeout(callback, delay, ...args);
   };
   const nativeClearTimeout = window.clearTimeout.bind(window);
@@ -130,6 +131,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
         React.createElement("input", { defaultValue: "Board filter" })));
   };
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
+    hasRecovery: () => typeof recoveryTimer === "function",
     boardMounts: () => boardMounts,
     refreshBoardOpen: () => React.act(async () => server(child)),
     serverBoard: () => React.act(async () => {
@@ -429,7 +431,7 @@ for (const boardBack of [true, false]) for (const stableChildren of [true, false
     assert.equal(f.checkpoints.at(-1).title, boardBack ? undefined : child.title);
     assert.equal(f.observed().loading, undefined);
     assert.equal(document.querySelector(".kanban-column-title"), null);
-    assert.deepEqual(f.routerCalls, ["/project", "refresh"], "board repair must run before protection removes the source listener");
+    assert.deepEqual(f.routerCalls, boardBack ? ["/project"] : ["/project", "refresh"], "flagged board repair must not refresh and reset its scroll");
     if (boardBack) assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
     await f.serverBoard();
     assert.equal(f.observed().title, undefined);
@@ -460,6 +462,49 @@ test("Forward during protected board Back restores the cached ticket despite a l
   await f.serverBoard();
   assert.equal(f.observed().title, child.title);
   assert.equal(f.observed().loading, undefined);
+});
+
+test("board Back never schedules the four-second stale-children reveal", async t => {
+  const f = fixture(t);
+  await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
+  assert.equal(f.hasRecovery(), false);
+  assert.equal(f.observed().title, undefined);
+});
+
+test("board protection hard-navigates after six seconds, never reveals stale children, and cancels on ready or departure", () => {
+  const body = source.match(/if \(!boardBack \|\| historyDestination\?\.pathname !== "\/project"[^\n]*\n([\s\S]*?)\n  \}, \[boardBack, historyDestination\]\);/)?.[1];
+  assert.ok(body);
+  const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", body);
+  for (const outcome of ["timeout", "ready", "forward", "different board"]) {
+    const calls = [], timers = new Map();
+    let boardReady = false, staleTitle = true, observe;
+    const sourceNode = { querySelector: selector => selector === "#kanban-page-container" ? boardReady : staleTitle };
+    const win = {
+      location: { pathname: "/project", search: "?id=15&surface=board", hash: "#column", replace: url => calls.push(url) },
+      setTimeout: (callback, delay) => { assert.equal(delay, 6000); timers.set(1, callback); return 1; },
+      clearTimeout: id => timers.delete(id),
+      MutationObserver: class {
+        constructor(callback) { observe = callback; }
+        observe(node, options) { assert.equal(node, sourceNode); assert.deepEqual(options, { childList: true, subtree: true }); }
+        disconnect() { calls.push("disconnect"); }
+      },
+    };
+    const cleanup = protect(win, { pathname: "/project" }, { current: sourceNode }, value => calls.push(value));
+    assert.deepEqual(calls, []);
+    if (outcome === "ready") {
+      boardReady = true; observe();
+      assert.deepEqual(calls, [], "board marker alongside a stale ticket is not ready");
+      staleTitle = false; observe();
+      assert.deepEqual(calls, [null]);
+      cleanup(); assert.equal(timers.size, 0);
+    } else {
+      if (outcome === "forward") win.location.pathname = href(child);
+      if (outcome === "different board") win.location.search = "?id=16";
+      timers.get(1)();
+      assert.deepEqual(calls, outcome === "timeout" ? ["/project?id=15&surface=board#column"] : []);
+      cleanup(); assert.equal(timers.size, 0);
+    }
+  }
 });
 
 test("board Back reveals table or empty board layouts without waiting for a kanban column", async t => {
