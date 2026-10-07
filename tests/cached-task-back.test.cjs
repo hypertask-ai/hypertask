@@ -163,7 +163,7 @@ for (const cachedParent of [true, false]) {
       assert.equal(f.observed().title, child.title);
       assert.equal(f.observed().body, child.description_.content);
       assert.throws(() => assertDestination(f.observed(), parent), assert.AssertionError);
-      assert.deepEqual(f.routerCalls, [href(parent)], "detail replace must not queue a refresh of the child URL");
+      assert.deepEqual(f.routerCalls, [href(parent), "refresh"]);
     }
     assert.equal(f.observed().loading, undefined);
   });
@@ -244,4 +244,20 @@ test("native detail seeds cache readiness with the Back flag independently of su
   seed(false, true, false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
   assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), undefined);
   client.clear();
+});
+
+test("flagged detail misses reach native traversal instead of repairing the source route", () => {
+  const body = source.match(/const restoreSourceRoute = \(event: PopStateEvent\) => \{([\s\S]*?)\n    \};/)?.[1];
+  assert.ok(body);
+  const restore = new Function("event", "window", "backFirstOpen", "accountId", "previousLocation", "router", "cachedTaskDetailLocation", body);
+  for (const enabled of [true, false]) {
+    let stops = 0;
+    const calls = [];
+    const event = { state: { __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, stopImmediatePropagation: () => stops++ };
+    const win = { location: { pathname: href(parent), search: "", hash: "" }, dispatchEvent: () => {} };
+    const previous = { current: { accountId: 2343, taskId: child.id, projectId: child.projectId, uniqueIndex: child.uniqueIndex } };
+    restore(event, win, enabled, 2343, previous, { replace: url => calls.push(url), refresh: () => calls.push("refresh") }, cache.cachedTaskDetailLocation);
+    assert.equal(stops, enabled ? 0 : 1);
+    assert.deepEqual(calls, enabled ? [] : [href(parent), "refresh"]);
+  }
 });

@@ -99,6 +99,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
+      // Native detail traversal publishes the destination URL while its RSC is pending.
+      if (backFirstOpen && /^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) return;
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
           // Same-task modal Back must reach its dismiss listener even if Next
           // stripped the cached marker, just as rendering retains that location.
@@ -109,13 +111,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
       router.replace(window.location.pathname + window.location.search + window.location.hash);
-      // A refresh here would race the detail replace and restore the old task URL.
-      if (!/^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) router.refresh();
+      router.refresh();
       window.dispatchEvent(new Event("cached-task-detail-navigation"));
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
     return () => window.removeEventListener("popstate", restoreSourceRoute, true);
-  }, [location, accountId, router]);
+  }, [location, accountId, router, backFirstOpen]);
   useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
