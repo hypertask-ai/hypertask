@@ -236,20 +236,24 @@ case "$1:$2" in
   *) exit 1 ;;
 esac
 MOCK
-cat > "$E/worker-bin/wrangler" <<'MOCK'
-#!/usr/bin/env bash
-[[ $PWD == "$SHIP_CHECKOUT/$SHIP_WORKER" ]] || exit 1
-case "$*" in
-  'deployments status --json') [ "${WRANGLER_ERROR:-0}" = 0 ] || exit 1; echo "$DEPLOYMENT_FIXTURE" ;;
-  'versions view worker-version --json') [ "${VERSION_ERROR:-0}" = 0 ] || exit 1; echo "$VERSION_FIXTURE" ;;
-  *) exit 1 ;;
-esac
-MOCK
+export XDG_CACHE_HOME="$E/worker-cache" NPX_LOG="$E/npx-log" FAKE_WRANGLER_MARKER="$E/fake-wrangler-invoked"
+worker_config="$E/worker-checkout/workers/docs-agent/wrangler.toml"
+printf 'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef"\n' > "$worker_config"
 cat > "$E/worker-bin/npx" <<'MOCK'
 #!/usr/bin/env bash
-[[ $1 == wrangler ]] || exit 1
-shift
-exec "$(dirname "$0")/wrangler" "$@"
+jq -cn --arg cwd "$PWD" --arg account_id "${CLOUDFLARE_ACCOUNT_ID:-}" \
+  '$ARGS.positional as $args | {cwd: $cwd, args: $args, account_id: $account_id}' --args -- "$@" >> "$NPX_LOG" || exit 1
+# Model npx's vulnerable local executable lookup so the old implementation fails this regression.
+if [[ -x node_modules/.bin/wrangler ]]; then exec node_modules/.bin/wrangler "$@"; fi
+[[ $PWD == "${XDG_CACHE_HOME:-$HOME/.cache}/ship-check-wrangler" && $PWD != "$SHIP_CHECKOUT/"* ]] || exit 1
+[[ ${CLOUDFLARE_ACCOUNT_ID:-} == 0123456789abcdef0123456789abcdef ]] || exit 1
+case "$*" in
+  "--yes wrangler@3.114.17 deployments status --name ${EXPECTED_WORKER_NAME:-docs-agent_fixture} --json")
+    [ "${WRANGLER_ERROR:-0}" = 0 ] || exit 1; echo "$DEPLOYMENT_FIXTURE" ;;
+  "--yes wrangler@3.114.17 versions view worker-version --name ${EXPECTED_WORKER_NAME:-docs-agent_fixture} --json")
+    [ "${VERSION_ERROR:-0}" = 0 ] || exit 1; echo "$VERSION_FIXTURE" ;;
+  *) exit 1 ;;
+esac
 MOCK
 chmod +x "$E/worker-bin/"*
 worker_sha=f2619e33637f2577b609be8b52234910ee61b802
@@ -257,11 +261,18 @@ worker_deployment='{"versions":[{"version_id":"worker-version","percentage":100}
 worker_version="{\"annotations\":{\"workers/message\":\"$worker_sha\"}}"
 W() {
   local want=$1 expected=$2 out got; shift 2
+  : > "$NPX_LOG"
   out=$(env PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version" "$@" ./ship-check deployed YPER4-999); got=$?
   if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "worker: $out"
   else bad "worker: want $want $expected got $got $out"; fi
 }
 W 0 'deployed ok (worker worker-version)'
+jq -se --arg cwd "$XDG_CACHE_HOME/ship-check-wrangler" '
+  length == 2 and all(.[]; .cwd == $cwd and .account_id == "0123456789abcdef0123456789abcdef")
+  and .[0].args == ["--yes", "wrangler@3.114.17", "deployments", "status", "--name", "docs-agent_fixture", "--json"]
+  and .[1].args == ["--yes", "wrangler@3.114.17", "versions", "view", "worker-version", "--name", "docs-agent_fixture", "--json"]
+' "$NPX_LOG" >/dev/null && ok 'worker pinned npx cwd, args and account recorded' || bad 'worker npx invocation not isolated'
+W 0 'deployed ok (worker worker-version)' XDG_CACHE_HOME= HOME="$E/worker-home"
 W 0 'deployed ok (worker worker-version)' VERSION_FIXTURE="{\"annotations\":{\"workers/tag\":\"${worker_sha:0:12}\"}}"
 W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{"annotations":{"workers/message":"wrong","workers/tag":"wrong"}}'
 W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE="{\"annotations\":{\"workers/message\":\"${worker_sha:0:12}\",\"workers/tag\":\"$worker_sha\"}}"
@@ -282,6 +293,74 @@ W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=../worke
 W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=/worker
 W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
 
+# A checkout-local fake would forge matching deployment data, but must never run.
+mkdir -p "$E/worker-checkout/workers/docs-agent/node_modules/.bin"
+cat > "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler" <<'MOCK'
+#!/usr/bin/env bash
+touch "$FAKE_WRANGLER_MARKER"
+if [[ $* == *'deployments status'* ]]; then
+  echo '{"versions":[{"version_id":"worker-version","percentage":100}]}'
+else
+  printf '{"annotations":{"workers/message":"%s"}}\n' "$WORKER_SHA"
+fi
+MOCK
+chmod +x "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler"
+control=$(WORKER_SHA="$worker_sha" "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler" deployments status --json)
+[ -f "$FAKE_WRANGLER_MARKER" ] && [ "$control" = "$worker_deployment" ] \
+  && ok 'fake wrangler positive control forges deployment and touches marker' || bad 'fake wrangler control not effective'
+rm -f "$FAKE_WRANGLER_MARKER"
+W 0 'deployed ok (worker worker-version)'
+W 1 'FAIL: could not read worker deployment' WRANGLER_ERROR=1
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{}'
+[ ! -e "$FAKE_WRANGLER_MARKER" ] && ok 'checkout fake never invoked; mock alone decides deployment' || bad 'checkout fake wrangler invoked'
+
+cp "$worker_config" "$E/valid-wrangler.toml"
+W 1 'FAIL: could not read worker wrangler.toml' SHIP_WORKER=missing
+for config in \
+  '' \
+  'account_id = "0123456789abcdef0123456789abcdef"' \
+  'name = "docs-agent_fixture"' \
+  $'name = "bad.name"\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = "bad name"\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = ""\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789ABCDEF0123456789ABCDEF"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcde"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef0"' \
+  $'name = "docs-agent_fixture"\naccount_id = "not-an-account"' \
+  $'[env.production]\nname = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef"'; do
+  printf '%s\n' "$config" > "$worker_config"
+  W 1 'FAIL: '
+  [ ! -s "$NPX_LOG" ] && ok 'invalid worker identity rejected before npx' || bad 'invalid identity reached npx'
+done
+printf 'name = "$(touch %s)"\naccount_id = "0123456789abcdef0123456789abcdef"\n' "$FAKE_WRANGLER_MARKER" > "$worker_config"
+W 1 'FAIL: invalid worker name or account_id'
+[ ! -e "$FAKE_WRANGLER_MARKER" ] && ok 'wrangler.toml parsed only as data' || bad 'wrangler.toml executed'
+cp "$E/valid-wrangler.toml" "$worker_config"
+echo 'name = "duplicate"' >> "$worker_config"
+W 1 'FAIL: duplicate worker name'
+cp "$E/valid-wrangler.toml" "$worker_config"
+echo 'account_id = "0123456789abcdef0123456789abcdef"' >> "$worker_config"
+W 1 'FAIL: duplicate worker account_id'
+printf "  name = 'other_worker-2' # comment\naccount_id = '0123456789abcdef0123456789abcdef' # comment\n[vars]\nname = 'ignored'" > "$worker_config"
+W 0 'deployed ok (worker worker-version)' EXPECTED_WORKER_NAME=other_worker-2
+cp "$E/valid-wrangler.toml" "$worker_config"
+W 1 'FAIL: invalid merge sha' WORKER_SHA=short
+W 1 'FAIL: neutral wrangler directory must be outside SHIP_CHECKOUT' XDG_CACHE_HOME="$E/worker-checkout/cache"
+for entry in package.json node_modules; do
+  touch "$XDG_CACHE_HOME/ship-check-wrangler/$entry"
+  W 1 'FAIL: neutral wrangler directory must be empty'
+  rm -f "$XDG_CACHE_HOME/ship-check-wrangler/$entry"
+done
+for entry in package.json node_modules .git; do
+  touch "$XDG_CACHE_HOME/$entry"
+  W 1 'FAIL: neutral wrangler directory must be outside checkouts and local npm packages'
+  rm -f "$XDG_CACHE_HOME/$entry"
+done
+mkdir -p "$E/linked-cache"
+ln -s "$E/worker-checkout/workers/docs-agent" "$E/linked-cache/ship-check-wrangler"
+W 1 'FAIL: unsafe neutral wrangler directory' XDG_CACHE_HOME="$E/linked-cache"
+W 1 'FAIL: unsafe neutral wrangler directory' XDG_CACHE_HOME=relative-cache
+
 # Done guards use segment worker settings, including ship-gates' quoted paths.
 (
   export PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2
@@ -300,6 +379,7 @@ W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
   G 2 "$worker_cmd && $worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
   G 2 "$worker_cmd && $worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
   mkdir -p "$E/worker checkout/workers/docs agent"
+  cp "$worker_config" "$E/worker checkout/workers/docs agent/wrangler.toml"
   for quote in "'" '"'; do
     quoted_cmd="SHIP_REPO=${quote}$SHIP_REPO${quote} SHIP_BASE=${quote}$SHIP_BASE${quote} SHIP_CHECKOUT=${quote}$E/worker checkout${quote} SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
     G 0 "$quoted_cmd"
