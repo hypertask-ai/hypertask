@@ -66,22 +66,26 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
+    if (!subtaskLink || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
+    const restoreCachedTask = (event: PopStateEvent) => {
+      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
+      if (window.location.pathname === sourcePath) return;
+      const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+      const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
+      if (!task) return;
+      // Next can discard the marker or remount this wrapper; traversal cannot depend on either.
+      event.stopImmediatePropagation();
+      openCachedTaskDetail({
+        queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+        task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+      });
+    };
+    window.addEventListener("popstate", restoreCachedTask, true);
+    return () => window.removeEventListener("popstate", restoreCachedTask, true);
+  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
+  useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
-      if (subtaskLink && accountId !== null && window.location.pathname !==
-          `/detail/project-${location.projectId}/${location.uniqueIndex}`) {
-        const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-        if (task) {
-          // Publish the cached traversal without replaying Next's stale route tree.
-          event.stopImmediatePropagation();
-          openCachedTaskDetail({
-            queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-            task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
-          });
-          return;
-        }
-      }
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
           // Same-task modal Back must reach its dismiss listener even if Next
           // stripped the cached marker, just as rendering retains that location.
@@ -97,7 +101,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
     return () => window.removeEventListener("popstate", restoreSourceRoute, true);
-  }, [location, accountId, router, subtaskLink, queryClient]);
+  }, [location, accountId, router]);
   useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;

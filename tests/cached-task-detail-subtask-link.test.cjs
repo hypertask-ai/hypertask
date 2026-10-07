@@ -101,7 +101,8 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = { __esModule: true, default: Detail };
   const Navigation = load(navigationFile, mocks, ref);
   let children = direct ? React.createElement(ServerDetail) : "Board";
-  const render = () => renderer.render(React.createElement(React.StrictMode, null, React.createElement(Navigation, { accountId: 2343 }, React.isValidElement(children) ? React.cloneElement(children) : children)));
+  let navigationKey = 0;
+  const render = () => renderer.render(React.createElement(React.StrictMode, null, React.createElement(Navigation, { accountId: 2343, key: navigationKey }, React.isValidElement(children) ? React.cloneElement(children) : children)));
   const open = task => cache.openCachedTaskDetail({ queryClient: client, accountId: 2343, projectId: task.projectId, uniqueIndex: task.uniqueIndex, href: href(task), task });
   const assertContent = task => {
     assert.equal(window.location.pathname, href(task));
@@ -124,6 +125,7 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   return { client, render, open, assertContent, click, traverse, playlists,
     next(task) { nextPath = href(task); render(); },
     server(task) { serverTask = task; children = React.createElement(ServerDetail); nextPath = href(task); render(); },
+    remount() { navigationKey++; render(); },
     instant(value) { instant = value; }, account(value) { account = value; }, authenticated(value) { authenticated = value; },
     nextTraversals: () => nextTraversals };
 }
@@ -163,6 +165,27 @@ for (const direct of [false, true]) {
     await React.act(async () => window.history.replaceState({}, "", window.location.href));
   });
 }
+
+test("cached traversal survives an unmarked matching Next page without a remembered location", async t => {
+  const f = fixture(t, { direct: true });
+  await React.act(async () => f.render());
+  f.client.setQueryData(cache.cachedTaskDetailKey(2343, parent.id), parentWithChild);
+  await f.click(child);
+  await React.act(async () => {
+    window.history.replaceState({}, "", window.location.href);
+    f.server(child);
+    f.remount();
+  });
+  f.assertContent(child);
+  const composer = document.querySelector("textarea");
+  await React.act(async () => { window.dispatchEvent(new Event("cached-task-detail-navigation")); f.render(); });
+  assert.equal(document.querySelector("textarea"), composer, "matching Next content stays mounted");
+  await f.traverse("back");
+  assert.equal(window.history.state.cachedTaskDetail?.taskId, parent.id, "cached Back must survive losing the remembered location");
+  f.assertContent(parent);
+  await f.traverse("forward"); f.assertContent(child);
+  assert.equal(f.nextTraversals(), 0);
+});
 
 test("an unmarked matching Next page retains its composer after seeding and same-task modal popstate", async t => {
   const f = fixture(t, { direct: true });
