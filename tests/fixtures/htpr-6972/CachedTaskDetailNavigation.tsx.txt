@@ -3,13 +3,12 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
-import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { cachedTaskDetailKey, cachedTaskDetailLocation, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
 const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").then((module) => {
@@ -47,7 +46,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   accountId: number | null;
 }) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -66,24 +64,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     },
   );
   previousLocation.current = location;
-  useEffect(() => {
-    if (!subtaskLink || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
-    const restoreCachedTask = (event: Event) => {
-      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
-      if (window.location.pathname === sourcePath) return;
-      const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-      const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-      if (!task) return;
-      // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
-      (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
-      flushSync(() => openCachedTaskDetail({
-        queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-        task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
-      }));
-    };
-    window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
-    return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {

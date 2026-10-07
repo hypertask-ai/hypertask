@@ -40,6 +40,7 @@ let task = null;
 let current = row;
 let updateCount = 1;
 const db = {
+  featureFlag: { findUnique: async () => ({ mode: "OFF" }) },
   task: {
     findFirst: async (input) => {
       calls.reads.push(input);

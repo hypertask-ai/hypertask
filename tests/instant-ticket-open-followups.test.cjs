@@ -39,6 +39,7 @@ function domFixture(t) {
 }
 function navigationMocks(client, enabled, pathname, react = React) {
   return {
+    "react-dom": require("react-dom"),
     react,
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname(), useRouter: () => ({ replace: () => assert.fail("cached navigation must not request a server route") }) },
