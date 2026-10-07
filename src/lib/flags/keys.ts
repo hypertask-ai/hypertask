@@ -22,6 +22,7 @@ export const HTPR_6980_INSTANT_COLUMN_DELETE_FLAG = "htpr-6980-instant-column-de
 export const HTPR_6985_DELETE_VIEW_ONCE_FLAG = "htpr-6985-delete-view-once";
 export const HTPR_6989_BULK_ARCHIVE_UNDO_FLAG = "htpr-6989-bulk-archive-undo";
 export const HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG = "htpr-6990-narrow-sidebar-width";
+export const HTPR_6994_SEARCH_ESC_LEAVES_FLAG = "htpr-6994-search-esc-leaves";
 export const HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG = "htpr-6964-flags-page-type-search";
 export const HTPR_6934_SERVER_FIRST_SCREEN_FLAG = "htpr-6934-server-first-screen";
 export const HTPR_6924_REST_COMPAT_FLAG = "htpr-6924-rest-compat";
