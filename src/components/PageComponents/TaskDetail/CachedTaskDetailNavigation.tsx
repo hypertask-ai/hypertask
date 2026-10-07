@@ -2,13 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
@@ -49,6 +49,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
+  const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
+  const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -72,26 +74,39 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
-    if (!subtaskLink || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
+    if ((!subtaskLink && !backFirstOpen) || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
     const restoreCachedTask = (event: Event) => {
-      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
+      // Next can update a nested native detail while this layout still holds the source pathname.
+      const sourcePath = backFirstOpen
+        ? [...document.querySelectorAll<HTMLElement>("#title-input")]
+          .find((title) => title.getClientRects().length > 0)
+          ?.closest("[data-task-detail-path]")?.getAttribute("data-task-detail-path")
+        : location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
       if (window.location.pathname === sourcePath) return;
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-      if (!task) return;
+      if (!task) {
+        if (backFirstOpen && route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
+        return;
+      }
       // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
       (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
-      flushSync(() => openCachedTaskDetail({
-        queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-        task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
-      }));
+      flushSync(() => {
+        if (backFirstOpen) setHistoryDestination({ pathname: window.location.pathname });
+        openCachedTaskDetail({
+          queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+          task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+        });
+      });
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [subtaskLink, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
+  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
+      // Native detail traversal publishes the destination URL while its RSC is pending.
+      if (backFirstOpen && /^\/detail\/project-\d+\/\d+$/.test(window.location.pathname)) return;
       if (!event.state?.__NA || !event.state?.__PRIVATE_NEXTJS_INTERNALS_TREE ||
           // Same-task modal Back must reach its dismiss listener even if Next
           // stripped the cached marker, just as rendering retains that location.
@@ -107,7 +122,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
     return () => window.removeEventListener("popstate", restoreSourceRoute, true);
-  }, [location, accountId, router]);
+  }, [location, accountId, router, backFirstOpen]);
   useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
@@ -149,18 +164,61 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }, [location, task, router]);
   const showDetail = instantTicketOpen && !!location && !!task && task.projectId === location.projectId && task.uniqueIndex === location.uniqueIndex;
   useEffect(() => {
-    if (!showDetail || EmbeddedTaskDetail) return;
+    const nativeDetail = backFirstOpen && instantTicketOpen && accountId !== null && currentUser?.id === accountId && pathname?.startsWith("/detail/project-");
+    if ((!showDetail && !nativeDetail) || EmbeddedTaskDetail) return;
     let cancelled = false;
     void loadTaskDetail().then(({ default: Detail }) => {
-      if (!cancelled) setTaskDetail(() => Detail);
+      if (!cancelled) {
+        setTaskDetail(() => Detail);
+      }
     }).catch(() => {
       if (!cancelled) router.replace(window.location.pathname + window.location.search + window.location.hash);
     });
     return () => { cancelled = true; };
-  }, [showDetail, EmbeddedTaskDetail, router]);
-  // A Suspense fallback would remount the board and replay its startup navigation.
+  }, [showDetail, EmbeddedTaskDetail, router, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, pathname]);
+  useEffect(() => {
+    if (!historyDestination || showDetail || accountId === null || currentUser?.id !== accountId) return;
+    let restored = false;
+    const restoreDestination = () => {
+      if (restored || window.location.pathname !== historyDestination.pathname) return;
+      const route = historyDestination.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+      const destination = route && findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]));
+      if (!destination) return;
+      // Native detail seeds its authorized task after RSC renders, even when Next retains the children element.
+      restored = true;
+      openCachedTaskDetail({
+        queryClient, accountId, projectId: destination.projectId, uniqueIndex: destination.uniqueIndex,
+        task: destination, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+      });
+      // Seeding the same URL does not change the external location snapshot.
+      setHistoryDestination({ pathname: historyDestination.pathname });
+    };
+    const unsubscribe = queryClient.getQueryCache().subscribe(restoreDestination);
+    restoreDestination();
+    return unsubscribe;
+  }, [historyDestination, accountId, currentUser?.id, queryClient, showDetail]);
+  useEffect(() => {
+    if (!historyDestination) return;
+    // Error/unavailable routes may never seed the task cache. Let their children surface.
+    const timer = window.setTimeout(() => setHistoryDestination(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [historyDestination]);
+  const suppressPreviousTask = backFirstOpen && instantTicketOpen && currentUser?.id === accountId &&
+    historyDestination?.pathname === nativePathname;
+  if (!showDetail && suppressPreviousTask) {
+    return (
+      <>
+        {/* Pending native RSC must not suspend the visible protection. */}
+        <div hidden><Suspense fallback={null}>{children}</Suspense></div>
+        <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
+          Loading task…
+        </div>
+      </>
+    );
+  }
+  if (suppressPreviousTask && showDetail && !EmbeddedTaskDetail) return null;
   if (!showDetail || !EmbeddedTaskDetail) return children;
-  return (
+  const detail = (
     <EmbeddedTaskDetail
       key={`${location.accountId}:${location.taskId}`}
       taskId={location.taskId}
@@ -170,4 +228,6 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       embedded={false}
     />
   );
+  // Only cross-task history traversal must hide the previous route during suspension.
+  return backFirstOpen ? <Suspense key={`${location.accountId}:${location.taskId}`} fallback={suppressPreviousTask ? null : children}>{detail}</Suspense> : detail;
 }

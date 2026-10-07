@@ -179,7 +179,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
       useEffect: callback => { const cleanup = callback(); if (cleanup) navigationCleanups.push(cleanup); },
     },
     "next/navigation": { usePathname: () => taskHref, useRouter: () => ({ replace: href => navigationCalls.push(href), refresh: () => navigationCalls.push("refresh") }) },
-    "@tanstack/react-query": { useQueryClient: () => ({ getQueryData: () => task }) },
+    "@tanstack/react-query": { useQueryClient: () => ({ getQueryData: () => task, getQueryCache: () => ({ subscribe: () => () => {} }) }) },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": {},
     "@/hooks/useFlag": { useFlag: () => cachedLayout },

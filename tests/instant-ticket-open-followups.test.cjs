@@ -2,7 +2,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { execFileSync } = require("node:child_process");
 const React = require("react");
 const { renderToString } = require("react-dom/server");
 const { createRoot } = require("react-dom/client");
@@ -14,9 +13,7 @@ const cache = require("jiti").createJiti(__filename, { alias: { "@": path.join(r
 const flag = "htpr-6752-instant-ticket-open";
 const navigationPath = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
 const task = { id: 42, projectId: 7049, uniqueIndex: 31, status: "Normal", title: "Cached title", description_: { content: "Cached body" } };
-const read = (file) => file === navigationPath && process.env.CACHED_NAVIGATION_BASELINE
-  ? execFileSync("git", ["show", `origin/production:${file}`], { cwd: root, encoding: "utf8" })
-  : fs.readFileSync(path.join(root, file), "utf8");
+const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function compile(source, mocks) {
   const exports = {};
   const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -46,8 +43,8 @@ function navigationMocks(client, enabled, pathname, react = React) {
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 985 }) },
     "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6972-subtask-link") return false; if (key === "htpr-7000-inbox-next-open") return true; assert.equal(key, flag); return enabled(); } },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
+    "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6972-subtask-link", "htpr-6991-back-first-open"].includes(key)) return false; if (key === "htpr-7000-inbox-next-open") return true; assert.equal(key, flag); return enabled(); } },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag, HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_6991_BACK_FIRST_OPEN_FLAG: "htpr-6991-back-first-open", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: ({ initialTask }) => React.createElement("article", { id: "ticket" }, initialTask.title, initialTask.description_.content) },
     "@/lib/navigation/cachedTaskDetail": cache,
   };
@@ -58,9 +55,7 @@ test("navigation: back restores board rows and forward restores the cached detai
   const client = new QueryClient();
   t.after(() => client.clear());
   let nextPath = "/project";
-  const source = process.env.CACHED_NAVIGATION_BASELINE
-    ? execFileSync("git", ["show", `origin/production:${navigationPath}`], { cwd: root, encoding: "utf8" })
-    : read(navigationPath);
+  const source = read(navigationPath);
   const Navigation = compile(source, navigationMocks(client, () => true, () => nextPath)).default;
   const renderer = createRoot(document.getElementById("root"));
   const board = React.createElement("ul", { id: "board" }, React.createElement("li", null, "Board row"));
@@ -229,7 +224,7 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   window.clearTimeout = (key) => timers.delete(key);
   const flush = (queue) => { const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach((callback) => callback()); };
   const mocks = navigationMocks(client, () => enabled, () => pathname, {
-    ...React, useMemo: (factory) => factory(), useRef: (initial) => ({ current: initial }), useState: (initial) => [initial(), () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
+    ...React, useMemo: (factory) => factory(), useRef: (initial) => ({ current: initial }), useState: (initial) => [typeof initial === "function" ? initial() : initial, () => {}], useEffect: (effect) => effects.push(effect), useSyncExternalStore: (subscribe, snapshot) => snapshot(),
   });
   const chunks = [
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail",

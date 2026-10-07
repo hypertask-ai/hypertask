@@ -107,6 +107,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
         <DescriptionAndCommentsProvider>
           <div
             ref={embedded ? scrollElementRef : undefined}
+            data-task-detail-path={`/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`}
             className={
               embedded
                 ? "min-h-0 flex-1 overflow-y-auto overscroll-contain"
