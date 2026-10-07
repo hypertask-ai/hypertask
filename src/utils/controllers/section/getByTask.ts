@@ -3,21 +3,26 @@
 
 // Create an instance of PrismaClient
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 // Example usage
-const sectionGetByTask= async (taskId:number) => {
+const sectionGetByTask= async (taskId:number, userId:number) => {
   try {
     // Get Task First
     const task = await prisma.task.findFirst({
         where: {
             id: taskId,
+            project: projectContentAccessWhere(userId),
         },
         include: {
             project: true,
             user: true,
         }
     })
+    if (!task) {
+      return { status: 404, json: { message: "Task not found" } };
+    }
     const sections = await prisma.section.findMany({
         where:{
             projectId:task?.projectId,

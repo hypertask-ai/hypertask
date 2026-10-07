@@ -1,13 +1,18 @@
 // Import PrismaClient from the generated Prisma client
 import sectionGetAll from '@/utils/controllers/section/getAll';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // Create an instance of PrismaClient
 
 // Example usage
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 if (req.method==="POST"){
-  const { userId } = req.body;
+  const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+  if (!session) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+  const userId = session.userId;
   if (!userId ) {
       return res.status(400).json({ message: "Missing Required Credentials" });
   }
