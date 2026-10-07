@@ -94,7 +94,9 @@ function fixture(name, scenario = {}, mode = false) {
       return session;
     } },
     "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
+    "@/lib/flags": { HTPR_6989_BULK_ARCHIVE_UNDO_FLAG: "htpr-6989-bulk-archive-undo", isFeatureEnabled: async (key, id) => {
+      // Router parity keeps the independent bulk-undo bugfix off.
+      if (key === "htpr-6989-bulk-archive-undo") return false;
       flags.push([key, id]);
       if (mode === "outage") throw new Error("Flag unavailable");
       return mode === true;
