@@ -18,7 +18,7 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContext) {
-  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, keepDirectTaskOpen, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
+  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
 
 
   // Event handlers
@@ -146,7 +146,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   };
 
   // A task can still carry an inbox notification when opened from another
-  // surface. The fix limits advancement to Inbox lineage while its flag is on.
+  // surface. Advancement is limited to Inbox lineage.
   const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -161,7 +161,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     );
     return handleCallback(
       !preserveTutorialInbox &&
-        ((alwaysAdvance && (!keepDirectTaskOpen || isInboxFlow)) ||
+        ((alwaysAdvance && isInboxFlow) ||
           (isInboxFlow && inInbox && advanceOnSend))
         ? "moveToNext"
         : undefined,

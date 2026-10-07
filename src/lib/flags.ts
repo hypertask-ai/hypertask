@@ -107,7 +107,6 @@ import {
   HTPR_6555_IDLE_COMMENT_MIC_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
   HTPR_6557_AGENT_ROOMS_FLAG,
-  HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
@@ -391,12 +390,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-18",
     description:
       "Focuses mobile task creation on one description box, with collapsed title and properties plus raw and Task Writer save actions.",
-  },
-  {
-    key: HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG,
-    shippedOn: "2026-09-18",
-    description:
-      "Keeps a task open after Ctrl or Command plus Enter unless it was opened through the Inbox cycle.",
   },
   {
     key: HTPR_6557_AGENT_ROOMS_FLAG,
@@ -951,7 +944,6 @@ export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
 const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
   [HTPR_6951_TASK_WRITING_PROGRESS_FLAG]: "bugfix",
   [HTPR_6561_DESCRIPTION_STRUCTURE_FLAG]: "bugfix",
-  [HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG]: "bugfix",
   [HTPR_6553_AGENT_CHAT_POLLING_FLAG]: "bugfix",
   [HTPR_6516_AGENT_ATTRIBUTION_FLAG]: "bugfix",
   [HTPR_6512_SEED_TEAM_AGENT_FLAG]: "bugfix",

@@ -15,7 +15,6 @@ import type { EmojiGifPickerEventDetail } from "./Components/EmojiGifPicker";
 import { shouldAdvanceAfterNotificationArchive } from "@/lib/taskDetailArchiveNavigation";
 import { useMobileVisualViewport } from "@/hooks/General/useMobileVisualViewport";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG } from "@/lib/flags/keys";
 
 type AIGeneratedAttachment = {
   id?: string;
@@ -130,7 +129,6 @@ export function useTaskDetailEditorState({
   const consistentCommentShortcuts = useFlag(
     "htpr-5913-consistent-comment-shortcuts",
   );
-  const keepDirectTaskOpen = useFlag(HTPR_6559_KEEP_DIRECT_TASK_OPEN_FLAG);
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
 
   // State
@@ -207,7 +205,7 @@ export function useTaskDetailEditorState({
     editorId: id,
     popoverTriggerButtonId: "popover-button-" + id,
   };
-  return { allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, consistentCommentShortcuts, keepDirectTaskOpen, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
+  return { allowPerks, defaultContent, createdAt, user, attachments, carouselAttachments, creatorname, isSelected, id, allowEdit, stack, reply, mode, handleSave, commentId, isMbl, shouldTriggerAiTaskWriter, setLoading, createNewComment, handleTaskOptions, taskFromServer, focusOn, setEditMode, setEditState, hasDraft, hasDraftInit, setHasDraftInit, editMode, currentId, descriptionFocusRequest, hasCommentDraft, defaultCommentFocus, isRecording, toggleRecording, scrollVirtualize, draftsFromTQ, setCarousalItems, uploadingDescription, resetDraft, setResetDraft, isApple, queryClient, currentUser, inViewObject, router, searchParams, inboxFlow, currentTask, inInbox, isInboxFlow, isReadEditMode, isReadOnlyContent, userPreferences, advanceOnSend, consistentCommentShortcuts, draftQueryKey, editor, editorContent, setEditorContent, scrolledOnMobile, setScrolledOnMobile, toggleHighlight, setToggleHighlight, trigger, setTrigger, filesDropped, setFilesDropped, shouldShowAiTaskWriter, setShouldShowAITaskWriter, aiTriggerData, setAiTriggerData, suggestReplyAbortRef, shouldShowInlineDraftAiRef, showSetLinkModal, setShowSetLinkModal, pendingGuestDescriptionFocusTaskRef, handledDescriptionFocusNonceRef, emojiGifPicker, setEmojiGifPicker, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, setMobileEditSaving, saveInFlight, setSaveInFlight, mobileEditSavingRef, saveInFlightRef, mobileEditSessionActiveRef, cancelMobileExistingEditRef, mobileEditSnapshotRef, newCommentAttachments, setNewCommentAttachments, divIds };
 }
 
 export type useTaskDetailEditorStateValue = ReturnType<typeof useTaskDetailEditorState>;
