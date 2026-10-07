@@ -63,7 +63,6 @@
     "htpr-6542-team-scoped-management-keys": "OWNER_AND_QA",
     "htpr-6551-quiet-run-activity": "OWNER_AND_QA",
     "htpr-6553-agent-chat-polling": "EVERYONE",
-    "htpr-6554-light-comment-separation": "EVERYONE",
     "htpr-6555-idle-comment-mic": "OWNER_AND_QA",
     "htpr-6556-mobile-description-first": "OWNER_AND_QA",
     "htpr-6557-agent-rooms": "OWNER_AND_QA",
