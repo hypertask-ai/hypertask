@@ -145,3 +145,4 @@ export const HTPR_6975_TYPED_WRITES_FLAG = "htpr-6975-typed-writes";
 export const HTPR_6979_TYPED_WRITES_FLAG = "htpr-6979-typed-writes-sections-notifications";
 
 export const HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG = "htpr-6993-quick-add-view-context";
+export const HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG = "htpr-6997-new-task-window-view-context";
