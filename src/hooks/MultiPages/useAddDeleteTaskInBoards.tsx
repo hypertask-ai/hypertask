@@ -13,6 +13,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG } from "@/lib/flags/keys";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { PriorityConstants } from "@/lib/constants/constants";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 
 
@@ -152,6 +153,12 @@ const useAddDeleteTaskInBoards = () => {
         const result = await createNewTaskGloballyAPIHandler({
           ...item,
           ...defaults,
+          // The legacy priority-sorted top insert creates an Urgent priority.
+          priority: defaults.priority ?? (
+            _currentProject.sorting_mode === "Priority" && position === "top" && sections[sectionIndex]?.items.length
+              ? PriorityConstants.find((priority) => priority.priority_index === 1)
+              : undefined
+          ),
           userId: currentUser.id,
           projectId,
           projectIdentifier: _currentProject.uniqueIdentifier ?? "TASK",
