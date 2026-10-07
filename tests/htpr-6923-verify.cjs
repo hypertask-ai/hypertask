@@ -536,6 +536,75 @@ function projectViews() {
   assert.throws(() => assert.equal(callerFiles(sync.endpoint, injected).length, 0), "absence control rejects an injected sync-view caller");
   console.log("project views structural verification passed; sync-view callers 0/0/0 (retained)");
 }
+const sectionRoutes = {
+  "create": {
+    "module": "create",
+    "hash": "7e125e5557cc993bb52cc9c954e10a33845f8e4dd6f1ad7eaf43d8cc4d6e1f67",
+    "export": "export default handler"
+  },
+  "update": {
+    "module": "update",
+    "hash": "7999c9d4aace14ce7e0776679e295c88434fca5ed029f12c35a24179436f7020",
+    "export": "export default handler;"
+  },
+  "rename": {
+    "module": "rename",
+    "hash": "df0e36fe621b8e021fb3133f24883a3327d9fd03628c1d963ed91e8d14909658",
+    "export": "export default handler;"
+  },
+  "resetRanks": {
+    "module": "reset-ranks",
+    "hash": "177a16e061585ac5aca352df5be92dcd292898cafc8cf385319e6c3f4b4a7462",
+    "export": "export default handler;"
+  },
+  "getAll": {
+    "module": "get-all",
+    "hash": "b77e4b5bde0876ec69d5f1a27a8ca94fc1c1118a9aec46e543839b348d8914a4",
+    "export": "export default handler;"
+  },
+  "getByTaskId": {
+    "module": "get-by-task",
+    "hash": "f41132ed4a517c2791c552c4f258e1f11f6f4943782a5797226733521ba2ce5a",
+    "export": "export default handler;"
+  },
+  "getProjectSections": {
+    "module": "get-project-sections",
+    "hash": "620ad2b21d77e3cdf989a16054db78cd877d09df40d968f9b3cd76c0a6851f8b",
+    "export": "export default handler;"
+  }
+};
+function sectionLegacySources() {
+  return Object.fromEntries(Object.entries(sectionRoutes).map(([name, entry]) => {
+    const source = read(`src/pages/api/section/${name}.ts`)
+      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+      .replace(/export default withTaskWriteFlag\([\s\S]*?\n\);/, entry.export);
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), entry.hash, name + " independent legacy bytes");
+    return [name, source];
+  }));
+}
+function sections() {
+  const sources = sectionLegacySources();
+  const measured = inventory().filter(row => row.endpoint.startsWith("section/"));
+  assert.deepEqual(measured.map(row => row.endpoint.split("/")[1]).sort(), Object.keys(sectionRoutes).sort());
+  for (const [name, { module, hash }] of Object.entries(sectionRoutes)) {
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), hash), "pin mutation control");
+    const page = read(`src/pages/api/section/${name}.ts`);
+    assert.ok(page.includes('withTaskWriteFlag(handler, "POST"'));
+    assert.ok(page.includes(`(await import("@/lib/api/section-writes/${module}")).POST`));
+    assert.ok(read(`src/lib/api/section-writes/${module}.ts`).includes("export const POST"));
+    assert.ok(!fs.existsSync(path.join(root, `src/app/api/section/${name}/route.ts`)), "no URL twin");
+  }
+  for (const name of ["getAll", "getByTaskId"]) {
+    const endpoint = "section/" + name;
+    assert.deepEqual(measured.find(row => row.endpoint === endpoint).callers, [0, 0, 0], "retain unused reader pending slice 12 external-use review");
+    const controllerImport = `import controller from "@/utils/controllers/${endpoint}";`;
+    assert.equal(callerFiles(endpoint, [{ file: "fixture.ts", text: controllerImport }]).length, 0, "controller import is not an HTTP caller");
+    const injected = [{ file: "fixture.ts", text: controllerImport + `fetch("/api/${endpoint}")` }];
+    assert.equal(callerFiles(endpoint, injected).length, 1, "caller scanner positive control");
+    assert.throws(() => assert.equal(callerFiles(endpoint, injected).length, 0), "absence checker rejects an injected caller");
+  }
+  console.log("section structural verification passed; seven shells retained");
+}
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -577,7 +646,13 @@ function callerFiles(endpoint, corpus) {
   const escaped = endpoint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   // Includes shortened URLs and source imports conservatively, but not prefix siblings.
   const pattern = new RegExp(`/${escaped}(?=[?\\#\\s'\"\x60)]|$)`);
-  return corpus.filter(({ file, text }) => file !== `src/pages/api/${endpoint}.ts` && pattern.test(text));
+  return corpus.filter(({ file, text }) => {
+    // Extracted section handlers import controllers, not the matching HTTP URL.
+    if (endpoint.startsWith("section/")) {
+      for (const quote of ['"', "'"]) text = text.replaceAll(`${quote}@/utils/controllers/${endpoint}${quote}`, "");
+    }
+    return file !== `src/pages/api/${endpoint}.ts` && pattern.test(text);
+  });
 }
 function inventory() {
   const routes = git("ls-files", "src/pages/api/tasks", "src/pages/api/projects", "src/pages/api/section", "src/pages/api/notifications")
@@ -674,9 +749,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

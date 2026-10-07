@@ -13,6 +13,7 @@ const sections = projects.map(({ id }) => ({ id: id * 10, projectId: id, deleted
 function harness({ userId = 42 } = {}) {
   const calls = [];
   const mocks = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/prisma": { default: {
       section: { findMany: async (query) => {
         calls.push(["sections", query]);

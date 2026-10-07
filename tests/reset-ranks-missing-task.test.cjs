@@ -55,6 +55,7 @@ test("resetRanks skips a task deleted concurrently instead of 500ing (HTPR-5310)
   delete require.cache[path.join(root, "src/lib/auth/getSessionUser.ts")];
   delete require.cache[path.join(root, "src/utils/controllers/projects/getAllIncludes.ts")];
   delete require.cache[path.join(root, "src/pages/api/section/resetRanks.ts")];
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/lib/realtime/server.ts", { broadcastBoardChange: async () => {} });
   stubModule("src/lib/auth/getSessionUser.ts", {
