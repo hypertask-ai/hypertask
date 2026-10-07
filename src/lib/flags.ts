@@ -10,6 +10,7 @@ import {
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
   HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
+  HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,
   HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG,
   HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
   HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG,
@@ -343,6 +344,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     key: HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
     shippedOn: "2026-10-07",
     description: "The Ctrl+J AI ticket writer inherits the open board view's labels, assignees, priority and size for new tickets on that board without replacing explicit values.",
+    kind: "bugfix",
+  },
+  {
+    key: HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,
+    shippedOn: "2026-10-07",
+    description: "Inbox E archives the open ticket on the first press even before its full notification membership finishes loading.",
     kind: "bugfix",
   },
   {

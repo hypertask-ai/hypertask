@@ -119,6 +119,24 @@ test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", as
   assert.equal(snapshot.modes[key], "EVERYONE");
 });
 
+test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
+  assert.equal(key, "htpr-7002-inbox-e-first-press");
+  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+    .match(/key: HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,[\s\S]*?\n  \},/)?.[0];
+  assert.match(definition, /kind: "bugfix",\n  \},$/);
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(snapshot.modes[key], "EVERYONE");
+});
+
 test("admin access requires the signed, active owner", async () => {
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
   sessionUserId = 7;
@@ -161,7 +179,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context"]);
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context", "htpr-7002-inbox-e-first-press"]);
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
@@ -637,6 +655,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6998-board-scroll-restore", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6999-ctrl-j-view-context", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7000-inbox-next-open", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7002-inbox-e-first-press", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

@@ -149,3 +149,4 @@ export const HTPR_6979_TYPED_WRITES_FLAG = "htpr-6979-typed-writes-sections-noti
 export const HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG = "htpr-6993-quick-add-view-context";
 export const HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG = "htpr-6997-new-task-window-view-context";
 export const HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG = "htpr-6999-ctrl-j-view-context";
+export const HTPR_7002_INBOX_E_FIRST_PRESS_FLAG = "htpr-7002-inbox-e-first-press";
