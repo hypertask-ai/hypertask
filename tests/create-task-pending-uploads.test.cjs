@@ -25,7 +25,7 @@ const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
 function mount(backgroundTaskUploadsEnabled) {
   const created = [];
   const errors = [];
-  const state = { saving: false, closed: false, reset: false };
+  const state = { saving: false, closed: false, reset: false, attachments: [], trigger: false };
   const toast = Object.assign(() => {}, {
     error: (message) => errors.push(message),
     success: () => {},
@@ -35,28 +35,36 @@ function mount(backgroundTaskUploadsEnabled) {
     isRecording: false, uploadInProgress: false, canSave: undefined,
     backgroundTaskUploadsEnabled, createSubmissionRef: { current: false },
     pendingAttachmentUploadsRef: { current: new Map() }, createTaskAttachmentsRef: { current: [] },
+    attachmentComposerEpochRef: { current: 0 }, attachmentComposerEpoch: 0,
+    aiPromptRef: { current: undefined }, setAttachmentComposerEpoch: () => {},
     formValues: { title: 'New ticket', description: '', attachments: [] },
     setUploadInProgress: (value) => { state.saving = value; },
     saveEpochRef: { current: 0 }, titleGenerationForSaveRef: { current: false },
     shouldGenerateTitleForSave: () => false, getCurrentTitle: () => 'New ticket',
-    editor: { getHTML: () => '' },
+    editor: { getHTML: () => '', chain: () => ({ unsetHighlight() { return this; }, clearContent() { return this; }, run() {} }) },
     setEditMode: () => {}, setCurrentFocusedElement: () => {},
     createTaskUploadCount: () => 0, reserveCreateTaskUploads: () => {}, releaseCreateTaskUploadReservations: () => {},
-    handleChange: () => {}, setNewCommentAttachments: () => {}, setTrigger: () => {}, setFilesDropped: () => {},
+    handleChange: (key, value) => { context.formValues[key] = value; },
+    setNewCommentAttachments: (value) => { state.attachments = value; },
+    setTrigger: (update) => { state.trigger = update(state.trigger); }, setFilesDropped: () => {},
+    resetFormValues: () => { state.reset = true; context.formValues.attachments = []; },
+    setShowConfirmationModal: () => {}, handleSetUserInput: () => {},
+    setHasOpenedClassicForm: () => {}, setShouldShowAITaskWriter: () => {}, setUploadingStateCreateTaskModal: () => {},
     CreateTaskAndDescription: async (_description, _title, payload) => { created.push(payload); return '/detail/project-1/42'; },
     getTaskCreatePerformanceTraceScope: () => null,
     completeTaskCreatePerformanceTrace: () => {}, completeTaskCreatePerformanceTraceAfterPaint: () => {},
     completeTaskCreatePerformanceTraceAfterElementRemoved: () => {},
-    resetComposerAfterCreate: () => { state.reset = true; },
     closeHandler: () => { state.closed = true; }, asyncPush: async () => {},
     isMbl: false, pathname: '/project', localStorage: { removeItem: () => {} },
     document: { getElementById: () => ({ focus: () => {} }) }, DIV_ID_CONSTANTS: { titleInputModal: 'title' },
     divIds: { wrapperId: 'modal' }, toast, console: { log: () => {} },
   };
-  const names = ['onFilesSelected', 'onUploadFailed', 'getAttachments', 'handleFileDrop', 'callbackAttachments', 'CtrlEnterHandler'];
-  const handlers = new Function(...Object.keys(context), `${compile(names.map(declaration).join('\n'))}; return { ${names.join(', ')} };`)(...Object.values(context));
+  const names = ['onFilesSelected', 'onUploadFailed', 'getAttachments', 'handleFileDrop', 'callbackAttachments', 'resetComposerAfterCreate', 'CtrlEnterHandler'];
+  const render = () => new Function(...Object.keys(context), `${compile(names.map(declaration).join('\n'))}; return { ${names.join(', ')} };`)(...Object.values(context));
+  const handlers = render();
   return {
     ...handlers, created, errors, state, context,
+    rerender: () => { context.attachmentComposerEpoch = context.attachmentComposerEpochRef.current; return render(); },
     onFilesSelected: (files, preparation = Promise.resolve(files.map((file, id) => ({ id, file })))) => handlers.onFilesSelected(files, preparation),
   };
 }
@@ -218,4 +226,61 @@ test('the create window wires selection and upload-failure reports through the s
   assert.match(state, /useFileUpload\(props\.filesFromParent, props\.onFilesSelected, props\.onUploadFailed\)/);
   assert.match(state, /await handleDroppedFiles\(files\)/);
   assert.match(uploader, /onUploadFailed=\{props\.onUploadFailed\}/);
+});
+
+for (const background of [false, true]) {
+  test(`Save & new isolates late preview and upload callbacks from the next ticket (background=${background})`, async () => {
+    const fixture = mount(background);
+    const file = new File(['image'], 'first.webp', { type: 'image/webp' });
+    const uploaded = [{ id: 0, file: { name: file.name, size: file.size, type: file.type, source: 'https://files.example/first.webp' } }];
+    fixture.onFilesSelected([file]);
+    const save = fixture.CtrlEnterHandler('SaveAndNew');
+    await fixture.callbackAttachments(uploaded);
+    await save;
+    await nextTurn();
+    assert.equal(fixture.created[0].attachments[0].file.source, uploaded[0].file.source);
+    assert.deepEqual(fixture.state.attachments, []);
+    assert.deepEqual(fixture.context.createTaskAttachmentsRef.current, []);
+    const triggerAfterReset = fixture.state.trigger;
+    // The old gallery emits its uploadedFiles again when its files become empty.
+    await fixture.getAttachments([file]);
+    await fixture.callbackAttachments(uploaded);
+    assert.deepEqual(fixture.state.attachments, [], 'old callbacks cannot repopulate the next composer');
+    assert.deepEqual(fixture.context.formValues.attachments, []);
+    assert.equal(fixture.state.trigger, triggerAfterReset);
+    const next = fixture.rerender();
+    await next.CtrlEnterHandler('SaveAndClose');
+    await nextTurn();
+    assert.deepEqual(fixture.created[1].attachments, [], 'title-only second ticket has no old attachment');
+  });
+}
+
+test('late preparation, failure and upload callbacks cannot affect a same-name file in the next composer', async () => {
+  const fixture = mount(true);
+  const original = new File(['old'], 'photo.png');
+  let prepare;
+  fixture.onFilesSelected([original], new Promise((resolve) => { prepare = resolve; }));
+  fixture.resetComposerAfterCreate();
+  const next = fixture.rerender();
+  const current = new File(['new'], 'photo.png');
+  next.onFilesSelected([current]);
+  const pending = fixture.context.pendingAttachmentUploadsRef.current.get(current.name);
+  prepare([{ id: 0, file: new File(['webp'], 'photo.webp') }]);
+  await nextTurn();
+  fixture.onUploadFailed(current.name);
+  await fixture.callbackAttachments([{ id: 0, file: { name: current.name, source: 'https://files.example/old.png' } }]);
+  assert.equal(fixture.context.pendingAttachmentUploadsRef.current.get(current.name), pending);
+  assert.equal(pending.failed, false);
+  assert.deepEqual(fixture.context.createTaskAttachmentsRef.current, []);
+  const save = next.CtrlEnterHandler('SaveAndClose');
+  await nextTurn();
+  assert.equal(fixture.created.length, 0);
+  await next.callbackAttachments([{ id: 0, file: { name: current.name, source: 'https://files.example/new.png' } }]);
+  await save;
+  await nextTurn();
+  assert.equal(fixture.created[0].attachments[0].file.source, 'https://files.example/new.png');
+});
+
+test('the uploader remounts at the composer boundary to clear fileItems and gallery upload history', () => {
+  assert.match(modal, /<AttachmentsUpload\s+key=\{attachmentComposerEpoch\}/);
 });
