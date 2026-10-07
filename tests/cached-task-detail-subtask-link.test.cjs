@@ -86,6 +86,8 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: authenticated }) },
     "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6972_SUBTASK_LINK_FLAG ? enabled : instant },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache, "@/lib/taskDetailInboxFlow": inbox,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask, editMode: "", cachedLayout: true }) },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "./TaskPagesContext": { useTaskPages: () => ({ loading: false, hasPages: true }) },

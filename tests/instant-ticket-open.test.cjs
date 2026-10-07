@@ -40,6 +40,8 @@ mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = { __esModule: true
 mocks["@/lib/navigation/cachedTaskDetail"] = require("jiti").createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
 })(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
+mocks["@/utils/helperFunctions/helperFunctions"] = { returnIfModalOrInputActive: () => false };
+mocks["@/lib/constants/constants"] = { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } };
 const CachedTaskDetailNavigation = load("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx").default;
 
 // Execute the production shell's JSX, not a copy of its route/loading policy.

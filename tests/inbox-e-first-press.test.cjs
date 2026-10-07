@@ -346,21 +346,34 @@ function sourceCallback(file, env, name) {
   return new Function(...Object.keys(env), `${compiled}\nreturn callback;`)(...Object.values(env));
 }
 
-function queuedFlow(t, { enabled = true, ...options } = {}) {
+function queuedFlow(t, { enabled = true, noRAF = false, ...options } = {}) {
   const flow = makeFlow(t, { enabled, ...options });
   const listeners = new Map();
   const frames = new Map();
+  const scheduled = new Set();
+  const cancelled = [];
   let frameId = 0;
   for (const target of [window, document]) {
     target.addEventListener = (type, handler, capture) => listeners.set(`${type}:${!!capture}`, handler);
     target.removeEventListener = (type, handler, capture) => listeners.delete(`${type}:${!!capture}`);
   }
   const cleanup = sourceCallback("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
-    inboxEFirstPress: enabled, window, document,
+    inboxEFirstPress: enabled, window, document, queryClient: flow.queryClient,
+    REACT_QUERY_KEYS: sourceCallback("src/lib/constants/constants.ts", {}, "REACT_QUERY_KEYS"),
     returnIfModalOrInputActive: () => ["INPUT", "TEXTAREA"].includes(flow.activeElement.tagName) ||
       !!flow.activeElement.closest(".ProseMirror") || !!flow.activeElement.closest(".chatwindow"),
-    requestAnimationFrame: callback => { frames.set(++frameId, callback); return frameId; },
-    cancelAnimationFrame: id => frames.delete(id),
+    setTimeout: (callback, delay) => {
+      const id = setTimeout(() => { scheduled.delete(id); callback(); }, delay);
+      scheduled.add(id);
+      return id;
+    },
+    clearTimeout: id => {
+      assert.ok(scheduled.delete(id), "cleanup must only cancel a scheduled timeout");
+      cancelled.push(id);
+      clearTimeout(id);
+    },
+    requestAnimationFrame: noRAF ? undefined : callback => { frames.set(++frameId, callback); return frameId; },
+    cancelAnimationFrame: noRAF ? undefined : id => frames.delete(id),
   })();
   t.after(() => cleanup?.());
   let readinessCleanup;
@@ -382,12 +395,115 @@ function queuedFlow(t, { enabled = true, ...options } = {}) {
     if (!event.stopped) listeners.get("keydown:false")?.(event);
     return event;
   }
-  function frame() {
+  function poll() {
     const queued = [...frames.values()]; frames.clear();
     for (const callback of queued) callback();
+    t.mock.timers.tick(16);
   }
-  return { ...flow, mountKeyboard, press, frame };
+  return { ...flow, mountKeyboard, press, poll, cleanup, scheduled, cancelled };
 }
+
+test("no rAF environment: idle cleanup cancels nothing", t => {
+  const flow = queuedFlow(t, { noRAF: true });
+  flow.cleanup();
+  assert.deepEqual(flow.cancelled, []);
+  assert.equal(flow.scheduled.size, 0);
+});
+
+test("no rAF environment: queued E still archives and advances", t => {
+  const active = queuedFlow(t, { noRAF: true });
+  active.press();
+  active.mountKeyboard();
+  t.mock.timers.tick(2000);
+  assert.deepEqual(active.archived, [{ item: notification, mode: "Notification" }]);
+  assert.deepEqual(active.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  assert.equal(active.scheduled.size, 0);
+  active.cleanup();
+});
+
+for (const mobile of [false, true]) {
+  test(`slow ${mobile ? "phone" : "desktop"} readiness hands E to the same-path mounted cache-membership handler at two seconds`, t => {
+    const flow = queuedFlow(t, { mobile });
+    flow.press();
+    flow.mountKeyboard();
+    t.mock.timers.tick(1999);
+    assert.deepEqual(flow.archived, []);
+    t.mock.timers.tick(1);
+    assert.equal(flow.context.currentTask.notifications, undefined);
+    assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+    assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+    t.mock.timers.tick(6000);
+    assert.equal(flow.archived.length, 1);
+    assert.equal(flow.scheduled.size, 0);
+  });
+}
+
+for (const ready of [false, true]) {
+  test(`navigation blocked with membership ${ready ? "ready" : "slow"} waits beyond two seconds before archiving and advancing`, t => {
+    const flow = queuedFlow(t, { currentTask: ready ? { ...task, _count: { notifications: 1 }, notifications: [notification] } : task });
+    const keys = sourceCallback("src/lib/constants/constants.ts", {}, "REACT_QUERY_KEYS");
+    flow.queryClient.setQueryData(keys.uploadStates, true);
+    flow.mountKeyboard();
+    assert.equal(flow.press().stopped, true);
+    t.mock.timers.tick(4000);
+    assert.deepEqual(flow.archived, []);
+    assert.deepEqual(flow.navigations, []);
+    flow.queryClient.setQueryData(keys.uploadStates, false);
+    flow.poll();
+    assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+    assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
+  });
+}
+
+test("blocked navigation expires at six seconds without archiving", t => {
+  const flow = queuedFlow(t);
+  const keys = sourceCallback("src/lib/constants/constants.ts", {}, "REACT_QUERY_KEYS");
+  flow.queryClient.setQueryData(keys.uploadStates, true);
+  flow.press(); flow.mountKeyboard();
+  t.mock.timers.tick(2000);
+  t.mock.timers.tick(4000);
+  flow.queryClient.setQueryData(keys.uploadStates, false);
+  flow.poll();
+  assert.deepEqual(flow.archived, []);
+  assert.deepEqual(flow.navigations, []);
+  assert.equal(flow.scheduled.size, 0);
+});
+
+test("a slow registered last-ticket handler archives and returns to Inbox", t => {
+  const flow = queuedFlow(t, { playlist: [task] });
+  flow.press(); flow.mountKeyboard();
+  t.mock.timers.tick(2000);
+  assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
+  assert.deepEqual(flow.navigations, [["Back"]]);
+});
+
+for (const path of ["/my-tasks", "/detail/project-15/7003"]) {
+  test(`navigation away to ${path} cancels a slow mounted handler before hand-off`, t => {
+    const flow = queuedFlow(t);
+    flow.press(); flow.mountKeyboard();
+    t.mock.timers.tick(1999);
+    const original = window.location;
+    window.location = new URL(path + "?inboxFlow=true", window.location.origin);
+    window.dispatchEvent(new CustomEvent("cached-task-detail-navigation", { detail: {} }));
+    window.location = original;
+    t.mock.timers.tick(6000);
+    assert.deepEqual(flow.archived, []);
+    assert.deepEqual(flow.navigations, []);
+    assert.equal(flow.scheduled.size, 0);
+  });
+}
+
+test("a wrong-path detail handler cannot receive the timed-out E", t => {
+  const flow = queuedFlow(t);
+  flow.press();
+  window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", {
+    detail: { path: "/detail/project-16/7002", ready: true, handleKeyDown: flow.keyboard().handleKeyDown },
+  }));
+  t.mock.timers.tick(2000);
+  flow.mountKeyboard(); flow.poll();
+  assert.deepEqual(flow.archived, []);
+  assert.deepEqual(flow.navigations, []);
+});
 
 for (const mobile of [false, true]) {
   test(`queued early ${mobile ? "phone" : "desktop"} E cannot reach the stale Inbox listener or archive before detail is ready`, t => {
@@ -395,18 +511,18 @@ for (const mobile of [false, true]) {
     const event = flow.press();
     assert.equal(event.stopped, true, "capture must stop the still-mounted Inbox bubble handler");
     assert.equal(event.prevented, true);
-    flow.frame();
+    flow.poll();
     assert.deepEqual(flow.archived, []);
     assert.deepEqual(flow.navigations, []);
     flow.mountKeyboard();
-    flow.frame();
+    flow.poll();
     assert.deepEqual(flow.archived, [], "mount alone does not mean notification membership has loaded");
     flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
     flow.mountKeyboard();
-    flow.frame();
+    flow.poll();
     assert.deepEqual(flow.archived, [{ item: notification, mode: "Notification" }]);
     assert.deepEqual(flow.navigations, [["Replace", "/detail/project-15/7003?inboxFlow=true"]]);
-    flow.frame();
+    flow.poll();
     assert.equal(flow.archived.length, 1);
   });
 }
@@ -416,7 +532,7 @@ test("the queued last-ticket E archives and returns to Inbox", t => {
   const flow = queuedFlow(t, { playlist: [task] });
   flow.press();
   flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
-  flow.mountKeyboard(); flow.frame();
+  flow.mountKeyboard(); flow.poll();
   assert.equal(flow.archived.length, 1);
   assert.deepEqual(flow.navigations, [["Back"]]);
 });
@@ -428,7 +544,7 @@ for (const reason of ["timeout", "navigation", "unmount"]) {
     if (reason === "timeout") t.mock.timers.tick(2000);
     else if (reason === "navigation") window.location = new URL("/my-tasks", window.location.origin);
     else window.dispatchEvent(new CustomEvent("htpr-7002-detail-keyboard", { detail: { path: window.location.pathname, ready: false } }));
-    flow.frame();
+    flow.poll();
     assert.deepEqual(flow.archived, []);
     assert.deepEqual(flow.navigations, []);
   });
@@ -438,7 +554,7 @@ test("repeated early E queues only one archive-and-advance action", t => {
   const flow = queuedFlow(t);
   flow.press(); flow.press();
   flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
-  flow.mountKeyboard(); flow.frame();
+  flow.mountKeyboard(); flow.poll();
   assert.equal(flow.archived.length, 1);
   assert.equal(flow.navigations.length, 1);
 });

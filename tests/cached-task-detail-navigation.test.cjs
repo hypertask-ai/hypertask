@@ -256,6 +256,8 @@ test("background history refreshes preserve the mounted cached detail, but route
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
     "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   };
   const source = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx"), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;

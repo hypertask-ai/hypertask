@@ -185,6 +185,8 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/hooks/useFlag": { useFlag: () => cachedLayout },
     "@/lib/flags/keys": {},
     "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   }).default;
   let resolveBack;
   dom.window.addEventListener("popstate", () => resolveBack?.(), true);

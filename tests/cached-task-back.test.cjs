@@ -74,6 +74,8 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : true },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": coldViewer ? viewer : { __esModule: true, default: Detail },
   };
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
