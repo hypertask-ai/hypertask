@@ -109,7 +109,6 @@ import {
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
   HTPR_6557_AGENT_ROOMS_FLAG,
   HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
-  HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
 } from "@/lib/flags/keys";
 
@@ -385,12 +384,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-18",
     description:
       "Lets management keys be limited to one team while existing account-wide keys keep their current access.",
-  },
-  {
-    key: HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-    shippedOn: "2026-09-18",
-    description:
-      "Preserves description headings, paragraphs, lists, and bold text when AI Chat edits a task, and stores bare API text as editor paragraphs.",
   },
   {
     key: HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
@@ -950,7 +943,6 @@ export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
 // adding kind: "bugfix" to their definitions would release missing rows to Everyone.
 const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
   [HTPR_6951_TASK_WRITING_PROGRESS_FLAG]: "bugfix",
-  [HTPR_6561_DESCRIPTION_STRUCTURE_FLAG]: "bugfix",
   [HTPR_6553_AGENT_CHAT_POLLING_FLAG]: "bugfix",
   [HTPR_6516_AGENT_ATTRIBUTION_FLAG]: "bugfix",
   [HTPR_6512_SEED_TEAM_AGENT_FLAG]: "bugfix",
