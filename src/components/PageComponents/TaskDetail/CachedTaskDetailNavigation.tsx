@@ -76,7 +76,12 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   useEffect(() => {
     if ((!subtaskLink && !backFirstOpen) || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
     const restoreCachedTask = (event: Event) => {
-      const sourcePath = location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
+      // Next can update a nested native detail while this layout still holds the source pathname.
+      const sourcePath = backFirstOpen
+        ? [...document.querySelectorAll<HTMLElement>("#title-input")]
+          .find((title) => title.getClientRects().length > 0)
+          ?.closest("[data-task-detail-path]")?.getAttribute("data-task-detail-path")
+        : location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
       if (window.location.pathname === sourcePath) return;
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;

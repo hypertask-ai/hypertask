@@ -26,6 +26,9 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
   Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
   window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, "", href(parent));
   window.scrollTo = () => {};
+  dom.window.HTMLElement.prototype.getClientRects = function () {
+    return this.closest('[hidden], [style="display: none;"]') ? [] : [{}];
+  };
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   let nextPath = href(parent), children, nativeTask = parent, seedNative = false, settleTraversal, observeMount = false;
@@ -44,8 +47,8 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
       if (native && seedNative) client.setQueryData(cache.cachedTaskDetailKey(2343, initialTask.id), initialTask);
     }, [initialTask, native]);
     if (observeMount) mounts.push({ destination: href(initialTask), ...observed() });
-    return React.createElement("article", null,
-      React.createElement("h1", null, initialTask.title),
+    return React.createElement("article", { "data-task-detail-path": href(initialTask) },
+      React.createElement("h1", { id: "title-input" }, initialTask.title),
       React.createElement("p", null, initialTask.description_.content),
       React.createElement("textarea"));
   };
@@ -98,6 +101,16 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     await new Promise(resolve => { settleTraversal = resolve; window.history[method](); });
   });
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
+    initializeNativeStaleRoot: async () => {
+      await React.act(async () => server(parent));
+      await React.act(async () => {
+        window.history.pushState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["child"] }, "", href(child));
+        nativeTask = child;
+        for (const notify of routeSubscribers) notify();
+      });
+      assert.equal(nextPath, href(parent));
+      assert.equal(observed().title, child.title);
+    },
     server: task => React.act(async () => { seedNative = true; server(task); }),
     nextPath: task => React.act(async () => { nextPath = href(task); render(); }),
     nextTraversals: () => nextTraversals };
@@ -216,6 +229,23 @@ test("cache-miss Back allows the hidden native route to render and seed the pare
   assert.equal(f.observed().title, parent.title);
   assert.equal(f.observed().loading, undefined);
   assert.equal(window.location.pathname, href(parent));
+});
+
+test("cache-miss Back protects a nested native child despite the root layout retaining the parent pathname", async t => {
+  const f = fixture(t, { cachedParent: false, stableChildren: true });
+  await f.initializeNativeStaleRoot();
+  const inactive = document.createElement("div");
+  inactive.hidden = true;
+  inactive.setAttribute("data-task-detail-path", href(parent));
+  inactive.innerHTML = '<h1 id="title-input">Inactive parent</h1>';
+  document.getElementById("root").prepend(inactive);
+  await f.traverse("back");
+  assert.equal(f.checkpoints.at(-1).loading, href(parent));
+  assert.equal(f.observed().loading, href(parent));
+  assert.equal(f.observed().title, undefined);
+  await f.server(parent);
+  assert.equal(f.observed().title, parent.title);
+  assert.equal(f.observed().loading, undefined);
 });
 
 test("same-task modal popstate keeps the task and unsent composer mounted", async t => {
