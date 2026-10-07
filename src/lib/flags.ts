@@ -19,6 +19,7 @@ import {
   HTPR_6972_SUBTASK_LINK_FLAG,
   HTPR_6991_BACK_FIRST_OPEN_FLAG,
   HTPR_7000_INBOX_NEXT_OPEN_FLAG,
+  HTPR_7003_BOARD_BACK_FLAG,
   HTPR_7001_INBOX_NEXT_CACHED_FLAG,
   HTPR_6978_SIZE_LABEL_CLICK_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
@@ -296,6 +297,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-07",
     description: "Clears the previous task immediately on Back or Forward before restoring cached detail or waiting for the destination route.",
+  },
+  {
+    key: HTPR_7003_BOARD_BACK_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-07",
+    description: "Keeps the previous ticket hidden on a quick Back from a board card until the board is ready to show.",
   },
   {
     key: HTPR_7000_INBOX_NEXT_OPEN_FLAG,
