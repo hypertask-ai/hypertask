@@ -178,6 +178,30 @@ for (const mobile of [false, true]) {
     assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 460);
   }, { mobile }));
 
+  test(`${mobile ? "phone" : "desktop"}: repeated active-card refocus without focusin cannot erase completed restoration`, async () => fixture(async f => {
+    await f.render(); f.scroll(f.scrollers().columns[0], "scrollTop", 283);
+    await f.leave(); await f.back();
+    const column = f.scrollers().columns[0];
+    const card = document.createElement("div");
+    card.tabIndex = 0;
+    column.append(card);
+    card.focus();
+    await f.flush();
+    let focusEvents = 0;
+    card.addEventListener("focusin", () => focusEvents++);
+    card.focus({ preventScroll: true });
+    assert.equal(focusEvents, 0, "refocusing the active card emits no focusin");
+    // focusKanbanCard adjusts scrollTop explicitly even when focus does not change.
+    f.scroll(column, "scrollTop", 0);
+    assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 283);
+    await f.flush();
+    assert.equal(column.scrollTop, 283);
+    column.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    f.scroll(column, "scrollTop", 50);
+    await f.flush();
+    assert.equal(column.scrollTop, 50, "actual user interaction still releases protection");
+  }, { mobile }));
+
   test(`${mobile ? "phone" : "desktop"}: pointer interaction releases completed restoration focus protection`, async () => fixture(async f => {
     await f.render(); f.scroll(f.scrollers().columns[0], "scrollTop", 460);
     await f.leave(); await f.back();
