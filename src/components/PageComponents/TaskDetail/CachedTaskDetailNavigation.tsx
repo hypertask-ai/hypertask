@@ -50,7 +50,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
-  const [historyDestination, setHistoryDestination] = useState<{ pathname: string; source: ReactNode } | null>(null);
+  const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -81,7 +81,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
       if (!task) {
-        if (backFirstOpen && route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname, source: children }));
+        if (backFirstOpen && route) flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
         return;
       }
       // The root relay runs before Next's native listener, which otherwise replays a stale route tree.
@@ -95,7 +95,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname, children]);
+  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
@@ -156,7 +156,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   }, [location, task, router]);
   const showDetail = instantTicketOpen && !!location && !!task && task.projectId === location.projectId && task.uniqueIndex === location.uniqueIndex;
   useEffect(() => {
-    if (!showDetail || EmbeddedTaskDetail) return;
+    const nativeDetail = backFirstOpen && instantTicketOpen && accountId !== null && currentUser?.id === accountId && pathname?.startsWith("/detail/project-");
+    if ((!showDetail && !nativeDetail) || EmbeddedTaskDetail) return;
     let cancelled = false;
     void loadTaskDetail().then(({ default: Detail }) => {
       if (!cancelled) {
@@ -166,22 +167,40 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (!cancelled) router.replace(window.location.pathname + window.location.search + window.location.hash);
     });
     return () => { cancelled = true; };
-  }, [showDetail, EmbeddedTaskDetail, router]);
+  }, [showDetail, EmbeddedTaskDetail, router, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, pathname]);
   useEffect(() => {
-    if (historyDestination && pathname === historyDestination.pathname && children !== historyDestination.source) {
+    if (!historyDestination || accountId === null || currentUser?.id !== accountId) return;
+    let restored = false;
+    const restoreDestination = () => {
+      if (restored || window.location.pathname !== historyDestination.pathname) return;
+      const route = historyDestination.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+      const destination = route && findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2]));
+      if (!destination) return;
+      // Native detail seeds its authorized task after RSC renders, even when Next retains the children element.
+      restored = true;
+      openCachedTaskDetail({
+        queryClient, accountId, projectId: destination.projectId, uniqueIndex: destination.uniqueIndex,
+        task: destination, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+      });
       setHistoryDestination(null);
-    }
-  }, [historyDestination, pathname, children]);
+    };
+    const unsubscribe = queryClient.getQueryCache().subscribe(restoreDestination);
+    restoreDestination();
+    return unsubscribe;
+  }, [historyDestination, accountId, currentUser?.id, queryClient]);
   if (!showDetail && backFirstOpen && instantTicketOpen && currentUser?.id === accountId &&
-      historyDestination?.pathname === nativePathname &&
-      (pathname !== nativePathname || children === historyDestination.source)) {
+      historyDestination?.pathname === nativePathname) {
     return (
-      <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
-        Loading task…
-      </div>
+      <>
+        <div hidden>{children}</div>
+        <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
+          Loading task…
+        </div>
+      </>
     );
   }
   // A Suspense fallback would remount the board and replay its startup navigation.
+  if (backFirstOpen && showDetail && !EmbeddedTaskDetail) return null;
   if (!showDetail || !EmbeddedTaskDetail) return children;
   return (
     <EmbeddedTaskDetail

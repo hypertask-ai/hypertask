@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -28,7 +28,8 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } 
   window.scrollTo = () => {};
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
-  let nextPath = href(parent), children, settleTraversal, observeMount = false;
+  let nextPath = href(parent), children, nativeTask = parent, seedNative = false, settleTraversal, observeMount = false;
+  const routeSubscribers = new Set();
   const mounts = [], checkpoints = [], routerCalls = [];
   window.addEventListener("popstate", () => {
     if (settleTraversal) { const resolve = settleTraversal; settleTraversal = null; setImmediate(resolve); }
@@ -36,8 +37,12 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } 
   new Function("window", "CustomEvent", historyScript)(window, window.CustomEvent);
   let nextTraversals = 0;
   window.addEventListener("popstate", () => { nextTraversals++; }, true);
-  const observed = () => ({ title: document.querySelector("h1")?.textContent, body: document.querySelector("p")?.textContent, loading: document.querySelector('[role="status"]')?.getAttribute("data-task-path") });
-  const Detail = ({ initialTask }) => {
+  const visible = selector => [...document.querySelectorAll(selector)].find(el => !el.closest("[hidden]"));
+  const observed = () => ({ title: visible("h1")?.textContent, body: visible("p")?.textContent, loading: visible('[role="status"]')?.getAttribute("data-task-path") });
+  const Detail = ({ initialTask, native = false }) => {
+    React.useEffect(() => {
+      if (native && seedNative) client.setQueryData(cache.cachedTaskDetailKey(2343, initialTask.id), initialTask);
+    }, [initialTask, native]);
     if (observeMount) mounts.push({ destination: href(initialTask), ...observed() });
     return React.createElement("article", null,
       React.createElement("h1", null, initialTask.title),
@@ -64,7 +69,14 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } 
   }, exports);
   const Navigation = exports.default;
   const render = () => renderer.render(React.createElement(Navigation, { accountId: 2343 }, children));
-  const server = task => { nextPath = href(task); children = React.createElement(Detail, { initialTask: task }); render(); };
+  const NativeRoute = () => React.createElement(Detail, { initialTask: React.useSyncExternalStore(notify => { routeSubscribers.add(notify); return () => routeSubscribers.delete(notify); }, () => nativeTask), native: true });
+  const routeChildren = React.createElement(NativeRoute);
+  const server = task => {
+    nextPath = href(task); nativeTask = task;
+    children = stableChildren ? routeChildren : React.createElement(Detail, { initialTask: task, native: true });
+    for (const notify of routeSubscribers) notify();
+    render();
+  };
   t.after(async () => {
     await React.act(async () => renderer.unmount());
     client.clear(); dom.window.close();
@@ -86,7 +98,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false } 
     await new Promise(resolve => { settleTraversal = resolve; window.history[method](); });
   });
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
-    server: task => React.act(async () => server(task)),
+    server: task => React.act(async () => { seedNative = true; server(task); }),
     nextPath: task => React.act(async () => { nextPath = href(task); render(); }),
     nextTraversals: () => nextTraversals };
 }
@@ -156,12 +168,12 @@ for (const cachedParent of [true, false]) {
   });
 }
 
-test("cold Back uses the native parent without Loading while the embedded viewer imports", async t => {
+test("a pending cached viewer shows neither the child nor Loading on cold Back", async t => {
   const f = fixture(t, { coldViewer: true });
   await f.initialize({ refreshChild: false }); await f.traverse("back");
-  assertDestination(f.checkpoints.at(-1), parent);
+  assert.equal(f.checkpoints.at(-1).title, undefined);
   assert.equal(f.observed().loading, undefined);
-  assert.equal(f.observed().title, parent.title);
+  assert.equal(f.observed().title, undefined);
   await React.act(async () => f.resolveViewer());
   assert.equal(f.observed().title, parent.title);
   assert.equal(f.observed().loading, undefined);
@@ -192,6 +204,19 @@ test("cached Forward bypasses an outstanding cache-miss Back destination", async
   assert.equal(f.observed().loading, undefined);
 });
 
+test("cache-miss Back allows the hidden native route to render and seed the parent with stable children", async t => {
+  const f = fixture(t, { cachedParent: false, stableChildren: true });
+  await f.initialize(); await f.traverse("back");
+  assert.equal(f.observed().loading, href(parent));
+  assert.equal(f.observed().title, undefined);
+  await f.nextPath(parent);
+  assert.equal(f.observed().loading, href(parent));
+  await f.server(parent);
+  assert.equal(f.observed().title, parent.title);
+  assert.equal(f.observed().loading, undefined);
+  assert.equal(window.location.pathname, href(parent));
+});
+
 test("same-task modal popstate keeps the task and unsent composer mounted", async t => {
   const f = fixture(t);
   await f.initialize();
@@ -200,4 +225,22 @@ test("same-task modal popstate keeps the task and unsent composer mounted", asyn
   assert.equal(document.querySelector("textarea"), composer);
   assert.equal(composer.value, "Unsent draft");
   assert.equal(f.observed().loading, undefined);
+});
+
+test("native detail seeds cache readiness with the Back flag independently of subtask links", () => {
+  const nativeSource = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/useTaskDetailState.tsx"), "utf8");
+  const body = nativeSource.slice(nativeSource.indexOf("  const subtaskLink =")).match(/useEffect\(\(\) => \{([\s\S]*?)\n  \}, \[/)?.[1];
+  assert.ok(body);
+  const seed = new Function("subtaskLink", "backFirstOpen", "embedded", "authenticatedUserId", "currentUser", "_parsedTask", "queryClient", "cachedTaskDetailKey", body);
+  for (const subtaskLink of [false, true]) for (const backFirstOpen of [false, true]) {
+    const client = new QueryClient();
+    seed(subtaskLink, backFirstOpen, false, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+    assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), subtaskLink || backFirstOpen ? parent : undefined);
+    client.clear();
+  }
+  const client = new QueryClient();
+  seed(false, true, true, 2343, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  seed(false, true, false, 2344, { id: 2343 }, parent, client, cache.cachedTaskDetailKey);
+  assert.equal(client.getQueryData(cache.cachedTaskDetailKey(2343, parent.id)), undefined);
+  client.clear();
 });
