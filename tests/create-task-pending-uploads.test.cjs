@@ -42,7 +42,7 @@ function mount(backgroundTaskUploadsEnabled) {
     editor: { getHTML: () => '' },
     setEditMode: () => {}, setCurrentFocusedElement: () => {},
     createTaskUploadCount: () => 0, reserveCreateTaskUploads: () => {}, releaseCreateTaskUploadReservations: () => {},
-    handleChange: () => {}, setNewCommentAttachments: () => {}, setTrigger: () => {},
+    handleChange: () => {}, setNewCommentAttachments: () => {}, setTrigger: () => {}, setFilesDropped: () => {},
     CreateTaskAndDescription: async (_description, _title, payload) => { created.push(payload); return '/detail/project-1/42'; },
     getTaskCreatePerformanceTraceScope: () => null,
     completeTaskCreatePerformanceTrace: () => {}, completeTaskCreatePerformanceTraceAfterPaint: () => {},
@@ -53,7 +53,7 @@ function mount(backgroundTaskUploadsEnabled) {
     document: { getElementById: () => ({ focus: () => {} }) }, DIV_ID_CONSTANTS: { titleInputModal: 'title' },
     divIds: { wrapperId: 'modal' }, toast, console: { log: () => {} },
   };
-  const names = ['onFilesSelected', 'onUploadFailed', 'getAttachments', 'callbackAttachments', 'CtrlEnterHandler'];
+  const names = ['onFilesSelected', 'onUploadFailed', 'getAttachments', 'handleFileDrop', 'callbackAttachments', 'CtrlEnterHandler'];
   const handlers = new Function(...Object.keys(context), `${compile(names.map(declaration).join('\n'))}; return { ${names.join(', ')} };`)(...Object.values(context));
   return {
     ...handlers, created, errors, state, context,
@@ -180,6 +180,26 @@ for (const fails of [false, true]) {
     else assert.equal(fixture.created[0].attachments[0].file.name, resized.name);
   });
 }
+
+test('the window registers a dropped file before the child preparation effect', async () => {
+  const fixture = mount(false);
+  const file = new File(['hello'], 'dropped-before-effect.txt');
+  void fixture.handleFileDrop([file]);
+  const save = fixture.CtrlEnterHandler('Save');
+  await nextTurn();
+  assert.equal(fixture.created.length, 0);
+  await fixture.callbackAttachments([{ id: 0, file: { name: file.name, source: 'https://files.example/drop.txt' } }]);
+  await save;
+  assert.equal(fixture.created[0].attachments[0].file.name, file.name);
+});
+
+test('dropping an already-attached file does not leave an unresolvable wait', async () => {
+  const fixture = mount(false);
+  const file = new File(['hello'], 'duplicate-drop.txt');
+  fixture.context.createTaskAttachmentsRef.current = [{ id: 0, file }];
+  await fixture.handleFileDrop([file]);
+  assert.equal(fixture.context.pendingAttachmentUploadsRef.current.size, 0);
+});
 
 test('the create window wires selection and upload-failure reports through the shared uploader', () => {
   const state = fs.readFileSync(path.join(root, 'src/components/Common/AttachmentsUpload/useAttachmentUploadState.ts'), 'utf8');

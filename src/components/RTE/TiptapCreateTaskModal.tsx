@@ -141,7 +141,7 @@ const TiptapCreateTaskModal = () => {
     seen: boolean;
   }>());
   // Register before file preparation or the lazy preview can yield to Save.
-  const onFilesSelected = (files: File[], preparation: Promise<FileItem[]>) => {
+  const onFilesSelected = (files: File[], preparation?: Promise<FileItem[]>) => {
     files.forEach((file) => {
       const existing = pendingAttachmentUploadsRef.current.get(file.name);
       if (existing && !existing.failed) return;
@@ -154,7 +154,7 @@ const TiptapCreateTaskModal = () => {
       void promise.catch(() => undefined);
       pendingAttachmentUploadsRef.current.set(file.name, { promise, resolve, reject, failed: false, seen: false });
     });
-    void preparation.then((prepared) => {
+    void preparation?.then((prepared) => {
       prepared.forEach(({ file }, index) => {
         const name = files[index].name;
         const pending = pendingAttachmentUploadsRef.current.get(name);
@@ -382,8 +382,14 @@ const TiptapCreateTaskModal = () => {
 
   const handleFileDrop = async (droppedFiles: FileList) => {
     console.log("🚀 ~ handleFileDrop ~ droppedFiles:", droppedFiles);
-    if (droppedFiles && droppedFiles.length > 0)
-      setFilesDropped([...droppedFiles]);
+    if (droppedFiles && droppedFiles.length > 0) {
+      const files = [...droppedFiles];
+      onFilesSelected(files.filter((file) => !createTaskAttachmentsRef.current.some((attachment) => {
+        const existing = attachment.file ?? attachment;
+        return existing.name === file.name && existing.size === file.size;
+      })));
+      setFilesDropped(files);
+    }
   };
 
   const audioTiptapCallback = (text: string, setContent: boolean = false) => {
