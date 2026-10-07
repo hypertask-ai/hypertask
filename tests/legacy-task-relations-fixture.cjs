@@ -88,6 +88,7 @@ function fixture({ enabled = false, userId = 7, compat, failFlag = false, failQu
     return roots.map((item) => projectRow("Task", item, args));
   } } };
   const mocks = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/prisma": { default: database },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere },
     "@/lib/agents/visibility": visibility,

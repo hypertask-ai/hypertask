@@ -316,6 +316,35 @@ function attachments() {
   assert.ok(read("src/pages/api/tasks/n8nUpload.ts").includes("bodyParser: false"));
   console.log("attachments structural verification passed");
 }
+const slice5cHashes = {
+  "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
+  "src/utils/controllers/tasks/getAll.ts": "b82c469dbf01bdb976e32a93a35cff0e8b3f3139fb39923913d52c2655dbea89",
+  "src/lib/api/task-writes/route.ts": "ede51193ada9ee53a18b8d1b54ab7a6f0a7ac47f0fe98ece94293556cb0faa71",
+  "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
+};
+function slice5cLegacySource() {
+  return read("src/pages/api/tasks/getAll.ts")
+    .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+    .replace(/export default withTaskWriteFlag\([\s\S]*$/, "export default handler;");
+}
+function slice5c() {
+  const original = JSON.parse(read("tests/fixtures/htpr-6968-slice-5c/getAll.json"));
+  assert.equal(slice5cLegacySource(), original, "getAll fallback is byte-identical to independent fixture");
+  for (const [file, hash] of Object.entries(slice5cHashes)) {
+    const source = file === "src/pages/api/tasks/getAll.ts" ? original : read(file);
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), hash, file + " preserved bytes");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(source + "changed").digest("hex"), hash), "pin mutation control");
+  }
+  const page = read("src/pages/api/tasks/getAll.ts");
+  assert.ok(page.includes('withTaskWriteFlag(handler, "POST", async () =>'));
+  assert.ok(page.includes('(await import("@/lib/api/task-writes/getAll")).POST'));
+  assert.ok(read("src/lib/api/task-writes/getAll.ts").includes("taskWriteRoute"));
+  assert.ok(!fs.existsSync(path.join(root, "src/app/api/tasks/getAll/route.ts")), "no URL twin");
+  const controllerImport = 'import controller from "@/utils/controllers/tasks/getAll";';
+  assert.equal(callerFiles("tasks/getAll", [{ file: "fixture.ts", text: controllerImport }]).length, 0, "controller import is not an HTTP caller");
+  assert.equal(callerFiles("tasks/getAll", [{ file: "fixture.ts", text: controllerImport + 'fetch("/api/tasks/getAll")' }]).length, 1, "controller exclusion retains real caller control");
+  console.log("slice5c structural verification passed; independent fallback, controller and helpers pinned");
+}
 const slice5Routes = {
   single: { module: "single-read-delete", methods: ["GET", "DELETE"], hash: legacyHashes.update },
   markRead: { module: "mark-read", methods: ["POST"], hash: "5aa66631b3772ce09f2631bea22e6fd23362bedbc4c4745511550b34e4e2f60b" },
@@ -341,10 +370,7 @@ function slice5() {
     }
     assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
   }
-  for (const [file, hash] of Object.entries({
-    "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
-    "src/utils/controllers/tasks/getAll.ts": "b82c469dbf01bdb976e32a93a35cff0e8b3f3139fb39923913d52c2655dbea89",
-  })) assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, "compatibility migration remains untouched");
+  slice5c(); // Preserve getAll's independent compatibility policy through slice 5c.
   console.log("slice5 structural verification passed");
 }
 const slice5bRoutes = {
@@ -423,7 +449,7 @@ function slice5b() {
     assert.ok(read(`src/lib/api/task-writes/${module}.ts`).includes(`export const ${method}`));
     assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
   }
-  slice5(); // Includes the unchanged getAll route/controller compatibility pins.
+  slice5(); // Includes the getAll fallback/controller compatibility pins.
   console.log("slice5b structural verification passed");
 }
 const projectViewRoutes = {
@@ -687,8 +713,9 @@ const notificationDeferredHashes = {
 function notifications() {
   const sources = notificationLegacySources();
   for (const [file, hash] of Object.entries(notificationDeferredHashes)) {
-    assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, file + " deliberately unchanged");
-    assert.throws(() => assert.equal(crypto.createHash("sha256").update(read(file) + "changed").digest("hex"), hash), "deferred pin mutation control");
+    const source = file === "src/pages/api/tasks/getAll.ts" ? slice5cLegacySource() : read(file);
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), hash, file + " deliberately unchanged");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(source + "changed").digest("hex"), hash), "deferred pin mutation control");
   }
   const controllerImport = 'import controller from "@/utils/controllers/notifications/getByTask";';
   assert.equal(callerFiles("notifications/getByTask", [{ file: "fixture.ts", text: controllerImport }]).length, 0);
@@ -910,7 +937,7 @@ function callerFiles(endpoint, corpus) {
   const pattern = new RegExp(`/${escaped}(?=[?\\#\\s'\"\x60)]|$)`);
   return corpus.filter(({ file, text }) => {
     // Extracted handlers import controllers, not the matching HTTP URL.
-    if (endpoint.startsWith("section/") || endpoint === "notifications/getByTask") {
+    if (endpoint.startsWith("section/") || endpoint === "notifications/getByTask" || endpoint === "tasks/getAll") {
       for (const quote of ['"', "'"]) text = text.replaceAll(`${quote}@/utils/controllers/${endpoint}${quote}`, "");
     }
     return file !== `src/pages/api/${endpoint}.ts` && pattern.test(text);
@@ -1011,9 +1038,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { notificationSettingsRoutes, notificationSettingsLegacySources, notificationSettings, notificationRoutes, notificationLegacySources, notifications, sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { slice5c, slice5cLegacySource, notificationSettingsRoutes, notificationSettingsLegacySources, notificationSettings, notificationRoutes, notificationLegacySources, notifications, sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { notifications, sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { notifications, sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b, slice5c };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

@@ -46,6 +46,7 @@ function fixture(options = {}) {
     } },
   };
   const mocks = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/prisma": { default: database },
     "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6154-chat-stop-and-timeout" },
     "@/lib/auth/betterAuth": { auth: { api: { getSession: async ({ headers }) => {
