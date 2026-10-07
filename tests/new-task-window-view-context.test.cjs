@@ -161,12 +161,44 @@ test("explicit caller values including empty selections win initially and during
   }
 });
 
-test("duplicate values win over caller and view defaults", () => {
-  const duplicate = { title: "Copy", taskLabels: [{ label: labels[0] }], assignees: [{ user: assignees[0] }, { agent: assignees[1] }], priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) };
-  const result = modal({ duplicate, payload: { priority, estimate, assignees: [] } });
-  assert.deepEqual(result.form.assignees, assignees);
-  assert.deepEqual(result.form.priority, duplicate.priority);
-  assert.deepEqual(result.form.estimate, duplicate.estimate);
+test("duplicate initial values remain unchanged with the flag on", () => {
+  for (const quickFlag of [false, true]) {
+    for (const fields of [
+      { assignees: [{ user: assignees[0] }, { agent: assignees[1] }], priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
+      {},
+      { assignees: [], priority: null, estimate: null },
+    ]) {
+      const duplicate = { title: "Copy", taskLabels: [{ label: labels[0] }], ...fields };
+      for (const payload of [undefined, { priority, estimate, assignees }]) {
+        const on = modal({ duplicate, payload, quickFlag });
+        const off = modal({ duplicate, payload, quickFlag, flag: false });
+        assert.deepEqual(on.form, off.form);
+        assert.deepEqual(on.form.assignees, []);
+        assert.deepEqual(on.form.priority, duplicate.priority ?? payload?.priority);
+        assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
+      }
+    }
+  }
+});
+
+test("duplicate board resolution does not add view assignees, priority or size with the flag on", () => {
+  for (const quickFlag of [false, true]) {
+    for (const fields of [
+      { priority: constants.PriorityConstants[1], estimate: constants.EstimateConstants.at(-1) },
+      {},
+      { assignees: [], priority: null, estimate: null },
+    ]) {
+      const duplicate = { title: "Copy", taskLabels: [], ...fields };
+      const on = modal({ duplicate, quickFlag, board: { id: 15 } });
+      const off = modal({ duplicate, quickFlag, board: { id: 15 }, flag: false });
+      on.switchBoard(project());
+      off.switchBoard(project());
+      assert.deepEqual(on.form, off.form);
+      assert.deepEqual(on.form.assignees, []);
+      assert.deepEqual(on.form.priority, duplicate.priority ?? undefined);
+      assert.deepEqual(on.form.estimate, duplicate.estimate ?? undefined);
+    }
+  }
 });
 
 test("user values and deliberate clearing survive later board defaults", () => {

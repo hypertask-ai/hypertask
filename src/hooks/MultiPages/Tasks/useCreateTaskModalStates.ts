@@ -194,10 +194,8 @@ const useCreateTaskModalGlobalStates = () => {
           createTaskModal.duplicate?.description ??
           createTaskModal.column_payload?.prefilledDescription ??
           "<p></p>",
-        assignees: newTaskWindowViewContextEnabled
-          ? createTaskModal.duplicate?.assignees?.map(
-              (assignment: any) => assignment.agent ?? assignment.user
-            ).filter(Boolean) ?? createTaskModal.column_payload?.assignees ?? viewDefaults?.assignees ?? []
+        assignees: newTaskWindowViewContextEnabled && !createTaskModal.duplicate
+          ? createTaskModal.column_payload?.assignees ?? viewDefaults?.assignees ?? []
           : [],
         attachments:
           createTaskModal.column_payload?.prefilledAttachments?.map(
@@ -213,9 +211,11 @@ const useCreateTaskModalGlobalStates = () => {
         priority:
           createTaskModal.duplicate?.priority ??
           createTaskModal.column_payload?.priority ??
-          (newTaskWindowViewContextEnabled ? viewDefaults?.priority : undefined),
+          (newTaskWindowViewContextEnabled && !createTaskModal.duplicate
+            ? viewDefaults?.priority
+            : undefined),
         estimate: createTaskModal.duplicate?.estimate ??
-          (newTaskWindowViewContextEnabled
+          (newTaskWindowViewContextEnabled && !createTaskModal.duplicate
             ? createTaskModal.column_payload?.estimate ?? viewDefaults?.estimate
             : undefined),
         dueDate: normalizeCreateTaskFormDate(
@@ -458,10 +458,9 @@ const useCreateTaskModalGlobalStates = () => {
       : getActiveFiltersFromProject(project).addedFilters.find(
           (filter) => filter.type === "Labels"
         )?.searchPayload;
-    const viewFields = newTaskWindowViewContextEnabled ? {
+    const viewFields = newTaskWindowViewContextEnabled && !createTaskModal.duplicate ? {
       assignees: editedViewFieldsRef.current.assignees ||
         createTaskModal.column_payload?.assignees !== undefined ||
-        createTaskModal.duplicate?.assignees !== undefined ||
         formValuesRef.current.assignees.length > 0
           ? formValuesRef.current.assignees
           : viewDefaults?.assignees ?? [],
