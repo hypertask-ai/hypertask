@@ -2,7 +2,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { execFileSync } = require("node:child_process");
 const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 
@@ -12,7 +11,7 @@ const jiti = require("jiti").createJiti(__filename, { alias: { "@": path.join(ro
 const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const { findCachedTaskDetail } = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
 
-function load({ enabled = [], task = null, ref = process.env.CACHED_RELATIONS_BASELINE } = {}) {
+function load({ enabled = [], task = null, legacy = false } = {}) {
   const queries = [], flagCalls = [];
   const mocks = {
     "@prisma/client": require("@prisma/client"),
@@ -27,7 +26,7 @@ function load({ enabled = [], task = null, ref = process.env.CACHED_RELATIONS_BA
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   };
-  const source = ref ? execFileSync("git", ["show", `${ref}:${file}`], { cwd: root, encoding: "utf8" }) : fs.readFileSync(path.join(root, file), "utf8");
+  const source = fs.readFileSync(legacy ? path.join(__dirname, "fixtures/htpr-6972/load.ts.txt") : path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)(name => {
@@ -48,7 +47,7 @@ function projectRelation(row, select) {
 
 test("flag-off relation projections retain the compact legacy shape", () => {
   const { taskDetailInclude } = load();
-  const legacy = load({ ref: "3a35c08e7~1" }).taskDetailInclude(6, 15);
+  const legacy = load({ legacy: true }).taskDetailInclude(6, 15);
   for (const projection of [taskDetailInclude(6, 15), taskDetailInclude(6, 15, false)]) {
     assert.deepEqual(projection.subTasks, legacy.subTasks);
     assert.deepEqual(projection.parentTask, legacy.parentTask);

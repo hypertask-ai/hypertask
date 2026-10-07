@@ -2,7 +2,6 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const { execFileSync } = require("node:child_process");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
 const { flushSync } = require("react-dom");
@@ -25,8 +24,8 @@ child.parentTask = { ...parent, subTasks: [{ ...child, parentTask: null }] };
 const parentWithChild = { ...parent, subTasks: [child] };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function load(file, mocks, ref = process.env.SUBTASK_LINK_BASELINE) {
-  const source = ref ? execFileSync("git", ["show", `${ref}:${file}`], { cwd: root, encoding: "utf8" }) : fs.readFileSync(path.join(root, file), "utf8");
+function load(file, mocks, legacy = false) {
+  const source = fs.readFileSync(legacy ? path.join(__dirname, "fixtures/htpr-6972/CachedTaskDetailNavigation.tsx.txt") : path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   new Function("require", "exports", "queueMicrotask", compiled)(name => {
@@ -36,7 +35,7 @@ function load(file, mocks, ref = process.env.SUBTASK_LINK_BASELINE) {
   return exports.default;
 }
 
-function fixture(t, { enabled = true, direct = false, ref } = {}) {
+function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + (direct ? href(parent) : "/project") });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -109,7 +108,7 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   };
   const ServerDetail = () => React.createElement(Detail, { initialTask: serverTask });
   mocks["@/components/Modals/SwipeUnread/EmbeddedTaskDetail"] = { __esModule: true, default: Detail };
-  const Navigation = load(navigationFile, mocks, ref);
+  const Navigation = load(navigationFile, mocks, legacy);
   let children = direct ? React.createElement(ServerDetail) : "Board";
   let navigationKey = 0;
   const render = () => renderer.render(React.createElement(React.StrictMode, null, React.createElement(Navigation, { accountId: 2343, key: navigationKey }, React.isValidElement(children) ? React.cloneElement(children) : children)));
@@ -245,9 +244,9 @@ test("same-task modal history after a normal Next navigation does not replace th
   assert.equal(window.history.state.cachedTaskDetail, undefined);
 });
 
-for (const ref of [undefined, "3a35c08e7~1"]) {
-  test(`flag-off cached navigation preserves pre-1131 behavior (${ref ?? "candidate"})`, async t => {
-    const f = fixture(t, { enabled: false, ref });
+for (const legacy of [false, true]) {
+  test(`flag-off cached navigation preserves pre-1131 behavior (${legacy ? "legacy fixture" : "candidate"})`, async t => {
+    const f = fixture(t, { enabled: false, legacy });
     await React.act(async () => f.render());
     await React.act(async () => f.open(parentWithChild));
     const link = document.querySelector("a");
