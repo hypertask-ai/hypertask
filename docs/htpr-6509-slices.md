@@ -196,7 +196,7 @@ The inventory below assigns every existing file exactly once to its primary doma
 | 7 (shipped, PR 1146) | All project view create/update/delete/rename/switch/unsaved/reset writes have shared flag-gated handlers; current shared UI, callers and URLs remain unchanged. Verification and live QA handoff below. |
 | 8 (shipped, PR 1146) | All view order/default-order/smart-split writes have shared flag-gated handlers. Historical 101/401/404/409 statuses retained; zero-caller `sync-view` stays byte-pinned legacy for slice 12's external-use review. |
 | 9 (local; not shipped) | All seven section endpoints use shared flag-gated handlers: four writes and three POST reads. Ranking and board access preserved; all shells retained, including zero-caller `getAll`/`getByTaskId` for slice 12. Verification and live QA handoff below. |
-| 10 | Inbox/task-notification mutations (including GET writes), task-seen and follower email; preserve user scoping and realtime/inbox fan-out. |
+| 10 (in PR) | All seven inbox/task-notification inventory endpoints plus companion `comments/updateSeen` use shared flag-gated Web handlers, including GET writes, task-seen and follower email. Signed-user scoping and ordered inbox/realtime fan-out preserved; no slice-10 remainder. Verification and live QA handoff below. |
 | 11 | Notification preferences, matrix, splits and push status plus remaining notification reads. Review zero-caller mute without removing the shared mute model/services. |
 | 12 | MCP service adapter atop the shared in-process operations from the service-layer ticket; transfer slice-1 URL ownership; final same-URL twin/dead-shell audit. Update direct imports of removed Pages modules to shared services. No MCP wrapper/auth cache or update-pipeline redesign. |
 
@@ -226,23 +226,23 @@ Counts are src / CLI / e2e; reads are included so none of the remaining 33 task 
 
 | Current file | Primary slice | Disposition | Caller files (src / CLI / e2e) |
 | --- | --- | --- | --- |
-| `src/pages/api/notifications/(un)archiveBulk.ts` | 10 | Migrate / preserve contract | 3 / 0 / 0 |
+| `src/pages/api/notifications/(un)archiveBulk.ts` | 10 | Migrate / preserve contract | 4 / 0 / 0 |
 | `src/pages/api/notifications/access.ts` | 11 | Migrate / preserve contract | 2 / 0 / 0 |
 | `src/pages/api/notifications/changePushNotificationStatus.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
 | `src/pages/api/notifications/getAll.ts` | 11 | Migrate / preserve contract | 9 / 0 / 0 |
 | `src/pages/api/notifications/getAllInbox.ts` | 11 | Migrate / preserve contract | 2 / 0 / 0 |
-| `src/pages/api/notifications/getByTask.ts` | 10 | Migrate / preserve contract | 2 / 0 / 0 |
+| `src/pages/api/notifications/getByTask.ts` | 10 | Migrate / preserve contract | 1 / 0 / 0 |
 | `src/pages/api/notifications/getCount.ts` | 11 | Migrate / preserve contract | 3 / 0 / 0 |
 | `src/pages/api/notifications/getPushNotificationStatus.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
-| `src/pages/api/notifications/markAsDone.ts` | 10 | Migrate / preserve contract | 5 / 0 / 0 |
-| `src/pages/api/notifications/markAsUnseen.ts` | 10 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/markAsDone.ts` | 10 | Migrate / preserve contract | 6 / 0 / 0 |
+| `src/pages/api/notifications/markAsUnseen.ts` | 10 | Migrate / preserve contract | 2 / 0 / 0 |
 | `src/pages/api/notifications/matrix.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
 | `src/pages/api/notifications/moveTaskToInbox.ts` | 10 | Migrate / preserve contract | 4 / 0 / 1 |
 | `src/pages/api/notifications/mute.ts` | 11 | Zero-caller candidate; retain pending review | 0 / 0 / 0 |
 | `src/pages/api/notifications/preference.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
 | `src/pages/api/notifications/sendEmailToFollower.ts` | 10 | Migrate / preserve contract | 3 / 0 / 0 |
 | `src/pages/api/notifications/splits.ts` | 11 | Migrate / preserve contract | 1 / 0 / 0 |
-| `src/pages/api/notifications/unArchiveNotificationById.ts` | 10 | Migrate / preserve contract | 1 / 0 / 0 |
+| `src/pages/api/notifications/unArchiveNotificationById.ts` | 10 | Migrate / preserve contract | 2 / 0 / 0 |
 | `src/pages/api/projects/archive.ts` | 6 | Migrate / preserve contract | 2 / 1 / 0 |
 | `src/pages/api/projects/boardTasks.ts` | 6 | Migrate / preserve contract | 4 / 0 / 4 |
 | `src/pages/api/projects/create.ts` | 6 | Migrate / preserve contract | 5 / 0 / 2 |
@@ -558,3 +558,34 @@ Use Owner/QA with the existing migration flag On, then compare Off on an explici
 | `/api/section/getProjectSections` | Board → Ctrl+K → **Manage board columns**, then Task → Ctrl+K → **Move task to column** (cancel picker); verify default/active columns and fallback order with a cold cache. |
 | `/api/section/getAll` | **No active UI caller:** retained unused authenticated POST read. A signed same-origin read scoped to the session actor is required; no browser click covers it. |
 | `/api/section/getByTaskId` | **No active UI caller:** retained unused authenticated POST read. A signed same-origin read with an accessible disposable taskId is required; no browser click covers it. |
+
+
+### Slice 10: shared inbox, task-notification, task-seen and follower-email writes (in PR)
+
+Ticket: https://app.hypertask.ai/detail/project-15/6968. Base: `4b69679197159381d91cda7bdfc6b291ae48bd9b` (production including slice 9, PR 1150), branch `htpr-6968-slice-10`. “In PR” marks the prepared implementation; the owning session must open the PR. This session commits and pushes only, without opening a PR, merging, deploying or touching the board.
+
+- All seven slice-10 inventory routes dispatch through `withTaskWriteFlag` to `src/lib/api/notification-writes/`. The companion task-open write, POST `comments/updateSeen`, is included so both notification-seen and comment-seen paths use the same migration boundary. Existing task `markRead` was migrated in slice 5 and is untouched.
+- Reuses `taskWriteRoute`, `taskReadQuery` and server flag `htpr-6923-app-router-writes`; no flag registry/default/mode change. Off, missing session and lookup failures run byte-identical legacy handlers. All originals are independently SHA-256-pinned against committed fixtures under `tests/fixtures/htpr-6968/slice-10/`, never read from Git history at test runtime. JSON string fixtures preserve original trailing whitespace without adding whitespace errors to the patch. GET `markAsDone`/`markAsUnseen` remain GET writes. `unArchiveNotificationById` retains its historical every-method behavior; other routes still reject other methods before any flag preflight. Import/operation failures never retry legacy.
+- Archive/unarchive retains signed-user ownership, task-less notifications, Deleted filtering, representative/sibling write order, shared batch timestamps and lossless same-batch undo. Tutorial authorization and its single-notification archive, Invited notifications, missing/foreign IDs and existing status/error bodies are preserved. Unarchive-by-ID still deletes same-type/task siblings after restoring the owned representative.
+- `getByTask` keeps the original signed-user, Normal-only seen controller. `comments/updateSeen` retains one comment update and continues after the seen controller returns its caught 500, exactly as legacy does. Move-to-inbox keeps the original task lock, board consistency check, dedupe/reminder creation and one inbox broadcast after unlocking. Follower email retains self-recipient 201, signed actor task-content access, exact email arguments and existing failure responses. The controllers/services are unchanged and byte-pinned.
+- The Web adapter additionally carries optional raw Pages headers so a socket-ID header array still excludes its first socket, while a literal comma-separated invalid header stays invalid. Only the new notification handlers consume this field; no existing helper semantics change. Query arrays and permissive number parsing are preserved for direct Web requests too.
+- `tests/htpr-6968-slice-10.test.cjs`: **269 passed, 0 failed**. Original/Off/outage/On/direct-Web comparisons cover status, body, response headers, ordered mutation/inbox/email/realtime calls and resulting synthetic notifications; real Pages resolver cases also compare JSON bytes, Content-Type, Content-Length and ETag. Branch cases exercise ownership denial, tutorial rules, task-less/Deleted/archive statuses, same-batch restore, GET/query arrays, auth/null-body/catch boundaries and every success-path failure boundary. Fixtures run the real seen controller and inbox reconciliation service against an isolated synthetic store; no database is accessed.
+- Required targeted regression command: `node --test tests/htpr-6923-*.test.cjs tests/htpr-6968-*.test.cjs`: **1,708 passed, 0 failed** (includes the 269 new contracts). Three direct Pages test harnesses (`notification-seen-authz`, `task-page-inbox-removal`, `inbox-archive-undo-restores-siblings`) receive the established legacy pass-through stub; those plus tutorial/native-card regressions: **29 passed, 0 failed**. The auth harness first reproduced four missing-wrapper-import failures before its stub was added. Only changed-file ESLint is run; no full lint, full suite or build. `npx tsc --noEmit -p .` completed in **37 seconds**, exit **2**, with **15 diagnostics in untouched files, none in changed files**. This is not a clean project-wide typecheck or a freshly compiled baseline comparison.
+- Caller counts for slice-10 rows are refreshed against this base (including PR 1149's typed notification callers). Exact `notifications/getByTask` controller imports are excluded, just like section controller imports; a positive URL control prevents masking real HTTP callers. Every slice-11 endpoint is byte-pinned unchanged, as are slice-12's `sync-view` shell, sibling `projects/detail`, `tasks/getAll` and raw multipart `n8nUpload`. No MCP/URL ownership transfer, dead-shell removal or frontend caller migration is included. The optional whole-plan `plan` oracle currently fails on pre-existing caller-count drift outside slice 10 (first: `projects/boardTasks`, documented 4 vs measured 6); those unrelated historical rows/dead-candidate claims are not repaired by this slice.
+- Evidence: worktree-local `GATES.md`. No browser/live mutation or live QA is claimed. Auth/flag preflight on Off remains the established migration behavior. Unknown external use, live email delivery and realtime timing remain runtime verification risks.
+
+#### Live QA: slice 10 handoff (not executed)
+
+Read-only `/api/flags` with the existing plain-QA account (user 2343) reported `htpr-6923-app-router-writes` **disabled**, proving **not Everyone** at verification time; the exact non-Everyone mode is not inferred from defaults. No touched flag is currently proven on for Everyone. Recheck live modes before merge: if this migration flag becomes Everyone, record a changed-path browser click against the PR build on a real board in `~/.local/state/vcc-evidence/HTPR-6968/premerge.md`, including commit, account and live flag states. Keep typed-write and other sibling flags at their live settings.
+
+Use Owner/QA with the migration flag On, compare Off only through the approved flag workflow, and use disposable fixtures with approval for writes/email. Verify named network requests, not just rendered UI; use two tabs to verify acting-tab socket exclusion and other-tab updates.
+
+| Endpoint | Existing UI click path / action |
+| --- | --- |
+| POST `/api/notifications/(un)archiveBulk` | Inbox → select disposable notifications → archive; Undo/Ctrl+Z → confirm representatives and same-batch siblings return, including a task-less notification. |
+| GET `/api/notifications/markAsDone` | Inbox → archive a notification; Task detail → remove from Inbox; Learn Hypertask → archive tutorial notification. Check 403/404/409 outcomes only with approved fixtures. |
+| GET `/api/notifications/markAsUnseen` | Inbox → mark read/unread; verify only the signed user's notification changes. |
+| POST `/api/notifications/getByTask` and `/api/comments/updateSeen` | Open a disposable task with unseen notifications, then a task with unseen comments; verify the appropriate seen request and unread indicators after reload. |
+| POST `/api/notifications/moveTaskToInbox` | Task options → move/add to Inbox; repeat → verify no duplicate/reminder fan-out and one cross-tab refresh. |
+| POST `/api/notifications/unArchiveNotificationById` | Inbox Archive → restore a disposable notification; verify same-type sibling cleanup and other-tab update. Non-POST compatibility is covered by contracts, not a normal click. |
+| POST `/api/notifications/sendEmailToFollower` | Add an approved test follower or create a task with one; verify network status and test-recipient email delivery. Never send mail to live unrelated users for QA. |
