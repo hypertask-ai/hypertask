@@ -6,7 +6,7 @@ import { HTPR_6998_BOARD_SCROLL_RESTORE_FLAG } from "@/lib/flags/keys";
 export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
   const enabled = useFlag(HTPR_6998_BOARD_SCROLL_RESTORE_FLAG);
   const pathname = usePathname();
-  const query = useSearchParams().toString();
+  const query = useSearchParams()?.toString() ?? "";
 
   useEffect(() => {
     if (!enabled || !ready) return;
@@ -92,6 +92,8 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
     strip.addEventListener("keydown", onInteract);
     document.addEventListener("scroll", onScroll, true);
     window.addEventListener("pagehide", save);
+    // A removed column or a shorter list can make a target unreachable; give up after loading settles.
+    const giveUp = window.setTimeout(stopRestore, 5000);
     if (pending.size) {
       mutations = new MutationObserver(scheduleRestore);
       mutations.observe(board, { childList: true, subtree: true, attributes: true });
@@ -99,6 +101,7 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
       scheduleRestore();
     }
     return () => {
+      window.clearTimeout(giveUp);
       stopRestore();
       strip.removeEventListener("wheel", onInteract);
       strip.removeEventListener("touchmove", onInteract);
