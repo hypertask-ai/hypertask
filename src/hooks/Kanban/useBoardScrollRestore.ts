@@ -35,8 +35,10 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
       const value = JSON.parse(window.sessionStorage.getItem(storageKey) ?? "{}");
       if (value && typeof value === "object") saved = value;
     } catch {}
-    const pending = new Map(Object.entries(saved).filter(([, position]) => Number.isFinite(position) && position >= 0));
+    const targets = new Map(Object.entries(saved).filter(([, position]) => Number.isFinite(position) && position >= 0));
+    const pending = new Map(targets);
     const applied = new WeakMap<HTMLElement, number>();
+    let protectFocus = pending.size > 0;
     let frame: number | null = null;
     let mutations: MutationObserver | undefined;
     let sizes: ResizeObserver | undefined;
@@ -83,9 +85,23 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
       stopRestore();
       save();
     };
+    const onFocus = (event: FocusEvent) => {
+      if (!protectFocus || !(event.target instanceof HTMLElement)) return;
+      // Active-card effects can focus after the successful restoration frame.
+      // Reapply affected ancestors before their queued scroll events save the reset.
+      for (const [key, { element }] of getScrollers()) {
+        const position = targets.get(key);
+        if (position === undefined || !element.contains(event.target)) continue;
+        pending.set(key, position);
+        applied.delete(element);
+      }
+      scheduleRestore();
+    };
     const onInteract = () => {
+      protectFocus = false;
       stopRestore();
     };
+    strip.addEventListener("focusin", onFocus);
     strip.addEventListener("wheel", onInteract, { passive: true });
     strip.addEventListener("touchmove", onInteract, { passive: true });
     strip.addEventListener("pointerdown", onInteract, { passive: true });
@@ -93,7 +109,7 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
     document.addEventListener("scroll", onScroll, true);
     window.addEventListener("pagehide", save);
     // A removed column or a shorter list can make a target unreachable; give up after loading settles.
-    const giveUp = window.setTimeout(stopRestore, 5000);
+    const giveUp = window.setTimeout(onInteract, 5000);
     if (pending.size) {
       mutations = new MutationObserver(scheduleRestore);
       mutations.observe(board, { childList: true, subtree: true, attributes: true });
@@ -103,6 +119,7 @@ export const useBoardScrollRestore = (isMobile: boolean, ready: boolean) => {
     return () => {
       window.clearTimeout(giveUp);
       stopRestore();
+      strip.removeEventListener("focusin", onFocus);
       strip.removeEventListener("wheel", onInteract);
       strip.removeEventListener("touchmove", onInteract);
       strip.removeEventListener("pointerdown", onInteract);

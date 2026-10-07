@@ -151,6 +151,49 @@ for (const mobile of [false, true]) {
     }, { mobile, enabled }));
   }
 
+  test(`${mobile ? "phone" : "desktop"}: late active-card focus after completed restoration cannot erase saved scroll`, async () => fixture(async f => {
+    await f.render();
+    let s = f.scrollers();
+    f.scroll(s.columns[0], "scrollTop", 460);
+    f.scroll(s.columns[1], "scrollTop", 120);
+    f.scroll(s.strip, "scrollLeft", 140);
+    await f.leave(); await f.back();
+    s = f.scrollers();
+    assert.equal(s.columns[0].scrollTop, 460, "the first restoration already completed");
+    assert.equal(f.resizeObservers.size, 0);
+    const card = document.createElement("div");
+    card.tabIndex = 0;
+    s.columns[0].append(card);
+    // Browsers scroll a newly focused card before delivering queued scroll events;
+    // JSDOM delivers focusin but does not implement the focus-induced scrolling.
+    s.columns[0].scrollTop = 0;
+    card.focus();
+    s.strip.dispatchEvent(new window.Event("scroll"));
+    s.columns[0].dispatchEvent(new window.Event("scroll"));
+    assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 460);
+    await f.flush();
+    assert.deepEqual(s.columns.map(column => column.scrollTop), [460, 120]);
+    assert.equal(s.strip.scrollLeft, 140);
+    f.scroll(s.columns[0], "scrollTop", 460);
+    assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 460);
+  }, { mobile }));
+
+  test(`${mobile ? "phone" : "desktop"}: pointer interaction releases completed restoration focus protection`, async () => fixture(async f => {
+    await f.render(); f.scroll(f.scrollers().columns[0], "scrollTop", 460);
+    await f.leave(); await f.back();
+    const column = f.scrollers().columns[0];
+    const card = document.createElement("div");
+    card.tabIndex = 0;
+    column.append(card);
+    column.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    column.scrollTop = 0;
+    card.focus();
+    column.dispatchEvent(new window.Event("scroll"));
+    await f.flush();
+    assert.equal(column.scrollTop, 0, "normal user focus is allowed to scroll");
+    assert.equal(JSON.parse(window.sessionStorage.getItem("htpr-6998-board-scroll:/project?id=15"))["droppable-section-container-10"], 0);
+  }, { mobile }));
+
   test(`${mobile ? "phone" : "desktop"}: waits for hydrated data and asynchronous card layout, preserving section identity after reorder`, async () => fixture(async f => {
     await f.render();
     let s = f.scrollers();
