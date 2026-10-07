@@ -38,6 +38,12 @@ function fixture(t, { enabled = true, direct = false, ref } = {}) {
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
   Object.assign(global, { window: dom.window, document: dom.window.document, Event: dom.window.Event, IS_REACT_ACT_ENVIRONMENT: true });
+  window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, "", window.location.href);
+  for (const method of ["pushState", "replaceState"]) {
+    const original = window.history[method].bind(window.history);
+    // Next restores its internal marker after handling native history writes.
+    window.history[method] = (state, title, url) => original({ ...state, __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, title, url);
+  }
   window.scrollTo = () => {};
   window.requestAnimationFrame = () => 1;
   window.cancelAnimationFrame = () => {};
@@ -125,10 +131,16 @@ for (const direct of [false, true]) {
     const composer = document.querySelector("textarea");
     await React.act(async () => { window.dispatchEvent(new Event("cached-task-detail-navigation")); f.render(); });
     assert.equal(document.querySelector("textarea"), composer, "same-address notification never replaces the mounted page");
+    await React.act(async () => {
+      const { cachedTaskDetail, ...state } = window.history.state;
+      window.history.replaceState(state, "", window.location.href);
+    });
     await f.click(child); f.assertContent(child);
     assert.deepEqual(f.playlists.at(-1), [{ projectId: 6859, uniqueIndex: 43 }, { projectId: 6859, uniqueIndex: 45 }]);
     assert.equal(window.location.search, "?inboxFlow=true");
     await f.traverse("back"); f.assertContent(parent);
+    assert.equal(window.history.state.cachedTaskDetail?.taskId, parent.id, "unmarked Back must publish a durable parent marker before stale Next renders");
+    await React.act(async () => f.next(child)); f.assertContent(parent);
     await React.act(async () => f.next(parent)); f.assertContent(parent);
     await f.traverse("forward"); f.assertContent(child);
     await React.act(async () => f.next(parent)); f.assertContent(child);

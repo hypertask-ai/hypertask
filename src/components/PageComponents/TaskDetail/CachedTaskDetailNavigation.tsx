@@ -2,13 +2,13 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
-import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
+import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
 const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").then((module) => {
@@ -16,11 +16,11 @@ const loadTaskDetail = () => import("@/components/Modals/SwipeUnread/EmbeddedTas
   return module;
 });
 
-const subscribeToLocation = (notify: (event: Event) => void, capture = false) => {
-  window.addEventListener("popstate", notify, capture);
+const subscribeToLocation = (notify: () => void) => {
+  window.addEventListener("popstate", notify);
   window.addEventListener("cached-task-detail-navigation", notify);
   return () => {
-    window.removeEventListener("popstate", notify, capture);
+    window.removeEventListener("popstate", notify);
     window.removeEventListener("cached-task-detail-navigation", notify);
   };
 };
@@ -54,30 +54,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const previousLocation = useRef<CachedTaskDetailLocation | undefined>(undefined);
   const [taskDetail, setTaskDetail] = useState(() => loadedTaskDetail);
   const EmbeddedTaskDetail = taskDetail ?? loadedTaskDetail;
-  const subscribeToTaskHistory = useMemo(() => (notify: () => void) => {
-    let currentPathname = browserPathname();
-    return subscribeToLocation((event) => {
-      const nextPathname = browserPathname();
-      // Direct Next pages have no cached marker. Recover them only on traversal,
-      // before Next acknowledges the URL with potentially stale RSC children.
-      if (event.type === "popstate" && nextPathname !== currentPathname && instantTicketOpen &&
-          accountId !== null && currentUser?.id === accountId) {
-        const route = nextPathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
-        if (task) previousLocation.current = {
-          accountId, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
-        };
-      }
-      currentPathname = nextPathname;
-      notify();
-    }, true);
-  }, [instantTicketOpen, accountId, currentUser?.id, queryClient]);
-  // Cached opens retain Next's source tree, so popstate updates independently.
-  const nativePathname = useSyncExternalStore(
-    subtaskLink ? subscribeToTaskHistory : subscribeToLocation,
-    browserPathname,
-    serverPathname,
-  );
+  // Cached opens retain Next's source tree, so popstate must update the view independently.
+  const nativePathname = useSyncExternalStore(subscribeToLocation, browserPathname, serverPathname);
   // Next can replace custom history state while refreshing the same route.
   const location = cachedTaskDetailLocation(
     nativePathname ?? pathname,
@@ -96,6 +74,15 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
           cachedTaskDetailLocation(window.location.pathname, accountId, {
             cachedTaskDetail: event.state?.cachedTaskDetail ?? previousLocation.current,
           })) return;
+      if (subtaskLink && accountId !== null) {
+        const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
+        const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
+        // Unmarked Next entries need a durable marker before stale RSC can render.
+        if (task && openCachedTaskDetail({
+          queryClient, accountId, projectId: task.projectId, uniqueIndex: task.uniqueIndex,
+          task, href: window.location.pathname + window.location.search + window.location.hash, replace: true,
+        })) return;
+      }
       // Next's native-history restore can cache detail RSC in the source route's slot.
       // Revalidate the source URL instead of traversing that stale route payload.
       event.stopImmediatePropagation();
@@ -105,7 +92,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("popstate", restoreSourceRoute, true);
     return () => window.removeEventListener("popstate", restoreSourceRoute, true);
-  }, [location, accountId, router]);
+  }, [location, accountId, router, subtaskLink, queryClient]);
   useEffect(() => {
     if (!instantTicketOpen || accountId === null || currentUser?.id !== accountId ||
         !pathname || !["/project", "/my-tasks", "/inbox"].includes(pathname)) return;
