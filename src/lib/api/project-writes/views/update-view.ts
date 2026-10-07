@@ -1,5 +1,7 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-// route = "/api/projects/views/update-view"
+import { z } from "zod";
+import { taskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import {
@@ -16,27 +18,21 @@ import {
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import { Prisma } from "@prisma/client";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 // ============= simple stuff here
 // 1. user selects the default view.
 // 2. so that means the applied view in user_project_view is now null.
 // 3. LITERALLY THATS IT
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const currentUser = await loadSessionUserRecord(session.userId);
+
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  prepare: session => loadSessionUserRecord(session.userId),
+  operation: async (body, currentUser) => {
+    const req = { body };
     const userId = currentUser.id;
+
     // lets check if the api request misses info like user, projectid.
 
     const { projectId, viewId, view_settings } = req.body;
@@ -50,9 +46,7 @@ const handler: NextApiHandler = async (
 
     try {
       if (!projectId)
-        return res
-          .status(401)
-          .json({ message: "Authentication required" });
+        return viewWriteJson({ message: "Authentication required" }, 401);
       const targetView = await prisma.view.findFirst({
         where: {
           id: viewId,
@@ -74,12 +68,12 @@ const handler: NextApiHandler = async (
         select: { id: true },
       });
       if (!targetView) {
-        return res.status(404).json({ message: "View not found on this board" });
+        return viewWriteJson({ message: "View not found on this board" }, 404);
       }
       if (personalEmptySectionsOnly) {
         const boardEmptySections = view_settings?.board_empty_sections;
         if (!isBoardEmptySectionSetting(boardEmptySections)) {
-          return res.status(400).json({ message: "Invalid empty column visibility" });
+          return viewWriteJson({ message: "Invalid empty column visibility" }, 400);
         }
         await prisma.view_Last_Used.upsert({
           create: {
@@ -97,10 +91,10 @@ const handler: NextApiHandler = async (
             },
           },
         });
-        return res.status(200).json({
+        return viewWriteJson({
           viewId,
           board_empty_sections: boardEmptySections,
-        });
+        }, 200);
       }
       const mutateView = <T>(
         boardFilters: unknown,
@@ -117,7 +111,7 @@ const handler: NextApiHandler = async (
         const requestedLayout = view_settings?.board_layout;
         const boardLayout = sanitizeBoardLayout(requestedLayout);
         if (requestedLayout !== null && boardLayout === null) {
-          return res.status(400).json({ message: "Invalid board layout" });
+          return viewWriteJson({ message: "Invalid board layout" }, 400);
         }
         await mutateView(undefined, async (tx) => {
           await tx.view.update({
@@ -126,7 +120,7 @@ const handler: NextApiHandler = async (
           });
         });
         broadcastBoardChange(projectId, { originUserId: userId });
-        return res.status(200).json({ viewId, board_layout: boardLayout });
+        return viewWriteJson({ viewId, board_layout: boardLayout }, 200);
       }
       const projectView = await prisma.project_View.upsert({
         create: {
@@ -241,21 +235,19 @@ const handler: NextApiHandler = async (
       );
       broadcastBoardChange(viewProjectId, { originUserId: userId });
 
-      return res.status(200).json(project_view_updated);
+      return viewWriteJson(project_view_updated, 200);
     } catch (error) {
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       if (
         error instanceof MissingBoardFilterLabelError ||
         error instanceof ManagedSmartSplitMutationError
       ) {
-        return res.status(error.status).json({ message: error.message });
+        return viewWriteJson({ message: error.message }, error.status);
       }
-      return res.status(500).json(error);
+      return viewWriteJson(error, 500);
     }
-  }
-  return res.status(405).json({ message: "Method not allowed" });
-};
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/update-view")).POST,
-);
+  },
+});
+
+export const POST = route;

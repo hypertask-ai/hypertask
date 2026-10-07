@@ -1,5 +1,7 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-// route = "/api/projects/views/delete-rename-view"
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
+import { taskReadQuery } from "@/lib/api/task-writes/read-query";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import getProjectView, { getUniqueSlug } from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
@@ -9,29 +11,26 @@ import {
     assertViewIsNotManagedSmartSplit,
     ManagedSmartSplitMutationError,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // ============= simple stuff here
 // 1. user selects the default view.
 // 2. so that means the applied view in user_project_view is now null.
 // 3. LITERALLY THATS IT
-const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const userId = session.userId;
 
+const route = (method: string) => taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  operation: async (body, session, request) => {
+    const req = { body, method, query: method === "DELETE" ? taskReadQuery(request) : {} };
+    const userId = session.userId;
     if (req.method === "POST") {
         // lets check if the api request misses info like user, projectid.
 
         const { viewId, title } = req.body
 
         try {
-            if (!viewId) return res.status(101).json({ message: "Missing required information" })
+            if (!viewId) return viewWriteJson({ message: "Missing required information" }, 101)
             if (title.length < 2) throw ("Title length too low!")
             const viewToUpdate = await prisma.view.findUnique({
                     where:{ id: viewId },
@@ -53,13 +52,13 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
             const project_view_updated = await getProjectView(viewProjectId, userId)
             broadcastBoardChange(viewProjectId, { originUserId: userId })
-            return res.status(200).json({view: newSlug === null ? undefined : sanitizeViewBoardFilters(updatedView), project_view_updated: project_view_updated});
+            return viewWriteJson({view: newSlug === null ? undefined : sanitizeViewBoardFilters(updatedView), project_view_updated: project_view_updated}, 200);
         } catch (error) {
             console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
-                return res.status(error.status).json({ message: error.message })
+                return viewWriteJson({ message: error.message }, error.status)
             }
-            return res.status(500).json(error)
+            return viewWriteJson(error, 500)
         }
     }
     else if (req.method === "DELETE") {
@@ -100,21 +99,20 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const promise2 = await getProjectView(projectId_, userId)
             broadcastBoardChange(projectId_, { originUserId: userId })
 
-            return res.status(200).json(promise2)
+            return viewWriteJson(promise2, 200)
         } catch (error) {
             console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
             if (error instanceof ManagedSmartSplitMutationError) {
-                return res.status(error.status).json({ message: error.message })
+                return viewWriteJson({ message: error.message }, error.status)
             }
-            return res.status(500).json(error)
+            return viewWriteJson(error, 500)
         }
     }
 
-};
+  },
+});
 
+export const POST = route("POST");
 
-export default withTaskWriteFlag(withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/delete-rename-view")).POST,
-), "DELETE", async () =>
-  (await import("@/lib/api/project-writes/views/delete-rename-view")).DELETE,
-);
+export const DELETE: TaskWriteRoute = (request, session) =>
+  route("DELETE")({ headers: request.headers, cookies: request.cookies, query: request.query, url: request.url, json: async () => undefined }, session);

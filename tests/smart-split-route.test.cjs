@@ -67,6 +67,8 @@ const loadHandler = ({
     acquireBoardFilterWriteLock: async (_tx, projectId) => onBoardFilterLock(projectId),
   });
 
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
+
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-route-${++loadId}.cjs`),
     {

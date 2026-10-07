@@ -28,6 +28,8 @@ const load = (relativePath, stubs) => {
     delete require.cache[path.join(root, stubPath)];
     stubModule(stubPath, exports);
   }
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
+
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-view-mutation-${++loadId}.cjs`),
     {

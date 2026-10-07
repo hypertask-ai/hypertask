@@ -1,5 +1,6 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { z } from "zod";
+import { taskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
 
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -14,20 +15,16 @@ import {
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
+
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const req = { body };
     const userId = session.userId;
+
     try {
       const {
         projectId,
@@ -42,7 +39,7 @@ const handler: NextApiHandler = async (
 
       var updatedProjectView;
       if (!Number.isInteger(projectId)) {
-        return res.status(400).json({ message: "Missing required information!" });
+        return viewWriteJson({ message: "Missing required information!" }, 400);
       }
       const accessibleProject = await prisma.project.findFirst({
         where: {
@@ -55,13 +52,13 @@ const handler: NextApiHandler = async (
         select: { id: true },
       });
       if (!accessibleProject) {
-        return res.status(403).json({ message: "Board access required" });
+        return viewWriteJson({ message: "Board access required" }, 403);
       }
       // a view with no name is unfindable in Manage Views, so reject it here
       // (every client - UI, CLI, MCP - goes through this route).
       const title = viewTitle?.trim();
       if (!title)
-        return res.status(400).json({ message: "View name is required!" });
+        return viewWriteJson({ message: "View name is required!" }, 400);
       // lets check if its a new view or an old one.
       const viewPromise = prisma.view.findFirst({
         where: {
@@ -242,7 +239,7 @@ const handler: NextApiHandler = async (
             default_view_id: view.id,
           },
         });
-      } 
+      }
 
       let newSlug;
       if(!view.slug){
@@ -264,25 +261,22 @@ const handler: NextApiHandler = async (
       const project_view_updated = await getProjectView(projectId, userId);
       broadcastBoardChange(projectId, { originUserId: userId });
 
-      return res.status(200).json({
+      return viewWriteJson({
         view: setAsDefault ? undefined : newSlug ?? view.slug,
         project_view_updated,
-      });
+      }, 200);
     } catch (error) {
       console.log(error);
       if (
         error instanceof MissingBoardFilterLabelError ||
         error instanceof ManagedSmartSplitMutationError
       ) {
-        return res.status(error.status).json({ message: error.message });
+        return viewWriteJson({ message: error.message }, error.status);
       }
-      return res.status(400).json({ message: JSON.stringify(error) });
+      return viewWriteJson({ message: JSON.stringify(error) }, 400);
     }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
-  }
-};
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/create-view")).POST,
-);
+  },
+});
+
+export const POST = route;

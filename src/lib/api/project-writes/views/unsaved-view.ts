@@ -1,5 +1,7 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-// route = "/api/projects/views/unsaved-view"
+import { z } from "zod";
+import { taskWriteRoute } from "@/lib/api/task-writes/route";
+import { viewWriteJson } from "./response";
+import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
@@ -21,31 +23,25 @@ import {
   sanitizeBoardLayout,
   sanitizeTableSort,
 } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
-import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   MissingBoardFilterLabelError,
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 
 // ============= simple stuff here
 // 1. user selects the default view.
 // 2. so that means the applied view in user_project_view is now null.
 // 3. LITERALLY THATS IT
-const handler: NextApiHandler = async (
-  req: NextApiRequest,
-  res: NextApiResponse
-) => {
-  if (req.method === "POST") {
-    const session = await getSessionUser(
-      new Headers(req.headers as Record<string, string>)
-    );
-    if (!session) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const currentUser = await loadSessionUserRecord(session.userId);
+
+const route = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Missing required information",
+  allowNullBody: true,
+  prepare: session => loadSessionUserRecord(session.userId),
+  operation: async (body, currentUser) => {
+    const req = { body };
     const userId = currentUser.id;
+
     // lets check if the api request misses info like user, projectid.
 
     const {
@@ -67,7 +63,7 @@ const handler: NextApiHandler = async (
       "baseViewId"
     );
     if (!Number.isInteger(projectId)) {
-      return res.status(400).json({ message: "Missing required information!" });
+      return viewWriteJson({ message: "Missing required information!" }, 400);
     }
     const sanitizedBoardFilters = sanitizeBoardFilters(board_filters);
     const sanitizedTableSort = sanitizeTableSort(
@@ -89,7 +85,7 @@ const handler: NextApiHandler = async (
       include: { section: true },
     });
     if (!project) {
-      return res.status(403).json({ message: "Board access required" });
+      return viewWriteJson({ message: "Board access required" }, 403);
     }
     const superDefault = {
       board_columns_view: project?.section ?? [],
@@ -153,7 +149,7 @@ const handler: NextApiHandler = async (
         baseViewId != null &&
         (!baseView || !canUseViewAsTabBase(baseView, userId))
       ) {
-        return res.status(403).json({ message: "View is not accessible" });
+        return viewWriteJson({ message: "View is not accessible" }, 403);
       }
 
       // Older clients do not send board_layout. Preserve the tab/base layout
@@ -228,17 +224,15 @@ const handler: NextApiHandler = async (
           userId
         );
         if (!projectViewResponse) {
-          return res.status(404).json({ message: "Project view not found" });
+          return viewWriteJson({ message: "Project view not found" }, 404);
         }
-        return res.status(200).json(
-          applyTransientTabSettings(
+        return viewWriteJson(applyTransientTabSettings(
             projectViewResponse,
             userId,
             baseViewId == null ? null : baseView,
             settingsFromReqBody,
             !isDeepEqual(settingsFromReqBody, comparisonSettings),
-          )
-        );
+          ), 200);
       }
 
       const resolvedAppliedViewId =
@@ -466,20 +460,19 @@ const handler: NextApiHandler = async (
         projectId,
         userId
       );
-      return res.status(200).json(project_view_updated);
+      return viewWriteJson(project_view_updated, 200);
     } catch (error) {
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error);
       if (error instanceof MissingBoardFilterLabelError) {
-        return res.status(error.status).json({ message: error.message });
+        return viewWriteJson({ message: error.message }, error.status);
       }
-      return res.status(500).json(error);
+      return viewWriteJson(error, 500);
     }
-  }
-};
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/project-writes/views/unsaved-view")).POST,
-);
+  },
+});
+
+export const POST = route;
 
 const createUserProjectView = async (
   userId: number,
