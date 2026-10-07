@@ -94,6 +94,8 @@ function makeFlow(t, {
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 2343 }) },
     "react-hot-toast": { default: message => toasts.push(message) },
     "@/lib/navigation/cachedTaskDetail": {},
+    "@/utils/api/Homepage": {},
+    "@/lib/firstScreen/SurfaceContext": {},
   }).default;
   const context = {
     currentTask,
