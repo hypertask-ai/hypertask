@@ -107,6 +107,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "./mutation": mutation,
   });
   const route = loadSource("src/pages/api/notifications/markAsDone.ts", {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/realtime/server": {
       socketIdFromHeader: () => null,

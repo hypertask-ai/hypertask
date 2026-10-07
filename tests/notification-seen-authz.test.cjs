@@ -63,6 +63,7 @@ function request(body, method = "POST") {
 function loadGetByTaskRoute(session) {
   const controllerCalls = [];
   const handler = loadTypeScript("src/pages/api/notifications/getByTask.ts", {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
@@ -81,6 +82,7 @@ function loadCommentSeenRoute(session) {
   const controllerCalls = [];
   const commentWrites = [];
   const handler = loadTypeScript("src/pages/api/comments/updateSeen.ts", {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },

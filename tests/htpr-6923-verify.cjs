@@ -606,6 +606,117 @@ function sections() {
   }
   console.log("section structural verification passed; seven shells retained");
 }
+const notificationRoutes = {
+  "(un)archiveBulk": {
+    "module": "archive-bulk",
+    "method": "POST",
+    "path": "src/pages/api/notifications/(un)archiveBulk.ts",
+    "hash": "f891e1628c58b24c5f32fbaa702c5e5c953b905aa2775d511b7c431a1e8f4281"
+  },
+  "getByTask": {
+    "module": "task-seen",
+    "method": "POST",
+    "path": "src/pages/api/notifications/getByTask.ts",
+    "hash": "60d91acda72716a25a5d6b1c0f03d8fdf4ce40a54fb0af8466299db5eb29fbf5"
+  },
+  "markAsDone": {
+    "module": "mark-done",
+    "method": "GET",
+    "path": "src/pages/api/notifications/markAsDone.ts",
+    "hash": "494077913e306f9772a9ca3c32796c86c680e6fe05d10d90ce82b678a525e76f"
+  },
+  "markAsUnseen": {
+    "module": "mark-unseen",
+    "method": "GET",
+    "path": "src/pages/api/notifications/markAsUnseen.ts",
+    "hash": "1b2c530228c8d259705a5388388078b11c527cc310820bbecd7331f1c43d5e0f"
+  },
+  "moveTaskToInbox": {
+    "module": "move-task-to-inbox",
+    "method": "POST",
+    "path": "src/pages/api/notifications/moveTaskToInbox.ts",
+    "hash": "f38ecba037e7cdffdf65c20fedb444e746f6fafe42e5e92768e5c776f0900322"
+  },
+  "sendEmailToFollower": {
+    "module": "follower-email",
+    "method": "POST",
+    "path": "src/pages/api/notifications/sendEmailToFollower.ts",
+    "hash": "0458ba3de29a382ab4bb7d79abed74f85bd89a7b6063fa1633bed1f0371952a3"
+  },
+  "unArchiveNotificationById": {
+    "module": "unarchive-by-id",
+    "method": "POST",
+    "anyMethod": true,
+    "path": "src/pages/api/notifications/unArchiveNotificationById.ts",
+    "hash": "310f19f6da5f0741cade25d21ee04bd4d3aa9d3acc26888b76609c891830d9a4"
+  },
+  "updateSeen": {
+    "module": "comments-seen",
+    "method": "POST",
+    "domain": "comments",
+    "path": "src/pages/api/comments/updateSeen.ts",
+    "hash": "385eb8048ce8ca63a133c688d5d981c69ee595a4757bcd828186a61ebad93b9d"
+  }
+};
+function notificationLegacySources() {
+  return Object.fromEntries(Object.entries(notificationRoutes).map(([name, entry]) => {
+    const fixture = JSON.parse(read(`tests/fixtures/htpr-6968/slice-10/${name}.legacy.json`));
+    assert.equal(crypto.createHash("sha256").update(fixture).digest("hex"), entry.hash, name + " fixture bytes");
+    let source = read(entry.path).replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "");
+    if (entry.anyMethod) {
+      source = source.replace('async function handler(', 'export default  async function handler(')
+        .replace("import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'", "import type { NextApiRequest, NextApiResponse } from 'next'");
+      source = source.slice(0, source.indexOf('\n\nexport default ((req, res)'));
+    } else {
+      source = source.replace(/export default withTaskWriteFlag\([\s\S]*?\n\);/, "export default handler;");
+    }
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), entry.hash, name + " legacy fallback bytes");
+    assert.equal(source, fixture, name + " independent original fixture");
+    return [name, fixture];
+  }));
+}
+const notificationDeferredHashes = {
+  "src/pages/api/notifications/access.ts": "b8532082d9cf9238eeafbd7b9b6cd0a2198554ce405cbfaed60bb3b0e9b3826d", // gitleaks:allow sha256 file pin, not a secret
+  "src/pages/api/notifications/changePushNotificationStatus.ts": "e4cc04a0aee7e64cbd5469da50b7a117b956f30b52b53207655760d5fe9b447b",
+  "src/pages/api/notifications/getAll.ts": "e19347613818bc0d8fd6192144d9d5a7b8e9d5314b27eb3bed599a9199ca4f25",
+  "src/pages/api/notifications/getAllInbox.ts": "3c33e20ce6a6d661d6853a5d7b3c6f8eace1a80d16af54ce7dcce391e09e753b",
+  "src/pages/api/notifications/getCount.ts": "847e3d8c1c846f7fec053e1f836d31067593727e533778330a9ad4e322c20d2b",
+  "src/pages/api/notifications/getPushNotificationStatus.ts": "a51b85aab4614ab7ba387ffa8c1e65dcd0ad9ceee8f1f110335f0e66179f5ae7",
+  "src/pages/api/notifications/matrix.ts": "6e96da9184fa2ad3b97ad79ea407ee501fea5519596694240d8becb660be0671",
+  "src/pages/api/notifications/mute.ts": "704ecadd1658873dc4d9bcfee7548abda9b3e514a6318623139a20d37f72e2aa",
+  "src/pages/api/notifications/preference.ts": "12912e4816fbcda18ac1d640bee2327b9cfea983c444a729df822e43b0adfaf2",
+  "src/pages/api/notifications/splits.ts": "6ebdac600b1c82f7a44d7581118e2862002828f4eaf23ec82715d306e8d88ebc",
+  "src/pages/api/projects/views/sync-view.ts": "451a5e8060edeea344f51e405b890ced8d43fb56d87f88711df41b10aa1cc516",
+  "src/pages/api/projects/detail.ts": "ae86b4e8ee6555a57bfb8080c58172b9783b2a875ac6c9df4c124f62def4cf6f",
+  "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
+  "src/pages/api/tasks/n8nUpload.ts": "d314ad36c6533f9386be38b762917c8474bba3ad681a9b475714ab7c0c4d9740",
+  "src/utils/controllers/notifications/getByTask.ts": "34e1ea9d71f7c2c716724bb777cfb26de4b60ee3d93617a0e7e7c19dc1c67e14",
+  "src/lib/taskCardActions/inboxState.ts": "6aae12f9bdb428064e65b9d2fc54d25b7b28fead43ca05ae0e285b8a137ec8ee",
+  "src/utils/controllers/notifications/sendMentionEmail.ts": "c76347bba0b559e289c830318d936c25353f46643451cbbf023a586d3e5886b0"
+};
+function notifications() {
+  const sources = notificationLegacySources();
+  for (const [file, hash] of Object.entries(notificationDeferredHashes)) {
+    assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, file + " deliberately unchanged");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(read(file) + "changed").digest("hex"), hash), "deferred pin mutation control");
+  }
+  const controllerImport = 'import controller from "@/utils/controllers/notifications/getByTask";';
+  assert.equal(callerFiles("notifications/getByTask", [{ file: "fixture.ts", text: controllerImport }]).length, 0);
+  assert.equal(callerFiles("notifications/getByTask", [{ file: "fixture.ts", text: controllerImport + 'fetch("/api/notifications/getByTask")' }]).length, 1, "controller exclusion retains actual HTTP caller control");
+  const doc = read("docs/htpr-6509-slices.md");
+  const assigned = [...doc.matchAll(/^\| `(src\/pages\/api\/[^`]+)` \| 10 \|/gm)].map(match => match[1]).sort();
+  assert.deepEqual(assigned, Object.values(notificationRoutes).filter(entry => !entry.domain).map(entry => entry.path).sort(), "every slice-10 inventory row migrated");
+  for (const [name, entry] of Object.entries(notificationRoutes)) {
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), entry.hash), "pin mutation control");
+    const page = read(entry.path);
+    assert.ok(page.includes(entry.anyMethod ? 'handler, req.method ?? ""' : `withTaskWriteFlag(handler, "${entry.method}"`));
+    assert.ok(page.includes(`(await import("@/lib/api/notification-writes/${entry.module}")).${entry.method}`));
+    assert.ok(read(`src/lib/api/notification-writes/${entry.module}.ts`).includes("taskWriteRoute"));
+    assert.ok(!fs.existsSync(path.join(root, entry.path.replace("src/pages/api/", "src/app/api/").replace(/\.ts$/, "/route.ts"))), "no URL twin");
+  }
+  console.log("notification structural verification passed; slice-10 inventory and task-seen companion pinned");
+}
+
 const deadCandidates = [
   "tasks/getAll", "tasks/linkPullRequest", "projects/detail", "projects/views/sync-view",
   "section/getAll", "section/getByTaskId", "notifications/mute",
@@ -648,8 +759,8 @@ function callerFiles(endpoint, corpus) {
   // Includes shortened URLs and source imports conservatively, but not prefix siblings.
   const pattern = new RegExp(`/${escaped}(?=[?\\#\\s'\"\x60)]|$)`);
   return corpus.filter(({ file, text }) => {
-    // Extracted section handlers import controllers, not the matching HTTP URL.
-    if (endpoint.startsWith("section/")) {
+    // Extracted handlers import controllers, not the matching HTTP URL.
+    if (endpoint.startsWith("section/") || endpoint === "notifications/getByTask") {
       for (const quote of ['"', "'"]) text = text.replaceAll(`${quote}@/utils/controllers/${endpoint}${quote}`, "");
     }
     return file !== `src/pages/api/${endpoint}.ts` && pattern.test(text);
@@ -750,9 +861,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { notificationRoutes, notificationLegacySources, notifications, sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { notifications, sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

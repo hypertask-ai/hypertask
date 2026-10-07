@@ -9,6 +9,8 @@ import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 // second parse/serialization and also accepts a real App Router Request.
 export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   cookies?: Partial<Record<string, string>>;
+  // Preserve Pages header arrays for acting-tab socket exclusion.
+  rawHeaders?: NextApiRequest["headers"];
   query?: NextApiRequest["query"];
   url?: string;
 };
@@ -92,7 +94,7 @@ export function withTaskWriteFlag(
     if (!enabled || !session || !headers) return legacy(req, res);
     const route = await loadRoute();
     // Never retry legacy after dispatch: the operation may already have written.
-    const response = await route({ headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
+    const response = await route({ headers, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
     // Creation historically leaves unresolved sections/ranks without a response.
     if (!response) return;
     response.headers.forEach((value, name) => {
