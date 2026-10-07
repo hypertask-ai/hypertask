@@ -99,13 +99,13 @@ for (const [label, scenario] of [
   }
 });
 
-test("an interrupted successful delete followed by a duplicate returns legacy 500 {} without another write", async () => {
+test("an interrupted successful delete followed by a duplicate returns 404 View does not exist without another write", async () => {
   const original = fixture(), success = await exchange(original, "legacy");
   assert.equal(success.status, 200);
   const failed = await exchange(original, "legacy");
-  assert.equal(failed.status, 500);
-  assert.equal(failed.text, "{}");
-  assert.ok(original.caught.some(args => args.some(value => value instanceof Error && value.message === "View does not exist")));
+  assert.equal(failed.status, 404);
+  assert.equal(failed.text, '{"message":"View does not exist"}');
+  assert.equal(original.caught.some(args => args.some(value => value instanceof Error)), false);
   assert.equal(original.effects.filter(([name]) => name === "delete").length, 1);
   for (const flag of [false, true]) {
     const current = fixture({}, flag);

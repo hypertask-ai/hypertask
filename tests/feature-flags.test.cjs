@@ -117,7 +117,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG].includes(key)],
+      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG].includes(key)],
       `${key} should use its declared rollout default`,
     );
   }
@@ -584,6 +584,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6978-size-label-click", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-6979-typed-writes-sections-notifications", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6980-instant-column-delete", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-6985-delete-view-once", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
@@ -955,6 +956,18 @@ test("typed section and notification writes are a feature defaulting Owner + QA"
   assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+});
+
+test("saved view deletion is an Everyone-default bugfix and respects OFF", async () => {
+  const key = flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG;
+  assert.equal(key, "htpr-6985-delete-view-once");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-07");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
