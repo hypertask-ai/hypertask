@@ -3,7 +3,7 @@ import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { generateText, Output } from "ai";
+import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -233,12 +233,12 @@ export async function POST(request: NextRequest) {
       .map((question) => question.trim())
       .filter(Boolean)
       .slice(0, 5);
-    if (questions.length === 0) {
-      throw new Error("Model returned no usable questions");
-    }
-
     return NextResponse.json({ questions });
   } catch (error) {
+    if (NoOutputGeneratedError.isInstance(error) ||
+      (NoObjectGeneratedError.isInstance(error) && !error.text?.trim())) {
+      return NextResponse.json({ questions: [] });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

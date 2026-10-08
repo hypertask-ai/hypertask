@@ -372,15 +372,25 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         : false;
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
+      // Adaptive thinking shares maxOutputTokens with the answer and can exhaust
+      // these small budgets before emitting any text or structured output.
+      const directOutput = params.responseFormat?.type === "json" ||
+        (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
       return {
         ...supportedParams,
         providerOptions: {
           ...params.providerOptions,
           anthropic: {
             ...params.providerOptions?.anthropic,
-            thinking: { type: "adaptive" },
-            effort: "medium",
+            thinking: { type: directOutput ? "disabled" : "adaptive" },
+            effort: directOutput ? "low" : "medium",
           },
+          ...(directOutput && (context.provider === "byok:openrouter" || context.provider === "openrouter") ? {
+            openrouter: {
+              ...params.providerOptions?.openrouter,
+              reasoning: { enabled: false },
+            },
+          } : {}),
         },
       };
     },

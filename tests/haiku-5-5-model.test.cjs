@@ -211,7 +211,7 @@ test("real Anthropic SDK transport sends the direct id, adaptive medium and no s
     },
   }) });
   await h.makeModel().doGenerate({
-    ...params, maxOutputTokens: 64,
+    ...params, maxOutputTokens: 2048,
     prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }],
   });
   assert.equal(body.model, "claude-haiku-5-5");
@@ -220,6 +220,121 @@ test("real Anthropic SDK transport sends the direct id, adaptive medium and no s
   assert.equal(body.output_config.effort, "medium");
   await h.flush();
   assert.equal(h.rows[0].totalTokens, 120);
+});
+
+test("short and structured Haiku calls disable thinking across direct, gateway and OpenRouter transports", async () => {
+  const consumers = [
+    ["task-questions", 500, true], ["summary", 700, true],
+    ["summary", 160, false], ["summary", 960, false],
+    ["status-update", 900, true], ["chat", 600, true],
+    ["summary", 1200, true], ["summary", 400, true],
+    ["custom-instructions", 500, true], ["editor", 6000, true],
+  ];
+  for (const [provider, id, credential] of [
+    ["claude", option.directModel, "fixture-direct"],
+    ["gateway", `anthropic/${option.model}`, "vck_fixture"],
+    ["openrouter", `anthropic/${option.model}`, "fixture-direct"],
+  ]) {
+    for (const method of ["doGenerate", "doStream"]) {
+      for (const [feature, maxOutputTokens, structured] of consumers) {
+        const h = harness();
+        const model = h.makeModel(provider, id, credential);
+        h.api.providerOptionsForAiModel(model, feature, { userId: 985 }, option);
+        const responseFormat = structured ? { type: "json", schema: { type: "object" } } : undefined;
+        await model[method]({ ...params, maxOutputTokens, responseFormat, providerOptions: {
+          gateway: { tags: [feature] }, anthropic: { cacheControl: { type: "ephemeral" }, thinking: { type: "adaptive" } },
+          openrouter: { provider: { order: ["anthropic"] }, reasoning: { effort: "high" } },
+        } });
+        const sent = h.calls[0];
+        assert.equal(sent.maxOutputTokens, maxOutputTokens);
+        assert.equal(sent.responseFormat, responseFormat);
+        assert.equal(sent.providerOptions.anthropic.thinking.type, "disabled", `${provider}: ${feature} ${maxOutputTokens}`);
+        assert.equal(sent.providerOptions.anthropic.effort, "low");
+        assert.deepEqual(sent.providerOptions.gateway.tags, [feature]);
+        assert.equal(sent.providerOptions.anthropic.cacheControl.type, "ephemeral");
+        if (provider === "openrouter") {
+          assert.equal(sent.providerOptions.openrouter.reasoning.enabled, false);
+          assert.equal(sent.providerOptions.openrouter.reasoning.effort, undefined);
+          assert.deepEqual(sent.providerOptions.openrouter.provider.order, ["anthropic"]);
+        }
+        await h.flush();
+      }
+    }
+  }
+});
+
+test("real SDK returns structured and short text output rather than exhausting the budget on thinking", async () => {
+  const { createAnthropic } = require("@ai-sdk/anthropic");
+  const { z } = require("zod");
+  const schema = z.object({ questions: z.array(z.string()) });
+  for (const mode of ["object", "legacy-object", "text"]) {
+    let body;
+    const h = harness({ anthropicFactory: (config) => createAnthropic({
+      ...config,
+      fetch: async (_url, init) => {
+        body = JSON.parse(init.body);
+        const thinking = body.thinking?.type !== "disabled";
+        return new Response(JSON.stringify({
+          id: "msg_fixture", type: "message", role: "assistant", model: option.directModel,
+          content: thinking
+            ? [{ type: "thinking", thinking: "Budget spent reasoning", signature: "fixture" }]
+            : [{ type: "text", text: mode === "text" ? "A short summary" : '{"questions":["What is next?"]}' }],
+          stop_reason: thinking ? "max_tokens" : "end_turn", stop_sequence: null,
+          usage: { input_tokens: 100, output_tokens: thinking ? body.max_tokens : 20 },
+        }), { headers: { "content-type": "application/json" } });
+      },
+    }) });
+    const input = { model: h.makeModel(), prompt: "fixture", maxOutputTokens: mode === "text" ? 160 : 500, maxRetries: 0 };
+    if (mode === "legacy-object") {
+      const result = await ai.generateObject({ ...input, schema });
+      assert.deepEqual(result.object.questions, ["What is next?"]);
+    } else {
+      const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
+      if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
+      else assert.equal(result.text, "A short summary");
+    }
+    assert.equal(body.thinking.type, "disabled");
+    assert.equal(body.output_config.effort, "low");
+    assert.equal(body.max_tokens, input.maxOutputTokens);
+    await h.flush();
+  }
+});
+
+test("real OpenRouter SDK sends reasoning disabled for short structured Haiku calls", async () => {
+  const { createOpenRouter } = require("@openrouter/ai-sdk-provider");
+  let body;
+  const h = harness();
+  const model = ai.wrapLanguageModel({
+    model: createOpenRouter({ apiKey: "fixture", fetch: async (_url, init) => {
+      body = JSON.parse(init.body);
+      return new Response(JSON.stringify({
+        id: "fixture", model: `anthropic/${option.model}`, created: 0,
+        choices: [{ index: 0, message: { role: "assistant", content: '{"questions":[]}' }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 1, completion_tokens: 5, total_tokens: 6 },
+      }), { headers: { "content-type": "application/json" } });
+    } })(`anthropic/${option.model}`),
+    middleware: h.api.createUsageTracingMiddleware({ userId: 985, provider: "byok:openrouter" }, `anthropic/${option.model}`),
+  });
+  await model.doGenerate({ maxOutputTokens: 500, prompt: [{ role: "user", content: [{ type: "text", text: "fixture" }] }], responseFormat: { type: "json" } });
+  assert.equal(body.reasoning.enabled, false);
+  assert.equal(body.max_tokens, 500);
+  await h.flush();
+});
+
+test("flag-off short structured legacy calls preserve their original settings", async () => {
+  for (const [provider, modelId, credential] of [
+    ["claude", "claude-haiku-4.5", "fixture-direct"],
+    ["gateway", "google/gemini-3.5-flash-lite", "vck_fixture"],
+    ["openrouter", "anthropic/claude-haiku-4.5", "fixture-direct"],
+  ]) {
+    const h = harness({ enabled: false });
+    const input = { ...params, maxOutputTokens: 500, responseFormat: { type: "json" }, providerOptions: { gateway: { tags: ["task-questions"] } } };
+    await h.makeModel(provider, modelId, credential).doGenerate(input);
+    assert.equal(h.calls[0].providerOptions, input.providerOptions);
+    assert.equal(h.calls[0].temperature, input.temperature);
+    assert.equal(h.calls[0].requestedModelId, modelId);
+    await h.flush();
+  }
 });
 
 test("editor and chat selectors preserve Haiku ids and omit temperature", () => {

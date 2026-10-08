@@ -37,6 +37,12 @@ function isClientResponse(expression) {
     const message = expression.arguments[0];
     if (message && ts.isCallExpression(message) && message.expression.getText() === "requestErrorMessage") return true;
   } else if (ts.isPropertyAccessExpression(expression.expression) && expression.expression.name.text === "json") {
+    const guard = expression.parent.parent.parent;
+    // Missing SDK output is an expected empty-question result, not an incident.
+    if (ts.isIfStatement(guard) && guard.thenStatement === expression.parent.parent &&
+      expression.arguments[0]?.getText().replace(/\s+/g, "") === "{questions:[]}" &&
+      guard.expression.getText().replace(/\s+/g, "") ===
+        "NoOutputGeneratedError.isInstance(error)||(NoObjectGeneratedError.isInstance(error)&&!error.text?.trim())") return true;
     const options = expression.arguments[1];
     if (options && ts.isObjectLiteralExpression(options)) {
       status = options.properties.find((property) =>
@@ -117,6 +123,20 @@ test("all AI route fallback catches report handled errors", () => {
     missingReports(parse(filename)).map((line) => `${path.relative(root, filename)}:${line}`),
   );
   assert.deepEqual(missing, [], "Unhandled fallback catches");
+});
+
+test("only the typed missing-output branch may skip empty-question incident reporting", () => {
+  const condition = "NoOutputGeneratedError.isInstance(error) || (NoObjectGeneratedError.isInstance(error) && !error.text?.trim())";
+  const response = "return NextResponse.json({ questions: [] });";
+  assert.deepEqual(missingReports(parse("fixture.ts", `try {} catch (error) { if (${condition}) { ${response} } await reportError({ source: "handled" }); return []; }`)), []);
+  for (const body of [
+    `if (${condition}) { ${response} } return [];`,
+    `if (NoObjectGeneratedError.isInstance(error)) { ${response} } await reportError({ source: "handled" }); return [];`,
+    `if (true) { ${response} } await reportError({ source: "handled" }); return [];`,
+    `if (${condition}) {} else { ${response} } await reportError({ source: "handled" }); return [];`,
+  ]) {
+    assert.equal(missingReports(parse("fixture.ts", `try {} catch (error) { ${body} }`)).length, 1);
+  }
 });
 
 test("AI route catches never report the same error twice", () => {
