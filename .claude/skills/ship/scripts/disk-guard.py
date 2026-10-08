@@ -109,7 +109,7 @@ def unreadable_but_harmless(process):
 
 
 class Guard:
-    def __init__(self, home=None, tmp=Path('/tmp'), dry=False, verbose=False):
+    def __init__(self, home=None, tmp=Path('/tmp'), dry=False, verbose=False, budget=12 * 60):
         self.home = Path(home or Path.home()).resolve()
         self.projects = self.home / 'projects'
         self.protected = self.projects / 'hypertask'
@@ -118,6 +118,8 @@ class Guard:
         self.dry = dry
         self.verbose = verbose
         self.now = time.time()
+        # Stop starting removals before systemd's TimeoutStartSec kills the run mid-delete.
+        self.deadline = time.monotonic() + budget
         self.freed = 0
         self.planned = 0
         self.removed = 0
@@ -242,6 +244,8 @@ class Guard:
                 candidates.append(entry)
         for path in candidates:
             try:
+                if time.monotonic() > self.deadline:
+                    raise ValueError('time budget reached; next run continues')
                 if any(inside(tree, path) or inside(path, tree) for tree in self.trees):
                     raise ValueError('registered git worktree')
                 if path.lstat().st_uid != os.getuid():
@@ -321,6 +325,8 @@ class Guard:
                 if path in self.failed_repos:
                     continue
                 try:
+                    if time.monotonic() > self.deadline:
+                        raise ValueError('time budget reached; next run continues')
                     if index == 0:
                         raise ValueError('main checkout')
                     if path == self.protected or inside(path, self.protected):

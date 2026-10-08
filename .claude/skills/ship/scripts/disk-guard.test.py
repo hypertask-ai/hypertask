@@ -93,6 +93,13 @@ class TemporaryTests(Fixture):
         self.assertGreater(self.guard.freed, 0)
         self.assertIn('bytes_freed=', (self.guard.state / 'log').read_text())
 
+    def test_spent_time_budget_starts_no_removal(self):
+        old = self.output_dir(self.tmp / 'old')
+        self.guard.deadline = 0
+        self.guard.temporary()
+        self.assertTrue(old.exists())
+        self.assertIn('time budget reached', self.output.getvalue())
+
     def test_newest_nested_mtime_blocks_removal(self):
         path = self.output_dir(self.tmp / 'old')
         (path / 'output').touch()
