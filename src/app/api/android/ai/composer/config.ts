@@ -1,5 +1,6 @@
 import {
   aiModelOptions,
+  isAiModelOptionVisible,
   getAiModelDefinition,
   isPremiumAiModelDefinition,
   pickAutoAiModelOption,
@@ -29,6 +30,7 @@ type ComposerConfigInput = {
   providersWithByok: ReadonlySet<string>;
   // HTPR-6722 flag: Luna is included on Free plans.
   lunaFree?: boolean;
+  haiku55Enabled?: boolean;
 };
 
 function canUseModelForPlan(
@@ -64,6 +66,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
   const allowedOptions = enabled
     ? aiModelOptions.filter(
         (option) =>
+          isAiModelOptionVisible(option, Boolean(input.haiku55Enabled)) &&
           isAiFeatureModelEnabled(
             "aiChat",
             option.id,

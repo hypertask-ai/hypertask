@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
   HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
@@ -214,6 +215,13 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7010_HAIKU_5_5_FLAG,
+    kind: "feature",
+    defaultMode: "OWNER_AND_QA",
+    shippedOn: "2026-10-08",
+    description: "Adds Claude Haiku 5.5 as an optional AI model next to Haiku 4.5 without changing your default model.",
+  },
   {
     key: HTPR_7008_PHONE_FIRST_PAINT_FLAG,
     kind: "bugfix",

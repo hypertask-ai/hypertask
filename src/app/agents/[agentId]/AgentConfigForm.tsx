@@ -1,6 +1,8 @@
 "use client";
 
-import { aiModelOptions } from "@/lib/aiModelOptions";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { aiModelOptions, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import AgentSelect, { AgentOption } from "../AgentSelect";
@@ -51,6 +53,7 @@ export function AgentConfigForm({
   handleVisibilityChange, providerKeyLoaded, visibilityNotice, savingImportant,
   handleImportantToggle, currentUser,
 }: Props) {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">
@@ -108,7 +111,7 @@ export function AgentConfigForm({
                       {/* Same list the PATCH route enforces, so the picker can
                         never offer something the API will reject. */}
                       {aiModelOptions
-                        .filter((option) => canPinModelOption(option.id))
+                        .filter((option) => canPinModelOption(option.id) && isAiModelOptionVisible(option, haiku55Enabled))
                         .map((option) => (
                           <AgentOption key={option.id} value={option.id}>
                             {option.title}

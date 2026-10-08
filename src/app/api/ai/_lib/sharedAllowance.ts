@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
+import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
   aiAllowancePeriod,
@@ -74,7 +75,21 @@ export function sharedAiAllowanceErrorMessage(error: unknown): string | null {
 type ModelPricing = {
   inputUsdPerToken: number;
   outputUsdPerToken: number;
+  longRequest?: {
+    tokenThreshold: number;
+    inputUsdPerToken: number;
+    outputUsdPerToken: number;
+  };
 };
+
+export function modelCostUsd(pricing: ModelPricing, inputTokens: number, outputTokens: number): number {
+  const input = Math.max(inputTokens, 0);
+  const output = Math.max(outputTokens, 0);
+  const rates = pricing.longRequest && input + output > pricing.longRequest.tokenThreshold
+    ? pricing.longRequest
+    : pricing;
+  return input * rates.inputUsdPerToken + output * rates.outputUsdPerToken;
+}
 
 type AllowanceReservation = {
   amountMicroUsd: number;
@@ -201,6 +216,18 @@ function gatewayPricingLookupSlugs(modelSlug: string): string[] {
 }
 
 export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
+  if (isHaiku55Model(modelSlug)) {
+    // The catalog exposes only one rate, but Haiku 5.5 prices the entire request by size.
+    return {
+      inputUsdPerToken: 0.10 / 1_000_000,
+      outputUsdPerToken: 0.50 / 1_000_000,
+      longRequest: {
+        tokenThreshold: 100_000,
+        inputUsdPerToken: 0.50 / 1_000_000,
+        outputUsdPerToken: 2.50 / 1_000_000,
+      },
+    };
+  }
   const models = await loadGatewayPricing();
   for (const slug of gatewayPricingLookupSlugs(modelSlug)) {
     const pricing = models.get(slug);
@@ -246,9 +273,7 @@ export function estimateReservationMicroUsd(args: {
     1,
     Math.ceil(args.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS),
   );
-  const estimatedUsd =
-    inputTokens * args.pricing.inputUsdPerToken +
-    outputTokens * args.pricing.outputUsdPerToken;
+  const estimatedUsd = modelCostUsd(args.pricing, inputTokens, outputTokens);
   return usdToMicroUsd(
     estimatedUsd * RESERVATION_SAFETY_MULTIPLIER + RESERVATION_SAFETY_USD,
   );
@@ -269,9 +294,7 @@ function settledUsageMicroUsd(
   ) {
     return reservedMicroUsd;
   }
-  const actualUsd =
-    Math.max(inputTokens, 0) * pricing.inputUsdPerToken +
-    Math.max(outputTokens, 0) * pricing.outputUsdPerToken;
+  const actualUsd = modelCostUsd(pricing, inputTokens, outputTokens);
   return usdToMicroUsd(actualUsd);
 }
 

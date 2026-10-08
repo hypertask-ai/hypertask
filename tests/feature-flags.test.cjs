@@ -62,6 +62,22 @@ test.beforeEach(() => {
   ]);
 });
 
+test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
+  const key = flags.HTPR_7010_HAIKU_5_5_FLAG;
+  assert.equal(key, "htpr-7010-haiku-5-5");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(entry.shippedOn, "2026-10-08");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
 test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
   const key = flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG;
   assert.equal(key, "htpr-6970-phone-new-task-title");
@@ -705,6 +721,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7003-board-back", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7004-no-loading-flash", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7008-phone-first-paint", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

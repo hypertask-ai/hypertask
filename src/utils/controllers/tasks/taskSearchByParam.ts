@@ -5,7 +5,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
-import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, PAGE_MENTIONS_FLAG, HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags";
 import {
   matchesMentionName,
   selectMentionAgents,
@@ -22,7 +22,7 @@ const taskSearchByParam = async (
     // (needs only userid), owner_members (only projectId) and hyperAI (a
     // constant id) are mutually independent, so fetch them concurrently
     // instead of in three sequential round trips.
-    const [projectIds, owner_members, hyperAI, pageMentionsEnabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -48,6 +48,7 @@ const taskSearchByParam = async (
       // on the flag table before, and a read failure there must not blank the
       // whole @ list (people, agents, tasks, boards) for everyone.
       isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
+      isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, userid).catch(() => false),
     ]);
 
     if (!projectIds.includes(projectId)) {
@@ -68,6 +69,7 @@ const taskSearchByParam = async (
       param === "all" || !normalizedModelQuery
         ? []
         : [...aiModelDefinitions, ...aiImageModelDefinitions]
+            .filter((model) => model.key !== "claude-haiku-5-5" || haiku55Enabled)
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(

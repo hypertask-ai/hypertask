@@ -73,6 +73,8 @@ const CLAUDE_MODELS = new Set([
   "claude-opus-5-5",
   "claude-opus-5",
   "claude-haiku-4.5",
+  "claude-haiku-5.5",
+  "claude-haiku-5-5",
 ]);
 const OPENAI_MODELS = new Set([
   "gpt-6-luna",
@@ -86,6 +88,7 @@ const OPENAI_MODELS = new Set([
 const CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES = [
   "claude-opus",
   "claude-sonnet-5",
+  "claude-haiku-5",
 ] as const;
 
 const IMG_TAG_RE = /<img\b[^>]*>/gi;

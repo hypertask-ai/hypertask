@@ -1,11 +1,12 @@
 import { useFlag } from "@/hooks/useFlag";
-import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   aiModelDefinitions,
   aiModelOptions,
+  isAiModelOptionVisible,
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelDefinition,
@@ -96,6 +97,7 @@ const AIModelDropDownList = ({
   // htpr-6722-latest-models: Luna is included on Free plans.
   lunaFree: boolean;
 }) => {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
   const [isOpen, setIsOpen] = useState(false);
   const [submenu, setSubmenu] = useState<Submenu | null>(null);
   const [submenuPlacement, setSubmenuPlacement] =
@@ -139,15 +141,15 @@ const AIModelDropDownList = ({
     () =>
       new Set(
         aiModelOptions
-          .filter((option) => listedIds.has(option.id))
+          .filter((option) => listedIds.has(option.id) && isAiModelOptionVisible(option, haiku55Enabled))
           .map((option) => option.modelKey)
       ),
-    [listedIds]
+    [listedIds, haiku55Enabled]
   );
   const availableOptions = useMemo(
     () =>
       aiModelOptions.filter((option) => {
-        if (!listedIds.has(option.id)) return false;
+        if (!listedIds.has(option.id) || !isAiModelOptionVisible(option, haiku55Enabled)) return false;
         // Guests: allowlist is the only availability gate, ignore team providers
         // and custom endpoints.
         if (isGuest) return isGuestAllowedModelKey(option.modelKey);
@@ -164,6 +166,7 @@ const AIModelDropDownList = ({
       customEndpoint.configured,
       enabledProviderSet,
       listedIds,
+      haiku55Enabled,
       respectTeamAvailability,
       isGuest,
     ]
