@@ -19,7 +19,7 @@ import type { ITask } from "@/models/model";
 import { currentUserAtom } from "@/store";
 import { fetchCommentsHelper } from "@/utils/api/Task Detail";
 
-import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount } from "@/lib/taskDetailReads";
+import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount, TASK_DETAIL_READ_FRESH_MS } from "@/lib/taskDetailReads";
 
 type EmbeddedTaskDetailProps = {
   taskId: number;
@@ -109,7 +109,10 @@ const EmbeddedTaskDetail = ({
     },
     initialData: initialTask,
     ...(flagReady && !dedupe ? {} : { enabled: flagReady && Boolean(currentUser?.id) }),
-    ...(dedupe ? { initialDataUpdatedAt: 0, refetchOnMount: shouldRefetchDetailOnMount } : {}),
+    ...(dedupe ? {
+      initialDataUpdatedAt: 0, staleTime: TASK_DETAIL_READ_FRESH_MS, refetchOnMount: shouldRefetchDetailOnMount,
+      refetchOnReconnect: "always" as const, refetchOnWindowFocus: "always" as const,
+    } : {}),
     ...(embedded ? {} : { retry: false, ...(dedupe ? {} : { refetchOnMount: "always" as const }) }),
   });
   const commentsQuery = useQuery({

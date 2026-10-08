@@ -14,6 +14,26 @@ export const TASK_DETAIL_READ_FRESH_MS = 30_000;
 export const shouldRefetchDetailOnMount = (query: { state: { dataUpdatedAt: number; isInvalidated: boolean } }) =>
   query.state.isInvalidated || Date.now() - query.state.dataUpdatedAt >= TASK_DETAIL_READ_FRESH_MS;
 
+export type TaskDetailServerSeed = {
+  userId: number;
+  taskId: number;
+  projectId: number;
+  uniqueIndex: number;
+  updatedAt: number;
+};
+
+export function adoptTaskDetailServerSeed(queryClient: QueryClient, userId: number | null, task: ITask, seed?: TaskDetailServerSeed) {
+  if (!seed || userId !== seed.userId || !(task.id > 0) || task.id !== seed.taskId ||
+    task.projectId !== seed.projectId || task.uniqueIndex !== seed.uniqueIndex || task.status === "Deleted" ||
+    !Number.isFinite(seed.updatedAt) || seed.updatedAt <= 0 || seed.updatedAt > Date.now() ||
+    Date.now() - seed.updatedAt >= TASK_DETAIL_READ_FRESH_MS) return;
+  const queryKey = taskDetailReadKey(userId, task.id);
+  const state = queryClient.getQueryState(queryKey);
+  // A delayed route seed must not erase a write, denial or newer authorized read.
+  if (state?.isInvalidated || state?.error || state?.fetchStatus === "fetching" || (state?.dataUpdatedAt ?? 0) > seed.updatedAt) return;
+  queryClient.setQueryData(queryKey, task, { updatedAt: seed.updatedAt });
+}
+
 export function refreshTaskDetailReadAfterWrite(queryClient: QueryClient, userId: number, taskId: number, updates: Partial<ITask> = {}) {
   const queryKey = taskDetailReadKey(userId, taskId);
   // A pre-write response must not replace the local snapshot used on reopen.

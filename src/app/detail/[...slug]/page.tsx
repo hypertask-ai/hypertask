@@ -161,6 +161,7 @@ export default async function Page(
         _comments={JSON.stringify({ comments: comments.json, stacked: initialMap, lastReadAt, agentRunActivities, updatedAt: commentsUpdatedAt })}
         allowPerks={true}
         parsedTask={JSON.stringify(task)}
+        serverTaskSeed={{ userId: userObj.id, taskId: task.id, projectId: slug.projectId, uniqueIndex: slug.uniqueIndex, updatedAt: currentDate.getTime() }}
         scrollSetting={scrollSetting}
       >
         {/*

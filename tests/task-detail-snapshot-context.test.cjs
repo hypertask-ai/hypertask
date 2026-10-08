@@ -44,6 +44,11 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const emptyHook = () => ({});
   const providerInputs = [];
   const provider = load("src/lib/contexts/TaskDetail/TaskProvider.tsx", {
+    "@tanstack/react-query": { useQueryClient: () => queryClient },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
+    "@/hooks/useFlag": { useFlag: () => subtaskLink },
+    "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
+    "@/lib/taskDetailReads": require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, interopDefault: true })(path.join(__dirname, "..", "src/lib/taskDetailReads.ts")),
     "@/hooks/Task Detail/useTaskDetailGlobalStates": {
       default: (task, comments) => {
         providerInputs.push({ task, comments });
@@ -109,7 +114,8 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const comments = JSON.stringify({ comments: [{ id: 1 }], updatedAt: 1234 });
   async function render(task) {
     await React.act(async () => root.render(React.createElement(provider.TasksProvider, {
-      parsedTask: JSON.stringify(task), _comments: comments, _initialStacked: {}, stack: { stack: false },
+      parsedTask: JSON.stringify(task), _comments: comments, _initialStacked: {}, stack: { stack: false }, embedded,
+      serverTaskSeed: { userId: 2343, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex, updatedAt: Date.now() },
       allowPerks: true, scrollSetting: "Bottom",
     }, React.createElement(Consumer))));
   }

@@ -387,9 +387,9 @@ test("post-write refetch refreshes metadata and stale mount/focus policy remains
   assert.equal(reads.shouldRefetchDetailOnMount({ state: { dataUpdatedAt: Date.now() - 31_000, isInvalidated: false } }), true);
 });
 
-test("realtime events, same-user multi-tab edits, reconnect and PR subscription still refetch", async t => {
+test("realtime events, same-user multi-tab edits, reconnect and PR subscription still refetch after server seed adoption", async t => {
   const h = harness(t);
-  h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]); await settle();
+  reads.adoptTaskDetailServerSeed(h.client, 985, h.task(), { userId: 985, taskId: 42, projectId: 15, uniqueIndex: 42, updatedAt: Date.now() });
   h.comments(); h.field("labels"); await settle();
   const channelHandlers = new Map(), connectionHandlers = new Map();
   const channel = { subscribed: false, bind: (event, fn) => channelHandlers.set(event, fn), unbind: event => channelHandlers.delete(event) };
@@ -463,7 +463,7 @@ for (const pending of [false, true]) {
   });
 }
 
-test("initial unavailable direct read does not invalidate freshly mounted metadata; later reconciliation does", async t => {
+test("initial unavailable direct open adopts the server read; later reconciliation still refetches", async t => {
   const h = harness(t);
   h.client.setQueryData(reads.taskDetailReadKey(985, 42), h.task());
   h.comments({ comments: [1], updatedAt: Date.now() }); h.field("labels"); await settle();
@@ -475,9 +475,9 @@ test("initial unavailable direct read does not invalidate freshly mounted metada
   });
   hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
   await settle();
-  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 1, single: 0 });
+  assert.deepEqual(h.counts, { task: 0, comments: 0, meta: 1, single: 0 });
   h.version(2); h.tick(); await settle();
-  assert.deepEqual(h.counts, { task: 2, comments: 2, meta: 2, single: 0 });
+  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 2, single: 0 });
   assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [2]);
 });
 
@@ -504,7 +504,7 @@ for (const entry of ["direct", "stale", "invalidated", "off"]) {
   test(`initial unavailable realtime still refreshes ${entry} opens`, async t => {
     const h = harness(t, entry !== "off");
     const key = reads.taskDetailReadKey(985, 42);
-    if (entry !== "off") h.client.setQueryData(key, h.task(), { updatedAt: entry === "stale" ? Date.now() - 31_000 : Date.now() });
+    if (entry !== "off" && entry !== "direct") h.client.setQueryData(key, h.task(), { updatedAt: entry === "stale" ? Date.now() - 31_000 : Date.now() });
     if (entry === "invalidated") await h.client.invalidateQueries({ queryKey: key, exact: true });
     global.window.history = { state: entry === "direct" ? {} : { cachedTaskDetail: { taskId: 42 } } };
     const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
