@@ -67,7 +67,7 @@ function fixture(t, { enabled = true, instant = true, authenticatedId = 2343, in
       if (key === flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG) return enabled;
       if (key === flags.HTPR_6752_INSTANT_TICKET_OPEN_FLAG) return instant;
       if (key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG) return true;
-      assert.ok([flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG].includes(key), key);
+      assert.ok([flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG].includes(key), key);
       return false;
     } },
     "@/lib/flags/keys": flags,

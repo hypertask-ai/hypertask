@@ -183,7 +183,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
+      [true, true, [flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
       `${key} should use its declared rollout default`,
     );
   }
@@ -232,6 +232,17 @@ test("board-back bugfix defaults to Everyone for plain QA and respects OFF", asy
 test("no-loading-flash bugfix defaults to Everyone for plain QA and respects OFF", async () => {
   const { HTPR_7004_NO_LOADING_FLASH_FLAG: key } = flags;
   assert.equal(key, "htpr-7004-no-loading-flash");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+});
+
+test("phone-first-paint bugfix defaults to Everyone for plain QA and respects OFF", async () => {
+  const { HTPR_7008_PHONE_FIRST_PAINT_FLAG: key } = flags;
+  assert.equal(key, "htpr-7008-phone-first-paint");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
   assert.equal(entry.mode, "EVERYONE");
@@ -693,6 +704,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7002-inbox-e-first-press", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7003-board-back", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7004-no-loading-flash", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7008-phone-first-paint", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

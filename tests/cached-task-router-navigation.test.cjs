@@ -54,7 +54,7 @@ function fixture(t, enabled, sourcePath = "/inbox") {
     "@/store": { currentUserAtom: {} },
     "@/hooks/useFlag": { useFlag: key => {
       if (key === HTPR_7000_INBOX_NEXT_OPEN_FLAG) return enabled;
-      if (key === flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG) return false;
+      if (key === flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG || key === flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG) return false;
       assert.ok([HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG].includes(key));
       return true;
     } },
