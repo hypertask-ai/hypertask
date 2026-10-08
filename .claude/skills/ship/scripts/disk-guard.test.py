@@ -312,7 +312,7 @@ class ProcessTests(Fixture):
         self.assertTrue(target.exists())
         self.assertIn('process has cwd/fd/root inside', self.output.getvalue())
 
-    def test_other_uid_unreadable_process_requires_private_candidate(self):
+    def test_other_uid_unreadable_process_keeps_ordinary_candidate(self):
         process = self.proc(123)
         # The harmless list and zombie exemption apply only to our own UID.
         (process / 'comm').write_text('sshd\n')
@@ -331,8 +331,42 @@ class ProcessTests(Fixture):
                         self.assertTrue(links.called)
                         with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
                             self.guard.temporary()
-                    self.assertEqual(target.exists(), mode == 0o755)
+                    self.assertTrue(target.exists())
         self.assertIn('other accounts could be using it', self.output.getvalue())
+
+    def test_unreadable_root_allows_only_old_named_rebuildable_caches(self):
+        process = self.proc(123)
+        self.process.stop()
+        with self.foreign_owner(process, 0), \
+             patch.object(disk.os, 'readlink', side_effect=PermissionError('root')):
+            found, uncertain = disk.process_paths(process.parent)
+            self.assertEqual(uncertain, {process})
+            with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
+                for name in ('claude-123/.next/cache', 'node-compile-cache-123',
+                             '.zig-cache', 'zig-cache', 'zig-cache-123', 'zig016-123'):
+                    with self.subTest(name=name):
+                        target = self.output_dir(self.tmp / name)
+                        (target / 'output').touch()
+                        self.guard.temporary()
+                        self.assertTrue(target.exists())
+                        self.old(target)
+                        self.guard.temporary()
+                        self.assertFalse(target.exists())
+
+                checkout = self.output_dir(self.tmp / 'zig016-checkout')
+                (checkout / '.git').mkdir()
+                self.old(checkout)
+                self.guard.temporary()
+                self.assertTrue(checkout.exists())
+
+    def test_unreadable_root_does_not_override_readable_cache_usage(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'claude-123/.next/cache')
+        self.paths.return_value = ({target / 'output'}, {process})
+        with self.foreign_owner(process, 0):
+            self.guard.temporary()
+        self.assertTrue(target.exists())
+        self.assertIn('process has cwd/fd/root inside', self.output.getvalue())
 
     def test_readable_other_uid_fd_keeps_even_when_cwd_is_unreadable(self):
         process = self.proc(123)
@@ -633,12 +667,13 @@ class WorktreeTests(Fixture):
         self.sweep()
         self.assertTrue(tree.exists())
 
-    def test_detached_remote_contained_removed(self):
+    def test_detached_remote_contained_kept(self):
         repo, tree = self.repo()
         self.git(tree, 'checkout', '--detach')
         self.old(tree)
         self.sweep()
-        self.assertFalse(tree.exists())
+        self.assertTrue(tree.exists())
+        self.assertIn('detached worktree; open PR cannot be ruled out', self.output.getvalue())
         self.assertIn('refs/heads/feature', self.git(repo, 'for-each-ref', '--format=%(refname)'))
 
     def test_detached_uncontained_kept(self):

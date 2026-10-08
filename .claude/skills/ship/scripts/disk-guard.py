@@ -229,10 +229,14 @@ class Guard:
             try:
                 if any(process.stat().st_uid == os.getuid() for process in uncertain):
                     return 'process scan incomplete (permission or I/O error)'
-                info = path.lstat()
             except OSError:
                 return 'process scan incomplete (permission or I/O error)'
-            if info.st_uid != os.getuid() or info.st_mode & 0o077:
+            if not (path.is_dir() and (
+                    (path.name == 'cache' and path.parent.name == '.next')
+                    or path.name.startswith('node-compile-cache')
+                    or path.name in {'.zig-cache', 'zig-cache'}
+                    or (path.parent == self.tmp and path.name.startswith(('zig-cache', 'zig016')))
+            ) and not contains_git(path)):
                 return 'other accounts could be using it'
         return None
 
@@ -316,6 +320,8 @@ class Guard:
 
     def merged(self, repo, row):
         branch = row.get('branch', '').removeprefix('refs/heads/')
+        if not branch:
+            raise ValueError('detached worktree; open PR cannot be ruled out')
         if branch:
             prs = self.prs(repo, branch)
             if any(r['state'] == 'OPEN' for r in prs):
@@ -338,7 +344,7 @@ class Guard:
         refs = command(['git', 'for-each-ref', '--format=%(refname)', '--contains', row['HEAD'], 'refs/remotes/'], repo)
         if not refs:
             raise ValueError('HEAD is not contained in a remote-tracking ref')
-        return False  # Safe detached/abandoned tree, but do not delete an unmerged local branch.
+        return False  # Safe abandoned tree, but do not delete an unmerged local branch.
 
     def check_ignored_files(self, path):
         rows = command(['git', 'status', '--porcelain', '--ignored', '--untracked-files=all', '-z'], path)

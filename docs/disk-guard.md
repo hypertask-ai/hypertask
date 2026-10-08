@@ -34,13 +34,16 @@ in place. Reinstall to update the installed copy. No crontab is used.
 - Readable process `cwd`, `fd`, and `root` links are scanned across all UIDs,
   including root. Any process using a candidate keeps it. Unreadable other-UID
   processes keep candidates with reason `other accounts could be using it`,
-  unless the candidate's top entry is owned by us and has no group/other
-  permission bits (`mode & 0o077 == 0`). No ancestor privacy check is inferred.
-  Permission or I/O errors in an own-process scan keep the candidate, except
-  for `sshd`, `(sd-pam)`, `gpg-agent`, `ssh-agent`, and zombies. These harmless
-  exceptions apply only to our own UID. Failed process IDs are retried for each
-  later candidate; readable paths are cached. Every deletion refreshes the full
-  scan. No privileged helper is installed.
+  regardless of permission bits, including `0700`. Only named rebuildable cache
+  directories may be removed under this uncertainty: `.next/cache`,
+  `node-compile-cache*`, `.zig-cache`, `zig-cache`, and top-level `/tmp/zig-cache*`
+  or `/tmp/zig016*` directories containing no `.git`. The same ownership,
+  two-day newest-mtime and readable-process checks still apply; Git checkouts
+  stay protected. Permission or I/O errors in an own-process scan keep the
+  candidate, except for `sshd`, `(sd-pam)`, `gpg-agent`, `ssh-agent`, and zombies.
+  These harmless exceptions apply only to our own UID. Failed process IDs are
+  retried for each later candidate; readable paths are cached. Every deletion
+  refreshes the full scan. No privileged helper is installed.
 - Worktree discovery covers repositories under `~/projects`, including nested
   worker-tree parents. Dependency/build directories are not traversed for repo
   discovery. The `~/projects/hypertask` checkout is never used as a command cwd
@@ -53,8 +56,9 @@ in place. Reinstall to update the installed copy. No crontab is used.
 - Linked worktrees must be clean, including untracked files, inactive, and older
   than three days. Age excludes `.git` and `node_modules`. Locked worktrees stay.
   GitHub must confirm no open PR for a named branch, and either its current tip
-  matches a merged PR or is an ancestor of `origin/HEAD`. A detached tree or a
-  branch without a surviving upstream must have HEAD contained in a remote ref.
+  matches a merged PR or is an ancestor of `origin/HEAD`. Detached worktrees
+  always stay with reason `detached worktree; open PR cannot be ruled out`.
+  A branch without a surviving upstream must have HEAD contained in a remote ref.
   Missing default refs and failed, malformed, truncated or rate-limited `gh`
   responses keep the worktree. Remote refs are not fetched or changed by the
   guard. Calls are cached per run and capped at 60 per sweep.
