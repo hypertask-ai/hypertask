@@ -48,7 +48,7 @@ function compile(file, mocks) {
 }
 
 test("phone inbox flag on and pending skip legacy downloads; off and desktop warm only inbox modules", async () => {
-  const file = "src/components/ProviderGlobal/GloablProviders.tsx";
+  const file = "src/hooks/useInboxLegacyWarm.ts";
   const source = read(file);
   const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let callback;
