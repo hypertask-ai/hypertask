@@ -90,9 +90,9 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   };
 
   // ---------------------- GET TASK
-  const getTask = async () => {
+  const getTask = async (refresh = true) => {
     // Cached Inbox detail already revalidates via its task query. A mount refresh can replay the source URL after E advances.
-    if (!(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
+    if (refresh && !(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
       new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {
       navigate(taskDetailConfig.navigation.refresh);
     }

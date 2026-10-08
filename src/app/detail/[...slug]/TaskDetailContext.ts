@@ -55,7 +55,7 @@ export interface createTaskDetailActionsHandlers {
   toggleDueDate: (refresh?: boolean) => void;
   toggleRemoveSubtaskModal: () => void;
   deleteTask: (state: boolean) => Promise<void>;
-  getTask: () => Promise<void>;
+  getTask: (refresh?: boolean) => Promise<void>;
   UnFollowCallback: () => void;
   UnFollow: (id: any) => Promise<void>;
   removeRelationHandler: (relationId: number) => Promise<void>;

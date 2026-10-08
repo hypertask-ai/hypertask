@@ -1,8 +1,9 @@
 
 import { useEffect, useLayoutEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG } from "@/lib/flags/keys";
 import { focusManager } from "@tanstack/react-query";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { emitProductPerformanceEvent } from "@/lib/analytics/productPerformance";
 import { performanceDeviceClass } from "@/lib/analytics/appPerformanceScope";
@@ -11,6 +12,8 @@ import { markTaskDetailPhase, readTaskDetailPhaseTimings, TASK_DETAIL_USABLE_MAR
 import type { useTaskDetailInitialScrollValue } from "./useTaskDetailInitialScroll";
 export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue) {
   const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
+  const { cachedLayout } = useTaskContext();
   const { embedded, _currentTask, _parsedTask, handleKeyDown, handleKeyUp, sharedLink, isRecording, showMentionList, currentTask, carousalItems, getTask, setNonEssentialReady, readinessTaskRef, currentUser, updateActiveItemAndItemInView, setStickyElementHeight, showAiChatInterface, onWindowFocus } = context;
 
   useEffect(() => {
@@ -45,8 +48,9 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   ]);
 
   useEffect(() => {
-    getTask();
-  }, [_currentTask]);
+    // The cached query revalidates on mount; another RSC refresh can race Back and trigger Next's MPA fallback.
+    getTask(!(noLoadingFlash && cachedLayout));
+  }, [_currentTask, noLoadingFlash, cachedLayout]);
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;
