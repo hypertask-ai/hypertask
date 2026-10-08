@@ -65,7 +65,7 @@ test("creator hydration enables description quoting without changing the frozen 
   assert.equal(children().find((child) => child?.type === Editor).props.user.id, 99);
 });
 
-test("cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
+test("flag-off cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
   const source = read("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx");
   for (const embedded of [false, true]) {
     for (const error of [new TypeError("Failed to fetch"), new Error("Unable to load task")]) {
@@ -85,8 +85,8 @@ test("cached network and HTTP refresh failures recover through the authorized ro
           "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
           "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => null },
           "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
-          "@/hooks/useFlag": { useFlag: () => true },
-          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
+          "@/hooks/useFlag": { useFlag: key => key !== "htpr-7004-no-loading-flash" },
+          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
           "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
           "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
           "@/lib/state": { useRecoilValue: () => ({ id: 6 }) },

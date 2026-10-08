@@ -20,6 +20,7 @@ import {
   HTPR_6991_BACK_FIRST_OPEN_FLAG,
   HTPR_7000_INBOX_NEXT_OPEN_FLAG,
   HTPR_7003_BOARD_BACK_FLAG,
+  HTPR_7004_NO_LOADING_FLASH_FLAG,
   HTPR_7001_INBOX_NEXT_CACHED_FLAG,
   HTPR_6978_SIZE_LABEL_CLICK_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
@@ -303,6 +304,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-07",
     description: "Keeps the previous ticket hidden on a quick Back from a board card until the board is ready to show.",
+  },
+  {
+    key: HTPR_7004_NO_LOADING_FLASH_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-08",
+    description: "Keeps an already-visible cached ticket on screen while retrying a failed background refresh instead of reloading into Loading after Back.",
   },
   {
     key: HTPR_7000_INBOX_NEXT_OPEN_FLAG,

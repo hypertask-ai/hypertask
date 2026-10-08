@@ -10,6 +10,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
 const refresh = jiti(path.join(root, "src/lib/realtime/taskDetailRefresh.ts"));
+const flags = jiti(path.join(root, "src/lib/flags/keys.ts"));
 const task = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Cached", description_: { content: "Cached body" } };
 
 function compile(source, mocks) {
@@ -142,8 +143,8 @@ test("cached refresh keeps parsedTask stable while updating metadata and preserv
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
-    "@/hooks/useFlag": { useFlag: () => true },
-    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
+    "@/hooks/useFlag": { useFlag: key => key !== flags.HTPR_7004_NO_LOADING_FLASH_FLAG },
+    "@/lib/flags/keys": flags,
     "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
     "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: Provider, useTaskContext: () => React.useContext(Context) },
@@ -195,8 +196,8 @@ test("cached refresh failures retry in place during edits, drafts and uploads, t
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": { currentUserAtom: {} },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
-    "@/hooks/useFlag": { useFlag: () => true },
-    "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
+    "@/hooks/useFlag": { useFlag: key => key !== flags.HTPR_7004_NO_LOADING_FLASH_FLAG },
+    "@/lib/flags/keys": flags,
     "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
     "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: Provider, useTaskContext: () => React.useContext(Context) },
@@ -241,3 +242,119 @@ test("cached refresh failures retry in place during edits, drafts and uploads, t
     global.window = browserWindow;
   }
 });
+
+for (const enabled of [true, false]) {
+  test(`HTPR-7004 bounds refresh retries, resets on success and preserves access denial and editing (flag=${enabled})`, async t => {
+    const render = await mount(t);
+    const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
+    let error = null;
+    let editor = {};
+    let retries = 0;
+    const refetch = async () => { retries++; };
+    const Detail = compile(fs.readFileSync(path.join(root, "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"), "utf8"), {
+      react: React,
+      "react/jsx-runtime": require("react/jsx-runtime"),
+      "@tanstack/react-query": { useQueryClient: () => ({}), useQuery: ({ queryKey }) => queryKey[0] === "cached-task-detail" ? { data: task, error, refetch } : {} },
+      "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
+      "@/store": { currentUserAtom: {} },
+      "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
+      "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_7004_NO_LOADING_FLASH_FLAG ? enabled : true },
+      "@/lib/flags/keys": flags,
+      "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
+      "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
+      "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children }) => children, useTaskContext: () => editor },
+      "@/lib/navigation/cachedTaskDetail": cache,
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/app/unauthorized/page": { __esModule: true, default: () => React.createElement("div", { role: "alert" }, "No access") },
+      "@/utils/api/Task Detail": {},
+      "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => React.createElement("textarea", { id: "title-input", defaultValue: task.title }) },
+    }).default;
+    const browserWindow = global.window;
+    const replacements = [];
+    const timers = new Map();
+    let timerId = 0;
+    global.window = {
+      location: { href: browserWindow.location.href, replace: url => replacements.push(url) },
+      setTimeout: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
+      clearTimeout: id => timers.delete(id),
+    };
+    try {
+      const element = () => React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false });
+      await render(element());
+      const title = document.querySelector("#title-input");
+      const fireRetry = async delay => {
+        assert.equal(timers.size, 1);
+        const [id, timer] = [...timers.entries()][0];
+        assert.equal(timer.delay, delay);
+        timers.delete(id);
+        const before = retries;
+        await React.act(async () => timer.callback());
+        assert.equal(retries, before + 1);
+      };
+      for (let streak = 0; streak < 2; streak++) {
+        const before = retries;
+        const reloadsBefore = replacements.length;
+        for (const delay of [1000, 2000, 4000]) {
+          error = new TypeError("Failed to fetch");
+          await render(element());
+          assert.equal(document.querySelector("#title-input"), title, "the parent stays committed");
+          assert.equal(title.value, task.title);
+          if (enabled) {
+            assert.equal(replacements.length, reloadsBefore, "recoverable failures retry before reloading");
+            await render(element());
+            await fireRetry(delay);
+          } else {
+            assert.equal(replacements.at(-1), browserWindow.location.href, "OFF positive control still reloads immediately");
+            assert.equal(timers.size, 0);
+          }
+        }
+        error = new Error("Unable to load task");
+        await render(element());
+        assert.equal(timers.size, 0, "persistent failures stop retrying after the bound");
+        assert.equal(retries - before, enabled ? 3 : 0);
+        assert.equal(replacements.length - reloadsBefore, enabled ? 1 : 4);
+        assert.equal(replacements.at(-1), browserWindow.location.href);
+        error = null;
+        await render(element());
+        assert.equal(timers.size, 0, "success ends the streak and resets its retry budget");
+      }
+      error = new Error("Another refresh failure");
+      await render(element());
+      if (enabled) assert.equal([...timers.values()][0].delay, 1000);
+      error = null;
+      await render(element());
+      assert.equal(timers.size, 0, "success cancels a pending retry without consuming the budget");
+      error = new Error("Failure before departure");
+      await render(element());
+      await render(null);
+      assert.equal(timers.size, 0, "leaving the parent cancels its retry");
+      const reloadsBeforeEditing = replacements.length;
+      for (const protectedState of [...protectedStates, { editMode: "title" }]) {
+        editor = protectedState;
+        error = new Error("Failure while editing");
+        await render(element());
+        await fireRetry(1000);
+        assert.equal(replacements.length, reloadsBeforeEditing, "editing still retries indefinitely at one second");
+      }
+      editor = {};
+      error = new cache.TaskAccessDeniedError();
+      await render(element());
+      assert.equal(document.querySelector("#title-input"), null, "authorization denial must not retain cached content");
+      assert.equal(document.querySelector('[role="alert"]').textContent, "No access");
+      assert.equal(timers.size, 0, "denials are not treated as transient failures");
+      assert.equal(replacements.at(-1), browserWindow.location.href);
+      const reloadsBeforeDeniedEdit = replacements.length;
+      editor = { hasDraft: true };
+      error = new cache.TaskAccessDeniedError();
+      await render(element());
+      await fireRetry(1000);
+      assert.equal(document.querySelector("#title-input"), null);
+      assert.equal(document.querySelector('[role="alert"]').textContent, "No access");
+      assert.equal(replacements.length, reloadsBeforeDeniedEdit, "access denial during editing retains today's retry behaviour");
+      await render(null);
+      assert.equal(timers.size, 0);
+    } finally {
+      global.window = browserWindow;
+    }
+  });
+}
