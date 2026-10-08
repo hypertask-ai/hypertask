@@ -5,7 +5,7 @@ Ticket: https://app.hypertask.ai/detail/project-4060/223
 Install from any worktree with Python 3 (stdlib only):
 
 ```bash
-python3 .claude/skills/ship/scripts/disk-guard.py --dry-run
+python3 .claude/skills/ship/scripts/disk-guard.py --dry-run --verbose
 python3 .claude/skills/ship/scripts/disk-guard.py --report
 python3 .claude/skills/ship/scripts/disk-guard.py --install
 systemctl --user start disk-guard.service
@@ -31,14 +31,21 @@ in place. Reinstall to update the installed copy. No crontab is used.
   named `node-compile-cache*` and `.next/cache` descendants are eligible, with
   the same age, ownership and process checks. A live process using a cache
   keeps it. No generalized Claude scratchpad deletion is performed.
-- All process `cwd`, `fd`, and `root` links are scanned. Permission or I/O errors
-  make absence unprovable, so candidate deletion is refused. On a host with
-  inaccessible processes this deliberately favors keeping data over freeing
-  space. No privileged helper is installed.
+- Only this user's uid's process `cwd`, `fd`, and `root` links are scanned.
+  Other users cannot access this user's private 0700 temporary directories.
+  Permission or I/O errors in an own-process scan keep the candidate being
+  checked. Failed process IDs are retried for each later candidate instead of
+  caching their error for the whole run; readable paths are cached. Every
+  deletion still refreshes the full scan. Persistent own-process errors prevent
+  proving inactivity for each affected candidate. No privileged helper is installed.
 - Worktree discovery covers repositories under `~/projects`, including nested
   worker-tree parents. Dependency/build directories are not traversed for repo
   discovery. The `~/projects/hypertask` checkout is never used as a command cwd
-  or considered for removal.
+  or considered for removal. A failed discovery protects only that repository
+  folder, not unrelated temporary output. Successful discoveries still protect
+  all their registered worktrees. Each temporary candidate is also kept if it
+  or any descendant directory through depth four contains a `.git` marker.
+  Failed repository folders appear once in the summary and remain report-only.
 - Linked worktrees must be clean, including untracked files, inactive, and older
   than three days. Age excludes `.git` and `node_modules`. Locked worktrees stay.
   GitHub must confirm no open PR for a named branch, and either its current tip
@@ -63,16 +70,22 @@ in place. Reinstall to update the installed copy. No crontab is used.
 
 ## State and report
 
-`~/.local/state/disk-guard/log` has one timestamped line per action with a
-reason and bytes freed. The log rotates at 10 MiB with one retained copy, so
-the guard's own logs cannot grow indefinitely. `status.json` records `used_percent`, `level`
-(`ok`, `clean`, `critical`), `last_run`, `freed`, and removal/keep counts.
+`~/.local/state/disk-guard/log` and the service journal contain only removals,
+errors, and one summary per run by default. The summary includes counts per
+keep reason, failed repository folders, and bytes freed. Per-item keeps are
+printed and logged only with `--verbose`; the default never writes those
+expanded details to disk. The log rotates before reaching 5 MiB, retaining only
+`log.1`. `status.json` records `used_percent`, `level` (`ok`, `clean`, `critical`),
+`last_run`, `freed`, removal/keep counts, `keep_reasons`, and `failed_repos`.
 `--dry-run` only prints decisions, never changes state, deletes data, sends
 notifications, or prunes Docker. Its `would_free` is an allocated-size estimate,
 not a Docker image estimate. Actual worktree/image freed bytes are observed
 filesystem usage deltas and may reflect concurrent host activity.
 
-`--report` writes `report-YYYY-MM-DD.md` without deleting anything. It lists
+`--report` writes `report-YYYY-MM-DD.md` without deleting anything. Orphan
+worktrees whose gitdir is missing are listed as "orphan worktree folder, main repo
+missing", with allocated size and newest mtime, always keep. Other discovery
+failures are listed with their inspection failure reason. It also lists
 sizes, newest ages and keep/delete recommendations for VCC evidence, br7 runs,
 retired-agent archives and npm caches, plus old `_cacache` file counts and
 Docker volume usage. Evidence is retained as audit proof. Archive paths include

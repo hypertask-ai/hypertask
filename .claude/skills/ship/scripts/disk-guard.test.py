@@ -28,7 +28,7 @@ class Fixture(unittest.TestCase):
         self.tmp = self.root / 'tmp'
         self.home.mkdir()
         self.tmp.mkdir()
-        self.guard = disk.Guard(self.home, self.tmp)
+        self.guard = disk.Guard(self.home, self.tmp, verbose=True)
         self.guard.state.mkdir(parents=True)
         self.output = io.StringIO()
         redirect = contextlib.redirect_stdout(self.output)
@@ -135,7 +135,7 @@ class TemporaryTests(Fixture):
 
     def test_incomplete_process_scan_keeps(self):
         path = self.output_dir(self.tmp / 'old')
-        self.paths.return_value = (set(), True)
+        self.paths.return_value = (set(), {Path('/proc/123')})
         self.guard.temporary()
         self.assertTrue(path.exists())
 
@@ -149,11 +149,15 @@ class TemporaryTests(Fixture):
         self.assertTrue(tmp_tree.exists())
         self.assertIn('registered git worktree', self.output.getvalue())
 
-    def test_discovery_failure_blocks_tmp_cleanup(self):
+    def test_bad_repo_does_not_block_unrelated_tmp_cleanup(self):
         path = self.output_dir(self.tmp / 'old')
-        self.guard.discovery_ok = False
+        broken = self.output_dir(self.home / 'projects/orphan')
+        (broken / '.git').write_text('gitdir: /missing-main-repo/.git/worktrees/orphan\n')
+        self.old(broken)
+        self.guard.discover()
         self.guard.temporary()
-        self.assertTrue(path.exists())
+        self.assertFalse(path.exists())
+        self.assertTrue(broken.exists())
 
     def test_claude_scratch_only_named_old_caches_removed(self):
         scratch = self.output_dir(self.tmp / 'claude-123')
@@ -202,6 +206,168 @@ class TemporaryTests(Fixture):
         self.assertTrue(path.exists())
         self.assertFalse((self.guard.state / 'log').exists())
         self.assertGreater(self.guard.planned, 0)
+
+    def test_nested_git_file_or_directory_keeps_tmp_entry(self):
+        for depth in (0, 1, 4):
+            for directory in (False, True):
+                with self.subTest(depth=depth, directory=directory):
+                    entry = self.output_dir(self.tmp / f'git-{depth}-{directory}')
+                    repo = entry.joinpath(*(['nested'] * depth))
+                    repo.mkdir(parents=True, exist_ok=True)
+                    marker = repo / '.git'
+                    if directory:
+                        marker.mkdir()
+                    else:
+                        marker.write_text('gitdir: /missing/repo\n')
+                    self.old(entry)
+                    self.guard.temporary()
+                    self.assertTrue(entry.exists())
+                    self.assertTrue(marker.exists())
+
+    def test_failed_discovery_still_protects_successfully_registered_tree(self):
+        repo, _ = self.repo()
+        registered = self.tmp / 'registered'
+        self.git(repo, 'worktree', 'add', '-b', 'tmp-feature', str(registered))
+        self.old(registered)
+        broken = self.output_dir(self.home / 'projects/orphan')
+        (broken / '.git').write_text('gitdir: /missing-main-repo/.git/worktrees/orphan\n')
+        unrelated = self.output_dir(self.tmp / 'old')
+        self.guard.discover()
+        # Successful registration protects even if the marker disappears afterwards.
+        (registered / '.git').unlink()
+        self.old(registered)
+        self.guard.temporary()
+        self.assertTrue(registered.exists())
+        self.assertFalse(unrelated.exists())
+
+
+class ProcessTests(Fixture):
+    def proc(self, pid):
+        process = self.root / 'proc' / str(pid)
+        (process / 'fd').mkdir(parents=True)
+        (process / 'cwd').symlink_to(self.home)
+        (process / 'root').symlink_to('/')
+        return process
+
+    def test_other_uid_process_is_ignored_without_reading_links(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'old')
+        (process / 'fd/1').symlink_to(target / 'output')
+        self.process.stop()
+        real_stat = disk.Path.stat
+        def owner(path, *args, **kwargs):
+            info = real_stat(path, *args, **kwargs)
+            if path == process:
+                fields = list(info)
+                fields[4] = os.getuid() + 1
+                return os.stat_result(fields)
+            return info
+        with patch.object(disk.Path, 'stat', owner), \
+             patch.object(disk.os, 'readlink', side_effect=PermissionError('other uid')) as links:
+            found, uncertain = disk.process_paths(process.parent)
+        self.assertEqual(found, set())
+        self.assertFalse(uncertain)
+        links.assert_not_called()
+        with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
+            self.guard.temporary()
+        self.assertFalse(target.exists())
+
+    def test_own_unreadable_process_keeps_one_candidate_then_retries(self):
+        process = self.proc(123)
+        held = self.output_dir(self.tmp / 'held')
+        other = self.output_dir(self.tmp / 'other')
+        self.process.stop()
+        with patch.object(disk.os, 'readlink', side_effect=PermissionError('own uid')):
+            incomplete = disk.process_paths(process.parent)
+        self.assertTrue(incomplete[1])
+        real_iterdir = disk.Path.iterdir
+        def entries(path):
+            return iter([held, other]) if path == self.tmp else real_iterdir(path)
+        with patch.object(disk.Path, 'iterdir', entries), \
+             patch.object(disk, 'process_paths', side_effect=[incomplete, (set(), set()), (set(), set())]) as scan:
+            self.guard.temporary()
+            self.assertEqual(scan.call_count, 3)
+            self.assertEqual(scan.call_args_list[1].kwargs, {'processes': {process}})
+            self.assertEqual(scan.call_args_list[2].kwargs, {})
+        self.assertTrue(held.exists())
+        self.assertFalse(other.exists())
+
+
+class LoggingTests(Fixture):
+    def setUp(self):
+        super().setUp()
+        self.guard = disk.Guard(self.home, self.tmp)
+
+    def test_summary_only_with_reason_counts_no_keep_detail_on_disk(self):
+        for i in range(100):
+            self.output_dir(self.tmp / f'fresh-{i}', 1)
+        with patch.object(self.guard, 'usage', return_value=80), patch.object(self.guard, 'images'):
+            self.guard.run()
+        text = (self.guard.state / 'log').read_text()
+        self.assertEqual(len(text.splitlines()), 1)
+        self.assertIn('summary:', text)
+        self.assertNotIn('fresh-', text)
+        self.assertEqual(self.output.getvalue(), text)
+        status = json.loads((self.guard.state / 'status.json').read_text())
+        self.assertEqual(status['keep_reasons'], {'newest mtime is not older than 2 days': 100})
+        self.assertEqual(status['freed'], 0)
+        self.assertEqual(status['kept'], 100)
+
+    def test_default_removals_and_errors_are_logged(self):
+        self.guard.verbose = False
+        removed = self.output_dir(self.tmp / 'old')
+        failed = self.output_dir(self.tmp / 'failed')
+        real_inventory = disk.inventory
+        def inspect(path, *args, **kwargs):
+            if path == failed:
+                raise PermissionError('fixture')
+            return real_inventory(path, *args, **kwargs)
+        with patch.object(disk, 'inventory', side_effect=inspect), \
+             patch.object(self.guard, 'usage', return_value=80), patch.object(self.guard, 'images'):
+            self.guard.run()
+        text = (self.guard.state / 'log').read_text()
+        self.assertEqual(len(text.splitlines()), 3)
+        self.assertIn('removed:', text)
+        self.assertIn('error:', text)
+        self.assertEqual(text.count('summary:'), 1)
+        self.assertFalse(removed.exists())
+        self.assertTrue(failed.exists())
+
+    def test_verbose_keep_details_are_opt_in(self):
+        self.guard.verbose = True
+        kept = self.output_dir(self.tmp / 'fresh', 1)
+        self.guard.temporary()
+        self.assertIn(str(kept), self.output.getvalue())
+        self.assertIn('kept:', self.output.getvalue())
+        self.assertIn(str(kept), (self.guard.state / 'log').read_text())
+
+    def test_rotation_at_five_mib_retains_only_one_previous_file(self):
+        self.guard.verbose = False
+        log = self.guard.state / 'log'
+        previous = self.guard.state / 'log.1'
+        previous.write_text('older rotation')
+        with log.open('wb') as stream:
+            stream.truncate(5 * 1024 * 1024 - 1)
+        self.guard.log('error', 'fixture', 'rotation test')
+        self.assertEqual(previous.stat().st_size, 5 * 1024 * 1024 - 1)
+        self.assertLess(log.stat().st_size, 1024)
+        self.assertEqual(sorted(p.name for p in self.guard.state.glob('log*')), ['log', 'log.1'])
+
+
+class ReportTests(Fixture):
+    def test_orphan_report_includes_size_newest_mtime_and_never_deletes(self):
+        orphan = self.output_dir(self.home / 'projects/orphan')
+        (orphan / '.git').write_text('gitdir: /missing-main-repo/.git/worktrees/orphan\n')
+        self.old(orphan)
+        newest, size = disk.inventory(orphan)
+        with patch.object(disk, 'command', side_effect=subprocess.CalledProcessError(128, 'fixture')):
+            report = self.guard.report().read_text()
+        row = next(line for line in report.splitlines() if str(orphan) in line)
+        self.assertIn('orphan worktree folder, main repo missing', row)
+        self.assertIn(str(size), row)
+        self.assertIn(disk.datetime.fromtimestamp(newest, disk.timezone.utc).isoformat(), row)
+        self.assertIn('keep', row)
+        self.assertTrue(orphan.exists())
 
 
 class WorktreeTests(Fixture):
@@ -365,6 +531,14 @@ class WorktreeTests(Fixture):
 
 
 class OperationTests(Fixture):
+    def test_component_containment_matches_parent_boundaries(self):
+        for child, parent in [('/tmp/cache/output', '/tmp/cache'), ('/tmp/cache', '/tmp/cache'),
+                              ('/tmp/cache-other', '/tmp/cache'), ('/tmp/cache', '/'),
+                              ('/tmp/cache', '.'), ('relative/cache', '.'), ('relative/cache', 'relative')]:
+            child, parent = Path(child), Path(parent)
+            with self.subTest(child=child, parent=parent):
+                self.assertEqual(disk.inside(child, parent), child == parent or parent in child.parents)
+
     def test_log_is_bounded_with_one_rotation(self):
         log = self.guard.state / 'log'
         with log.open('wb') as stream:

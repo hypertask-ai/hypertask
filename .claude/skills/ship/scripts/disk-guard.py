@@ -23,7 +23,7 @@ def command(args, cwd=None):
 
 
 def inside(path, parent):
-    return path == parent or parent in path.parents
+    return path.anchor == parent.anchor and path.parts[:len(parent.parts)] == parent.parts
 
 
 def inventory(path, exclude=(), owned=False):
@@ -53,12 +53,30 @@ def inventory(path, exclude=(), owned=False):
     return newest, size
 
 
-def process_paths(proc=Path('/proc')):
-    paths, uncertain = set(), False
-    for process in proc.iterdir():
+def contains_git(path):
+    if path.name == '.git':
+        return True
+    pending = [(path, 0)]
+    while pending:
+        item, depth = pending.pop()
+        if item.is_symlink() or not item.is_dir():
+            continue
+        for child in item.iterdir():
+            if child.name == '.git':
+                return True
+            if depth < 4 and not child.is_symlink() and child.is_dir():
+                pending.append((child, depth + 1))
+    return False
+
+
+def process_paths(proc=Path('/proc'), processes=None):
+    paths, uncertain = set(), set()
+    for process in proc.iterdir() if processes is None else processes:
         if not process.name.isdigit():
             continue
         try:
+            if process.stat().st_uid != os.getuid():
+                continue
             links = [process / 'cwd', process / 'root'] + list((process / 'fd').iterdir())
             for link in links:
                 try:
@@ -70,49 +88,57 @@ def process_paths(proc=Path('/proc')):
         except FileNotFoundError:
             continue
         except (PermissionError, OSError):
-            uncertain = True
+            uncertain.add(process)
     return paths, uncertain
 
 
 class Guard:
-    def __init__(self, home=None, tmp=Path('/tmp'), dry=False):
+    def __init__(self, home=None, tmp=Path('/tmp'), dry=False, verbose=False):
         self.home = Path(home or Path.home()).resolve()
         self.projects = self.home / 'projects'
         self.protected = self.projects / 'hypertask'
         self.tmp = tmp.resolve()
         self.state = self.home / '.local/state/disk-guard'
         self.dry = dry
+        self.verbose = verbose
         self.now = time.time()
         self.freed = 0
         self.planned = 0
         self.removed = 0
         self.kept = 0
+        self.keep_reasons = {}
         self.gh_cache = {}
         self.trees = set()
-        self.discovery_ok = True
+        self.failed_repos = {}
         self.process_snapshot = None
 
     def log(self, action, path, reason, freed=0):
+        if action in {'kept', 'error'}:
+            self.kept += 1
+            self.keep_reasons[reason] = self.keep_reasons.get(reason, 0) + 1
+        if not self.verbose and action not in {'removed', 'removed branch', 'would remove',
+                                               'pruned', 'would prune', 'error', 'summary'}:
+            return
         line = (f'{datetime.now(timezone.utc).isoformat()} {action}: '
                 f'{str(path)!r} reason={reason!r} bytes_freed={freed}')
         print(line, flush=True)
         if not self.dry:
             self.state.mkdir(parents=True, exist_ok=True)
             log = self.state / 'log'
-            if log.exists() and log.stat().st_size >= 10 * 1024 * 1024:
+            if log.exists() and log.stat().st_size + len((line + '\n').encode()) >= 5 * 1024 * 1024:
                 log.replace(self.state / 'log.1')
             with log.open('a') as stream:
                 stream.write(line + '\n')
-        if action == 'kept':
-            self.kept += 1
 
     def discover(self):
         repos = []
         seen = set()
         if not self.projects.exists():
             return repos
-        def failed(_):
-            self.discovery_ok = False
+        def failed(exc):
+            path = Path(exc.filename or self.projects).resolve()
+            self.trees.add(path)
+            self.failed_repos[path] = 'repository discovery failed (permission or I/O error)'
         for root, dirs, files in os.walk(self.projects, followlinks=False, onerror=failed):
             path = Path(root)
             dirs[:] = [d for d in dirs if d not in SCAN_SKIP and not (path / d).is_symlink()]
@@ -125,7 +151,6 @@ class Guard:
                 common = Path(command(['git', 'rev-parse', '--path-format=absolute', '--git-common-dir'], path))
                 if common in seen:
                     continue
-                seen.add(common)
                 rows = []
                 for block in command(['git', '-c', 'core.quotePath=false', 'worktree', 'list', '--porcelain', '-z'], path).split('\0\0'):
                     row = {}
@@ -137,15 +162,33 @@ class Guard:
                         row['path'] = Path(row['worktree']).resolve()
                         rows.append(row)
                         self.trees.add(row['path'])
+                seen.add(common)
                 repos.append((path, rows))
             except (OSError, subprocess.SubprocessError, ValueError):
-                self.discovery_ok = False
-                self.log('kept', path, 'cannot enumerate registered worktrees')
+                self.trees.add(path)
+                reason = 'cannot enumerate registered worktrees'
+                try:
+                    marker = path / '.git'
+                    if marker.is_file():
+                        key, _, target = marker.read_text().strip().partition(':')
+                        if key == 'gitdir' and not (path / target.strip()).exists():
+                            reason = 'orphan worktree folder, main repo missing'
+                except (OSError, UnicodeError):
+                    pass
+                self.failed_repos[path] = reason
+        for path, reason in self.failed_repos.items():
+            self.log('kept', path, reason)
         return repos
 
     def busy(self, path, refresh=False):
         if refresh or self.process_snapshot is None:
             self.process_snapshot = process_paths()
+        else:
+            paths, uncertain = self.process_snapshot
+            if uncertain:
+                # Retry failed processes per candidate without repeating every readable fd.
+                retry_paths, uncertain = process_paths(processes=uncertain)
+                self.process_snapshot = (paths | retry_paths, uncertain)
         paths, uncertain = self.process_snapshot
         if any(inside(p, path) for p in paths):
             return 'process has cwd/fd/root inside'
@@ -183,11 +226,11 @@ class Guard:
                 candidates.append(entry)
         for path in candidates:
             try:
-                if not self.discovery_ok:
-                    raise ValueError('registered worktree discovery incomplete')
                 if any(inside(tree, path) or inside(path, tree) for tree in self.trees):
                     raise ValueError('registered git worktree')
-                if path.is_dir() and (path / '.git').exists():
+                if path.lstat().st_uid != os.getuid():
+                    raise ValueError('foreign owner')
+                if contains_git(path):
                     raise ValueError('git checkout, not disposable cache')
                 size = self.safety(path, 2 * DAY)
                 if self.dry:
@@ -206,7 +249,7 @@ class Guard:
             except ValueError as exc:
                 self.log('kept', path, str(exc))
             except OSError:
-                self.log('kept', path, 'filesystem inspection or deletion failed')
+                self.log('error', path, 'filesystem inspection or deletion failed')
 
     def prs(self, repo, branch):
         key = (repo, branch)
@@ -259,6 +302,8 @@ class Guard:
         for repo, rows in repos:
             for index, row in enumerate(rows):
                 path = row['path']
+                if path in self.failed_repos:
+                    continue
                 try:
                     if index == 0:
                         raise ValueError('main checkout')
@@ -309,7 +354,7 @@ class Guard:
                 except ValueError as exc:
                     self.log('kept', path, str(exc))
                 except (OSError, subprocess.SubprocessError):
-                    self.log('kept', path, 'git or filesystem inspection failed')
+                    self.log('error', path, 'git or filesystem inspection failed')
 
     def usage(self):
         info = os.statvfs('/')
@@ -360,7 +405,7 @@ class Guard:
             self.log('alerted', 'INFRA MANAGER', 'critical disk via existing fleet-watchdog Telegram route')
         except Exception:
             # Exception strings and HTTP request URLs can contain the bot token.
-            self.log('kept', 'alert', 'notification failed; retry after hourly limit')
+            self.log('error', 'alert', 'notification failed; retry after hourly limit')
 
     def images(self):
         if self.dry:
@@ -373,7 +418,7 @@ class Guard:
             self.freed += freed
             self.log('pruned', 'docker dangling images', 'disk >=80%; volumes never pruned', freed)
         except (OSError, subprocess.SubprocessError):
-            self.log('kept', 'docker dangling images', 'Docker unavailable or prune failed')
+            self.log('error', 'docker dangling images', 'Docker unavailable or prune failed')
 
     def run(self):
         used = self.usage()
@@ -387,7 +432,9 @@ class Guard:
         self.critical(after)
         status = {'used_percent': round(after, 2), 'level': 'critical' if after >= 90 else 'clean' if after >= 80 else 'ok',
                   'last_run': datetime.now(timezone.utc).isoformat(), 'freed': self.freed,
-                  'would_free': self.planned, 'removed': self.removed, 'kept': self.kept}
+                  'would_free': self.planned, 'removed': self.removed, 'kept': self.kept,
+                  'keep_reasons': self.keep_reasons,
+                  'failed_repos': {str(path): reason for path, reason in self.failed_repos.items()}}
         if not self.dry:
             temp = self.state / 'status.tmp'
             temp.write_text(json.dumps(status, indent=2) + '\n')
@@ -395,6 +442,7 @@ class Guard:
         self.log('summary', '/', json.dumps(status, sort_keys=True), self.freed)
 
     def report(self):
+        self.discover()
         lines = ['# Disk guard retention report', '', f'Generated: {datetime.now(timezone.utc).isoformat()}',
                  '', 'Report only. No data or Docker volumes were deleted.', '',
                  '| Item | Allocated bytes | Age (newest mtime) | Decision | Reason |',
@@ -404,6 +452,13 @@ class Guard:
         roots.extend(sorted((self.home / '.local/state').glob('retired-agents*')))
         roots.append(self.home / '.npm')
         rows = []
+        for item, reason in self.failed_repos.items():
+            try:
+                newest, size = inventory(item)
+                mtime = datetime.fromtimestamp(newest, timezone.utc).isoformat()
+                rows.append((size, item, f'{(self.now - newest) / DAY:.1f} days; newest mtime {mtime}', 'keep', reason))
+            except (OSError, ValueError):
+                rows.append((0, item, 'unknown', 'keep', reason + '; cannot safely inspect size or mtime'))
         for root in roots:
             if not root.exists():
                 lines.append(f'| {root} | 0 | absent | keep | no directory |')
@@ -482,8 +537,9 @@ def main():
     flags.add_argument('--install', action='store_true')
     flags.add_argument('--dry-run', action='store_true')
     flags.add_argument('--report', action='store_true')
+    parser.add_argument('--verbose', action='store_true', help='include per-item keep decisions')
     args = parser.parse_args()
-    guard = Guard(dry=args.dry_run)
+    guard = Guard(dry=args.dry_run, verbose=args.verbose)
     if args.dry_run:
         guard.run()
         return
