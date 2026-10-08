@@ -10,8 +10,9 @@ import FilesImageFallback from "@/components/FilesImageFallback";
 import { isMobileDevice } from "@/utils/serverActions";
 import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
-import { inter } from "@/lib/fonts/inter";
-import { newsreader } from "@/lib/fonts/newsreader";
+import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
+import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
+import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG } from "@/lib/flags/keys";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
@@ -58,6 +59,9 @@ export default async function RootLayout(
   // round trip solely to identify Apple devices.
   const [device, boardDocument, inboxDocument] = await Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
   const firstScreen = boardDocument ?? inboxDocument;
+  const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
+    (boardDocument.display as BoardDisplay).isMobile &&
+    ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   // Performance identity comes from the HTTP-only, HMAC-signed session. The
   // client-writable nookies_user cookie is a claim, not authentication.
   const analyticsSession = verifySession(
@@ -98,6 +102,10 @@ export default async function RootLayout(
       data-theme={themeValue}
     >
       <head>
+        {/* Only Plex is used by these seeded phone boards. Keep legacy preloads elsewhere. */}
+        {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
+          <link key={href} rel="preload" href={href} as="font" type="font/woff2" crossOrigin="anonymous" />
+        ))}
         {/* Window popstate follows registration order even for capture listeners. */}
         <script
           id="ht-cached-task-history"

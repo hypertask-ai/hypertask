@@ -1,3 +1,4 @@
+export const HTPR_7016_PHONE_BOARD_COLD_START_FLAG = "htpr-7016-phone-board-cold-start";
 export const HTPR_7010_HAIKU_5_5_FLAG = "htpr-7010-haiku-5-5";
 /**
  * Feature flag keys, and nothing else.

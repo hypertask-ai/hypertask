@@ -153,6 +153,18 @@ test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", as
   assert.equal(snapshot.modes[key], "EVERYONE");
 });
 
+test("phone board cold-start bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7016_PHONE_BOARD_COLD_START_FLAG;
+  assert.equal(key, "htpr-7016-phone-board-cold-start");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+});
+
 test("admin access requires the signed, active owner", async () => {
   assert.equal(await flags.isFeatureFlagOwner(new Headers()), true);
   sessionUserId = 7;
@@ -195,7 +207,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context", "htpr-7002-inbox-e-first-press"]);
+  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context", "htpr-7002-inbox-e-first-press", "htpr-7016-phone-board-cold-start"]);
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
@@ -734,6 +746,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7008-phone-first-load-js", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7008-phone-first-paint", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
