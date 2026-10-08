@@ -8,7 +8,7 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7003_BOARD_BACK_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
@@ -127,6 +127,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       document.removeEventListener("keydown", onKey, true);
     };
   }, [inboxEFirstPress, queryClient]);
+  const boardBack = useFlag(HTPR_7003_BOARD_BACK_FLAG);
+  const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
   const pathname = usePathname();
   const router = useRouter();
@@ -150,14 +152,22 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   );
   previousLocation.current = location;
   useEffect(() => {
-    if ((!subtaskLink && !backFirstOpen) || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
+    if ((!subtaskLink && !backFirstOpen && !boardBack) || !instantTicketOpen || accountId === null || currentUser?.id !== accountId) return;
     const restoreCachedTask = (event: Event) => {
       // Next can update a nested native detail while this layout still holds the source pathname.
-      const sourcePath = backFirstOpen
+      const sourcePath = backFirstOpen || boardBack
         ? [...document.querySelectorAll<HTMLElement>("#title-input")]
           .find((title) => title.getClientRects().length > 0)
           ?.closest("[data-task-detail-path]")?.getAttribute("data-task-detail-path")
         : location ? `/detail/project-${location.projectId}/${location.uniqueIndex}` : pathname;
+      if (boardBack && window.location.pathname === "/project" &&
+          /^\/detail\/project-\d+\/\d+$/.test(sourcePath ?? "")) {
+        // The background refresh can leave ticket RSC in the board's source slot.
+        (event as CustomEvent<PopStateEvent>).detail.stopImmediatePropagation();
+        router.replace(window.location.pathname + window.location.search + window.location.hash);
+        flushSync(() => setHistoryDestination({ pathname: window.location.pathname }));
+        return;
+      }
       if (window.location.pathname === sourcePath) return;
       const route = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
       const task = route ? findCachedTaskDetail(queryClient, accountId, Number(route[1]), Number(route[2])) : undefined;
@@ -177,7 +187,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     };
     window.addEventListener("cached-task-detail-popstate", restoreCachedTask);
     return () => window.removeEventListener("cached-task-detail-popstate", restoreCachedTask);
-  }, [subtaskLink, backFirstOpen, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname]);
+  }, [subtaskLink, backFirstOpen, boardBack, instantTicketOpen, accountId, currentUser?.id, queryClient, location, pathname, router]);
   useEffect(() => {
     if (!location) return;
     const restoreSourceRoute = (event: PopStateEvent) => {
@@ -274,21 +284,59 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     return unsubscribe;
   }, [historyDestination, accountId, currentUser?.id, queryClient, showDetail]);
   useEffect(() => {
-    if (!historyDestination) return;
+    if (!historyDestination || (boardBack && historyDestination.pathname === "/project")) return;
     // Error/unavailable routes may never seed the task cache. Let their children surface.
     const timer = window.setTimeout(() => setHistoryDestination(null), 4000);
     return () => window.clearTimeout(timer);
-  }, [historyDestination]);
-  const suppressPreviousTask = backFirstOpen && instantTicketOpen && currentUser?.id === accountId &&
+  }, [boardBack, historyDestination]);
+  useEffect(() => {
+    if (!boardBack || historyDestination?.pathname !== "/project") return;
+    const clearOnDeparture = () => {
+      if (window.location.pathname !== historyDestination.pathname) setHistoryDestination(null);
+    };
+    clearOnDeparture();
+    window.addEventListener("popstate", clearOnDeparture);
+    window.addEventListener("cached-task-detail-popstate", clearOnDeparture);
+    window.addEventListener("cached-task-detail-navigation", clearOnDeparture);
+    return () => {
+      window.removeEventListener("popstate", clearOnDeparture);
+      window.removeEventListener("cached-task-detail-popstate", clearOnDeparture);
+      window.removeEventListener("cached-task-detail-navigation", clearOnDeparture);
+    };
+  }, [boardBack, historyDestination, pathname, nativePathname]);
+  useEffect(() => {
+    if (!boardBack || historyDestination?.pathname !== "/project" || !protectedSource) return;
+    const source = protectedSource;
+    const boardUrl = window.location.pathname + window.location.search + window.location.hash;
+    // A failed board response must never uncover the stale ticket children.
+    const timer = window.setTimeout(() => {
+      if (window.location.pathname + window.location.search + window.location.hash === boardUrl) window.location.replace(boardUrl);
+    }, 6000);
+    const revealBoard = () => {
+      if (window.location.pathname === historyDestination.pathname &&
+          source.querySelector("#kanban-page-container") && !source.querySelector("#title-input")) {
+        setHistoryDestination(null);
+      }
+    };
+    // Next may resolve nested RSC without changing this layout's children element.
+    const observer = new window.MutationObserver(revealBoard);
+    observer.observe(source, { childList: true, subtree: true });
+    revealBoard();
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+    };
+  }, [boardBack, historyDestination, protectedSource]);
+  const suppressPreviousTask = (backFirstOpen || (boardBack && historyDestination?.pathname === "/project")) && instantTicketOpen && currentUser?.id === accountId &&
     historyDestination?.pathname === nativePathname;
   if (!showDetail && suppressPreviousTask) {
     return (
       <>
         {/* Pending native RSC must not suspend the visible protection. */}
-        <div hidden><Suspense fallback={null}>{children}</Suspense></div>
-        <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
+        <div hidden ref={setProtectedSource}><Suspense fallback={null}>{children}</Suspense></div>
+        {historyDestination.pathname !== "/project" && <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
           Loading task…
-        </div>
+        </div>}
       </>
     );
   }

@@ -19,7 +19,7 @@ const parent = { id: 42, projectId: 6859, uniqueIndex: 43, title: "Parent title"
 const child = { ...parent, id: 44, uniqueIndex: 45, title: "Child title", description_: { content: "Child body" } };
 const href = task => `/detail/project-${task.projectId}/${task.uniqueIndex}`;
 
-function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false } = {}) {
+function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, stableChildren = false, outerSuspense = false, boardBack = true, boardColumns = true, inboxNextOpen = true } = {}) {
   const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai" + href(parent) });
   const names = ["window", "document", "Event", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = Object.fromEntries(names.map(name => [name, global[name]]));
@@ -30,14 +30,19 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
   dom.window.HTMLElement.prototype.getClientRects = function () {
     return this.closest('[hidden], [style="display: none;"]') ? [] : [{}];
   };
-  let recoveryTimer;
+  let recoveryTimer, boardRecoveryTimer;
   const nativeSetTimeout = window.setTimeout.bind(window);
   window.setTimeout = (callback, delay, ...args) => {
     if (delay === 4000) { recoveryTimer = callback; return -1; }
+    if (delay === 6000) { boardRecoveryTimer = callback; return -2; }
     return nativeSetTimeout(callback, delay, ...args);
   };
   const nativeClearTimeout = window.clearTimeout.bind(window);
-  window.clearTimeout = id => { if (id === -1) recoveryTimer = undefined; else nativeClearTimeout(id); };
+  window.clearTimeout = id => {
+    if (id === -1) recoveryTimer = undefined;
+    else if (id === -2) boardRecoveryTimer = undefined;
+    else nativeClearTimeout(id);
+  };
   const client = new QueryClient();
   const renderer = createRoot(document.getElementById("root"));
   let nextPath = href(parent), children, nativeTask = parent, seedNative = false, settleTraversal, observeMount = false;
@@ -72,7 +77,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     "next/navigation": { usePathname: () => nextPath, useRouter: () => ({ replace: url => routerCalls.push(url), refresh: () => routerCalls.push("refresh") }) },
     "@tanstack/react-query": { useQueryClient: () => client },
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) }, "@/store": { currentUserAtom: {} },
-    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : true },
+    "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6991_BACK_FIRST_OPEN_FLAG ? enabled : key === flags.HTPR_7003_BOARD_BACK_FLAG ? boardBack : key === flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG ? inboxNextOpen : true },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
     "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
@@ -89,7 +94,10 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     const navigation = React.createElement(Navigation, { accountId: 2343 }, children);
     renderer.render(outerSuspense ? React.createElement(React.Suspense, { fallback: React.createElement("h1", null, "Outer fallback") }, navigation) : navigation);
   };
-  const NativeRoute = () => React.createElement(Detail, { initialTask: React.useSyncExternalStore(notify => { routeSubscribers.add(notify); return () => routeSubscribers.delete(notify); }, () => nativeTask), native: true });
+  const NativeRoute = () => {
+    const task = React.useSyncExternalStore(notify => { routeSubscribers.add(notify); return () => routeSubscribers.delete(notify); }, () => nativeTask);
+    return task ? React.createElement(Detail, { initialTask: task, native: true }) : React.createElement(Board);
+  };
   const routeChildren = React.createElement(NativeRoute);
   const server = task => {
     nextPath = href(task); nativeTask = task;
@@ -117,13 +125,47 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     window.addEventListener("cached-task-detail-popstate", checkpoint);
     await new Promise(resolve => { settleTraversal = resolve; window.history[method](); });
   });
-  let boardMounts = 0;
+  let boardMounts = 0, suspendBoard = false;
   const Board = () => {
+    if (suspendBoard) throw suspension;
     React.useEffect(() => { boardMounts++; }, []);
-    return React.createElement("section", { id: "source-board" }, React.createElement("input", { defaultValue: "Board filter" }));
+    return React.createElement("section", { id: "source-board" },
+      React.createElement("div", { id: "kanban-page-container" },
+        boardColumns && React.createElement("div", { className: "kanban-column-title" }, "To do"),
+        React.createElement("input", { defaultValue: "Board filter" })));
   };
   return { client, initialize, traverse, observed, checkpoints, mounts, routerCalls, resolveViewer,
+    hasRecovery: () => typeof recoveryTimer === "function",
+    hasBoardRecovery: () => typeof boardRecoveryTimer === "function",
+    leaveBoard: method => React.act(async () => {
+      window.history.pushState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["inbox"] }, "", "/inbox");
+      if (method === "pathname") {
+        nextPath = "/inbox"; children = React.createElement("section", { id: "inbox" }, "Inbox"); render();
+      } else {
+        window.dispatchEvent(method === "popstate"
+          ? new window.PopStateEvent("popstate", { state: window.history.state })
+          : new window.Event("cached-task-detail-navigation"));
+      }
+    }),
+    pastBoardFallback: () => React.act(async () => {
+      // Advance past the six-second deadline while away, without a real-time test delay.
+      const callback = boardRecoveryTimer;
+      boardRecoveryTimer = undefined;
+      callback?.();
+    }),
+    returnToBoard: () => React.act(async () => {
+      window.history.pushState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["board"] }, "", "/project");
+      window.dispatchEvent(new window.Event("cached-task-detail-navigation"));
+    }),
     boardMounts: () => boardMounts,
+    refreshBoardOpen: () => React.act(async () => server(child)),
+    serverBoard: () => React.act(async () => {
+      nextPath = "/project"; nativeTask = null;
+      children = stableChildren ? routeChildren : React.createElement(Board);
+      for (const notify of routeSubscribers) notify();
+      render();
+    }),
+    suspendBoard: () => { suspendBoard = true; },
     openFromBoard: async () => {
       window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["board"] }, "", "/project");
       nextPath = "/project"; children = React.createElement(Board);
@@ -142,7 +184,7 @@ function fixture(t, { enabled = true, cachedParent = true, coldViewer = false, s
     }),
     suspendNative: () => { suspendNative = true; },
     suspendCachedParent: () => { suspendCachedParent = true; },
-    resolveSuspension: () => React.act(async () => { suspendNative = false; suspendCachedParent = false; resolveSuspension(); }),
+    resolveSuspension: () => React.act(async () => { suspendNative = false; suspendCachedParent = false; suspendBoard = false; resolveSuspension(); }),
     initializeNativeStaleRoot: async () => {
       await React.act(async () => server(parent));
       await React.act(async () => {
@@ -400,4 +442,119 @@ test("flagged detail misses reach native traversal instead of repairing the sour
     assert.equal(stops, enabled ? 0 : 1);
     assert.deepEqual(calls, enabled ? [] : [href(parent), "refresh"]);
   }
+});
+
+for (const boardBack of [true, false]) for (const stableChildren of [true, false]) {
+  test(`board Back never exposes the background ticket route (7003=${boardBack}, stable children=${stableChildren})`, async t => {
+    const f = fixture(t, { boardBack, stableChildren });
+    await f.openFromBoard();
+    await f.refreshBoardOpen();
+    assert.equal(f.observed().title, child.title);
+    await f.traverse("back");
+    assert.equal(window.location.pathname, "/project");
+    assert.equal(f.observed().title, boardBack ? undefined : child.title);
+    assert.equal(f.checkpoints.at(-1).title, boardBack ? undefined : child.title);
+    assert.equal(f.observed().loading, undefined);
+    assert.equal(document.querySelector(".kanban-column-title"), null);
+    assert.deepEqual(f.routerCalls, boardBack ? ["/project"] : ["/project", "refresh"], "flagged board repair must not refresh and reset its scroll");
+    if (boardBack) assert.equal(f.nextTraversals(), 0, "do not replay the stale native tree");
+    await f.serverBoard();
+    assert.equal(f.observed().title, undefined);
+    assert.equal(document.querySelector(".kanban-column-title").closest("[hidden]"), null);
+    assert.equal(f.observed().loading, undefined);
+  });
+}
+
+test("board Back isolates suspended source children from the previous cached title", async t => {
+  const f = fixture(t, { outerSuspense: true });
+  await f.openFromBoard();
+  f.suspendBoard();
+  await f.traverse("back");
+  assert.equal(f.observed().title, undefined);
+  assert.equal(f.observed().loading, undefined);
+  await f.resolveSuspension();
+  assert.equal(document.querySelector(".kanban-column-title").closest("[hidden]"), null);
+  assert.equal(f.observed().title, undefined);
+});
+
+test("Forward during protected board Back restores the cached ticket despite a late board response", async t => {
+  const f = fixture(t);
+  await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
+  assert.equal(f.observed().title, undefined);
+  await f.traverse("forward");
+  assert.equal(f.observed().title, child.title);
+  assert.equal(f.observed().loading, undefined);
+  await f.serverBoard();
+  assert.equal(f.observed().title, child.title);
+  assert.equal(f.observed().loading, undefined);
+});
+
+for (const method of ["cached-task-detail-navigation", "popstate", "pathname"]) {
+  test(`protected board Back clears on ${method} departure and remains visible on a delayed revisit`, async t => {
+    const f = fixture(t, { stableChildren: true, inboxNextOpen: false });
+    await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
+    assert.ok(document.getElementById("title-input").closest("[hidden]"));
+    assert.equal(f.hasBoardRecovery(), true);
+    await f.leaveBoard(method);
+    assert.equal(window.location.pathname, "/inbox");
+    assert.equal(f.hasBoardRecovery(), false, "departure must cancel board recovery immediately");
+    await f.pastBoardFallback();
+    await f.returnToBoard(); await f.serverBoard();
+    assert.equal(!!document.getElementById("kanban-page-container").closest("[hidden]"), false, "the revisited board must be visible");
+    assert.equal(f.observed().title, undefined);
+    assert.equal(f.hasBoardRecovery(), false);
+  });
+}
+
+test("board Back never schedules the four-second stale-children reveal", async t => {
+  const f = fixture(t);
+  await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
+  assert.equal(f.hasRecovery(), false);
+  assert.equal(f.observed().title, undefined);
+});
+
+test("board protection hard-navigates after six seconds, never reveals stale children, and cancels on ready or departure", () => {
+  const body = source.match(/if \(!boardBack \|\| historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[boardBack, historyDestination, protectedSource\]\);/)?.[1];
+  assert.ok(body);
+  const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", body);
+  for (const outcome of ["timeout", "ready", "forward", "different board"]) {
+    const calls = [], timers = new Map();
+    let boardReady = false, staleTitle = true, observe;
+    const sourceNode = { querySelector: selector => selector === "#kanban-page-container" ? boardReady : staleTitle };
+    const win = {
+      location: { pathname: "/project", search: "?id=15&surface=board", hash: "#column", replace: url => calls.push(url) },
+      setTimeout: (callback, delay) => { assert.equal(delay, 6000); timers.set(1, callback); return 1; },
+      clearTimeout: id => timers.delete(id),
+      MutationObserver: class {
+        constructor(callback) { observe = callback; }
+        observe(node, options) { assert.equal(node, sourceNode); assert.deepEqual(options, { childList: true, subtree: true }); }
+        disconnect() { calls.push("disconnect"); }
+      },
+    };
+    const cleanup = protect(win, { pathname: "/project" }, sourceNode, value => calls.push(value));
+    assert.deepEqual(calls, []);
+    if (outcome === "ready") {
+      boardReady = true; observe();
+      assert.deepEqual(calls, [], "board marker alongside a stale ticket is not ready");
+      staleTitle = false; observe();
+      assert.deepEqual(calls, [null]);
+      cleanup(); assert.equal(timers.size, 0);
+    } else {
+      if (outcome === "forward") win.location.pathname = href(child);
+      if (outcome === "different board") win.location.search = "?id=16";
+      timers.get(1)();
+      assert.deepEqual(calls, outcome === "timeout" ? ["/project?id=15&surface=board#column"] : []);
+      cleanup(); assert.equal(timers.size, 0);
+    }
+  }
+});
+
+test("board Back reveals table or empty board layouts without waiting for a kanban column", async t => {
+  const f = fixture(t, { boardColumns: false });
+  await f.openFromBoard(); await f.refreshBoardOpen(); await f.traverse("back");
+  assert.equal(f.observed().title, undefined);
+  await f.serverBoard();
+  assert.equal(document.getElementById("kanban-page-container").closest("[hidden]"), null);
+  assert.equal(document.querySelector(".kanban-column-title"), null);
+  assert.equal(f.observed().loading, undefined);
 });
