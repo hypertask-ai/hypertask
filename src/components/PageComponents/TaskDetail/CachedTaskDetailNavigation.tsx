@@ -3,6 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { HTPR_7008_PHONE_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
@@ -50,6 +51,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   accountId: number | null;
 }) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const phoneFirstPaint = useFlag(HTPR_7008_PHONE_FIRST_PAINT_FLAG);
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
@@ -226,8 +228,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       void warmTaskDetail().catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    // Leave a paint opportunity before warming code that the page does not need.
-    if (!connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
+    // A paint or idle callback can precede real content on a throttled phone.
+    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
+    if (!deferPhoneWarm && !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
           if (window.requestIdleCallback) idle = window.requestIdleCallback(warm, { timeout: 5000 });
@@ -241,7 +244,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (idle !== undefined) window.cancelIdleCallback(idle);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [instantTicketOpen, accountId, currentUser?.id, pathname]);
+  }, [instantTicketOpen, accountId, currentUser?.id, pathname, phoneFirstPaint]);
   const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
   );

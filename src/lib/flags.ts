@@ -21,6 +21,7 @@ import {
   HTPR_7000_INBOX_NEXT_OPEN_FLAG,
   HTPR_7003_BOARD_BACK_FLAG,
   HTPR_7004_NO_LOADING_FLASH_FLAG,
+  HTPR_7008_PHONE_FIRST_PAINT_FLAG,
   HTPR_7001_INBOX_NEXT_CACHED_FLAG,
   HTPR_6978_SIZE_LABEL_CLICK_FLAG,
   HTPR_6934_SERVER_FIRST_SCREEN_FLAG,
@@ -213,6 +214,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7008_PHONE_FIRST_PAINT_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-08",
+    description: "Defers automatic ticket editor, reactions, emoji and Firebase warming on phone board and inbox pages until user interaction.",
+  },
   {
     key: HTPR_7001_INBOX_NEXT_CACHED_FLAG,
     kind: "bugfix",
