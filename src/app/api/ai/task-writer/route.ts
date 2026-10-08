@@ -133,7 +133,10 @@ export async function POST(request: NextRequest) {
     if (
       error instanceof AiFeatureDisabledError ||
       error instanceof AutoDescriptionSuggestionsDisabledError ||
-      error instanceof ProjectAccessError
+      error instanceof ProjectAccessError ||
+      (error instanceof Error &&
+        (error.name === "AiGatewayKeyRequiredError" ||
+          error.name === "AiPlanAccessError"))
     ) {
       return createSseErrorResponse(error.message, 403);
     }
