@@ -72,6 +72,74 @@ function harness(t, enabled = true) {
   return { client, counts, mocks, prefetch, field, comments, embedded, task, meta, tick: () => intervals.forEach(callback => callback()), version: value => { version = value; }, user: value => { userId = value; }, ready: value => { ready = value; } };
 }
 
+function localTaskWrites(h) {
+  const noop = () => {};
+  const store = { currentUserAtom: "user", currentProjectAtom: "project" };
+  return load("src/hooks/MultiPages/useUpdateTaskInBoards.tsx", {
+    ...h.mocks,
+    "@/store": store,
+    "@/lib/state": { useRecoilState: atom => [atom === store.currentUserAtom ? { id: 985 } : null, noop], useRecoilValue: () => ({}), useSetRecoilState: () => noop },
+    "@/utils/helperFunctions/helperFunctions": {},
+    "@/utils/generateRank": { default: noop },
+    "next/navigation": { useRouter: () => ({}) },
+    "react-hot-toast": { default: noop },
+    "@/components/undoToast": { undoToastSettings: {} },
+    "../../utils/helperFunctions/Views/FilterHelperFunctions": {},
+    "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},
+    "../General/useUndo": { useUndoContext: () => ({}) },
+    "../Inbox/useGlobalFocusHandler": { __esModule: true, default: () => ({}) },
+    "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
+    "@/utils/helperFunctions/Views/SearchFilterHelperFunction": {},
+    "@/lib/boardSync/reconcileActiveBoardQuery": {},
+  }).default();
+}
+
+for (const [field, value] of [["assignees", [{ userId: 985 }]], ["title", "Locally edited title"], ["priority", 3], ["estimate", 5], ["taskLabels", [{ id: 7 }]]]) {
+  test(`reopen after local ${field} edit starts with the edited shared task without a board cache`, async t => {
+    const h = harness(t);
+    const key = reads.taskDetailReadKey(985, 42);
+    h.client.setQueryData(key, h.task());
+    const writes = localTaskWrites(h);
+    if (field === "assignees") {
+      const noop = () => {};
+      const context = { _parsedTask: h.task(), currentTask: h.task(), queryClient: h.client, ...writes,
+        _setActiveItem: noop, setInViewObject: noop, setCurrentTask: noop, setShowAssignModal: noop };
+      load("src/app/detail/[...slug]/useTaskDetailCommentActions.tsx", { ...h.mocks,
+        "react-hot-toast": { __esModule: true, default: noop }, "@prisma/client": {},
+        "@/utils/helperFunctions/hasFigmaEmbed": {} }).useTaskDetailCommentActions(() => context).toggleModal(value);
+    } else writes.updateTaskInCache({ [field]: value }, 42, 15, null);
+    global.fetch = () => new Promise(() => {});
+    const reopened = h.embedded();
+    assert.deepEqual(JSON.parse(reopened.props.parsedTask)[field], value);
+    assert.equal(h.client.getQueryState(key).isInvalidated, true, "reopen reconciles write side effects rather than trusting the old freshness budget");
+  });
+}
+
+test("local edits cancel a pre-write shared read and preserve account isolation", async t => {
+  const h = harness(t), key = reads.taskDetailReadKey(985, 42);
+  h.client.setQueryData(key, h.task());
+  h.client.setQueryData(reads.taskDetailReadKey(986, 42), h.task());
+  let resolveRead;
+  const pending = h.client.fetchQuery({ queryKey: key, queryFn: () => new Promise(resolve => { resolveRead = resolve; }) }).catch(error => error);
+  localTaskWrites(h).updateTaskInCache({ title: "Local title" }, 42, 15, null);
+  resolveRead(h.task());
+  await pending;
+  await settle();
+  assert.equal(h.client.getQueryData(key).title, "Local title");
+  assert.equal(h.client.getQueryData(reads.taskDetailReadKey(986, 42)).title, "Task 1");
+  localTaskWrites(h).updateTaskInCache({ title: "Uncached task" }, 43, 15, null);
+  assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 43)), undefined, "a write cannot authorize or seed an incomplete task snapshot");
+});
+
+test("flag-off local edits leave the shared read untouched", t => {
+  const h = harness(t, false), key = reads.taskDetailReadKey(985, 42), previous = h.task();
+  h.client.setQueryData(key, previous);
+  localTaskWrites(h).updateTaskInCache({ title: "Local edit" }, 42, 15, null);
+  assert.equal(h.client.getQueryData(key), previous);
+  assert.equal(h.client.getQueryState(key).isInvalidated, false);
+});
+
 test("shared task fetcher uses explicit cache options and rejects invalid responses without replacing cached data", async t => {
   const h = harness(t);
   const signal = new AbortController().signal;

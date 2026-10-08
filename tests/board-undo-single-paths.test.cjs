@@ -81,7 +81,7 @@ function boardRemoval(f, subtasks = false) {
   const project = { sections: [section], filteredSections: [section], tasks: [task] };
   const env = {
     toast: hotToast.toast, undoToastSettings: undo.undoToastSettings,
-    _currentProject: { id: 2 }, _currentUser: { id: 985 },
+    _currentProject: { id: 2 }, _currentUser: { id: 985 }, dedupe: false,
     getProjectIdxAndAllData: async () => ({ allData: { updatedProjects: [project] }, projectToUpdateIndex: 0 }),
     reAdjustFocusFromCurrContext() {}, returnSortedItems: (items) => items, mutationHandler() {},
     globalAPIHandlers: { deleteTaskAPI: async () => {}, archiveTask: async () => {} },

@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6975_TYPED_WRITES_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { IComment, ITaskLabel, ISection } from "@/models/model";
 import toast from "react-hot-toast";
@@ -10,6 +11,7 @@ import globalConstants from "@/lib/constants";
 import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailNavigationActions(getContext: () => TaskDetailContext) {
   const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId } = getContext();
 
 
@@ -56,6 +58,7 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       });
 
       if (response.status === taskDetailConfig.httpStatus.ok) {
+        if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { sectionId: sectionToMoveTo.id, section: sectionToMoveTo.section_title });
         const data = typedClient ? await readMoveTaskResponse(response) : await response.json();
         taskUpdateCommentsInCache(data.newComment);
 

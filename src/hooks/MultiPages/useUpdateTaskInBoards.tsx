@@ -24,6 +24,9 @@ import { appendCreatedSectionToProject } from "@/utils/helperFunctions/Views/app
 import { buildBuiltinViewContext, BuiltinViewId, isBuiltinViewId } from "@/lib/constants/builtinViews";
 import type { IFilterRuntimeContext } from "@/models/Filters/model";
 import { reconcileActiveBoardTasks } from "@/lib/boardSync/reconcileActiveBoardQuery";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 type UpdateOptions = {
   updatedProjectView?: IProjectView | null;
@@ -178,6 +181,7 @@ const applyProjectFilters = (
 
 const UpdateKanban = () => {
   const queryClient = useQueryClient();
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const setactiveitem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
   const [_currentProject, __] = useRecoilState(currentProjectAtom)
@@ -342,7 +346,8 @@ const UpdateKanban = () => {
     sectionId: number | null | undefined,
     _currentProject?: IProject | null,
   ) {
-    // const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom)
+    // Detail edits also work without the board/section being cached.
+    if (dedupe && _currentUser?.id && taskId) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, taskId, taskToReturn);
 
     if (!taskId || !projectId || !sectionId) return;
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(projectId)
@@ -534,6 +539,11 @@ const UpdateKanban = () => {
       // Then call handleStatus with updated values
       console.time("refetchProject")
       await handleStatus();
+      if (dedupe && _currentUser?.id) {
+        for (const id of tasksToDelete?.length ? tasksToDelete : [taskId]) {
+          refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, id, status === "Move" ? {} : { status });
+        }
+      }
       console.timeEnd("refetchProject")
 
       // Server cascades subtask deletion; refetch (guarded by hasSubtasks) is the
@@ -618,6 +628,7 @@ const UpdateKanban = () => {
     if (destinationSecIdx === -1) return;
 
     const destinationSection = sectionsToUpdate[destinationSecIdx];
+    if (dedupe && _currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, _currentUser.id, itemId, { sectionId: destinationSectionId, section: destinationSection.section_title });
     ranking = options.insertAtEnd
       ? generateRanking(
           destinationSection.items[destinationSection.items.length - 1]?.ranking,

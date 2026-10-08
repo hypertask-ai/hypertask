@@ -50,6 +50,9 @@ import {
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 export default function useSaveContent() {
   const {
@@ -77,6 +80,7 @@ export default function useSaveContent() {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [currentProject] = useRecoilState(currentProjectAtom);
   const queryClient = useQueryClient();
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const _mbl = useContext(MobileViewContext);
   const hyperAiId = process.env.NEXT_PUBLIC_HYPERAI_ID || "332";
   const { resetDescriptionQuery } = useProjectQuery();
@@ -445,6 +449,7 @@ export default function useSaveContent() {
       setHasDraftInit(false);
       const response = await updateTask(newTask);
       if (response.status === 200) {
+        if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { description_: response.data.description_ ?? { ...currentTask.description_, content: descriptionContent } });
         invalidateUserDrafts();
         return "Success";
       }
@@ -508,6 +513,7 @@ export default function useSaveContent() {
         });
         
         if (response.status === 200) {
+          if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { description_: response.data.description_ ?? { ...currentTask.description_, content: result.html } });
           setDescription(result.html ?? unprocessedHTML ?? "");
           if (result.hyperMention && currentTask)
             postHyperMention("Description", "Update", {

@@ -14,6 +14,14 @@ export const TASK_DETAIL_READ_FRESH_MS = 30_000;
 export const shouldRefetchDetailOnMount = (query: { state: { dataUpdatedAt: number; isInvalidated: boolean } }) =>
   query.state.isInvalidated || Date.now() - query.state.dataUpdatedAt >= TASK_DETAIL_READ_FRESH_MS;
 
+export function refreshTaskDetailReadAfterWrite(queryClient: QueryClient, userId: number, taskId: number, updates: Partial<ITask> = {}) {
+  const queryKey = taskDetailReadKey(userId, taskId);
+  // A pre-write response must not replace the local snapshot used on reopen.
+  void queryClient.cancelQueries({ queryKey, exact: true });
+  queryClient.setQueryData<ITask>(queryKey, previous => previous ? { ...previous, ...updates } : undefined);
+  void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
+}
+
 export async function fetchScopedTaskDetail(taskId: number, projectId: number, uniqueIndex: number, signal: AbortSignal | undefined, options: Pick<RequestInit, "cache" | "credentials">) {
   const response = await fetch(
     `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`,
