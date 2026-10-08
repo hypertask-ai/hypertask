@@ -88,8 +88,24 @@ def process_paths(proc=Path('/proc'), processes=None):
         except FileNotFoundError:
             continue
         except (PermissionError, OSError):
-            uncertain.add(process)
+            if not unreadable_but_harmless(process):
+                uncertain.add(process)
     return paths, uncertain
+
+
+# Login and key agents are not dumpable, so their fds are unreadable; they never hold build folders.
+HARMLESS_UNREADABLE = {'sshd', '(sd-pam)', 'gpg-agent', 'ssh-agent'}
+
+
+def unreadable_but_harmless(process):
+    try:
+        if (process / 'comm').read_text().strip() in HARMLESS_UNREADABLE:
+            return True
+        # A zombie has released every file it held.
+        return any(line.split()[1:2] == ['Z'] for line in (process / 'status').read_text().splitlines()
+                   if line.startswith('State:'))
+    except (OSError, IndexError):
+        return False
 
 
 class Guard:

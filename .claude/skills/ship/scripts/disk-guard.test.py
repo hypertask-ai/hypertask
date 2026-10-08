@@ -249,6 +249,16 @@ class ProcessTests(Fixture):
         (process / 'root').symlink_to('/')
         return process
 
+    def test_unreadable_login_agent_or_zombie_does_not_make_scan_uncertain(self):
+        self.process.stop()
+        for pid, comm, state, harmless in [(201, 'sshd', 'S', True), (202, 'codex', 'Z', True), (203, 'node', 'S', False)]:
+            process = self.proc(pid)
+            (process / 'comm').write_text(comm + '\n')
+            (process / 'status').write_text(f'Name:\t{comm}\nState:\t{state} (x)\n')
+            with patch.object(disk.os, 'readlink', side_effect=PermissionError('not dumpable')):
+                _, uncertain = disk.process_paths(process.parent, [process])
+            self.assertEqual(bool(uncertain), not harmless, comm)
+
     def test_other_uid_process_is_ignored_without_reading_links(self):
         process = self.proc(123)
         target = self.output_dir(self.tmp / 'old')
