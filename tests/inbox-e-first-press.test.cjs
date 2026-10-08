@@ -346,7 +346,12 @@ function sourceCallback(file, env, name) {
   return new Function(...Object.keys(env), `${compiled}\nreturn callback;`)(...Object.values(env));
 }
 
-function queuedFlow(t, { enabled = true, noRAF = false, ...options } = {}) {
+const globalProvider = "src/components/ProviderGlobal/GloablProviders.tsx";
+const cachedNavigation = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
+const queueSource = fs.readFileSync(path.resolve(__dirname, "..", globalProvider), "utf8").includes('"htpr-7002-detail-keyboard"')
+  ? globalProvider : cachedNavigation;
+
+function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...options } = {}) {
   const flow = makeFlow(t, { enabled, ...options });
   const listeners = new Map();
   const frames = new Map();
@@ -357,7 +362,7 @@ function queuedFlow(t, { enabled = true, noRAF = false, ...options } = {}) {
     target.addEventListener = (type, handler, capture) => listeners.set(`${type}:${!!capture}`, handler);
     target.removeEventListener = (type, handler, capture) => listeners.delete(`${type}:${!!capture}`);
   }
-  const cleanup = sourceCallback("src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx", {
+  const mountQueue = sourceCallback(queueSource, {
     inboxEFirstPress: enabled, window, document, queryClient: flow.queryClient,
     REACT_QUERY_KEYS: sourceCallback("src/lib/constants/constants.ts", {}, "REACT_QUERY_KEYS"),
     returnIfModalOrInputActive: () => ["INPUT", "TEXTAREA"].includes(flow.activeElement.tagName) ||
@@ -374,7 +379,8 @@ function queuedFlow(t, { enabled = true, noRAF = false, ...options } = {}) {
     },
     requestAnimationFrame: noRAF ? undefined : callback => { frames.set(++frameId, callback); return frameId; },
     cancelAnimationFrame: noRAF ? undefined : id => frames.delete(id),
-  })();
+  });
+  const cleanup = deferQueue ? undefined : mountQueue();
   t.after(() => cleanup?.());
   let readinessCleanup;
   const originalCustomEvent = global.CustomEvent;
@@ -400,7 +406,81 @@ function queuedFlow(t, { enabled = true, noRAF = false, ...options } = {}) {
     for (const callback of queued) callback();
     t.mock.timers.tick(16);
   }
-  return { ...flow, mountKeyboard, press, poll, cleanup, scheduled, cancelled };
+  return { ...flow, mountKeyboard, mountQueue, press, poll, cleanup, scheduled, cancelled };
+}
+
+for (const enabled of [false, true]) {
+  test(`phone route commit ${enabled ? "on" : "off"}: early E survives the real workspace frame remount only behind the flag`, t => {
+    const React = require("react");
+    const { createRoot } = require("react-dom/client");
+    const { JSDOM } = require("jsdom");
+    const flow = queuedFlow(t, { enabled, mobile: true, deferQueue: true });
+    const dom = new JSDOM("<!doctype html><div id='root'></div>");
+    const previousAct = global.IS_REACT_ACT_ENVIRONMENT;
+    global.IS_REACT_ACT_ENVIRONMENT = true;
+    function act(callback) {
+      const previousWindow = global.window, previousDocument = global.document;
+      global.window = dom.window; global.document = dom.window.document;
+      try { React.act(callback); } finally { global.window = previousWindow; global.document = previousDocument; }
+    }
+    let pathname = "/inbox", mounts = 0;
+    const frameMocks = {
+      "next/navigation": { usePathname: () => pathname },
+      "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
+      "@/components/Common/Tooltip": { __esModule: true, default: () => null },
+      "@/lib/flags/keys": {},
+    };
+    const frameModule = { exports: {} };
+    const frameSource = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, "..", "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8"), {
+      compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
+    }).outputText;
+    new Function("require", "module", "exports", frameSource)(specifier => frameMocks[specifier] ?? require(specifier), frameModule, frameModule.exports);
+    const Frame = frameModule.exports.default;
+    const tree = ts.createSourceFile(globalProvider, fs.readFileSync(path.resolve(__dirname, "..", globalProvider), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let shell;
+    function visit(node) {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(tree) === "AIChatClosedLayout") shell = node.getText(tree);
+      ts.forEachChild(node, visit);
+    }
+    visit(tree);
+    assert.ok(shell, "exercise the actual global provider workspace subtree");
+    const compiled = ts.transpileModule(`const Shell = ({children}) => ${shell};`, {
+      compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+    }).outputText;
+    function Navigation({ children }) {
+      React.useEffect(() => { mounts++; }, []);
+      React.useEffect(() => queueSource === cachedNavigation ? flow.mountQueue() : undefined, []);
+      return children;
+    }
+    const env = {
+      React, AIChatClosedLayout: Frame, CachedTaskDetailNavigation: Navigation, authenticatedUserId: 2343,
+      showMobileTabBar: false, mobileBottomInsetVisible: false, mobilePullCommandVisible: false,
+      openAIChatInterface: () => {}, showAiChatInterface: false, sidebarWidthPx: 0,
+      shouldMountChatRuntime: false, Suspense: React.Suspense, AIChatPanels: () => null,
+    };
+    const Shell = new Function(...Object.keys(env), `${compiled}\nreturn Shell;`)(...Object.values(env));
+    function Provider() {
+      React.useEffect(() => queueSource === globalProvider ? flow.mountQueue() : undefined, []);
+      return React.createElement(Shell, null, React.createElement("article"));
+    }
+    const renderer = createRoot(dom.window.document.getElementById("root"));
+    act(() => renderer.render(React.createElement(Provider)));
+    t.after(() => {
+      act(() => renderer.unmount());
+      global.IS_REACT_ACT_ENVIRONMENT = previousAct;
+      dom.window.close();
+    });
+    flow.press();
+    pathname = window.location.pathname;
+    act(() => renderer.render(React.createElement(Provider)));
+    assert.equal(mounts, 2, "the phone Inbox-to-detail wrapper change really remounts navigation");
+    flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
+    flow.mountKeyboard(); flow.poll();
+    assert.deepEqual(flow.archived, enabled ? [{ item: notification, mode: "Notification" }] : []);
+    assert.deepEqual(flow.navigations, enabled ? [["Replace", "/detail/project-15/7003?inboxFlow=true"]] : []);
+  });
 }
 
 test("no rAF environment: idle cleanup cancels nothing", t => {
