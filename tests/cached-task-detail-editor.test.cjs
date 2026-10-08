@@ -244,10 +244,11 @@ test("cached refresh failures retry in place during edits, drafts and uploads, t
 });
 
 for (const enabled of [true, false]) {
-  test(`HTPR-7004 retains the committed parent during failed refresh and cancels retries on recovery or departure (flag=${enabled})`, async t => {
+  test(`HTPR-7004 bounds refresh retries, resets on success and preserves access denial and editing (flag=${enabled})`, async t => {
     const render = await mount(t);
     const cache = jiti(path.join(root, "src/lib/navigation/cachedTaskDetail.ts"));
     let error = null;
+    let editor = {};
     let retries = 0;
     const refetch = async () => { retries++; };
     const Detail = compile(fs.readFileSync(path.join(root, "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"), "utf8"), {
@@ -261,7 +262,7 @@ for (const enabled of [true, false]) {
       "@/lib/flags/keys": flags,
       "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
       "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
-      "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children }) => children, useTaskContext: () => ({}) },
+      "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children }) => children, useTaskContext: () => editor },
       "@/lib/navigation/cachedTaskDetail": cache,
       "@/lib/realtime/taskDetailRefresh": refresh,
       "@/app/unauthorized/page": { __esModule: true, default: () => React.createElement("div", { role: "alert" }, "No access") },
@@ -274,42 +275,84 @@ for (const enabled of [true, false]) {
     let timerId = 0;
     global.window = {
       location: { href: browserWindow.location.href, replace: url => replacements.push(url) },
-      setTimeout: (callback, delay) => { assert.equal(delay, 1000); timers.set(++timerId, callback); return timerId; },
+      setTimeout: (callback, delay) => { timers.set(++timerId, { callback, delay }); return timerId; },
       clearTimeout: id => timers.delete(id),
     };
     try {
       const element = () => React.createElement(Detail, { taskId: 42, projectId: 6859, uniqueIndex: 43, initialTask: task, embedded: false });
       await render(element());
       const title = document.querySelector("#title-input");
-      for (const failure of [new TypeError("Failed to fetch"), new Error("Unable to load task")]) {
-        error = failure;
-        await render(element());
-        assert.equal(document.querySelector("#title-input"), title, "the parent stays committed");
-        assert.equal(title.value, task.title);
-        if (enabled) {
-          assert.deepEqual(replacements, [], "recoverable failures must never navigate into native Loading");
-          assert.equal(timers.size, 1);
-          const before = retries;
-          await React.act(async () => [...timers.values()][0]());
-          assert.equal(retries, before + 1);
-        } else {
-          assert.equal(replacements.at(-1), browserWindow.location.href, "OFF positive control still reloads the document");
-          assert.equal(timers.size, 0);
+      const fireRetry = async delay => {
+        assert.equal(timers.size, 1);
+        const [id, timer] = [...timers.entries()][0];
+        assert.equal(timer.delay, delay);
+        timers.delete(id);
+        const before = retries;
+        await React.act(async () => timer.callback());
+        assert.equal(retries, before + 1);
+      };
+      for (let streak = 0; streak < 2; streak++) {
+        const before = retries;
+        const reloadsBefore = replacements.length;
+        for (const delay of [1000, 2000, 4000]) {
+          error = new TypeError("Failed to fetch");
+          await render(element());
+          assert.equal(document.querySelector("#title-input"), title, "the parent stays committed");
+          assert.equal(title.value, task.title);
+          if (enabled) {
+            assert.equal(replacements.length, reloadsBefore, "recoverable failures retry before reloading");
+            await render(element());
+            await fireRetry(delay);
+          } else {
+            assert.equal(replacements.at(-1), browserWindow.location.href, "OFF positive control still reloads immediately");
+            assert.equal(timers.size, 0);
+          }
         }
+        error = new Error("Unable to load task");
+        await render(element());
+        assert.equal(timers.size, 0, "persistent failures stop retrying after the bound");
+        assert.equal(retries - before, enabled ? 3 : 0);
+        assert.equal(replacements.length - reloadsBefore, enabled ? 1 : 4);
+        assert.equal(replacements.at(-1), browserWindow.location.href);
+        error = null;
+        await render(element());
+        assert.equal(timers.size, 0, "success ends the streak and resets its retry budget");
       }
+      error = new Error("Another refresh failure");
+      await render(element());
+      if (enabled) assert.equal([...timers.values()][0].delay, 1000);
       error = null;
       await render(element());
-      assert.equal(timers.size, 0, "a successful refresh cancels the pending retry");
-      error = new Error("Another refresh failure");
+      assert.equal(timers.size, 0, "success cancels a pending retry without consuming the budget");
+      error = new Error("Failure before departure");
       await render(element());
       await render(null);
       assert.equal(timers.size, 0, "leaving the parent cancels its retry");
+      const reloadsBeforeEditing = replacements.length;
+      for (const protectedState of [...protectedStates, { editMode: "title" }]) {
+        editor = protectedState;
+        error = new Error("Failure while editing");
+        await render(element());
+        await fireRetry(1000);
+        assert.equal(replacements.length, reloadsBeforeEditing, "editing still retries indefinitely at one second");
+      }
+      editor = {};
       error = new cache.TaskAccessDeniedError();
       await render(element());
       assert.equal(document.querySelector("#title-input"), null, "authorization denial must not retain cached content");
       assert.equal(document.querySelector('[role="alert"]').textContent, "No access");
       assert.equal(timers.size, 0, "denials are not treated as transient failures");
       assert.equal(replacements.at(-1), browserWindow.location.href);
+      const reloadsBeforeDeniedEdit = replacements.length;
+      editor = { hasDraft: true };
+      error = new cache.TaskAccessDeniedError();
+      await render(element());
+      await fireRetry(1000);
+      assert.equal(document.querySelector("#title-input"), null);
+      assert.equal(document.querySelector('[role="alert"]').textContent, "No access");
+      assert.equal(replacements.length, reloadsBeforeDeniedEdit, "access denial during editing retains today's retry behaviour");
+      await render(null);
+      assert.equal(timers.size, 0);
     } finally {
       global.window = browserWindow;
     }

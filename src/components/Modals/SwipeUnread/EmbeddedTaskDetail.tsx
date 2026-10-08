@@ -37,11 +37,18 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
   const previousUpdatedAt = useRef(dataUpdatedAt);
   const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
   const editing = Boolean(editMode) || preserveContent;
+  const refreshRetries = useRef(0);
   useEffect(() => {
-    if (!error) return;
-    // A refresh failure must not replace an authorized cached view with a cold document's Suspense fallback.
-    if (editing || (noLoadingFlash && !(error instanceof TaskAccessDeniedError))) {
-      const retry = window.setTimeout(() => { void refetch(); }, 1000);
+    if (!error) {
+      refreshRetries.current = 0;
+      return;
+    }
+    // Retry transient failures before replacing the cached view with a cold document's Suspense fallback.
+    if (editing || (noLoadingFlash && !(error instanceof TaskAccessDeniedError) && refreshRetries.current < 3)) {
+      const retry = window.setTimeout(() => {
+        if (!editing) refreshRetries.current += 1;
+        void refetch();
+      }, editing ? 1000 : 1000 * 2 ** refreshRetries.current);
       return () => window.clearTimeout(retry);
     }
     // Recover through the authorized route only when no local work is active.
