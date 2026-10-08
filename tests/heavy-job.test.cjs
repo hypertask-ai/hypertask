@@ -9,7 +9,10 @@ const root = path.resolve(__dirname, '..');
 const script = path.join(root, 'scripts/heavy-job.sh');
 function fixture() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ht-heavy-test-'));
-  const env = { ...process.env, HOME: dir, XDG_RUNTIME_DIR: dir, HT_HEAVY_SLOTS: '1', CI: 'false' };
+  const bin = path.join(dir, 'disk-bin');
+  mkdirSync(bin);
+  writeFileSync(path.join(bin, 'df'), '#!/bin/sh\nprintf "Filesystem 1024-blocks Used Available Capacity Mounted on\\nfixture 100 79 21 %s%% /\\n" "${TEST_DISK_USED:-79}"\n', { mode: 0o755 });
+  const env = { ...process.env, HOME: dir, XDG_RUNTIME_DIR: dir, HT_HEAVY_SLOTS: '1', CI: 'false', PATH: `${bin}:${process.env.PATH}`, TEST_DISK_USED: '79' };
   delete env.GITHUB_ACTIONS;
   return { dir, env };
 }
@@ -163,6 +166,33 @@ test('fresh disk critical flag refuses a heavy job before creating slots', async
     assert.equal(result.stdout, '');
     assert.match(result.stderr, /Disk guard:.*Refusing a new heavy job/);
     assert.throws(() => statSync(path.join(dir, 'ht-heavy')), { code: 'ENOENT' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('df refuses a heavy job at 90 percent without a flag, but not below 90', async () => {
+  for (const used of ['89', '90', '100']) {
+    const { dir, env } = fixture();
+    try {
+      const result = await run({ ...env, TEST_DISK_USED: used }, 'console.log("ran")').done;
+      assert.equal(result.status, used === '89' ? 0 : 75);
+      assert.equal(result.stdout, used === '89' ? 'ran\n' : '');
+      if (used !== '89') {
+        assert.match(result.stderr, /Disk guard:.*Refusing a new heavy job/);
+        assert.throws(() => statSync(path.join(dir, 'ht-heavy')), { code: 'ENOENT' });
+      }
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  }
+});
+
+test('CI bypasses critical df usage without a flag', async () => {
+  const { dir, env } = fixture();
+  try {
+    for (const override of [{ CI: 'true' }, { GITHUB_ACTIONS: '' }]) {
+      const result = await run({ ...env, TEST_DISK_USED: '100', ...override }, 'console.log("CI allowed")').done;
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'CI allowed\n');
+      assert.equal(result.stderr, '');
+    }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 

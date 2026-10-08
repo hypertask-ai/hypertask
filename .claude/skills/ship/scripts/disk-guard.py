@@ -10,12 +10,15 @@ import shlex
 import shutil
 import stat
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
 
 DAY = 86400
 SCAN_SKIP = {'.git', 'node_modules', '.next', '.cache', '.venv', 'target', 'dist', '__pycache__'}
+DISPOSABLE = {'node_modules', '.next', 'dist', 'build', 'out', 'coverage', '.turbo', '.cache',
+              'target', 'zig-cache', '.zig-cache', 'zig-out', '__pycache__', '.pytest_cache'}
 
 
 def command(args, cwd=None):
@@ -56,16 +59,16 @@ def inventory(path, exclude=(), owned=False):
 def contains_git(path):
     if path.name == '.git':
         return True
-    pending = [(path, 0)]
-    while pending:
-        item, depth = pending.pop()
-        if item.is_symlink() or not item.is_dir():
-            continue
-        for child in item.iterdir():
-            if child.name == '.git':
+    pending = [path]
+    try:
+        while pending:
+            item = pending.pop()
+            if item.name == '.git':
                 return True
-            if depth < 4 and not child.is_symlink() and child.is_dir():
-                pending.append((child, depth + 1))
+            if stat.S_ISDIR(item.lstat().st_mode):
+                pending.extend(item.iterdir())
+    except OSError:
+        return True
     return False
 
 
@@ -74,10 +77,16 @@ def process_paths(proc=Path('/proc'), processes=None):
     for process in proc.iterdir() if processes is None else processes:
         if not process.name.isdigit():
             continue
+        uid, unreadable = None, False
         try:
-            if process.stat().st_uid != os.getuid():
-                continue
-            links = [process / 'cwd', process / 'root'] + list((process / 'fd').iterdir())
+            uid = process.stat().st_uid
+            links = [process / 'cwd', process / 'root']
+            try:
+                links.extend((process / 'fd').iterdir())
+            except FileNotFoundError:
+                pass
+            except OSError:
+                unreadable = True
             for link in links:
                 try:
                     target = os.readlink(link)
@@ -85,11 +94,14 @@ def process_paths(proc=Path('/proc'), processes=None):
                         paths.add(Path(target.removesuffix(' (deleted)')).resolve())
                 except FileNotFoundError:
                     continue  # Descriptors and processes can disappear during a scan.
+                except OSError:
+                    unreadable = True
         except FileNotFoundError:
             continue
-        except (PermissionError, OSError):
-            if not unreadable_but_harmless(process):
-                uncertain.add(process)
+        except OSError:
+            unreadable = True
+        if unreadable and (uid != os.getuid() or not unreadable_but_harmless(process)):
+            uncertain.add(process)
     return paths, uncertain
 
 
@@ -141,12 +153,15 @@ class Guard:
                 f'{str(path)!r} reason={reason!r} bytes_freed={freed}')
         print(line, flush=True)
         if not self.dry:
-            self.state.mkdir(parents=True, exist_ok=True)
-            log = self.state / 'log'
-            if log.exists() and log.stat().st_size + len((line + '\n').encode()) >= 5 * 1024 * 1024:
-                log.replace(self.state / 'log.1')
-            with log.open('a') as stream:
-                stream.write(line + '\n')
+            try:
+                self.state.mkdir(parents=True, exist_ok=True)
+                log = self.state / 'log'
+                if log.exists() and log.stat().st_size + len((line + '\n').encode()) >= 5 * 1024 * 1024:
+                    log.replace(self.state / 'log.1')
+                with log.open('a') as stream:
+                    stream.write(line + '\n')
+            except OSError:
+                print(f'{line}\nDisk guard: log write failed; cleanup continues.', file=sys.stderr, flush=True)
 
     def discover(self):
         repos = []
@@ -211,7 +226,14 @@ class Guard:
         if any(inside(p, path) for p in paths):
             return 'process has cwd/fd/root inside'
         if uncertain:
-            return 'process scan incomplete (permission or I/O error)'
+            try:
+                if any(process.stat().st_uid == os.getuid() for process in uncertain):
+                    return 'process scan incomplete (permission or I/O error)'
+                info = path.lstat()
+            except OSError:
+                return 'process scan incomplete (permission or I/O error)'
+            if info.st_uid != os.getuid() or info.st_mode & 0o077:
+                return 'other accounts could be using it'
         return None
 
     def safety(self, path, age, exclude=(), refresh=False):
@@ -318,6 +340,19 @@ class Guard:
             raise ValueError('HEAD is not contained in a remote-tracking ref')
         return False  # Safe detached/abandoned tree, but do not delete an unmerged local branch.
 
+    def check_ignored_files(self, path):
+        rows = command(['git', 'status', '--porcelain', '--ignored', '--untracked-files=all', '-z'], path)
+        for row in rows.split('\0'):
+            if not row:
+                continue
+            if not row.startswith('!! '):
+                raise ValueError('worktree became dirty')
+            parts = Path(row[3:]).parts
+            if not (any(part in DISPOSABLE for part in parts)
+                    or (parts and (parts[-1].endswith('.tsbuildinfo') or parts[-1] == '.eslintcache'))
+                    or ('.vercel', 'output') in zip(parts, parts[1:])):
+                raise ValueError('ignored local files present')
+
     def worktrees(self, repos):
         for repo, rows in repos:
             for index, row in enumerate(rows):
@@ -337,6 +372,7 @@ class Guard:
                         raise ValueError('locked, missing, or prunable worktree')
                     if command(['git', 'status', '--porcelain', '--untracked-files=all'], path):
                         raise ValueError('dirty worktree (including untracked files)')
+                    self.check_ignored_files(path)
                     size = self.safety(path, 3 * DAY, {'.git', 'node_modules'})
                     is_merged = self.merged(repo, row)
                     if self.dry:
@@ -351,6 +387,7 @@ class Guard:
                         raise ValueError('branch changed during inspection')
                     if command(['git', 'status', '--porcelain', '--untracked-files=all'], path):
                         raise ValueError('worktree became dirty')
+                    self.check_ignored_files(path)
                     # Run removal from a surviving, unprotected checkout.
                     controller = next((r['path'] for r in rows if r['path'] != path
                                        and r['path'] != self.protected and r['path'].is_dir()), None)
@@ -388,18 +425,22 @@ class Guard:
         if self.dry:
             self.log('would update', flag, 'critical' if used >= 90 else 'below critical threshold')
             return
-        if used < 90:
-            flag.unlink(missing_ok=True)
+        try:
+            if used < 90:
+                flag.unlink(missing_ok=True)
+                return
+            flag.write_text(f'{used:.2f}% at {self.now}\n')
+            os.utime(flag, (self.now, self.now))
+            mark = self.state / 'last-alert'
+            if mark.exists() and self.now - mark.stat().st_mtime < 3600:
+                self.log('kept', 'alert', 'hourly rate limit')
+                return
+            # Record the attempt before sending, so an error or interruption cannot spam.
+            mark.touch()
+            os.utime(mark, (self.now, self.now))
+        except OSError:
+            self.log('error', flag, 'critical state write failed; cleanup continues')
             return
-        flag.write_text(f'{used:.2f}% at {self.now}\n')
-        os.utime(flag, (self.now, self.now))
-        mark = self.state / 'last-alert'
-        if mark.exists() and self.now - mark.stat().st_mtime < 3600:
-            self.log('kept', 'alert', 'hourly rate limit')
-            return
-        # Record the attempt before sending, so an error or interruption cannot spam.
-        mark.touch()
-        os.utime(mark, (self.now, self.now))
         try:
             credentials = dict(os.environ)
             env_file = self.home / '.config/hypertask-env.sh'
@@ -458,9 +499,12 @@ class Guard:
                   'keep_reasons': self.keep_reasons,
                   'failed_repos': {str(path): reason for path, reason in self.failed_repos.items()}}
         if not self.dry:
-            temp = self.state / 'status.tmp'
-            temp.write_text(json.dumps(status, indent=2) + '\n')
-            temp.replace(self.state / 'status.json')
+            try:
+                temp = self.state / 'status.tmp'
+                temp.write_text(json.dumps(status, indent=2) + '\n')
+                temp.replace(self.state / 'status.json')
+            except OSError:
+                self.log('error', self.state / 'status.json', 'status write failed; cleanup continues')
         self.log('summary', '/', json.dumps(status, sort_keys=True), self.freed)
 
     def report(self):

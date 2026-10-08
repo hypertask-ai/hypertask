@@ -5,13 +5,17 @@ if [ "$#" -eq 0 ]; then echo 'Usage: scripts/heavy-job.sh COMMAND [ARG ...]' >&2
 if [ "${CI:-}" = true ] || [ "${GITHUB_ACTIONS+x}" = x ]; then exec "$@"; fi
 
 check_disk() {
-  local critical="${HOME}/.local/state/disk-guard/critical" mtime
-  if [ -f "$critical" ]; then
-    mtime=$(stat -c %Y "$critical" 2>/dev/null) || return 0
+  local critical="${HOME}/.local/state/disk-guard/critical" mtime used
+  if [ -f "$critical" ] && mtime=$(stat -c %Y "$critical" 2>/dev/null); then
     if [ $(( $(date +%s) - mtime )) -lt 1800 ]; then
       echo 'Disk guard: disk is critical (>=90% used). Refusing a new heavy job; check ~/.local/state/disk-guard/status.json.' >&2
       exit 75
     fi
+  fi
+  used=$(df -P / 2>/dev/null | awk 'NR == 2 {gsub(/%/, "", $5); print $5}') || return 0
+  if [[ "$used" =~ ^[0-9]+$ ]] && [ "$used" -ge 90 ]; then
+    echo 'Disk guard: disk is critical (>=90% used). Refusing a new heavy job; check ~/.local/state/disk-guard/status.json.' >&2
+    exit 75
   fi
 }
 check_disk

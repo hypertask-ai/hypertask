@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Safety fixtures never inspect or delete the real host's projects or tmp."""
 import contextlib
+import errno
 import importlib.util
 import io
 import json
@@ -215,7 +216,7 @@ class TemporaryTests(Fixture):
         self.assertGreater(self.guard.planned, 0)
 
     def test_nested_git_file_or_directory_keeps_tmp_entry(self):
-        for depth in (0, 1, 4):
+        for depth in (0, 1, 4, 5, 12):
             for directory in (False, True):
                 with self.subTest(depth=depth, directory=directory):
                     entry = self.output_dir(self.tmp / f'git-{depth}-{directory}')
@@ -230,6 +231,26 @@ class TemporaryTests(Fixture):
                     self.guard.temporary()
                     self.assertTrue(entry.exists())
                     self.assertTrue(marker.exists())
+
+    def test_git_inspection_errors_keep_candidate(self):
+        entry = self.output_dir(self.tmp / 'old')
+        for method in ('lstat', 'iterdir'):
+            real = getattr(disk.Path, method)
+            def inspect(path, *args, **kwargs):
+                if path == entry:
+                    raise PermissionError('fixture')
+                return real(path, *args, **kwargs)
+            with self.subTest(method=method), patch.object(disk.Path, method, inspect):
+                self.assertTrue(disk.contains_git(entry))
+                self.guard.temporary()
+            self.assertTrue(entry.exists())
+
+    def test_git_inspection_does_not_follow_symlinks(self):
+        entry = self.output_dir(self.tmp / 'old')
+        (entry / 'loop').symlink_to(entry)
+        self.assertFalse(disk.contains_git(entry))
+        self.guard.temporary()
+        self.assertTrue(entry.exists())  # The existing symlink safety rule still applies.
 
     def test_failed_discovery_still_protects_successfully_registered_tree(self):
         repo, _ = self.repo()
@@ -266,28 +287,89 @@ class ProcessTests(Fixture):
                 _, uncertain = disk.process_paths(process.parent, [process])
             self.assertEqual(bool(uncertain), not harmless, comm)
 
-    def test_other_uid_process_is_ignored_without_reading_links(self):
-        process = self.proc(123)
-        target = self.output_dir(self.tmp / 'old')
-        (process / 'fd/1').symlink_to(target / 'output')
-        self.process.stop()
+    def foreign_owner(self, process, uid):
         real_stat = disk.Path.stat
         def owner(path, *args, **kwargs):
             info = real_stat(path, *args, **kwargs)
             if path == process:
                 fields = list(info)
-                fields[4] = os.getuid() + 1
+                fields[4] = uid
                 return os.stat_result(fields)
             return info
-        with patch.object(disk.Path, 'stat', owner), \
-             patch.object(disk.os, 'readlink', side_effect=PermissionError('other uid')) as links:
+        return patch.object(disk.Path, 'stat', owner)
+
+    def test_other_uid_readable_fd_keeps_candidate(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'old')
+        (process / 'fd/1').symlink_to(target / 'output')
+        self.process.stop()
+        with self.foreign_owner(process, os.getuid() + 1):
             found, uncertain = disk.process_paths(process.parent)
-        self.assertEqual(found, set())
+        self.assertIn(target / 'output', found)
         self.assertFalse(uncertain)
-        links.assert_not_called()
         with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
             self.guard.temporary()
-        self.assertFalse(target.exists())
+        self.assertTrue(target.exists())
+        self.assertIn('process has cwd/fd/root inside', self.output.getvalue())
+
+    def test_other_uid_unreadable_process_requires_private_candidate(self):
+        process = self.proc(123)
+        # The harmless list and zombie exemption apply only to our own UID.
+        (process / 'comm').write_text('sshd\n')
+        (process / 'status').write_text('State:\tZ (zombie)\n')
+        self.process.stop()
+        for uid in (os.getuid() + 1, 0):
+            for mode in (0o755, 0o700):
+                with self.subTest(uid=uid, mode=oct(mode)):
+                    target = self.output_dir(self.tmp / f'old-{uid}-{mode}')
+                    target.chmod(mode)
+                    with self.foreign_owner(process, uid), \
+                         patch.object(disk.os, 'readlink', side_effect=PermissionError('other uid')) as links:
+                        found, uncertain = disk.process_paths(process.parent)
+                        self.assertEqual(found, set())
+                        self.assertEqual(uncertain, {process})
+                        self.assertTrue(links.called)
+                        with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
+                            self.guard.temporary()
+                    self.assertEqual(target.exists(), mode == 0o755)
+        self.assertIn('other accounts could be using it', self.output.getvalue())
+
+    def test_readable_other_uid_fd_keeps_even_when_cwd_is_unreadable(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'old')
+        (process / 'fd/1').symlink_to(target / 'output')
+        self.process.stop()
+        real_readlink = disk.os.readlink
+        def readlink(path):
+            if path == process / 'cwd':
+                raise PermissionError('fixture')
+            return real_readlink(path)
+        with self.foreign_owner(process, os.getuid() + 1), patch.object(disk.os, 'readlink', readlink):
+            found, uncertain = disk.process_paths(process.parent)
+        self.assertIn(target / 'output', found)
+        self.assertEqual(uncertain, {process})
+        with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
+            self.guard.temporary()
+        self.assertTrue(target.exists())
+
+    def test_readable_other_uid_cwd_keeps_even_when_fd_listing_is_unreadable(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'old')
+        (process / 'cwd').unlink()
+        (process / 'cwd').symlink_to(target)
+        self.process.stop()
+        real_iterdir = disk.Path.iterdir
+        def entries(path):
+            if path == process / 'fd':
+                raise PermissionError('fixture')
+            return real_iterdir(path)
+        with self.foreign_owner(process, os.getuid() + 1), patch.object(disk.Path, 'iterdir', entries):
+            found, uncertain = disk.process_paths(process.parent)
+        self.assertIn(target, found)
+        self.assertEqual(uncertain, {process})
+        with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
+            self.guard.temporary()
+        self.assertTrue(target.exists())
 
     def test_own_unreadable_process_keeps_one_candidate_then_retries(self):
         process = self.proc(123)
@@ -494,6 +576,53 @@ class WorktreeTests(Fixture):
         self.sweep()
         self.assertFalse(tree.exists())
 
+    def test_ignored_local_files_keep_worktree(self):
+        _, tree = self.repo()
+        ignore = self.root / 'ignore'
+        ignore.write_text('*\n')
+        self.git(tree, 'config', 'core.excludesFile', str(ignore))
+        for name in ('.env', '.env.local', 'local-notes/notes', '.vercel/project.json', 'node_modules-backup/cache'):
+            with self.subTest(name=name):
+                self.output.seek(0)
+                self.output.truncate(0)
+                local = tree / name
+                local.parent.mkdir(parents=True, exist_ok=True)
+                local.write_text('valuable ignored data\n')
+                self.old(tree)
+                self.sweep()
+                self.assertTrue(local.exists())
+                self.assertIn('ignored local files present', self.output.getvalue())
+                local.unlink()
+
+    def test_ignored_disposable_outputs_allow_worktree_removal(self):
+        _, tree = self.repo()
+        ignore = self.root / 'ignore'
+        ignore.write_text('*\n')
+        self.git(tree, 'config', 'core.excludesFile', str(ignore))
+        for name in ('node_modules', '.next', 'dist', 'build', 'out', 'coverage', '.turbo', '.cache',
+                     '.vercel/output', 'target', 'zig-cache', '.zig-cache', 'zig-out', '__pycache__', '.pytest_cache'):
+            self.output_dir(tree / name)
+        (tree / 'app.tsbuildinfo').write_text('build metadata\n')
+        (tree / '.eslintcache').write_text('lint cache\n')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(tree.exists())
+
+    def test_ignored_local_file_created_during_inspection_keeps_worktree(self):
+        _, tree = self.repo()
+        ignore = self.root / 'ignore'
+        ignore.write_text('.env*\n')
+        self.git(tree, 'config', 'core.excludesFile', str(ignore))
+        merged = self.guard.merged
+        def inspect(*args):
+            (tree / '.env.local').write_text('valuable local configuration\n')
+            self.old(tree)
+            return merged(*args)
+        with patch.object(self.guard, 'merged', side_effect=inspect):
+            self.sweep()
+        self.assertTrue((tree / '.env.local').exists())
+        self.assertIn('ignored local files present', self.output.getvalue())
+
     def test_unmerged_upstream_kept(self):
         repo, tree = self.repo()
         (tree / 'file').write_text('new work')
@@ -581,6 +710,61 @@ class OperationTests(Fixture):
                 self.assertEqual(status['used_percent'], percent)
                 self.assertIn('last_run', status)
                 self.assertIn('freed', status)
+
+    def test_critical_flag_enospc_still_runs_temporary_cleanup(self):
+        old = self.output_dir(self.tmp / 'old')
+        real_write = disk.Path.write_text
+        def write(path, *args, **kwargs):
+            if path == self.guard.state / 'critical':
+                raise OSError(errno.ENOSPC, 'fixture full disk')
+            return real_write(path, *args, **kwargs)
+        with patch.object(disk.Path, 'write_text', write), \
+             patch.object(self.guard, 'usage', return_value=90), patch.object(self.guard, 'images'), \
+             patch.object(self.guard, 'temporary', wraps=self.guard.temporary) as temporary:
+            self.guard.run()
+        temporary.assert_called_once()
+        self.assertFalse(old.exists())
+        self.assertIn('summary:', self.output.getvalue())
+
+    def test_status_enospc_does_not_abort_summary(self):
+        real_write = disk.Path.write_text
+        def write(path, *args, **kwargs):
+            if path == self.guard.state / 'status.tmp':
+                raise OSError(errno.ENOSPC, 'fixture full disk')
+            return real_write(path, *args, **kwargs)
+        with patch.object(disk.Path, 'write_text', write), patch.object(self.guard, 'usage', return_value=79):
+            self.guard.run()
+        self.assertIn('summary:', self.output.getvalue())
+        self.assertIn('status write failed', self.output.getvalue())
+
+    def test_log_enospc_uses_stderr_and_continues_cleanup(self):
+        paths = [self.output_dir(self.tmp / name) for name in ('old-a', 'old-b')]
+        real_open = disk.Path.open
+        def open_file(path, *args, **kwargs):
+            if path == self.guard.state / 'log':
+                raise OSError(errno.ENOSPC, 'fixture full disk')
+            return real_open(path, *args, **kwargs)
+        stderr = io.StringIO()
+        with patch.object(disk.Path, 'open', open_file), contextlib.redirect_stderr(stderr), \
+             patch.object(self.guard, 'usage', return_value=80), patch.object(self.guard, 'images'):
+            self.guard.run()
+        self.assertTrue(all(not path.exists() for path in paths))
+        self.assertIn('removed:', stderr.getvalue())
+        self.assertIn('summary:', stderr.getvalue())
+        self.assertIn('log write failed', stderr.getvalue())
+
+    def test_alert_marker_enospc_does_not_abort_cleanup_or_send_alert(self):
+        real_touch = disk.Path.touch
+        def touch(path, *args, **kwargs):
+            if path == self.guard.state / 'last-alert':
+                raise OSError(errno.ENOSPC, 'fixture full disk')
+            return real_touch(path, *args, **kwargs)
+        with patch.object(disk.Path, 'touch', touch), patch.object(self.guard, 'usage', return_value=90), \
+             patch.object(self.guard, 'temporary') as temporary, patch.object(self.guard, 'images'), \
+             patch.object(disk.urllib.request, 'urlopen') as notify:
+            self.guard.run()
+        temporary.assert_called_once()
+        notify.assert_not_called()
 
     def test_critical_alert_hourly_and_cleared_after_recovery(self):
         class Response(io.StringIO):

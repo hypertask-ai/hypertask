@@ -31,20 +31,24 @@ in place. Reinstall to update the installed copy. No crontab is used.
   named `node-compile-cache*` and `.next/cache` descendants are eligible, with
   the same age, ownership and process checks. A live process using a cache
   keeps it. No generalized Claude scratchpad deletion is performed.
-- Only this user's uid's process `cwd`, `fd`, and `root` links are scanned.
-  Other users cannot access this user's private 0700 temporary directories.
-  Permission or I/O errors in an own-process scan keep the candidate being
-  checked. Failed process IDs are retried for each later candidate instead of
-  caching their error for the whole run; readable paths are cached. Every
-  deletion still refreshes the full scan. Persistent own-process errors prevent
-  proving inactivity for each affected candidate. No privileged helper is installed.
+- Readable process `cwd`, `fd`, and `root` links are scanned across all UIDs,
+  including root. Any process using a candidate keeps it. Unreadable other-UID
+  processes keep candidates with reason `other accounts could be using it`,
+  unless the candidate's top entry is owned by us and has no group/other
+  permission bits (`mode & 0o077 == 0`). No ancestor privacy check is inferred.
+  Permission or I/O errors in an own-process scan keep the candidate, except
+  for `sshd`, `(sd-pam)`, `gpg-agent`, `ssh-agent`, and zombies. These harmless
+  exceptions apply only to our own UID. Failed process IDs are retried for each
+  later candidate; readable paths are cached. Every deletion refreshes the full
+  scan. No privileged helper is installed.
 - Worktree discovery covers repositories under `~/projects`, including nested
   worker-tree parents. Dependency/build directories are not traversed for repo
   discovery. The `~/projects/hypertask` checkout is never used as a command cwd
   or considered for removal. A failed discovery protects only that repository
   folder, not unrelated temporary output. Successful discoveries still protect
   all their registered worktrees. Each temporary candidate is also kept if it
-  or any descendant directory through depth four contains a `.git` marker.
+  or any descendant at any depth contains a `.git` file or directory. This full
+  walk never follows symlinks, and any inspection error keeps the candidate.
   Failed repository folders appear once in the summary and remain report-only.
 - Linked worktrees must be clean, including untracked files, inactive, and older
   than three days. Age excludes `.git` and `node_modules`. Locked worktrees stay.
@@ -54,13 +58,21 @@ in place. Reinstall to update the installed copy. No crontab is used.
   Missing default refs and failed, malformed, truncated or rate-limited `gh`
   responses keep the worktree. Remote refs are not fetched or changed by the
   guard. Calls are cached per run and capped at 60 per sweep.
+- Ignored worktree paths are checked initially and again before removal.
+  Anything outside the disposable allowlist keeps the worktree with reason
+  `ignored local files present`, including ignored `.env*` files and local notes.
+  The allowlist is `node_modules`, `.next`, `dist`, `build`, `out`, `coverage`,
+  `.turbo`, `.cache`, `.vercel/output`, `target`, `zig-cache`, `.zig-cache`,
+  `zig-out`, `__pycache__`, `.pytest_cache`, `*.tsbuildinfo`, and `.eslintcache`.
 - Worktrees use `git worktree remove`, never force. Only proven merged branches
   are passed to `git branch -d`. Git may keep a squash-merged branch if safe
   branch deletion is refused. Detached/abandoned branch names are retained.
-- At 90%, a fresh `critical` file holds new local heavy jobs. Waiting jobs also
-  recheck before starting. The hold expires after 30 minutes if the timer stops;
-  the existing `CI=true` / `GITHUB_ACTIONS` cap bypass also bypasses this hold.
-  A run below 90% removes the flag.
+- At 90%, a fresh `critical` file holds new local heavy jobs. The heavy-job
+  wrapper also checks `df` on `/` and refuses at 90% even if the flag is missing
+  or stale. Waiting jobs recheck before starting. The flag expires after 30
+  minutes if the timer stops, but critical disk usage still holds jobs. The
+  existing `CI=true` / `GITHUB_ACTIONS` bypass skips both checks. A run below
+  90% removes the flag.
 - Critical notifications reuse the fleet-watchdog Telegram route, addressed to
   INFRA MANAGER, using the two `TELEGRAM_HYPERTASK_*` variables in
   `~/.config/hypertask-env.sh` or the environment. Attempts are limited to one
@@ -77,6 +89,10 @@ printed and logged only with `--verbose`; the default never writes those
 expanded details to disk. The log rotates before reaching 5 MiB, retaining only
 `log.1`. `status.json` records `used_percent`, `level` (`ok`, `clean`, `critical`),
 `last_run`, `freed`, removal/keep counts, `keep_reasons`, and `failed_repos`.
+Critical flag, alert marker, status, and log write errors never abort cleanup,
+including `ENOSPC`. If the log cannot be written, its line and a generic warning
+are sent to stderr. Alerts are not sent when their rate-limit marker cannot be
+saved.
 `--dry-run` only prints decisions, never changes state, deletes data, sends
 notifications, or prunes Docker. Its `would_free` is an allocated-size estimate,
 not a Docker image estimate. Actual worktree/image freed bytes are observed
