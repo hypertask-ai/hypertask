@@ -1,6 +1,6 @@
 
 import { getAllFollowers } from "@/utils/api/Task Detail";
-import { useTaskDetailMetaField } from "@/hooks/Task Detail/useTaskDetailMetaField";
+import { useTaskDetailMetaField } from "@/lib/useTaskDetailMetaField";
 
 
 

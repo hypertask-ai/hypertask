@@ -298,7 +298,7 @@ test("the task title passes its stable ref to autosizing on the first render", (
 });
 
 test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
-  const metaHook = load("src/hooks/Task Detail/useTaskDetailMetaField.ts", {
+  const metaHook = load("src/lib/useTaskDetailMetaField.ts", {
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
@@ -306,7 +306,7 @@ test("an unset priority stays null while its background query loads, keeping the
     "@/lib/taskDetailReads": {},
   });
   const { useGetPriorityForTask } = load("src/hooks/MultiPages/useGetPriorityForTask.ts", {
-    "@/hooks/Task Detail/useTaskDetailMetaField": metaHook,
+    "@/lib/useTaskDetailMetaField": metaHook,
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }) },
     "@/utils/api/global": { default: {} },
   });

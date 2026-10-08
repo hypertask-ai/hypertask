@@ -1,6 +1,6 @@
 
 import globalAPIHandlers from "@/utils/api/global";
-import { useTaskDetailMetaField } from "@/hooks/Task Detail/useTaskDetailMetaField";
+import { useTaskDetailMetaField } from "@/lib/useTaskDetailMetaField";
 
 
 

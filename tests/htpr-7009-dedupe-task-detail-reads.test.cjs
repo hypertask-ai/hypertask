@@ -57,7 +57,7 @@ function harness(t, enabled = true) {
   };
   t.after(() => { effects.forEach(fn => fn()); observers.forEach(fn => fn()); client.clear(); Object.assign(global, { fetch: original.fetch, document: original.document, window: original.window, setInterval: original.setInterval, clearInterval: original.clearInterval }); axios.get = original.get; });
   const prefetch = targets => load("src/hooks/Task Detail/usePrefetchTaskDetail.ts", mocks).usePrefetchTaskDetailTargets({ userId })(targets);
-  const field = name => load("src/hooks/Task Detail/useTaskDetailMetaField.ts", mocks).useTaskDetailMetaField(name, [{ priority: "priority", estimate: "estimate", labels: "taskLabels", followers: "followersFor:" }[name], 42], 42, () => axios.get("/api/tasks/detailMeta?taskId=42").then(r => r.data[name]), []);
+  const field = name => load("src/lib/useTaskDetailMetaField.ts", mocks).useTaskDetailMetaField(name, [{ priority: "priority", estimate: "estimate", labels: "taskLabels", followers: "followersFor:" }[name], 42], 42, () => axios.get("/api/tasks/detailMeta?taskId=42").then(r => r.data[name]), []);
   const comments = initialData => load("src/hooks/Task Detail/useGetComments.ts", mocks).useGetAllComments([constants.CommentsTQPrefixKey, 42], 42, userId, initialData);
   const embedded = source => load("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx", {
     ...mocks,
@@ -526,7 +526,7 @@ test("resolved flag-off metadata options and fetch results match origin/producti
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => "priority", getEstimateForTask: async () => "estimate", getAllTaskLabels: async () => ["label"] } },
     "@/utils/api/Task Detail": { getAllFollowers: async () => ["follower"] },
   };
-  mocks["@/hooks/Task Detail/useTaskDetailMetaField"] = load("src/hooks/Task Detail/useTaskDetailMetaField.ts", mocks);
+  mocks["@/lib/useTaskDetailMetaField"] = load("src/lib/useTaskDetailMetaField.ts", mocks);
   for (const [file, hook, args] of [
     ["src/hooks/MultiPages/useGetPriorityForTask.ts", "useGetPriorityForTask", [["priority", 42], 42]],
     ["src/hooks/MultiPages/useGetEstimateForTask.ts", "useGetEstimateForTask", [["estimate", 42], 42]],
