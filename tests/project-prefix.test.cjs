@@ -533,6 +533,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
       fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [], findTaskNumberAlias: async () => null,
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
     "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},

@@ -23,6 +23,7 @@ test("the real task page sends task and comments snapshots once, preserving thei
     "./TaskDetailComp": { default: component },
     "../../unauthorized/page": { default: component },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 2343 }) },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
     "@/lib/prisma": { default: {} },
     "@/lib/flags": {
       HTPR_6868_TICKET_PREFIX_FLAG: "htpr-6868-ticket-prefix",
