@@ -215,100 +215,110 @@ async function githubWebhookActor(): Promise<IUser> {
 async function reconcileMergedPullRequestAssignees(
   task: WebhookTask,
 ): Promise<boolean> {
-  const currentTask = await prisma.task.findUnique({
-    where: { id: task.id },
-    select: { projectId: true, sectionId: true, status: true },
-  });
-  if (
-    !currentTask ||
-    currentTask.status !== "Normal" ||
-    currentTask.projectId !== task.projectId ||
-    currentTask.sectionId === null
-  ) {
-    return false;
-  }
+  let changed = false;
+  // The task move is already durable; optional cleanup must not invite retries.
+  try {
+    const currentTask = await prisma.task.findUnique({
+      where: { id: task.id },
+      select: { projectId: true, sectionId: true, status: true },
+    });
+    if (
+      !currentTask ||
+      currentTask.status !== "Normal" ||
+      currentTask.projectId !== task.projectId ||
+      currentTask.sectionId === null
+    ) {
+      return false;
+    }
 
-  const qaSection = await prisma.section.findUnique({
-    where: { id: currentTask.sectionId },
-    select: {
-      id: true,
-      projectId: true,
-      deleted: true,
-      section_title: true,
-      autoAssignAgentId: true,
-    },
-  });
-  if (
-    !qaSection ||
-    qaSection.deleted ||
-    qaSection.projectId !== task.projectId ||
-    qaSection.section_title.toLowerCase() !==
-      MERGED_PULL_REQUEST_SECTION.toLowerCase()
-  ) {
-    return false;
-  }
+    const qaSection = await prisma.section.findUnique({
+      where: { id: currentTask.sectionId },
+      select: {
+        id: true,
+        projectId: true,
+        deleted: true,
+        section_title: true,
+        autoAssignAgentId: true,
+      },
+    });
+    if (
+      !qaSection ||
+      qaSection.deleted ||
+      qaSection.projectId !== task.projectId ||
+      qaSection.section_title.toLowerCase() !==
+        MERGED_PULL_REQUEST_SECTION.toLowerCase()
+    ) {
+      return false;
+    }
 
-  const qaAgentId = qaSection.autoAssignAgentId;
-  if (!qaAgentId) {
-    console.warn(
-      `[GitHub webhook] QA section ${qaSection.section_title} has no agent auto-assignee; task ${task.id} assignments were not changed.`,
-    );
-    return false;
-  }
-
-  const actor = await githubWebhookActor();
-  const mutationOptions = {
-    expectedProjectId: task.projectId,
-    expectedSectionId: qaSection.id,
-    allowHumanOverride: false,
-  };
-  const qaAssignment = await assigneesAssign(
-    actor,
-    null,
-    task.id,
-    qaAgentId,
-    undefined,
-    { ...mutationOptions, intent: "assign" },
-  );
-  if (qaAssignment.status === 409) {
-    console.warn(
-      `[GitHub webhook] Task ${task.id} has an active write; its QA assignment cleanup was skipped.`,
-    );
-    return false;
-  }
-  if (qaAssignment.status !== 200) {
-    throw new Error("QA agent assignment failed");
-  }
-
-  const outgoingAgentAssignments = await prisma.assignees.findMany({
-    where: { taskId: task.id, agentId: { not: null } },
-    select: { userId: true, agentId: true },
-  });
-  let changed =
-    "assignmentOutcome" in qaAssignment.json &&
-    qaAssignment.json.assignmentOutcome === "created";
-  for (const assignment of outgoingAgentAssignments) {
-    if (!assignment.agentId || assignment.agentId === qaAgentId) continue;
-    const removal = await assigneesAssign(
-      actor,
-      assignment.userId,
-      task.id,
-      assignment.agentId,
-      undefined,
-      { ...mutationOptions, intent: "unassign" },
-    );
-    if (removal.status === 409) {
+    const qaAgentId = qaSection.autoAssignAgentId;
+    if (!qaAgentId) {
       console.warn(
-        `[GitHub webhook] Task ${task.id} changed during QA assignment cleanup; remaining agent assignments were preserved.`,
+        `[GitHub webhook] QA section ${qaSection.section_title} has no agent auto-assignee; task ${task.id} assignments were not changed.`,
       );
-      return changed;
+      return false;
     }
-    if (removal.status !== 200) {
-      throw new Error("Outgoing agent unassignment failed");
+
+    const actor = await githubWebhookActor();
+    const mutationOptions = {
+      expectedProjectId: task.projectId,
+      expectedSectionId: qaSection.id,
+      allowHumanOverride: false,
+    };
+    const qaAssignment = await assigneesAssign(
+      actor,
+      null,
+      task.id,
+      qaAgentId,
+      undefined,
+      { ...mutationOptions, intent: "assign" },
+    );
+    if (qaAssignment.status !== 200) {
+      console.warn(
+        `[GitHub webhook] Task ${task.id} QA assignment cleanup was skipped (status ${qaAssignment.status}):`,
+        "message" in qaAssignment.json
+          ? qaAssignment.json.message
+          : "Unknown assignment failure",
+      );
+      return false;
     }
-    changed = true;
+
+    changed =
+      "assignmentOutcome" in qaAssignment.json &&
+      qaAssignment.json.assignmentOutcome === "created";
+    const outgoingAgentAssignments = await prisma.assignees.findMany({
+      where: { taskId: task.id, agentId: { not: null } },
+      select: { userId: true, agentId: true },
+    });
+    for (const assignment of outgoingAgentAssignments) {
+      if (!assignment.agentId || assignment.agentId === qaAgentId) continue;
+      const removal = await assigneesAssign(
+        actor,
+        assignment.userId,
+        task.id,
+        assignment.agentId,
+        undefined,
+        { ...mutationOptions, intent: "unassign" },
+      );
+      if (removal.status !== 200) {
+        console.warn(
+          `[GitHub webhook] Task ${task.id} outgoing agent ${assignment.agentId} cleanup was skipped (status ${removal.status}):`,
+          "message" in removal.json
+            ? removal.json.message
+            : "Unknown unassignment failure",
+        );
+        return changed;
+      }
+      changed = true;
+    }
+    return changed;
+  } catch (error) {
+    console.warn(
+      `[GitHub webhook] Task ${task.id} QA assignment cleanup was skipped (status exception):`,
+      error instanceof Error ? error.message : String(error),
+    );
+    return changed;
   }
-  return changed;
 }
 
 function invalidPayload(message: string) {

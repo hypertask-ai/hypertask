@@ -15,9 +15,12 @@ function loadTs(relativePath) {
 }
 
 async function withStubbedGithubRoute(stubbedModules, run) {
-  const paths = Object.keys(stubbedModules).map((relativePath) =>
-    path.join(root, relativePath)
-  );
+  const paths = [...new Set([
+    ...Object.keys(stubbedModules),
+    "src/utils/controllers/assignees/assign.ts",
+    "src/utils/controllers/agents/boardMembers.ts",
+    "src/lib/agents/visibility.ts",
+  ])].map((relativePath) => path.join(root, relativePath));
   const routePath = path.join(root, "src/app/api/webhooks/github/route.ts");
   const previous = new Map(
     [...paths, routePath].map((modulePath) => [
@@ -416,11 +419,23 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
     moveStatus = 200,
     qaAgentId = "qa-agent",
     assignmentResponse = () => ({ status: 200, json: {} }),
+    useRealAssignment = false,
+    readFailure = null,
+    taskOverrides = {},
+    existingAssignees = [
+      { userId: 6, agentId: null },
+      { userId: 8, agentId: "qa-agent" },
+      { userId: 7, agentId: "dev-agent" },
+    ],
+    readAssignees = async () => existingAssignees,
     payload = mergedPullRequestPayload(),
   } = {}) {
     const moves = [];
     const assignmentChanges = [];
+    const warnings = [];
     let currentSectionId = startingSectionId;
+    let actorReads = 0;
+    const taskEvents = [];
     const task = {
       id: 36637,
       projectId: 15,
@@ -429,6 +444,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       uniqueIndex: 5952,
       ticketNumber: "HTPR-5952",
       riskLevel: "Low",
+      ...taskOverrides,
     };
     const prisma = {
       project: {
@@ -436,37 +452,55 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       },
       section: {
         findFirst: async () => ({ id: 5511, section_title: "QA" }),
-        findUnique: async () => ({
-          id: currentSectionId,
-          projectId: 15,
-          deleted: false,
-          section_title: currentSectionId === 5511 ? "QA" : "In Progress",
-          autoAssignAgentId: currentSectionId === 5511 ? qaAgentId : null,
-        }),
+        findUnique: async () => {
+          if (readFailure === "section") throw new Error("QA section read failed");
+          return {
+            id: currentSectionId,
+            projectId: 15,
+            deleted: false,
+            section_title: currentSectionId === 5511 ? "QA" : "In Progress",
+            autoAssignAgentId: currentSectionId === 5511 ? qaAgentId : null,
+          };
+        },
       },
       task: {
         findMany: async () => (legacy ? [] : [task]),
         findFirst: async ({ where }) => (where.ticketNumber ? task : null),
-        findUnique: async () => ({
-          projectId: 15,
-          sectionId: currentSectionId,
-          status: "Normal",
-        }),
+        findUnique: async () => {
+          if (readFailure === "task") throw new Error("QA task read failed");
+          return { ...task, sectionId: currentSectionId, status: "Normal" };
+        },
       },
-      assignees: {
-        findMany: async () => [
-          { userId: 6, agentId: null },
-          { userId: 8, agentId: "qa-agent" },
-          { userId: 7, agentId: "dev-agent" },
-        ],
+      assignees: { findMany: readAssignees },
+      agent: {
+        findFirst: async ({ where }) => {
+          assert.equal(where.id, qaAgentId);
+          assert.equal(where.revokedAt, null);
+          assert.deepEqual(where.OR, [{ userId: 332 }, { visibility: "TEAM" }]);
+          return null;
+        },
+      },
+      member: {
+        findFirst: async ({ where }) => {
+          assert.deepEqual(where, {
+            projectId: 15,
+            agentId: qaAgentId,
+            agent: { revokedAt: null },
+          });
+          return null;
+        },
       },
       user: {
-        findUnique: async () => ({
-          id: 1,
-          email: "bot@example.invalid",
-          displayName: "HyperAI",
-          photoURL: null,
-        }),
+        findUnique: async () => {
+          actorReads += 1;
+          if (readFailure === "actor" && actorReads > 1) throw new Error("QA actor read failed");
+          return {
+            id: 332,
+            email: "bot@example.invalid",
+            displayName: "HyperAI",
+            photoURL: null,
+          };
+        },
       },
       comment: { findFirst: async () => null },
     };
@@ -477,7 +511,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       "src/lib/prisma.ts": { default: prisma },
       "src/lib/realtime/server.ts": {
         broadcastBoardChange: async () => {},
-        broadcastTaskChange: async () => {},
+        broadcastTaskChange: async (taskId) => taskEvents.push(taskId),
       },
       "src/utils/generateRank.ts": { default: () => "rank" },
       "src/lib/pullRequests/syncTaskPullRequests.ts": {
@@ -513,10 +547,47 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       },
     };
 
-    return withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
-      const response = await POST(signedGithubRequest(payload, secret));
-      return { response, body: await response.json(), moves, assignmentChanges };
-    });
+    if (useRealAssignment) {
+      delete stubbedModules["src/utils/controllers/assignees/assign.ts"];
+      Object.assign(stubbedModules, {
+        "src/utils/controllers/FCM/index.ts": {},
+        "src/utils/controllers/activities/createAssignedActivity.ts": {},
+        "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts": {},
+        "src/utils/controllers/notifications/agentActionRecipients.ts": {},
+        "src/utils/controllers/notifications/sendAssignEmail.ts": {},
+        "src/utils/index.ts": { taskBaseUri: "https://app.hypertask.ai/detail/" },
+        "src/lib/mcp/tasks/services.ts": {},
+        "src/lib/agentWebhooks/outbox.ts": {},
+        "src/lib/mcp/webhooks/outbox.ts": {},
+        "src/lib/mcp/tasks/agentMutationFence.ts": {
+          AgentMutationLeaseConflictError: class extends Error {},
+        },
+      });
+    }
+
+    const previousWarn = console.warn;
+    console.warn = (...args) => warnings.push(args);
+    try {
+      return await withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
+        if (useRealAssignment) {
+          const { default: assigneesAssign } = loadTs("src/utils/controllers/assignees/assign.ts");
+          const assignment = await assigneesAssign(
+            { id: 332 }, null, task.id, qaAgentId, undefined,
+            { expectedProjectId: 15, expectedSectionId: 5511, allowHumanOverride: false, intent: "assign" },
+          );
+          assert.equal(assignment.status, 400);
+          assert.equal(assignment.json.message,
+            "Agent is not a member of this board. Add the agent to the board before assigning.");
+        }
+        const response = await POST(signedGithubRequest(payload, secret));
+        return {
+          response, body: await response.json(), moves, assignmentChanges,
+          warnings, currentSectionId, existingAssignees, taskEvents,
+        };
+      });
+    } finally {
+      console.warn = previousWarn;
+    }
   }
 
   try {
@@ -590,16 +661,98 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
       assert.equal(result.assignmentChanges.length, 0);
     });
 
-    await t.test("hard assignment failures fail the delivery", async () => {
-      const result = await runScenario({
-        startingSectionId: 5511,
-        assignmentResponse: () => ({
-          status: 500,
-          json: { message: "Failed" },
-        }),
+    for (const legacy of [false, true]) {
+      await t.test(`stale board 15 QA auto-assignee preserves the moved ticket (${legacy ? "legacy" : "linked"})`, async () => {
+        const payload = mergedPullRequestPayload();
+        payload.pull_request.number = 1193;
+        payload.pull_request.title = "HTPR-7014 [BUGFIX] merge delivery";
+        payload.pull_request.html_url = "https://github.com/hypertask-ai/hypertask/pull/1193";
+        payload.pull_request.head.ref = "htpr-7014-fix";
+        const existingAssignees = [
+          { userId: 6, agentId: "32323d91-41e2-43c4-9370-ea7c0110d1b0" },
+        ];
+        const result = await runScenario({
+          legacy, payload, useRealAssignment: true,
+          startingSectionId: 4310,
+          qaAgentId: "b7ad06ff-1aaa-4a64-937d-f7fd801506e5",
+          taskOverrides: { id: 57334, uniqueIndex: 7014, ticketNumber: "HTPR-7014" },
+          existingAssignees,
+        });
+        assert.equal(result.moves.length, 1);
+        assert.equal(result.currentSectionId, 5511);
+        assert.deepEqual(result.existingAssignees, existingAssignees);
+        assert.equal(result.response.status, 200);
+        assert.equal(result.body.success, true);
+        assert.match(result.warnings.flat().join(" "), /Task 57334.*400.*Agent is not a member of this board/);
       });
-      assert.equal(result.response.status, 500);
-    });
+
+      for (const status of [400, 403, 404, 409, 500]) {
+        await t.test(`QA assignment status ${status} is optional (${legacy ? "legacy" : "linked"})`, async () => {
+          const result = await runScenario({
+            legacy,
+            assignmentResponse: () => ({ status, json: { message: "Assignment rejected" } }),
+          });
+          assert.equal(result.currentSectionId, 5511);
+          assert.equal(result.response.status, 200);
+          assert.equal(result.assignmentChanges.length, 1);
+          assert.match(result.warnings.flat().join(" "), new RegExp(`Task 36637.*${status}.*Assignment rejected`));
+        });
+      }
+
+      for (const status of [400, 409, 500]) {
+        await t.test(`outgoing agent status ${status} is optional (${legacy ? "legacy" : "linked"})`, async () => {
+          const result = await runScenario({
+            legacy,
+            startingSectionId: 5511,
+            assignmentResponse: ({ options }) => options.intent === "assign"
+              ? { status: 200, json: { assignmentOutcome: "created" } }
+              : { status, json: { message: "Removal rejected" } },
+          });
+          assert.equal(result.response.status, 200);
+          assert.equal(result.assignmentChanges.length, 2);
+          assert.deepEqual(result.taskEvents, [36637]);
+          assert.match(result.warnings.flat().join(" "), new RegExp(`Task 36637.*${status}.*Removal rejected`));
+        });
+      }
+
+      for (const phase of ["assign", "unassign", "read-assignees"]) {
+        await t.test(`QA cleanup ${phase} exception is optional (${legacy ? "legacy" : "linked"})`, async () => {
+          const result = await runScenario({
+            legacy,
+            startingSectionId: phase === "assign" ? 4309 : 5511,
+            assignmentResponse: ({ options }) => {
+              if (options.intent === phase) throw new Error("Assignment service unavailable");
+              return { status: 200, json: { assignmentOutcome: "created" } };
+            },
+            ...(phase === "read-assignees" ? {
+              readAssignees: async () => { throw new Error("Assignment service unavailable"); },
+            } : {}),
+          });
+          assert.equal(result.response.status, 200);
+          assert.equal(result.currentSectionId, 5511);
+          assert.match(result.warnings.flat().join(" "), /Task 36637.*exception.*Assignment service unavailable/);
+          assert.deepEqual(result.taskEvents, [36637]);
+        });
+      }
+
+      for (const readFailure of ["task", "section", "actor"]) {
+        await t.test(`QA ${readFailure} lookup failure is optional (${legacy ? "legacy" : "linked"})`, async () => {
+          const result = await runScenario({ legacy, readFailure });
+          assert.equal(result.moves.length, 1);
+          assert.equal(result.currentSectionId, 5511);
+          assert.equal(result.response.status, 200);
+          assert.match(result.warnings.flat().join(" "), new RegExp(`Task 36637.*exception.*QA ${readFailure} read failed`));
+        });
+      }
+
+      await t.test(`real move failures still fail the delivery (${legacy ? "legacy" : "linked"})`, async () => {
+        const result = await runScenario({ legacy, moveStatus: 500 });
+        assert.equal(result.response.status, 500);
+        assert.equal(result.currentSectionId, 4309);
+        assert.equal(result.assignmentChanges.length, 0);
+        assert.deepEqual(result.body, { success: false, error: "Internal server error" });
+      });
+    }
 
     await t.test("non-merge events do not reconcile assignments", async () => {
       const payload = mergedPullRequestPayload();
