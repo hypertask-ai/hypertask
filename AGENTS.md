@@ -126,6 +126,10 @@ This is a Next.js 14 app with both App Router and legacy Pages Router surfaces. 
 
 Before changing a feature, trace the entry point through middleware, route handler, controller/service layer, queue side effects, auth/cookie behavior, and realtime/cache invalidation where relevant.
 
+## AI models
+
+One AI model per class: a new model version replaces the old one in the same change (old one leaves every picker, saved picks move to the new one). Enforced by tests/model-class-unique.test.cjs (Valentin, 2026-10-08).
+
 ## Feature flags for new user-facing behavior
 
 - Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.

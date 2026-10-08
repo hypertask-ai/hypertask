@@ -73,6 +73,7 @@ export type TAiModelOption = {
 
 export type TAiModelDefinition = {
   key: TAiModelKey;
+  modelClass: string;
   label: string;
   provider: TAiProviderKey | "custom";
   priceTier?: 1 | 2 | 3;
@@ -91,15 +92,23 @@ export type TAiImageModelDefinition = {
 };
 
 export const aiModelDefinitions: TAiModelDefinition[] = [
-  { key: "gpt-6-luna", label: "6 Luna", provider: "openai", priceTier: 2 },
+  {
+    key: "gpt-6-luna",
+    modelClass: "gpt-luna",
+    label: "6 Luna",
+    provider: "openai",
+    priceTier: 2,
+  },
   {
     key: "gpt-5.6-terra",
+    modelClass: "gpt-terra",
     label: "5.6 Terra",
     provider: "openai",
     priceTier: 2,
   },
   {
     key: "gpt-6.1-sol",
+    modelClass: "gpt-sol",
     label: "6.1 Sol",
     provider: "openai",
     priceTier: 3,
@@ -107,6 +116,7 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   },
   {
     key: "claude-opus-5-5",
+    modelClass: "claude-opus",
     label: "Opus 5.5",
     provider: "anthropic",
     priceTier: 3,
@@ -114,57 +124,84 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   },
   {
     key: "claude-sonnet-5-5",
+    modelClass: "claude-sonnet",
     label: "Sonnet 5.5",
     provider: "anthropic",
     priceTier: 2,
   },
   {
     key: "claude-haiku-4.5",
+    modelClass: "claude-haiku",
     label: "Haiku 4.5",
     provider: "anthropic",
     priceTier: 1,
   },
   {
     key: "claude-haiku-5-5",
+    modelClass: "claude-haiku",
     label: "Haiku 5.5",
     provider: "anthropic",
     priceTier: 1,
   },
   {
     key: "deepseek-v4.1-flash",
+    modelClass: "deepseek-flash",
     label: "DeepSeek V4.1 Flash",
     provider: "deepseek",
     priceTier: 1,
   },
   {
     key: "deepseek-v4-pro",
+    modelClass: "deepseek-pro",
     label: "DeepSeek V4 Pro",
     provider: "deepseek",
     priceTier: 1,
   },
-  { key: "kimi-k2.5", label: "Kimi K2.5", provider: "moonshot", priceTier: 1 },
-  { key: "kimi-k3", label: "Kimi K3", provider: "moonshot", priceTier: 3 },
+  {
+    key: "kimi-k2.5",
+    modelClass: "kimi-k2.5-free", // Valentin, 2026-10-08: keep K2.5 next to K3 because it was on the free plan.
+    label: "Kimi K2.5",
+    provider: "moonshot",
+    priceTier: 1,
+  },
+  {
+    key: "kimi-k3",
+    modelClass: "kimi-k3",
+    label: "Kimi K3",
+    provider: "moonshot",
+    priceTier: 3,
+  },
   {
     key: "qwen3.7-plus",
+    modelClass: "qwen-plus",
     label: "Qwen3.7 Plus",
     provider: "alibaba",
     priceTier: 1,
   },
-  { key: "glm-5.3-flash", label: "GLM-5.3 Flash", provider: "zhipu", priceTier: 2 },
+  {
+    key: "glm-5.3-flash",
+    modelClass: "glm-flash",
+    label: "GLM-5.3 Flash",
+    provider: "zhipu",
+    priceTier: 2,
+  },
   {
     key: "gemini-3.5-flash-lite",
+    modelClass: "gemini-flash-lite",
     label: "Gemini 3.5 Flash Lite",
     provider: "google",
     priceTier: 1,
   },
   {
     key: "gemini-3.8-flash",
+    modelClass: "gemini-flash",
     label: "Gemini 3.8 Flash",
     provider: "google",
     priceTier: 2,
   },
   {
     key: "custom",
+    modelClass: "custom",
     label: "Custom endpoint",
     provider: "custom",
   },
