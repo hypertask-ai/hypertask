@@ -16,7 +16,7 @@ function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId =
     setCurrentProject: project => projects.push(project),
   };
   const mocks = {
-    "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
+    "@/hooks/useFlag": { useFlagReady: () => true, useFlag: key => key === flag && enabled },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout }) },
     "@/lib/configs/taskDetail.config": { default: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } } },
     "@/utils/api/global": { default: {} },

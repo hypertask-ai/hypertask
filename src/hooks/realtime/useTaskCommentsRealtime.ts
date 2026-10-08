@@ -17,6 +17,10 @@ import {
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import type { IAttachment, ITask } from "@/models/model";
 
+import { fetchScopedTaskDetail, taskDetailReadKey } from "@/lib/taskDetailReads";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+
 export const TASK_COMMENTS_RECONCILE_INTERVAL_MS = 10_000;
 
 type RealtimePayload = {
@@ -42,7 +46,8 @@ export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store" as const;
 
 async function fetchTaskDetailForRealtime(
   projectId: number,
-  uniqueIndex: number | string
+  uniqueIndex: number | string,
+  signal?: AbortSignal,
 ): Promise<ITask | null> {
   // cache: "no-store" is required: a default GET can reuse a pre-change
   // response, so the side panel stays on the mount-time section/title/due
@@ -51,7 +56,7 @@ async function fetchTaskDetailForRealtime(
   // key only on the URL (getTask used to answer `public` — HTPR-6281 QA #2).
   const response = await fetch(
     `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}&_=${Date.now()}`,
-    { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" }
+    { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", ...(signal ? { signal } : {}) }
   );
   if (!response.ok) return null;
   return response.json();
@@ -65,6 +70,8 @@ export function useTaskCommentsRealtime(
   options: UseTaskCommentsRealtimeOptions = {}
 ): void {
   const queryClient = useQueryClient();
+  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const wasConnected = useRef(false);
   const shouldRefetchTask = useRef(false);
   const shouldSyncTaskContent = useRef(false);
@@ -85,7 +92,7 @@ export function useTaskCommentsRealtime(
   currentTaskAssigneesRef.current = options.currentTaskAssignees;
 
   useEffect(() => {
-    if (taskId == null) return;
+    if (taskId == null || !flagReady) return;
     const activeTaskId = taskId;
 
     let cancelled = false;
@@ -130,8 +137,10 @@ export function useTaskCommentsRealtime(
           const task = await refreshTaskDetailQueryCache({
             queryClient,
             taskId,
-            fetchTask: () =>
-              fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex),
+            readQueryKey: dedupe && currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
+            fetchTask: (signal) => dedupe && currentUserId
+              ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" })
+              : fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex, signal),
           });
 
           if (
@@ -379,5 +388,7 @@ export function useTaskCommentsRealtime(
     keepAssignee,
     preserveEditorContent,
     hasPullRequests,
+    dedupe,
+    flagReady,
   ]);
 }

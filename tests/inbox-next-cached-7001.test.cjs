@@ -26,6 +26,8 @@ function compile(file, mocks) {
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)(name => {
+    if (name === "@/lib/taskDetailReads") return jiti(path.join(root, "src/lib/taskDetailReads.ts"));
+    if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG ? false : mocks[name].useFlag(key) };
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
   }, exports);

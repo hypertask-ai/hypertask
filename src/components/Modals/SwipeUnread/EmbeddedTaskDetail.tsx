@@ -9,8 +9,8 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shoul
 
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -18,6 +18,8 @@ import { useRecoilValue } from "@/lib/state";
 import type { ITask } from "@/models/model";
 import { currentUserAtom } from "@/store";
 import { fetchCommentsHelper } from "@/utils/api/Task Detail";
+
+import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount } from "@/lib/taskDetailReads";
 
 type EmbeddedTaskDetailProps = {
   taskId: number;
@@ -31,8 +33,13 @@ type EmbeddedTaskDetailProps = {
 function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef, assigneeSnapshotRef, children }: { task: ITask; dataUpdatedAt: number; error: Error | null; refetch: () => Promise<unknown>; currentTaskRef: RefObject<ITask | null>; assigneeSnapshotRef: RefObject<{ assignees: ITask["assignees"] } | null>; children: ReactNode }) {
   const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
   currentTaskRef.current = currentTask;
+  // Joining a shared prefetch skips this observer's queryFn; use the provider's assignee references.
+  if (dedupe && assigneeSnapshotRef.current === null) {
+    assigneeSnapshotRef.current = { assignees: currentTask?.assignees };
+  }
   const previousTask = useRef(task);
   const previousUpdatedAt = useRef(dataUpdatedAt);
   const preserveContent = shouldPreserveTaskEditorContent({ hasDraft, hasDraftInit, editMode, uploadingDescription });
@@ -78,21 +85,6 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
   return children;
 }
 
-const fetchTaskDetail = async (taskId: number, projectId: number, uniqueIndex: number, signal: AbortSignal) => {
-  const response = await fetch(
-    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`,
-    { signal },
-  );
-  if ([401, 403, 404].includes(response.status)) throw new TaskAccessDeniedError();
-  if (!response.ok) throw new Error("Unable to load task");
-  const task = (await response.json()) as ITask | null;
-  // The existing endpoint returns JSON null when the authorized task no longer exists.
-  if (!task || task.id !== taskId || task.status === "Deleted" || task.projectId !== projectId || task.uniqueIndex !== uniqueIndex) {
-    throw new TaskAccessDeniedError();
-  }
-  return task;
-};
-
 const EmbeddedTaskDetail = ({
   taskId,
   projectId,
@@ -104,17 +96,21 @@ const EmbeddedTaskDetail = ({
   const currentUser = useRecoilValue(currentUserAtom);
   const queryClient = useQueryClient();
   const { data: preferences } = useGetUserPreferences();
+  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const currentTaskRef = useRef<ITask | null>(initialTask ?? null);
   const assigneeSnapshotRef = useRef<{ assignees: ITask["assignees"] } | null>(null);
   const taskQuery = useQuery({
-    queryKey: embedded ? ["swipe-unread-task-detail", taskId] : cachedTaskDetailKey(currentUser?.id, taskId),
+    queryKey: dedupe ? taskDetailReadKey(currentUser?.id, taskId) : embedded ? ["swipe-unread-task-detail", taskId] : cachedTaskDetailKey(currentUser?.id, taskId),
     queryFn: async ({ signal }) => {
       assigneeSnapshotRef.current = { assignees: currentTaskRef.current?.assignees };
-      return fetchTaskDetail(taskId, projectId, uniqueIndex, signal);
+      return fetchScopedTaskDetail(taskId, projectId, uniqueIndex, signal, dedupe ? { cache: "no-store", credentials: "same-origin" } : {});
     },
     initialData: initialTask,
-    ...(embedded ? {} : { retry: false, refetchOnMount: "always" as const }),
+    ...(flagReady && !dedupe ? {} : { enabled: flagReady && Boolean(currentUser?.id) }),
+    ...(dedupe ? { initialDataUpdatedAt: 0, refetchOnMount: shouldRefetchDetailOnMount } : {}),
+    ...(embedded ? {} : { retry: false, ...(dedupe ? {} : { refetchOnMount: "always" as const }) }),
   });
   const commentsQuery = useQuery({
     queryKey: [globalConstants.CommentsTQPrefixKey, taskId],

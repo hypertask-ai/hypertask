@@ -118,7 +118,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
-    "@/hooks/useFlag": { useFlag: () => false },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
@@ -298,7 +298,15 @@ test("the task title passes its stable ref to autosizing on the first render", (
 });
 
 test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
+  const metaHook = load("src/hooks/Task Detail/useTaskDetailMetaField.ts", {
+    "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/flags/keys": {},
+    "@/lib/taskDetailReads": {},
+  });
   const { useGetPriorityForTask } = load("src/hooks/MultiPages/useGetPriorityForTask.ts", {
+    "@/hooks/Task Detail/useTaskDetailMetaField": metaHook,
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }) },
     "@/utils/api/global": { default: {} },
   });

@@ -1,14 +1,9 @@
 
 import { getAllFollowers } from "@/utils/api/Task Detail";
-import { useQuery } from "@tanstack/react-query";
+import { useTaskDetailMetaField } from "@/hooks/Task Detail/useTaskDetailMetaField";
 
 
 
 export const useGetAllFollowers = (queryKey:any, taskId:number, initialData?:any) => {
-    return useQuery({
-        queryKey:queryKey, 
-        queryFn:() => getAllFollowers(taskId),
-        initialData:initialData??[]
-
-})
+    return useTaskDetailMetaField("followers", queryKey, taskId, () => getAllFollowers(taskId), initialData);
 }

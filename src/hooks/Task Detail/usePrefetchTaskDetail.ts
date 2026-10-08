@@ -11,6 +11,10 @@ import {
   getDraftsHelper,
 } from "@/utils/api/Task Detail";
 
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { fetchScopedTaskDetail, fetchTaskDetailMeta, taskDetailReadKey, TASK_DETAIL_READ_FRESH_MS } from "@/lib/taskDetailReads";
+
 // 5 min: the opened view refetches per its own query config anyway, so this
 // only bounds how often the same neighbor is re-prefetched while navigating.
 // At 15s, J/K-ing an inbox re-fired the whole fan-out constantly (HTPR-3998).
@@ -19,6 +23,7 @@ const TASK_DETAIL_PREFETCH_STALE_TIME = 5 * 60 * 1000;
 export type PrefetchTaskDetailTarget = {
   id: number;
   projectId: number;
+  uniqueIndex?: number;
 };
 
 const getTargets = (
@@ -39,7 +44,7 @@ const getTargets = (
       if (!taskId || !projectId || seenTaskIds.has(taskId)) return targets;
 
       seenTaskIds.add(taskId);
-      targets.push({ id: taskId, projectId });
+      targets.push({ id: taskId, projectId, uniqueIndex: item?.uniqueIndex ?? task.uniqueIndex });
       return targets;
     },
     [],
@@ -52,8 +57,11 @@ export const usePrefetchTaskDetailTargets = ({
   userId?: number;
 }) => {
   const queryClient = useQueryClient();
+  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
 
   return useCallback((targets: PrefetchTaskDetailTarget[]) => {
+    if (!flagReady) return;
     const prefetch = (
       queryKey: readonly unknown[],
       queryFn: () => Promise<unknown> | unknown,
@@ -68,17 +76,26 @@ export const usePrefetchTaskDetailTargets = ({
     };
 
     targets.forEach((target) => {
-      prefetch(["task-", target.id], () => fetchSingleTask(target.id));
-      prefetch([taskDetailConfig.queryKeys.priority, target.id], () =>
-        globalAPIHandlers.getPriorityForTask(target.id),
-      );
-      prefetch([taskDetailConfig.queryKeys.estimate, target.id], () =>
-        globalAPIHandlers.getEstimateForTask(target.id),
-      );
-      prefetch([taskDetailConfig.queryKeys.taskLabels, target.id], () =>
-        globalAPIHandlers.getAllTaskLabels(target.id),
-      );
-      prefetch(["followersFor:", target.id], () => getAllFollowers(target.id));
+      if (dedupe && userId) {
+        if (target.uniqueIndex != null) void queryClient.prefetchQuery({
+          queryKey: taskDetailReadKey(userId, target.id),
+          queryFn: ({ signal }) => fetchScopedTaskDetail(target.id, target.projectId, target.uniqueIndex!, signal, { cache: "no-store", credentials: "same-origin" }),
+          staleTime: TASK_DETAIL_READ_FRESH_MS,
+        });
+        void fetchTaskDetailMeta(queryClient, target.id, false, TASK_DETAIL_READ_FRESH_MS).catch(() => undefined);
+      } else {
+        prefetch(["task-", target.id], () => fetchSingleTask(target.id));
+        prefetch([taskDetailConfig.queryKeys.priority, target.id], () =>
+          globalAPIHandlers.getPriorityForTask(target.id),
+        );
+        prefetch([taskDetailConfig.queryKeys.estimate, target.id], () =>
+          globalAPIHandlers.getEstimateForTask(target.id),
+        );
+        prefetch([taskDetailConfig.queryKeys.taskLabels, target.id], () =>
+          globalAPIHandlers.getAllTaskLabels(target.id),
+        );
+        prefetch(["followersFor:", target.id], () => getAllFollowers(target.id));
+      }
       prefetch([taskDetailConfig.queryKeys.moveTaskModal, target.projectId], () =>
         globalAPIHandlers.getSectionsForMoveTask(target.projectId),
       );
@@ -95,7 +112,7 @@ export const usePrefetchTaskDetailTargets = ({
       // (creates the link server-side) — firing it per focused neighbor created
       // share links for tasks the user never opened (HTPR-3998).
     });
-  }, [queryClient, userId]);
+  }, [queryClient, userId, dedupe, flagReady]);
 };
 
 export const usePrefetchTaskDetail = ({

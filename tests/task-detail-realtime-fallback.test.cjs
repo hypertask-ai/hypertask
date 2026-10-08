@@ -21,7 +21,11 @@ function loadHook(stubs) {
     fileName: filename,
   }).outputText;
   const loadedModule = { exports: {} };
-  const localRequire = (request) => stubs[request] ?? require(request);
+  const localRequire = (request) => stubs[request] ?? {
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/flags/keys": {},
+    "@/lib/taskDetailReads": {},
+  }[request] ?? require(request);
 
   new Function(
     "module",

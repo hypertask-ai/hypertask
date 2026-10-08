@@ -22,6 +22,7 @@ export const HTPR_6972_SUBTASK_LINK_FLAG = "htpr-6972-subtask-link";
 export const HTPR_6991_BACK_FIRST_OPEN_FLAG = "htpr-6991-back-first-open";
 export const HTPR_7001_INBOX_NEXT_CACHED_FLAG = "htpr-7001-inbox-next-cached";
 export const HTPR_7003_BOARD_BACK_FLAG = "htpr-7003-board-back";
+export const HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG = "htpr-7009-dedupe-task-detail-reads";
 export const HTPR_7004_NO_LOADING_FLASH_FLAG = "htpr-7004-no-loading-flash";
 export const HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG = "htpr-7008-phone-first-load-js";
 export const HTPR_7008_PHONE_FIRST_PAINT_FLAG = "htpr-7008-phone-first-paint";

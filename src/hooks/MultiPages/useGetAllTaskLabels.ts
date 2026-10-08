@@ -1,14 +1,9 @@
 
 import globalAPIHandlers from "@/utils/api/global";
-import { useQuery } from "@tanstack/react-query";
+import { useTaskDetailMetaField } from "@/hooks/Task Detail/useTaskDetailMetaField";
 
 
 
 export const useGetAllTaskLabels = (taskId:number, initialData?:any) => {
-    return useQuery({
-        queryKey:["taskLabels",taskId], 
-        queryFn:() => globalAPIHandlers.getAllTaskLabels(taskId),
-        initialData:initialData??[]
-
-})
+    return useTaskDetailMetaField("labels", ["taskLabels",taskId], taskId, () => globalAPIHandlers.getAllTaskLabels(taskId), initialData);
 }
