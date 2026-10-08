@@ -18,14 +18,16 @@ export function refreshTaskDetailReadAfterWrite(queryClient: QueryClient, userId
   const queryKey = taskDetailReadKey(userId, taskId);
   // A pre-write response must not replace the local snapshot used on reopen.
   void queryClient.cancelQueries({ queryKey, exact: true });
+  void queryClient.cancelQueries({ queryKey: taskDetailMetaKey(taskId), exact: true });
   queryClient.setQueryData<ITask>(queryKey, previous => previous ? { ...previous, ...updates } : undefined);
   void queryClient.invalidateQueries({ queryKey, exact: true, refetchType: "none" });
 }
 
-export async function fetchScopedTaskDetail(taskId: number, projectId: number, uniqueIndex: number, signal: AbortSignal | undefined, options: Pick<RequestInit, "cache" | "credentials">) {
+export async function fetchScopedTaskDetail(taskId: number, projectId: number, uniqueIndex: number, signal: AbortSignal | undefined, options: Pick<RequestInit, "cache" | "credentials"> & { cacheBust?: boolean }) {
+  const { cacheBust, ...requestOptions } = options;
   const response = await fetch(
-    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}`,
-    { signal, ...options },
+    `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}${cacheBust ? `&_=${Date.now()}` : ""}`,
+    { signal, ...requestOptions },
   );
   if ([401, 403, 404].includes(response.status)) throw new TaskAccessDeniedError();
   if (!response.ok) throw new Error("Unable to load task");
@@ -46,9 +48,33 @@ export async function fetchTaskDetailMeta(queryClient: QueryClient, taskId: numb
     queryKey,
     staleTime: freshForMs,
     queryFn: async ({ signal }) => {
-      const { data } = await axios.get<TaskDetailMeta>(`/api/tasks/detailMeta?taskId=${taskId}`, { signal });
-      for (const [field, prefix] of Object.entries(metaFields)) {
-        queryClient.setQueryData([prefix, taskId], data[field as keyof TaskDetailMeta]);
+      const fields = Object.entries(metaFields).map(([field, prefix]) => {
+        const key = [prefix, taskId];
+        return { field: field as keyof TaskDetailMeta, key, state: queryClient.getQueryState(key) };
+      });
+      // Legacy local and realtime writers all update these exact satellite keys.
+      const unsubscribe = queryClient.getQueryCache().subscribe(event => {
+        if (event.type === "updated" && event.action.type === "success" &&
+          fields.some(({ key }) => event.query.queryKey.length === 2 && event.query.queryKey[0] === key[0] && event.query.queryKey[1] === taskId)) {
+          void queryClient.cancelQueries({ queryKey, exact: true });
+        }
+      });
+      signal.addEventListener("abort", unsubscribe, { once: true });
+      let data: TaskDetailMeta;
+      try {
+        ({ data } = await axios.get<TaskDetailMeta>(`/api/tasks/detailMeta?taskId=${taskId}`, { signal }));
+      } finally {
+        unsubscribe();
+        signal.removeEventListener("abort", unsubscribe);
+      }
+      signal.throwIfAborted();
+      for (const { field, key, state } of fields) {
+        const current = queryClient.getQueryState(key);
+        // Update counts also catch writes in the same millisecond as the read.
+        if ((current?.dataUpdateCount ?? 0) === (state?.dataUpdateCount ?? 0) &&
+          (current?.dataUpdatedAt ?? 0) === (state?.dataUpdatedAt ?? 0)) {
+          queryClient.setQueryData(key, data[field]);
+        }
       }
       return data;
     },

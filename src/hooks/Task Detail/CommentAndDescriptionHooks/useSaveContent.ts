@@ -50,7 +50,6 @@ import {
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
-import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 

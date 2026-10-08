@@ -143,7 +143,7 @@ export function useTaskCommentsRealtime(
             readQueryKey: dedupe && currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
             ...(refreshSatellites ? {} : { refreshSatellites: false }),
             fetchTask: (signal) => dedupe && currentUserId
-              ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" })
+              ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", cacheBust: true })
               : fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex, signal),
           });
 

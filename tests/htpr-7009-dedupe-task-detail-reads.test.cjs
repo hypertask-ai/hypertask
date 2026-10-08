@@ -132,6 +132,87 @@ test("local edits cancel a pre-write shared read and preserve account isolation"
   assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 43)), undefined, "a write cannot authorize or seed an incomplete task snapshot");
 });
 
+test("local priority edit cancels pending metadata and survives its stale response", async t => {
+  const h = harness(t), key = ["priority", 42], stale = h.meta();
+  h.client.setQueryData(key, 1);
+  let resolveRead, signal;
+  axios.get = (_url, options) => { signal = options.signal; return new Promise(resolve => { resolveRead = resolve; }); };
+  const pending = reads.fetchTaskDetailMeta(h.client, 42).catch(error => error);
+  localTaskWrites(h).updateTaskInCache({ priority: 3 }, 42, 15, null);
+  assert.equal(signal.aborted, true, "the write helper cancels metadata before satellite reconciliation");
+  h.client.setQueryData(key, 3);
+  resolveRead({ data: stale });
+  await pending; await settle();
+  assert.equal(h.client.getQueryData(key), 3);
+  assert.equal(h.client.getQueryData(reads.taskDetailMetaKey(42)), undefined);
+});
+
+for (const [field, prefix, value] of [["priority", "priority", 3], ["estimate", "estimate", 5], ["labels", "taskLabels", [7]], ["followers", "followersFor:", [985]]]) {
+  test(`satellite ${field} update cancels pending metadata without affecting another task`, async t => {
+    const h = harness(t), key = [prefix, 42], stale = h.meta();
+    h.client.setQueryData(key, stale[field]);
+    let resolveRead, signal;
+    axios.get = (_url, options) => { signal = options.signal; return new Promise(resolve => { resolveRead = resolve; }); };
+    const pending = reads.fetchTaskDetailMeta(h.client, 42).catch(error => error);
+    h.client.setQueryData([prefix, 43], value);
+    assert.equal(signal.aborted, false, "another task's satellite must not cancel this request");
+    h.client.setQueryData(key, value);
+    assert.equal(signal.aborted, true);
+    resolveRead({ data: stale });
+    await pending; await settle();
+    assert.deepEqual(h.client.getQueryData(key), value);
+  });
+
+  test(`metadata skips newer ${field} even when cancellation loses and timestamps match`, async t => {
+    const h = harness(t), key = [prefix, 42], stale = h.meta();
+    t.mock.method(Date, "now", () => 1_800_000_000_000);
+    h.client.setQueryData(key, stale[field]);
+    let resolveRead, cancellations = 0;
+    t.mock.method(h.client, "cancelQueries", async () => { cancellations++; });
+    axios.get = () => new Promise(resolve => { resolveRead = resolve; });
+    const pending = reads.fetchTaskDetailMeta(h.client, 42);
+    const startedAt = h.client.getQueryState(key).dataUpdatedAt;
+    h.client.setQueryData(key, value);
+    assert.equal(h.client.getQueryState(key).dataUpdatedAt, startedAt);
+    resolveRead({ data: stale });
+    await pending;
+    assert.equal(cancellations, 1);
+    assert.deepEqual(h.client.getQueryData(key), value);
+    for (const [other, otherPrefix] of [["priority", "priority"], ["estimate", "estimate"], ["labels", "taskLabels"], ["followers", "followersFor:"]]) {
+      if (other !== field) assert.deepEqual(h.client.getQueryData([otherPrefix, 42]), stale[other], "unchanged fields still receive metadata");
+    }
+  });
+}
+
+test("realtime satellite reconciliation cancels stale metadata before seeding new priority", async t => {
+  const h = harness(t), stale = h.meta();
+  let resolveRead, signal;
+  axios.get = (_url, options) => { signal = options.signal; return new Promise(resolve => { resolveRead = resolve; }); };
+  const pending = reads.fetchTaskDetailMeta(h.client, 42).catch(error => error);
+  h.version(3);
+  await refresh.seedTaskDetailSatelliteCaches(h.client, h.task());
+  assert.equal(signal.aborted, true);
+  resolveRead({ data: stale });
+  await pending; await settle();
+  assert.equal(h.client.getQueryData(["priority", 42]), 3);
+  assert.equal(h.client.getQueryData(["estimate", 42]), 3);
+});
+
+test("cancelled metadata listener cannot cancel a newer read when the old transport ignores abort", async t => {
+  const h = harness(t), stale = h.meta(), pendingResponses = [];
+  axios.get = () => new Promise(resolve => pendingResponses.push(resolve));
+  const old = reads.fetchTaskDetailMeta(h.client, 42).catch(error => error);
+  h.client.setQueryData(["priority", 42], 3);
+  const newer = reads.fetchTaskDetailMeta(h.client, 42);
+  h.version(3);
+  pendingResponses[1]({ data: h.meta() });
+  await newer;
+  pendingResponses[0]({ data: stale });
+  await old; await settle();
+  assert.equal(h.client.getQueryData(["priority", 42]), 3);
+  assert.deepEqual(h.client.getQueryData(reads.taskDetailMetaKey(42)), h.meta());
+});
+
 test("flag-off local edits leave the shared read untouched", t => {
   const h = harness(t, false), key = reads.taskDetailReadKey(985, 42), previous = h.task();
   h.client.setQueryData(key, previous);
@@ -166,6 +247,45 @@ test("shared task fetcher uses explicit cache options and rejects invalid respon
     assert.equal(h.client.getQueryData(queryKey), previous);
   }
 });
+
+test("shared task fetcher cache-busts only when requested and keeps the option out of RequestInit", async t => {
+  const h = harness(t), signal = new AbortController().signal;
+  t.mock.method(Date, "now", () => 1_800_000_000_000);
+  for (const cacheBust of [false, true]) {
+    global.fetch = async (url, init) => {
+      assert.equal(url, `/api/tasks/getTask?project=project-15&uniqueIndex=42${cacheBust ? "&_=1800000000000" : ""}`);
+      assert.deepEqual(init, { signal, cache: "no-store", credentials: "same-origin" });
+      return { ok: true, status: 200, json: async () => h.task() };
+    };
+    await reads.fetchScopedTaskDetail(42, 15, 42, signal, { cache: "no-store", credentials: "same-origin", cacheBust });
+  }
+});
+
+for (const enabled of [false, true]) {
+  test(`realtime task reads retain timestamp cache-busting with dedupe ${enabled ? "on" : "off"}`, async t => {
+    const h = harness(t, enabled), handlers = new Map(), requests = [];
+    t.mock.method(Date, "now", () => 1_800_000_000_000);
+    global.fetch = async (url, init) => { requests.push({ url, init }); return { ok: true, status: 200, json: async () => h.task() }; };
+    const channel = { subscribed: true, bind: (event, fn) => handlers.set(event, fn), unbind() {} };
+    const client = { allChannels: () => [{ name: "private-task-42" }], subscribe: () => channel, unsubscribe() {}, connection: { state: "connected", bind() {}, unbind() {} } };
+    const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
+      "@/lib/realtime/client": { connectRealtimeClient: async () => client, releaseRealtimeClientIfIdle() {} },
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/lib/realtime/taskCommentsRefresh": commentsRefresh,
+    });
+    hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
+    await settle();
+    handlers.get("task:changed")({ originUserId: 985 });
+    await settle();
+    assert.ok(requests.length > 0);
+    for (const { url, init } of requests) {
+      assert.equal(url, "/api/tasks/getTask?project=project-15&uniqueIndex=42&_=1800000000000");
+      assert.equal(init.cache, "no-store");
+      assert.equal(init.credentials, "same-origin");
+      assert.equal("cacheBust" in init, false);
+    }
+  });
+}
 
 test("flag-off detail query options and fetch behavior match production after helper reuse", async t => {
   const h = harness(t, false), captured = [];
