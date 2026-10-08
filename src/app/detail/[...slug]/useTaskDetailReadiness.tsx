@@ -48,9 +48,9 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   ]);
 
   useEffect(() => {
-    // The cached query revalidates on mount; another RSC refresh can race Back and trigger Next's MPA fallback.
-    getTask(!(noLoadingFlash && cachedLayout));
-  }, [_currentTask, noLoadingFlash, cachedLayout]);
+    // Cached navigation revalidates even with stable layout off; an RSC refresh can race Back and trigger Next's MPA fallback.
+    getTask(!(noLoadingFlash && (cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id)));
+  }, [_currentTask, _parsedTask.id, noLoadingFlash, cachedLayout]);
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;
