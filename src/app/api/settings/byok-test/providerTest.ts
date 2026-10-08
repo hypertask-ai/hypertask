@@ -30,7 +30,7 @@ type TestRequest = {
   url: string;
 };
 
-function testModel(provider: TByokProviderKey, haiku55Enabled = false) {
+function testModel(provider: TByokProviderKey, haiku55Enabled: boolean) {
   const modelKey = provider === "claude" && haiku55Enabled ? "claude-haiku-5-5" : TEST_MODEL_KEYS[provider];
   if (!modelKey) return null;
   const option = aiModelOptions.find(

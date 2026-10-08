@@ -101,7 +101,7 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
     "src/app/agents/[agentId]/AgentConfigForm.tsx",
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /useFlag\(HTPR_7010_HAIKU_5_5_FLAG\)/);
+    assert.match(source, /useFlag\(\s*HTPR_7010_HAIKU_5_5_FLAG\s*,?\s*\)/);
     assert.match(source, /isAiModelOptionVisible\(option, false\)/);
     const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let visibilityExpression;

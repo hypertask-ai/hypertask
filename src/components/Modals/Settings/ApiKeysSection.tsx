@@ -146,11 +146,7 @@ function testResultCopy(state: TestState | undefined) {
   };
 }
 
-const ApiKeysSectionContent = () => {
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
-  const visibleProviderRows = haiku55Enabled
-    ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
-    : providerRows;
+const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: ProviderRow[] }) => {
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
@@ -777,9 +773,14 @@ const ApiKeysSectionContent = () => {
 };
 
 const ApiKeysSection = () => {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const visibleProviderRows = haiku55Enabled
+    ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
+    : providerRows;
+
   const { billing } = useSettingsTeam();
   if (!billing || billing.storePlanId === "Free") return null;
-  return <ApiKeysSectionContent />;
+  return <ApiKeysSectionContent visibleProviderRows={visibleProviderRows} />;
 };
 
 export default ApiKeysSection;

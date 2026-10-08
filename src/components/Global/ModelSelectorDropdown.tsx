@@ -817,7 +817,9 @@ type AIModelDropDownButtonProps = Omit<
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const haiku55Enabled = useFlag(
+    HTPR_7010_HAIKU_5_5_FLAG,
+  );
   const visibleModelOptions = haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));

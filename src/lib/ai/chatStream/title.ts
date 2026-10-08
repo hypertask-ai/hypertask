@@ -38,14 +38,14 @@ export async function generateConversationTitle(
   try {
     const haiku55Enabled = await haiku55ModelEnabled(usageContext?.userId ?? tags?.userId);
     const provider = haiku55Enabled ? "claude" : "openai";
-    const credential = haiku55Enabled
+    const modelAccess = haiku55Enabled
       ? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
           trustedTeamId: tags?.teamId,
           projectId: usageContext?.projectId ?? tags?.projectId,
           userId: usageContext?.userId ?? tags?.userId,
         })
       : byokApiKey;
-    const model = resolveAiModel(provider, haiku55Enabled ? "claude-haiku-5-5" : "gpt-6-luna", credential);
+    const model = resolveAiModel(provider, haiku55Enabled ? "claude-haiku-5-5" : "gpt-6-luna", modelAccess);
     if (usageContext) configureAiModelUsage(model, {
       ...usageContext,
       teamId: tags?.teamId ?? null,

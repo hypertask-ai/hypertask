@@ -276,7 +276,7 @@ async function extractBinaryDocumentTextWithOpenAI(
   ];
   const haiku55Enabled = !isImage && await haiku55ModelEnabled(usageContext?.userId ?? gatewayTags?.userId);
   const provider = haiku55Enabled ? "claude" : "openai";
-  const credential = haiku55Enabled
+  const modelAccess = haiku55Enabled
     ? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
         projectId: usageContext?.projectId ?? gatewayTags?.projectId,
         userId: usageContext?.userId ?? gatewayTags?.userId,
@@ -286,12 +286,12 @@ async function extractBinaryDocumentTextWithOpenAI(
   const model = resolveAiModel(
     provider,
     haiku55Enabled ? "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
-    credential,
+    modelAccess,
   );
 
   if (usageContext) configureAiModelUsage(model, {
     ...usageContext,
-    provider: aiUsageProviderForCredential(provider, credential),
+    provider: aiUsageProviderForCredential(provider, modelAccess),
     feature: "custom-instructions",
   });
   const result = await generateText({

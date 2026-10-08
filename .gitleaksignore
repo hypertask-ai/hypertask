@@ -1,3 +1,8 @@
 # Historical feature-flag identifiers, not credentials. The local variable is now flagName.
 04beafd9add039d36886ca290cbaadb6da3cdf02:tests/feature-flags.test.cjs:generic-api-key:66
 e10e24b83fc54a6f5d5c4fc52fa083b1d3ed3c32:tests/feature-flags.test.cjs:generic-api-key:66
+
+# Historical non-secret flag condition identifiers. Renamed modelAccess and typed the probe boolean.
+88441754d3391added9c75141cb427312ce0b7eb:src/app/api/ai/_lib/customInstructions.ts:generic-api-key:279
+88441754d3391added9c75141cb427312ce0b7eb:src/lib/ai/chatStream/title.ts:generic-api-key:41
+88441754d3391added9c75141cb427312ce0b7eb:src/app/api/settings/byok-test/providerTest.ts:generic-api-key:33
