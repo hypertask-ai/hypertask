@@ -63,11 +63,16 @@ export async function GET(request: NextRequest) {
       providerCredentials
         .filter(
           ({ configured }) =>
-            configured || (storePlanId === "BYOK" && Boolean(gatewayCredential)),
+            (!defaultContext.haiku55Enabled || storePlanId !== "Free") &&
+            (configured || (storePlanId === "BYOK" && Boolean(gatewayCredential))),
         )
         .map(({ provider }) => provider),
     );
-    if (defaultContext.byok) providersWithByok.add(defaultContext.byok.provider);
+    if (defaultContext.byok) {
+      providersWithByok.add(
+        defaultContext.byok.provider === "openrouter" ? "openrouter" : "anthropic",
+      );
+    }
     return NextResponse.json({
       success: true,
       projectId: project.id,

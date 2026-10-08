@@ -1,9 +1,9 @@
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { aiUsageProviderForCredential, configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { type AiGatewayTags, isAiGatewayEnabled, resolveAiModel, providerOptionsForAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { type AiGatewayTags, isAiGatewayEnabled, providerOptionsForAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { generateText } from "ai";
 
 export function fallbackTitle(message: string) {
@@ -47,7 +47,7 @@ export async function generateConversationTitle(
           userId: usageContext?.userId ?? tags?.userId,
         })
       : byokApiKey;
-    const model = resolveAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput);
+    const model = resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" });
     if (usageContext) configureAiModelUsage(model, {
       ...usageContext,
       teamId: tags?.teamId ?? null,

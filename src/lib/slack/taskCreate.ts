@@ -1,4 +1,4 @@
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -6,7 +6,6 @@ import { z } from "zod";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
   aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
@@ -213,7 +212,7 @@ async function writeSlackTaskDraft(input: {
   if (!systemModel) throw new Error("No Slack task-writing model is configured");
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
+  const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: input.teamId, projectId: input.projectId, userId: input.actorUserId }, feature: "summary" });
   configureAiModelUsage(model, {
     userId: input.actorUserId,
     teamId: input.teamId,

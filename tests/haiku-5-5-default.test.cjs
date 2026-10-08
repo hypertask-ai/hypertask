@@ -30,7 +30,7 @@ test("plan-aware defaults keep Luna on Free and choose Haiku for paid or compati
   for (const plan of ["Free", "Pro", "AI", "BYOK", null, undefined]) {
     for (const lunaFree of [false, true]) {
       for (const hasByok of [false, true]) {
-        const paidOrByok = hasByok || ["Pro", "AI", "BYOK"].includes(plan);
+        const paidOrByok = (hasByok && plan !== "Free") || ["Pro", "AI", "BYOK"].includes(plan);
         const expected = paidOrByok ? haiku.id : plan === "Free" && lunaFree ? "gpt-6-luna" : "gemini-3.5-flash-lite";
         assert.equal(catalog.getDefaultAiModelOptionForPlan(plan, hasByok, lunaFree, true).id, expected);
         assert.equal(catalog.defaultModelKeyFor({ haiku55Enabled: true, plan, hasByok }), paidOrByok ? haiku.id : "gpt-6-luna");
@@ -91,7 +91,7 @@ test("Android access and defaults follow plan and BYOK while saved Haiku upgrade
         const providersWithByok = new Set(provider ? [provider] : []);
         const input = { settings, storePlanId, providersWithByok, customEndpointConfigured: false, lunaFree: true };
         const on = composer.buildComposerConfig({ ...input, haiku55Enabled: true });
-        const expected = settings.featureModels || storePlanId !== "Free" || catalog.hasHaikuByokProvider(providersWithByok) ? haiku.id : "gpt-6-luna";
+        const expected = settings.featureModels || storePlanId !== "Free" ? haiku.id : "gpt-6-luna";
         assert.equal(on.selectedModelId, expected);
         assert.ok(on.models.some((option) => option.id === haiku.id));
         assert.equal(on.models.some((option) => option.id === "claude-haiku-4.5"), false);
@@ -112,7 +112,7 @@ test("plan-aware ladder upgrades saved Haiku but preserves Free production defau
     const settings = { featureModels: { [feature]: "anthropic/claude-haiku-4.5" } };
     for (const context of [{ plan: "Free" }, { plan: "Pro" }, { plan: "AI" }, { plan: "BYOK" }, { plan: "Free", hasByok: true }]) {
       assert.equal(ladder.resolveSystemModel(feature, settings, true, context).model, "anthropic/claude-haiku-5.5");
-      assert.equal(ladder.resolveSystemModel(feature, {}, true, context).model, context.plan !== "Free" || context.hasByok ? "anthropic/claude-haiku-5.5" : "google/gemini-3.5-flash-lite");
+      assert.equal(ladder.resolveSystemModel(feature, {}, true, context).model, context.plan !== "Free" ? "anthropic/claude-haiku-5.5" : "google/gemini-3.5-flash-lite");
       assert.equal(ladder.resolveSystemModel(feature, {}, false, context).model, "google/gemini-3.5-flash-lite");
     }
     assert.deepEqual(ladder.getSystemModelsForFeature(feature, true, { plan: "Free" }).map((entry) => entry.provider), ladder.getSystemModelsForFeature(feature, false).map((entry) => entry.provider));
@@ -219,7 +219,7 @@ test("title callback dependencies refresh the model when the flag changes while 
       extractTitleAndDescription: (title) => ({ title }),
     });
     await loaded.exports("fixture description", new AbortController().signal);
-    const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" || provider ? haiku.id : lunaFree ? "gpt-6-luna" : catalog.defaultAiModelOption.id;
+    const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : lunaFree ? "gpt-6-luna" : catalog.defaultAiModelOption.id;
     assert.equal(requests.at(-1).modelOptionId, expected);
   }
 });
@@ -241,34 +241,38 @@ test("Haiku access, price tier and premium status match production 4.5 on every 
   }
 });
 
-test("server plan-aware BYOK context checks enabled customer keys, not shared funding or unrelated providers", async () => {
+test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips unknown plans", async () => {
   for (const enabled of [false, true]) {
-    for (const provider of [null, "claude", "gateway", "openrouter", "openai", "managed_gateway"]) {
-      for (const keyEnabled of [false, true]) {
-        const lookedUp = [];
-        const api = stubbedModule("src/app/api/ai/_lib/byokKeys.ts", {
-          "@/lib/prisma": {
-            teamByokApiKey: { findUnique: async ({ where }) => {
-              const requested = where.teamId_provider.provider;
-              lookedUp.push(requested);
-              return requested === provider ? { enabled: keyEnabled, ciphertext: "fixture", team: { aiProviderSettings: {} } } : null;
-            } },
-          },
-          "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value },
-          "@/utils/controllers/projects/getAllIncludes": {},
-          "@/app/api/ai/_lib/modelProvider": {},
-          "@/lib/aiModelOptions": catalog,
-          "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
-          "@/lib/ai/customEndpoint": {},
-          "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-          "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => "Free" },
-        });
-        const context = await api.getAiDefaultModelContext({ userId: 985, trustedTeamId: "fixture-team" });
-        const eligible = enabled && keyEnabled && ["claude", "gateway", "openrouter"].includes(provider);
-        assert.equal(context.hasByok, eligible);
-        assert.equal(catalog.defaultModelKeyFor(context), eligible ? haiku.id : "gpt-6-luna");
-        assert.equal(context.byok?.provider, eligible ? provider : undefined);
-        assert.equal(lookedUp.length > 0, enabled);
+    for (const plan of ["Free", undefined, "Pro", "AI", "BYOK"]) {
+      for (const provider of [null, "claude", "gateway", "openrouter", "openai", "managed_gateway"]) {
+        for (const keyEnabled of [false, true]) {
+          const lookedUp = [];
+          const api = stubbedModule("src/app/api/ai/_lib/byokKeys.ts", {
+            "@/lib/prisma": {
+              teamByokApiKey: { findUnique: async ({ where }) => {
+                const requested = where.teamId_provider.provider;
+                lookedUp.push(requested);
+                return requested === provider ? { enabled: keyEnabled, ciphertext: "fixture", team: { aiProviderSettings: {} } } : null;
+              } },
+            },
+            "@/lib/crypto/byokCipher": { decryptByokSecret: (value) => value },
+            "@/utils/controllers/projects/getAllIncludes": {},
+            "@/app/api/ai/_lib/modelProvider": {},
+            "@/lib/aiModelOptions": catalog,
+            "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
+            "@/lib/ai/customEndpoint": {},
+            "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
+            "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
+            "@/app/api/ai/chat/stream/modelFallback": fallback,
+          });
+          const context = await api.getAiDefaultModelContext({ userId: 985, trustedTeamId: "fixture-team" });
+          const canUseByok = enabled && Boolean(plan) && plan !== "Free";
+          const eligible = canUseByok && keyEnabled && ["claude", "gateway", "openrouter"].includes(provider);
+          assert.equal(context.hasByok, eligible);
+          assert.equal(catalog.defaultModelKeyFor(context), enabled && ["Pro", "AI", "BYOK"].includes(plan) ? haiku.id : "gpt-6-luna");
+          assert.equal(context.byok?.provider, eligible ? provider : undefined);
+          assert.equal(lookedUp.length > 0, canUseByok);
+        }
       }
     }
   }
@@ -298,7 +302,7 @@ test("default sites use shared plan-aware policy on client and server", () => {
         for (const provider of [null, "claude", "gateway", "openrouter", "openai"]) {
           const billing = { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] };
           const actual = vm.runInNewContext(expression, { haiku55Enabled, lunaFree: true, defaultBilling: billing, defaultAiModelOption: catalog.defaultAiModelOption, getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags });
-          const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" || flags.hasHaikuByokProviderFlags(billing.byokProviderFlags) ? haiku.id : "gpt-6-luna";
+          const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : "gpt-6-luna";
           assert.equal(actual.id, expected, `${file}: ${plan}, ${provider}, ${haiku55Enabled}`);
         }
       }
@@ -349,23 +353,89 @@ test("server title default sites retain Free Luna and route paid or compatible B
         const api = stubbedModule("src/lib/ai/chatStream/title.ts", {
           "@/lib/aiModelOptions": catalog,
           "@/app/api/ai/_lib/byokKeys": {
-            getAiDefaultModelContext: async () => ({ haiku55Enabled, plan, hasByok: Boolean(provider), byok: haiku55Enabled && provider ? { provider, credential: "fixture-byok" } : undefined }),
+            getAiDefaultModelContext: async () => ({ haiku55Enabled, plan, hasByok: plan !== "Free" && Boolean(provider), byok: haiku55Enabled && plan !== "Free" && provider ? { provider, credential: "fixture-byok" } : undefined }),
             getByokOrTeamGatewayApiKeyForProvider: async () => "fixture-team",
+            resolveAutomaticAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
           },
           "@/app/api/ai/_lib/modelProvider": {
             isAiGatewayEnabled: () => true,
-            resolveAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
             configureAiModelUsage: () => {}, providerOptionsForAiModel: () => ({}), aiUsageProviderForCredential: (source) => source,
           },
           "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture prompt" },
           ai: { generateText: async () => ({ text: "Fixture title" }) },
         });
         assert.equal(await api.generateConversationTitle("fixture content", "fixture message", "fixture-openai", { teamId: "fixture-team" }, { userId: 985 }), "Fixture title");
-        const useHaiku = haiku55Enabled && (plan !== "Free" || provider);
+        const useHaiku = haiku55Enabled && (plan !== "Free");
         assert.equal(catalog.isHaiku55Model(requests[0].model), Boolean(useHaiku));
         assert.equal(requests[0].source, !useHaiku ? "openai" : provider === "openrouter" ? "openrouter" : "claude");
         assert.equal(requests[0].credential, !useHaiku ? "fixture-openai" : provider ? "fixture-byok" : "fixture-team");
       }
     }
+  }
+});
+
+test("Android maps BYOK sources to catalog provider keys and preserves Free-plan BYOK restrictions", async () => {
+  const providers = load(path.join(root, "src/lib/aiProviders.ts"));
+  for (const enabled of [false, true]) {
+    for (const plan of ["Free", "Pro", "BYOK"]) {
+      for (const provider of ["claude", "gateway", "openrouter"]) {
+        let input;
+        const api = stubbedModule("src/app/api/android/ai/composer/route.ts", {
+          "next/server": { NextResponse: { json: (value) => value } },
+          "@/lib/prisma": { project: { findFirst: async () => ({ id: 15, teamId: "fixture-team" }) } },
+          "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 } }) },
+          "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+          "@/utils/controllers/teams/getTeamAiSettingsForViewer": { getTeamAiSettingsForViewer: async () => ({ ok: true, settings: {} }) },
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, lunaFreePlanEnabled: async () => true },
+          "@/app/api/ai/_lib/byokKeys": {
+            resolveTeamCustomEndpoint: async () => undefined,
+            resolveTeamByokApiKey: async () => plan === "Free" ? "fixture-saved-but-ineligible" : undefined,
+            getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: enabled && plan !== "Free", byok: enabled && plan !== "Free" ? { provider, credential: "fixture" } : undefined }),
+          },
+          "./config": { ...composer, buildComposerConfig: (value) => { input = value; return composer.buildComposerConfig(value); } },
+        });
+        const result = await api.GET({ nextUrl: { searchParams: new URLSearchParams({ project_id: "15" }) } });
+        assert.equal(result.success, true);
+        for (const key of input.providersWithByok) assert.equal(providers.isAiProviderKey(key), true, key);
+        if (enabled && plan !== "Free") assert.deepEqual([...input.providersWithByok], [provider === "openrouter" ? "openrouter" : "anthropic"]);
+        if (enabled && plan === "Free") assert.equal(input.providersWithByok.size, 0);
+        assert.equal(result.selectedModelId, enabled ? plan !== "Free" ? haiku.id : "gpt-6-luna" : plan === "Free" ? "gpt-6-luna" : "gemini-3.5-flash-lite");
+        if (!enabled && plan === "Free") assert.ok(input.providersWithByok.size > 0);
+      }
+    }
+  }
+});
+
+test("all automatic Haiku sites use the shared unavailable-model fallback with owning lookup and feature", () => {
+  for (const [file, feature] of [
+    ["src/app/api/ai/_lib/boardMemory.ts", "custom-instructions"],
+    ["src/app/api/ai/_lib/customInstructions.ts", "custom-instructions"],
+    ["src/app/api/ai/_lib/commentSummaries.ts", "summary"],
+    ["src/app/api/ai/_lib/taskSummaries.ts", "summary"],
+    ["src/app/api/ai/task-questions/route.ts", "task-questions"],
+    ["src/app/api/reports/status-update/route.ts", "status-update"],
+    ["src/lib/ai/chatStream/title.ts", "chat"],
+    ["src/lib/slack/chat.ts", "chat"],
+    ["src/lib/slack/taskCreate.ts", "summary"],
+    ["src/lib/slack/threadSummary.ts", "summary"],
+  ]) {
+    const ast = ts.createSourceFile(file, fs.readFileSync(path.join(root, file), "utf8"), ts.ScriptTarget.Latest, true);
+    const calls = [];
+    function visit(node) {
+      if (ts.isCallExpression(node)) {
+        assert.notEqual(node.expression.getText(ast), "resolveAiModel", file);
+        if (node.expression.getText(ast) === "resolveAutomaticAiModel") calls.push(node);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(ast);
+    assert.equal(calls.length, 1, file);
+    assert.equal(calls[0].arguments.length, 4, file);
+    const context = calls[0].arguments[3];
+    const properties = new Map(context.properties.map((property) => [property.name.getText(ast), property.initializer]));
+    assert.equal(properties.get("feature").text, feature, file);
+    assert.match(properties.get("haiku55Enabled").getText(ast), /^(defaultContext|args)\.haiku55Enabled$/);
+    assert.match(properties.get("lookup").getText(ast), /\buserId\s*:/, file);
+    assert.match(properties.get("lookup").getText(ast), /\b(trustedTeamId|projectId)\b/, file);
   }
 });

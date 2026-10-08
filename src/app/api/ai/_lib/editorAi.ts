@@ -769,7 +769,7 @@ export async function selectTaskWriterModel(args: {
   );
 
   const tags = gatewayTagsForLookup({
-    teamId: args.projectId ? teamContext.teamId : args.teamId,
+    teamId: teamContext.teamId ?? args.teamId,
     projectId: args.projectId,
     userId: args.userId,
   });
@@ -826,7 +826,8 @@ export async function selectTaskWriterModel(args: {
     selected.modelId = fallback.modelId;
     selected.provider = fallback.provider;
     selected.usageProvider = fallback.usageProvider;
-    return fallback.model as LanguageModelV4;
+    selected.providerOptions = fallback.providerOptions;
+    return { model: fallback.model as LanguageModelV4, providerOptions: fallback.providerOptions };
   };
   if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled)) {
     return selected;
@@ -843,7 +844,7 @@ export async function selectTaskWriterModel(args: {
         } catch (error) {
           const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          const result = await fallback.doGenerate(params);
+          const result = await fallback.model.doGenerate({ ...params, providerOptions: fallback.providerOptions ?? {} });
           hasOutput = true;
           return result;
         }
@@ -855,7 +856,7 @@ export async function selectTaskWriterModel(args: {
         } catch (error) {
           const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          result = await fallback.doStream(params);
+          result = await fallback.model.doStream({ ...params, providerOptions: fallback.providerOptions ?? {} });
         }
         let reader = result.stream.getReader();
         let cancelled = false;
@@ -863,8 +864,8 @@ export async function selectTaskWriterModel(args: {
         let finished = false;
         let preamble: Array<Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]> = [];
         let pending: typeof preamble = [];
-        const switchReader = async (fallback: LanguageModelV4) => {
-          const next = (await fallback.doStream(params)).stream.getReader();
+        const switchReader = async (fallback: NonNullable<Awaited<ReturnType<typeof fallbackModel>>>) => {
+          const next = (await fallback.model.doStream({ ...params, providerOptions: fallback.providerOptions ?? {} })).stream.getReader();
           reader = next;
           if (cancelled) await next.cancel(cancelReason);
         };

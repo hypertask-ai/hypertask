@@ -1,4 +1,4 @@
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { createHash, randomUUID } from "node:crypto";
@@ -15,7 +15,6 @@ import {
 } from "@/app/api/ai/_lib/taskContent";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
   aiUsageProviderForCredential,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
@@ -248,6 +247,7 @@ async function generateAndStoreTaskSummaryWithLease(
       description,
       sources,
       systemModel,
+      haiku55Enabled: defaultContext.haiku55Enabled,
       haikuByok,
       gatewayApiKey,
       gatewayTags,
@@ -427,6 +427,7 @@ async function generateTaskSummary(args: {
   description: string;
   sources: SummarySource[];
   systemModel: SystemModel;
+  haiku55Enabled: boolean;
   haikuByok?: Awaited<ReturnType<typeof getAiDefaultModelContext>>["byok"];
   gatewayApiKey?: string;
   gatewayTags?: AiGatewayTags;
@@ -444,10 +445,15 @@ async function generateTaskSummary(args: {
     };
   }
 
-  const model = resolveAiModel(
+  const model = resolveAutomaticAiModel(
     args.haikuByok?.provider === "claude" ? "claude" : args.haikuByok?.provider === "openrouter" ? "openrouter" : "gateway",
     args.haikuByok?.provider === "claude" ? "claude-haiku-5-5" : args.systemModel.model,
-    args.gatewayApiKey
+    args.gatewayApiKey,
+    {
+      haiku55Enabled: args.haiku55Enabled,
+      lookup: { trustedTeamId: args.teamId, projectId: args.projectId, userId: args.userId },
+      feature: "summary",
+    },
   );
   configureAiModelUsage(model, {
     userId: args.userId,

@@ -1,4 +1,4 @@
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -10,7 +10,6 @@ import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
   aiUsageProviderForCredential,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
@@ -206,7 +205,7 @@ export async function POST(request: NextRequest) {
       projectId: task.projectId,
     };
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
+    const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" });
     configureAiModelUsage(model, {
       userId: viewer.id,
       teamId: task.project.teamId,

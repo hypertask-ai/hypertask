@@ -1,5 +1,5 @@
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
@@ -27,7 +27,6 @@ import {
   aiUsageProviderForCredential,
   gatewayProviderOptionsForModel,
   isAiGatewayEnabled,
-  resolveAiModel,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 
@@ -285,10 +284,19 @@ async function extractBinaryDocumentTextWithOpenAI(
         trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId,
       })
     : gatewayApiKey;
-  const model = resolveAiModel(
+  const model = resolveAutomaticAiModel(
     provider,
     useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
     modelInput,
+    {
+      haiku55Enabled: defaultContext.haiku55Enabled,
+      lookup: {
+        projectId: usageContext?.projectId ?? gatewayTags?.projectId,
+        userId: usageContext?.userId ?? gatewayTags?.userId,
+        trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId,
+      },
+      feature: "custom-instructions",
+    },
   );
 
   if (usageContext) configureAiModelUsage(model, {

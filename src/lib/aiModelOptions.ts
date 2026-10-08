@@ -512,7 +512,7 @@ export type AiDefaultModelContext = {
 };
 
 export function defaultModelKeyFor({ haiku55Enabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
-  return haiku55Enabled && (hasByok || plan === "Pro" || plan === "AI" || plan === "BYOK")
+  return haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK")
     ? "claude-haiku-5-5"
     : productionDefault;
 }

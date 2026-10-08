@@ -1,5 +1,5 @@
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject } from "ai";
@@ -13,7 +13,6 @@ import {
 import {
   aiUsageProviderForCredential,
   gatewayProviderOptionsForModel,
-  resolveAiModel,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 import {
@@ -184,7 +183,7 @@ export async function learnBoardMemoryFromSignal(args: {
       undefined,
       { projectId: project.id, userId: args.userId },
     );
-    const model = resolveAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey);
+    const model = resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" });
     const gatewayTags: AiGatewayTags = {
       projectId: project.id,
       teamId: project.teamId ?? "",

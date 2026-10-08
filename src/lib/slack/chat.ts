@@ -1,4 +1,4 @@
-import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -6,7 +6,6 @@ import { z } from "zod";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
   aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
@@ -182,7 +181,7 @@ async function parseSlackIntent(
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
+  const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" });
   configureAiModelUsage(model, {
     userId: actor.user.id,
     teamId: actor.teamId,
