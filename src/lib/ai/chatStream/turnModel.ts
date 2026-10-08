@@ -41,6 +41,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   };
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
+  let teamProviderSettings: unknown;
   // External agents are chatted with from Agent Chat, not this native stream.
   // Checked before any provider or model work so the turn never starts.
   if (body.session_id) {
@@ -79,7 +80,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       );
     }
     const planGateProjectId = providerContext.planGateProjectId;
-    const teamProviderSettings = chatTeamContext?.aiProviderSettings;
+    teamProviderSettings = chatTeamContext?.aiProviderSettings;
     usageProjectId = chatTeamContext?.projectId ?? null;
     gatewayTags.projectId = usageProjectId;
     gatewayTags.teamId = chatTeamContext?.teamId ?? null;
@@ -263,5 +264,5 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     await reportHandledChatError(error, "select-model");
     return createSseErrorResponse(errorMessage(error));
   }
-  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent };
+  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings };
 }

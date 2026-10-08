@@ -1,7 +1,8 @@
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
-import { getAiModelOptionById } from "@/lib/aiModelOptions";
+import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
+import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 
 
 import { type ModelMessage, type ToolSet, streamText, stepCountIs, generateText } from "ai";
@@ -28,6 +29,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const { instructions, messages, tools, toolExecutions } = inputs;
 
   const haiku55Enabled = await haiku55ModelEnabled(dbUser.id);
+  state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
   const chunks: string[] = [];
   let result!: ReturnType<typeof streamText>;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -62,6 +64,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           attempt === 0 &&
           !state.cancelled &&
           !state.providerAbort.signal.aborted &&
+          (!isHaiku55Model(state.selected.resolvedModelId) || resolveTeamProviderEnabled(state.teamProviderSettings, "openai")) &&
           previousModelForFailedStream(
             state.selected.resolvedModelId,
             error,

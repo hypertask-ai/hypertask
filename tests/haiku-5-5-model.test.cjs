@@ -23,12 +23,12 @@ function moduleWithStubs(relativePath, stubs, extra = "") {
   vm.runInNewContext(code + extra, {
     module: loadedModule, exports: loadedModule.exports,
     require: (id) => stubs[id] ?? require(id),
-    process, performance, setTimeout, clearTimeout, ReadableStream, console,
+    process, performance, setTimeout, clearTimeout, ReadableStream, Response, console,
   }, { filename });
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, flagError = false, userId = 985, input = 100, output = 20, anthropicFactory, unavailableHaiku = false } = {}) {
+function harness({ enabled = true, flagError = false, userId = 985, input = 100, output = 20, anthropicFactory, unavailableHaiku = false, unavailableStatus = 404 } = {}) {
   const rows = [], pending = [], calls = [], checks = [];
   const usage = { inputTokens: { total: input }, outputTokens: { total: output } };
   const result = { content: [], usage, finishReason: { unified: "stop" } };
@@ -36,12 +36,12 @@ function harness({ enabled = true, flagError = false, userId = 985, input = 100,
     specificationVersion: "v4", provider, modelId, supportedUrls: {},
     doGenerate: async (params) => {
       calls.push({ ...params, requestedModelId: modelId });
-      if (unavailableHaiku && catalog.isHaiku55Model(modelId)) throw Object.assign(new Error("model unavailable"), { status: 404 });
+      if (unavailableHaiku && catalog.isHaiku55Model(modelId)) throw Object.assign(new Error("model unavailable"), { status: unavailableStatus });
       return result;
     },
     doStream: async (params) => {
       calls.push({ ...params, requestedModelId: modelId });
-      if (unavailableHaiku && catalog.isHaiku55Model(modelId)) throw Object.assign(new Error("model unavailable"), { status: 404 });
+      if (unavailableHaiku && catalog.isHaiku55Model(modelId)) throw Object.assign(new Error("model unavailable"), { status: unavailableStatus });
       return { stream: new ReadableStream({ start(controller) {
         controller.enqueue({ type: "finish", usage, finishReason: { unified: "stop" } });
         controller.close();
@@ -217,6 +217,7 @@ test("editor and chat selectors preserve Haiku ids and omit temperature", () => 
     "@/lib/aiModelOptions": catalog,
     "@/lib/systemModelLadder": ladder,
     "@/app/api/ai/_lib/modelProvider": h.api,
+    "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/app/api/ai/_lib/providerGate": {},
     "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-opus", "claude-sonnet-5", "claude-haiku-5"] },
     "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
@@ -342,6 +343,7 @@ test("chat and editor selection resolve saved personal, team and agent Haiku pic
   const stubs = {
     "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
     "@/app/api/ai/_lib/providerGate": providerGate,
+    "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/app/api/ai/_lib/modelProvider": h.api,
     "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-haiku-5"] },
     "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
@@ -378,26 +380,38 @@ test("custom BYOK endpoints upgrade persisted Haiku model ids only with the flag
   }
 });
 
+function editorWithFallback(h, credentialPicks, enabled = true, credential = "fixture-direct") {
+  return moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
+    "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+    "@/app/api/ai/_lib/modelProvider": h.api,
+    "@/app/api/ai/_lib/providerGate": moduleWithStubs("src/app/api/ai/_lib/providerGate.ts", {
+      "@/lib/prisma": {}, "@/lib/aiModelOptions": catalog,
+      "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
+      "@/utils/controllers/projects/getAllIncludes": {},
+    }),
+    "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
+    "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
+    "@/lib/prisma": { userSetting: { findUnique: async () => null } },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Free", lunaFreePlanEnabled: async () => true, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/byokKeys": {
+      getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return entry.id === "gpt-6-luna" && typeof credential === "object" ? "fixture-openai" : credential; },
+      getByokOrTeamGatewayApiKeyForProvider: async (provider) => { credentialPicks.push(provider); return credential; },
+    },
+    "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
+    "@/app/api/ai/_lib/sharedAllowance": pricing,
+    "@ai-sdk/anthropic": { createAnthropic: () => ({ tools: { webSearch_20250305: () => ({}) } }) },
+    "@ai-sdk/openai": { createOpenAI: () => ({ tools: { webSearch: () => ({}) } }) },
+    "./editorAiPrompts": {}, "next/headers": {}, ai,
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {}, "@/app/api/ai/_lib/customInstructions": {},
+    "@/app/api/ai/_lib/taskWriterPrompt": {}, "@/app/api/ai/_lib/taskWriterBoardResearch": {},
+  });
+}
+
 test("editor request defaults to Haiku and its unavailable-model fallback resolves Luna's own BYOK credential", async () => {
   for (const method of ["doGenerate", "doStream"]) {
     const h = harness({ unavailableHaiku: true });
     const credentialPicks = [];
-    const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
-      "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
-      "@/app/api/ai/_lib/modelProvider": h.api,
-      "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
-      "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
-      "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-      "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Free", lunaFreePlanEnabled: async () => true, haiku55ModelEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
-      "@/app/api/ai/_lib/byokKeys": { getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-direct"; } },
-      "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
-      "@/app/api/ai/_lib/sharedAllowance": pricing,
-      "@ai-sdk/anthropic": { createAnthropic: () => ({ tools: { webSearch_20250305: () => ({}) } }) },
-      "@ai-sdk/openai": { createOpenAI: () => ({ tools: { webSearch: () => ({}) } }) },
-      "./editorAiPrompts": {}, "next/headers": {}, ai,
-      "@/utils/controllers/turbopuffer/turbopufferHelper": {}, "@/app/api/ai/_lib/customInstructions": {},
-      "@/app/api/ai/_lib/taskWriterPrompt": {}, "@/app/api/ai/_lib/taskWriterBoardResearch": {},
-    });
+    const editor = editorWithFallback(h, credentialPicks);
     const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
     assert.equal(selected.modelId, option.model);
     const result = await selected.model[method](params);
@@ -408,5 +422,148 @@ test("editor request defaults to Haiku and its unavailable-model fallback resolv
     assert.deepEqual(h.calls.map((call) => call.requestedModelId), ["claude-haiku-5-5", "gpt-6-luna"]);
     await h.flush();
     assert.equal(h.rows.find((row) => row.model === "gpt-6-luna").provider, "byok:openai");
+  }
+});
+
+function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude", modelId = option.model, credential = "fixture-direct" } = {}) {
+  const credentialPicks = [], events = [];
+  const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
+    "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+    "@/app/api/ai/_lib/providerGate": {}, "@/app/api/ai/_lib/modelProvider": h.api,
+    "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-haiku-5"] },
+    "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
+  });
+  const reply = moduleWithStubs("src/lib/ai/chatStream/modelReply.ts", {
+    "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled },
+    "@/app/api/ai/_lib/byokKeys": { getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return "fixture-openai"; } },
+    "@/app/api/ai/_lib/modelProvider": h.api, "@/lib/aiModelOptions": catalog,
+    "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
+    "@/app/api/ai/chat/stream/modelFallback": load(path.join(root, "src/app/api/ai/chat/stream/modelFallback.ts")),
+    "@/lib/ai/chatStream/models": selectors,
+    "@/lib/ai/chatStream/errors": { userFacingErrorMessage: (error) => error.message, userFacingErrorDetails: () => ({}), reportHandledChatError: async () => {} },
+    "@/app/api/ai/_lib/heartbeatExecution": {}, "@/app/api/ai/chat/stream/bulkTools": { hasVisibleCompletion: (chunks) => chunks.length > 0 },
+    "@/lib/ai/chatStream/types": {}, "@/lib/ai/tools/constants": { MAX_TOOL_STEPS: 1 },
+    "@/lib/ai/chatStream/content": {}, "@/lib/ai/tools/metadata": {},
+    ai: { stepCountIs: () => ({}), streamText: ({ model, onError }) => ({ textStream: (async function* () {
+      try {
+        const result = await model.doStream(params);
+        for await (const chunk of result.stream) if (chunk.type === "finish") yield "ok";
+      } catch (error) {
+        await onError({ error });
+        throw error;
+      }
+    })() }) },
+  });
+  const state = {
+    dbUser: { id: 985 }, gatewayTags: { teamId: "fixture-team" },
+    streamCredential: credential, streamModelOption: provider === "claude" ? option : undefined,
+    body: {}, selected: { ...selectors.selectModel(provider, modelId, credential, provider === "claude" ? option : undefined), provider },
+    providerAbort: new AbortController(), send: (...args) => events.push(args), finish: (...args) => events.push(args),
+    recordTurnOutcome: () => {},
+  };
+  const route = moduleWithStubs("src/app/api/ai/chat/stream/route.ts", {
+    "@/lib/ai/chatStream/turnModel": { loadTurnModel: async () => ({ ...state, teamProviderSettings: settings }) },
+    "@/lib/ai/chatStream/stream": { createChatStream: (options) => {
+      Object.assign(state, options);
+      return reply.generateModelReply(state, { instructions: "fixture", messages: [], tools: {}, toolExecutions: [] });
+    } },
+    "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => state.dbUser },
+    "@/app/api/ai/_lib/cronServiceAuth": {}, "@/lib/nativeAgent/heartbeatTurnEnvelope": {},
+    "@/lib/prisma": { user: { findUnique: async () => state.dbUser } },
+    "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": keys,
+    "@/app/api/ai/chat/stream/ensureNativeChatTurn": {},
+    "@/app/api/ai/_lib/currentTaskContext": { resolveAiUsageTaskId: async () => null },
+    "@/app/api/ai/chat/stream/streamLease": { acquireAiChatStreamLease: async () => ({}) },
+    "@/app/api/ai/_lib/heartbeatExecution": {}, "@/lib/ai/chatStream/errors": {},
+    "@/lib/ai/chatStream/request": { chatRequestSchema: { parse: (body) => body } },
+    "@/lib/ai/tools/constants": {},
+  });
+  return { state, credentialPicks, events, run: () => route.POST({ json: async () => ({ message: "fixture" }), headers: { get: () => null } }) };
+}
+
+test("chat fallback respects team provider settings before resolving credentials", async () => {
+  const turnSource = fs.readFileSync(path.join(root, "src/lib/ai/chatStream/turnModel.ts"), "utf8");
+  assert.match(turnSource, /teamProviderSettings = chatTeamContext\?\.aiProviderSettings/);
+  assert.match(turnSource, /return \{[^}]*\bteamProviderSettings\b[^}]*\}/);
+  for (const openai of [false, true, undefined]) {
+    for (const credential of ["fixture-direct", "vck_fixture"]) {
+      for (const unavailableStatus of [403, 404]) {
+        const h = harness({ unavailableHaiku: true, unavailableStatus });
+        const chat = chatWithFallback(h, { settings: { providers: { openai } }, credential });
+        if (openai === false) {
+          await assert.rejects(chat.run(), /model unavailable/);
+          assert.equal(h.calls.length, 1);
+          assert.equal(chat.credentialPicks.length, 0);
+          assert.ok(chat.events.some(([type]) => type === "error"));
+        } else {
+          await chat.run();
+          assert.equal(chat.state.selected.resolvedModelId, "gpt-6-luna");
+          assert.equal(h.calls.length, 2);
+          assert.deepEqual(chat.credentialPicks, credential.startsWith("vck_") ? [] : ["gpt-6-luna"]);
+        }
+        await h.flush();
+      }
+    }
+  }
+});
+
+test("editor fallback respects team provider settings before resolving credentials", async () => {
+  for (const openai of [false, true, undefined]) {
+    for (const credential of ["fixture-direct", "vck_fixture"]) {
+      for (const method of ["doGenerate", "doStream"]) {
+        const h = harness({ unavailableHaiku: true });
+        const credentialPicks = [];
+        const editor = editorWithFallback(h, credentialPicks, true, credential);
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openai } } } });
+        if (openai === false) {
+          await assert.rejects(selected.model[method](params), /model unavailable/);
+          assert.equal(h.calls.length, 1);
+          assert.deepEqual(credentialPicks, [option.id]);
+        } else {
+          const result = await selected.model[method](params);
+          if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
+          assert.equal(selected.modelId, "gpt-6-luna");
+          assert.equal(h.calls.length, 2);
+        }
+        await h.flush();
+      }
+    }
+  }
+});
+
+test("legacy raw effective model drives chat and editor fallback for OpenRouter and custom endpoints", async () => {
+  for (const provider of ["openrouter", "custom"]) {
+    for (const modelId of ["anthropic/claude-haiku-4.5", "claude-haiku-4-5-20251001"]) {
+      for (const enabled of [false, true]) {
+        for (const openai of [false, true]) {
+          for (const unavailableStatus of [403, 404]) {
+            const credential = provider === "custom" ? { apiKey: "fixture", baseUrl: "https://example.test/v1", modelId } : "fixture-direct";
+            const settings = { providers: { openai } };
+            const h = harness({ enabled, unavailableHaiku: true, unavailableStatus });
+            const chat = chatWithFallback(h, { enabled, provider, modelId, credential, settings });
+            if (enabled && !openai) await assert.rejects(chat.run(), /model unavailable/);
+            else await chat.run();
+            assert.equal(h.calls.length, enabled && openai ? 2 : 1);
+            assert.equal(chat.credentialPicks.length, enabled && openai ? 1 : 0);
+            await h.flush();
+            for (const method of ["doGenerate", "doStream"]) {
+              const eh = harness({ enabled, unavailableHaiku: true, unavailableStatus });
+              const credentialPicks = [];
+              const editor = editorWithFallback(eh, credentialPicks, enabled, credential);
+              const selected = await editor.selectTaskWriterModel({ userId: 985, sourceSelected: provider, modelSelected: provider === "custom" ? "custom" : modelId, teamContext: { teamId: "fixture-team", settings } });
+              eh.api.configureAiModelUsage(selected.model, { userId: 985, feature: "task-writer" });
+              if (enabled && !openai) await assert.rejects(selected.model[method](params), /model unavailable/);
+              else {
+                const result = await selected.model[method](params);
+                if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
+              }
+              assert.equal(eh.calls.length, enabled && openai ? 2 : 1);
+              assert.equal(credentialPicks.includes("gpt-6-luna"), enabled && openai);
+              await eh.flush();
+            }
+          }
+        }
+      }
+    }
   }
 });

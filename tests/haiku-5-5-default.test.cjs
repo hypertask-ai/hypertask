@@ -155,3 +155,40 @@ test("BYOK probes use Haiku for Anthropic and gateway accounts while retaining O
   }
   assert.equal(JSON.parse(probe.buildByokTestRequest("openai", "fixture", undefined, true).init.body).model, "gpt-6-luna");
 });
+
+test("title callback dependencies refresh the model when the flag changes while mounted", async () => {
+  const file = "src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts";
+  const source = fs.readFileSync(path.join(root, file), "utf8");
+  const ast = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true);
+  let callback;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === "requestTitleFromDescription") callback = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(callback);
+  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "defaultModelOption"]);
+  const code = ts.transpileModule(`module.exports = ${callback.getText(ast)}`, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  let previous;
+  const requests = [];
+  const useCallback = (fn, dependencies) => {
+    if (!previous || dependencies.some((value, index) => value !== previous.dependencies[index])) previous = { fn, dependencies };
+    return previous.fn;
+  };
+  for (const haiku55Enabled of [false, true, false]) {
+    const loaded = { exports: {} };
+    vm.runInNewContext(code, {
+      module: loaded, useCallback, haiku55Enabled,
+      defaultModelOption: haiku55Enabled ? haiku : catalog.defaultAiModelOption,
+      formValuesRef: { current: { currentProject: { teamId: "fixture-team" } } }, aiModelPreferencesRef: { current: {} },
+      descriptionText: (text) => text, getAiModelPreferenceIds: () => ({}), getAiModelOptionById: catalog.getAiModelOptionById,
+      buildTaskWriterRequestScope: () => ({}), deriveCurrentBoardBilling: () => ({}), taskWriterRoute: "/fixture",
+      fetch: async (_url, init) => { requests.push(JSON.parse(init.body)); return { ok: true, text: async () => "fixture title" }; },
+      extractTitleAndDescription: (title) => ({ title }),
+    });
+    await loaded.exports("fixture description", new AbortController().signal);
+    assert.equal(requests.at(-1).modelOptionId, haiku55Enabled ? haiku.id : catalog.defaultAiModelOption.id);
+  }
+});
