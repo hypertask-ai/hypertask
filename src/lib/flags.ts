@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
   HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
@@ -216,6 +217,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-08",
+    description: "Keeps unused fonts from delaying the existing server-drawn phone board cards. Requires the server first screen.",
+  },
   {
     key: HTPR_7010_HAIKU_5_5_FLAG,
     kind: "feature",
