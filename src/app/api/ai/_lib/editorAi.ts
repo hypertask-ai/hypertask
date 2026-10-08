@@ -802,7 +802,9 @@ export async function selectTaskWriterModel(args: {
       },
     );
     inheritAiModelUsage(fallback.model, selected.model);
-    configureAiModelUsage(fallback.model, { provider: fallback.usageProvider });
+    if (previous.model === "gpt-6-luna") {
+      configureAiModelUsage(fallback.model, { provider: fallback.usageProvider });
+    }
     selected.modelId = fallback.modelId;
     selected.provider = fallback.provider;
     selected.usageProvider = fallback.usageProvider;

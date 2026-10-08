@@ -31,6 +31,7 @@ function stubPlan(plan = "Pro") {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
+    haiku55ModelEnabled: async () => false,
     lunaFreePlanEnabled: async () => false,
     storePlanIdForProject: async () => plan,
   });
