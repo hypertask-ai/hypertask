@@ -25,6 +25,7 @@ export type TAiModelKey =
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "claude-haiku-4.5"
+  | "claude-haiku-5-5"
   | "custom";
 
 export type TAiEffort = "light" | "standard" | "high";
@@ -52,6 +53,7 @@ export type TAiModelOptionId =
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "claude-haiku-4.5"
+  | "claude-haiku-5-5"
   | "custom";
 
 export type TAiProviderOptions = Record<string, Record<string, any>>;
@@ -119,6 +121,12 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   {
     key: "claude-haiku-4.5",
     label: "Haiku 4.5",
+    provider: "anthropic",
+    priceTier: 1,
+  },
+  {
+    key: "claude-haiku-5-5",
+    label: "Haiku 5.5",
     provider: "anthropic",
     priceTier: 1,
   },
@@ -378,6 +386,19 @@ export const aiModelOptions: TAiModelOption[] = [
     desc: "Fast and cheap Claude",
     reasoning: "instant",
     modelKey: "claude-haiku-4.5",
+  },
+  {
+    id: "claude-haiku-5-5",
+    source: "claude",
+    title: "Haiku 5.5",
+    model: "claude-haiku-5.5",
+    directModel: "claude-haiku-5-5",
+    desc: "Fast and cheap Claude with adaptive thinking",
+    reasoning: "thinking",
+    modelKey: "claude-haiku-5-5",
+    providerOptions: {
+      anthropic: { thinking: { type: "adaptive" }, effort: "medium" },
+    },
   },
   {
     id: "deepseek-v4.1-flash",
@@ -706,4 +727,15 @@ export function getNearestAiModelOption(
   });
 
   return getAiModelOption(modelKey, nearestEffort, options);
+}
+
+export function isHaiku55Model(modelId: string): boolean {
+  return /(?:^|\/)claude-haiku-5[.-]5$/.test(modelId);
+}
+
+export function isAiModelOptionVisible(
+  option: TAiModelOption,
+  haiku55Enabled: boolean,
+): boolean {
+  return option.modelKey !== "claude-haiku-5-5" || haiku55Enabled;
 }

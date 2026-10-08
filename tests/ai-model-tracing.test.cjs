@@ -8,7 +8,8 @@ const { wrapLanguageModel } = require('ai');
 const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
-const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
+const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage, modelCostUsd } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
+const { isHaiku55Model } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
 
 function harness({ rejectTelemetry = false, rejectPricing = false, observationSink } = {}) {
   const rows = [], captures = [], errors = [], pending = [], allowances = [];
@@ -27,11 +28,13 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     ai: { ...require('ai'), createGateway: () => factory('gateway') },
     '@/app/api/ai/_lib/sharedAllowance': {
       sharedAiAllowanceErrorMessage,
+      modelCostUsd,
       gatewayCatalogModelSlug: (id) => id,
       createSharedAllowanceMiddleware: (args) => { allowances.push(args); return { specificationVersion: 'v4' }; },
       modelPricing: async () => { if (rejectPricing) throw new Error('unknown price'); return { inputUsdPerToken: 0.000003, outputUsdPerToken: 0.000015 }; },
     },
-    '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined },
+    '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model },
+    '@/lib/flags/keys': { HTPR_7010_HAIKU_5_5_FLAG: 'htpr-7010-haiku-5-5' },
     '@/lib/aiProviders': { getAiProviderInfo: () => ({ openAiCompatibleBaseUrl: 'https://example.test/v1' }) },
     '@/lib/aiAllowancePolicy': { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
     '@/lib/aiUsageClassification': { isSystemAiFeature: (feature) => feature === 'summary', INCLUDED_WITH_HYPERTASK_GATEWAY_TAG: 'system' },

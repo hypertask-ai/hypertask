@@ -20,14 +20,17 @@ import {
   createSharedAllowanceMiddleware,
   gatewayCatalogModelSlug,
   modelPricing,
+  modelCostUsd,
   sharedAiAllowanceErrorMessage,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
+  isHaiku55Model,
   type TAiModelOption,
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import {
   FREE_TEAM_AI_ALLOWANCE_USD,
   PAID_TEAM_AI_ALLOWANCE_USD,
@@ -294,7 +297,7 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
       modelPricing(slug),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
     ]);
-    return pricing ? inputTokens * pricing.inputUsdPerToken + outputTokens * pricing.outputUsdPerToken : null;
+    return pricing ? modelCostUsd(pricing, inputTokens, outputTokens) : null;
   } catch {
     return null;
   } finally {
@@ -357,6 +360,28 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   };
   return {
     specificationVersion: "v4",
+    transformParams: async ({ params }) => {
+      if (!isHaiku55Model(modelId)) return params;
+      // Check at inference so raw ids, saved choices and BYOK cannot bypass the flag.
+      const enabled = context.userId
+        ? await import("@/lib/flags")
+            .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, context.userId!))
+            .catch(() => false)
+        : false;
+      if (!enabled) throw new Error("This AI model is unavailable.");
+      const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
+      return {
+        ...supportedParams,
+        providerOptions: {
+          ...params.providerOptions,
+          anthropic: {
+            ...params.providerOptions?.anthropic,
+            thinking: { type: "adaptive" },
+            effort: "medium",
+          },
+        },
+      };
+    },
     wrapGenerate: async ({ doGenerate, params }) => {
       const record = start(params.prompt);
       try {

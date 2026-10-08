@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +13,7 @@ import {
   aiImageModelDefinitions,
   aiModelDefinitions,
   aiModelOptions,
+  isAiModelOptionVisible,
   getAiModelDefinition,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
@@ -307,6 +310,10 @@ function DictationProviderDropdown({
 }
 
 const AiFeaturesSection = () => {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const visibleModelOptions = haiku55Enabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
@@ -383,7 +390,7 @@ const AiFeaturesSection = () => {
           priceTier: 3,
         }));
     }
-    return aiModelOptions.flatMap((option) => {
+    return visibleModelOptions.flatMap((option) => {
       const definition = getAiModelDefinition(option.modelKey);
       if (
         !definition ||

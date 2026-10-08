@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -74,6 +76,7 @@ export async function GET(request: NextRequest) {
         storePlanId,
         providersWithByok,
         lunaFree: await lunaFreePlanEnabled(ctx.user.id),
+        haiku55Enabled: await isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, ctx.user.id).catch(() => false),
       }),
     });
   } catch (cause) {

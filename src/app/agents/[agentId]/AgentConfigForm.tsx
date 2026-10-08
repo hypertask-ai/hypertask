@@ -1,6 +1,8 @@
 "use client";
 
-import { aiModelOptions } from "@/lib/aiModelOptions";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { aiModelOptions, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import AgentSelect, { AgentOption } from "../AgentSelect";
@@ -51,6 +53,10 @@ export function AgentConfigForm({
   handleVisibilityChange, providerKeyLoaded, visibilityNotice, savingImportant,
   handleImportantToggle, currentUser,
 }: Props) {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const visibleModelOptions = haiku55Enabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   return (
     <>
                 <section className="bg-comment-description rounded-[4px] px-4 py-3 shadow-md flex flex-col gap-1.5">
@@ -107,7 +113,7 @@ export function AgentConfigForm({
                       <AgentOption value="">Team default</AgentOption>
                       {/* Same list the PATCH route enforces, so the picker can
                         never offer something the API will reject. */}
-                      {aiModelOptions
+                      {visibleModelOptions
                         .filter((option) => canPinModelOption(option.id))
                         .map((option) => (
                           <AgentOption key={option.id} value={option.id}>
