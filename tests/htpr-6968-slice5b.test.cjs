@@ -26,12 +26,12 @@ const endpoints = {
   getArchivedTasks: { query: { projectId: "15", cursor: "42", boardScope: "all", q: " term " } },
   getArchivedTasksByProject: { query: { projectId: "15" } },
   getTask: { query: { project: "project-15", uniqueIndex: "42" } },
-  getTaskMinimal: { body: { id: 42 }, method: "POST", public: true },
+  getTaskMinimal: { body: { id: 42 }, method: "POST" },
   getUnscheduled: { query: { searchQuery: "term" } },
   detailMeta: { query: { taskId: "42" } },
   searchAll: { body: { projectIds: [15, 99], searchQuery: "HTPR-70" } },
   searchByParam: { query: { param: "all", projectId: "15" } },
-  searchOrphans: { query: { projectId: "15", currentTaskId: "42", searchQuery: "term" }, public: true },
+  searchOrphans: { query: { projectId: "15", currentTaskId: "42", searchQuery: "term" } },
 };
 const sources = slice5bLegacySources();
 function compileOriginal(source, mocks) {
@@ -68,12 +68,12 @@ function fixture(name, scenario = {}, mode = false) {
       return mode === true;
     } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows) },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: userId => ({ ownerId: userId }) },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: userId => ({ ownerId: userId }), projectContentAccessWhere: userId => ({ ownerId: userId }) },
     "@/lib/prisma": { default: {
       project: { findMany: record("boards", scenario.denied ? [] : [{ id: 15 }], scenario.boardsThrow) },
       task: {
         findUnique: record("minimal", scenario.missingTask ? null : fullTask, scenario.operationThrows),
-        findFirst: record("task-scope", scenario.denied || scenario.missingTask ? null : { userId: scenario.creatorless ? null : 985, agentId: scenario.agentCreator ? "creator-agent" : null }, scenario.operationThrows),
+        findFirst: record("task-scope", scenario.denied || scenario.missingTask ? null : name === "getTaskMinimal" ? fullTask : { id: 42, userId: scenario.creatorless ? null : 985, agentId: scenario.agentCreator ? "creator-agent" : null }, scenario.operationThrows),
         findMany: async (...args) => {
           effects.push(["unscheduled", ...structuredClone(args)]);
           if (scenario.operationThrows) throw new Error("unscheduled unavailable");
@@ -166,7 +166,7 @@ const cases = {
     ["full scalar row", {}], ["missing id", { body: {}, status: 400 }], ["zero id", { body: { id: 0 }, status: 400 }],
     ["null body", { body: null, status: 500 }], ["absent body", { body: undefined, status: 500 }],
     ["string id unchanged", { body: { id: "42tail" } }], ["array id unchanged", { body: { id: [42, 43] } }],
-    ["missing task", { missingTask: true }], ["no permission check added", { denied: true }],
+    ["missing task", { missingTask: true }], ["permission denied before content", { denied: true, status: 404 }],
     ["GET accepts body", { method: "GET" }], ["DELETE still reads", { method: "DELETE" }],
     ["PATCH still reads", { method: "PATCH" }], ["nonstandard method still reads", { method: "CUSTOM" }],
     ["controller throws", { operationThrows: true, status: 500 }],
@@ -205,7 +205,7 @@ const cases = {
     ["nested status envelope and ranking", {}], ["missing fields string", { query: {}, status: 200 }],
     ["arrays and numeric prefixes", { query: { projectId: ["15tail", "99"], currentTaskId: ["42tail", "43"], searchQuery: ["term", "other"] } }],
     ["invalid numbers delegated", { query: { projectId: "bad", currentTaskId: "bad" } }],
-    ["no permission gate added", { denied: true }], ["controller throws", { operationThrows: true, status: 200 }],
+    ["permission denied before content", { denied: true, status: 404 }], ["controller throws", { operationThrows: true, status: 200 }],
   ],
 };
 for (const name of Object.keys(endpoints)) {

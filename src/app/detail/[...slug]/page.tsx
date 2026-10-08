@@ -8,7 +8,8 @@ import {
   parseProjectSlug,
 } from "@/utils/controllers/taskDetail/load";
 import { Metadata } from "next";
-import { requireServerCookieUser } from "@/lib/auth/serverUser";
+import { getServerCookieUser, requireServerCookieUser } from "@/lib/auth/serverUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 
@@ -29,22 +30,20 @@ import Unauthorized from "../../unauthorized/page";
 
 export async function generateMetadata(props: any): Promise<Metadata> {
   const params = await props.params;
-  // read route params
-  if (!parseDetailSlug(params.slug)) return { title: "Hypertask" }
-  params.slug[0], params.slug[1]
-  console.log("🚀 ~ params.slug[1]:", params.slug[1])
-  // fetch data
+  const slug = parseDetailSlug(params.slug);
+  if (!slug) return { title: "Hypertask" };
+  const user = await getServerCookieUser();
+  if (!user) return { title: "Hypertask" };
   const task = await prisma.task.findFirst({
     where: {
-      uniqueIndex: parseInt(params.slug[1]),
-      project: {
-        id: parseInt(params.slug[0].split('-')[1]),
-      }
+      ...slug,
+      project: projectContentAccessWhere(user.id),
     },
     select: { title: true, ticketNumber: true }
-  })
+  });
+  if (!task) return { title: "Hypertask" };
 
-  const tabTitle = task?.ticketNumber + " " + task?.title + " - Hypertask"
+  const tabTitle = task.ticketNumber + " " + task.title + " - Hypertask"
   return {
     title: tabTitle,
 

@@ -389,10 +389,11 @@ const slice5bRoutes = {
     "method": "GET",
     "hash": "5c3fe5f24649ad569a849fdef4aea86c70bda630533421e950e100cac5bcb2e9"
   },
+  // HTPR-7017: security fixes intentionally replace the unauthenticated read contract.
   "getTaskMinimal": {
     "module": "minimal-read",
     "method": "READ",
-    "hash": "0b5fa4385e7cbffea28526960e637cd570b688e7b41a86cd1b1fbfcaec0f4bde"
+    "hash": "7a264c49ca54d680ec33f7fbd27ffb3bfa8943ff173314254a7cd2c25a8ba023"
   },
   "getUnscheduled": {
     "module": "unscheduled-read",
@@ -417,7 +418,7 @@ const slice5bRoutes = {
   "searchOrphans": {
     "module": "search-orphans",
     "method": "GET",
-    "hash": "4f23124348d24a0e3c2353b8f4c10a9a38bbf766b9842d5ff1192a9ba75ff1d9"
+    "hash": "5631236d4a484844dd6d15deab0f0ba1644f4e9b0f848dfdc5424206f5632216"
   }
 };
 function slice5bLegacySources() {
@@ -676,12 +677,13 @@ const notificationRoutes = {
     "path": "src/pages/api/notifications/unArchiveNotificationById.ts",
     "hash": "310f19f6da5f0741cade25d21ee04bd4d3aa9d3acc26888b76609c891830d9a4"
   },
+  // HTPR-7017: require board access and scope comment IDs to the authorized task.
   "updateSeen": {
     "module": "comments-seen",
     "method": "POST",
     "domain": "comments",
     "path": "src/pages/api/comments/updateSeen.ts",
-    "hash": "385eb8048ce8ca63a133c688d5d981c69ee595a4757bcd828186a61ebad93b9d"
+    "hash": "c50eb838fc0f003012674e843229d3e08e1a80b0b00f08d71535d57d85a55568"
   }
 };
 function notificationLegacySources() {
@@ -844,8 +846,8 @@ const notificationSettingsProtectedHashes = {
   "src/lib/api/notification-writes/follower-email.ts": "b64177bb06505ec5c88c8c8f116180ec5ea9d79b1cd540fd00f0deaeb7868cff",
   "src/pages/api/notifications/unArchiveNotificationById.ts": "4d5382c27d6dbfa4eb332a51469e49c0b94f3885fb132050690d13621a415766",
   "src/lib/api/notification-writes/unarchive-by-id.ts": "1ba74c345046ca08e08e4ce6fff2764d232fc968be30d3eb53234211c4231923",
-  "src/pages/api/comments/updateSeen.ts": "aa2fb8a0ab926a2bfcd58afe0858703bcfaf0471fd6a03771b6339b84bd8d8e9",
-  "src/lib/api/notification-writes/comments-seen.ts": "eea010033b09c0a998f6a1461fe455f8e57bab882ce64a725aaeee6bef1dd6e1",
+  "src/pages/api/comments/updateSeen.ts": "b195ce617cfcaafd457fb4d9ca0b5e3144bc5cd2d154e9ae60c612c351614fa6",
+  "src/lib/api/notification-writes/comments-seen.ts": "26fd763a255cd97ee4e0d6376490cba903efe8c2aa2378c7d18235cd8c1ffc20",
   "src/lib/api/task-writes/route.ts": "ede51193ada9ee53a18b8d1b54ab7a6f0a7ac47f0fe98ece94293556cb0faa71",
   "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
   "src/prisma/schema.prisma": "a67938af392180ea5f40ee997db680c883a337b30911fc0d44dfebbde48ef603",

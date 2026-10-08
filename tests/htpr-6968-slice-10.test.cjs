@@ -77,6 +77,7 @@ function fixture(name, scenario = {}, mode = false) {
         return structuredClone(found);
       },
     },
+    task: { findFirst: async args => { step("task-scope", args); return scenario.denied ? null : { id: Number(args.where.id) }; } },
     comment: { updateMany: async args => { step("comments", args); return { count: 2 }; } },
     $transaction: async fn => { step("transaction"); const result = await fn(db); step("commit"); return result; },
     $queryRaw: async (_strings, ...values) => { step("task-project-lock", values); return [{ projectId: scenario.wrongBoard ? 16 : 15 }]; },
@@ -102,6 +103,7 @@ function fixture(name, scenario = {}, mode = false) {
       return mode === true;
     } },
     "@/lib/prisma": { default: db },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: userId => ({ ownerId: userId }) },
     "@/lib/realtime/server": realtime,
     "@/utils/controllers/tasks/assertTaskAccess": { userCanAccessTaskContent: async (...args) => { step("task-access", ...args); return !scenario.denied; } },
     "@/utils/controllers/notifications/sendMentionEmail": { sendMentionEmail: async (...args) => { step("email", ...args); return !scenario.emailFailed; } },
@@ -286,8 +288,8 @@ test("task-seen keeps signed user, Normal-only selection and comment write after
   assert.deepEqual(old.effects, [["updateMany", { data: { seen: true }, where: { userId: 985, taskId: 42, status: "Normal" } }]]);
   const comments = await parity("updateSeen", { failLabel: "updateMany" });
   assert.equal(comments.expected.status, 200, "legacy proceeds when the seen controller returns its caught 500");
-  assert.deepEqual(comments.old.effects.map(([label]) => label), ["updateMany", "comments"]);
-  assert.deepEqual(comments.old.effects[1][1], { where: { id: { in: [10, 11] }, NOT: { seen: { has: 985 } } }, data: { seen: { push: 985 } } });
+  assert.deepEqual(comments.old.effects.map(([label]) => label), ["task-scope", "updateMany", "comments"]);
+  assert.deepEqual(comments.old.effects[2][1], { where: { id: { in: [10, 11] }, taskId: 42, NOT: { seen: { has: 985 } } }, data: { seen: { push: 985 } } });
 });
 test("inbox creation retains task lock, dedupe/reminder path and exactly one realtime after unlock", async () => {
   const { old } = await parity("moveTaskToInbox", { noRows: true });

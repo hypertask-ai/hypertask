@@ -3,6 +3,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 
@@ -21,7 +22,8 @@ export default  async function handler(
     const reminders = await prisma.reminder.findMany({
         where:{
             userId: session.userId,
-            status:"Normal"
+            status:"Normal",
+            task: { project: projectContentAccessWhere(session.userId) },
             
         },
         include:{

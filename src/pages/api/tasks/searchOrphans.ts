@@ -1,6 +1,9 @@
 import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import SearchForOrphanTasks from "@/utils/controllers/tasks/getOrphanTasks";
+import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -8,11 +11,19 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "GET") {
     try {
+      const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+      if (!session) return res.status(401).json({ message: "Unauthorized" });
       const { projectId, searchQuery, currentTaskId } = req.query;
 
       if (!projectId || !currentTaskId) {
         return res.status(200).json("Missing Required Data");
       }
+
+      const task = await prisma.task.findFirst({
+        where: { id: parseInt(currentTaskId as string), projectId: parseInt(projectId as string), project: projectContentAccessWhere(session.userId) },
+        select: { id: true },
+      });
+      if (!task) return res.status(404).json({ message: "Task not found" });
 
       const response = await SearchForOrphanTasks(
         parseInt(projectId as string),
