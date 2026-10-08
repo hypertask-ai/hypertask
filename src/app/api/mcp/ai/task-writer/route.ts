@@ -139,7 +139,12 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    if (error instanceof AiFeatureDisabledError) {
+    if (
+      error instanceof AiFeatureDisabledError ||
+      (error instanceof Error &&
+        (error.name === "AiGatewayKeyRequiredError" ||
+          error.name === "AiPlanAccessError"))
+    ) {
       return NextResponse.json(
         { success: false, error: error.message },
         { status: 403 }
