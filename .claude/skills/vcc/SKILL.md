@@ -33,7 +33,7 @@ This skill also lives in `~/.agents/skills/vcc` so Codex sessions load it (type 
 - Follow the repo CLAUDE.md and the board-15 contracts in hypertask-ai/company-skills `agents/Hypertask Product/` (merge rules, QA and safety, ticket communication). Branch off `origin/production` in your own worktree, one ticket one PR, title `HTPR-NNNN [FEATURE] ...` (or the honest type), PR body starts "Summary for non-engineers".
 - New behaviour ships behind a flag named after the ticket, default Owner + QA. Valentin judges the real thing on the live site behind the flag; never park the ticket for a mockup.
 - Product questions go on the ticket as one `Question:` comment that @mentions Valentin (via `vcc`), and the ticket moves to Valentin Review. Everything else you decide.
-- Delegate big reading, writing or self-contained coding to Codex sub-sessions via hax (Valentin, 2026-10-01): `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` in the background, each told to use the unlazy skill. No Claude subagents for delegated work.
+- Delegate big reading, writing or self-contained coding to Codex sub-sessions via hax (Valentin, 2026-10-01): `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<prompt>"` in the background, each told to use the unlazy skill. No Claude subagents for delegated work. A hax helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
 
 ## QA routine (Valentin, 2026-10-01: "you will do the whole feature end to end", "you need to verify yourself")
 
