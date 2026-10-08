@@ -33,6 +33,9 @@ Start with `/ship`: Valentin's own Claude Code or Codex session takes one ticket
 15. **Read the CI reference before changing workflows, runners, rulesets, required checks or previews:** https://hypertask.app/wiki/deployment and `docs/ci-policy.yml`. App CI runs on GitHub-hosted runners. No VPN runner, new host or default preview gate without a recorded decision.
 16. **CLI and MCP tickets:** File a CLI, MCP or `/api/mcp/*` bug unassigned on board 15 with the exact command, error and expected result. CLI tickets are fixed in `hypertask-ai/cli` (`~/projects/hypertask-cli-zig`, PRs to `main`, tests `zig build test` and `python3 scripts/parity_test.py`). The Node CLI is retired. `/api/mcp/*` server changes stay in this repo.
 
+### AI models
+17. One AI model per class: a new model version replaces the old one in the same change (old one leaves every picker, saved picks move to the new one). Enforced by tests/model-class-unique.test.cjs (Valentin, 2026-10-08).
+
 ### Helpers
 Use Codex sub-sessions when helpers are needed: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. The owning session remains responsible for the ticket through live verification and close.
 
