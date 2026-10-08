@@ -11,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -137,7 +138,8 @@ class TemporaryTests(Fixture):
         for name, target in zip(('cwd', 'root', 'fd/1'), paths):
             (proc / name).symlink_to(target)
         self.process.stop()
-        found, unknown = disk.process_paths(proc.parent)
+        with patch.object(disk.subprocess, 'run', side_effect=FileNotFoundError('sudo unavailable')):
+            found, unknown = disk.process_paths(proc.parent)
         self.assertEqual(found, set(paths))
         self.assertFalse(unknown)
 
@@ -270,6 +272,97 @@ class TemporaryTests(Fixture):
 
 
 class ProcessTests(Fixture):
+    def setUp(self):
+        super().setUp()
+        sudo = patch.object(disk.subprocess, 'run', side_effect=subprocess.CalledProcessError(1, ['sudo']))
+        self.sudo = sudo.start()
+        self.addCleanup(sudo.stop)
+
+    def test_privileged_scan_keeps_used_candidate(self):
+        target = self.output_dir(self.tmp / 'old')
+        self.process.stop()
+        self.sudo.side_effect = None
+        self.sudo.return_value = subprocess.CompletedProcess([], 0, json.dumps([str(target / 'output')]))
+        self.guard.temporary()
+        self.assertTrue(target.exists())
+        self.assertIn('process has cwd/fd/root inside', self.output.getvalue())
+        self.sudo.assert_called_once_with(
+            ['sudo', '-n', '/usr/bin/python3', '-I', '-c', disk.PRIVILEGED_PROCESS_SCAN],
+            capture_output=True, text=True, check=True, timeout=60)
+        self.assertEqual(self.guard.process_snapshot, ({target / 'output'}, set()))
+
+    def test_privileged_scan_removes_unused_old_candidate(self):
+        target = self.output_dir(self.tmp / 'old')
+        self.process.stop()
+        self.sudo.side_effect = None
+        self.sudo.return_value = subprocess.CompletedProcess([], 0, '[]')
+        # A successful privileged scan must not consult the unprivileged scan.
+        with patch.object(disk.Path, 'iterdir', wraps=disk.Path.iterdir) as entries:
+            found, uncertain = disk.process_paths()
+            entries.assert_not_called()
+        self.assertEqual((found, uncertain), (set(), set()))
+        self.guard.temporary()
+        self.assertFalse(target.exists())
+        self.assertEqual(self.sudo.call_count, 3)  # Direct call, initial scan, pre-delete refresh.
+
+    def test_invalid_privileged_output_falls_back_and_keeps_root_cache(self):
+        process = self.proc(123)
+        target = self.output_dir(self.tmp / 'claude-123/.next/cache')
+        self.process.stop()
+        self.sudo.side_effect = None
+        for output in ('not JSON', '{}', '[null]', '["relative"]'):
+            with self.subTest(output=output):
+                self.sudo.return_value = subprocess.CompletedProcess([], 0, output)
+                with self.foreign_owner(process, 0), \
+                     patch.object(disk.os, 'readlink', side_effect=PermissionError('root')):
+                    snapshot = disk.process_paths(process.parent)
+                    self.assertEqual(snapshot, (set(), {process}))
+                    with patch.object(disk, 'process_paths', return_value=snapshot):
+                        self.guard.temporary()
+                self.assertTrue(target.exists())
+        self.assertIn('privileged process scan unavailable', self.output.getvalue())
+
+    def test_sudo_unavailable_or_timeout_falls_back(self):
+        process = self.proc(123)
+        self.process.stop()
+        for error in (FileNotFoundError('sudo'), subprocess.TimeoutExpired(['sudo'], 60),
+                      subprocess.CalledProcessError(1, ['sudo'])):
+            with self.subTest(error=type(error).__name__):
+                self.sudo.side_effect = error
+                found, uncertain = disk.process_paths(process.parent)
+                self.assertEqual(found, {self.home, Path('/')})
+                self.assertFalse(uncertain)
+
+    def test_embedded_scan_reads_links_and_strips_deleted_suffix(self):
+        entries = [contextlib.nullcontext(iter([Path('/proc/123')])),
+                   contextlib.nullcontext(iter([SimpleNamespace(path='/proc/123/fd/1')]))]
+        with patch.object(disk.os, 'scandir', side_effect=entries), \
+             patch.object(disk.os, 'readlink', side_effect=['/tmp/used (deleted)', '/', 'socket:[1]']) as links:
+            exec(disk.PRIVILEGED_PROCESS_SCAN, {})
+        self.assertEqual(json.loads(self.output.getvalue()), ['/', '/tmp/used'])
+        self.assertEqual([call.args[0] for call in links.call_args_list],
+                         ['/proc/123/cwd', '/proc/123/root', '/proc/123/fd/1'])
+
+    def test_embedded_scan_skips_vanished_processes_and_descriptors(self):
+        with patch.object(disk.os, 'scandir', side_effect=[
+                contextlib.nullcontext(iter([Path('/proc/123')])), FileNotFoundError('vanished')]), \
+             patch.object(disk.os, 'readlink', side_effect=[FileNotFoundError('vanished'),
+                                                          ProcessLookupError('vanished')]):
+            exec(disk.PRIVILEGED_PROCESS_SCAN, {})
+        self.assertEqual(json.loads(self.output.getvalue()), [])
+
+    def test_embedded_scan_fails_on_permission_or_io_errors(self):
+        for operation in ('scandir', 'readlink'):
+            for error in (PermissionError('unreadable'), OSError(errno.EIO, 'I/O error')):
+                with self.subTest(operation=operation, error=type(error).__name__):
+                    entries = [contextlib.nullcontext(iter([Path('/proc/123')])),
+                               error if operation == 'scandir' else contextlib.nullcontext(iter([]))]
+                    with patch.object(disk.os, 'scandir', side_effect=entries), \
+                         patch.object(disk.os, 'readlink', side_effect=error), \
+                         self.assertRaises(type(error)):
+                        exec(disk.PRIVILEGED_PROCESS_SCAN, {})
+        self.assertEqual(self.output.getvalue(), '')
+
     def proc(self, pid):
         process = self.root / 'proc' / str(pid)
         (process / 'fd').mkdir(parents=True)
@@ -332,9 +425,9 @@ class ProcessTests(Fixture):
                         with patch.object(disk, 'process_paths', return_value=(found, uncertain)):
                             self.guard.temporary()
                     self.assertTrue(target.exists())
-        self.assertIn('other accounts could be using it', self.output.getvalue())
+        self.assertIn('privileged process scan unavailable', self.output.getvalue())
 
-    def test_unreadable_root_allows_only_old_named_rebuildable_caches(self):
+    def test_sudo_failure_and_unreadable_root_keeps_all_old_named_caches(self):
         process = self.proc(123)
         self.process.stop()
         with self.foreign_owner(process, 0), \
@@ -351,7 +444,8 @@ class ProcessTests(Fixture):
                         self.assertTrue(target.exists())
                         self.old(target)
                         self.guard.temporary()
-                        self.assertFalse(target.exists())
+                        self.assertTrue(target.exists())
+                        self.assertIn('privileged process scan unavailable', self.output.getvalue())
 
                 checkout = self.output_dir(self.tmp / 'zig016-checkout')
                 (checkout / '.git').mkdir()

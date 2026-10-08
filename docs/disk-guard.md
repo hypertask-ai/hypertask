@@ -31,19 +31,23 @@ in place. Reinstall to update the installed copy. No crontab is used.
   named `node-compile-cache*` and `.next/cache` descendants are eligible, with
   the same age, ownership and process checks. A live process using a cache
   keeps it. No generalized Claude scratchpad deletion is performed.
-- Readable process `cwd`, `fd`, and `root` links are scanned across all UIDs,
-  including root. Any process using a candidate keeps it. Unreadable other-UID
-  processes keep candidates with reason `other accounts could be using it`,
-  regardless of permission bits, including `0700`. Only named rebuildable cache
-  directories may be removed under this uncertainty: `.next/cache`,
-  `node-compile-cache*`, `.zig-cache`, `zig-cache`, and top-level `/tmp/zig-cache*`
-  or `/tmp/zig016*` directories containing no `.git`. The same ownership,
-  two-day newest-mtime and readable-process checks still apply; Git checkouts
-  stay protected. Permission or I/O errors in an own-process scan keep the
-  candidate, except for `sshd`, `(sd-pam)`, `gpg-agent`, `ssh-agent`, and zombies.
-  These harmless exceptions apply only to our own UID. Failed process IDs are
-  retried for each later candidate; readable paths are cached. Every deletion
-  refreshes the full scan. No privileged helper is installed.
+- Process inspection first tries a read-only sudo scan across all UIDs, including
+  root: `sudo -n /usr/bin/python3 -I -c <fixed embedded script>`, without a shell
+  and with a 60-second timeout. The constant script only lists `/proc` entries
+  and reads `cwd`, `root`, and `fd` symlink targets, strips ` (deleted)`, and
+  returns absolute paths as JSON. Vanished processes/descriptors are skipped;
+  other inspection errors fail the scan. No caller data enters the sudo command,
+  nothing is written as root, and no privileged helper is installed.
+  A successful scan is complete, with no uncertainty. If sudo is unavailable,
+  fails, times out, or returns invalid output, the unprivileged scan is used.
+  Any unreadable other-UID or root process then keeps every candidate, including
+  named caches and `0700` directories, with reason
+  `privileged process scan unavailable`. Any process using a candidate keeps it.
+  Permission or I/O errors in an own-process scan also keep the candidate, except
+  for `sshd`, `(sd-pam)`, `gpg-agent`, `ssh-agent`, and zombies. These harmless
+  exceptions apply only to our own UID in the unprivileged fallback. Failed
+  process IDs are retried for each later candidate; readable paths are cached.
+  Every deletion refreshes the full scan.
 - Worktree discovery covers repositories under `~/projects`, including nested
   worker-tree parents. Dependency/build directories are not traversed for repo
   discovery. The `~/projects/hypertask` checkout is never used as a command cwd

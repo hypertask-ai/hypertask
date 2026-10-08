@@ -72,7 +72,43 @@ def contains_git(path):
     return False
 
 
+# Fixed read-only code: no candidate paths or other caller data reach sudo.
+PRIVILEGED_PROCESS_SCAN = r'''
+import json
+import os
+
+paths = set()
+with os.scandir('/proc') as entries:
+    processes = [entry.name for entry in entries if entry.name.isdigit()]
+for pid in processes:
+    process = '/proc/' + pid
+    links = [process + '/cwd', process + '/root']
+    try:
+        with os.scandir(process + '/fd') as entries:
+            links.extend(entry.path for entry in entries)
+    except (FileNotFoundError, ProcessLookupError):
+        pass
+    for link in links:
+        try:
+            target = os.readlink(link)
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        if target.startswith('/'):
+            paths.add(target.removesuffix(' (deleted)'))
+print(json.dumps(sorted(paths)))
+'''
+
+
 def process_paths(proc=Path('/proc'), processes=None):
+    try:
+        output = subprocess.run(['sudo', '-n', '/usr/bin/python3', '-I', '-c', PRIVILEGED_PROCESS_SCAN],
+                                capture_output=True, text=True, check=True, timeout=60).stdout
+        targets = json.loads(output)
+        if not isinstance(targets, list) or any(not isinstance(p, str) or not p.startswith('/') for p in targets):
+            raise ValueError('invalid privileged process scan')
+        return {Path(p) for p in targets}, set()
+    except (OSError, subprocess.SubprocessError, ValueError):
+        pass
     paths, uncertain = set(), set()
     for process in proc.iterdir() if processes is None else processes:
         if not process.name.isdigit():
@@ -227,17 +263,11 @@ class Guard:
             return 'process has cwd/fd/root inside'
         if uncertain:
             try:
-                if any(process.stat().st_uid == os.getuid() for process in uncertain):
-                    return 'process scan incomplete (permission or I/O error)'
+                if any(process.stat().st_uid != os.getuid() for process in uncertain):
+                    return 'privileged process scan unavailable'
             except OSError:
-                return 'process scan incomplete (permission or I/O error)'
-            if not (path.is_dir() and (
-                    (path.name == 'cache' and path.parent.name == '.next')
-                    or path.name.startswith('node-compile-cache')
-                    or path.name in {'.zig-cache', 'zig-cache'}
-                    or (path.parent == self.tmp and path.name.startswith(('zig-cache', 'zig016')))
-            ) and not contains_git(path)):
-                return 'other accounts could be using it'
+                return 'privileged process scan unavailable'
+            return 'process scan incomplete (permission or I/O error)'
         return None
 
     def safety(self, path, age, exclude=(), refresh=False):
