@@ -348,8 +348,8 @@ function sourceCallback(file, env, name) {
 
 const globalProvider = "src/components/ProviderGlobal/GloablProviders.tsx";
 const cachedNavigation = "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx";
-const queueSource = fs.readFileSync(path.resolve(__dirname, "..", globalProvider), "utf8").includes('"htpr-7002-detail-keyboard"')
-  ? globalProvider : cachedNavigation;
+const queueHook = "src/hooks/useInboxEFirstPressQueue.ts";
+const queueSource = fs.existsSync(path.resolve(__dirname, "..", queueHook)) ? queueHook : cachedNavigation;
 
 function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...options } = {}) {
   const flow = makeFlow(t, { enabled, ...options });
@@ -462,7 +462,7 @@ for (const enabled of [false, true]) {
     };
     const Shell = new Function(...Object.keys(env), `${compiled}\nreturn Shell;`)(...Object.values(env));
     function Provider() {
-      React.useEffect(() => queueSource === globalProvider ? flow.mountQueue() : undefined, []);
+      React.useEffect(() => queueSource === queueHook ? flow.mountQueue() : undefined, []);
       return React.createElement(Shell, null, React.createElement("article"));
     }
     const renderer = createRoot(dom.window.document.getElementById("root"));
