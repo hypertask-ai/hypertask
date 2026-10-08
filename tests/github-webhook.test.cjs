@@ -687,6 +687,42 @@ test("extractTicketId skips agent slugs and finds the linked board ticket", () =
   );
 });
 
+test("extractTicketId ignores flag keys in the body of another board's PR (PR 1191 moved HTPR-7010)", () => {
+  const { extractTicketId } = loadTs(
+    "src/app/api/webhooks/github/github-webhook-helpers.ts"
+  );
+
+  // HTPR-7014: PR 1191 belonged to YPER4-220, but its description mentioned
+  // the flag "htpr-7010", so merging it moved HTPR-7010 to QA.
+  assert.equal(
+    extractTicketId({
+      boardPrefix: "HTPR",
+      title: "YPER4-220 [INFRA] One AI model per class, enforced by a test",
+      headRef: "yper4-220-model-class",
+      body: "Covers the htpr-7010 and htpr-6722 flag combinations, flag htpr-7010-haiku-5-5. Fixes HTPR-7010.",
+    }),
+    null
+  );
+  assert.equal(
+    extractTicketId({
+      boardPrefix: "HTPR",
+      title: "Improve GitHub integration",
+      headRef: "feat/github-webhook",
+      body: "Flag htpr-7010-haiku-5-5 and HTPR-7010-haiku stay off; the htpr-7010 flag too.",
+    }),
+    null
+  );
+  assert.equal(
+    extractTicketId({
+      boardPrefix: "HTPR",
+      title: "Improve GitHub integration",
+      headRef: "feat/github-webhook",
+      body: "Resolves HTPR-7014.",
+    }),
+    "HTPR-7014"
+  );
+});
+
 test("extractTicketId prefers the branch's ticket over a different ticket mentioned in the title", () => {
   const { extractTicketId } = loadTs(
     "src/app/api/webhooks/github/github-webhook-helpers.ts"
