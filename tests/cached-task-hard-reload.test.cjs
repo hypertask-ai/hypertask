@@ -4,7 +4,7 @@ const { load } = require("./task-route-loader.cjs");
 
 const flag = "htpr-7004-no-loading-flash";
 
-function mount({ enabled, cachedLayout }) {
+function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId = 57094 }) {
   const effects = [];
   const refreshes = [];
   const projects = [];
@@ -35,7 +35,14 @@ function mount({ enabled, cachedLayout }) {
   useTaskDetailReadiness(context);
   const mountEffect = effects.find(effect => effect.dependencies[0] === context._currentTask);
   assert(mountEffect, "the actual detail mount effect must run");
-  mountEffect.callback();
+  const previousWindow = global.window;
+  global.window = { history: { state: cachedNavigation ? { cachedTaskDetail: { taskId: cachedTaskId } } : null } };
+  try {
+    mountEffect.callback();
+  } finally {
+    if (previousWindow === undefined) delete global.window;
+    else global.window = previousWindow;
+  }
   return { context, refreshes, projects };
 }
 
@@ -43,6 +50,22 @@ test("cached parent mount after subtask Back does not enqueue redundant RSC refr
   const flow = mount({ enabled: true, cachedLayout: true });
   assert.deepEqual(flow.refreshes, []);
   assert.deepEqual(flow.projects, [{ id: 6859 }], "cached mount still initializes the current board");
+});
+
+test("cached Back skips the RSC mount refresh even with stable layout off", () => {
+  const flow = mount({ enabled: true, cachedLayout: false, cachedNavigation: true });
+  assert.deepEqual(flow.refreshes, []);
+  assert.deepEqual(flow.projects, [{ id: 6859 }]);
+});
+
+test("another task's cached marker does not suppress a native mount refresh", () => {
+  const flow = mount({ enabled: true, cachedLayout: false, cachedNavigation: true, cachedTaskId: 57095 });
+  assert.deepEqual(flow.refreshes, ["Refresh"]);
+});
+
+test("flag off preserves the cached-navigation refresh with stable layout off", () => {
+  const flow = mount({ enabled: false, cachedLayout: false, cachedNavigation: true });
+  assert.deepEqual(flow.refreshes, ["Refresh"]);
 });
 
 test("flag off preserves the cached mount refresh", () => {
