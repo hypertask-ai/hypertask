@@ -1,5 +1,8 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import axios from "axios";
@@ -143,7 +146,7 @@ function testResultCopy(state: TestState | undefined) {
   };
 }
 
-const ApiKeysSectionContent = () => {
+const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: ProviderRow[] }) => {
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
@@ -757,7 +760,7 @@ const ApiKeysSectionContent = () => {
           <SettingsCard title="Gateway">{renderRow(gatewayRow)}</SettingsCard>
           <SettingsCard title="Providers">
             <div className="flex flex-col">
-              {providerRows
+              {visibleProviderRows
                 .filter((row) => !gdprSafeMode || !row.chinaHosted)
                 .map(renderRow)}
             </div>
@@ -770,9 +773,14 @@ const ApiKeysSectionContent = () => {
 };
 
 const ApiKeysSection = () => {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const visibleProviderRows = haiku55Enabled
+    ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
+    : providerRows;
+
   const { billing } = useSettingsTeam();
   if (!billing || billing.storePlanId === "Free") return null;
-  return <ApiKeysSectionContent />;
+  return <ApiKeysSectionContent visibleProviderRows={visibleProviderRows} />;
 };
 
 export default ApiKeysSection;

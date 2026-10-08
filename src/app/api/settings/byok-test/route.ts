@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import {
@@ -139,6 +140,7 @@ export async function POST(request: Request) {
     body.provider,
     apiKey,
     customEndpoint,
+    await haiku55ModelEnabled(user.id),
   );
   if (!testRequest) {
     return NextResponse.json(

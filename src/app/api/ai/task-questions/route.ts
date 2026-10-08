@@ -1,3 +1,5 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -9,7 +11,7 @@ import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
+  aiUsageProviderForCredential,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 import {
@@ -186,9 +188,12 @@ export async function POST(request: NextRequest) {
           })
           .join("\n\n")
       : "(no comments)";
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: viewer.id }) : { haiku55Enabled: false, byok: undefined };
     const systemModel = resolveSystemModel(
       "questionSuggestions",
       task.project.team?.aiProviderSettings,
+      defaultContext.haiku55Enabled,
+      defaultContext,
     );
     if (!systemModel) {
       return NextResponse.json({ questions: [] });
@@ -200,13 +205,14 @@ export async function POST(request: NextRequest) {
       teamId: task.project.teamId,
       projectId: task.projectId,
     };
-    const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+    const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
     configureAiModelUsage(model, {
       userId: viewer.id,
       teamId: task.project.teamId,
       projectId: task.projectId,
       taskId: task.id,
-      provider: systemModel.provider,
+      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "task-questions",
     });
     const result = await generateText({

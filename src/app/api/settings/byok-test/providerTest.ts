@@ -30,8 +30,8 @@ type TestRequest = {
   url: string;
 };
 
-function testModel(provider: TByokProviderKey) {
-  const modelKey = TEST_MODEL_KEYS[provider];
+function testModel(provider: TByokProviderKey, haiku55Enabled: boolean) {
+  const modelKey = provider === "claude" && haiku55Enabled ? "claude-haiku-5-5" : TEST_MODEL_KEYS[provider];
   if (!modelKey) return null;
   const option = aiModelOptions.find(
     (candidate) => candidate.modelKey === modelKey
@@ -80,7 +80,8 @@ function jsonRequest(
 export function buildByokTestRequest(
   provider: TByokProviderKey,
   apiKey: string,
-  customEndpoint?: Pick<CustomEndpointConfig, "baseUrl" | "modelId">
+  customEndpoint?: Pick<CustomEndpointConfig, "baseUrl" | "modelId">,
+  haiku55Enabled = false,
 ): TestRequest | null {
   if (provider === "custom") {
     if (!customEndpoint) return null;
@@ -95,7 +96,9 @@ export function buildByokTestRequest(
     return jsonRequest(
       "https://ai-gateway.vercel.sh/v1/chat/completions",
       apiKey,
-      { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+      haiku55Enabled
+        ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
+        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 
@@ -103,11 +106,13 @@ export function buildByokTestRequest(
     return jsonRequest(
       "https://openrouter.ai/api/v1/chat/completions",
       apiKey,
-      { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
+      haiku55Enabled
+        ? { id: "anthropic/claude-haiku-5.5", label: "Haiku 5.5" }
+        : { id: "openai/gpt-6-luna", label: "GPT 6 Luna" }
     );
   }
 
-  const model = testModel(provider);
+  const model = testModel(provider, haiku55Enabled);
   if (!model) return null;
 
   if (provider === "openai") {

@@ -1,21 +1,32 @@
+import { wrapLanguageModel, type LanguageModel } from "ai";
 import prisma from "@/lib/prisma";
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   isVercelAiGatewayKey,
   registerManagedGatewayKey,
+  resolveAiModel,
+  inheritAiModelUsage,
+  configureAiModelUsage,
+  aiUsageProviderForCredential,
+  providerOptionsForAiModel,
+  type AiGatewayFeature,
   type AiModelCredential,
   type GatewayFundingSource,
   type ModelProviderId,
 } from "@/app/api/ai/_lib/modelProvider";
 import {
   getAiModelDefinition,
+  getAiModelOptionById,
+  isHaiku55Model,
+  type AiDefaultModelContext,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
   getAiProviderInfo,
   isByokProviderRestrictedInGdprSafeMode,
   isGdprSafeModeEnabled,
+  resolveTeamProviderEnabled,
   type TByokProviderKey,
 } from "@/lib/aiProviders";
 import {
@@ -23,7 +34,8 @@ import {
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
-import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 
 export type ByokProviderFlag = {
   provider?: string | null;
@@ -445,4 +457,67 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   }
 
   return getTeamGatewayApiKey(lookup);
+}
+
+export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
+  const enabled = haiku55Enabled ?? (await haiku55ModelEnabled?.(lookup.userId) ?? false);
+  const storePlanId = plan ?? (enabled ? await storePlanIdForProject(lookup.projectId, normalizeTeamId(lookup.trustedTeamId ?? lookup.teamId)) : "Free");
+  let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
+  if (enabled && storePlanId && storePlanId !== "Free") {
+    for (const provider of ["claude", "gateway", "openrouter"] as const) {
+      const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
+      if (credential) {
+        byok = { provider, credential };
+        break;
+      }
+    }
+  }
+  return { haiku55Enabled: enabled, plan: storePlanId, hasByok: Boolean(byok), byok };
+}
+
+export function resolveAutomaticAiModel(
+  provider: ModelProviderId,
+  modelId: string,
+  credential: AiModelCredential | undefined,
+  context: { haiku55Enabled: boolean; lookup: ByokLookupContext; feature: AiGatewayFeature },
+): LanguageModel {
+  const model = resolveAiModel(provider, modelId, credential);
+  if (!context.haiku55Enabled || !isHaiku55Model(modelId)) return model;
+
+  const wrapped = wrapLanguageModel({
+    model: model as Parameters<typeof wrapLanguageModel>[0]["model"],
+    middleware: {
+      specificationVersion: "v4",
+      wrapGenerate: async ({ doGenerate, params }) => {
+        try {
+          return await doGenerate();
+        } catch (error) {
+          if (params.abortSignal?.aborted || !previousModelForFailedStream(modelId, error, false, false, true)) throw error;
+          const teamId = await resolveLookupTeamId(context.lookup);
+          if (!teamId) throw error;
+          const team = await prisma.team.findUnique({
+            where: { id: teamId },
+            select: { aiProviderSettings: true },
+          });
+          if (!team || !resolveTeamProviderEnabled(team.aiProviderSettings, "openai")) throw error;
+          const option = getAiModelOptionById("gpt-6-luna")!;
+          const fallbackCredential = await getByokOrTeamGatewayApiKeyForModelOption(option, undefined, context.lookup);
+          const fallback = resolveAiModel("openai", option.model, fallbackCredential, option);
+          inheritAiModelUsage(fallback, wrapped);
+          configureAiModelUsage(fallback, { provider: aiUsageProviderForCredential("openai", fallbackCredential, option) });
+          const providerOptions = providerOptionsForAiModel(fallback, context.feature, {
+            teamId,
+            projectId: context.lookup.projectId,
+            userId: context.lookup.userId,
+          }, option);
+          return (fallback as ReturnType<typeof wrapLanguageModel>).doGenerate({
+            ...params,
+            providerOptions: providerOptions ?? {},
+          });
+        }
+      },
+    },
+  });
+  inheritAiModelUsage(wrapped, model);
+  return wrapped;
 }

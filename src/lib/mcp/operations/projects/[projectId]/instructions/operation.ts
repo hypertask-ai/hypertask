@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -51,7 +52,11 @@ export async function GET(
       include: { attachments: true },
     });
 
-    return NextResponse.json({ success: true, instruction });
+    const haiku55Enabled = await haiku55ModelEnabled(ctx.user.id);
+    const selected = haiku55Enabled ? getAiModelOptionById(instruction?.model_selected, true) : undefined;
+    return NextResponse.json({ success: true, instruction: instruction && selected ? {
+      ...instruction, model_selected: selected.id, source_selected: selected.source,
+    } : instruction });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to read custom instructions";

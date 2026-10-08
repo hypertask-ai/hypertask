@@ -1,3 +1,5 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -5,7 +7,7 @@ import { z } from "zod";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
+  aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { resolveSystemModel } from "@/lib/systemModelLadder";
 import { callSlackApi } from "@/lib/slack/api";
@@ -79,19 +81,22 @@ export async function buildSlackThreadSummaryComment(
   const { participants, permalink, transcript } = source;
   if (!transcript) return null;
 
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: context.teamId, userId: context.installedByUserId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel(
     "summaries",
     context.aiProviderSettings,
+    defaultContext.haiku55Enabled, defaultContext,
   );
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: context.teamId });
-  const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+  const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: context.teamId, projectId: context.projectId, userId: context.installedByUserId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
   configureAiModelUsage(model, {
     userId: context.installedByUserId,
     teamId: context.teamId,
     projectId: context.projectId,
     taskId: context.taskId,
-    provider: systemModel.provider,
+    provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "summary",
   });
   const result = await generateObject({

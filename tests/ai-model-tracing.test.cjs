@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const load = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, fsCache: false });
 const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
 const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage, modelCostUsd } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
-const { isHaiku55Model } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
+const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
 
 function harness({ rejectTelemetry = false, rejectPricing = false, observationSink } = {}) {
   const rows = [], captures = [], errors = [], pending = [], allowances = [];
@@ -33,7 +33,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
       createSharedAllowanceMiddleware: (args) => { allowances.push(args); return { specificationVersion: 'v4' }; },
       modelPricing: async () => { if (rejectPricing) throw new Error('unknown price'); return { inputUsdPerToken: 0.000003, outputUsdPerToken: 0.000015 }; },
     },
-    '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model },
+    '@/lib/aiModelOptions': { getAiModelDefinition: () => undefined, isHaiku55Model, isHaiku45Model, resolveHaikuModelId },
     '@/lib/flags/keys': { HTPR_7010_HAIKU_5_5_FLAG: 'htpr-7010-haiku-5-5' },
     '@/lib/aiProviders': { getAiProviderInfo: () => ({ openAiCompatibleBaseUrl: 'https://example.test/v1' }) },
     '@/lib/aiAllowancePolicy': { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },

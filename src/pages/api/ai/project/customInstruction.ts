@@ -1,3 +1,6 @@
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
+import { getDefaultAiModelOptionForPlan } from "@/lib/aiModelOptions";
+import { haiku55ModelEnabled, lunaFreePlanEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -37,7 +40,11 @@ export default async function handler(
                 include: { attachments: true },
             });
 
-            return res.status(200).json(customInstructions);
+            const haiku55Enabled = await haiku55ModelEnabled(userId);
+            const selected = haiku55Enabled ? getAiModelOptionById(customInstructions?.model_selected, true) : undefined;
+            return res.status(200).json(customInstructions && selected ? {
+                ...customInstructions, model_selected: selected.id, source_selected: selected.source,
+            } : customInstructions);
         } catch (error) {
             await reportError({
               message: error instanceof Error ? error.message : "AI request failed",
@@ -102,13 +109,7 @@ export default async function handler(
         try {
 
             const { projectId, customInstruction, modelSelected, modelOptionId } = req.body
-            const hasModelSelection =
-                typeof modelOptionId === "string" || typeof modelSelected === "string";
-            const selectedModelOption = hasModelSelection
-                ? getAiModelOptionById(modelOptionId) ??
-                  getAiModelOptionById(modelSelected) ??
-                  defaultAiModelOption
-                : undefined;
+            const haiku55Enabled = await haiku55ModelEnabled(session.userId);
             if (!projectId) return res.status(101).json({ message: "Missing required information" })
 
             const project = await prisma.project.findFirst({
@@ -119,6 +120,15 @@ export default async function handler(
                 select: { id: true },
             })
             if (!project) return res.status(404).json({ message: "Project not found" })
+
+            const defaultContext = haiku55Enabled ? await getAiDefaultModelContext({ projectId: Number(projectId), userId: session.userId }, true) : undefined;
+            const hasModelSelection =
+                typeof modelOptionId === "string" || typeof modelSelected === "string";
+            const selectedModelOption = hasModelSelection
+                ? getAiModelOptionById(modelOptionId, haiku55Enabled) ??
+                  getAiModelOptionById(modelSelected, haiku55Enabled) ??
+                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, await lunaFreePlanEnabled(session.userId), true) : defaultAiModelOption)
+                : undefined;
 
             var customInstructions;
             // lets first find out if the customInstruction exists or not.

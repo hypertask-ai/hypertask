@@ -2,7 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
-import { aiModelOptions, isAiModelOptionVisible } from "@/lib/aiModelOptions";
+import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import AgentSelect, { AgentOption } from "../AgentSelect";
@@ -53,9 +53,11 @@ export function AgentConfigForm({
   handleVisibilityChange, providerKeyLoaded, visibilityNotice, savingImportant,
   handleImportantToggle, currentUser,
 }: Props) {
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const haiku55Enabled = useFlag(
+    HTPR_7010_HAIKU_5_5_FLAG,
+  );
   const visibleModelOptions = haiku55Enabled
-    ? aiModelOptions
+    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   return (
     <>
@@ -105,7 +107,7 @@ export function AgentConfigForm({
                 {agent.runtimeType === "NATIVE" && (
                   <InfoRow label="Model">
                     <AgentSelect
-                      value={agent.modelOptionId ?? ""}
+                      value={getAiModelOptionById(agent.modelOptionId, haiku55Enabled)?.id ?? ""}
                       onChange={handleModelChange}
                       disabled={savingModel}
                       ariaLabel="Model this agent runs on"

@@ -26,6 +26,8 @@ import {
 import {
   getAiModelDefinition,
   isHaiku55Model,
+  isHaiku45Model,
+  resolveHaikuModelId,
   type TAiModelOption,
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
@@ -437,13 +439,45 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   };
 }
 
-function traceLanguageModel(model: LanguageModel, provider: string): LanguageModel {
+function traceLanguageModel(
+  model: LanguageModel,
+  provider: string,
+  replacement?: () => LanguageModel,
+): LanguageModel {
   if (typeof model === "string") throw new Error("A resolved AI model is required");
   const context: ModelUsageContext = { provider };
-  const traced = wrapLanguageModel({
+  let traced = wrapLanguageModel({
     model,
     middleware: createUsageTracingMiddleware(context, model.modelId),
   });
+  if (replacement && isHaiku45Model(model.modelId)) {
+    // Resolve before the original model's allowance and tracing middleware run.
+    const upgradedModel = async () => {
+      const enabled = context.userId
+        ? await import("@/lib/flags")
+            .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, context.userId!))
+            .catch(() => false)
+        : false;
+      if (!enabled) return null;
+      const upgraded = replacement();
+      configureAiModelUsage(upgraded, context);
+      return upgraded as ReturnType<typeof wrapLanguageModel>;
+    };
+    traced = wrapLanguageModel({
+      model: traced,
+      middleware: {
+        specificationVersion: "v4",
+        wrapGenerate: async ({ doGenerate, params }) => {
+          const upgraded = await upgradedModel();
+          return upgraded ? upgraded.doGenerate(params) : doGenerate();
+        },
+        wrapStream: async ({ doStream, params }) => {
+          const upgraded = await upgradedModel();
+          return upgraded ? upgraded.doStream(params) : doStream();
+        },
+      },
+    });
+  }
   modelUsageContexts.set(traced, context);
   return traced;
 }
@@ -455,14 +489,34 @@ export function resolveAiModel(
   modelOption?: TAiModelOption,
   directProvider?: TAiProviderKey,
 ): LanguageModel {
+  const persistedModelId = isCustomEndpointConfig(byokCredential) ? byokCredential.modelId : modelId;
   return traceLanguageModel(
     resolveUntracedAiModel(provider, modelId, byokCredential, modelOption, directProvider),
     aiUsageProviderForCredential(provider, byokCredential, modelOption, directProvider),
+    isHaiku45Model(persistedModelId)
+      ? () => resolveAiModel(
+          provider,
+          provider === "claude"
+            ? isVercelAiGatewayKey(byokCredential) ? "claude-haiku-5.5" : "claude-haiku-5-5"
+            : resolveHaikuModelId(modelId, true),
+          isCustomEndpointConfig(byokCredential)
+            ? { ...byokCredential, modelId: resolveHaikuModelId(persistedModelId, true) }
+            : byokCredential,
+          modelOption ? { ...modelOption, directModel: "claude-haiku-5-5" } : undefined,
+          directProvider,
+        )
+      : undefined,
   );
 }
 
 export function resolveGatewayModel(modelSlug: string, gatewayApiKey?: string): LanguageModel {
-  return traceLanguageModel(resolveUntracedGatewayModel(modelSlug, gatewayApiKey), "gateway");
+  return traceLanguageModel(
+    resolveUntracedGatewayModel(modelSlug, gatewayApiKey),
+    "gateway",
+    isHaiku45Model(modelSlug)
+      ? () => resolveGatewayModel(resolveHaikuModelId(modelSlug, true), gatewayApiKey)
+      : undefined,
+  );
 }
 
 export function aiUsageProviderForCredential(

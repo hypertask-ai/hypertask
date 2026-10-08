@@ -1,3 +1,6 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { defaultModelKeyFor } from "@/lib/aiModelOptions";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject } from "ai";
@@ -11,7 +14,6 @@ import {
 import {
   aiUsageProviderForCredential,
   gatewayProviderOptionsForModel,
-  resolveAiModel,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 import {
@@ -174,12 +176,15 @@ export async function learnBoardMemoryFromSignal(args: {
     return { enabled: true, learned: [] as string[] };
   }
   try {
-    const gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
-      "openai",
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: project.id, userId: args.userId }) : { haiku55Enabled: false, byok: undefined };
+    const useHaiku = defaultModelKeyFor(defaultContext, BOARD_MEMORY_MODEL) === "claude-haiku-5-5";
+    const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
+    const gatewayApiKey = (useHaiku ? defaultContext.byok?.credential : undefined) ?? await getByokOrTeamGatewayApiKeyForProvider(
+      provider,
       undefined,
       { projectId: project.id, userId: args.userId },
     );
-    const model = resolveAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey);
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" }) : resolveLegacyAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey);
     const gatewayTags: AiGatewayTags = {
       projectId: project.id,
       teamId: project.teamId ?? "",
@@ -189,7 +194,7 @@ export async function learnBoardMemoryFromSignal(args: {
       userId: args.userId,
       teamId: project.teamId,
       projectId: project.id,
-      provider: aiUsageProviderForCredential("openai", gatewayApiKey),
+      provider: aiUsageProviderForCredential(provider, gatewayApiKey),
       feature: "custom-instructions",
     });
     const result = await generateObject({

@@ -1,3 +1,6 @@
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -39,6 +42,7 @@ import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
   defaultAiModelOption,
+  getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   resolveAiImageModelMention,
   resolveAiModelMention,
@@ -80,22 +84,29 @@ export default function useSaveContent() {
   const { postHyperMention, postImageGeneration } = useHyperMention();
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const defaultBilling = currentBoardBilling;
+  const defaultModelOption = haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true)
+    : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
     "improveWriting",
     currentProject?.teamId,
   );
   const improveWritingOption =
-    getAiModelOptionById(improveWritingOptionIds.teamScoped) ??
-    getAiModelOptionById(improveWritingOptionIds.global);
+    getAiModelOptionById(improveWritingOptionIds.teamScoped, haiku55Enabled) ??
+    getAiModelOptionById(improveWritingOptionIds.global, haiku55Enabled) ??
+    (haiku55Enabled ? getAiModelOptionById(currentProject?.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
   const improveWritingModel =
     improveWritingOption?.id ??
     currentProject?.ai_custom_instructions?.[0]?.model_selected ??
-    defaultAiModelOption.id;
+    defaultModelOption.id;
   const improveWritingSource =
     improveWritingOption?.source ??
     currentProject?.ai_custom_instructions?.[0]?.source_selected ??
-    defaultAiModelOption.source;
+    defaultModelOption.source;
   const invalidateUserDrafts = () => {
     queryClient.invalidateQueries({
       queryKey: USER_DRAFTS_QUERY_KEY(currentUser?.id),
@@ -230,7 +241,7 @@ export default function useSaveContent() {
                     const displayName = span.getAttribute("data-id");
                     const imageModelMention =
                       resolveAiImageModelMention(displayName);
-                    const modelMention = resolveAiModelMention(displayName);
+                    const modelMention = resolveAiModelMention(displayName, haiku55Enabled);
                     if (imageModelMention) {
                       imageMention = {
                         ...mentionBody,

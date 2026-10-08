@@ -1,5 +1,7 @@
 import {
   aiModelOptions,
+  getDefaultAiModelOptionForPlan,
+  hasHaikuByokProvider,
   isAiModelOptionVisible,
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -81,21 +83,26 @@ export function buildComposerConfig(input: ComposerConfigInput) {
           ),
       )
     : [];
+  const defaultContext = { plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
   const boardDefault = resolveUserFacingModelOption(
     "aiChat",
     input.settings,
     null,
     {
       customEndpointConfigured: input.customEndpointConfigured,
+      haiku55Enabled: input.haiku55Enabled,
+      ...defaultContext,
       defaultModelOption:
-        lunaFree
+        input.haiku55Enabled
+          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, lunaFree, true)
+          : lunaFree
           ? preferredAiModelOption
           : undefined,
     },
   );
   const selected =
     allowedOptions.find((option) => option.id === boardDefault?.id) ??
-    pickAutoAiModelOption(allowedOptions) ??
+    pickAutoAiModelOption(allowedOptions, input.haiku55Enabled, defaultContext) ??
     null;
   const blockedReason = !enabled
     ? "AI chat is disabled for this board."

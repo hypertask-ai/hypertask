@@ -7,9 +7,10 @@ import { type AiProviderOptions, type AiModelCredential, type AiGatewayTags, isC
 import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionForPlan, isLunaBlockedForPlan } from "@/lib/aiModelOptions";
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
+import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
-import { storePlanIdForProject, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { storePlanIdForProject, haiku55ModelEnabled, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
+import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -41,6 +42,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   };
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
+  let teamProviderSettings: unknown;
   // External agents are chatted with from Agent Chat, not this native stream.
   // Checked before any provider or model work so the turn never starts.
   if (body.session_id) {
@@ -79,7 +81,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       );
     }
     const planGateProjectId = providerContext.planGateProjectId;
-    const teamProviderSettings = chatTeamContext?.aiProviderSettings;
+    teamProviderSettings = chatTeamContext?.aiProviderSettings;
     usageProjectId = chatTeamContext?.projectId ?? null;
     gatewayTags.projectId = usageProjectId;
     gatewayTags.teamId = chatTeamContext?.teamId ?? null;
@@ -132,10 +134,15 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         (credential !== null && typeof credential === "object");
     }
     const lunaFree = await lunaFreePlanEnabled(dbUser.id);
+    const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
+    const defaultContext = haiku55Enabled
+      ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
+      : { hasByok: false, byok: undefined };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
-      hasEligibleByokCredential,
+      haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
       lunaFree,
+      haiku55Enabled,
     );
     // An agent pinned to a model runs its own turns on it, which is the point
     // of pinning: a sweeper on a cheap model, a coordinator on an expensive
@@ -154,10 +161,11 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       body.aiFeature,
       personalModelOptionId,
       requestDefaultModelOption,
+      haiku55Enabled,
     );
     if (selection.modelOption) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(selection.modelOption, teamProviderSettings)
+        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled)
       );
     }
     if (
@@ -169,13 +177,18 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       )
     ) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings),
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled),
       );
     }
+    const haikuByok = defaultContext.byok?.provider === "openrouter" &&
+      !resolveTeamProviderEnabled(teamProviderSettings, "openrouter")
+      ? undefined : defaultContext.byok;
     const getSelectionApiKey = (
       selected: ModelSelection
     ) =>
-      selected.modelOption
+      selected.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok
+        ? Promise.resolve(haikuByok.credential)
+        : selected.modelOption
         ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
           body.byokProviderFlags,
@@ -201,6 +214,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         personalModelOptionId,
         false,
         requestDefaultModelOption,
+      haiku55Enabled,
       );
       byokApiKey = await getSelectionApiKey(selection);
     }
@@ -213,6 +227,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
+      haiku55Enabled,
         );
       } else if (!byokApiKey) {
         selection = defaultModelSelection(
@@ -221,9 +236,14 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
+      haiku55Enabled,
         );
         byokApiKey = await getSelectionApiKey(selection);
       }
+    }
+
+    if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {
+      selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
     }
 
     await assertModelAllowedForPlan(
@@ -261,5 +281,5 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     await reportHandledChatError(error, "select-model");
     return createSseErrorResponse(errorMessage(error));
   }
-  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent };
+  return { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings };
 }

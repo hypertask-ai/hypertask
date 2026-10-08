@@ -1,3 +1,5 @@
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   processHtmlForTaskId,
@@ -41,6 +43,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
   defaultAiModelOption,
+  getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
 } from "@/lib/aiModelOptions";
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
@@ -154,22 +157,29 @@ const useCreateTaskModalGlobalStates = () => {
   const [tempMentionProjectId, setTempMentionProjectId] = useState<string>("");
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const defaultBilling = deriveCurrentBoardBilling(_currentProject);
+  const defaultModelOption = haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true)
+    : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
     "improveWriting",
     _currentProject?.teamId,
   );
   const improveWritingOption =
-    getAiModelOptionById(improveWritingOptionIds.teamScoped) ??
-    getAiModelOptionById(improveWritingOptionIds.global);
+    getAiModelOptionById(improveWritingOptionIds.teamScoped, haiku55Enabled) ??
+    getAiModelOptionById(improveWritingOptionIds.global, haiku55Enabled) ??
+    (haiku55Enabled ? getAiModelOptionById(_currentProject?.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
   const improveWritingModel =
     improveWritingOption?.id ??
     _currentProject?.ai_custom_instructions?.[0]?.model_selected ??
-    defaultAiModelOption.id;
+    defaultModelOption.id;
   const improveWritingSource =
     improveWritingOption?.source ??
     _currentProject?.ai_custom_instructions?.[0]?.source_selected ??
-    defaultAiModelOption.source;
+    defaultModelOption.source;
   const { goToProjectShortcut } = useProjectQuery()
   const pathname = usePathname();
 
@@ -365,16 +375,21 @@ const useCreateTaskModalGlobalStates = () => {
       project.teamId,
     );
     const titleOption =
-      getAiModelOptionById(titleOptionIds.teamScoped) ??
-      getAiModelOptionById(titleOptionIds.global);
+      getAiModelOptionById(titleOptionIds.teamScoped, haiku55Enabled) ??
+      getAiModelOptionById(titleOptionIds.global, haiku55Enabled) ??
+      (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
+    const titleBilling = deriveCurrentBoardBilling(project);
+    const titleDefaultOption = haiku55Enabled
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), lunaFree, true)
+      : defaultModelOption;
     const titleModel =
       titleOption?.id ??
       project.ai_custom_instructions?.[0]?.model_selected ??
-      defaultAiModelOption.id;
+      titleDefaultOption.id;
     const titleSource =
       titleOption?.source ??
       project.ai_custom_instructions?.[0]?.source_selected ??
-      defaultAiModelOption.source;
+      titleDefaultOption.source;
 
     const response = await fetch(taskWriterRoute, {
       method: "POST",
@@ -409,7 +424,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, []);
+  }, [haiku55Enabled, defaultModelOption, lunaFree]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);

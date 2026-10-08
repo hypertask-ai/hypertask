@@ -1,3 +1,5 @@
+import { isHaiku55Model } from "../../../../../lib/aiModelOptions";
+
 const PREVIOUS_MODELS: Record<string, string> = {
   "gpt-6-luna": "gpt-5.6-luna",
   "gpt-6.1-sol": "gpt-6-sol",
@@ -12,8 +14,11 @@ export function previousModelForFailedStream(
   error: unknown,
   hasStreamedContent: boolean,
   hasExecutedTools: boolean,
+  haiku55Enabled = false,
 ): { model: string; status: string } | null {
-  const previous = PREVIOUS_MODELS[model];
+  const previous = haiku55Enabled && isHaiku55Model(model)
+    ? "gpt-6-luna"
+    : PREVIOUS_MODELS[model];
   if (!previous || hasStreamedContent || hasExecutedTools) return null;
   let current = error;
   const seen = new Set<unknown>();

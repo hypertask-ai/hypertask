@@ -69,7 +69,9 @@ const taskSearchByParam = async (
       param === "all" || !normalizedModelQuery
         ? []
         : [...aiModelDefinitions, ...aiImageModelDefinitions]
-            .filter((model) => model.key !== "claude-haiku-5-5" || haiku55Enabled)
+            .filter((model) => haiku55Enabled
+              ? model.key !== "claude-haiku-4.5"
+              : model.key !== "claude-haiku-5-5")
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(
