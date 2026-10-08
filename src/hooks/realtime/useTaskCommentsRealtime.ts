@@ -240,9 +240,8 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      // A cached open already reads on mount; unavailable realtime must not cancel or repeat that fresh read.
-      const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId &&
-        window.history?.state?.cachedTaskDetail?.taskId === activeTaskId
+      // A cached open or authorized server seed already supplies this initial read.
+      const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId
         ? queryClient.getQueryState(taskDetailReadKey(currentUserId, activeTaskId)) : undefined;
       if (!initialRead || !(initialRead.fetchStatus === "fetching" ||
         (initialRead.status === "success" && !shouldRefetchDetailOnMount({ state: initialRead })))) {

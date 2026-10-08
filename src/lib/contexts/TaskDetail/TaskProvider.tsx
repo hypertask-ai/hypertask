@@ -26,10 +26,16 @@ import { ScrollSetting, ViewVisibility } from "@prisma/client";
 import { Virtualizer } from "@tanstack/react-virtual";
 import type { SerializedAgentRunActivity } from "@/lib/agentRuns/model";
 import type { TaskThreadFeedItem } from "@/lib/agentRuns/taskActivityFeed";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/General/useAuth";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { adoptTaskDetailServerSeed, type TaskDetailServerSeed } from "@/lib/taskDetailReads";
 
 interface TaskContextProps {
   children?: ReactNode; // Add this line to include children
   parsedTask: string;
+  serverTaskSeed?: TaskDetailServerSeed;
   allowPerks: boolean;
   _comments: string;
   _initialStacked: StackedType;
@@ -188,6 +194,13 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const [newCommentsSnapshotReady, setNewCommentsSnapshotReady] =
     useState<boolean>(false);
   const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
+  const queryClient = useQueryClient();
+  const { authenticatedUserId } = useAuth();
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  useMemo(() => {
+    // Seed before descendants mount read observers, including after flags resolve.
+    if (dedupe && !props.embedded && !props.isShareView) adoptTaskDetailServerSeed(queryClient, authenticatedUserId, initialTask, props.serverTaskSeed);
+  }, [dedupe, props.embedded, props.isShareView, props.serverTaskSeed, authenticatedUserId, initialTask, queryClient]);
   const taskGlobalStates = useTaskDetailGlobalStates(
     initialTask,
     props._comments,
