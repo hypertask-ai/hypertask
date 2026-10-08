@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import {
   FEATURE_FLAG_ADMIN_URL,
+  FEATURE_FLAG_KEYS,
   FEATURE_FLAG_OWNER_USER_ID,
   FEATURE_FLAG_SWEEP_AGENT_ID,
   FEATURE_FLAG_TICKET_PROJECT_ID,
@@ -93,13 +94,13 @@ async function sweep() {
   // A crashed run can leave a claim behind. The advisory lock means no live sweep holds one, so
   // anything still pending here is stale and the flag goes back in the queue.
   await prisma.featureFlag.updateMany({
-    where: { removalTaskId: PENDING_REMOVAL_TASK_ID },
+    where: { key: { in: FEATURE_FLAG_KEYS }, removalTaskId: PENDING_REMOVAL_TASK_ID },
     data: { removalTaskId: null },
   });
   const cutoff = new Date(Date.now() - FEATURE_FLAG_REMOVAL_DAYS * 24 * 60 * 60 * 1000);
   const due = await prisma.featureFlag.findMany({
     where: {
-      key: { notIn: [...RETIRED_FEATURE_FLAG_KEYS] },
+      key: { in: FEATURE_FLAG_KEYS, notIn: [...RETIRED_FEATURE_FLAG_KEYS] },
       mode: "EVERYONE",
       keep: false,
       removalTaskId: null,
@@ -142,7 +143,7 @@ async function sweep() {
     // what makes "overdue and not kept" true at a single instant rather than across two queries.
     const claimed = await prisma.featureFlag.updateMany({
       where: {
-        key: flag.key,
+        key: { equals: flag.key, in: FEATURE_FLAG_KEYS },
         mode: "EVERYONE",
         keep: false,
         removalTaskId: null,
