@@ -10,6 +10,9 @@ function compile(source, mocks) {
   const exports = {};
   const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   new Function("require", "exports", js)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in mocks)) return {};
+    if (name === "@/hooks/useFlag" && name in mocks) return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
   }, exports);

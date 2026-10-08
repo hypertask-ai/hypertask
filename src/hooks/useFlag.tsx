@@ -21,7 +21,7 @@ import { useHydrated } from "@/hooks/General/useHydrated";
 
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 
-const FeatureFlagsContext = createContext<{ values: Record<string, boolean>; seeded: boolean }>({ values: {}, seeded: false });
+const FeatureFlagsContext = createContext<{ values: Record<string, boolean>; seeded: boolean; fallback: boolean }>({ values: {}, seeded: false, fallback: true });
 const FLAGS_ROUTE = "/api/flags";
 const FLAGS_REFRESH_MS = 60_000;
 export const FEATURE_FLAGS_QUERY_PREFIX = ["feature-flags"] as const;
@@ -124,7 +124,7 @@ export function FeatureFlagProvider({
 
   const hydrated = useHydrated();
   const values = hydrated ? (query.data ?? seed?.values ?? {}) : (seed?.values ?? {});
-  const context = useMemo(() => ({ values, seeded: seed !== undefined }), [values, seed]);
+  const context = useMemo(() => ({ values, seeded: seed !== undefined, fallback: query.isError }), [values, seed, query.isError]);
   return (
     <FeatureFlagsContext.Provider value={context}>
       {children}
@@ -136,4 +136,10 @@ export function useFlag(key: string): boolean {
   const { values, seeded } = useContext(FeatureFlagsContext);
   const hydrated = useHydrated();
   return (seeded || hydrated) && values[key] === true;
+}
+
+export function useFlagReady(key: string): boolean {
+  // An unresolved false is not Off: switching query keys after a read starts duplicates it.
+  const { values, fallback } = useContext(FeatureFlagsContext);
+  return Object.hasOwn(values, key) || fallback;
 }

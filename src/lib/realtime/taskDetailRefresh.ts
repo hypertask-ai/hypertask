@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { COMMENT_EVENT, TASK_EVENT } from "./shared";
 
 type TaskDetailRealtimeRefreshInput = {
@@ -163,16 +164,26 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   queryClient,
   taskId,
   fetchTask,
+  readQueryKey,
+  refreshSatellites = true,
 }: {
   queryClient: TaskDetailQueryClient;
   taskId: number;
-  fetchTask: () => Promise<T | null>;
+  fetchTask: (signal?: AbortSignal) => Promise<T | null>;
+  readQueryKey?: readonly unknown[];
+  refreshSatellites?: boolean;
 }): Promise<T | null> {
   await queryClient.cancelQueries({ queryKey: ["task-", taskId] });
-  const task = await fetchTask();
+  let task: T | null;
+  if (readQueryKey) {
+    const client = queryClient as QueryClient;
+    const queryKey = readQueryKey;
+    await client.cancelQueries({ queryKey, exact: true });
+    task = await client.fetchQuery({ queryKey, staleTime: 0, queryFn: ({ signal }) => fetchTask(signal) });
+  } else task = await fetchTask();
   if (task) {
     queryClient.setQueryData(["task-", taskId], task);
-    await seedTaskDetailSatelliteCaches(queryClient, task);
+    if (refreshSatellites) await seedTaskDetailSatelliteCaches(queryClient, task);
   }
   return task;
 }

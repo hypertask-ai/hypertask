@@ -70,6 +70,9 @@ test("pages query never fires must not block opening a cached ticket", async (t)
   }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)((name) => {
+    if (name === "@/lib/taskDetailReads") return {};
+    if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key !== "htpr-7009-dedupe-task-detail-reads" };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     if (name in mocks) return { __esModule: true, ...mocks[name] };
     assert.ok(["react", "react/jsx-runtime"].includes(name), `Unexpected dependency: ${name}`);
     return require(name);

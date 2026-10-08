@@ -58,7 +58,7 @@ async function withPalette(t, config, check) {
     source('src/store/index.ts', atoms);
     source('src/store/currentPageActions.ts', { currentPageActionsAtom: 'currentPageActionsAtom' });
     source('src/lib/state.tsx', state);
-    source('src/hooks/useFlag.tsx', { useFlag: (key) => flags[key] ?? false });
+    source('src/hooks/useFlag.tsx', { useFlagReady: () => true, useFlag: (key) => flags[key] ?? false });
     source('src/lib/contexts/TaskDetail/TaskProvider.tsx', { TaskContext, useTaskContext: () => React.useContext(TaskContext) });
     source('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => config.apple ?? false });
     source('src/lib/contexts/mobileContext.tsx', { MobileViewContext: React.createContext(config.mobile ?? false) });

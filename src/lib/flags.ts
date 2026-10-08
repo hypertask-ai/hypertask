@@ -34,6 +34,7 @@ import {
   HTPR_6975_TYPED_WRITES_FLAG,
   HTPR_6979_TYPED_WRITES_FLAG,
   HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
+  HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG,
   HTPR_6985_DELETE_VIEW_ONCE_FLAG,
   HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
   HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
@@ -222,6 +223,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-08",
     description: "Keeps unused fonts from delaying the existing server-drawn phone board cards. Requires the server first screen.",
+  },
+  {
+    key: HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-08",
+    description: "Loads each ticket detail snapshot once when opening it, while keeping realtime and reconnect refreshes.",
   },
   {
     key: HTPR_7010_HAIKU_5_5_FLAG,

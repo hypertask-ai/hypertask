@@ -29,7 +29,8 @@ import { createTaskDetailInitialScrollGuard } from "@/lib/taskDetailInitialScrol
 import { markTaskDetailPhase, TASK_DETAIL_COMP_MOUNT_MARK, TASK_DETAIL_SUSPENSE_COMMIT_MARK } from "@/lib/analytics/taskDetailPhaseTimings";
 import { useAuth } from "@/hooks/General/useAuth";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { taskDetailReadKey } from "@/lib/taskDetailReads";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 
 export interface TaskDetailProps {
@@ -73,6 +74,7 @@ export function useTaskDetailState({
 
   const {
     parsedTask: _currentTask,
+    cachedLayout,
     currentId,
     setCurrentTask,
     currentTask,
@@ -120,6 +122,7 @@ export function useTaskDetailState({
     scrollElementRef,
   } = useTaskContext();
   const _parsedTask = useMemo(() => JSON.parse(_currentTask), [_currentTask]);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
   const { authenticatedUserId } = useAuth();
@@ -130,6 +133,11 @@ export function useTaskDetailState({
     const key = cachedTaskDetailKey(currentUser.id, _parsedTask.id);
     if (!queryClient.getQueryState(key)) queryClient.setQueryData(key, _parsedTask);
   }, [subtaskLink, backFirstOpen, embedded, authenticatedUserId, currentUser?.id, _parsedTask, queryClient]);
+  useEffect(() => {
+    if (!dedupe || cachedLayout || embedded || authenticatedUserId !== currentUser?.id || !(_parsedTask.id > 0)) return;
+    const key = taskDetailReadKey(currentUser.id, _parsedTask.id);
+    queryClient.setQueryData(key, _parsedTask);
+  }, [dedupe, cachedLayout, embedded, authenticatedUserId, currentUser?.id, _parsedTask, queryClient]);
   const { markAsDone, navigateToNextTask, navigateToPreviousTask } =
     useArchiveAndNavigate();
   const { callBackHandlerRemoveParent } = useUpdateSubtask();

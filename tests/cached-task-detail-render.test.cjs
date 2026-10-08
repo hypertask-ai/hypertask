@@ -18,8 +18,11 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
-  "@/hooks/useFlag": { useFlag: (key) => { if (["htpr-6962-keep-assignee", "htpr-7004-no-loading-flash"].includes(key)) return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
-  "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+  "@/hooks/useFlag": { useFlagReady: () => true, useFlag: (key) => { if (["htpr-7009-dedupe-task-detail-reads", "htpr-6962-keep-assignee", "htpr-7004-no-loading-flash"].includes(key)) return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
+  "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads", HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+  "@/lib/taskDetailReads": require("jiti").createJiti(__filename, {
+    alias: { "@": path.join(root, "src") },
+  })(path.join(root, "src/lib/taskDetailReads.ts")),
   "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
   "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
   "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children, parsedTask, _comments, cachedNavigation }) => { providerPayload = { parsedTask, _comments, cachedNavigation }; return children; }, useTaskContext: () => ({}) },
@@ -45,6 +48,9 @@ const source = process.env.CACHED_DETAIL_BASELINE
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
 const exportsObject = {};
 new Function("require", "exports", compiled)((name) => {
+  if (name === "@/lib/taskDetailReads") return mocks[name];
+  if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+  if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
   assert.ok(name in mocks, `Unexpected dependency: ${name}`);
   return mocks[name];
 }, exportsObject);
@@ -165,6 +171,9 @@ test("description paints cached content and drafts before constructing the rich 
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exportsObject = {};
   new Function("require", "exports", compiled)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in mocks)) return {};
+    if (name === "@/hooks/useFlag" && name in mocks) return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
   }, exportsObject);

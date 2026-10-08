@@ -1,14 +1,9 @@
 
-import { useQuery } from "@tanstack/react-query";
+import { useTaskDetailMetaField } from "@/lib/useTaskDetailMetaField";
 import globalAPIHandlers from "@/utils/api/global";
 
 
 
 export const useGetEstimateForTask = (queryKey:any, taskId:number|null, initialData?:any) => {
-    return useQuery({
-        queryKey:queryKey, 
-        queryFn:() => globalAPIHandlers.getEstimateForTask(taskId),
-        initialData:initialData??[]
-
-})
+    return useTaskDetailMetaField("estimate", queryKey, taskId, () => globalAPIHandlers.getEstimateForTask(taskId), initialData);
 }
