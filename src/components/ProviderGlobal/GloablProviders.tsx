@@ -18,6 +18,7 @@ import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
 import { useQueryClient } from "@tanstack/react-query";
+import { useInboxEFirstPressQueue } from "@/hooks/useInboxEFirstPressQueue";
 import { IProject } from "@/models/model";
 import CachedTaskDetailNavigation from "@/components/PageComponents/TaskDetail/CachedTaskDetailNavigation";
 
@@ -622,6 +623,7 @@ export default function GlobalProvider({
   // ------------------------ shortcuts / routing helpers
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
+  useInboxEFirstPressQueue(queryClient);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
