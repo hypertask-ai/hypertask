@@ -461,7 +461,7 @@ function traceLanguageModel(
       if (!enabled) return null;
       const upgraded = replacement();
       configureAiModelUsage(upgraded, context);
-      return upgraded as Exclude<LanguageModel, string>;
+      return upgraded as ReturnType<typeof wrapLanguageModel>;
     };
     traced = wrapLanguageModel({
       model: traced,
