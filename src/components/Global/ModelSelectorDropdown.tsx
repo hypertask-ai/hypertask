@@ -804,11 +804,6 @@ function SubmenuRow({
   );
 }
 
-// Module scope keeps the list reference stable across renders.
-const modelOptionsWithoutHaiku55 = aiModelOptions.filter((option) =>
-  isAiModelOptionVisible(option, false)
-);
-
 type AIModelDropDownButtonProps = Omit<
   Parameters<typeof AIModelDropDownList>[0],
   "lunaFree" | "visibleModelOptions"
@@ -819,7 +814,7 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
   const visibleModelOptions = haiku55Enabled
     ? aiModelOptions
-    : modelOptionsWithoutHaiku55;
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   if (lunaFree) return <AIModelDropDownList {...props} visibleModelOptions={visibleModelOptions} lunaFree />;
   return <AIModelDropDownList {...props} visibleModelOptions={visibleModelOptions} lunaFree={false} />;
 };
