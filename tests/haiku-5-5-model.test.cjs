@@ -588,7 +588,7 @@ test("editor request plan-aware defaults route paid and eligible BYOK to Haiku a
         const credentialPicks = [];
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const editor = editorWithFallback(h, credentialPicks, enabled, credential, plan, provider);
-        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
         const useHaiku = enabled && (plan !== "Free");
         assert.equal(catalog.isHaiku55Model(selected.modelId), Boolean(useHaiku));
         if (!useHaiku) assert.equal(selected.modelId, "gpt-6-luna");
@@ -607,7 +607,7 @@ test("editor cross-provider fallback rebuilds gateway tags for generation and ev
       const h = harness({ unavailableHaiku: true, streamFailure });
       const picks = [];
       const editor = editorWithFallback(h, picks, true, "fixture-direct", "Pro", provider, "vck_fixture");
-      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+      const selected = await editor.selectTaskWriterModel({ userId: 985, projectId: 15, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter: true } } } });
       const result = await selected.model[method]({ ...params, providerOptions: selected.providerOptions });
       if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
       assert.equal(h.calls.length, 2);
@@ -755,6 +755,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
         const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
         const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
           "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+          "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
           "@/app/api/ai/_lib/modelProvider": h.api,
           "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-haiku-5"] },
@@ -763,6 +764,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
         const chat = moduleWithStubs("src/lib/ai/chatStream/turnModel.ts", {
           "next/server": {}, "@/lib/prisma": { userSetting: { findUnique: async () => null } },
           "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+          "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
           "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
           "@/app/api/ai/_lib/modelProvider": h.api,
           "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, lunaFreePlanEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
@@ -772,7 +774,7 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
             getByokOrTeamGatewayApiKeyForProvider: async () => credential,
           },
           "@/app/api/ai/_lib/chatTeamContext": {
-            resolveChatTeamContext: async () => ({ teamId: "fixture-team", projectId: 15, aiProviderSettings: {} }),
+            resolveChatTeamContext: async () => ({ teamId: "fixture-team", projectId: 15, aiProviderSettings: { providers: { openrouter: true } } }),
             buildChatProviderContext: () => ({ planGateProjectId: 15, keyLookupContext: { trustedTeamId: "fixture-team", userId: 985 } }),
           },
           "@/lib/nativeAgent/modelPin": load(path.join(root, "src/lib/nativeAgent/modelPin.ts")),
@@ -791,5 +793,37 @@ test("chat default sites use plan-aware server context and upgrade saved Haiku o
         await h.flush();
       }
     }
+  }
+});
+
+
+test("editor Haiku BYOK override respects OpenRouter provider restrictions", async () => {
+  for (const openrouter of [false, true, undefined]) {
+    const h = harness();
+    const picks = [];
+    const editor = editorWithFallback(h, picks, true, "fixture-openrouter", "Pro", "openrouter");
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: { providers: { openrouter } } } });
+    assert.equal(selected.provider, openrouter === true ? "openrouter" : "claude");
+    assert.deepEqual(picks, openrouter === true ? [] : [option.id]);
+    await h.flush();
+  }
+});
+
+test("editor Luna fallback removes Claude-native tools but preserves function tools", async () => {
+  const tools = [
+    { type: "provider", id: "anthropic.web_search_20250305", name: "web_search", args: {} },
+    { type: "function", name: "get_task", description: "Read a task", inputSchema: { type: "object", properties: {} } },
+  ];
+  for (const [method, streamFailure] of [["doGenerate", "throw"], ["doStream", "throw"], ["doStream", "read"], ["doStream", "chunk"]]) {
+    const h = harness({ unavailableHaiku: true, streamFailure });
+    const editor = editorWithFallback(h, []);
+    const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+    assert.ok(selected.tools.web_search);
+    const result = await selected.model[method]({ ...params, tools });
+    if (result.stream) for await (const chunk of result.stream) assert.equal(chunk.type, "finish");
+    assert.deepEqual(h.calls[0].tools, tools);
+    assert.deepEqual(Array.from(h.calls[1].tools), [tools[1]]);
+    assert.equal(selected.tools, undefined);
+    await h.flush();
   }
 });

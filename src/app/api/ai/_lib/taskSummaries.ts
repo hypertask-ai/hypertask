@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject, NoObjectGeneratedError } from "ai";
@@ -158,7 +159,7 @@ async function generateAndStoreTaskSummaryWithLease(
   if (!task) return null;
 
   const description = convertHtmlToText(task.description_?.content ?? "");
-  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: task.userId });
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: task.userId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel(
     "summaries",
     task.project.team?.aiProviderSettings,
@@ -445,7 +446,7 @@ async function generateTaskSummary(args: {
     };
   }
 
-  const model = resolveAutomaticAiModel(
+  const model = args.haiku55Enabled ? resolveAutomaticAiModel(
     args.haikuByok?.provider === "claude" ? "claude" : args.haikuByok?.provider === "openrouter" ? "openrouter" : "gateway",
     args.haikuByok?.provider === "claude" ? "claude-haiku-5-5" : args.systemModel.model,
     args.gatewayApiKey,
@@ -454,7 +455,7 @@ async function generateTaskSummary(args: {
       lookup: { trustedTeamId: args.teamId, projectId: args.projectId, userId: args.userId },
       feature: "summary",
     },
-  );
+  ) : resolveLegacyAiModel("gateway", args.systemModel.model, args.gatewayApiKey);
   configureAiModelUsage(model, {
     userId: args.userId,
     teamId: args.teamId,

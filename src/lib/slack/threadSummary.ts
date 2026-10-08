@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
@@ -80,7 +81,7 @@ export async function buildSlackThreadSummaryComment(
   const { participants, permalink, transcript } = source;
   if (!transcript) return null;
 
-  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: context.teamId, userId: context.installedByUserId });
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: context.teamId, userId: context.installedByUserId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel(
     "summaries",
     context.aiProviderSettings,
@@ -89,7 +90,7 @@ export async function buildSlackThreadSummaryComment(
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: context.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: context.teamId, projectId: context.projectId, userId: context.installedByUserId }, feature: "summary" });
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: context.teamId, projectId: context.projectId, userId: context.installedByUserId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
   configureAiModelUsage(model, {
     userId: context.installedByUserId,
     teamId: context.teamId,

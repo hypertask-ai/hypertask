@@ -28,7 +28,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
 
-  const haiku55Enabled = await haiku55ModelEnabled(dbUser.id);
+  const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
   state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
   const chunks: string[] = [];
   let result!: ReturnType<typeof streamText>;

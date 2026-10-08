@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -175,7 +176,7 @@ export async function learnBoardMemoryFromSignal(args: {
     return { enabled: true, learned: [] as string[] };
   }
   try {
-    const defaultContext = await getAiDefaultModelContext({ projectId: project.id, userId: args.userId });
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: project.id, userId: args.userId }) : { haiku55Enabled: false, byok: undefined };
     const useHaiku = defaultModelKeyFor(defaultContext, BOARD_MEMORY_MODEL) === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
     const gatewayApiKey = (useHaiku ? defaultContext.byok?.credential : undefined) ?? await getByokOrTeamGatewayApiKeyForProvider(
@@ -183,7 +184,7 @@ export async function learnBoardMemoryFromSignal(args: {
       undefined,
       { projectId: project.id, userId: args.userId },
     );
-    const model = resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" });
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId: project.id, userId: args.userId }, feature: "custom-instructions" }) : resolveLegacyAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey);
     const gatewayTags: AiGatewayTags = {
       projectId: project.id,
       teamId: project.teamId ?? "",

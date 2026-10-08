@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
@@ -37,7 +38,7 @@ export async function generateConversationTitle(
     return fallback;
   }
   try {
-    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId });
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }) : { haiku55Enabled: false, byok: undefined };
     const useHaiku = defaultModelKeyFor(defaultContext, "gpt-6-luna") === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
     const modelInput = useHaiku
@@ -47,7 +48,7 @@ export async function generateConversationTitle(
           userId: usageContext?.userId ?? tags?.userId,
         })
       : byokApiKey;
-    const model = resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" });
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(provider, useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : "gpt-6-luna", modelInput, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: tags?.teamId, projectId: usageContext?.projectId ?? tags?.projectId, userId: usageContext?.userId ?? tags?.userId }, feature: "chat" }) : resolveLegacyAiModel("openai", "gpt-6-luna", byokApiKey);
     if (usageContext) configureAiModelUsage(model, {
       ...usageContext,
       teamId: tags?.teamId ?? null,

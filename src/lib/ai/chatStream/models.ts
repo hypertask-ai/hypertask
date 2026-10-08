@@ -82,7 +82,9 @@ export function resolveModelSelection(
   }
 
   const modelOption =
-    getAiModelOptionById(modelOptionId, haiku55Enabled) ?? getAiModelOptionById(requestedModel, haiku55Enabled);
+    haiku55Enabled
+      ? getAiModelOptionById(modelOptionId, true) ?? getAiModelOptionById(requestedModel, true)
+      : getAiModelOptionById(modelOptionId) ?? getAiModelOptionById(requestedModel);
   if (modelOption) return selectionFromModelOption(modelOption);
 
   return defaultModelSelection(

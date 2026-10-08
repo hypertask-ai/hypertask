@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import prisma from "@/lib/prisma";
@@ -111,7 +112,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Board not found" }, { status: 404 });
   }
 
-  const defaultContext = await getAiDefaultModelContext({ projectId: project.id, userId: session.userId });
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: project.id, userId: session.userId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel(
     "statusUpdates",
     project.team?.aiProviderSettings,
@@ -232,7 +233,7 @@ export async function POST(request: NextRequest) {
       trustedTeamId: project.team?.id ?? null,
     });
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId, userId: session.userId }, feature: "status-update" });
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { projectId, userId: session.userId }, feature: "status-update" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
     configureAiModelUsage(model, {
       userId: session.userId,
       teamId: project.team?.id ?? null,

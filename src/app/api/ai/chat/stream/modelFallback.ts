@@ -1,4 +1,4 @@
-import { isHaiku55Model } from "@/lib/aiModelOptions";
+import { isHaiku55Model } from "../../../../../lib/aiModelOptions";
 
 const PREVIOUS_MODELS: Record<string, string> = {
   "gpt-6-luna": "gpt-5.6-luna",

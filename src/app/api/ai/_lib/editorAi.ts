@@ -652,8 +652,10 @@ export async function selectTaskWriterModel(args: {
       (credential !== null && typeof credential === "object");
   }
   const lunaFree = await lunaFreePlanEnabled(args.userId);
-  const haiku55Enabled = await haiku55ModelEnabled(args.userId);
-  const defaultContext = await getAiDefaultModelContext(keyLookup, haiku55Enabled, storePlanId);
+  const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
+  const defaultContext = haiku55Enabled
+    ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
+    : { hasByok: false, byok: undefined };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
@@ -701,11 +703,14 @@ export async function selectTaskWriterModel(args: {
     );
   }
 
+  const haikuByok = defaultContext.byok?.provider === "openrouter" &&
+    !resolveTeamProviderEnabled(teamContext.settings, "openrouter")
+    ? undefined : defaultContext.byok;
   const getSelectionApiKey = (
     selected: ReturnType<typeof resolveTaskWriterSelection>
   ) =>
-    selected.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok
-      ? Promise.resolve(defaultContext.byok.credential)
+    selected.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok
+      ? Promise.resolve(haikuByok.credential)
       : selected.modelOption
       ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
@@ -756,7 +761,7 @@ export async function selectTaskWriterModel(args: {
     }
   }
 
-  if (selection.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok?.provider === "openrouter") {
+  if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
@@ -827,7 +832,12 @@ export async function selectTaskWriterModel(args: {
     selected.provider = fallback.provider;
     selected.usageProvider = fallback.usageProvider;
     selected.providerOptions = fallback.providerOptions;
-    return { model: fallback.model as LanguageModelV4, providerOptions: fallback.providerOptions };
+    if (fallback.provider !== selection.provider) selected.tools = fallback.tools;
+    return {
+      model: fallback.model as LanguageModelV4,
+      providerOptions: fallback.providerOptions,
+      crossProvider: fallback.provider !== selection.provider,
+    };
   };
   if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled)) {
     return selected;
@@ -844,7 +854,11 @@ export async function selectTaskWriterModel(args: {
         } catch (error) {
           const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          const result = await fallback.model.doGenerate({ ...params, providerOptions: fallback.providerOptions ?? {} });
+          const result = await fallback.model.doGenerate({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          });
           hasOutput = true;
           return result;
         }
@@ -856,7 +870,11 @@ export async function selectTaskWriterModel(args: {
         } catch (error) {
           const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          result = await fallback.model.doStream({ ...params, providerOptions: fallback.providerOptions ?? {} });
+          result = await fallback.model.doStream({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          });
         }
         let reader = result.stream.getReader();
         let cancelled = false;
@@ -865,7 +883,11 @@ export async function selectTaskWriterModel(args: {
         let preamble: Array<Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]> = [];
         let pending: typeof preamble = [];
         const switchReader = async (fallback: NonNullable<Awaited<ReturnType<typeof fallbackModel>>>) => {
-          const next = (await fallback.model.doStream({ ...params, providerOptions: fallback.providerOptions ?? {} })).stream.getReader();
+          const next = (await fallback.model.doStream({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          })).stream.getReader();
           reader = next;
           if (cancelled) await next.cancel(cancelReason);
         };

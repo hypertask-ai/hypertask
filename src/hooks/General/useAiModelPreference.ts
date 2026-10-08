@@ -73,14 +73,21 @@ export function useAiModelPreference(
     surface,
     currentTeamId,
   );
-  const planDefault = getDefaultAiModelOptionForPlan(
-    scopedBilling?.storePlanId,
-    haiku55Enabled
-      ? hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags)
-      : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
-    lunaFree,
-    haiku55Enabled,
-  );
+  const planDefault = haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(
+        scopedBilling?.storePlanId,
+        hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),
+        lunaFree,
+        true,
+      )
+    : getDefaultAiModelOptionForPlan(
+        scopedBilling?.storePlanId,
+        isByokProviderEnabledForSource(
+          scopedBilling?.byokProviderFlags,
+          preferredAiModelOption.source,
+        ),
+        lunaFree,
+      );
   const resolveOption = useCallback(
     () =>
       resolveAiModelOption(

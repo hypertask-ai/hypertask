@@ -358,6 +358,7 @@ test("server title default sites retain Free Luna and route paid or compatible B
             resolveAutomaticAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
           },
           "@/app/api/ai/_lib/modelProvider": {
+            resolveAiModel: (source, model, credential) => { requests.push({ source, model, credential }); return {}; },
             isAiGatewayEnabled: () => true,
             configureAiModelUsage: () => {}, providerOptionsForAiModel: () => ({}), aiUsageProviderForCredential: (source) => source,
           },

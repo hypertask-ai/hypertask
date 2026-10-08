@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
@@ -187,7 +188,7 @@ export async function POST(request: NextRequest) {
           })
           .join("\n\n")
       : "(no comments)";
-    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: viewer.id });
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: viewer.id }) : { haiku55Enabled: false, byok: undefined };
     const systemModel = resolveSystemModel(
       "questionSuggestions",
       task.project.team?.aiProviderSettings,
@@ -205,7 +206,7 @@ export async function POST(request: NextRequest) {
       projectId: task.projectId,
     };
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" });
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: task.project.teamId, projectId: task.projectId, userId: viewer.id }, feature: "task-questions" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
     configureAiModelUsage(model, {
       userId: viewer.id,
       teamId: task.project.teamId,

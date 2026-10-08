@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -274,7 +275,7 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
   ];
-  const defaultContext = isImage ? { haiku55Enabled: false, byok: undefined } : await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId });
+  const defaultContext = isImage ? { haiku55Enabled: false, byok: undefined } : typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
   const useHaiku = !isImage && defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
   const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
   const modelInput = useHaiku
@@ -284,7 +285,7 @@ async function extractBinaryDocumentTextWithOpenAI(
         trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId,
       })
     : gatewayApiKey;
-  const model = resolveAutomaticAiModel(
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(
     provider,
     useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
     modelInput,
@@ -297,7 +298,7 @@ async function extractBinaryDocumentTextWithOpenAI(
       },
       feature: "custom-instructions",
     },
-  );
+  ) : resolveLegacyAiModel("openai", isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL, gatewayApiKey);
 
   if (usageContext) configureAiModelUsage(model, {
     ...usageContext,

@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
@@ -207,12 +208,12 @@ async function writeSlackTaskDraft(input: {
   teamId: string;
   transcript: string;
 }): Promise<{ description: string; title: string }> {
-  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: input.teamId, userId: input.actorUserId });
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: input.teamId, userId: input.actorUserId }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel("summaries", input.aiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) throw new Error("No Slack task-writing model is configured");
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: input.teamId, projectId: input.projectId, userId: input.actorUserId }, feature: "summary" });
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: input.teamId, projectId: input.projectId, userId: input.actorUserId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
   configureAiModelUsage(model, {
     userId: input.actorUserId,
     teamId: input.teamId,

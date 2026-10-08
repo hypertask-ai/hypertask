@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -59,7 +60,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
     }
 
     const targetLines = getCommentSummaryTargetLines(wordCount);
-    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: comment.task.project.teamId, userId: comment.creatorId ?? comment.task.userId });
+    const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: comment.task.project.teamId, userId: comment.creatorId ?? comment.task.userId }) : { haiku55Enabled: false, byok: undefined };
     const systemModel = resolveSystemModel(
       "summaries",
       comment.task.project.team?.aiProviderSettings,
@@ -71,7 +72,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       trustedTeamId: comment.task.project.teamId,
     });
     const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-    const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: comment.task.project.teamId, projectId: comment.task.projectId, userId: comment.creatorId ?? comment.task.userId }, feature: "summary" });
+    const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: comment.task.project.teamId, projectId: comment.task.projectId, userId: comment.creatorId ?? comment.task.userId }, feature: "summary" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
     configureAiModelUsage(model, {
       userId: comment.creatorId ?? comment.task.userId,
       teamId: comment.task.project.teamId,

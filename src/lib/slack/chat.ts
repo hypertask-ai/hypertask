@@ -1,3 +1,4 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
@@ -176,12 +177,12 @@ async function parseSlackIntent(
   actor: NonNullable<Awaited<ReturnType<typeof resolveSlackActor>>>,
   context = "",
 ): Promise<SlackAction | null> {
-  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: actor.teamId, userId: actor.user.id });
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: actor.teamId, userId: actor.user.id }) : { haiku55Enabled: false, byok: undefined };
   const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
   const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
-  const model = resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" });
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
   configureAiModelUsage(model, {
     userId: actor.user.id,
     teamId: actor.teamId,

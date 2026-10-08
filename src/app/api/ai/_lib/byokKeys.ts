@@ -460,7 +460,7 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
 }
 
 export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
-  const enabled = haiku55Enabled ?? await haiku55ModelEnabled(lookup.userId);
+  const enabled = haiku55Enabled ?? (await haiku55ModelEnabled?.(lookup.userId) ?? false);
   const storePlanId = plan ?? (enabled ? await storePlanIdForProject(lookup.projectId, normalizeTeamId(lookup.trustedTeamId ?? lookup.teamId)) : "Free");
   let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
   if (enabled && storePlanId && storePlanId !== "Free") {
