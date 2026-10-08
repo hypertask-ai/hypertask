@@ -18,6 +18,8 @@ export function useTaskDetailMetaField(field: keyof TaskDetailMeta, queryKey: an
       return meta[field];
     } : queryFn,
     initialData: dedupe ? (field === "priority" || field === "estimate" ? initialData : undefined) : initialData ?? (field === "priority" ? null : []),
+    // Keep legacy defaults visible, but not fake-fresh on a later flag-on mount.
+    ...(!flagReady ? { initialDataUpdatedAt: 0 } : {}),
     ...(flagReady && !dedupe ? {} : { enabled: flagReady && !!taskId }),
     ...(dedupe ? { placeholderData: field === "labels" || field === "followers" ? [] : undefined, refetchOnMount: shouldRefetchDetailOnMount } : {}),
   });

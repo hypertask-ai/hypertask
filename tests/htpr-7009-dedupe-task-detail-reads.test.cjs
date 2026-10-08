@@ -69,7 +69,7 @@ function harness(t, enabled = true) {
     "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: () => null },
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: () => null },
   }, source).default({ taskId: 42, projectId: 15, uniqueIndex: 42, initialTask: task(), embedded: false });
-  return { client, counts, mocks, prefetch, field, comments, embedded, task, meta, version: value => { version = value; }, user: value => { userId = value; }, ready: value => { ready = value; } };
+  return { client, counts, mocks, prefetch, field, comments, embedded, task, meta, tick: () => intervals.forEach(callback => callback()), version: value => { version = value; }, user: value => { userId = value; }, ready: value => { ready = value; } };
 }
 
 test("shared task fetcher uses explicit cache options and rejects invalid responses without replacing cached data", async t => {
@@ -232,6 +232,104 @@ test("realtime events, same-user multi-tab edits, reconnect and PR subscription 
   assert.equal(current.title, "Task 4");
 });
 
+test("rebased readiness retains production's no-loading-flash guard when dedupe is off", () => {
+  const file = "src/app/detail/[...slug]/useTaskDetailReadiness.tsx";
+  const production = require("node:child_process").execFileSync("git", ["show", `origin/production:${file}`], { cwd: root, encoding: "utf8" });
+  const refreshDecision = source => new Function("flagReady", "dedupe", "noLoadingFlash", "cachedLayout", "window", "_parsedTask",
+    `return ${source.match(/getTask\(([^;]+)\);/)[1]}`);
+  const actual = refreshDecision(fs.readFileSync(path.join(root, file), "utf8"));
+  const expected = refreshDecision(production);
+  for (const noLoadingFlash of [false, true]) for (const cachedLayout of [false, true]) for (const cachedTaskId of [undefined, 42, 43]) {
+    const args = [noLoadingFlash, cachedLayout, { history: { state: { cachedTaskDetail: { taskId: cachedTaskId } } } }, { id: 42 }];
+    assert.equal(actual(true, false, ...args), expected(true, false, ...args));
+    assert.equal(actual(true, true, ...args), false);
+    assert.equal(actual(false, false, ...args), false);
+  }
+});
+
+for (const pending of [false, true]) {
+  test(`initial unavailable realtime reuses the board read (${pending ? "pending" : "fresh"}) but periodic reconciliation still refreshes`, async t => {
+    const h = harness(t);
+    let release;
+    if (pending) global.fetch = () => {
+      h.counts.task++;
+      return new Promise(resolve => { release = () => resolve({ ok: true, status: 200, json: async () => h.task() }); });
+    };
+    h.prefetch([{ id: 42, projectId: 15, uniqueIndex: 42 }]);
+    if (!pending) await settle();
+    h.embedded(); h.comments(); h.field("labels");
+    global.window.history = { state: { cachedTaskDetail: { taskId: 42 } } };
+    const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
+      "@/lib/realtime/client": { connectRealtimeClient: async () => null, releaseRealtimeClientIfIdle() {} },
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/lib/realtime/taskCommentsRefresh": commentsRefresh,
+    });
+    hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
+    await settle();
+    assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 1, single: 0 }, "startup must not cancel or repeat the board read");
+    if (pending) { release(); await settle(); }
+    global.fetch = async () => { h.counts.task++; return { ok: true, status: 200, json: async () => h.task() }; };
+    h.version(2); h.tick(); await settle();
+    assert.deepEqual(h.counts, { task: 2, comments: 2, meta: 2, single: 0 }, "unhealthy realtime still reconciles on its next cycle");
+    assert.equal(h.client.getQueryData(reads.taskDetailReadKey(985, 42)).title, "Task 2");
+  });
+}
+
+test("initial unavailable direct read does not invalidate freshly mounted metadata; later reconciliation does", async t => {
+  const h = harness(t);
+  h.client.setQueryData(reads.taskDetailReadKey(985, 42), h.task());
+  h.comments({ comments: [1], updatedAt: Date.now() }); h.field("labels"); await settle();
+  global.window.history = { state: {} };
+  const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
+    "@/lib/realtime/client": { connectRealtimeClient: async () => null, releaseRealtimeClientIfIdle() {} },
+    "@/lib/realtime/taskDetailRefresh": refresh,
+    "@/lib/realtime/taskCommentsRefresh": commentsRefresh,
+  });
+  hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
+  await settle();
+  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 1, single: 0 });
+  h.version(2); h.tick(); await settle();
+  assert.deepEqual(h.counts, { task: 2, comments: 2, meta: 2, single: 0 });
+  assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [2]);
+});
+
+test("unavailable realtime mounted hidden still invalidates metadata when it first reconciles", async t => {
+  const h = harness(t);
+  h.comments({ comments: [1], updatedAt: Date.now() }); h.field("labels"); await settle();
+  global.document.visibilityState = "hidden";
+  global.window.history = { state: {} };
+  const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
+    "@/lib/realtime/client": { connectRealtimeClient: async () => null, releaseRealtimeClientIfIdle() {} },
+    "@/lib/realtime/taskDetailRefresh": refresh,
+    "@/lib/realtime/taskCommentsRefresh": commentsRefresh,
+  });
+  hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
+  await settle();
+  assert.deepEqual(h.counts, { task: 0, comments: 0, meta: 1, single: 0 });
+  global.document.visibilityState = "visible";
+  h.version(2); h.tick(); await settle();
+  assert.deepEqual(h.counts, { task: 1, comments: 1, meta: 2, single: 0 });
+  assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [2]);
+});
+
+for (const entry of ["direct", "stale", "invalidated", "off"]) {
+  test(`initial unavailable realtime still refreshes ${entry} opens`, async t => {
+    const h = harness(t, entry !== "off");
+    const key = reads.taskDetailReadKey(985, 42);
+    if (entry !== "off") h.client.setQueryData(key, h.task(), { updatedAt: entry === "stale" ? Date.now() - 31_000 : Date.now() });
+    if (entry === "invalidated") await h.client.invalidateQueries({ queryKey: key, exact: true });
+    global.window.history = { state: entry === "direct" ? {} : { cachedTaskDetail: { taskId: 42 } } };
+    const hook = load("src/hooks/realtime/useTaskCommentsRealtime.ts", { ...h.mocks,
+      "@/lib/realtime/client": { connectRealtimeClient: async () => null, releaseRealtimeClientIfIdle() {} },
+      "@/lib/realtime/taskDetailRefresh": refresh,
+      "@/lib/realtime/taskCommentsRefresh": commentsRefresh,
+    });
+    hook.useTaskCommentsRealtime(42, { currentUserId: 985, taskProjectId: 15, taskUniqueIndex: 42 });
+    await settle();
+    assert.equal(h.counts.task, 1);
+  });
+}
+
 test("resolved flag-off metadata options and fetch results match origin/production exactly", async () => {
   const mocks = {
     "@tanstack/react-query": { useQuery: options => options, useQueryClient: () => ({}) },
@@ -302,6 +400,27 @@ test("a real metadata refresh aborts a pre-write request before caching the chan
   assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [2]);
 });
 
+
+test("unresolved metadata flags do not seed fake-fresh legacy arrays before a flag-on mount", async t => {
+  const h = harness(t);
+  h.ready(false);
+  h.mocks["@/hooks/useFlag"].useFlag = () => false;
+  for (const field of ["labels", "followers"]) assert.deepEqual(h.field(field).data, []);
+  await settle();
+  assert.equal(h.counts.meta, 0);
+  for (const prefix of ["taskLabels", "followersFor:"]) {
+    assert.deepEqual(h.client.getQueryData([prefix, 42]), []);
+    assert.equal(h.client.getQueryState([prefix, 42]).status, "success");
+    assert.equal(h.client.getQueryState([prefix, 42]).dataUpdatedAt, 0);
+  }
+  h.ready(true);
+  h.mocks["@/hooks/useFlag"].useFlag = () => true;
+  for (const field of ["labels", "followers"]) h.field(field);
+  await settle();
+  assert.equal(h.counts.meta, 1);
+  assert.deepEqual(h.client.getQueryData(["taskLabels", 42]), [1]);
+  assert.deepEqual(h.client.getQueryData(["followersFor:", 42]), [1]);
+});
 
 test("initial reads wait for the flag decision instead of fetching under the temporary Off key", async t => {
   const h = harness(t);

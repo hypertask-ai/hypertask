@@ -17,7 +17,7 @@ import {
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import type { IAttachment, ITask } from "@/models/model";
 
-import { fetchScopedTaskDetail, taskDetailReadKey } from "@/lib/taskDetailReads";
+import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount } from "@/lib/taskDetailReads";
 import { useFlag, useFlagReady } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 
@@ -99,6 +99,7 @@ export function useTaskCommentsRealtime(
     let unsubscribe: (() => void) | undefined;
     let refreshInFlight = false;
     let refreshRequestedDuringFlight = false;
+    let skipInitialSatelliteRefresh = false;
     let subscriptionHealthy = false;
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
@@ -116,6 +117,8 @@ export function useTaskCommentsRealtime(
       }
 
       refreshInFlight = true;
+      const refreshSatellites = !skipInitialSatelliteRefresh;
+      skipInitialSatelliteRefresh = false;
       const includeTaskRefetch = shouldRefetchTask.current;
       const includeTaskContentSync = shouldSyncTaskContent.current;
       const titleAtFetchStart = currentTaskTitleRef.current;
@@ -138,6 +141,7 @@ export function useTaskCommentsRealtime(
             queryClient,
             taskId,
             readQueryKey: dedupe && currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
+            ...(refreshSatellites ? {} : { refreshSatellites: false }),
             fetchTask: (signal) => dedupe && currentUserId
               ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" })
               : fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex, signal),
@@ -236,7 +240,16 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      runFallbackCycle();
+      // A cached open already reads on mount; unavailable realtime must not cancel or repeat that fresh read.
+      const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId &&
+        window.history?.state?.cachedTaskDetail?.taskId === activeTaskId
+        ? queryClient.getQueryState(taskDetailReadKey(currentUserId, activeTaskId)) : undefined;
+      if (!initialRead || !(initialRead.fetchStatus === "fetching" ||
+        (initialRead.status === "success" && !shouldRefetchDetailOnMount({ state: initialRead })))) {
+        // Initial metadata queries own their reads; only later reconciliation needs satellite invalidation.
+        skipInitialSatelliteRefresh = dedupe && !wasConnected.current && reason === "unavailable" && canReconcile();
+        runFallbackCycle();
+      }
       fallbackTimer = setInterval(
         runFallbackCycle,
         TASK_COMMENTS_RECONCILE_INTERVAL_MS

@@ -165,11 +165,13 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   taskId,
   fetchTask,
   readQueryKey,
+  refreshSatellites = true,
 }: {
   queryClient: TaskDetailQueryClient;
   taskId: number;
   fetchTask: (signal?: AbortSignal) => Promise<T | null>;
   readQueryKey?: readonly unknown[];
+  refreshSatellites?: boolean;
 }): Promise<T | null> {
   await queryClient.cancelQueries({ queryKey: ["task-", taskId] });
   let task: T | null;
@@ -181,7 +183,7 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   } else task = await fetchTask();
   if (task) {
     queryClient.setQueryData(["task-", taskId], task);
-    await seedTaskDetailSatelliteCaches(queryClient, task);
+    if (refreshSatellites) await seedTaskDetailSatelliteCaches(queryClient, task);
   }
   return task;
 }
