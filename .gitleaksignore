@@ -1,2 +1,3 @@
-# Historical feature-flag identifier, not a credential. The local variable is now flagKey.
+# Historical feature-flag identifiers, not credentials. The local variable is now flagName.
 04beafd9add039d36886ca290cbaadb6da3cdf02:tests/feature-flags.test.cjs:generic-api-key:66
+e10e24b83fc54a6f5d5c4fc52fa083b1d3ed3c32:tests/feature-flags.test.cjs:generic-api-key:66

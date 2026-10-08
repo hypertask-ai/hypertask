@@ -63,19 +63,19 @@ test.beforeEach(() => {
 });
 
 test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
-  const flagKey = flags.HTPR_7010_HAIKU_5_5_FLAG;
-  assert.equal(flagKey, "htpr-7010-haiku-5-5");
-  assert.equal(flags.defaultFeatureFlagMode(flagKey), "OWNER_AND_QA");
-  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === flagKey);
+  const flagName = flags.HTPR_7010_HAIKU_5_5_FLAG;
+  assert.equal(flagName, "htpr-7010-haiku-5-5");
+  assert.equal(flags.defaultFeatureFlagMode(flagName), "OWNER_AND_QA");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === flagName);
   assert.equal(entry.kind, "feature");
   assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-08");
-  assert.equal(await flags.isFeatureEnabled(flagKey, 6), true);
-  assert.equal(await flags.isFeatureEnabled(flagKey, 985), true);
-  assert.equal(await flags.isFeatureEnabled(flagKey, 7), false);
+  assert.equal(await flags.isFeatureEnabled(flagName, 6), true);
+  assert.equal(await flags.isFeatureEnabled(flagName, 985), true);
+  assert.equal(await flags.isFeatureEnabled(flagName, 7), false);
   row = { mode: "OFF", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled(flagKey, 6), false);
-  assert.equal(await flags.isFeatureEnabled(flagKey, 985), false);
+  assert.equal(await flags.isFeatureEnabled(flagName, 6), false);
+  assert.equal(await flags.isFeatureEnabled(flagName, 985), false);
 });
 
 test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
