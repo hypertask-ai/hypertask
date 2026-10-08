@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -189,6 +190,7 @@ export async function POST(request: NextRequest) {
     const systemModel = resolveSystemModel(
       "questionSuggestions",
       task.project.team?.aiProviderSettings,
+    await haiku55ModelEnabled(viewer.id),
     );
     if (!systemModel) {
       return NextResponse.json({ questions: [] });

@@ -5,6 +5,8 @@ import {
   getAiModelDefinition,
   getAiModelOptionById,
   pickAutoAiModelOption,
+  isAiModelOptionVisible,
+  resolveHaikuModelId,
   type TAiImageModelDefinition,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
@@ -103,6 +105,7 @@ export function isAiFeatureEnabled(
 export function getAiFeatureModelOverride(
   feature: ModelAiFeature,
   aiProviderSettings: unknown,
+  haiku55Enabled = false,
 ): string | null {
   if (!isObjectRecord(aiProviderSettings)) return null;
 
@@ -112,40 +115,48 @@ export function getAiFeatureModelOverride(
   const model = featureModels[feature];
   if (typeof model !== "string" || !model.trim()) return null;
   const trimmed = model.trim();
-  return RETIRED_SYSTEM_MODEL_SLUGS[trimmed] ?? trimmed;
+  return resolveHaikuModelId(RETIRED_SYSTEM_MODEL_SLUGS[trimmed] ?? trimmed, haiku55Enabled);
 }
 
 export function getSystemFeatureModelOverride(
   feature: SystemFeature,
   aiProviderSettings: unknown,
+  haiku55Enabled = false,
 ): string | null {
-  return getAiFeatureModelOverride(feature, aiProviderSettings);
+  return getAiFeatureModelOverride(feature, aiProviderSettings, haiku55Enabled);
 }
 
 export function getSystemModelsForFeature(
   feature: SystemFeature,
+  haiku55Enabled = false,
 ): readonly SystemModel[] {
-  return SYSTEM_MODEL_LADDERS[SYSTEM_FEATURES[feature].role];
+  const ladder = SYSTEM_MODEL_LADDERS[SYSTEM_FEATURES[feature].role];
+  return haiku55Enabled
+    ? [...ladder.filter((entry) => entry.provider === "anthropic"), ...ladder.filter((entry) => entry.provider !== "anthropic")]
+        .map((entry) => ({ ...entry, model: resolveHaikuModelId(entry.model, true) }))
+    : ladder;
 }
 
 export function isSystemModelForFeature(
   feature: SystemFeature,
   model: unknown,
+  haiku55Enabled = false,
 ): model is string {
   return (
     typeof model === "string" &&
-    getSystemModelsForFeature(feature).some((entry) => entry.model === model)
+    getSystemModelsForFeature(feature, haiku55Enabled).some((entry) => entry.model === model)
   );
 }
 
 export function isAiFeatureModelAllowed(
   feature: ModelAiFeature,
   model: unknown,
+  haiku55Enabled = false,
 ): model is string {
   if (typeof model !== "string") return false;
   const kind = AI_FEATURES[feature].modelKind;
   if (kind === "fast") {
-    return isSystemModelForFeature(feature as SystemFeature, model);
+    return isSystemModelForFeature(feature as SystemFeature, model, haiku55Enabled);
   }
   if (kind === "image") {
     return aiImageModelDefinitions.some(
@@ -160,11 +171,12 @@ export function isAiFeatureModelEnabled(
   model: unknown,
   aiProviderSettings: unknown,
   customEndpointConfigured = true,
+  haiku55Enabled = false,
 ): model is string {
-  if (!isAiFeatureModelAllowed(feature, model)) return false;
+  if (!isAiFeatureModelAllowed(feature, model, haiku55Enabled)) return false;
   const kind = AI_FEATURES[feature].modelKind;
   if (kind === "fast") {
-    const definition = getSystemModelsForFeature(feature as SystemFeature).find(
+    const definition = getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled).find(
       (entry) => entry.model === model,
     );
     return Boolean(
@@ -215,13 +227,16 @@ export function resolveUserFacingModelOption(
   options?: {
     customEndpointConfigured?: boolean;
     defaultModelOption?: TAiModelOption;
+    haiku55Enabled?: boolean;
   },
 ): TAiModelOption | null {
   if (!isAiFeatureEnabled(feature, aiProviderSettings)) return null;
   const customEndpointConfigured = options?.customEndpointConfigured ?? true;
-  const defaultModelOption = options?.defaultModelOption ?? defaultAiModelOption;
+  const haiku55Enabled = options?.haiku55Enabled ?? false;
+  const defaultModelOption = options?.defaultModelOption ??
+    (haiku55Enabled ? getAiModelOptionById("claude-haiku-5-5")! : defaultAiModelOption);
 
-  const personal = getAiModelOptionById(personalModelOptionId);
+  const personal = getAiModelOptionById(personalModelOptionId, haiku55Enabled);
   if (
     isModelOptionEnabled(personal, aiProviderSettings, customEndpointConfigured)
   ) {
@@ -229,7 +244,8 @@ export function resolveUserFacingModelOption(
   }
 
   const teamDefault = getAiModelOptionById(
-    getAiFeatureModelOverride(feature, aiProviderSettings),
+    getAiFeatureModelOverride(feature, aiProviderSettings, haiku55Enabled),
+    haiku55Enabled,
   );
   if (
     isModelOptionEnabled(
@@ -254,12 +270,13 @@ export function resolveUserFacingModelOption(
   return (
     pickAutoAiModelOption(
       aiModelOptions.filter((option) =>
-        isModelOptionEnabled(
+        isAiModelOptionVisible(option, haiku55Enabled) && isModelOptionEnabled(
           option,
           aiProviderSettings,
           customEndpointConfigured,
         ),
       ),
+      haiku55Enabled,
     ) ?? null
   );
 }
@@ -286,11 +303,12 @@ export function resolveImageModel(
 export function resolveSystemModel(
   feature: SystemFeature,
   aiProviderSettings: unknown,
+  haiku55Enabled = false,
 ): SystemModel | null {
   if (!isAiFeatureEnabled(feature, aiProviderSettings)) return null;
 
-  const ladder = getSystemModelsForFeature(feature);
-  const override = getSystemFeatureModelOverride(feature, aiProviderSettings);
+  const ladder = getSystemModelsForFeature(feature, haiku55Enabled);
+  const override = getSystemFeatureModelOverride(feature, aiProviderSettings, haiku55Enabled);
   const selectedOverride = ladder.find(
     ({ model, provider }) =>
       model === override &&

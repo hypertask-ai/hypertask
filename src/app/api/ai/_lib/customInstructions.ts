@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
@@ -273,15 +274,24 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
   ];
+  const haiku55Enabled = !isImage && await haiku55ModelEnabled(usageContext?.userId ?? gatewayTags?.userId);
+  const provider = haiku55Enabled ? "claude" : "openai";
+  const credential = haiku55Enabled
+    ? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
+        projectId: usageContext?.projectId ?? gatewayTags?.projectId,
+        userId: usageContext?.userId ?? gatewayTags?.userId,
+        trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId,
+      })
+    : gatewayApiKey;
   const model = resolveAiModel(
-    "openai",
-    isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
-    gatewayApiKey
+    provider,
+    haiku55Enabled ? "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
+    credential,
   );
 
   if (usageContext) configureAiModelUsage(model, {
     ...usageContext,
-    provider: aiUsageProviderForCredential("openai", gatewayApiKey),
+    provider: aiUsageProviderForCredential(provider, credential),
     feature: "custom-instructions",
   });
   const result = await generateText({

@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { tool } from "ai";
 import { z } from "zod";
 import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
@@ -109,7 +110,11 @@ export function createBoardConfigTool(context: ToolContext) {
             include: { attachments: true },
           });
 
-          return sanitizeForJson({ success: true, instruction });
+          const haiku55Enabled = await haiku55ModelEnabled(user.id);
+          const selected = haiku55Enabled ? getAiModelOptionById(instruction?.model_selected, true) : undefined;
+          return sanitizeForJson({ success: true, instruction: instruction && selected ? {
+            ...instruction, model_selected: selected.id, source_selected: selected.source,
+          } : instruction });
         }
 
         if (input.custom_instruction === undefined) {

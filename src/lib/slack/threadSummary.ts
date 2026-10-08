@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -82,6 +83,7 @@ export async function buildSlackThreadSummaryComment(
   const systemModel = resolveSystemModel(
     "summaries",
     context.aiProviderSettings,
+    await haiku55ModelEnabled(context.installedByUserId),
   );
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: context.teamId });

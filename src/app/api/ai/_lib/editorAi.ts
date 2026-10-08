@@ -18,7 +18,7 @@ import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGateway
 import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, type TAiModelOption } from "@/lib/aiModelOptions";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
-import { assertModelAllowedForPlan, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { assertModelAllowedForPlan, haiku55ModelEnabled, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
@@ -314,10 +314,10 @@ export function defaultModelSelection(
     feature,
     settings,
     personalModelOptionId,
-    { customEndpointConfigured, defaultModelOption }
+    { customEndpointConfigured, defaultModelOption, haiku55Enabled: defaultModelOption.modelKey === "claude-haiku-5-5" }
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings));
+  return selectionFromModelOption(filterModelOptionForTeam(option, settings, defaultModelOption.modelKey === "claude-haiku-5-5"));
 }
 
 function resolveTaskWriterSelection(
@@ -342,7 +342,7 @@ function resolveTaskWriterSelection(
   }
 
   const modelOption =
-    getAiModelOptionById(modelOptionId) ?? getAiModelOptionById(requestedModel);
+    getAiModelOptionById(modelOptionId, defaultModelOption.modelKey === "claude-haiku-5-5") ?? getAiModelOptionById(requestedModel, defaultModelOption.modelKey === "claude-haiku-5-5");
   if (modelOption) {
     return selectionFromModelOption(modelOption);
   }
@@ -647,10 +647,12 @@ export async function selectTaskWriterModel(args: {
       (credential !== null && typeof credential === "object");
   }
   const lunaFree = await lunaFreePlanEnabled(args.userId);
+  const haiku55Enabled = await haiku55ModelEnabled(args.userId);
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     hasEligibleByokCredential,
     lunaFree,
+    haiku55Enabled,
   );
   const personalModelOptionId = args.aiFeature
     ? await getPersonalModelOptionId(
@@ -675,7 +677,7 @@ export async function selectTaskWriterModel(args: {
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(selection.modelOption, teamContext.settings)
+      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled)
     );
   }
   if (
@@ -687,7 +689,7 @@ export async function selectTaskWriterModel(args: {
     )
   ) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
     );
   }
 
@@ -772,33 +774,41 @@ export async function selectTaskWriterModel(args: {
   };
   let hasOutput = false;
   let fellBack = false;
-  const fallbackModel = (error: unknown) => {
+  const fallbackModel = async (error: unknown) => {
     if (fellBack) return null;
     const previous = previousModelForFailedStream(
-      selected.modelId, error, hasOutput, false,
+      selected.modelId, error, hasOutput, false, haiku55Enabled,
     );
     if (!previous) return null;
     fellBack = true;
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
     );
+    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
+      ? await getByokOrTeamGatewayApiKeyForModelOption(
+          getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
+        )
+      : byokApiKey;
     const fallback = selectEditorModel(
-      selection.provider,
+      previous.model === "gpt-6-luna" ? "openai" : selection.provider,
       previous.model,
-      byokApiKey,
+      fallbackCredential,
       {
         feature: args.feature ?? "task-writer",
         tags,
-        modelOption: selection.modelOption
-          ? { ...selection.modelOption, directModel: undefined }
-          : undefined,
+        modelOption: previous.model === "gpt-6-luna"
+          ? getAiModelOptionById(previous.model)
+          : selection.modelOption ? { ...selection.modelOption, directModel: undefined } : undefined,
       },
     );
     inheritAiModelUsage(fallback.model, selected.model);
+    configureAiModelUsage(fallback.model, { provider: fallback.usageProvider });
     selected.modelId = fallback.modelId;
+    selected.provider = fallback.provider;
+    selected.usageProvider = fallback.usageProvider;
     return fallback.model as LanguageModelV4;
   };
-  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false)) {
+  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled)) {
     return selected;
   }
   selected.model = wrapLanguageModel({
@@ -811,7 +821,7 @@ export async function selectTaskWriterModel(args: {
           hasOutput = true;
           return result;
         } catch (error) {
-          const fallback = fallbackModel(error);
+          const fallback = await fallbackModel(error);
           if (!fallback) throw error;
           const result = await fallback.doGenerate(params);
           hasOutput = true;
@@ -823,7 +833,7 @@ export async function selectTaskWriterModel(args: {
         try {
           result = await doStream();
         } catch (error) {
-          const fallback = fallbackModel(error);
+          const fallback = await fallbackModel(error);
           if (!fallback) throw error;
           result = await fallback.doStream(params);
         }
@@ -856,7 +866,7 @@ export async function selectTaskWriterModel(args: {
                   try {
                     item = await reader.read();
                   } catch (error) {
-                    const fallback = fallbackModel(error);
+                    const fallback = await fallbackModel(error);
                     if (!fallback) throw error;
                     await switchReader(fallback);
                     preamble = [];
@@ -874,7 +884,7 @@ export async function selectTaskWriterModel(args: {
                     continue;
                   }
                   if (item.value.type === "error") {
-                    const fallback = fallbackModel(item.value.error);
+                    const fallback = await fallbackModel(item.value.error);
                     if (fallback) {
                       await reader.cancel();
                       await switchReader(fallback);

@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject } from "ai";
@@ -174,12 +175,14 @@ export async function learnBoardMemoryFromSignal(args: {
     return { enabled: true, learned: [] as string[] };
   }
   try {
+    const haiku55Enabled = await haiku55ModelEnabled(args.userId);
+    const provider = haiku55Enabled ? "claude" : "openai";
     const gatewayApiKey = await getByokOrTeamGatewayApiKeyForProvider(
-      "openai",
+      provider,
       undefined,
       { projectId: project.id, userId: args.userId },
     );
-    const model = resolveAiModel("openai", BOARD_MEMORY_MODEL, gatewayApiKey);
+    const model = resolveAiModel(provider, haiku55Enabled ? "claude-haiku-5-5" : BOARD_MEMORY_MODEL, gatewayApiKey);
     const gatewayTags: AiGatewayTags = {
       projectId: project.id,
       teamId: project.teamId ?? "",
@@ -189,7 +192,7 @@ export async function learnBoardMemoryFromSignal(args: {
       userId: args.userId,
       teamId: project.teamId,
       projectId: project.id,
-      provider: aiUsageProviderForCredential("openai", gatewayApiKey),
+      provider: aiUsageProviderForCredential(provider, gatewayApiKey),
       feature: "custom-instructions",
     });
     const result = await generateObject({

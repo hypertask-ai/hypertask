@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText } from "ai";
@@ -61,6 +62,7 @@ export async function generateAndStoreCommentSummary(commentId: number) {
     const systemModel = resolveSystemModel(
       "summaries",
       comment.task.project.team?.aiProviderSettings,
+    await haiku55ModelEnabled(comment.creatorId ?? comment.task.userId),
     );
     if (!systemModel) return null;
     const gatewayApiKey = await getTeamGatewayApiKey({

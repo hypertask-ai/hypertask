@@ -8,7 +8,7 @@ import { type TAiModelOption, preferredAiModelOption, getDefaultAiModelOptionFor
 import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_lib/chatTeamContext";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
-import { storePlanIdForProject, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
+import { storePlanIdForProject, haiku55ModelEnabled, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
@@ -132,10 +132,12 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         (credential !== null && typeof credential === "object");
     }
     const lunaFree = await lunaFreePlanEnabled(dbUser.id);
+    const haiku55Enabled = await haiku55ModelEnabled(dbUser.id);
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       hasEligibleByokCredential,
       lunaFree,
+      haiku55Enabled,
     );
     // An agent pinned to a model runs its own turns on it, which is the point
     // of pinning: a sweeper on a cheap model, a coordinator on an expensive
@@ -157,7 +159,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     );
     if (selection.modelOption) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(selection.modelOption, teamProviderSettings)
+        filterModelOptionForTeam(selection.modelOption, teamProviderSettings, haiku55Enabled)
       );
     }
     if (
@@ -169,7 +171,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       )
     ) {
       selection = selectionFromModelOption(
-        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings),
+        filterModelOptionForTeam(requestDefaultModelOption, teamProviderSettings, haiku55Enabled),
       );
     }
     const getSelectionApiKey = (

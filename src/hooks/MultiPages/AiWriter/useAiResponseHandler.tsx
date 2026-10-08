@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 // hooks/General/useAIResponseHandler.ts
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
@@ -12,6 +14,8 @@ import { getAiModelPreferenceIds } from '@/lib/aiModelPreferences';
 export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
   const [currentProject] = useRecoilState(currentProjectAtom);
   const { data: userPreferences } = useGetUserPreferences();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const defaultModelOption = haiku55Enabled ? getAiModelOptionById("claude-haiku-5-5")! : defaultAiModelOption;
   const [isLoading, setLoading] = useState(false);
   const [aiResponse, setAIResponse] = useState("");
   const improveWritingOptionIds = getAiModelPreferenceIds(
@@ -20,16 +24,17 @@ export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
     currentProject?.teamId,
   );
   const improveWritingOption =
-    getAiModelOptionById(improveWritingOptionIds.teamScoped) ??
-    getAiModelOptionById(improveWritingOptionIds.global);
+    getAiModelOptionById(improveWritingOptionIds.teamScoped, haiku55Enabled) ??
+    getAiModelOptionById(improveWritingOptionIds.global, haiku55Enabled) ??
+    (haiku55Enabled ? getAiModelOptionById(currentProject?.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
   const improveWritingModel =
     improveWritingOption?.id ??
     currentProject?.ai_custom_instructions?.[0]?.model_selected ??
-    defaultAiModelOption.id;
+    defaultModelOption.id;
   const improveWritingSource =
     improveWritingOption?.source ??
     currentProject?.ai_custom_instructions?.[0]?.source_selected ??
-    defaultAiModelOption.source;
+    defaultModelOption.source;
 
   const handleAIResponse = useCallback(async (prompt: string, additionalContext: string) => {
     setLoading(true);

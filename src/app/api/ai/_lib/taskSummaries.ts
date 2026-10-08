@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { createHash, randomUUID } from "node:crypto";
@@ -160,6 +161,7 @@ async function generateAndStoreTaskSummaryWithLease(
   const systemModel = resolveSystemModel(
     "summaries",
     task.project.team?.aiProviderSettings,
+    await haiku55ModelEnabled(task.userId),
   );
   if (!systemModel) return null;
   if (!task.project.teamId) {

@@ -200,6 +200,7 @@ async function loadGatewayPricing(): Promise<Map<string, ModelPricing>> {
 }
 
 export function gatewayCatalogModelSlug(modelSlug: string): string {
+  if (isHaiku55Model(modelSlug)) return "anthropic/claude-haiku-5.5";
   return modelSlug.startsWith("xai/")
     ? `spacexai/${modelSlug.slice("xai/".length)}`
     : modelSlug;
@@ -715,7 +716,7 @@ export function createSharedAllowanceMiddleware(args: {
         await settleAfterInference(reservation, result.usage);
         return result;
       } catch (error) {
-        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false)) {
+        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
           await settleAfterInference(reservation);
@@ -726,7 +727,7 @@ export function createSharedAllowanceMiddleware(args: {
     wrapStream: async ({ doStream, params }) => {
       const reservation = await beforeCall(params);
       const releaseIfUnavailable = async (error: unknown, hasOutput: boolean) => {
-        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false)) {
+        if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
           await settleAfterInference(reservation);

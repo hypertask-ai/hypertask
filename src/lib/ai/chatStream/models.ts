@@ -43,10 +43,10 @@ export function defaultModelSelection(
     feature,
     settings,
     personalModelOptionId,
-    { customEndpointConfigured, defaultModelOption },
+    { customEndpointConfigured, defaultModelOption, haiku55Enabled: defaultModelOption.modelKey === "claude-haiku-5-5" },
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings));
+  return selectionFromModelOption(filterModelOptionForTeam(option, settings, defaultModelOption.modelKey === "claude-haiku-5-5"));
 }
 
 export function normalizeProviderId(provider: string | null | undefined): ProviderId {
@@ -80,7 +80,7 @@ export function resolveModelSelection(
   }
 
   const modelOption =
-    getAiModelOptionById(modelOptionId) ?? getAiModelOptionById(requestedModel);
+    getAiModelOptionById(modelOptionId, defaultModelOption.modelKey === "claude-haiku-5-5") ?? getAiModelOptionById(requestedModel, defaultModelOption.modelKey === "claude-haiku-5-5");
   if (modelOption) return selectionFromModelOption(modelOption);
 
   return defaultModelSelection(

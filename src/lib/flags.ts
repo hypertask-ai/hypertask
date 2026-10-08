@@ -220,7 +220,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "feature",
     defaultMode: "OWNER_AND_QA",
     shippedOn: "2026-10-08",
-    description: "Adds Claude Haiku 5.5 as an optional AI model next to Haiku 4.5 without changing your default model.",
+    description: "Makes Claude Haiku 5.5 the included default model and replaces saved Haiku 4.5 choices when enabled.",
   },
   {
     key: HTPR_7008_PHONE_FIRST_PAINT_FLAG,

@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 /* eslint-disable @next/next/no-img-element */
 "use client";
 
@@ -183,11 +185,15 @@ export function AgentCard({
   onToggle: (agent: TAgent) => void;
   pending: boolean;
 }) {
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const modelOption = haiku55Enabled
+    ? getAiModelOptionById(agent.modelOptionId, true)
+    : getAiModelOptionById(agent.modelOptionId);
   const status = statusOf(agent);
   const working = isWorking(agent) ? agent.working : null;
   const last = lastActionAt(agent);
   const modelTitle = agent.modelOptionId
-    ? (getAiModelOptionById(agent.modelOptionId)?.title ?? "Team default")
+    ? (modelOption?.title ?? "Team default")
     : "Team default";
   const description =
     agent.runtimeType === "NATIVE"

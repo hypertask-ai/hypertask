@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -206,7 +207,7 @@ async function writeSlackTaskDraft(input: {
   teamId: string;
   transcript: string;
 }): Promise<{ description: string; title: string }> {
-  const systemModel = resolveSystemModel("summaries", input.aiProviderSettings);
+  const systemModel = resolveSystemModel("summaries", input.aiProviderSettings, await haiku55ModelEnabled(input.actorUserId));
   if (!systemModel) throw new Error("No Slack task-writing model is configured");
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
   const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);

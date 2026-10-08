@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   AI_FEATURES,
@@ -34,6 +35,7 @@ function effectiveModel(
   feature: AiFeature,
   settings: unknown,
   customEndpointConfigured: boolean,
+  haiku55Enabled = false,
 ): string | null {
   const enabledSettings = updateAiFeatureToggleSettings(
     settings,
@@ -44,7 +46,7 @@ function effectiveModel(
   if (kind === "none") return null;
   if (kind === "fast") {
     return (
-      resolveSystemModel(feature as SystemFeature, enabledSettings)?.model ??
+      resolveSystemModel(feature as SystemFeature, enabledSettings, haiku55Enabled)?.model ??
       null
     );
   }
@@ -56,7 +58,7 @@ function effectiveModel(
       feature as UserFacingModelFeature,
       enabledSettings,
       null,
-      { customEndpointConfigured },
+      { customEndpointConfigured, haiku55Enabled },
     )?.id ?? null
   );
 }
@@ -65,22 +67,24 @@ function featureRow(
   feature: AiFeature,
   settings: unknown,
   customEndpointConfigured: boolean,
+  haiku55Enabled = false,
 ) {
   const kind = AI_FEATURES[feature].modelKind;
   const override =
     kind === "none"
       ? null
-      : getAiFeatureModelOverride(feature as ModelAiFeature, settings);
+      : getAiFeatureModelOverride(feature as ModelAiFeature, settings, haiku55Enabled);
 
   return {
     enabled: isAiFeatureEnabled(feature, settings),
     model:
-      override && isAiFeatureModelAllowed(feature as ModelAiFeature, override)
+      override && isAiFeatureModelAllowed(feature as ModelAiFeature, override, haiku55Enabled)
         ? isAiFeatureModelEnabled(
             feature as ModelAiFeature,
             override,
             settings,
             customEndpointConfigured,
+            haiku55Enabled,
           )
           ? override
           : null
@@ -89,6 +93,7 @@ function featureRow(
       feature,
       settings,
       customEndpointConfigured,
+      haiku55Enabled,
     ),
     // Dictation has no LLM model, but a swappable transcription provider.
     ...(feature === "dictation"
@@ -100,11 +105,12 @@ function featureRow(
 function featureModelsResponse(
   settings: unknown,
   customEndpointConfigured: boolean,
+  haiku55Enabled = false,
 ) {
   return Object.fromEntries(
     (Object.keys(AI_FEATURES) as AiFeature[]).map((feature) => [
       feature,
-      featureRow(feature, settings, customEndpointConfigured),
+      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled),
     ]),
   );
 }
@@ -123,6 +129,7 @@ const handler: NextApiHandler = async (
   });
   if (!row) return res.status(401).json({ message: "Unauthorized" });
   const user = { id: row.id, accountId: row.accountId ?? undefined };
+  const haiku55Enabled = await haiku55ModelEnabled(user.id);
 
   if (req.method === "GET") {
     const teamId =
@@ -143,7 +150,7 @@ const handler: NextApiHandler = async (
     );
     return res
       .status(200)
-      .json(featureModelsResponse(lookup.settings, customEndpointConfigured));
+      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled));
   }
 
   if (req.method === "POST") {
@@ -218,7 +225,7 @@ const handler: NextApiHandler = async (
         if (
           normalizedModel !== null &&
           normalizedModel !== "" &&
-          !isAiFeatureModelAllowed(validFeature, normalizedModel)
+          !isAiFeatureModelAllowed(validFeature, normalizedModel, haiku55Enabled)
         ) {
           return res.status(400).json({ message: "Invalid model for feature" });
         }
@@ -251,7 +258,7 @@ const handler: NextApiHandler = async (
 
     return res
       .status(200)
-      .json(featureModelsResponse(nextSettings, customEndpointConfigured));
+      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled));
   }
 
   res.setHeader("Allow", "GET, POST");

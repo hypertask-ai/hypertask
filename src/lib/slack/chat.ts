@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -175,7 +176,7 @@ async function parseSlackIntent(
   actor: NonNullable<Awaited<ReturnType<typeof resolveSlackActor>>>,
   context = "",
 ): Promise<SlackAction | null> {
-  const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings);
+  const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings, await haiku55ModelEnabled(actor.user.id));
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
   const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);

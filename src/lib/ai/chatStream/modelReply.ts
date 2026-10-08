@@ -1,3 +1,7 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
+import { getAiModelOptionById } from "@/lib/aiModelOptions";
 
 
 import { type ModelMessage, type ToolSet, streamText, stepCountIs, generateText } from "ai";
@@ -23,6 +27,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const { dbUser, heartbeatExecutionId, contextTaskId, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = state;
   const { instructions, messages, tools, toolExecutions } = inputs;
 
+  const haiku55Enabled = await haiku55ModelEnabled(dbUser.id);
   const chunks: string[] = [];
   let result!: ReturnType<typeof streamText>;
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -62,6 +67,7 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
             error,
             chunks.length > 0,
             toolExecutions.length > 0,
+            haiku55Enabled,
           )
         ) {
           fallbackError = error;
@@ -131,22 +137,32 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         fallbackError,
         chunks.length > 0,
         toolExecutions.length > 0,
+        haiku55Enabled,
       )
       : null;
     if (!previous) break;
     console.warn(
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
+    const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
+    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
+      ? await getByokOrTeamGatewayApiKeyForModelOption(
+          getAiModelOptionById(previous.model)!, state.body.byokProviderFlags,
+          { trustedTeamId: gatewayTags.teamId, projectId: usageProjectId, userId: dbUser.id, agentId: actingAgent?.id },
+        )
+      : streamCredential;
     const fallback = selectModel(
-      state.selected.provider,
+      fallbackProvider,
       previous.model,
-      streamCredential,
-      streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
+      fallbackCredential,
+      previous.model === "gpt-6-luna" ? getAiModelOptionById(previous.model)
+        : streamModelOption ? { ...streamModelOption, directModel: undefined } : undefined,
       gatewayTags,
     );
     state.selected = {
       ...state.selected,
       ...fallback,
+      provider: fallbackProvider,
       modelId: fallback.resolvedModelId,
     };
     state.observedModel = state.selected.resolvedModelId;

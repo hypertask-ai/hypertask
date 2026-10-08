@@ -1,3 +1,5 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { type AiGatewayTags, isAiGatewayEnabled, resolveAiModel, providerOptionsForAiModel } from "@/app/api/ai/_lib/modelProvider";
@@ -34,11 +36,20 @@ export async function generateConversationTitle(
     return fallback;
   }
   try {
-    const model = resolveAiModel("openai", "gpt-6-luna", byokApiKey);
+    const haiku55Enabled = await haiku55ModelEnabled(usageContext?.userId ?? tags?.userId);
+    const provider = haiku55Enabled ? "claude" : "openai";
+    const credential = haiku55Enabled
+      ? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
+          trustedTeamId: tags?.teamId,
+          projectId: usageContext?.projectId ?? tags?.projectId,
+          userId: usageContext?.userId ?? tags?.userId,
+        })
+      : byokApiKey;
+    const model = resolveAiModel(provider, haiku55Enabled ? "claude-haiku-5-5" : "gpt-6-luna", credential);
     if (usageContext) configureAiModelUsage(model, {
       ...usageContext,
       teamId: tags?.teamId ?? null,
-      provider: "openai",
+      provider,
       feature: "chat",
     });
     const result = await generateText({

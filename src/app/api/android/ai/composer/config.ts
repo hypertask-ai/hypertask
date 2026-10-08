@@ -87,15 +87,18 @@ export function buildComposerConfig(input: ComposerConfigInput) {
     null,
     {
       customEndpointConfigured: input.customEndpointConfigured,
+      haiku55Enabled: input.haiku55Enabled,
       defaultModelOption:
-        lunaFree
+        input.haiku55Enabled
+          ? aiModelOptions.find((option) => option.id === "claude-haiku-5-5")
+          : lunaFree
           ? preferredAiModelOption
           : undefined,
     },
   );
   const selected =
     allowedOptions.find((option) => option.id === boardDefault?.id) ??
-    pickAutoAiModelOption(allowedOptions) ??
+    pickAutoAiModelOption(allowedOptions, input.haiku55Enabled) ??
     null;
   const blockedReason = !enabled
     ? "AI chat is disabled for this board."

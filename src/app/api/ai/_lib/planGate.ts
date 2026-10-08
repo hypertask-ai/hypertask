@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -116,6 +116,16 @@ export async function lunaFreePlanEnabled(
     // callers that only need the plan checks below should not pay for.
     const { isFeatureEnabled } = await import("@/lib/flags");
     return await isFeatureEnabled(LUNA_FREE_PLAN_FLAG, userId);
+  } catch {
+    return false;
+  }
+}
+
+export async function haiku55ModelEnabled(userId: number | null | undefined): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, userId);
   } catch {
     return false;
   }

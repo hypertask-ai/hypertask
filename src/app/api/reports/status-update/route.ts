@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -112,7 +113,8 @@ export async function POST(request: NextRequest) {
 
   const systemModel = resolveSystemModel(
     "statusUpdates",
-    project.team?.aiProviderSettings
+    project.team?.aiProviderSettings,
+    await haiku55ModelEnabled(session.userId),
   );
   if (!systemModel) {
     return NextResponse.json(
