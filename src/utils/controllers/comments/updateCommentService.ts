@@ -3,6 +3,7 @@
  * Single source of truth for: DB update, activity, search index, summary scheduling, mentions.
  */
 import prisma from '@/lib/prisma'
+import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { upsertCommentToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import scheduleTaskSummaryGeneration from '@/pages/api/queues/FAST/generateSummary'
 import scheduleCommentSummaryGeneration from '@/pages/api/queues/FAST/generateCommentSummary'
@@ -36,7 +37,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
   const text = normalizeBlockHtml(inputText)
 
   const comment = await prisma.comment.findFirst({
-    where: { id: commentId, creatorId: userId },
+    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId) } },
     select: { id: true, taskId: true, task: { select: { projectId: true } } }
   })
 

@@ -1,37 +1,22 @@
-import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import commentsGetCount from "@/utils/controllers/comments/getCount";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
-
-
-
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Vary", "Cookie");
     if (req.method === "GET") {
         try {
-            const { userId } = req.query;
-            const comments = await prisma.comment.findMany({
-                include: {
-                    task: {
-                        include: {
-                            assignees: {
-                                where: {
-                                    userId: parseInt(userId as string)
-                                }
-                            }
-                        }
-                    }
-                },
-                where: {
-                    NOT: {
-                        creatorId: parseInt(userId as string)
-                    }
-                }
-            })
-            res.status(200).json(comments.length);
+            const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+            if (!session) return res.status(401).json({ message: "Unauthorized" });
+
+            const response = await commentsGetCount(session.userId);
+            return res.status(response.status).json(response.json);
         } catch (error) {
-            res.status(500).json({ message: "Internal server error" });
+            return res.status(500).json({ message: "Internal server error" });
         }
     } else {
-        res.status(405).json({ message: "Method not allowed" });
+        return res.status(405).json({ message: "Method not allowed" });
     }
 };
 

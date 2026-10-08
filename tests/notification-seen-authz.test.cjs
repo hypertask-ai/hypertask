@@ -93,9 +93,14 @@ function loadCommentSeenRoute(session) {
         return { status: 200, json: { count: 1 } };
       },
     },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: userId => ({ ownerId: userId }) },
     "@/lib/prisma": {
       __esModule: true,
       default: {
+        task: { findFirst: async query => {
+          assert.deepEqual(query.where, { id: 42, project: { ownerId: session.userId } });
+          return { id: 42 };
+        } },
         comment: {
           updateMany: async (write) => {
             commentWrites.push(write);
@@ -158,6 +163,7 @@ test("comment seen route scopes notification and comment writes to the session u
     {
       where: {
         id: { in: [10, 11] },
+        taskId: 42,
         NOT: { seen: { has: 6 } },
       },
       data: { seen: { push: 6 } },

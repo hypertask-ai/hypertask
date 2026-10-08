@@ -1,11 +1,17 @@
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 
 
-const commentsGetCountByTask= async (taskId:string | string[] ) => {
+const commentsGetCountByTask= async (taskId:string | string[], userId: number) => {
 
         try {
+            const task = await prisma.task.findFirst({
+                where: { id: parseInt(taskId as string), project: projectContentAccessWhere(userId) },
+                select: { id: true },
+            });
+            if (!task) return { status: 404, json: { message: "Task not found" } };
 
             const commentCounts = await prisma.comment.count({
               where: {

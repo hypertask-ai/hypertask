@@ -8,6 +8,7 @@ import { broadcastTaskComment } from "@/lib/realtime/server";
 import { mentionPlainPreview } from "@/utils/controllers/notifications/mentionText";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 
@@ -32,8 +33,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
         }
 
-        const task = await prisma.task.findUnique({
-            where: { id: taskId },
+        const task = await prisma.task.findFirst({
+            where: { id: taskId, project: projectContentAccessWhere(mentionedBy, fromAgentId) },
             select: {
                 title: true,
                 uniqueIndex: true,
@@ -52,6 +53,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 }
             }
         });
+        if (!task) return res.status(404).json({ message: "Task not found" });
         let commentExists: { creatorId: number | null; agentId: string | null } | null = null;
         if (commentId) {
             commentExists = await prisma.comment.findFirst({

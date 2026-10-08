@@ -132,7 +132,9 @@ test("a user cannot update a comment they do not own", async () => {
     updateCommentService({ commentId: 44, text: "changed", userId: 6 }),
     /not owned by user/,
   );
-  assert.deepEqual(calls.lookup[0].where, { id: 44, creatorId: 6 });
+  assert.deepEqual(calls.lookup[0].where, { id: 44, creatorId: 6, task: { project: {
+    OR: [{ ownerId: 6 }, { members: { some: { userId: 6, agentId: null } } }],
+  } } });
   assert.equal(calls.transactions, 0);
   assert.deepEqual(calls.invalidations, []);
 });
