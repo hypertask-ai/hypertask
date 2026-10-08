@@ -177,8 +177,8 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
-import { useFlag } from "@/hooks/useFlag";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
+import { featureFlagsQueryKey, useFlag } from "@/hooks/useFlag";
+import { HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -624,6 +624,20 @@ export default function GlobalProvider({
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
   useInboxEFirstPressQueue(queryClient);
+  const phoneFirstLoadJs = useFlag(HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG);
+  const phoneJsFlagValue = queryClient.getQueryData<Record<string, boolean>>(
+    featureFlagsQueryKey(authenticatedUserId ?? 0),
+  )?.[HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG];
+  useEffect(() => {
+    if (pathname !== "/inbox") return;
+    // Wait for explicit Off: the query can resolve before useFlag hydrates.
+    if (window.innerWidth < 768 && (phoneFirstLoadJs || phoneJsFlagValue !== false)) return;
+    const legacyImports = Promise.all([
+      import("@/lib/firstScreen/comment"),
+      import("@/components/Modals/RemindMe/RemindMeComponent"),
+    ]);
+    void legacyImports.catch(() => {});
+  }, [mbl, pathname, phoneFirstLoadJs, phoneJsFlagValue]);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };

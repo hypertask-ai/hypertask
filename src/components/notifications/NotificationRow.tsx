@@ -2,7 +2,9 @@ import { INotification, TRemoveFromInboxMode } from "@/models/model";
 import formatDateDifference from "@/utils/generateTime";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { projectDisplayDate } from "@/lib/firstScreen/display";
-import { projectCommentPreview, projectPlainText } from "@/lib/firstScreen/comment";
+import dynamic from "next/dynamic";
+import type * as CommentProjection from "@/lib/firstScreen/comment";
+const SeededNotificationContent = dynamic(() => import("./SeededNotificationContent"));
 import { Circle } from "lucide-react";
 import UserAvatar from "../Common/UserAvatar";
 
@@ -188,9 +190,15 @@ function extractMentionSnippet(html: string, userId: string): string | null {
 }
 
 export const NotificationContent = () => {
+    const { notification } = useNotificationContext();
+    const snapshot = useFirstScreenSurface(notification.userId);
+    return snapshot ? <SeededNotificationContent /> : <NotificationContentBody />;
+}
+
+export const NotificationContentBody = ({ projection }: { projection?: typeof CommentProjection }) => {
     const { notification, isIbxSlctd } = useNotificationContext();
     const snapshot = useFirstScreenSurface(notification.userId);
-    const plain = snapshot ? projectPlainText : convertToPlain;
+    const plain = snapshot && projection ? projection.projectPlainText : convertToPlain;
     const flipMentionHierarchy = notification.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
     const dueDate = notification.task?.dueDate ? new Date(notification.task.dueDate) : null;
     const formattedDueDate = dueDate
@@ -216,7 +224,7 @@ export const NotificationContent = () => {
             >
                 {(snapshot || typeof window !== "undefined") &&
                     notification.type === "Comment"
-                    ? snapshot ? projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "")
+                    ? snapshot && projection ? projection.projectCommentPreview(notification.comment?.text ?? "").text : renderCommentPreview(notification.comment?.text ?? "")
                     : notification.type === "Assigned"
                         ? "Assigned to you"
                         : notification.type === "TaskArchived"
@@ -228,11 +236,11 @@ export const NotificationContent = () => {
                                     : notification.type === "Mentioned"
                                         ? notification.commentId ?
                                             flipMentionHierarchy
-                                                ? renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, Boolean(snapshot))
+                                                ? renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, snapshot ? projection : undefined)
                                                 : <>
 
                                                     Mentioned in:&nbsp;
-                                                    {renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, Boolean(snapshot))}
+                                                    {renderCommentMentionSimple(notification.comment?.text ?? "", notification.userId, snapshot ? projection : undefined)}
                                                 </>
                                             :
                                             `Mentioned in`
@@ -416,9 +424,9 @@ function renderCommentPreview(html: string) {
     return div.textContent?.trim() || convertToPlain(html);
 }
 
-export function renderCommentMentionSimple(html: string, currentUserId: string | number, seeded = false) {
-    if (seeded) {
-        const preview = projectCommentPreview(html, currentUserId);
+export function renderCommentMentionSimple(html: string, currentUserId: string | number, projection?: typeof CommentProjection) {
+    if (projection) {
+        const preview = projection.projectCommentPreview(html, currentUserId);
         return preview.mention ? <>{preview.mention.before}<span className="bg-mention-highlight text-mention-highlight" style={{ borderRadius: "4px", padding: "2px 4px" }}>@{preview.mention.name}</span>{preview.mention.after}</> : preview.text;
     }
     // Extract the inner text (plain) from your HTML.

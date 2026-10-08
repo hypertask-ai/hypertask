@@ -22,6 +22,7 @@ import {
   HTPR_7000_INBOX_NEXT_OPEN_FLAG,
   HTPR_7003_BOARD_BACK_FLAG,
   HTPR_7004_NO_LOADING_FLASH_FLAG,
+  HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG,
   HTPR_7008_PHONE_FIRST_PAINT_FLAG,
   HTPR_7001_INBOX_NEXT_CACHED_FLAG,
   HTPR_6978_SIZE_LABEL_CLICK_FLAG,
@@ -221,6 +222,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     defaultMode: "OWNER_AND_QA",
     shippedOn: "2026-10-08",
     description: "Adds Claude Haiku 5.5 as an optional AI model next to Haiku 4.5 without changing your default model.",
+  },
+  {
+    key: HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG,
+    shippedOn: "2026-10-08",
+    description: "Defers early warming of inbox comment parsing and closed reminder dialogs on phones until needed; Off warms those modules early.",
+    kind: "bugfix",
   },
   {
     key: HTPR_7008_PHONE_FIRST_PAINT_FLAG,
