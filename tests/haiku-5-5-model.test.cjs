@@ -97,7 +97,25 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
   ]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(source, /useFlag\(HTPR_7010_HAIKU_5_5_FLAG\)/);
-    assert.match(source, /isAiModelOptionVisible\(option, haiku55Enabled\)/);
+    assert.match(source, /isAiModelOptionVisible\(option, false\)/);
+    const sourceFile = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let visibilityExpression;
+    function visit(node) {
+      if (ts.isVariableDeclaration(node) && node.name.getText(sourceFile) === "visibleModelOptions") {
+        visibilityExpression = node.initializer.getText(sourceFile);
+      }
+      ts.forEachChild(node, visit);
+    }
+    visit(sourceFile);
+    assert.ok(visibilityExpression, `${file} gates its model list explicitly`);
+    for (const haiku55Enabled of [false, true]) {
+      const visible = vm.runInNewContext(visibilityExpression, {
+        haiku55Enabled,
+        aiModelOptions: catalog.aiModelOptions,
+        isAiModelOptionVisible: catalog.isAiModelOptionVisible,
+      });
+      assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haiku55Enabled)));
+    }
   }
   assert.equal(catalog.isAiModelOptionVisible(option, false), false);
   assert.equal(catalog.isAiModelOptionVisible(option, true), true);

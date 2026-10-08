@@ -311,6 +311,9 @@ function DictationProviderDropdown({
 
 const AiFeaturesSection = () => {
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const visibleModelOptions = haiku55Enabled
+    ? aiModelOptions
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId } = useSettingsTeam();
@@ -387,7 +390,7 @@ const AiFeaturesSection = () => {
           priceTier: 3,
         }));
     }
-    return aiModelOptions.filter((option) => isAiModelOptionVisible(option, haiku55Enabled)).flatMap((option) => {
+    return visibleModelOptions.flatMap((option) => {
       const definition = getAiModelDefinition(option.modelKey);
       if (
         !definition ||
