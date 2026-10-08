@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateObject, NoObjectGeneratedError } from "ai";
 import { createHash, randomUUID } from "node:crypto";
@@ -16,6 +16,7 @@ import {
 import {
   providerOptionsForAiModel,
   resolveAiModel,
+  aiUsageProviderForCredential,
   type AiGatewayTags,
 } from "@/app/api/ai/_lib/modelProvider";
 import {
@@ -158,10 +159,11 @@ async function generateAndStoreTaskSummaryWithLease(
   if (!task) return null;
 
   const description = convertHtmlToText(task.description_?.content ?? "");
+  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: task.project.teamId, userId: task.userId });
   const systemModel = resolveSystemModel(
     "summaries",
     task.project.team?.aiProviderSettings,
-    await haiku55ModelEnabled(task.userId),
+    defaultContext.haiku55Enabled, defaultContext,
   );
   if (!systemModel) return null;
   if (!task.project.teamId) {
@@ -171,9 +173,10 @@ async function generateAndStoreTaskSummaryWithLease(
     return null;
   }
 
+  const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
   let gatewayApiKey: string | undefined;
   try {
-    gatewayApiKey = await getTeamGatewayApiKey({
+    gatewayApiKey = haikuByok?.credential ?? await getTeamGatewayApiKey({
       trustedTeamId: task.project.teamId,
     });
   } catch (error) {
@@ -245,6 +248,7 @@ async function generateAndStoreTaskSummaryWithLease(
       description,
       sources,
       systemModel,
+      haikuByok,
       gatewayApiKey,
       gatewayTags,
       userId: task.userId,
@@ -423,6 +427,7 @@ async function generateTaskSummary(args: {
   description: string;
   sources: SummarySource[];
   systemModel: SystemModel;
+  haikuByok?: Awaited<ReturnType<typeof getAiDefaultModelContext>>["byok"];
   gatewayApiKey?: string;
   gatewayTags?: AiGatewayTags;
   userId: number;
@@ -440,8 +445,8 @@ async function generateTaskSummary(args: {
   }
 
   const model = resolveAiModel(
-    "gateway",
-    args.systemModel.model,
+    args.haikuByok?.provider === "claude" ? "claude" : args.haikuByok?.provider === "openrouter" ? "openrouter" : "gateway",
+    args.haikuByok?.provider === "claude" ? "claude-haiku-5-5" : args.systemModel.model,
     args.gatewayApiKey
   );
   configureAiModelUsage(model, {
@@ -450,7 +455,7 @@ async function generateTaskSummary(args: {
     projectId: args.projectId,
     taskId: args.taskId,
     agentId: args.agentId,
-    provider: args.systemModel.provider,
+    provider: args.haikuByok ? aiUsageProviderForCredential(args.haikuByok.provider, args.haikuByok.credential) : args.systemModel.provider,
     feature: "summary",
   });
   try {

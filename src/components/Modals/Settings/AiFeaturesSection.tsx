@@ -1,7 +1,9 @@
 "use client";
 
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -13,6 +15,7 @@ import {
   aiImageModelDefinitions,
   aiModelDefinitions,
   aiModelOptions,
+  getDefaultAiModelOptionForPlan,
   isAiModelOptionVisible,
   getAiModelDefinition,
   getAiModelOptionById,
@@ -321,7 +324,9 @@ const AiFeaturesSection = () => {
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
-  const { ownerAndMembers, team, teamId } = useSettingsTeam();
+  const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const defaultContext = { plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
   const { isLoading: providersLoading, providers } =
     useTeamAiProviders(teamId);
   const customEndpoint = useTeamCustomEndpoint(teamId);
@@ -376,7 +381,7 @@ const AiFeaturesSection = () => {
     const kind = AI_FEATURES[feature].modelKind;
     if (kind === "none") return [];
     if (kind === "fast") {
-      return getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled)
+      return getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled, defaultContext)
         .filter((model) => enabledProviders.has(model.provider))
         .map((model) => ({
           value: model.model,
@@ -423,8 +428,8 @@ const AiFeaturesSection = () => {
     const kind = AI_FEATURES[feature].modelKind;
     if (kind === "fast") {
       return (
-        resolveSystemModel(feature as SystemFeature, providerSettings, haiku55Enabled)?.model ??
-        getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled)[0].model
+        resolveSystemModel(feature as SystemFeature, providerSettings, haiku55Enabled, defaultContext)?.model ??
+        getSystemModelsForFeature(feature as SystemFeature, haiku55Enabled, defaultContext)[0].model
       );
     }
     if (kind === "image") {
@@ -438,7 +443,7 @@ const AiFeaturesSection = () => {
         feature as UserFacingModelFeature,
         providerSettings,
         undefined,
-        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled },
+        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, lunaFree, true) } : {}) },
       )?.id ?? aiModelOptions[0].id
     );
   };

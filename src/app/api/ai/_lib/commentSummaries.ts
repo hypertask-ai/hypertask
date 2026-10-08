@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText } from "ai";
@@ -7,6 +7,7 @@ import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
   resolveAiModel,
+  aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { resolveSystemModel } from "@/app/api/ai/_lib/systemModelLadder";
@@ -59,23 +60,26 @@ export async function generateAndStoreCommentSummary(commentId: number) {
     }
 
     const targetLines = getCommentSummaryTargetLines(wordCount);
+    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: comment.task.project.teamId, userId: comment.creatorId ?? comment.task.userId });
     const systemModel = resolveSystemModel(
       "summaries",
       comment.task.project.team?.aiProviderSettings,
-    await haiku55ModelEnabled(comment.creatorId ?? comment.task.userId),
+      defaultContext.haiku55Enabled,
+      defaultContext,
     );
     if (!systemModel) return null;
     const gatewayApiKey = await getTeamGatewayApiKey({
       trustedTeamId: comment.task.project.teamId,
     });
-    const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+    const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+    const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
     configureAiModelUsage(model, {
       userId: comment.creatorId ?? comment.task.userId,
       teamId: comment.task.project.teamId,
       projectId: comment.task.projectId,
       taskId: comment.task.id,
       agentId: comment.agentId,
-      provider: systemModel.provider,
+      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
     });
     const result = await generateText({

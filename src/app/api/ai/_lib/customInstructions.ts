@@ -1,4 +1,5 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { defaultModelKeyFor } from "@/lib/aiModelOptions";
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateText, type UserContent } from "ai";
@@ -274,10 +275,11 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
   ];
-  const haiku55Enabled = !isImage && await haiku55ModelEnabled(usageContext?.userId ?? gatewayTags?.userId);
-  const provider = haiku55Enabled ? "claude" : "openai";
-  const modelInput = haiku55Enabled
-    ? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
+  const defaultContext = isImage ? { haiku55Enabled: false, byok: undefined } : await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId });
+  const useHaiku = !isImage && defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
+  const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
+  const modelInput = useHaiku
+    ? defaultContext.byok?.credential ?? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {
         projectId: usageContext?.projectId ?? gatewayTags?.projectId,
         userId: usageContext?.userId ?? gatewayTags?.userId,
         trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId,
@@ -285,7 +287,7 @@ async function extractBinaryDocumentTextWithOpenAI(
     : gatewayApiKey;
   const model = resolveAiModel(
     provider,
-    haiku55Enabled ? "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
+    useHaiku ? provider === "openrouter" ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5" : isImage ? CUSTOM_INSTRUCTION_VISION_MODEL : CUSTOM_INSTRUCTION_MODEL,
     modelInput,
   );
 

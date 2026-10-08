@@ -2,6 +2,8 @@ import {
   aiImageModelDefinitions,
   aiModelOptions,
   defaultAiModelOption,
+  defaultModelKeyFor,
+  type AiDefaultModelContext,
   getAiModelDefinition,
   getAiModelOptionById,
   pickAutoAiModelOption,
@@ -129,12 +131,14 @@ export function getSystemFeatureModelOverride(
 export function getSystemModelsForFeature(
   feature: SystemFeature,
   haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): readonly SystemModel[] {
   const ladder = SYSTEM_MODEL_LADDERS[SYSTEM_FEATURES[feature].role];
-  return haiku55Enabled
+  if (!haiku55Enabled) return ladder;
+  const ordered = defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5"
     ? [...ladder.filter((entry) => entry.provider === "anthropic"), ...ladder.filter((entry) => entry.provider !== "anthropic")]
-        .map((entry) => ({ ...entry, model: resolveHaikuModelId(entry.model, true) }))
     : ladder;
+  return ordered.map((entry) => ({ ...entry, model: resolveHaikuModelId(entry.model, true) }));
 }
 
 export function isSystemModelForFeature(
@@ -228,13 +232,15 @@ export function resolveUserFacingModelOption(
     customEndpointConfigured?: boolean;
     defaultModelOption?: TAiModelOption;
     haiku55Enabled?: boolean;
+    plan?: AiDefaultModelContext["plan"];
+    hasByok?: boolean;
   },
 ): TAiModelOption | null {
   if (!isAiFeatureEnabled(feature, aiProviderSettings)) return null;
   const customEndpointConfigured = options?.customEndpointConfigured ?? true;
   const haiku55Enabled = options?.haiku55Enabled ?? false;
   const defaultModelOption = options?.defaultModelOption ??
-    (haiku55Enabled ? getAiModelOptionById("claude-haiku-5-5")! : defaultAiModelOption);
+    getAiModelOptionById(defaultModelKeyFor(options ?? {}, defaultAiModelOption.modelKey))!;
 
   const personal = getAiModelOptionById(personalModelOptionId, haiku55Enabled);
   if (
@@ -277,6 +283,7 @@ export function resolveUserFacingModelOption(
         ),
       ),
       haiku55Enabled,
+      options,
     ) ?? null
   );
 }
@@ -304,10 +311,11 @@ export function resolveSystemModel(
   feature: SystemFeature,
   aiProviderSettings: unknown,
   haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): SystemModel | null {
   if (!isAiFeatureEnabled(feature, aiProviderSettings)) return null;
 
-  const ladder = getSystemModelsForFeature(feature, haiku55Enabled);
+  const ladder = getSystemModelsForFeature(feature, haiku55Enabled, context);
   const override = getSystemFeatureModelOverride(feature, aiProviderSettings, haiku55Enabled);
   const selectedOverride = ladder.find(
     ({ model, provider }) =>

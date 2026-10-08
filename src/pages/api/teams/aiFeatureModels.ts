@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled, lunaFreePlanEnabled } from "@/app/api/ai/_lib/planGate";
 import type { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import {
   AI_FEATURES,
@@ -26,8 +26,8 @@ import {
 import { assertUserCanManageTeamByok } from "@/utils/controllers/teams/assertTeamByokAccess";
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import { updateTeamAiSettingsAtomically } from "@/utils/controllers/teams/updateTeamAiSettingsAtomically";
-import { resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
-import { getAiModelOptionById } from "@/lib/aiModelOptions";
+import { getAiDefaultModelContext, resolveTeamCustomEndpoint } from "@/app/api/ai/_lib/byokKeys";
+import { getDefaultAiModelOptionForPlan, type AiDefaultModelContext, getAiModelOptionById } from "@/lib/aiModelOptions";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -36,6 +36,7 @@ function effectiveModel(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
+  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
 ): string | null {
   const enabledSettings = updateAiFeatureToggleSettings(
     settings,
@@ -46,7 +47,7 @@ function effectiveModel(
   if (kind === "none") return null;
   if (kind === "fast") {
     return (
-      resolveSystemModel(feature as SystemFeature, enabledSettings, haiku55Enabled)?.model ??
+      resolveSystemModel(feature as SystemFeature, enabledSettings, haiku55Enabled, context)?.model ??
       null
     );
   }
@@ -58,7 +59,7 @@ function effectiveModel(
       feature as UserFacingModelFeature,
       enabledSettings,
       null,
-      { customEndpointConfigured, haiku55Enabled },
+      { customEndpointConfigured, haiku55Enabled, ...context, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(context.plan, context.hasByok, context.lunaFree, true) } : {}) },
     )?.id ?? null
   );
 }
@@ -68,6 +69,7 @@ function featureRow(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
+  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
 ) {
   const kind = AI_FEATURES[feature].modelKind;
   const override =
@@ -94,6 +96,7 @@ function featureRow(
       settings,
       customEndpointConfigured,
       haiku55Enabled,
+      context,
     ),
     // Dictation has no LLM model, but a swappable transcription provider.
     ...(feature === "dictation"
@@ -106,11 +109,12 @@ function featureModelsResponse(
   settings: unknown,
   customEndpointConfigured: boolean,
   haiku55Enabled = false,
+  context: AiDefaultModelContext & { lunaFree?: boolean } = {},
 ) {
   return Object.fromEntries(
     (Object.keys(AI_FEATURES) as AiFeature[]).map((feature) => [
       feature,
-      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled),
+      featureRow(feature, settings, customEndpointConfigured, haiku55Enabled, context),
     ]),
   );
 }
@@ -148,9 +152,10 @@ const handler: NextApiHandler = async (
     const customEndpointConfigured = Boolean(
       await resolveTeamCustomEndpoint({ trustedTeamId: teamId }),
     );
+    const defaultContext = { ...await getAiDefaultModelContext({ trustedTeamId: teamId, userId: user.id }, haiku55Enabled), lunaFree: await lunaFreePlanEnabled(user.id) };
     return res
       .status(200)
-      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled));
+      .json(featureModelsResponse(lookup.settings, customEndpointConfigured, haiku55Enabled, defaultContext));
   }
 
   if (req.method === "POST") {
@@ -256,9 +261,10 @@ const handler: NextApiHandler = async (
       return res.status(404).json({ message: "Team not found" });
     }
 
+    const defaultContext = { ...await getAiDefaultModelContext({ trustedTeamId: normalizedTeamId, userId: user.id }, haiku55Enabled), lunaFree: await lunaFreePlanEnabled(user.id) };
     return res
       .status(200)
-      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled));
+      .json(featureModelsResponse(nextSettings, customEndpointConfigured, haiku55Enabled, defaultContext));
   }
 
   res.setHeader("Allow", "GET, POST");

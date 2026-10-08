@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -7,6 +7,7 @@ import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
   resolveAiModel,
+  aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 import { createTask } from "@/lib/mcp/tasks/services";
@@ -207,15 +208,17 @@ async function writeSlackTaskDraft(input: {
   teamId: string;
   transcript: string;
 }): Promise<{ description: string; title: string }> {
-  const systemModel = resolveSystemModel("summaries", input.aiProviderSettings, await haiku55ModelEnabled(input.actorUserId));
+  const defaultContext = await getAiDefaultModelContext({ trustedTeamId: input.teamId, userId: input.actorUserId });
+  const systemModel = resolveSystemModel("summaries", input.aiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) throw new Error("No Slack task-writing model is configured");
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: input.teamId });
-  const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+  const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+  const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
   configureAiModelUsage(model, {
     userId: input.actorUserId,
     teamId: input.teamId,
     projectId: input.projectId,
-    provider: systemModel.provider,
+    provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "summary",
   });
   const result = await generateObject({

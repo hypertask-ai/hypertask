@@ -130,7 +130,7 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
   const on = composer.buildComposerConfig({ ...input, haiku55Enabled: true });
   assert.equal(off.models.some((entry) => entry.id === option.id), false);
   assert.equal(on.models.some((entry) => entry.id === option.id), true);
-  assert.equal(on.selectedModelId, "claude-haiku-5-5");
+  assert.equal(on.selectedModelId, input.storePlanId === "Free" ? (input.lunaFree ? "gpt-6-luna" : "gemini-3.5-flash-lite") : "claude-haiku-5-5");
   assert.equal(on.models.some((entry) => entry.id === "claude-haiku-4.5"), false);
   const mentions = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/taskSearchByParam.ts"), "utf8");
   assert.match(mentions, /haiku55Enabled\s*\? model.key !== "claude-haiku-4.5"\s*: model.key !== "claude-haiku-5-5"/);
@@ -380,7 +380,7 @@ test("custom BYOK endpoints upgrade persisted Haiku model ids only with the flag
   }
 });
 
-function editorWithFallback(h, credentialPicks, enabled = true, credential = "fixture-direct") {
+function editorWithFallback(h, credentialPicks, enabled = true, credential = "fixture-direct", plan = "Pro", byokProvider = null) {
   return moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
     "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
     "@/app/api/ai/_lib/modelProvider": h.api,
@@ -392,8 +392,9 @@ function editorWithFallback(h, credentialPicks, enabled = true, credential = "fi
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
     "@/lib/prisma": { userSetting: { findUnique: async () => null } },
-    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "Free", lunaFreePlanEnabled: async () => true, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
+    "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, lunaFreePlanEnabled: async () => true, haiku55ModelEnabled: async () => enabled, assertModelAllowedForPlan: async () => {} },
     "@/app/api/ai/_lib/byokKeys": {
+      getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: Boolean(byokProvider), byok: enabled && byokProvider ? { provider: byokProvider, credential } : undefined }),
       getByokOrTeamGatewayApiKeyForModelOption: async (entry) => { credentialPicks.push(entry.id); return entry.id === "gpt-6-luna" && typeof credential === "object" ? "fixture-openai" : credential; },
       getByokOrTeamGatewayApiKeyForProvider: async (provider) => { credentialPicks.push(provider); return credential; },
     },
@@ -563,6 +564,74 @@ test("legacy raw effective model drives chat and editor fallback for OpenRouter 
             }
           }
         }
+      }
+    }
+  }
+});
+
+test("editor request plan-aware defaults route paid and Free BYOK to Haiku and retain Free Luna", async () => {
+  for (const enabled of [false, true]) {
+    for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
+      for (const provider of [null, "claude", "gateway", "openrouter"]) {
+        const h = harness({ enabled });
+        const credentialPicks = [];
+        const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
+        const editor = editorWithFallback(h, credentialPicks, enabled, credential, plan, provider);
+        const selected = await editor.selectTaskWriterModel({ userId: 985, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } });
+        const useHaiku = enabled && (plan !== "Free" || provider);
+        assert.equal(catalog.isHaiku55Model(selected.modelId), Boolean(useHaiku));
+        if (!useHaiku) assert.equal(selected.modelId, "gpt-6-luna");
+        if (useHaiku && provider === "openrouter") assert.equal(selected.provider, "openrouter");
+        await selected.model.doGenerate(params);
+        assert.equal(catalog.isHaiku55Model(h.calls[0].requestedModelId), Boolean(useHaiku));
+        await h.flush();
+      }
+    }
+  }
+});
+
+test("chat default sites use plan-aware server context and upgrade saved Haiku on Free too", async () => {
+  for (const enabled of [false, true]) {
+    for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
+      for (const provider of [null, "claude", "gateway", "openrouter"]) {
+        const h = harness({ enabled });
+        const credential = provider === "gateway" ? "vck_fixture" : "fixture-direct";
+        const selectors = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
+          "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+          "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
+          "@/app/api/ai/_lib/modelProvider": h.api,
+          "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: ["claude-haiku-5"] },
+          "@/lib/ai/tools/constants": load(path.join(root, "src/lib/ai/tools/constants.ts")),
+        });
+        const chat = moduleWithStubs("src/lib/ai/chatStream/turnModel.ts", {
+          "next/server": {}, "@/lib/prisma": { userSetting: { findUnique: async () => null } },
+          "@/lib/aiModelOptions": catalog, "@/lib/systemModelLadder": ladder,
+          "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),
+          "@/app/api/ai/_lib/modelProvider": h.api,
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => plan, haiku55ModelEnabled: async () => enabled, lunaFreePlanEnabled: async () => true, assertModelAllowedForPlan: async () => {} },
+          "@/app/api/ai/_lib/byokKeys": {
+            getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan, hasByok: Boolean(provider), byok: enabled && provider ? { provider, credential } : undefined }),
+            getByokOrTeamGatewayApiKeyForModelOption: async () => credential,
+            getByokOrTeamGatewayApiKeyForProvider: async () => credential,
+          },
+          "@/app/api/ai/_lib/chatTeamContext": {
+            resolveChatTeamContext: async () => ({ teamId: "fixture-team", projectId: 15, aiProviderSettings: {} }),
+            buildChatProviderContext: () => ({ planGateProjectId: 15, keyLookupContext: { trustedTeamId: "fixture-team", userId: 985 } }),
+          },
+          "@/lib/nativeAgent/modelPin": load(path.join(root, "src/lib/nativeAgent/modelPin.ts")),
+          "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (entry) => entry },
+          "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: (error) => error.message, createSseErrorResponse: (error) => { throw new Error(error); } },
+          "@/lib/ai/tools/helpers": { loadActingAgent: async () => null },
+          "@/lib/ai/chatStream/models": selectors,
+        });
+        const turn = await chat.loadTurnModel({ aiFeature: "aiChat" }, { id: 985 });
+        const useHaiku = enabled && (plan !== "Free" || provider);
+        assert.equal(catalog.isHaiku55Model(turn.selected.modelId), Boolean(useHaiku));
+        if (!useHaiku) assert.equal(turn.selected.modelId, "gpt-6-luna");
+        if (useHaiku && provider === "openrouter") assert.equal(turn.selected.provider, "openrouter");
+        const savedTurn = await chat.loadTurnModel({ aiFeature: "aiChat", modelOptionId: "claude-haiku-4.5" }, { id: 985 });
+        assert.equal(catalog.isHaiku55Model(savedTurn.selected.modelId), enabled);
+        await h.flush();
       }
     }
   }

@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -23,6 +23,7 @@ import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
   resolveAiModel,
+  aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
 import { generateObject } from "ai";
@@ -111,10 +112,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Board not found" }, { status: 404 });
   }
 
+  const defaultContext = await getAiDefaultModelContext({ projectId: project.id, userId: session.userId });
   const systemModel = resolveSystemModel(
     "statusUpdates",
     project.team?.aiProviderSettings,
-    await haiku55ModelEnabled(session.userId),
+    defaultContext.haiku55Enabled,
+    defaultContext,
   );
   if (!systemModel) {
     return NextResponse.json(
@@ -229,12 +232,13 @@ export async function POST(request: NextRequest) {
     const gatewayApiKey = await getTeamGatewayApiKey({
       trustedTeamId: project.team?.id ?? null,
     });
-    const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+    const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+    const model = resolveAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey);
     configureAiModelUsage(model, {
       userId: session.userId,
       teamId: project.team?.id ?? null,
       projectId,
-      provider: systemModel.provider,
+      provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
     });
     const result = await generateObject({

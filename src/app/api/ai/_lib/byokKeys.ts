@@ -10,6 +10,7 @@ import {
 } from "@/app/api/ai/_lib/modelProvider";
 import {
   getAiModelDefinition,
+  type AiDefaultModelContext,
   type TAiModelOption,
 } from "@/lib/aiModelOptions";
 import {
@@ -23,7 +24,7 @@ import {
   type CustomEndpointConfig,
 } from "@/lib/ai/customEndpoint";
 import { MANAGED_TEAM_GATEWAY_PROVIDER } from "@/app/api/ai/_lib/managedGatewayKeys";
-import { storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 
 export type ByokProviderFlag = {
   provider?: string | null;
@@ -445,4 +446,20 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   }
 
   return getTeamGatewayApiKey(lookup);
+}
+
+export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
+  const enabled = haiku55Enabled ?? await haiku55ModelEnabled(lookup.userId);
+  const storePlanId = plan ?? (enabled ? await storePlanIdForProject(lookup.projectId, normalizeTeamId(lookup.trustedTeamId ?? lookup.teamId)) : "Free");
+  let byok: { provider: "claude" | "gateway" | "openrouter"; credential: string } | undefined;
+  if (enabled) {
+    for (const provider of ["claude", "gateway", "openrouter"] as const) {
+      const credential = await getByokApiKeyForProvider(provider, undefined, lookup, { resolveWithoutFlag: true });
+      if (credential) {
+        byok = { provider, credential };
+        break;
+      }
+    }
+  }
+  return { haiku55Enabled: enabled, plan: storePlanId, hasByok: Boolean(byok), byok };
 }

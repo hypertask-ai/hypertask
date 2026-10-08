@@ -220,7 +220,7 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "feature",
     defaultMode: "OWNER_AND_QA",
     shippedOn: "2026-10-08",
-    description: "Makes Claude Haiku 5.5 the included default model and replaces saved Haiku 4.5 choices when enabled.",
+    description: "Makes Haiku 5.5 the default for paid and compatible BYOK accounts, keeps Luna the Free default, and replaces saved Haiku 4.5 choices when enabled.",
   },
   {
     key: HTPR_7008_PHONE_FIRST_PAINT_FLAG,

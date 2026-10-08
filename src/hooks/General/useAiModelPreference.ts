@@ -10,7 +10,7 @@ import {
   preferredAiModelOption,
   resolveAiModelOption,
 } from "@/lib/aiModelOptions";
-import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
+import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
@@ -43,7 +43,6 @@ export function useAiModelPreference(
   const currentProject = useRecoilValue(currentProjectAtom);
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
-  const preferredOption = haiku55Enabled ? getAiModelOptionById("claude-haiku-5-5")! : preferredAiModelOption;
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
@@ -76,10 +75,9 @@ export function useAiModelPreference(
   );
   const planDefault = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
-    isByokProviderEnabledForSource(
-      scopedBilling?.byokProviderFlags,
-      preferredOption.source,
-    ),
+    haiku55Enabled
+      ? hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags)
+      : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
     lunaFree,
     haiku55Enabled,
   );

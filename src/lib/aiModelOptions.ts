@@ -505,6 +505,22 @@ export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
 
 export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 
+export type AiDefaultModelContext = {
+  haiku55Enabled?: boolean;
+  plan?: StorePlanKind | null;
+  hasByok?: boolean;
+};
+
+export function defaultModelKeyFor({ haiku55Enabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  return haiku55Enabled && (hasByok || plan === "Pro" || plan === "AI" || plan === "BYOK")
+    ? "claude-haiku-5-5"
+    : productionDefault;
+}
+
+export function hasHaikuByokProvider(providers: ReadonlySet<string>): boolean {
+  return ["claude", "anthropic", "gateway", "openrouter"].some((provider) => providers.has(provider));
+}
+
 // `lunaFree` is the per-user htpr-6722-latest-models flag: with it on, Luna
 // counts as an included (tier 1) model on Free plans and is their default.
 export function getDefaultAiModelOptionForPlan(
@@ -513,13 +529,13 @@ export function getDefaultAiModelOptionForPlan(
   lunaFree = false,
   haiku55Enabled = false,
 ): TAiModelOption {
-  if (haiku55Enabled) return getAiModelOptionById("claude-haiku-5-5")!;
-  return storePlanId === "Pro" ||
+  const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
     (storePlanId === "BYOK" && hasEligibleByokCredential) ||
     (storePlanId === "Free" && lunaFree)
     ? preferredAiModelOption
     : defaultAiModelOption;
+  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
 }
 
 // Model picker resolution: an explicit saved choice (or team/board default)
@@ -636,8 +652,9 @@ export function isPremiumAiModelKey(modelKey: TAiModelKey): boolean {
 export function pickAutoAiModelOption<T extends TAiModelOption>(
   candidates: readonly T[],
   haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): T | undefined {
-  if (haiku55Enabled) {
+  if (defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5") {
     const haiku = candidates.find((candidate) => candidate.modelKey === "claude-haiku-5-5");
     if (haiku) return haiku;
   }
@@ -656,6 +673,7 @@ export function pickReplacementAiModelOption<T extends TAiModelOption>(
   currentModelKey: TAiModelKey,
   candidates: readonly T[],
   haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): T | undefined {
   const tierOf = (modelKey: TAiModelKey) =>
     getAiModelDefinition(modelKey)?.priceTier ?? 3;
@@ -663,7 +681,7 @@ export function pickReplacementAiModelOption<T extends TAiModelOption>(
   const noPricier = candidates.filter(
     (candidate) => tierOf(candidate.modelKey) <= currentTier
   );
-  return pickAutoAiModelOption(noPricier.length > 0 ? noPricier : candidates, haiku55Enabled);
+  return pickAutoAiModelOption(noPricier.length > 0 ? noPricier : candidates, haiku55Enabled, context);
 }
 
 export function resolveAiModelMention(value: string | null | undefined, haiku55Enabled = false) {

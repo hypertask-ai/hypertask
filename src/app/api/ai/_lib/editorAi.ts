@@ -10,7 +10,7 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
@@ -310,15 +310,16 @@ export function defaultModelSelection(
   personalModelOptionId?: string | null,
   customEndpointConfigured = true,
   defaultModelOption = defaultAiModelOption,
+  haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
 ) {
   const option = resolveUserFacingModelOption(
     feature,
     settings,
     personalModelOptionId,
-    { customEndpointConfigured, defaultModelOption, haiku55Enabled: defaultModelOption.modelKey === "claude-haiku-5-5" }
+    { customEndpointConfigured, defaultModelOption, haiku55Enabled }
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings, defaultModelOption.modelKey === "claude-haiku-5-5"));
+  return selectionFromModelOption(filterModelOptionForTeam(option, settings, haiku55Enabled));
 }
 
 function resolveTaskWriterSelection(
@@ -326,6 +327,7 @@ function resolveTaskWriterSelection(
   modelSelected?: string | null,
   modelOptionId?: string | null,
   defaultModelOption = defaultAiModelOption,
+  haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
 ): { provider: ProviderId; model: string; modelOption?: TAiModelOption } {
   const provider = normalizeProvider(sourceSelected);
   const requestedModel = modelSelected?.trim();
@@ -339,11 +341,12 @@ function resolveTaskWriterSelection(
           undefined,
           true,
           defaultModelOption,
+          haiku55Enabled,
         );
   }
 
   const modelOption =
-    getAiModelOptionById(modelOptionId, defaultModelOption.modelKey === "claude-haiku-5-5") ?? getAiModelOptionById(requestedModel, defaultModelOption.modelKey === "claude-haiku-5-5");
+    getAiModelOptionById(modelOptionId, haiku55Enabled) ?? getAiModelOptionById(requestedModel, haiku55Enabled);
   if (modelOption) {
     return selectionFromModelOption(modelOption);
   }
@@ -354,6 +357,7 @@ function resolveTaskWriterSelection(
     undefined,
     true,
     defaultModelOption,
+    haiku55Enabled,
   );
 }
 
@@ -649,9 +653,10 @@ export async function selectTaskWriterModel(args: {
   }
   const lunaFree = await lunaFreePlanEnabled(args.userId);
   const haiku55Enabled = await haiku55ModelEnabled(args.userId);
+  const defaultContext = await getAiDefaultModelContext(keyLookup, haiku55Enabled, storePlanId);
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
-    hasEligibleByokCredential,
+    haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
     lunaFree,
     haiku55Enabled,
   );
@@ -669,12 +674,14 @@ export async function selectTaskWriterModel(args: {
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       )
     : resolveTaskWriterSelection(
         args.sourceSelected,
         args.modelSelected,
         args.modelOptionId,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
@@ -697,7 +704,9 @@ export async function selectTaskWriterModel(args: {
   const getSelectionApiKey = (
     selected: ReturnType<typeof resolveTaskWriterSelection>
   ) =>
-    selected.modelOption
+    selected.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok
+      ? Promise.resolve(defaultContext.byok.credential)
+      : selected.modelOption
       ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
           args.byokProviderFlags,
@@ -719,6 +728,7 @@ export async function selectTaskWriterModel(args: {
       personalModelOptionId,
       false,
       requestDefaultModelOption,
+      haiku55Enabled,
     );
     byokApiKey = await getSelectionApiKey(selection);
   }
@@ -731,6 +741,7 @@ export async function selectTaskWriterModel(args: {
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
     } else if (!byokApiKey) {
       selection = defaultModelSelection(
@@ -739,9 +750,14 @@ export async function selectTaskWriterModel(args: {
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
       byokApiKey = await getSelectionApiKey(selection);
     }
+  }
+
+  if (selection.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok?.provider === "openrouter") {
+    selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
   await assertModelAllowedForPlan(

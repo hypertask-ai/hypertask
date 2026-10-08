@@ -9,7 +9,7 @@ import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
 import { storePlanIdForProject, haiku55ModelEnabled, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
-import { getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
 
@@ -134,9 +134,10 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     }
     const lunaFree = await lunaFreePlanEnabled(dbUser.id);
     const haiku55Enabled = await haiku55ModelEnabled(dbUser.id);
+    const defaultContext = await getAiDefaultModelContext(keyLookupContext, haiku55Enabled, storePlanId);
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
-      hasEligibleByokCredential,
+      haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
       lunaFree,
       haiku55Enabled,
     );
@@ -157,6 +158,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       body.aiFeature,
       personalModelOptionId,
       requestDefaultModelOption,
+      haiku55Enabled,
     );
     if (selection.modelOption) {
       selection = selectionFromModelOption(
@@ -178,7 +180,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const getSelectionApiKey = (
       selected: ModelSelection
     ) =>
-      selected.modelOption
+      selected.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok
+        ? Promise.resolve(defaultContext.byok.credential)
+        : selected.modelOption
         ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
           body.byokProviderFlags,
@@ -204,6 +208,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         personalModelOptionId,
         false,
         requestDefaultModelOption,
+      haiku55Enabled,
       );
       byokApiKey = await getSelectionApiKey(selection);
     }
@@ -216,6 +221,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
+      haiku55Enabled,
         );
       } else if (!byokApiKey) {
         selection = defaultModelSelection(
@@ -224,9 +230,14 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           personalModelOptionId,
           true,
           requestDefaultModelOption,
+      haiku55Enabled,
         );
         byokApiKey = await getSelectionApiKey(selection);
       }
+    }
+
+    if (selection.modelOption?.modelKey === "claude-haiku-5-5" && defaultContext.byok?.provider === "openrouter") {
+      selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
     }
 
     await assertModelAllowedForPlan(
