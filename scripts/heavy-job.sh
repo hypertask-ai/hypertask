@@ -4,6 +4,18 @@ set -euo pipefail
 if [ "$#" -eq 0 ]; then echo 'Usage: scripts/heavy-job.sh COMMAND [ARG ...]' >&2; exit 2; fi
 if [ "${CI:-}" = true ] || [ "${GITHUB_ACTIONS+x}" = x ]; then exec "$@"; fi
 
+check_disk() {
+  local critical="${HOME}/.local/state/disk-guard/critical" mtime
+  if [ -f "$critical" ]; then
+    mtime=$(stat -c %Y "$critical" 2>/dev/null) || return 0
+    if [ $(( $(date +%s) - mtime )) -lt 1800 ]; then
+      echo 'Disk guard: disk is critical (>=90% used). Refusing a new heavy job; check ~/.local/state/disk-guard/status.json.' >&2
+      exit 75
+    fi
+  fi
+}
+check_disk
+
 slots=${HT_HEAVY_SLOTS:-$(( $(nproc) / 6 ))}
 if [ -z "${HT_HEAVY_SLOTS:-}" ] && [ "$slots" -lt 2 ]; then slots=2; fi
 if [[ ! $slots =~ ^[1-9][0-9]*$ ]]; then echo 'HT_HEAVY_SLOTS must be a positive integer.' >&2; exit 2; fi
@@ -18,10 +30,12 @@ chmod 700 "$lock_dir"
 # Never unlink slot files: every worktree must lock the same inodes.
 waiting=false
 while :; do
+  check_disk
   for ((slot=0; slot<slots; slot++)); do
     if [ -L "$lock_dir/slot-$slot" ]; then echo 'Refusing symlink heavy-job slot.' >&2; exit 2; fi
     exec 8>>"$lock_dir/slot-$slot"
     if flock -n 8; then
+      check_disk
       # The command inherits the lock, including if this wrapper is interrupted.
       exec "$@"
     fi

@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { spawn, spawnSync } = require('node:child_process');
-const { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, symlinkSync, statSync } = require('node:fs');
+const { mkdtempSync, readFileSync, rmSync, mkdirSync, writeFileSync, symlinkSync, statSync, utimesSync } = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -9,7 +9,7 @@ const root = path.resolve(__dirname, '..');
 const script = path.join(root, 'scripts/heavy-job.sh');
 function fixture() {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ht-heavy-test-'));
-  const env = { ...process.env, XDG_RUNTIME_DIR: dir, HT_HEAVY_SLOTS: '1', CI: 'false' };
+  const env = { ...process.env, HOME: dir, XDG_RUNTIME_DIR: dir, HT_HEAVY_SLOTS: '1', CI: 'false' };
   delete env.GITHUB_ACTIONS;
   return { dir, env };
 }
@@ -149,6 +149,58 @@ test('symlink lock directories are refused without creating slots in the target'
     assert.equal(result.stdout, '');
     assert.match(result.stderr, /Refusing symlink heavy-job lock directory/);
     assert.throws(() => readFileSync(path.join(target, 'slot-0')), { code: 'ENOENT' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('fresh disk critical flag refuses a heavy job before creating slots', async () => {
+  const { dir, env } = fixture();
+  try {
+    const state = path.join(dir, '.local/state/disk-guard');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(path.join(state, 'critical'), '90%');
+    const result = await run(env, 'console.log("must not run")').done;
+    assert.equal(result.status, 75);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Disk guard:.*Refusing a new heavy job/);
+    assert.throws(() => statSync(path.join(dir, 'ht-heavy')), { code: 'ENOENT' });
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('stale disk flag allows a job and CI bypasses a fresh flag', async () => {
+  const { dir, env } = fixture();
+  try {
+    const state = path.join(dir, '.local/state/disk-guard');
+    mkdirSync(state, { recursive: true });
+    const flag = path.join(state, 'critical');
+    writeFileSync(flag, '90%');
+    const stale = new Date(Date.now() - 1801 * 1000);
+    utimesSync(flag, stale, stale);
+    assert.equal((await run(env, 'console.log("stale allowed")').done).status, 0);
+    const fresh = new Date();
+    utimesSync(flag, fresh, fresh);
+    for (const override of [{ CI: 'true' }, { GITHUB_ACTIONS: '' }]) {
+      const result = await run({ ...env, ...override }, 'console.log("CI allowed")').done;
+      assert.equal(result.status, 0);
+      assert.equal(result.stdout, 'CI allowed\n');
+      assert.equal(result.stderr, '');
+    }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a queued job refuses to start if disk becomes critical while waiting', async () => {
+  const { dir, env } = fixture();
+  try {
+    const holder = run(env, 'console.log("holder");setTimeout(()=>{},1000)');
+    await holder.ready;
+    const queued = run(env, 'console.log("must not run")');
+    const state = path.join(dir, '.local/state/disk-guard');
+    mkdirSync(state, { recursive: true });
+    writeFileSync(path.join(state, 'critical'), '90%');
+    const result = await queued.done;
+    assert.equal(result.status, 75);
+    assert.equal(result.stdout, '');
+    assert.match(result.stderr, /Disk guard:/);
+    await holder.done;
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
