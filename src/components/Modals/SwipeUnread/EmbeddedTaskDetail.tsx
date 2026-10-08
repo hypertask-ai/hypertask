@@ -10,7 +10,7 @@ import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, shoul
 import TaskDetail from "@/app/detail/[...slug]/TaskDetailComp";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_7004_NO_LOADING_FLASH_FLAG } from "@/lib/flags/keys";
 import globalConstants from "@/lib/constants";
 import { FollowersProvider } from "@/lib/contexts/TaskDetail/FollowersProvider";
 import { TasksProvider } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -30,6 +30,7 @@ type EmbeddedTaskDetailProps = {
 
 function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef, assigneeSnapshotRef, children }: { task: ITask; dataUpdatedAt: number; error: Error | null; refetch: () => Promise<unknown>; currentTaskRef: RefObject<ITask | null>; assigneeSnapshotRef: RefObject<{ assignees: ITask["assignees"] } | null>; children: ReactNode }) {
   const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
+  const noLoadingFlash = useFlag(HTPR_7004_NO_LOADING_FLASH_FLAG);
   const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
   currentTaskRef.current = currentTask;
   const previousTask = useRef(task);
@@ -38,13 +39,14 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
   const editing = Boolean(editMode) || preserveContent;
   useEffect(() => {
     if (!error) return;
-    if (editing) {
+    // A refresh failure must not replace an authorized cached view with a cold document's Suspense fallback.
+    if (editing || (noLoadingFlash && !(error instanceof TaskAccessDeniedError))) {
       const retry = window.setTimeout(() => { void refetch(); }, 1000);
       return () => window.clearTimeout(retry);
     }
     // Recover through the authorized route only when no local work is active.
     window.location.replace(window.location.href);
-  }, [error, editing, refetch]);
+  }, [error, editing, noLoadingFlash, refetch]);
   useEffect(() => {
     // Structural sharing can retain task identity after an identical server read.
     if (previousTask.current === task && (!keepAssignee || previousUpdatedAt.current === dataUpdatedAt)) return;
