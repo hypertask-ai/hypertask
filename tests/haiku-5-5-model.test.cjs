@@ -111,6 +111,7 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
     for (const haiku55Enabled of [false, true]) {
       const visible = vm.runInNewContext(visibilityExpression, {
         haiku55Enabled,
+        useMemo: (compute) => compute(),
         aiModelOptions: catalog.aiModelOptions,
         isAiModelOptionVisible: catalog.isAiModelOptionVisible,
       });
