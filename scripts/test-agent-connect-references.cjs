@@ -21,7 +21,7 @@ const failed = [];
 for (const file of files) {
   const record = path.join(state, `${path.basename(file)}.json`);
   if (fs.existsSync(record) && JSON.parse(fs.readFileSync(record, "utf8")).status === 0) continue;
-  const args = file.endsWith(".cjs") ? ["--test", file] : ["node_modules/tsx/dist/cli.mjs", file];
+  const args = file.endsWith(".cjs") ? ["--test", "--test-reporter=tap", file] : ["node_modules/tsx/dist/cli.mjs", file];
   const result = spawnSync(process.execPath, args, { cwd: root, encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
   const output = (result.stdout ?? "") + (result.stderr ?? "");
   fs.writeFileSync(`${record}.log`, output, { mode: 0o600 });

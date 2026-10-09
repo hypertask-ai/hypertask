@@ -800,6 +800,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7009-dedupe-task-detail-reads", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7026-agent-connect-check", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7028-first-task-email", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7029-keep-demo-board-on-email-signup", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7030-google-signup-starter-board", mode: "EVERYONE", updatedAt: null },
