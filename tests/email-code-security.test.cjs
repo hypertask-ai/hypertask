@@ -482,6 +482,7 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
     },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
+    '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/themePreferences': loadTypescriptModule('src/lib/themePreferences.ts'),
     '@/utils/controllers/users/autoJoinByEmailDomain': async () => {},

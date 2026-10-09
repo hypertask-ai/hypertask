@@ -89,6 +89,7 @@ function makeHarness(redis = makeRedis()) {
     '@/lib/auth/slimUserCookie': loadTs('src/lib/auth/slimUserCookie.ts'),
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
+    '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/services/verificationCodeService': { VerificationCodeService: {

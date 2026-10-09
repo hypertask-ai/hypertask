@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
+import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
@@ -278,6 +279,7 @@ export async function POST(request: NextRequest) {
       })
 
       waitUntil(maybeSendWelcomeEmail(userData!.id, { boardId: welcomeBoardId }))
+      waitUntil(maybeScheduleAgentNudge(userData!.id))
 
       console.log('✅ Authentication cookies set successfully')
     } catch (cookieError) {

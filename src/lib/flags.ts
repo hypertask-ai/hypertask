@@ -14,6 +14,7 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7025_WELCOME_EMAIL_FLAG,
+  HTPR_7027_AGENT_NUDGE_EMAIL_FLAG,
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
   HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
   HTPR_7031_INVITE_EMAIL_FLAG,
@@ -280,6 +281,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "feature",
     shippedOn: "2026-10-09",
     description: "Sends new verified users a welcome email after sign-in with Claude Code connection instructions and their board link.",
+  },
+  {
+    key: HTPR_7027_AGENT_NUDGE_EMAIL_FLAG,
+    kind: "feature",
+    shippedOn: "2026-10-09",
+    description: "Sends new users one connection nudge 24 hours after signup if no agent has connected yet.",
   },
   {
     key: HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
