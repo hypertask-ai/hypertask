@@ -1,3 +1,4 @@
+export const HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG = "htpr-7029-keep-demo-board-on-email-signup";
 export const HTPR_7032_EMAIL_EXPIRY_COPY_FLAG = "htpr-7032-email-expiry-copy";
 export const HTPR_7032_FIRST_TIME_EMAIL_FLAG = "htpr-7032-first-time-email";
 export const HTPR_7033_CLI_INSTALL_COMMAND_FLAG = "htpr-7033-cli-install-command";

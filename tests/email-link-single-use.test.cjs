@@ -80,7 +80,7 @@ function makeHarness(redis = makeRedis()) {
     '@/utils/controllers/users/update_or_create_user': updateUser,
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: true, skipOnboarding: true } },
     '@/utils/controllers/users/autoJoinByEmailDomain': { default: async () => {} },
-    '@/utils/controllers/users/completeOnboardingStep': { CompleteOnboardingFirstStep: async () => {} },
+    '@/utils/controllers/users/provisionFirstWorkspace': { provisionFirstWorkspace: async () => {} },
     '@/lib/constants/constants': { companyRoleOptions: ['Founder'], companySizeOptions: ['Just me'] },
     '@/lib/auth/session': loadTs('src/lib/auth/session.ts'),
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },

@@ -4,10 +4,11 @@ import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import prisma from '@/lib/prisma'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
-import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep'
+import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import { sendEmail } from '@/lib/email/sendEmail'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { SESSION_COOKIE } from '@/lib/auth/session'
 
 // Separate audience for verification tokens
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
@@ -221,8 +222,9 @@ export async function POST(request: NextRequest) {
     if (userUpdateResult.res.isNewUser) {
       try {
         console.log('🚀 Completing onboarding step 1 for instant signup user')
-        const onboardingResult = await CompleteOnboardingFirstStep(
+        const onboardingResult = await provisionFirstWorkspace(
           userData as any,
+          request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam', // Default team title
           'MyBoard', // Default board title
           companySizeOptions[0], // Default: "Just me"
