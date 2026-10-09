@@ -463,11 +463,14 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install dependencies
+      - name: Install dependencies and generate Prisma client
         id: setup-npm
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-node.outcome == 'success'
         continue-on-error: true
-        run: npm ci
+        # Layout lock imports the server flag registry, which loads Prisma.
+        run: |
+          npm ci
+          npx prisma generate
 
       - name: Restore Playwright browser cache
         id: pw-cache
