@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -54,6 +54,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const queryClient = useQueryClient();
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
+  const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
   let typedWrite: typeof writeSection | undefined;
   if (typedWrites) typedWrite = writeSection;
   const isMobile = useContext(MobileViewContext);
@@ -339,8 +340,17 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       }
     } catch (error) {
       console.log("🚀 ~ handleSectionUpdateVis ~ error:", error);
-      if (rollbackDelete) {
-        rollbackDelete();
+      rollbackDelete?.();
+      if (
+        saveMode === "DELETE" &&
+        lastColumnDeleteMessage &&
+        axios.isAxiosError(error) &&
+        error.response?.status === 400 &&
+        error.response.data?.code === "LAST_COLUMN_HAS_CARDS" &&
+        typeof error.response.data.message === "string"
+      ) {
+        toast.error(error.response.data.message);
+      } else if (rollbackDelete) {
         toast.error("Column could not be deleted");
       }
     } finally {

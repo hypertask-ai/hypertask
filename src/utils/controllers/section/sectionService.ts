@@ -253,6 +253,7 @@ export interface DeleteSectionInput {
 
 export interface DeleteSectionResult {
   status: number
+  json?: { message: string; code: string }
   movedTaskCount?: number
   destinationSection?: { id: number; title: string } | null
 }
@@ -288,7 +289,15 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
         status: 'Normal'
       }
     })
-    if (taskCount > 0) return { status: 400 }
+    if (taskCount > 0) {
+      return {
+        status: 400,
+        json: {
+          message: "This is the board's last column. Move or delete its cards first.",
+          code: 'LAST_COLUMN_HAS_CARDS'
+        }
+      }
+    }
   }
 
   let movedTaskCount = 0

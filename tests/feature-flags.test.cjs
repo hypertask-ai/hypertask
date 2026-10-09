@@ -236,6 +236,19 @@ test("Ctrl+K column-delete bugfix defaults to Everyone and respects OFF", async 
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
 });
 
+test("last-column delete message bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG;
+  assert.equal(key, "htpr-7040-last-column-delete-message");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
 test("email signup demo-board bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG;
   assert.equal(key, "htpr-7029-keep-demo-board-on-email-signup");
@@ -319,6 +332,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
         flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
         flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
+        flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -864,6 +878,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

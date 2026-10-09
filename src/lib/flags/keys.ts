@@ -1,4 +1,5 @@
 export const HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG = "htpr-7037-shared-email-layout";
+export const HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG = "htpr-7040-last-column-delete-message";
 export const HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG = "htpr-7036-ctrlk-column-delete-keeps-cards";
 export const HTPR_7026_AGENT_CONNECT_CHECK_FLAG = "htpr-7026-agent-connect-check";
 
