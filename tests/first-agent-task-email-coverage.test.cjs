@@ -9,9 +9,7 @@ const serviceFile = "src/utils/controllers/section/sectionService.ts";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs) {
   const mod = { exports: {} };
-  const source = process.env.HTPR_7028_COVERAGE_BASELINE && file === serviceFile
-    ? require("node:child_process").execFileSync("git", ["show", `ab4895de:${file}`], { cwd: root, encoding: "utf8" })
-    : read(file);
+  const source = read(file);
   const js = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
@@ -103,7 +101,7 @@ function fixture(options = {}) {
       calls.scheduled.push(work);
     } },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/flags": { HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email", isFeatureEnabled: async () => true },
+    "@/lib/flags": { HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email", HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
     "@/lib/mcp/boards/columnRole": load("src/lib/mcp/boards/columnRole.ts", {}),
     "@/lib/email/sendEmail": { sendEmail: async (input) => {
       calls.sent.push(input);
@@ -111,7 +109,8 @@ function fixture(options = {}) {
       await options.sendBarrier;
     } },
     "@/lib/email/unsubscribe": { unsubscribeHeaders: () => ({}) },
-    "./emailTemplates": { renderAgentFirstTaskEmail: ({ taskTitle }) => ({ subject: "First task", html: taskTitle }) },
+    "@/lib/onboarding/emails/agentFirstTask": { renderAgentFirstTaskEmail: ({ taskTitle }) => ({ subject: "First task", html: taskTitle }) },
+    "./emailTemplates": {},
   });
   const service = load(serviceFile, {
     "@/lib/prisma": { __esModule: true, default: prisma },

@@ -863,6 +863,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7033-cli-install-command", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

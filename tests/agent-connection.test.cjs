@@ -4,6 +4,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const { load, root } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
+const LAYOUT_FLAG = "htpr-7037-shared-email-layout";
 const enums = { LogType: { Signup: "Signup" }, Status: { Normal: "Normal" } };
 
 function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, redisFailure = false, redisInitFailure = false, email = "fixture@example.test", fail = false } = {}) {
@@ -42,11 +43,12 @@ function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, r
   const mocks = {
     "@prisma/client": enums,
     "@/lib/prisma": prisma,
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, isFeatureEnabled: async (key, id) => { assert.equal(key, FLAG); assert.ok([42, 985].includes(id)); flagReads.push([key, id]); return id === 985 ? qaEnabled : enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: LAYOUT_FLAG, isFeatureEnabled: async (key, id) => { assert.ok([FLAG, LAYOUT_FLAG].includes(key)); assert.ok([42, 985].includes(id)); flagReads.push([key, id]); return key === LAYOUT_FLAG || (id === 985 ? qaEnabled : enabled); } },
     "@/lib/redis": { getRedis: async () => { if (redisInitFailure) throw new Error("Redis unavailable"); return { get: async (key) => { redisReads.push(key); if (redisFailure) throw new Error("Redis read failed"); return armed ? "1" : null; } }; } },
     "@/lib/onboarding/qaArm": load("src/lib/onboarding/qaArm.ts"),
     "@/lib/email/sendEmail": { sendEmail: async (email) => { sends.push(email); if (fail) throw new Error("Delivery failed"); } },
-    "@/utils/controllers/notifications/emailTemplates": { renderAgentConnectedEmail: (client, boardId) => ({ subject: "Your agent is connected", html: `${client}:${boardId}` }) },
+    "@/lib/onboarding/emails/agentConnected": { renderAgentConnectedEmail: (client, boardId) => ({ subject: "Your agent is connected", html: `${client}:${boardId}` }) },
+    "@/utils/controllers/notifications/emailTemplates": {},
   };
   return { module: load("src/lib/onboarding/agentConnection.ts", mocks), prisma, rows, sends, claims, queries, updates, flagReads, redisReads };
 }
@@ -105,7 +107,8 @@ test("armed signup uses normalized welcome marker and QA eligibility for card an
   assert.equal(h.sends.length, 1);
   assert.equal(h.sends[0].html, "Codex:7");
   assert.ok(h.redisReads.every((key) => key === "onboarding:qa-armed:fresh@mail.tm"));
-  assert.ok(h.flagReads.every(([key, id]) => key === FLAG && id === 985));
+  assert.ok(h.flagReads.filter(([key]) => key === FLAG).every(([, id]) => id === 985));
+  assert.deepEqual(h.flagReads.filter(([key]) => key === LAYOUT_FLAG), [[LAYOUT_FLAG, 42], [LAYOUT_FLAG, 42]]);
 });
 
 for (const options of [

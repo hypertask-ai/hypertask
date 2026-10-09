@@ -7,6 +7,7 @@ export function renderOnboardingEmail({
   paragraphs,
   code,
   cta,
+  secondaryCta,
   unsubscribeUrl,
 }: {
   subject: string;
@@ -14,6 +15,7 @@ export function renderOnboardingEmail({
   paragraphs: string[];
   code?: string;
   cta: { label: string; url: string };
+  secondaryCta?: { label: string; url: string };
   unsubscribeUrl?: string;
 }): { subject: string; html: string; text: string } {
   const blocks = paragraphs.map((paragraph) =>
@@ -32,7 +34,8 @@ export function renderOnboardingEmail({
       heading: escapeHtml(heading),
       listHtml: `<div class="content-list" style="margin:0 0 24px;font-size:14px;line-height:1.6;">${blocks.join("")}</div>`,
       ctaLabel: escapeHtml(cta.label),
+      secondaryCta: secondaryCta ? { label: secondaryCta.label, link: secondaryCta.url } : undefined,
     }, cta.url, unsubscribeUrl),
-    text: [heading, ...textBlocks, `${cta.label}: ${cta.url}`, ...(unsubscribeUrl ? [`Unsubscribe: ${unsubscribeUrl}`] : [])].join("\n\n"),
+    text: [heading, ...textBlocks, ...(secondaryCta ? [`${secondaryCta.label}: ${secondaryCta.url}`] : []), `${cta.label}: ${cta.url}`, ...(unsubscribeUrl ? [`Unsubscribe: ${unsubscribeUrl}`] : [])].join("\n\n"),
   };
 }
