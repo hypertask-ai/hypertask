@@ -501,6 +501,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
         flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
         flags.HTPR_7020_TAG_FULL_NAME_FLAG,
+        flags.HTPR_7047_SHARP_PLUS_SIGNS_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -1050,6 +1051,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7043-no-empty-board-flash", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7044-double-click-to-edit", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7045-shortcuts-help-phone", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7047-sharp-plus-signs", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
