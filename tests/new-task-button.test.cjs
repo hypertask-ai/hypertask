@@ -38,6 +38,6 @@ test("the bottom action keeps its click, tooltip, drag suppression and responsiv
   assert.match(bottom, /text='Create task' keyCombination=\{nQuickAddEnabled && quickEntryCardsEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]\} left=\{20\} bottom=\{-40\}/);
   assert.match(bottom, /size=\{14\} className='text-text-light-gray'/);
   assert.match(button, /size = 10, className = 'text-white-black'/);
-  assert.match(button, /<Plus size=\{size\} className=\{`sm:mx-0 xs:mx-2 \$\{className\}`\} strokeWidth=\{1\.75\}/);
+  assert.match(button, /<Plus\s+size=\{size\}\s+className=\{`sm:mx-0 xs:mx-2 \$\{className\}[^`]*`\}\s+strokeWidth=\{sharpPlusEnabled \? 2 : 1\.75\}/);
   assert.match(button, /text='Create task at top' keyCombination=\{\["C"\]\} left=\{left\} bottom=\{bottom\}\/\>/);
 });
