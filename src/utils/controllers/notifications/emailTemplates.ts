@@ -25,6 +25,9 @@ export type TNotification =
 
 export interface INotificationBody {
   sender: string;
+  senderUserId?: number;
+  senderEmail?: string;
+  senderName?: string;
   title: string;
   link: string;
   recipient: any;
@@ -212,7 +215,8 @@ export function renderDigestEmail(
 
 export function renderNotificationEmail(
   type: TNotification,
-  body: INotificationBody
+  body: INotificationBody,
+  inviteContext = false
 ): { subject: string; html: string } {
   const sender = escapeHtml(body.sender);
   const title = escapeHtml(body.title);
@@ -296,10 +300,15 @@ export function renderNotificationEmail(
       };
     case "Invite":
       return {
-        subject: `${body.sender} has invited you to the Kanban Board "${body.title}"`,
+        subject: inviteContext
+          ? `${body.sender} invited you to "${body.title}" on Hypertask`
+          : `${body.sender} has invited you to the Kanban Board "${body.title}"`,
         html: renderLayout(
           {
-            heading: `${sender} invited you to join &ldquo;${title}&rdquo;`,
+            heading: `${sender} invited you to join &ldquo;${title}&rdquo;${inviteContext ? " on Hypertask" : ""}`,
+            preview: inviteContext
+              ? `${body.sender} invited you to join ${body.title} on Hypertask, a board where people and AI agents (Claude Code, Cursor and others) pick up and finish tasks together.`
+              : undefined,
             ctaLabel: "Accept invite",
           },
           body.link

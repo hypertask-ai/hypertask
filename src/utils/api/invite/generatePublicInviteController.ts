@@ -33,7 +33,7 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
     const activeView = getViewFromProject(project)
     let viewSlug: string | undefined;
     viewSlug = setViewSlug(activeView)
-    if (invite) return {inviteLink:generateInviteLink(invite.id, projectId, invite.project.name, viewSlug), amountUsed:(invite.uses*-1)-1}
+    if (invite) return {inviteLink:await generateInviteLink(invite.id, projectId, invite.project.name, viewSlug, userId), amountUsed:(invite.uses*-1)-1}
 
     // ============ create a new invite link
     const newInvite = await prisma.invite.create({
@@ -46,6 +46,6 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
         },
         include:{project:{select:{name:true}}},
     })
-    return {inviteLink:generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug), amountUsed:(newInvite.uses*-1)-1}
+    return {inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, userId), amountUsed:(newInvite.uses*-1)-1}
 
 }

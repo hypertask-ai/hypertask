@@ -10,6 +10,7 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
+  HTPR_7031_INVITE_EMAIL_FLAG,
   HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
   HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
@@ -239,6 +240,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Uses the same pinned CLI installer in onboarding, demo tasks, Settings and help, with Windows download guidance.",
+  },
+  {
+    key: HTPR_7031_INVITE_EMAIL_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Fixes invite sender names, explains the shared human and AI agent board, and encodes invite link parameters.",
   },
   {
     key: HTPR_7016_PHONE_BOARD_COLD_START_FLAG,

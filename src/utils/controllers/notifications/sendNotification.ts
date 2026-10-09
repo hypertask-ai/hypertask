@@ -1,4 +1,5 @@
 import { sendEmail } from "@/lib/email/sendEmail";
+import { HTPR_7031_INVITE_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   renderNotificationEmail,
   type INotificationBody,
@@ -40,10 +41,19 @@ export const sendEmailNotification = async (
   }
 
   try {
-    const { subject, html } = renderNotificationEmail(type, body);
+    const inviteContext = type === "Invite" &&
+      await isFeatureEnabled(HTPR_7031_INVITE_EMAIL_FLAG, body.senderUserId ?? 0);
+    if (inviteContext) {
+      const prefix = body.senderEmail?.split("@")[0]?.toLowerCase();
+      const sender = [body.sender, body.senderName]
+        .map((name) => name?.trim())
+        .find((name) => name && name.toLowerCase() !== prefix) ?? "A teammate";
+      body = { ...body, sender };
+    }
+    const { subject, html } = renderNotificationEmail(type, body, inviteContext);
     const emailResponse = await sendEmail({
       to: body.recipient,
-      from: `${body.sender} <notifications@hypertask.ai>`.trim(),
+      from: `${inviteContext ? JSON.stringify(body.sender) : body.sender} <notifications@hypertask.ai>`.trim(),
       replyTo:
         typeof body.userId === "number" &&
         typeof (body.replyTaskId ?? body.taskId) === "number"
