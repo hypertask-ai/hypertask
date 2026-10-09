@@ -5,6 +5,7 @@ import { unsubscribeHeaders, unsubscribeUrl } from "@/lib/email/unsubscribe";
 import { FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7025_WELCOME_EMAIL_FLAG } from "@/lib/flags/keys";
 import { MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
+import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 import { onboardingEmailSkipReason } from "./eligibility";
@@ -24,7 +25,7 @@ export async function maybeSendWelcomeEmail(userId: number, opts?: { boardId?: n
 
     const redis = await getRedis();
     const email = user.email.trim().toLowerCase();
-    const armed = Boolean(await redis.get(`onboarding:qa-armed:${email}`));
+    const armed = await isOnboardingQaArmed(email, redis);
     if (!await isFeatureEnabled(HTPR_7025_WELCOME_EMAIL_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId)) return "flag_off";
     const sentKey = `onboarding:welcome-sent:${userId}`;
     if (await redis.get(sentKey) || await prisma.logs.findFirst({ where: { LoggedById: userId, log: "welcome_email_sent" } })) return "already_sent";

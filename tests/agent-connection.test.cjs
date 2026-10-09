@@ -6,7 +6,9 @@ const { load, root } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
 const enums = { LogType: { Signup: "Signup" }, Status: { Normal: "Normal" } };
 
-function harness({ rows = [], enabled = true, fail = false } = {}) {
+function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, redisFailure = false, redisInitFailure = false, email = "fixture@example.test", fail = false } = {}) {
+  const flagReads = [];
+  const redisReads = [];
   const claims = new Set();
   const sends = [];
   const queries = [];
@@ -26,7 +28,7 @@ function harness({ rows = [], enabled = true, fail = false } = {}) {
       },
       create: async ({ data }) => { const row = { ...data, id: rows.length + 1, createdAt: new Date() }; rows.push(row); return row; },
     },
-    user: { findUnique: async () => ({ email: "fixture@example.test" }) },
+    user: { findUnique: async (query) => { assert.deepEqual(query, { where: { id: 42 }, select: { email: true } }); return email === null ? null : { email }; } },
     project: { findFirst: async (query) => { assert.deepEqual(query.where, { ownerId: 42, status: "Normal" }); return { id: 7 }; } },
     webhookEvent: {
       create: async ({ data }) => {
@@ -40,11 +42,13 @@ function harness({ rows = [], enabled = true, fail = false } = {}) {
   const mocks = {
     "@prisma/client": enums,
     "@/lib/prisma": prisma,
-    "@/lib/flags": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, isFeatureEnabled: async (key, id) => { assert.equal(key, FLAG); assert.equal(id, 42); return enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, isFeatureEnabled: async (key, id) => { assert.equal(key, FLAG); assert.ok([42, 985].includes(id)); flagReads.push([key, id]); return id === 985 ? qaEnabled : enabled; } },
+    "@/lib/redis": { getRedis: async () => { if (redisInitFailure) throw new Error("Redis unavailable"); return { get: async (key) => { redisReads.push(key); if (redisFailure) throw new Error("Redis read failed"); return armed ? "1" : null; } }; } },
+    "@/lib/onboarding/qaArm": load("src/lib/onboarding/qaArm.ts"),
     "@/lib/email/sendEmail": { sendEmail: async (email) => { sends.push(email); if (fail) throw new Error("Delivery failed"); } },
     "@/utils/controllers/notifications/emailTemplates": { renderAgentConnectedEmail: (client, boardId) => ({ subject: "Your agent is connected", html: `${client}:${boardId}` }) },
   };
-  return { module: load("src/lib/onboarding/agentConnection.ts", mocks), prisma, rows, sends, claims, queries, updates };
+  return { module: load("src/lib/onboarding/agentConnection.ts", mocks), prisma, rows, sends, claims, queries, updates, flagReads, redisReads };
 }
 const row = (id, log, at = id) => ({ id, log, LoggedById: 42, createdAt: new Date(at * 1000) });
 
@@ -90,6 +94,70 @@ test("flag off does not claim or send; an old connection cannot email on a later
   await old.module.sendFirstAgentConnectedEmail(42, 2);
   assert.equal(old.sends.length, 0);
 });
+
+test("armed signup uses normalized welcome marker and QA eligibility for card and one-time email", async () => {
+  const h = harness({ enabled: false, armed: true, email: " Fresh@MAIL.TM " });
+  assert.equal((await h.module.getAgentConnectCardState(42)).eligible, true);
+  assert.equal((await h.module.getAgentConnectCardState(42)).boardId, 7);
+  h.rows.push(row(1, "mcp_connected:codex"));
+  await h.module.sendFirstAgentConnectedEmail(42, 1);
+  await h.module.sendFirstAgentConnectedEmail(42, 1);
+  assert.equal(h.sends.length, 1);
+  assert.equal(h.sends[0].html, "Codex:7");
+  assert.ok(h.redisReads.every((key) => key === "onboarding:qa-armed:fresh@mail.tm"));
+  assert.ok(h.flagReads.every(([key, id]) => key === FLAG && id === 985));
+});
+
+for (const options of [
+  { armed: false },
+  { armed: true, qaEnabled: false },
+  { armed: true, redisFailure: true },
+  { armed: true, redisInitFailure: true },
+  { armed: true, email: null },
+  { armed: true, email: "" },
+]) {
+  test(`disabled signup gets no card or email: ${JSON.stringify(options)}`, async () => {
+    const h = harness({ enabled: false, rows: [row(1, "cli_token_exchange")], ...options });
+    assert.deepEqual(await h.module.getAgentConnectCardState(42), { eligible: false, connected: false, dismissed: false });
+    await h.module.sendFirstAgentConnectedEmail(42, 1);
+    assert.equal(h.sends.length, 0);
+    assert.equal(h.claims.size, 0);
+    assert.equal(h.queries.length, 0);
+    assert.ok(h.flagReads.every(([, id]) => id === (options.armed && options.qaEnabled === false ? 985 : 42)));
+  });
+}
+
+for (const failure of ["redisFailure", "redisInitFailure"]) {
+  test(`${failure} preserves the user's own enabled flag`, async () => {
+    const h = harness({ armed: true, [failure]: true, rows: [row(1, "cli_token_exchange")] });
+    assert.equal((await h.module.getAgentConnectCardState(42)).eligible, true);
+    await h.module.sendFirstAgentConnectedEmail(42, 1);
+    assert.equal(h.sends.length, 1);
+    assert.ok(h.flagReads.every(([, id]) => id === 42));
+  });
+}
+
+for (const options of [
+  { armed: true, expected: true },
+  { armed: false, expected: false },
+  { armed: true, redisFailure: true, expected: false },
+]) {
+  test(`status route applies shared eligibility to first state, client label and dismissal: ${JSON.stringify(options)}`, async () => {
+    const h = harness({ enabled: false, rows: [row(1, "mcp_connected:codex")], ...options });
+    const route = routeHarness().common;
+    route["@/lib/onboarding/agentConnection"] = h.module;
+    const api = load("src/app/api/users/ai-connection-status/route.ts", route);
+    const status = await api.GET({ nextUrl: new URL("https://fixture.test/api?since=1970-01-01T00:00:00Z") });
+    assert.equal(status.status, 200);
+    assert.equal(Object.hasOwn(status.body, "client"), options.expected);
+    if (options.expected) assert.equal(status.body.client, "Codex");
+    const first = await api.GET({ nextUrl: new URL("https://fixture.test/api?mode=first") });
+    assert.equal(first.status, options.expected ? 200 : 404);
+    if (options.expected) assert.equal(first.body.eligible, true);
+    assert.equal((await api.POST()).status, options.expected ? 200 : 404);
+    assert.equal(h.rows.some((item) => item.log === "agent_connect_dismissed"), options.expected);
+  });
+}
 
 test("email failures do not throw, and keep the durable claim against uncertain delivery duplicates", async () => {
   const h = harness({ fail: true, rows: [row(1, "cli_token_exchange")] });
@@ -145,8 +213,7 @@ function routeHarness(enabled = true, user = { id: 42 }) {
   const common = {
     "next/server": { NextResponse: responses },
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => user },
-    "@/lib/flags": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, isFeatureEnabled: async () => enabled },
-    "@/lib/onboarding/agentConnection": { getFirstAgentConnection: async () => null, getAgentConnectCardState: async (id) => { calls.push(id); return { connected: false }; }, dismissAgentConnectCard: async (id) => { calls.push(id); } },
+    "@/lib/onboarding/agentConnection": { isAgentConnectCheckEnabledFor: async (id) => { assert.equal(id, 42); return enabled; }, getFirstAgentConnection: async () => null, getAgentConnectCardState: async (id) => { calls.push(id); return { eligible: enabled, connected: false }; }, dismissAgentConnectCard: async (id) => { calls.push(id); } },
     "@prisma/client": enums,
     "@/utils/controllers/logs/createLog": async (data) => calls.push(data),
   };
@@ -169,8 +236,7 @@ test("legacy status omits client with flag off and includes it only with flag on
     for (const match of [null, { at: new Date(2000), client: "Cursor" }]) {
       for (const query of ["", "?since=1970-01-01T00:00:01.000Z"]) {
         const h = routeHarness(enabled);
-        h.common["@/lib/flags"].isFeatureEnabled = async (key, id) => {
-          assert.equal(key, FLAG);
+        h.common["@/lib/onboarding/agentConnection"].isAgentConnectCheckEnabledFor = async (id) => {
           assert.equal(id, 42);
           return enabled;
         };
@@ -197,7 +263,7 @@ test("new first-state reads and dismissal require the server flag and authentica
     const api = load("src/app/api/users/ai-connection-status/route.ts", h.common);
     assert.equal((await api.GET({ nextUrl: new URL("https://fixture.test/api?mode=first") })).status, enabled ? 200 : 404);
     assert.equal((await api.POST()).status, enabled ? 200 : 404);
-    assert.equal(h.calls.length, enabled ? 2 : 0);
+    assert.equal(h.calls.length, enabled ? 2 : 1);
     assert.equal((await api.GET({ nextUrl: new URL("https://fixture.test/api?since=invalid") })).status, 400);
   }
   const api = load("src/app/api/users/ai-connection-status/route.ts", routeHarness(true, null).common);

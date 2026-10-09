@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection } from "@/lib/onboarding/agentConnection";
+import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection, isAgentConnectCheckEnabledFor } from "@/lib/onboarding/agentConnection";
 
 export const runtime = "nodejs";
 
@@ -15,10 +14,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     if (request.nextUrl.searchParams.get("mode") === "first") {
-      if (!(await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, user.id))) {
+      const state = await getAgentConnectCardState(user.id);
+      if (!state.eligible) {
         return NextResponse.json({ error: "Not found" }, { status: 404 });
       }
-      return NextResponse.json(await getAgentConnectCardState(user.id));
+      return NextResponse.json(state);
     }
 
     const since = request.nextUrl.searchParams.get("since");
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid since date" }, { status: 400 });
     }
     const match = await getFirstAgentConnection(user.id, sinceDate);
-    const enabled = await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, user.id);
+    const enabled = await isAgentConnectCheckEnabledFor(user.id);
     const status = enabled
       ? { connected: !!match, at: match?.at, client: match?.client }
       : { connected: !!match, at: match?.at };
@@ -44,7 +44,7 @@ export async function POST() {
     if (typeof user?.id !== "number") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!(await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, user.id))) {
+    if (!(await isAgentConnectCheckEnabledFor(user.id))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     await dismissAgentConnectCard(user.id);

@@ -1,6 +1,8 @@
 import { LogType, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
+import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { renderAgentConnectedEmail } from "@/utils/controllers/notifications/emailTemplates";
 
@@ -52,9 +54,22 @@ export async function getFirstAgentConnection(
   return row ? { at: row.createdAt, client: await connectionClient(userId, row) } : null;
 }
 
+export async function isAgentConnectCheckEnabledFor(userId: number): Promise<boolean> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
+  let armed = false;
+  if (user?.email) {
+    try {
+      armed = await isOnboardingQaArmed(user.email, await getRedis());
+    } catch {
+      // A Redis outage must not grant QA eligibility or disable a user's own flag.
+    }
+  }
+  return isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId);
+}
+
 export async function sendFirstAgentConnectedEmail(userId: number, logId: number): Promise<void> {
   try {
-    if (!(await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, userId))) return;
+    if (!(await isAgentConnectCheckEnabledFor(userId))) return;
     const first = await firstConnectionRow(userId);
     if (!first || first.id !== logId) return;
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
@@ -90,6 +105,8 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
 }
 
 export async function getAgentConnectCardState(userId: number) {
+  const eligible = await isAgentConnectCheckEnabledFor(userId);
+  if (!eligible) return { eligible, connected: false, dismissed: false };
   const [connection, dismissed, board] = await Promise.all([
     getFirstAgentConnection(userId),
     prisma.logs.findFirst({
@@ -102,7 +119,7 @@ export async function getAgentConnectCardState(userId: number) {
       select: { id: true },
     }),
   ]);
-  return { connected: !!connection, at: connection?.at, client: connection?.client, dismissed: !!dismissed, boardId: board?.id };
+  return { eligible, connected: !!connection, at: connection?.at, client: connection?.client, dismissed: !!dismissed, boardId: board?.id };
 }
 
 export async function dismissAgentConnectCard(userId: number): Promise<void> {

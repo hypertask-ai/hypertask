@@ -8,28 +8,46 @@ import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
 
 export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
-  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const card = enabled ? <EligibleAgentConnectCard key={`${userId}:${projectId}`} projectId={projectId} /> : null;
-  return card;
+  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const identity = `${userId}:${projectId}`;
+  const [state, setState] = useState<{ identity: string; eligible: boolean; show: boolean } | null>(null);
+  const serverEligible = state?.identity === identity && state.eligible;
+  const show = state?.identity === identity && state.show;
+
+  useEffect(() => {
+    const controller = new AbortController();
+    // Revalidate on flag changes and every minute so an expired QA arm or a
+    // flag switched off removes the card.
+    const load = () => void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          if (!controller.signal.aborted) setState({ identity, eligible: false, show: false });
+          return;
+        }
+        const data = await response.json();
+        if (!controller.signal.aborted) {
+          setState({ identity, eligible: data.eligible === true, show: !data.connected && !data.dismissed && data.boardId === projectId });
+        }
+      }).catch(() => undefined);
+    load();
+    const intervalId = setInterval(load, 60_000);
+    return () => {
+      controller.abort();
+      clearInterval(intervalId);
+    };
+  }, [identity, projectId, flagEnabled]);
+
+  return (flagEnabled ? true : serverEligible) && show
+    ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
+    : null;
 }
 
-function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
-  const [eligible, setEligible] = useState(false);
+function EligibleAgentConnectCard({ serverEligible }: { serverEligible: boolean }) {
+  const [eligible, setEligible] = useState(true);
   const [visible, setVisible] = useState(false);
   const [dismissing, setDismissing] = useState(false);
   const [error, setError] = useState("");
   const element = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) return;
-        const data = await response.json();
-        if (!controller.signal.aborted) setEligible(!data.connected && !data.dismissed && data.boardId === projectId);
-      }).catch(() => undefined);
-    return () => controller.abort();
-  }, [projectId]);
 
   useEffect(() => {
     if (!eligible || !element.current) return;
@@ -70,7 +88,7 @@ function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
           Dismiss
         </button>
       </div>
-      <ConnectAIOnboardingScreen compact visible={visible} onNextScreen={() => void dismiss()} />
+      <ConnectAIOnboardingScreen compact visible={visible} serverEligible={serverEligible} onNextScreen={() => void dismiss()} />
       {error && <p role="alert" className="mt-2 text-meta text-text-light-gray">{error}</p>}
     </section>
   );

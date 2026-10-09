@@ -109,9 +109,36 @@ test("live check polls every four seconds only while visible, uses returned clie
   });
 });
 
-test("board card is absent with flag off, existing connection, server dismissal or a different board", async () => {
+test("armed signup renders compact instructions and resolves the connected client with session flag off", async () => {
+  await withDOM(async ({ container, reactRoot, act }) => {
+    let connected = false;
+    const intervals = new Map();
+    global.setInterval = (fn) => { intervals.set(1, fn); return 1; };
+    global.clearInterval = (id) => intervals.delete(id);
+    global.fetch = async (url) => {
+      assert.equal(url, "/api/users/ai-connection-status?mode=first");
+      return { ok: true, json: async () => ({ eligible: true, connected, client: "Codex" }) };
+    };
+    const Screen = loadScreen(false);
+    await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, serverEligible: true, onNextScreen() {} })));
+    assert.match(container.textContent, /Waiting for your agent/);
+    assert.doesNotMatch(container.textContent, /Which AI will you drive/);
+    assert.deepEqual([...container.querySelectorAll("button")].slice(0, 3).map((button) => button.textContent), ["Claude Code", "Cursor", "Codex"]);
+    connected = true;
+    await act(async () => { for (const fn of intervals.values()) fn(); });
+    assert.match(container.textContent, /Connected! Codex just talked to Hypertask/);
+    assert.match(container.textContent, /Ask your agent to pick up the top task/);
+    assert.equal(intervals.size, 0);
+  });
+});
+
+test("board card honors server eligibility with flag off, existing connection, dismissal and board scope", async () => {
   for (const [enabled, state, expected] of [
-    [false, {}, false],
+    [false, { eligible: false, boardId: 7 }, false],
+    [false, { eligible: true, connected: false, dismissed: false, boardId: 7 }, true],
+    [false, { eligible: true, connected: true, boardId: 7 }, false],
+    [false, { eligible: true, dismissed: true, boardId: 7 }, false],
+    [false, { eligible: true, boardId: 8 }, false],
     [true, { connected: true, boardId: 7 }, false],
     [true, { dismissed: true, boardId: 7 }, false],
     [true, { boardId: 8 }, false],
@@ -124,11 +151,11 @@ test("board card is absent with flag off, existing connection, server dismissal 
       const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
         "@/hooks/useFlag": { useFlag: () => enabled },
         "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
-        "next/dynamic": () => () => React.createElement("div", null, "Shared connection screen"),
+        "next/dynamic": () => (props) => { assert.equal(props.compact, true); assert.equal(props.serverEligible, state.eligible === true); return React.createElement("div", null, "Shared connection screen"); },
       });
       await act(async () => reactRoot.render(React.createElement(AgentConnectCard, { projectId: 7, userId: 42 })));
       assert.equal(!!container.querySelector("section"), expected);
-      assert.equal(requests.length, enabled ? 1 : 0);
+      assert.equal(requests.length, 1);
       if (expected) {
         assert.match(container.textContent, /Shared connection screen/);
         const dismiss = container.querySelector("button");
@@ -138,6 +165,32 @@ test("board card is absent with flag off, existing connection, server dismissal 
       }
     });
   }
+});
+
+test("board card clears armed eligibility when user or board changes and ignores aborted responses", async () => {
+  await withDOM(async ({ container, reactRoot, act }) => {
+    const pending = [];
+    global.fetch = async (url, options) => new Promise((resolve) => pending.push({ resolve, signal: options.signal }));
+    global.IntersectionObserver = class { observe() {} disconnect() {} };
+    const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+      "next/dynamic": () => () => React.createElement("div", null, "Shared connection screen"),
+    });
+    const render = (userId, projectId) => reactRoot.render(React.createElement(AgentConnectCard, { userId, projectId }));
+    const respond = (request, state) => request.resolve({ ok: true, json: async () => state });
+    await act(async () => render(42, 7));
+    await act(async () => respond(pending[0], { eligible: true, boardId: 7 }));
+    assert.ok(container.querySelector("section"));
+    await act(async () => render(99, 7));
+    assert.equal(container.querySelector("section"), null);
+    assert.equal(pending[0].signal.aborted, true);
+    await act(async () => render(99, 8));
+    await act(async () => respond(pending[1], { eligible: true, boardId: 7 }));
+    assert.equal(container.querySelector("section"), null);
+    await act(async () => respond(pending[2], { eligible: false, boardId: 8 }));
+    assert.equal(container.querySelector("section"), null);
+  });
 });
 
 test("connected email shares the current layout, escapes the client and has exactly one absolute board CTA", () => {
