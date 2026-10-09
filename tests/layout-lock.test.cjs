@@ -174,3 +174,27 @@ test('spec covers six screens, updates serially from live-like flags, and never 
   assert.match(spec, /writeFileSync\(baselinePath,[\s\S]*\} else \{[\s\S]*layoutDifferences/);
   assert.match(LAYOUT_CHANGE_MESSAGE, /Only change e2e\/smoke\/layout-lock\.baseline\.json when the ticket asks for this layout change; put Valentin's quote in the PR\./);
 });
+
+
+test('stable cached phone opens allow the intentional unscrolled viewport only with their registered flag on', () => {
+  const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
+  const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
+  const expected = committed.viewports.Mobile.screens.ticket;
+  const stable = 'htpr-6899-stable-layout';
+  // PR 1074 browser-smoke failure: the old baseline had already scrolled past properties.
+  const measured = {
+    title: { x: 18, y: 64, width: 274, height: 37 },
+    description: { x: 10, y: 534, width: 370, height: 274 },
+    'first-comment': { x: 10, y: 792, width: 370, height: 88 },
+    'last-comment': { x: 10, y: 880, width: 370, height: 88 },
+    composer: { x: 0, y: 770, width: 390, height: 74 },
+    properties: { x: 10, y: 158, width: 370, height: 360 },
+  };
+  const options = { entries, registry: [stable], flags: { [stable]: true } };
+  assert.deepEqual(layoutDifferences('ticket/Mobile', expected, measured, options), []);
+  for (const control of [undefined, { ...options, flags: { [stable]: false } }, { ...options, registry: [] }]) {
+    assert.ok(layoutDifferences('ticket/Mobile', expected, measured, control).length, 'flag-off/live-like/unregistered drift must remain a failure');
+  }
+  assert.ok(layoutDifferences('ticket/Desktop', expected, measured, options).length, 'phone allowance cannot change desktop layout');
+  assert.deepEqual(entries.filter(entry => entry.flag === stable).map(entry => entry.screen), ['ticket/Mobile']);
+});

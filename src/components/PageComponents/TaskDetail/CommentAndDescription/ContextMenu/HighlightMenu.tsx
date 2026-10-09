@@ -17,6 +17,8 @@ import {
 import { useGetSelectionDetails, getPopoverCoordinates, setClipboard } from ".";
 
 import { MenuArgs, SetMenuOpen, TargetSelector } from "./types";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 
 const ARROW_WIDTH = 10;
 const ARROW_HEIGHT = 5;
@@ -55,6 +57,8 @@ function HighlightMenu({
   zIndex = 999999999,
   ...props
 }: MainArgs) {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const selection = useGetSelectionDetails(target);
   const [menuOpen, setMenuOpen] = useState<SetMenuOpen>(null);
   const clientRect = getPopoverCoordinates(selection?.range);
@@ -125,9 +129,10 @@ function HighlightMenu({
   const menuContent = menuOpen && selection && (
     <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
       <div
+        // Contact hovercards can disable body pointer events while this portal is open.
         className="Popover"
         ref={refs.setFloating}
-        style={getFloatingStylesOverride()}
+        style={stableLayout && instantTicketOpen ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}
         aria-labelledby={headingId}
         {...getFloatingProps()}
         onMouseDown={(e) => {

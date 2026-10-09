@@ -398,6 +398,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
     useFlag: () => true,
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     useTaskContext: () => ({
       currentTask: { id: 42 }, secondaryPanelsReady: true,
       virtualizer: { getVirtualItems: () => items, getTotalSize: () => measured ? (comments ? 800 : 711) : 200, measureElement: noop },

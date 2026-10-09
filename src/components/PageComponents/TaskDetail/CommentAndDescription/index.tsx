@@ -1,7 +1,7 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import React, { Suspense } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
@@ -57,6 +57,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const { uploadingDescription, comments, stacked } =
     useDescriptionAndCommentsContext();
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const {
     currentTask,
     secondaryPanelsReady,
@@ -104,7 +105,13 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       <div
         style={{
           height: _mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
-          minHeight: !_mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
+          // Keep late mobile pages below the first viewport, even before comments arrive.
+          // Desktop skips this: the composer now follows the comments and must not drop a screen down.
+          ...(stableLayout && cachedLayout && _mbl ? {
+            minHeight: `max(100svh, ${numberOfComments || numberOfUploadingComments ? virtualizer.getTotalSize() : 0}px)`,
+          } : {
+            minHeight: !_mbl && (!cachedLayout || numberOfComments || numberOfUploadingComments) ? `${virtualizer.getTotalSize()}px` : undefined,
+          }),
           position: "relative",
           width: "100%",
           zIndex: 1,
@@ -226,7 +233,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {cachedLayout && !_mbl && (stableLayout ? (
+        <div data-task-composer-slot className="flow-root min-h-[168px]">
+          {secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}
+        </div>
+      ) : secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>)}
       {cachedLayout && !uploadingDescription && !hasDraft && <DescriptionPages />}
       {cachedLayout && _mbl && currentTask && (
         <TaskInfoLateDetails currentTask={currentTask} removeRelationHandler={removeRelationHandler} />
@@ -264,6 +276,7 @@ const Description = ({
   subject: import("@/models/personHovercard").PersonHovercardSubject | null;
 }) => {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { cachedLayout } = useTaskContext();
   return (
     <>
@@ -277,7 +290,11 @@ const Description = ({
         />
         <DescriptonBody draftTQ={draftsFromTQ} />
         {isUploadingDescription && <UploadingDescriptionContainer />}
-        {instantTicketOpen ? <Suspense fallback={null}><DescriptionReactions /></Suspense> : <DescriptionReactions />}
+        {cachedLayout && stableLayout ? (
+          <div data-task-reactions-slot className="flow-root min-h-[38px]">
+            <Suspense fallback={null}><DescriptionReactions /></Suspense>
+          </div>
+        ) : instantTicketOpen ? <Suspense fallback={null}><DescriptionReactions /></Suspense> : <DescriptionReactions />}
         {isUploadingDescription || hasDraft ? null : cachedLayout ? (
           <DescriptionSubTask />
         ) : (
