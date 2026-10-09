@@ -72,6 +72,11 @@ function makeHarness(redis = makeRedis()) {
   }
   const aliases = {
     '@/lib/prisma': prisma,
+    '@/lib/flags': {
+      HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+      HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
+      isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
+    },
     '@/utils/controllers/users/update_or_create_user': updateUser,
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: true, skipOnboarding: true } },
     '@/utils/controllers/users/autoJoinByEmailDomain': { default: async () => {} },
