@@ -358,11 +358,11 @@ test("template button hierarchy has one primary and a borderless muted secondary
   assert.match(html, /class="cta"[^>]*background-color:#4455BB[^>]*>Review the work<\/a>/);
   const secondary = html.match(/<a class="secondary-cta"[^>]*>Invite a teammate<\/a>/)?.[0];
   assert.ok(secondary);
-  assert.ok(secondary.includes("color:#858585"));
+  assert.ok(secondary.includes("color:#727279"));
   for (const property of ["background", "border", "padding", "font-weight:600"]) {
     assert.equal(secondary.includes(property), false);
   }
-  assert.match(html, /\.secondary-cta \{ color: #a5a5a5 !important; \}/);
+  assert.match(html, /\.secondary-cta \{ color: #8e9093 !important; \}/);
   assert.ok(html.indexOf('class="secondary-cta"') < html.indexOf('class="cta"'), "primary action comes last");
 });
 
