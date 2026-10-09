@@ -167,11 +167,11 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
         className={cn(
           "h-2 w-2 flex-shrink-0 rounded-full",
           connected
-            ? "bg-hypertasks-green"
-            : "bg-text-light-gray motion-safe:animate-pulse",
+            ? "bg-green-500"
+            : "bg-amber-400 motion-safe:animate-pulse",
         )}
       />
-      <span className={connected ? "text-white-black" : "text-text-light-gray"}>
+      <span className={connected ? "text-green-500" : "text-text-light-gray"}>
         {connected
           ? `Connected! ${client} just talked to Hypertask.`
           : first ? "Waiting for your agent..." : `Waiting for ${label} to connect…`}
