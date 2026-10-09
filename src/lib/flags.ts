@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7028_FIRST_TASK_EMAIL_FLAG,
   HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
@@ -223,6 +224,13 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,
+    kind: "feature",
+    defaultMode: "OWNER_AND_QA",
+    shippedOn: "2026-10-09",
+    description: "Emails a board owner once when their agent first finishes a task, with links to review the work and invite a teammate.",
+  },
   {
     key: HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
     kind: "bugfix",

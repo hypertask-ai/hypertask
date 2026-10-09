@@ -18,6 +18,7 @@ import {
 import { autoAssignForSection } from "../assignees/autoAssignForSection";
 import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { sectionIsDone, spawnNextRecurrence } from "./spawnRecurrence";
+import { scheduleAgentFirstTaskEmail } from "../notifications/agentFirstTaskEmail";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AgentMutationLeaseConflictError,
@@ -609,6 +610,9 @@ export async function updateTaskSingle(
       },
       { timeout: 60_000 },
     );
+    if (!options.trustedCaller) {
+      scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
+    }
     const moveNotification =
       moveActivity && options.taskMovedActivity?.sendNotification
         ? sendTaskMoveNotificationIfNeeded(

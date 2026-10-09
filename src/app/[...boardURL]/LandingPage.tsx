@@ -18,7 +18,10 @@ export { type LandingPageInput } from "./LandingPageShared";
 import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
-import { currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG } from "@/lib/flags/keys";
+import { CommandMode } from "@/models/enums";
+import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -1158,6 +1161,23 @@ const readyProject = data?.updatedProjects?.[projectIndex]
 const boardDataReady = Boolean(
   readyProject && isBoardPayloadHydrated(readyProject),
 )
+const firstTaskEmailEnabled = useFlag(HTPR_7028_FIRST_TASK_EMAIL_FLAG)
+const inviteRequested = firstTaskEmailEnabled ? searchParams?.get("invite") === "1" : false
+const setShowCommands = useSetRecoilState(showCommandsAtom)
+const inviteProject = useRecoilValue(currentProjectAtom)
+const inviteHandledRef = useRef<string | null>(null)
+useEffect(() => {
+  if (!inviteRequested || !authenticated || isGuest || !boardDataReady ||
+      currentBoardAccessStatus !== "authorized" || readyProject?.id !== requestedProjectId ||
+      inviteProject?.id !== requestedProjectId) return;
+  const key = `${user.id}:${requestedProjectId}`;
+  if (inviteHandledRef.current === key) return;
+  inviteHandledRef.current = key;
+  setShowCommands({ show: true, mode: CommandMode.InviteMember });
+  const url = new URL(window.location.href);
+  url.searchParams.delete("invite");
+  window.history.replaceState(getNextRouterAwareHistoryState(window.history.state), "", `${url.pathname}${url.search}${url.hash}`);
+}, [inviteRequested, authenticated, isGuest, boardDataReady, currentBoardAccessStatus, readyProject?.id, requestedProjectId, inviteProject?.id, user.id, setShowCommands])
 const readyBoardRender = useMemo<BoardRenderSnapshot | null>(
   () =>
     boardDataReady && readyProject
