@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { FEATURE_FLAG_QA_USER, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_7025_WELCOME_EMAIL_FLAG } from "@/lib/flags/keys";
+import { HTPR_7025_WELCOME_EMAIL_FLAG, HTPR_7027_AGENT_NUDGE_EMAIL_FLAG } from "@/lib/flags/keys";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
@@ -13,7 +13,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const user = await prisma.user.findUnique({ where: { id: session.userId }, select: { email: true } });
-    if (user?.email !== FEATURE_FLAG_QA_USER.email || !await isFeatureEnabled(HTPR_7025_WELCOME_EMAIL_FLAG, session.userId)) {
+    if (user?.email !== FEATURE_FLAG_QA_USER.email) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     const origin = request.headers.get("origin");
@@ -21,6 +21,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
     }
     const body = await request.json();
+    const type = body?.type ?? "welcome";
+    if (type !== "welcome" && type !== "agent_nudge") {
+      return NextResponse.json({ error: "Invalid email type" }, { status: 400 });
+    }
+    const flag = type === "agent_nudge" ? HTPR_7027_AGENT_NUDGE_EMAIL_FLAG : HTPR_7025_WELCOME_EMAIL_FLAG;
+    if (!await isFeatureEnabled(flag, session.userId)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
     const email = typeof body?.email === "string" ? body.email.trim().toLowerCase() : "";
     if (email.length > 320 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: "Invalid email address" }, { status: 400 });

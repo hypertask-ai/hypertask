@@ -290,7 +290,9 @@ test("native hooks exclude bridge and refresh, and schedule after legacy cookies
       "@/lib/auth/themeCookie": { getThemeCookieOptions: () => ({}) },
       "@/lib/themePreferences": { themeCookieSeedValue: () => null },
       "@/utils/controllers/demo/adoptGuestBoards": { adoptGuestBoards: async () => events.push("adopt") },
+      "@/utils/controllers/demo/resolveLoginBoard": { resolveLoginBoard: async () => undefined },
       "@/lib/onboarding/emails/welcome": { maybeSendWelcomeEmail: async () => events.push("welcome") },
+      "@/lib/onboarding/emails/agentNudge": { maybeScheduleAgentNudge: async () => {} },
       "@vercel/functions": { waitUntil: () => events.push("scheduled") },
     });
     const plugin = pluginModule.legacyCookiePlugin();

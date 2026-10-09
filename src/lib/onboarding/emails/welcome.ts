@@ -1,6 +1,5 @@
 import { LogType, Status } from "@prisma/client";
 import { fallbackBaseUrl } from "@/lib/auth/requestBaseUrl";
-import { isGuestUser } from "@/lib/demo/guest";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders, unsubscribeUrl } from "@/lib/email/unsubscribe";
 import { FEATURE_FLAG_QA_USER_ID, isFeatureEnabled } from "@/lib/flags";
@@ -8,9 +7,10 @@ import { HTPR_7025_WELCOME_EMAIL_FLAG } from "@/lib/flags/keys";
 import { MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
+import { onboardingEmailSkipReason } from "./eligibility";
 import { renderOnboardingEmail } from "./layout";
 
-export const WELCOME_COHORT_START = "2026-10-09T00:00:00Z";
+export { WELCOME_COHORT_START } from "./eligibility";
 
 export async function maybeSendWelcomeEmail(userId: number, opts?: { boardId?: number }) {
   try {
@@ -19,12 +19,8 @@ export async function maybeSendWelcomeEmail(userId: number, opts?: { boardId?: n
       include: { UserSetting: true },
     });
     if (!user) return "missing_user";
-    if (user.joinedAt < new Date(WELCOME_COHORT_START)) return "pre_cohort";
-    if (isGuestUser(user)) return "guest";
-    // Managed agents have their own table; also exclude non-human UID prefixes.
-    if (/^(service|agent|bot)_/i.test(user.uid)) return "service_identity";
-    if (!user.email || !(user.emailVerified || user.UserSetting?.isVerified)) return "unverified_email";
-    if (!user.UserSetting || user.UserSetting.notification === false || user.UserSetting.notificationPreference === "nothing") return "notifications_off";
+    const reason = onboardingEmailSkipReason(user);
+    if (reason) return reason;
 
     const redis = await getRedis();
     const email = user.email.trim().toLowerCase();
