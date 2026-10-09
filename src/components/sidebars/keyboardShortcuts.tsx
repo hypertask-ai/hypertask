@@ -18,9 +18,6 @@ const KeyboardShortcuts = () => {
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
-  const consistentCommentShortcuts = useFlag(
-    "htpr-5913-consistent-comment-shortcuts",
-  );
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   // Keep the runtime branch local so CI can trace shortcut UI coverage.
   let includeComposeTaskShortcut = false;
@@ -38,7 +35,6 @@ const KeyboardShortcuts = () => {
   const mainData = getKeyboardShortcuts(
     isApple,
     appShellRailOn,
-    consistentCommentShortcuts,
     historyToggleLabel,
     includeComposeTaskShortcut,
     newTaskWindow,
