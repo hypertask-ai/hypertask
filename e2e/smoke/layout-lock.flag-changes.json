@@ -1,5 +1,19 @@
 [
   {
+    "flag": "htpr-7026-agent-connect-check",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7026",
+    "screen": "board/Desktop",
+    "landmarks": ["todo-column", "done-column", "column-title", "card"],
+    "reason": "The requested 'compact Connect your agent card/banner' appears above the landing board content only for a never-connected, non-dismissed user. The toolbar and app frame stay in place."
+  },
+  {
+    "flag": "htpr-7026-agent-connect-check",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7026",
+    "screen": "board/Mobile",
+    "landmarks": ["todo-column", "done-column", "column-title", "card"],
+    "reason": "The requested 'compact Connect your agent card/banner' appears above the landing board content at phone width too, only before connection or dismissal. The toolbar and app frame stay in place."
+  },
+  {
     "flag": "htpr-6422-my-tasks-views",
     "ticket": "https://app.hypertask.ai/detail/project-15/6422",
     "screen": "my-tasks/Desktop",

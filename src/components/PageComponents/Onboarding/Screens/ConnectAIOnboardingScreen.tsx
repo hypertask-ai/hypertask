@@ -16,10 +16,14 @@ import { CopyableCodeBlock } from "@/components/Modals/McpToken/components/Conne
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import type { IntegrationId } from "@/components/Modals/McpToken/utils";
 import { cn } from "@/utils/undoActions/helperFuncs";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 import { GetStartedButton } from "../GetStartedButton";
 
 interface IConnectAIOnboardingScreen {
   onNextScreen: () => void;
+  compact?: boolean;
+  visible?: boolean;
 }
 
 type ToolChoice = IntegrationId | "builtin";
@@ -104,33 +108,44 @@ const REST_BASE_URL =
 
 interface ConnectionStatusProps {
   label: string;
-  onConnected: () => void;
+  onConnected: (client: string) => void;
+  first?: boolean;
+  visible?: boolean;
 }
 
-function ConnectionStatus({ label, onConnected }: ConnectionStatusProps) {
+function ConnectionStatus({ label, onConnected, first = false, visible = true }: ConnectionStatusProps) {
   const [connected, setConnected] = useState(false);
+  const [client, setClient] = useState(label);
   const enteredAt = useRef(new Date().toISOString());
 
   useEffect(() => {
+    if (!visible || connected) return;
     let cancelled = false;
+    let pending = false;
+    const controller = new AbortController();
     let intervalId: ReturnType<typeof setInterval> | undefined;
 
     const checkConnection = async () => {
+      if (pending || document.hidden) return;
+      pending = true;
       try {
         const response = await fetch(
-          `/api/users/ai-connection-status?since=${encodeURIComponent(enteredAt.current)}`,
-          { cache: "no-store" },
+          first ? "/api/users/ai-connection-status?mode=first" : `/api/users/ai-connection-status?since=${encodeURIComponent(enteredAt.current)}`,
+          { cache: "no-store", signal: controller.signal },
         );
         if (!response.ok) return;
 
-        const data = (await response.json()) as { connected?: boolean };
+        const data = (await response.json()) as { connected?: boolean; client?: string };
         if (!cancelled && data.connected) {
           setConnected(true);
-          onConnected();
+          setClient(data.client || label);
+          onConnected(data.client || label);
           if (intervalId) clearInterval(intervalId);
         }
       } catch {
         // Connection confirmation is best-effort; keep polling after transient errors.
+      } finally {
+        pending = false;
       }
     };
 
@@ -139,24 +154,25 @@ function ConnectionStatus({ label, onConnected }: ConnectionStatusProps) {
 
     return () => {
       cancelled = true;
+      controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [onConnected]);
+  }, [connected, first, label, onConnected, visible]);
 
   return (
-    <div className="flex items-center gap-2 text-content">
+    <div role="status" className="flex items-center gap-2 text-content">
       <span
         className={cn(
           "h-2 w-2 flex-shrink-0 rounded-full",
           connected
-            ? "bg-green-500"
-            : "bg-amber-400 motion-safe:animate-pulse",
+            ? "bg-hypertasks-green"
+            : "bg-text-light-gray motion-safe:animate-pulse",
         )}
       />
-      <span className={connected ? "text-green-500" : "text-text-light-gray"}>
+      <span className={connected ? "text-white-black" : "text-text-light-gray"}>
         {connected
-          ? `Connected! ${label} just talked to Hypertask.`
-          : `Waiting for ${label} to connect…`}
+          ? `Connected! ${client} just talked to Hypertask.`
+          : first ? "Waiting for your agent..." : `Waiting for ${label} to connect…`}
       </span>
     </div>
   );
@@ -164,12 +180,17 @@ function ConnectionStatus({ label, onConnected }: ConnectionStatusProps) {
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = ({
   onNextScreen,
+  compact = false,
+  visible = true,
 }) => {
+  const connectCheckEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const isCompact = connectCheckEnabled ? compact : false;
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
   const [method, setMethod] = useState<ConnectMethod>("mcp");
   const [useBearer, setUseBearer] = useState(false);
   const [connected, setConnected] = useState(false);
+  const [connectedClient, setConnectedClient] = useState("");
   const hasGeneratedToken = useRef(false);
   const { token, expiresAt, isLoading, isGenerating, generateToken } =
     useMcpToken();
@@ -209,11 +230,55 @@ export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (
     setUseBearer(false);
   };
 
-  const handleConnected = useCallback(() => setConnected(true), []);
+  const handleConnected = useCallback((client: string) => {
+    setConnectedClient(client);
+    setConnected(true);
+  }, []);
 
   const chosenLabel = TOOL_CHOICES.find(
     (choice) => choice.id === chosenTool,
   )?.label;
+
+  const renderTools = (tools: ToolChoice[]) =>
+    tools.map((toolId) => (
+      <button
+        key={toolId}
+        type="button"
+        onClick={() => handleChooseTool(toolId)}
+        className={cn(
+          getIntegrationChipClassName(false),
+          "w-full min-h-12 justify-center text-center",
+        )}
+      >
+        {TOOL_CHOICES.find((choice) => choice.id === toolId)?.label ?? toolId}
+      </button>
+    ));
+
+  const liveStatus = isCompact ? (
+    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} />
+  ) : null;
+
+  if (isCompact && connected) {
+    return (
+      <div className="space-y-2">
+        <p role="status" className="text-content font-medium text-white-black">
+          Connected! {connectedClient} just talked to Hypertask.
+        </p>
+        <p className="text-content text-text-light-gray">Ask your agent to pick up the top task.</p>
+      </div>
+    );
+  }
+
+  if (isCompact && phase === "choose") {
+    return (
+      <div className="space-y-3">
+        {liveStatus}
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {renderTools(["claude-code", "cursor", "codex", "claude", "chatgpt", "vscode", "builtin"])}
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "choose") {
     return (
@@ -278,20 +343,7 @@ export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (
                   tier.tools.length > 2 && "sm:grid-cols-4",
                 )}
               >
-                {tier.tools.map((toolId) => (
-                  <button
-                    key={toolId}
-                    type="button"
-                    onClick={() => handleChooseTool(toolId)}
-                    className={cn(
-                      getIntegrationChipClassName(false),
-                      "w-full min-h-12 justify-center text-center",
-                    )}
-                  >
-                    {TOOL_CHOICES.find((choice) => choice.id === toolId)
-                      ?.label ?? toolId}
-                  </button>
-                ))}
+                {renderTools(tier.tools)}
               </div>
             </div>
           ))}
@@ -309,8 +361,9 @@ export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (
   const isBuiltin = chosenTool === "builtin";
 
   return (
-    <div className="flex flex-col gap-6 items-center justify-center max-w-[720px] mx-auto px-4 cursor-default">
-      <div className="w-full shadow-customshadow-2 bg-comment-description rounded border-thin border-border-light-gray-thin p-4 sm:p-5 text-white-black">
+    <div className={isCompact ? "min-w-0 space-y-3" : "flex flex-col gap-6 items-center justify-center max-w-[720px] mx-auto px-4 cursor-default"}>
+      {liveStatus}
+      <div className={isCompact ? "min-w-0 text-white-black" : "w-full shadow-customshadow-2 bg-comment-description rounded border-thin border-border-light-gray-thin p-4 sm:p-5 text-white-black"}>
         <button
           type="button"
           onClick={handleChooseDifferentTool}
@@ -504,17 +557,17 @@ export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (
                 : 'Ask your AI something about your board, e.g. "What’s on my Hypertask board?"'}
             </p>
 
-            <div className="mt-4">
+            {!isCompact && <div className="mt-4">
               <ConnectionStatus
                 label={chosenLabel}
                 onConnected={handleConnected}
               />
-            </div>
+            </div>}
           </div>
         )}
       </div>
 
-      <div className="flex flex-col items-center gap-2">
+      {!isCompact && <div className="flex flex-col items-center gap-2">
         <GetStartedButton
           onClick={onNextScreen}
           text="Continue"
@@ -529,7 +582,7 @@ export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (
             I&apos;ll connect later, skip this step
           </button>
         )}
-      </div>
+      </div>}
     </div>
   );
 };
