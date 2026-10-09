@@ -3,7 +3,13 @@ import { useCallback, useEffect, useLayoutEffect } from "react";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
+import { useFlag } from "@/hooks/useFlag";
+import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const { cachedLayout } = useTaskContext();
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 
@@ -146,6 +152,9 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         );
         document.getElementById(`${taskDetailConfig.audioButtons.createComment}-${taskDetailConfig.audioButtons.suffix}`)?.click();
         return () => clearTimeout(timeout);
+      } else if (stableLayout && instantTicketOpen && cachedLayout) {
+        // Preserve explicit URL actions above; only automatic late positioning moves the first paint.
+        return;
       } else if (searchParams?.get(taskDetailConfig.searchParams.inboxFlow)) {
         // Coming from the inbox: "Bottom" and "Inbox" both scroll to the bottom;
         // "None" leaves focus on the description.
@@ -191,7 +200,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
         }
       }
     }
-  }, [_parsedTask.id]);
+  }, [_parsedTask.id, stableLayout, instantTicketOpen, cachedLayout]);
 
 
 
@@ -200,7 +209,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   // to here so the two don't fight. Preference: land on the FIRST UNREAD comment
   // (read new-onwards); if nothing is new, fall to the very bottom so the last
   // comment sits fully above the composer. Explicit deep-links win over both.
-  useEffect(() => {
+  useEffect(stableLayout && instantTicketOpen && cachedLayout ? () => {} : () => {
     const generation = initialScrollGenerationRef.current;
     const runInitialPositioning = (callback: () => void) =>
       initialScrollGuard.run(generation, callback);
@@ -284,6 +293,9 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     initialScrollGuard,
     newCommentIds,
     newCommentsSnapshotReady,
+    cachedLayout,
+    stableLayout,
+    instantTicketOpen,
     scrollSetting,
     scrollElementRef,
     scrollWindowToBottomMobile,

@@ -22,24 +22,24 @@ const context = () => ({
   virtualizer: { getVirtualItems: () => [{ index: 0, key: "info", start: 0 }, { index: 1, key: "description", start: 500 }, { index: 2, key: "bottom", start: 1000 }, ...Array.from({ length: commentCount }, (_, i) => ({ index: 3 + i, key: `comment-${i}`, start: 1500 + 500 * i }))], getTotalSize: () => 1500 + 500 * commentCount, measureElement: noop },
 });
 
-function load(relative, mocks) {
+function load(relative, mocks, globals = {}) {
   const source = fs.readFileSync(path.join(process.env.STABLE_LAYOUT_SOURCE_ROOT || root, relative), "utf8");
   const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
   const exports = {};
   for (const mock of Object.values(mocks)) if ("default" in mock) mock.__esModule = true;
-  new Function("require", "exports", js)((name) => {
-    if (name === "react") return React;
+  new Function("require", "exports", ...Object.keys(globals), js)((name) => {
+    if (name === "react") return mocks.react || React;
     if (name === "react/jsx-runtime") return require(name);
     assert.ok(name in mocks, `Unexpected dependency in ${relative}: ${name}`);
     return mocks[name];
-  }, exports);
+  }, exports, ...Object.values(globals));
   return exports;
 }
 const common = {
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: context },
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
 const title = load("src/components/PageComponents/TaskDetail/TopRow/TaskDetailTitleContainer.tsx", {
@@ -232,6 +232,33 @@ test("real cached range extractor pins every natural-flow top row even after scr
   assert.deepEqual(original({}), [1, 20, 21], "flag-off still pins only the existing description row");
 });
 
+test("the desktop composer follows all comments exactly once and empty cached threads have no estimated-height gap", () => {
+  const { JSDOM } = require("jsdom");
+  cachedLayout = true;
+  secondaryPanelsReady = true;
+  commentCount = 0;
+  const output = html(thread, false);
+  const document = new JSDOM(output).window.document;
+  const slot = document.querySelector("[data-task-composer-slot]");
+  assert.equal(slot.parentElement.tagName, "MAIN", "the composer slot must be outside the virtualized list");
+  assert.equal(slot.previousElementSibling.querySelector('[id="bottom-description"]').parentElement.dataset.index, "2");
+  assert.equal(slot.querySelector('[data-part="composer"]').parentElement, slot, "the composer belongs to the trailing slot, not a virtual row");
+  assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
+  assert.doesNotMatch(output, /height:1500px/, "an empty cached thread must use its real top-row height");
+  assert.ok(output.indexOf('data-part="pages"') > output.indexOf('data-part="composer"'));
+  for (commentCount of [1, 3]) {
+    const afterComments = html(thread, false);
+    assert.equal((afterComments.match(/data-part="comment"/g) || []).length, commentCount);
+    assert.ok(afterComments.includes(`min-height:${1500 + 500 * commentCount}px`), "desktop reserves thread space without pushing the composer a screen down");
+    assert.doesNotMatch(afterComments, /max\(100svh/, "desktop composer must not sit a full screen below short threads");
+    assert.ok(afterComments.indexOf('data-part="composer"') > afterComments.lastIndexOf('data-part="comment"'));
+    assert.ok(afterComments.indexOf('data-part="pages"') > afterComments.indexOf('data-part="composer"'));
+    assert.equal((afterComments.match(/data-part="composer"/g) || []).length, 1);
+  }
+  commentCount = 0;
+  cachedLayout = true;
+});
+
 test("desktop composer follows the entire virtualized thread with stable layout on and off", () => {
   secondaryPanelsReady = true;
   for (const cached of [true, false]) {
@@ -241,7 +268,7 @@ test("desktop composer follows the entire virtualized thread with stable layout 
       const output = html(thread, false);
       assert.equal((output.match(/data-part="composer"/g) || []).length, 1);
       assert.ok(output.indexOf('data-part="composer"') > output.lastIndexOf('data-part="comment"'));
-      assert.match(output, /<\/div><div data-part="composer">/, "composer must be outside the virtualized height wrapper, not inside a row");
+      assert.match(output, cached ? /<\/div><div data-task-composer-slot/ : /<\/div><div data-part="composer">/, "composer must be outside the virtualized height wrapper, not inside a row");
       if (cached && !count) {
         assert.doesNotMatch(output, /min-height:/, "empty cached threads use their real top-row height, not estimates");
       } else {
@@ -325,12 +352,12 @@ test("real cached description retains its first-painted HTML until editing start
 test("cached layout requires both flags and flag-off keeps the production layout", () => {
   const statement = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(hookSource) === "[cachedLayout]"));
   assert.ok(statement, "the real hook must declare its cached-layout state");
-  const flag = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.name.getText(hookSource) === "stableLayoutFlag"));
+  const flag = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration => declaration.initializer?.getText(hookSource) === "useFlag(HTPR_6899_STABLE_LAYOUT_FLAG)"));
   assert.ok(flag, "stable layout must read its own ticket-specific flag");
   assert.equal(flag.declarationList.declarations[0].initializer.getText(hookSource), "useFlag(HTPR_6899_STABLE_LAYOUT_FLAG)");
   const initializer = statement.declarationList.declarations[0].initializer.getText(hookSource);
   const js = ts.transpileModule(`return ${initializer};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
-  const initialize = new Function("instantTicketOpen", "stableLayoutFlag", "cachedNavigation", "initialCommentsPayload", "useState", js);
+  const initialize = new Function("instantTicketOpen", flag.declarationList.declarations[0].name.getText(hookSource), "cachedNavigation", "initialCommentsPayload", "useState", js);
   const state = (value) => [value];
   for (const instant of [false, true]) {
     for (const stable of [false, true]) {
@@ -383,7 +410,7 @@ test("quote scroll targets the composer under cached layout and retains legacy s
         content => `<blockquote>${content}</blockquote>`, () => ({}), value => quotes.push(value), (...args) => focuses.push(args), value => modes.push(value), callback => timers.push(callback),
       );
       insert("Quoted text", {});
-      assert.deepEqual(scrolls, [[cached && !isMobile ? 2 : 24, { align: cached ? "center" : "end" }]]);
+      assert.deepEqual(scrolls, cached && !isMobile ? [] : [[24, { align: cached ? "center" : "end" }]], "desktop quoting waits for the real insertion effect instead of starting virtualizer retries");
       assert.deepEqual(quotes, ["<blockquote>Quoted text</blockquote>"]);
       assert.deepEqual(modes, ["comment"]);
       assert.deepEqual(focuses, [["comment-input", false]]);
@@ -391,5 +418,252 @@ test("quote scroll targets the composer under cached layout and retains legacy s
       timers[0]();
       assert.deepEqual(quotes, ["<blockquote>Quoted text</blockquote>", ""]);
     }
+  }
+});
+
+test("new-comment scrolling targets the trailing desktop composer instead of the description spacer", () => {
+  const declaration = hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(item => item.name.getText(hookSource) === "scrollVirtualize")).declarationList.declarations[0];
+  const js = ts.transpileModule(`return ${declaration.initializer.getText(hookSource)};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const cached of [false, true]) for (const isMobile of [false, true]) {
+    const scrolls = [];
+    const domScrolls = [];
+    const scroll = new Function("cachedLayout", "_mbl", "virtualizer", "virtualizeIndexes", "_count", "document", js)(
+      cached, isMobile, { scrollToIndex: (...args) => scrolls.push(args) }, { descriptionBottomVirtualIndex: 2 }, 25,
+      { getElementById: id => { assert.equal(id, "comment"); return { scrollIntoView: options => domScrolls.push(options) }; } },
+    );
+    scroll("new-comment");
+    assert.deepEqual(scrolls, cached && !isMobile ? [] : [[24, { align: "center" }]]);
+    assert.deepEqual(domScrolls, cached && !isMobile ? [{ behavior: "auto", block: "center" }] : []);
+  }
+});
+
+const config = load("src/lib/configs/taskDetail.config.ts", { "@/utils/htmlEscape": { escapeHtml: value => value } }).default;
+
+test("only cached stable instant opens skip automatic late scrolls; ordinary opens retain saved positioning", () => {
+  for (const instant of [false, true]) for (const stable of [false, true]) {
+    for (const isMobile of [false, true]) for (const unread of [false, true]) {
+      for (const scrollSetting of ["None", "Bottom"]) for (const embedded of [false, true]) for (const cached of [false, true]) {
+        const effects = [];
+        const timers = [];
+        const frames = [];
+        const movement = [];
+        let clock = 0;
+        const scrollTarget = { scrollHeight: 6000, scrollTo: value => movement.push(["bottom", value]), scrollBy: value => movement.push(["offset", value]) };
+        const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
+          react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
+          "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : stable },
+          "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
+          "@/lib/flags/keys": common["@/lib/flags/keys"],
+          "@/lib/configs/taskDetail.config": { default: config },
+          "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+        }, {
+          window: { ...scrollTarget, location: { hash: "" }, history: {}, innerHeight: 844 },
+          document: { documentElement: scrollTarget },
+          setTimeout: callback => timers.push(callback), clearTimeout: noop,
+          requestAnimationFrame: callback => frames.push(callback), performance: { now: () => clock += 1000 },
+        }).useTaskDetailInitialScroll;
+        const ctx = {
+          _parsedTask: task, _mbl: isMobile, scrollSetting, scrollElementRef: embedded ? { current: scrollTarget } : undefined,
+          bottomScrollCancelRef: { current: null }, hasBottomScrolledRef: { current: false }, hasScrolledToUnreadRef: { current: false },
+          initialScrollGenerationRef: { current: 1 }, initialScrollGuard: { allows: () => true, run: (_, callback) => callback() },
+          initialScrollViewportRef: { current: {} }, newCommentsSnapshotReady: false, newCommentIds: [], comments: [], visibleCommentIndices: [],
+          virtualizeIndexes: { commentsStartVirtualIndex: isMobile ? 3 : 2 },
+          virtualizer: { scrollToIndex: (...args) => movement.push(["index", ...args]) },
+          searchParams: new URLSearchParams(embedded ? "inboxFlow=true" : ""),
+          focusOn: (...args) => movement.push(["focus", ...args]), defaultCommentFocus: () => movement.push(["composer"]),
+          setPriority_: noop, setEstimate_: noop, showCreateTaskModal: { show: false },
+        };
+        useScroll(ctx);
+        assert.equal(effects.length, 5);
+        effects[3]();
+        effects[4]();
+        effects.length = 0;
+        ctx.newCommentsSnapshotReady = true;
+        ctx.comments = [{ id: "77" }];
+        ctx.visibleCommentIndices = [0];
+        ctx.newCommentIds = unread ? [77] : [];
+        useScroll(ctx);
+        effects[4]();
+        for (let i = 0; timers.length || frames.length; i++) {
+          assert.ok(i < 20, "settling must be bounded");
+          timers.splice(0).forEach(callback => callback());
+          frames.splice(0).forEach(callback => callback());
+        }
+        if (instant && stable && cached) {
+          assert.deepEqual(movement, [], "late data must not move the first paint or collapse the mobile header");
+          assert.equal(ctx.hasBottomScrolledRef.current, false);
+          assert.equal(ctx.hasScrolledToUnreadRef.current, false);
+        } else {
+          assert.ok(movement.length > 0, "ordinary opens or either flag off must retain production's initial positioning");
+        }
+      }
+    }
+  }
+});
+
+test("both flags preserve comment URL/hash links, reply focus and audio entry without competing unread scrolls", () => {
+  const declaration = name => hook.body.statements.find(node => ts.isVariableStatement(node) && node.declarationList.declarations.some(item => item.name.getText(hookSource) === name)).declarationList.declarations[0];
+  const actionsJS = ts.transpileModule(`const ${declaration("focusOn").getText(hookSource)}; const ${declaration("defaultCommentFocus").getText(hookSource)}; const ${declaration("scrollVirtualize").getText(hookSource)}; return { focusOn, scrollVirtualize };`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  for (const isMobile of [false, true]) {
+    for (const action of ["commentId", "hash", "reply", "audio"]) for (const cached of [false, true]) {
+      const effects = [];
+      const timers = [];
+      const movement = [];
+      const clicks = [];
+      const actualScrolls = [];
+      const document = { getElementById: id => ({
+        click: () => clicks.push(id), focus: noop,
+        scrollIntoView: options => actualScrolls.push([id, options]),
+      }) };
+      const actions = new Function("cachedLayout", "_mbl", "document", "setCurrentId", "virtualizer", "virtualizeIndexes", "comments", "visibleFeedItems", actionsJS)(
+        cached, isMobile, document, noop, { scrollToIndex: (...args) => actualScrolls.push(["index", ...args]) },
+        { commentsStartVirtualIndex: 3 }, [{ id: "77" }], [{ kind: "comment", commentIndex: 0 }],
+      );
+      const params = new URLSearchParams();
+      if (action !== "hash") params.set(config.searchParams[action], action === "commentId" ? "comment-77" : "true");
+      const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
+        react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
+        "@/hooks/useFlag": { useFlag: () => true },
+        "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
+        "@/lib/flags/keys": common["@/lib/flags/keys"],
+        "@/lib/configs/taskDetail.config": { default: config },
+        "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
+      }, {
+        window: { location: { hash: action === "hash" ? "#comment-77" : "" }, history: {} },
+        document,
+        setTimeout: callback => { timers.push(callback); return timers.length; }, clearTimeout: noop,
+      }).useTaskDetailInitialScroll;
+      useScroll({
+        _parsedTask: task, _mbl: isMobile, searchParams: params, scrollSetting: "Bottom", showCreateTaskModal: { show: false },
+        bottomScrollCancelRef: { current: null }, hasBottomScrolledRef: { current: false }, hasScrolledToUnreadRef: { current: false },
+        initialScrollGenerationRef: { current: 1 }, initialScrollGuard: { allows: () => true, run: (_, callback) => callback() },
+        initialScrollViewportRef: { current: {} }, newCommentsSnapshotReady: true, newCommentIds: [77],
+        comments: [{ id: "77" }], visibleCommentIndices: [0], virtualizeIndexes: { commentsStartVirtualIndex: 3 },
+        virtualizer: { scrollToIndex: (...args) => movement.push(["unread", ...args]) },
+        scrollVirtualize: (...args) => { movement.push(["deep-link", ...args]); actions.scrollVirtualize(...args); },
+        focusOn: (...args) => { movement.push(["focus", ...args]); actions.focusOn(...args); }, defaultCommentFocus: () => movement.push(["automatic"]),
+      });
+      const cleanup = effects[3]();
+      effects[4]();
+      assert.equal(timers.length, 1, `${action} must schedule its explicit action`);
+      timers[0]();
+      assert.deepEqual(movement, action === "commentId" || action === "hash"
+        ? [["deep-link", config.elementIds.comment, 77, undefined, true]]
+        : [["focus", config.elementIds.commentInput]]);
+      assert.deepEqual(actualScrolls, action === "commentId" || action === "hash"
+        ? [["index", 3, { align: "center", behavior: "auto" }]]
+        : [[config.elementIds.commentInput, { behavior: "smooth", block: "center" }]], "the real actions must scroll, not just select a comment/composer");
+      assert.deepEqual(clicks, action === "audio" ? [`${config.audioButtons.createComment}-${config.audioButtons.suffix}`] : []);
+      assert.equal(typeof cleanup, "function", "explicit action timeout is cancelled on cleanup");
+    }
+  }
+});
+
+test("stable-layout flag imports do not collide with production's independent useFlag import", () => {
+  const source = fs.readFileSync(path.join(process.env.STABLE_LAYOUT_SOURCE_ROOT || root, "src/components/RTE/useTaskDetailEditorEvents.tsx"), "utf8");
+  const productionImport = 'import { useFlag } from "@/hooks/useFlag";';
+  const combined = ts.createSourceFile("events.tsx", source.startsWith(productionImport) ? source : `${productionImport}\n${source}`, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  const bindings = combined.statements.filter(ts.isImportDeclaration).flatMap(statement => {
+    const clause = statement.importClause;
+    return [...(clause?.name ? [clause.name.text] : []), ...(clause?.namedBindings && ts.isNamedImports(clause.namedBindings)
+      ? clause.namedBindings.elements.map(element => element.name.text) : [])];
+  });
+  assert.equal(new Set(bindings).size, bindings.length, "combined PR builds must not redeclare production import bindings");
+});
+
+test("late composer and reaction controls fill reserved space and pages start below the first viewport", () => {
+  cachedLayout = true;
+  for (commentCount of [0, 3]) for (const isMobile of [false, true]) {
+    secondaryPanelsReady = false;
+    const before = html(thread, isMobile);
+    secondaryPanelsReady = true;
+    const after = html(thread, isMobile);
+    if (isMobile) assert.ok(before.includes(`min-height:max(100svh, ${commentCount ? 1500 + 500 * commentCount : 0}px)`));
+    else assert.doesNotMatch(before, /max\(100svh/);
+    assert.match(before, /data-task-reactions-slot="true" class="flow-root min-h-\[38px\]"/);
+    if (!isMobile) {
+      const slot = /<div[^>]*data-task-composer-slot[^>]*>/;
+      assert.equal((before.match(/data-task-composer-slot/g) || []).length, 1);
+      assert.equal((after.match(/data-task-composer-slot/g) || []).length, 1);
+      assert.equal(before.match(slot)[0], after.match(slot)[0]);
+      assert.match(before.match(slot)[0], /min-h-\[168px\]/);
+      assert.doesNotMatch(before, /data-part="composer"/);
+      assert.equal((after.match(/data-part="composer"/g) || []).length, 1);
+      const beforeSlot = before.indexOf(before.match(slot)[0]);
+      const afterSlot = after.indexOf(after.match(slot)[0]);
+      assert.equal(before.slice(0, beforeSlot), after.slice(0, afterSlot), "mounting the composer cannot change upstream rows or reserved thread height");
+      if (commentCount) {
+        assert.ok(beforeSlot > before.lastIndexOf('data-part="comment"'));
+        assert.ok(afterSlot > after.lastIndexOf('data-part="comment"'));
+      }
+      assert.ok(after.indexOf('data-part="pages"') > afterSlot);
+    } else {
+      assert.doesNotMatch(before + after, /data-task-composer-slot|data-part="composer"/, "mobile keeps its separate composer");
+      assert.equal(before, after);
+    }
+  }
+  commentCount = 0;
+  cachedLayout = false;
+  const original = html(thread, false);
+  assert.doesNotMatch(original, /data-task-(composer|reactions)-slot|max\(100svh/);
+});
+
+test("the real quote insertion effect fills the composer before centering it clear of the sticky header", () => {
+  for (const instant of [false, true]) for (const stable of [false, true]) {
+    const effects = [];
+    const events = [];
+    let html = "";
+    const editor = { state: { selection: { $from: { parent: { textBetween: () => "" }, parentOffset: 0 } } }, commands: { insertContent: content => { html += content; events.push("insert"); } } };
+    const useEvents = load("src/components/RTE/useTaskDetailEditorEvents.tsx", {
+      react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop },
+      "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
+      "@/lib/flags/keys": { ...common["@/lib/flags/keys"], HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task-window" },
+      "@/lib/state": { useSetRecoilState: () => noop },
+      "@/store": { showCommandsAtom: {} },
+      "@/models/enums": { CommandMode: {} },
+      "react-hot-toast": { default: {} }, axios: { default: {} },
+      "@/hooks/MultiPages/useClickOutside": { default: noop },
+      "../PageComponents/TaskDetail/TopRow/CreateSummaryButton": {},
+      "@/lib/constants/aiEvents": {}, "./Components/EmojiGifPicker": {},
+    }, { document: { getElementById: id => {
+      assert.equal(id, "comment-input");
+      return { scrollIntoView: options => events.push(options) };
+    } } }).useTaskDetailEditorEvents;
+    useEvents({ editor, mode: "create-comment", reply: "<blockquote>Quoted text</blockquote>", isSelected: true, isMbl: false,
+      handleFocus: () => events.push("focus"), divIds: {} });
+    effects[1]();
+    assert.equal(html, "<blockquote>Quoted text</blockquote><p></p>");
+    assert.deepEqual(events, ["insert", { behavior: instant && stable ? "auto" : "smooth", block: instant && stable ? "center" : "start" }, "focus"]);
+  }
+});
+
+test("the desktop Quote popover accepts pointer events despite a contact hovercard blocking body, only with both flags on", () => {
+  const { JSDOM } = require("jsdom");
+  const source = ts.createSourceFile("highlight.tsx", fs.readFileSync(path.join(process.env.STABLE_LAYOUT_SOURCE_ROOT || root, "src/components/PageComponents/TaskDetail/CommentAndDescription/ContextMenu/HighlightMenu.tsx"), "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let style;
+  const visit = node => {
+    if (ts.isJsxOpeningElement(node) && node.attributes.properties.some(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "className" && attribute.initializer?.getText(source).includes("Popover"))) {
+      style = node.attributes.properties.find(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(source) === "style")?.initializer;
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  assert.ok(style && ts.isJsxExpression(style));
+  const js = ts.transpileModule(`return ${style.expression.getText(source)};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const styles = new Function("instantTicketOpen", "stableLayout", "getFloatingStylesOverride", js);
+  const originalStyle = { position: "fixed", top: "40px", left: "20px", zIndex: 999999999 };
+  const dom = new JSDOM('<body style="pointer-events: none"><div id="popover" class="Popover">Quote</div></body>');
+  try {
+    const popover = dom.window.document.getElementById("popover");
+    for (const instant of [false, true]) for (const stable of [false, true]) {
+      const result = styles(instant, stable, () => originalStyle);
+      assert.deepEqual(result, instant && stable ? { ...originalStyle, pointerEvents: "auto" } : originalStyle);
+      popover.style.cssText = "";
+      Object.assign(popover.style, result);
+      assert.equal(dom.window.getComputedStyle(popover).pointerEvents, instant && stable ? "auto" : "none");
+      assert.equal(dom.window.document.body.style.pointerEvents, "none", "contact hovercard behavior is untouched");
+    }
+  } finally {
+    dom.window.close();
   }
 });

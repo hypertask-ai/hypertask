@@ -93,9 +93,9 @@ const useTaskDetailGlobalStates = (
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
-  const [cachedLayout] = useState(instantTicketOpen && stableLayoutFlag && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
+  const [cachedLayout] = useState(instantTicketOpen && stableLayout && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
   const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
   useEffect(() => {
     if (secondaryPanelsReady) return;
@@ -595,7 +595,10 @@ const useTaskDetailGlobalStates = (
       setReplyQuote(wrapblockquote);
       focusOn("comment-input", false);
       setEditMode("comment");
-      scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
+      // The cached desktop composer scrolls after quote insertion, using its real DOM height.
+      if (!cachedLayout || _mbl) {
+        scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
+      }
       setTimeout(() => {
         setReplyQuote("");
       }, 100);
@@ -791,9 +794,13 @@ const useTaskDetailGlobalStates = (
     end?: boolean,
     withCommentId?: boolean
   ) => {
-    if (type === "new-comment")
-      virtualizer.scrollToIndex(cachedLayout && !_mbl ? virtualizeIndexes.descriptionBottomVirtualIndex : _count - 1, { align: "center" });
-    else if (type === "edit-description")
+    if (type === "new-comment") {
+      if (cachedLayout && !_mbl) {
+        document.getElementById("comment")?.scrollIntoView({ behavior: "auto", block: "center" });
+      } else {
+        virtualizer.scrollToIndex(_count - 1, { align: "center" });
+      }
+    } else if (type === "edit-description")
       virtualizer.scrollToIndex(1, { align: "center" });
     else if (type === "description")
       virtualizer.scrollToIndex(0, { align: "start" });
