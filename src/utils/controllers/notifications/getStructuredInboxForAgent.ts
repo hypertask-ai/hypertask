@@ -24,7 +24,7 @@ import { notificationInboxInclude } from "@/utils/controllers/notifications/getA
  * without a leading `userId` no Notification index matches this query, and candidate
  * selection scans a large slice of the table (HTPR-4095).
  */
-const agentInboxVisibilityWhere = (
+export const agentInboxVisibilityWhere = (
   userId: number,
   window?: { after: Date | null; through: Date },
 ) =>
