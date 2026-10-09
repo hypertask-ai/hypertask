@@ -272,6 +272,8 @@ let sessionUserId = 6;
 let sharedChatEnabled = true;
 let broadcasts = [];
 
+stub("src/lib/telemetry/activationOccurrences.ts", { recordAuthenticatedConnection: () => {} });
+
 stub("src/lib/prisma.ts", { default: prisma });
 stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: sessionUserId }),

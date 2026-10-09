@@ -3,7 +3,6 @@ import { getRedis } from '@/lib/redis';
 import { createMcpToken } from '@/lib/mcp/auth';
 import createLog from '@/utils/controllers/logs/createLog';
 import { LogType, Status } from '@prisma/client';
-import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
 
 export const runtime = 'nodejs';
 
@@ -81,7 +80,6 @@ export async function POST(request: NextRequest) {
     // We use createMcpToken to generate a 30-day valid MCP token
     const token = createMcpToken(payload.userId, payload.email, '30d');
 
-    const connectedAt = new Date();
     // counts real CLI onboards; first row per user = onboard, later rows = 30-day renewals.
     await createLog({
       log: 'cli_token_exchange',
@@ -89,8 +87,7 @@ export async function POST(request: NextRequest) {
       status: Status.Normal,
       LoggedById: payload.userId,
     });
-    recordAgentConnection(payload.userId, token, "cli", request.headers.get("user-agent"), connectedAt);
-
+    
     // 5. Return it to the CLI
     return NextResponse.json({ token });
   } catch (error) {

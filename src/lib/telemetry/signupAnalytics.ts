@@ -13,11 +13,11 @@ type SignupRecord = SignupAttribution & {
   userId: number;
 };
 
-type PostHogCapture = {
+export type PostHogCapture = {
   captureImmediate: (capture: {
     distinctId: string;
     event: string;
-    properties: Record<string, string>;
+    properties: Record<string, unknown>;
   }) => Promise<unknown>;
 };
 
@@ -121,6 +121,22 @@ export function recordUserSignedUp(
 ): void {
   if (!signup.isNewUser) return;
 
+  recordServerCapture(buildUserSignedUpCapture(signup), dependencies);
+}
+
+export function scheduleAnalytics(work: () => Promise<unknown>): void {
+  const promise = Promise.resolve().then(work).catch(() => undefined);
+  try {
+    waitUntil(promise);
+  } catch {
+    void promise;
+  }
+}
+
+export function recordServerCapture(
+  capture: Parameters<PostHogCapture["captureImmediate"]>[0],
+  dependencies: SignupAnalyticsDependencies = {},
+): void {
   const reportError =
     dependencies.onError ??
     ((error: unknown) => {
@@ -137,7 +153,7 @@ export function recordUserSignedUp(
   if (!captureClient) return;
 
   const capturePromise = (async () => {
-    await captureClient.captureImmediate(buildUserSignedUpCapture(signup));
+    await captureClient.captureImmediate(capture);
   })().catch(reportError);
 
   try {

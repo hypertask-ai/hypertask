@@ -62,6 +62,11 @@ const authCode = {
   user: owner,
 }
 
+stubModule('src/lib/telemetry/activationOccurrences.ts', {
+  recordAgentConnection: () => {},
+  recordAuthenticatedConnection: () => {},
+})
+
 stubModule('src/lib/flags.ts', {
   HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG:
     'htpr-6542-team-scoped-management-keys',

@@ -40,6 +40,8 @@ export function tokenRevocationJtis(
   return [legacyTokenRevocationJti(token)]
 }
 
+// ponytail: in-memory per-process throttle, resets on deploy/restart — fine for a
+// UX nice-to-have status pill; upgrade to Redis if cross-instance accuracy matters.
 const mcpConnectionLogThrottle = new Map<number, number>()
 
 const AUTH_LOG_MAX_ENTRIES = 1_000

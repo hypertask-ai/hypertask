@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma"
 import { generateInviteLink, setViewSlug } from "@/pages/api/invite/createInviteLink"
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll"
@@ -46,6 +47,7 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
         },
         include:{project:{select:{name:true}}},
     })
+    recordActivationOccurrence(newInvite.userId, "teammate_invited", newInvite.id, { method: "link" });
     return {inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, userId), amountUsed:(newInvite.uses*-1)-1}
 
 }

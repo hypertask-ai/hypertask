@@ -45,6 +45,7 @@ function fixture(name, scenario = {}, mode = false, controllerFactory) {
     return value;
   };
   const mocks = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/auth/getSessionUser": { getSessionUser: async headers => {
       auth.push(headers.get("cookie"));
       if (scenario.authThrows) throw new Error("Auth unavailable");
@@ -206,6 +207,7 @@ function policyController(name, role, effects, options = {}) {
     task: { updateMany: record("write-tasks", { count: 2 }), findMany: record("tasks", [{ id: 42, title: "Task" }]) },
   };
   const mocks = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/prisma": { default: prisma }, "@/lib/subscription": { stripe: {} },
     "./getFirst": { default: record("first-board", { status: 200, json: { id: 16 } }) },
     "./getAllIncludes": { ...access, getProjectIncludeWithoutTasks: () => ({}), getProjectViewInclude: () => ({}), getBoardTaskInclude: () => ({}) },
@@ -253,6 +255,7 @@ function createController(effects, quota = false) {
   const record = (label, value) => async (...args) => { effects.push([label, ...structuredClone(args)]); return value; };
   const tx = { $executeRaw: record("lock", undefined), project: { findFirst: record("prefix-clash", null), create: record("write-board", board) } };
   const mocks = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/prisma": { default: {
       user: { findUnique: record("user", { id: 985 }) },
       $transaction: async fn => fn(tx), project: { update: record("write-name", board) },

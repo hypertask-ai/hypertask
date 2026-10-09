@@ -7,6 +7,7 @@ import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
 import { renderAgentFirstTaskEmail } from "@/lib/onboarding/emails/agentFirstTask";
 import { renderAgentFirstTaskEmail as renderLegacyAgentFirstTaskEmail } from "./emailTemplates";
+import { trackActivation } from "@/lib/telemetry/activationAnalytics";
 
 type CompletionTask = Pick<
   Task,
@@ -62,7 +63,6 @@ async function sendAgentFirstTaskEmail(
     const section = sections.find((section) => section.id === task.sectionId);
     return columnRoleFor(section ?? { section_title: task.section }) === "done";
   };
-  // HTPR-7034: agent_task_completed is fired by the activation analytics ticket
   const candidate = candidates.find(({ before, after }) => !isDone(before) && isDone(after));
   if (!candidate) return;
   const { after } = candidate;
@@ -110,5 +110,5 @@ async function sendAgentFirstTaskEmail(
     html,
     headers: unsubscribeHeaders(userId, board.owner.email),
   });
-  // HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "agent_first_task" })
+  trackActivation(userId, "lifecycle_email_sent", { type: "agent_first_task" });
 }

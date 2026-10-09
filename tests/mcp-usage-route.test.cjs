@@ -54,6 +54,7 @@ function loadRoute({
   const stubbedModules = [
     "src/app/api/mcp/ai/usage/route.ts",
     "src/lib/mcp/auth.ts",
+    "src/lib/telemetry/activationOccurrences.ts",
     "src/app/api/ai/_lib/byokKeys.ts",
     "src/app/api/settings/ai-usage/gatewayUsage.ts",
     "src/lib/prisma.ts",
@@ -65,6 +66,9 @@ function loadRoute({
   ];
   const originalCache = new Map(Object.entries(require.cache));
   stubbedModules.forEach(clearModule);
+  stubModule("src/lib/telemetry/activationOccurrences.ts", {
+    recordAuthenticatedConnection: () => {},
+  });
 
   if (authBoundary) {
     const authKeyPermissions = {

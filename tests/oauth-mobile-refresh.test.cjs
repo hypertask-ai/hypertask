@@ -140,6 +140,11 @@ nextHeaders.cookies = async () => ({
     ? undefined
     : { name, value: requestCookies[name] },
 })
+stubModule('src/lib/telemetry/activationOccurrences.ts', {
+  recordAgentConnection: () => {},
+  recordAuthenticatedConnection: () => {},
+})
+
 stubModule('src/utils/controllers/logs/createLog.ts', { default: async () => {} })
 stubModule('src/lib/mcp/clientTelemetry.ts', { logMcpCliUsage: () => {} })
 

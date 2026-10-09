@@ -21,6 +21,7 @@ function load(file, stubs) {
 }
 let publicAuthCalls = 0
 const session = load('src/lib/mcp/auth/session.ts', {
+    '@/lib/telemetry/activationOccurrences': { recordAuthenticatedConnection: () => {} },
   'next/server': { NextRequest }, '@/lib/prisma': {}, jsonwebtoken: jwt,
   '@/lib/apiKeys': {}, '@/lib/auth/betterAuth': { auth: { api: { verifyApiKey: denied } } },
   '@/lib/auth/getSessionUser': { getSessionUser: denied },

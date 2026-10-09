@@ -106,6 +106,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
+    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/auth/emailCodeRateLimit': {
       getEmailCodeClientIp: () => '192.0.2.1', claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }),
