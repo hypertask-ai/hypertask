@@ -533,7 +533,7 @@ guard() {
   cmd=$(jq -r '.tool_input.command // empty')
   # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
-    REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
+    REPO=${SHIP_REPO:-}; BASE=${SHIP_BASE:-production}
     SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
@@ -556,9 +556,15 @@ guard() {
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
       echo "ship-check blocked: cannot parse the leading environment assignments before the protected command." >&2; exit 2
     fi
-    # PR merge: the PR must be named right and its ticket must exist.
+    # Only the app and CLI repos use the Hypertask ticket-title contract.
     if [[ $rest =~ ^$merge ]]; then
-      [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
+      local repo_option="(^|[[:space:]])(-R[[:space:]]*|--repo[[:space:]=]+)[\"']?([^[:space:]\"']+)"
+      [[ $rest =~ $repo_option ]] && REPO=${BASH_REMATCH[3]}
+      if [ -z "$REPO" ]; then
+        REPO=$(git remote get-url origin 2>/dev/null) || { echo "ship-check blocked the merge: cannot determine the target repo." >&2; exit 2; }
+      fi
+      REPO=${REPO,,}; REPO=${REPO%/}; REPO=${REPO%.git}; REPO=${REPO##*github.com[:/]}
+      case "$REPO" in hypertask-ai/hypertask|hypertask-ai/cli) ;; *) continue ;; esac
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist)." >&2; exit 2; }
@@ -566,6 +572,7 @@ guard() {
     fi
     # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
+      REPO=${REPO:-hypertask-ai/hypertask}
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
       checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
       for c in $checks; do

@@ -64,6 +64,50 @@ G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
 unset -f gh
 
+# Merge scope: other repos need neither a Hypertask title nor premerge evidence.
+gh() {
+  if [[ ${1:-} == pr && ${2:-} == view && "$*" == *'--json title'* ]]; then
+    echo "${GUARD_TITLE:-Invalid PR title}"
+  else return 1; fi
+}
+hypertask() { echo '{"success":true,"tasks":[{"id":1}]}'; }
+export -f gh hypertask
+for option in '-R valentinyeo/wazig' '--repo valentinyeo/wazig' '--repo=valentinyeo/wazig' '-Rvalentinyeo/wazig'; do
+  G 0 $M 180 "$option"
+done
+G 0 SHIP_REPO=valentinyeo/wazig SHIP_BASE=main $M 180 -R valentinyeo/wazig
+G 0 SHIP_REPO=valentinyeo/wazig SHIP_BASE=main $M 180
+SHIP_REPO=valentinyeo/wazig SHIP_BASE=main G 0 $M 180
+G 0 SHIP_REPO=hypertask-ai/hypertask $M 180 -R valentinyeo/wazig
+for repo in hypertask-ai/hypertask hypertask-ai/cli; do
+  G 2 $M 180 -R "$repo"
+  G 2 SHIP_REPO=valentinyeo/wazig $M 180 --repo="$repo"
+  G 2 $M 180 -R "'$repo'"
+  G 2 SHIP_REPO="$repo" $M 180
+  SHIP_REPO="$repo" G 2 $M 180
+done
+G 2 $M 180 --repo=github.com/Hypertask-AI/Hypertask
+G 0 $M 180 -R valentinyeo/wazig '&&' $M 180 -R valentinyeo/wazig
+G 2 SHIP_REPO=valentinyeo/wazig $M 180 '&&' $M 180 -R hypertask-ai/hypertask
+GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 0 SHIP_REPO=hypertask-ai/cli SHIP_BASE=main $M 180
+GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 0 $M 180 -R hypertask-ai/cli
+GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 2 $M -R hypertask-ai/cli # CLI still requires a PR number.
+
+# Resolve the cwd remote when neither a repo option nor SHIP_REPO is provided.
+git init -q "$E/guard-repo"
+ln -s "$PWD/ship-check" "$E/guard-repo/ship-check"
+pushd "$E/guard-repo" >/dev/null
+for remote in https://github.com/valentinyeo/wazig.git git@github.com:valentinyeo/wazig.git ssh://git@github.com/valentinyeo/wazig.git; do
+  git config remote.origin.url "$remote"
+  SHIP_REPO= G 0 $M 180
+done
+for repo in hypertask-ai/hypertask hypertask-ai/cli; do
+  git config remote.origin.url "git@github.com:$repo.git"
+  SHIP_REPO= G 2 $M 180
+done
+popd >/dev/null
+unset -f gh hypertask
+
 # No real open PR is needed to test the unmerged gate.
 gh() {
   if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 809 && "$*" == *'--json number,title,state,mergeCommit,baseRefName'* ]]; then
