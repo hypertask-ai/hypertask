@@ -29,14 +29,14 @@ function load(file, mocks = {}) {
 
 function harness() {
   const user = { id: 3001, uid: "email_test", email: "new@yopmail.com", joinedAt: new Date("2026-10-09T00:00:00Z"), emailVerified: true, UserSetting: { notification: true, notificationPreference: "all", isVerified: true } };
-  const state = { user, enabled: true, qaEnabled: true, failSend: false, failAudit: false, failMarker: false, now: 0, owned: { id: 42 }, member: { id: 43 } };
+  const state = { user, enabled: true, qaEnabled: true, failSend: false, failAudit: false, failMarker: false, failQaRead: false, now: 0, owned: { id: 42 }, member: { id: 43 } };
   const values = new Map(), expiries = new Map();
   const sends = [], logs = [], queries = [], redisCalls = [], flagReads = [], errors = [], events = [];
   const expire = (key_) => {
     if (expiries.has(key_) && expiries.get(key_) <= state.now) { values.delete(key_); expiries.delete(key_); }
   };
   const redis = {
-    get: async (key_) => { expire(key_); return values.get(key_) ?? null; },
+    get: async (key_) => { if (state.failQaRead && key_.startsWith("onboarding:qa-armed:")) throw new Error("Redis read failed"); expire(key_); return values.get(key_) ?? null; },
     set: async (...args) => {
       redisCalls.push(args);
       const [key_, value, ...options] = args;
@@ -150,6 +150,15 @@ for (const qaEnabled of [true, false]) {
     assert.equal(h.sends.length, Number(qaEnabled));
   });
 }
+
+test("QA marker Redis failure preserves welcome's failed outcome without sending", async () => {
+  const h = harness();
+  h.state.failQaRead = true;
+  assert.equal(await h.send(), "failed");
+  assert.equal(h.sends.length, 0);
+  assert.equal(h.flagReads.length, 0);
+  assert.equal(h.errors.length, 1);
+});
 
 test("arming cannot override cohort, consent or durable sent audit and marker", async () => {
   for (const change of [
@@ -283,7 +292,7 @@ test("native hooks exclude bridge and refresh, and schedule after legacy cookies
       "@/lib/constants/constants": { companySizeOptions: ["Just me"], companyRoleOptions: ["Founder"] },
       "@/utils/controllers/users/provisionFirstWorkspace": { provisionFirstWorkspace: async () => { await Promise.resolve(); events.push("provisioned"); } },
       "better-auth/api": { createAuthEndpoint: () => ({}), createAuthMiddleware: (fn) => fn },
-      "@/lib/prisma": { default: { user: { findUnique: async () => userFound ? { id: 3001, email: "new@yopmail.com" } : null } } },
+      "@/lib/prisma": { default: { user: { findUnique: async () => userFound ? { id: 3001, email: "new@yopmail.com" } : null }, project: { findFirst: async () => null } } },
       "@/lib/auth/session": { SESSION_COOKIE: "ht_session", SESSION_TTL_SECONDS: 10, sessionCookieOptions: () => ({}), signSession: () => "signed" },
       "@/lib/auth/slimUserCookie": { slimUserForCookie: (user) => user },
       "@/lib/configs/auth.config": { default: { cookies: { theme: "theme" } } },

@@ -24,6 +24,7 @@ interface IConnectAIOnboardingScreen {
   onNextScreen: () => void;
   compact?: boolean;
   visible?: boolean;
+  serverEligible?: boolean;
 }
 
 type ToolChoice = IntegrationId | "builtin";
@@ -111,10 +112,12 @@ interface ConnectionStatusProps {
   onConnected: (client: string) => void;
   first?: boolean;
   visible?: boolean;
+  serverEligible?: boolean;
 }
 
-function ConnectionStatus({ label, onConnected, first = false, visible = true }: ConnectionStatusProps) {
+function ConnectionStatus({ label, onConnected, first = false, visible = true, serverEligible = false }: ConnectionStatusProps) {
   const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const showClient = enabled ? true : serverEligible;
   const [connected, setConnected] = useState(false);
   const [client, setClient] = useState(label);
   const enteredAt = useRef(new Date().toISOString());
@@ -138,7 +141,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
 
         const data = (await response.json()) as { connected?: boolean; client?: string };
         if (!cancelled && data.connected) {
-          const connectedLabel = enabled ? data.client || label : label;
+          const connectedLabel = showClient ? data.client || label : label;
           setConnected(true);
           setClient(connectedLabel);
           onConnected(connectedLabel);
@@ -159,7 +162,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
       controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [connected, enabled, first, label, onConnected, visible]);
+  }, [connected, showClient, first, label, onConnected, visible]);
 
   return (
     <div role="status" className="flex items-center gap-2 text-content">
@@ -182,7 +185,8 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
   const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const screen = enabled
+  const showCard = enabled ? true : props.serverEligible === true;
+  const screen = showCard
     ? <ConnectAISetup {...props} />
     : <ConnectAISetup onNextScreen={props.onNextScreen} />;
   return screen;
@@ -192,6 +196,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   onNextScreen,
   compact: isCompact = false,
   visible = true,
+  serverEligible = false,
 }) => {
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
@@ -263,7 +268,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
     ));
 
   const liveStatus = isCompact ? (
-    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} />
+    <ConnectionStatus label={chosenLabel || "Your agent"} onConnected={handleConnected} first visible={visible} serverEligible={serverEligible} />
   ) : null;
 
   if (isCompact && connected) {

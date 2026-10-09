@@ -8,12 +8,13 @@ import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
 
 export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
-  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const card = enabled ? <EligibleAgentConnectCard key={`${userId}:${projectId}`} projectId={projectId} /> : null;
-  return card;
+  return <EligibleAgentConnectCard key={`${userId}:${projectId}`} projectId={projectId} />;
 }
 
 function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
+  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const [serverEligible, setServerEligible] = useState(false);
+  const showCard = flagEnabled ? true : serverEligible;
   const [eligible, setEligible] = useState(false);
   const [visible, setVisible] = useState(false);
   const [dismissing, setDismissing] = useState(false);
@@ -26,7 +27,10 @@ function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
       .then(async (response) => {
         if (!response.ok) return;
         const data = await response.json();
-        if (!controller.signal.aborted) setEligible(!data.connected && !data.dismissed && data.boardId === projectId);
+        if (!controller.signal.aborted) {
+          setServerEligible(data.eligible === true);
+          setEligible(!data.connected && !data.dismissed && data.boardId === projectId);
+        }
       }).catch(() => undefined);
     return () => controller.abort();
   }, [projectId]);
@@ -61,7 +65,7 @@ function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
     }
   };
 
-  if (!eligible) return null;
+  if (!showCard || !eligible) return null;
   return (
     <section ref={element} aria-label="Connect your agent" className="mx-auto w-full max-w-[720px] rounded-[5px] border-thin border-border-light-gray-thin bg-comment-description p-3 text-white-black">
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -70,7 +74,7 @@ function EligibleAgentConnectCard({ projectId }: { projectId: number }) {
           Dismiss
         </button>
       </div>
-      <ConnectAIOnboardingScreen compact visible={visible} onNextScreen={() => void dismiss()} />
+      <ConnectAIOnboardingScreen compact visible={visible} serverEligible={serverEligible} onNextScreen={() => void dismiss()} />
       {error && <p role="alert" className="mt-2 text-meta text-text-light-gray">{error}</p>}
     </section>
   );
