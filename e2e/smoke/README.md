@@ -102,7 +102,7 @@ Local post-deploy runs also require these two QA environment variables.
 An unrunnable check fails visibly but never sends Telegram or contributes to
 consecutive smoke reds. Confirmed live failures and rollback operations retain
 Telegram, at most once per UTC day for each cause across SHAs and reruns.
-Unit-test failures, healthy-site build/drift problems and QA setup failures go
+Runner-only challenges, unit-test failures, healthy-site build/drift problems and QA setup failures go
 into infrastructure tickets and job evidence instead. Provider status alone is
 not a confirmed live-site failure. The classifier sends the smoke notification;
 the consecutive alarm records the incident and authorizes guarded rollback,

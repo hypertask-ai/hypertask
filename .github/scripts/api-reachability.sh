@@ -51,7 +51,7 @@ probe() {
     if [ "$valid" = "true" ]; then return 0; fi
     if [ "$attempt" -lt 3 ]; then sleep 2; fi
   done
-  if [ "$check" != "firewall" ]; then LIVE_FAILURE=true; fi
+  if [ "$check" != "firewall" ] && [ -z "$mitigated" ]; then LIVE_FAILURE=true; fi
   FAILURES+="$url: status=$status, x-vercel-mitigated=${mitigated:-none} (expected $expected with valid $check response)"$'\n'
 }
 
@@ -79,7 +79,7 @@ fi
 if [ -n "$FAILURES" ]; then
   MSG="🔴 hypertasks: API reachability check failed.
 ${FAILURES}Likely fix: the Vercel firewall system bypass for the affected host on project hypertasks-prod. Ensure all-sources bypass entries for mcp.hypertask.ai."
-  if $LIVE_FAILURE; then notify live api-reachability "$MSG"; else notify setup firewall-settings "$MSG"; fi
+  if $LIVE_FAILURE; then notify live api-reachability "$MSG"; else notify setup api-probe-inconclusive "$MSG"; fi
   echo "::error::$MSG"
   exit 1
 fi

@@ -25,7 +25,7 @@ function config(overrides = {}) {
   return {
     appUrl: "https://app.hypertask.ai",
     outcome: "red",
-    previousStreak: "1",
+    previousStreak: JSON.stringify({ version: 1, streak: 1, episode: null }),
     githubToken: "github-test",
     repository: "hypertask-ai/hypertask",
     mcpToken: "mcp-test",
@@ -154,7 +154,7 @@ test("incident failures remain pending and retry original evidence on recovery w
   assert.equal(next.calls.filter((call) => isTelegramUrl(call.url)).length, 0);
   const create = next.calls.find((call) => call.url.endsWith("/tasks/create"));
   assert.match(JSON.parse(create.options.body).description, /actions\/runs\/42/);
-  assert.equal(JSON.parse(next.calls.at(-1).options.body).value, "0");
+  assert.equal(JSON.parse(JSON.parse(next.calls.at(-1).options.body).value).streak, 0);
 });
 
 test("failed streak reservation fails closed without rollback or Telegram", async () => {
@@ -165,4 +165,14 @@ test("failed streak reservation fails closed without rollback or Telegram", asyn
     await assert.rejects(handleSmokeResult(config({ githubOutput: output }), async () => response(503)), /streak update/);
     await assert.rejects(readFile(output), { code: "ENOENT" });
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test("unversioned numeric streaks cannot trigger rollback on the first actual failure", async () => {
+  const { handleSmokeResult } = await import(scriptUrl);
+  for (const previousStreak of ["1", "125"]) {
+    const { fetchImpl } = alarmFetch();
+    const first = await handleSmokeResult(config({ previousStreak }), fetchImpl);
+    assert.equal(first.streak, 1);
+    assert.equal(first.action, "none");
+  }
 });

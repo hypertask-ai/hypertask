@@ -24,12 +24,12 @@ function parseStreak(value) {
 function readState(value) {
   try {
     const state = JSON.parse(value);
-    if (state && Number.isSafeInteger(state.streak) && state.streak >= 0 &&
-        state.episode && typeof state.episode === "object") return state;
+    if (state?.version === 1 && Number.isSafeInteger(state.streak) && state.streak >= 0 &&
+        (state.episode === null || (state.episode && typeof state.episode === "object"))) return state;
   } catch {
-    // Numeric variables from earlier runs remain valid.
+    // Older counters included checks that never ran; reset once on migration.
   }
-  return { streak: parseStreak(value), episode: null };
+  return { version: 1, streak: 0, episode: null };
 }
 
 export function decideSmokeAlarm(previousValue, outcome) {
@@ -171,7 +171,7 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
   }
   // Telegram is owned by the classifier, with daily per-cause deduplication.
   // The consecutive alarm only records incidents and authorizes rollback.
-  await updateStreak(fetchImpl, config, state.episode ? state : state.streak);
+  await updateStreak(fetchImpl, config, state);
   if (config.githubOutput) {
     appendFileSync(config.githubOutput, `rollback=${decision.action === "alarm"}\n`);
   }
@@ -181,7 +181,10 @@ export async function handleSmokeResult(config, fetchImpl = fetch) {
     state.episode.incident = true;
     await updateStreak(fetchImpl, config, state);
   }
-  if (config.outcome === "green") await updateStreak(fetchImpl, config, 0);
+  if (config.outcome === "green") {
+    state.episode = null;
+    await updateStreak(fetchImpl, config, state);
+  }
   return decision;
 }
 

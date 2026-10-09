@@ -39,9 +39,13 @@ export async function reportProductionAlert(config, fetchImpl = fetch) {
       if (!result.ok) throw new Error(`Monitoring ticket request failed (HTTP ${result.status}); see job summary`);
       return result.json();
     };
-    const search = await api(`/tasks?project_id=4060&status=Normal&search=${encodeURIComponent(title)}&limit=100`);
-    if (!Array.isArray(search.tasks)) throw new Error("Monitoring ticket search returned no task list");
-    const existing = search.tasks.find((task) => task.title === title);
+    let existing;
+    for (const status of ["Normal", "Archive", "Deleted"]) {
+      const search = await api(`/tasks?project_id=4060&status=${status}&search=${encodeURIComponent(title)}&limit=100`);
+      if (!Array.isArray(search.tasks)) throw new Error("Monitoring ticket search returned no task list");
+      existing = search.tasks.find((task) => task.title === title);
+      if (existing) break;
+    }
     const text = `<p>${escapeHtml(message)}</p><p><a href="${escapeHtml(config.runUrl)}">Workflow evidence</a></p>`;
     if (existing) {
       await api("/comments", { method: "POST", body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }) });

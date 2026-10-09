@@ -187,7 +187,7 @@ test("persistent challenges and invalid expectations retry and send exactly one 
     assert.deepEqual(output.sleeps, ["2", "2"]);
     const alerts = output.calls.filter((call) => call[0] === "report");
     assert.equal(alerts.length, 1);
-    assert.equal(alerts[0][1], "live");
+    assert.equal(alerts[0][1], response.headers?.toLowerCase().includes("x-vercel-mitigated:") ? "setup" : "live");
     const text = alerts[0].find((arg) => arg.startsWith("text="));
     assert.ok(text.includes(URLS[index]));
     assert.ok(text.includes(`status=${response.status}`));
@@ -216,6 +216,7 @@ test("multiple failed URLs share one alert and local failure needs no Telegram s
     assert.equal(output.status, 1, output.stdout + output.stderr);
     const alerts = output.calls.filter((call) => call[0] === "report");
     assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][1], "setup");
     assert.match(output.stdout, /x-vercel-mitigated=\(empty\)/);
     if (telegram) {
       const text = alerts[0].find((arg) => arg.startsWith("text="));
@@ -301,6 +302,7 @@ test("firewall retries clear stale headers and combined probe and guard failures
   assert.equal(output.status, 1, output.stdout + output.stderr);
   const alerts = output.calls.filter((call) => call[0] === "report");
   assert.equal(alerts.length, 1);
+  assert.equal(alerts[0][1], "setup");
   const text = alerts[0].find((arg) => arg.startsWith("text="));
   for (const url of URLS) assert.ok(text.includes(`${url}: status=503, x-vercel-mitigated=challenge`));
   assert.ok(text.includes(`${BYPASS_URL}: status=200, x-vercel-mitigated=none`));

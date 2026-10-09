@@ -45,7 +45,7 @@ test('unrunnable smoke creates one infra ticket, never Telegram, and updates it 
   assert.equal(creations.length, 1);
   assert.equal(JSON.parse(creations[0].options.body).project_id, 4060);
   assert.equal(h.calls.filter((c) => c.url.endsWith('/comments')).length, 1);
-  assert.equal(h.calls.filter((c) => c.url.includes('api.telegram.org')).length, 0);
+  assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 0);
 });
 
 for (const kind of ['live', 'rollback']) {
@@ -55,16 +55,35 @@ for (const kind of ['live', 'rollback']) {
     assert.equal(await reportProductionAlert(config(kind), h.fetch), 'telegram');
     assert.equal(await reportProductionAlert({ ...config(kind), message: 'different deploy SHA' }, h.fetch), 'duplicate');
     assert.equal(await reportProductionAlert({ ...config(kind), now: new Date('2026-10-10') }, h.fetch), 'telegram');
-    assert.equal(h.calls.filter((c) => c.url.includes('api.telegram.org')).length, 2);
+    assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 2);
   });
 }
+
+test('Telegram detection uses exact origin, with hostile URL positive controls', () => {
+  for (const url of ['https://evil.example/api.telegram.org', 'https://api.telegram.org.evil.example/']) {
+    assert.notEqual(new URL(url).origin, 'https://api.telegram.org');
+  }
+  assert.equal(new URL('https://api.telegram.org/botfixture/sendMessage').origin, 'https://api.telegram.org');
+});
+
+test('an archived cause is updated instead of creating another infrastructure ticket', async () => {
+  const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
+  const h = harness({ existing: true });
+  const fetch = (url, options) => url.includes('status=Normal')
+    ? Promise.resolve({ ok: true, status: 200, json: async () => ({ tasks: [] }) })
+    : h.fetch(url, options);
+  await reportProductionAlert(config(), fetch);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/tasks/create')).length, 0);
+  assert.equal(h.calls.filter((c) => c.url.endsWith('/comments')).length, 1);
+  assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 0);
+});
 
 test('failed dedup storage cannot permit duplicate Telegram delivery', async () => {
   const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
   for (const options of [{ reserveFailure: true }, { lookupFailure: true }]) {
     const h = harness(options);
     await assert.rejects(reportProductionAlert(config('live'), h.fetch), /Daily alert/);
-    assert.equal(h.calls.filter((c) => c.url.includes('api.telegram.org')).length, 0);
+    assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 0);
   }
   const h = harness({ telegramFailure: true });
   await assert.rejects(reportProductionAlert(config('live'), h.fetch), /Telegram delivery failed/);
@@ -75,7 +94,7 @@ test('setup without agent credentials remains summary-only', async () => {
   const { reportProductionAlert } = await import('../.github/scripts/production-alert.mjs');
   const h = harness();
   assert.equal(await reportProductionAlert({ ...config(), mcpToken: '' }, h.fetch), 'summary-only');
-  assert.equal(h.calls.filter((c) => c.url.includes('api.telegram.org')).length, 0);
+  assert.equal(h.calls.filter((c) => new URL(c.url).origin === 'https://api.telegram.org').length, 0);
 });
 
 test('CI failure naming recognizes actual spec output and TAP, including a startup failure', () => {
