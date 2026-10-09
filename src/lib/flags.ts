@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
   HTPR_7026_AGENT_CONNECT_CHECK_FLAG,
   HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
   HTPR_7028_FIRST_TASK_EMAIL_FLAG,
@@ -231,6 +232,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Moves cards to the first remaining board column before deleting a column from Ctrl+K or the column header, and refuses to delete a populated last column.",
+  },
   {
     key: HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
     kind: "bugfix",

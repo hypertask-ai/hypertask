@@ -4,6 +4,8 @@
  */
 import { ISection } from '@/models/model'
 import prisma from '@/lib/prisma'
+import { isFeatureEnabled } from '@/lib/flags'
+import { HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG } from '@/lib/flags/keys'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import * as sectionService from './sectionService'
 
@@ -20,10 +22,16 @@ const sectionUpdate = async (
         ...getProjectWhere(_userId, undefined)
       }
     },
-    select: { id: true }
+    select: { id: true, projectId: true }
   })
   if (!section) {
     return { status: 403, json: { message: 'Forbidden' } }
+  }
+
+  if (newSection.deleted === true && await isFeatureEnabled(HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG, _userId)) {
+    // Ctrl+K and the column header share this endpoint; move cards before hiding their column.
+    const result = await sectionService.deleteSection({ sectionId, projectId: section.projectId, userId: _userId })
+    return { status: result.status, json: { projectId: section.projectId } }
   }
 
   const result = await sectionService.updateSection({
