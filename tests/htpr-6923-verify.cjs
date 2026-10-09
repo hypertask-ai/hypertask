@@ -288,10 +288,11 @@ const attachmentRoutes = {
     "method": "POST",
     "hash": "01d48f1d642c0d7a64efc47680bf97795a21c6ebba2712345c89183e252683d8"
   },
+  // HTPR-7018: security fixes replace the unknown/unbound file download contract.
   "downloadAttachment": {
     "module": "download-attachment",
     "method": "GET",
-    "hash": "072e4872015008699263a5de8eac474a9bd205b4db1d5971ec4eca22a4c16ca7"
+    "hash": "5f2cbbcff8c92cec532737ce17dd4dc99d4f1ff9ce872ae69311e3d7b09de2bb"
   }
 };
 function attachmentLegacySources() {

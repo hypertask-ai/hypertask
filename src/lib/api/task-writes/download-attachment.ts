@@ -1,12 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "./route";
-import prisma from "@/lib/prisma";
+import { getAccessibleAttachmentKey } from "@/utils/controllers/tasks/getAccessibleAttachmentKey";
 
 import {
   getHypertasksS3Client,
   HYPERTASKS_S3_BUCKET,
-  parseHypertasksStorageKeyFromUrl,
 } from "@/lib/storage/hypertasksS3";
 
 const route = taskWriteRoute({
@@ -24,51 +23,11 @@ const route = taskWriteRoute({
     try {
       const fileSourceStr = fileSource.toString();
 
-      // Look up the attachment record to verify project membership
-      const attachment = await prisma.attachment.findFirst({
-        where: { fileSource: fileSourceStr },
-        select: {
-          task: { select: { projectId: true } },
-          description: { select: { task: { select: { projectId: true } } } },
-          comment: { select: { task: { select: { projectId: true } } } },
-          chatMessage: { select: { session: { select: { userId: true } } } },
-        },
-      });
-
-      if (attachment) {
-        // Determine the projectId through whichever relation is populated
-        const projectId =
-          attachment.task?.projectId ??
-          attachment.description?.task?.projectId ??
-          attachment.comment?.task?.projectId;
-
-        if (attachment.chatMessage) {
-          // Chat message attachment: only the session owner may download
-          if (attachment.chatMessage.session.userId !== userId) {
-            return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/html; charset=utf-8" } });
-          }
-        } else if (projectId != null) {
-          // Task/description/comment attachment: verify project membership
-          const project = await prisma.project.findFirst({
-            where: {
-              id: projectId,
-              OR: [
-                { members: { some: { userId: userId } } },
-                { ownerId: userId },
-              ],
-            },
-            select: { id: true },
-          });
-          if (!project) {
-            return new NextResponse("Forbidden", { status: 403, headers: { "content-type": "text/html; charset=utf-8" } });
-          }
-        }
-        // If attachment exists but has no resolvable project/chatMessage (e.g. AI_Custom_Instructions),
-        // allow authenticated users through
+      const key = await getAccessibleAttachmentKey(fileSourceStr, userId);
+      if (!key) {
+        return new NextResponse("File not found", { status: 404, headers: { "content-type": "text/html; charset=utf-8" } });
       }
-      // If no attachment record found, allow authenticated users (legacy files)
 
-      const key = getKey(fileSourceStr);
       const params = {
         Bucket: HYPERTASKS_S3_BUCKET,
         Key: key,
@@ -96,12 +55,4 @@ export const GET: TaskWriteRoute = async (request, session) => {
     }));
   }
   return route({ headers: request.headers, json: async () => query }, session);
-};
-
-const getKey = (url: string) => {
-  const key = parseHypertasksStorageKeyFromUrl(url);
-  if (!key) {
-    throw "unknown link";
-  }
-  return key;
 };
