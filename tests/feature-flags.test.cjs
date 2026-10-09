@@ -94,6 +94,24 @@ test("first-time email defaults to Owner + QA and fails closed for recipients wi
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
+test("Haiku default is an Owner + QA feature, including system ID zero only after release", async () => {
+  const key = flags.HTPR_7038_HAIKU_DEFAULT_FLAG;
+  assert.equal(key, "htpr-7038-haiku-default");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 0), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+});
+
 test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
   const flagName = flags.HTPR_7010_HAIKU_5_5_FLAG;
   assert.equal(flagName, "htpr-7010-haiku-5-5");
@@ -878,6 +896,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
     ],
   );

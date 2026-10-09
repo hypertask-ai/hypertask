@@ -1,6 +1,6 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -87,11 +87,12 @@ export default function useSaveContent() {
   const { postHyperMention, postImageGeneration } = useHyperMention();
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = currentBoardBilling;
   const defaultModelOption = haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,

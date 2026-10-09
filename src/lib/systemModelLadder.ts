@@ -134,6 +134,7 @@ export function getSystemModelsForFeature(
   context: AiDefaultModelContext = {},
 ): readonly SystemModel[] {
   const ladder = SYSTEM_MODEL_LADDERS[SYSTEM_FEATURES[feature].role];
+  haiku55Enabled ||= Boolean(context.haikuDefaultEnabled);
   if (!haiku55Enabled) return ladder;
   const ordered = defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5"
     ? [...ladder.filter((entry) => entry.provider === "anthropic"), ...ladder.filter((entry) => entry.provider !== "anthropic")]
@@ -232,6 +233,7 @@ export function resolveUserFacingModelOption(
     customEndpointConfigured?: boolean;
     defaultModelOption?: TAiModelOption;
     haiku55Enabled?: boolean;
+    haikuDefaultEnabled?: boolean;
     plan?: AiDefaultModelContext["plan"];
     hasByok?: boolean;
   },

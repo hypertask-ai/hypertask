@@ -544,12 +544,13 @@ export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 
 export type AiDefaultModelContext = {
   haiku55Enabled?: boolean;
+  haikuDefaultEnabled?: boolean;
   plan?: StorePlanKind | null;
   hasByok?: boolean;
 };
 
-export function defaultModelKeyFor({ haiku55Enabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
-  return haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK")
+export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  return haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
     ? "claude-haiku-5-5"
     : productionDefault;
 }
@@ -565,6 +566,7 @@ export function getDefaultAiModelOptionForPlan(
   hasEligibleByokCredential = false,
   lunaFree = false,
   haiku55Enabled = false,
+  haikuDefaultEnabled = false,
 ): TAiModelOption {
   const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
@@ -572,7 +574,7 @@ export function getDefaultAiModelOptionForPlan(
     (storePlanId === "Free" && lunaFree)
     ? preferredAiModelOption
     : defaultAiModelOption;
-  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
+  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
 }
 
 // Model picker resolution: an explicit saved choice (or team/board default)

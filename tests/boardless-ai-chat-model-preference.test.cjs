@@ -44,7 +44,7 @@ stub("src/hooks/MultiPages/useGetAllTeamsMinimal.ts", {
   useGetAllTeamsMinimal: () => ({ data: teams }),
 });
 stub("src/lib/lastBoardTeam.ts", { getLastBoardTeam: () => lastTeamId });
-stub("src/hooks/useFlag.tsx", { useFlag: () => lunaFree });
+stub("src/hooks/useFlag.tsx", { useFlag: (key) => key === "htpr-6722-latest-models" && lunaFree });
 stub("src/hooks/General/useGetUserPreferences.tsx", {
   USER_PREFERENCES_QUERY_KEY: ["preferences"],
   useGetUserPreferences: () => ({ data: { aiModelPreferences: preferences } }),

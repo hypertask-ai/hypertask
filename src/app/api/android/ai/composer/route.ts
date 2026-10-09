@@ -83,6 +83,7 @@ export async function GET(request: NextRequest) {
         providersWithByok,
         lunaFree: await lunaFreePlanEnabled(ctx.user.id),
         haiku55Enabled: defaultContext.haiku55Enabled,
+        haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
       }),
     });
   } catch (cause) {

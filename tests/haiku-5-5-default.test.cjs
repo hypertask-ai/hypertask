@@ -146,11 +146,11 @@ test("Free plan gate admits Haiku and server flag evaluation uses the user and f
     "@/lib/teamComp": {}, "@/lib/subscriptionAccess": {},
     "@/lib/aiModelOptions": catalog,
     "@/lib/flags/keys": load(path.join(root, "src/lib/flags/keys.ts")),
-    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return enabled; } },
+    "@/lib/flags": { isFeatureEnabled: async (name, id) => { checks.push([name, id]); if (fail) throw new Error("flag unavailable"); return name === "htpr-7010-haiku-5-5" && enabled; } },
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined, false);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7010-haiku-5-5", 985]]);
+  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
   enabled = false;
   assert.equal(await api.haiku55ModelEnabled(985), false);
   fail = true;
@@ -190,7 +190,7 @@ test("title callback dependencies refresh the model when the flag changes while 
   }
   visit(ast);
   assert.ok(callback);
-  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "defaultModelOption", "lunaFree"]);
+  assert.deepEqual(callback.arguments[1].elements.map((node) => node.getText(ast)), ["haiku55Enabled", "haikuDefaultEnabled", "defaultModelOption", "lunaFree"]);
   const code = ts.transpileModule(`module.exports = ${callback.getText(ast)}`, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
@@ -202,14 +202,14 @@ test("title callback dependencies refresh the model when the flag changes while 
   };
   const formValuesRef = { current: { currentProject: null } };
   const flags = load(path.join(root, "src/lib/byokSelectedProviderGate.ts"));
-  for (const [haiku55Enabled, plan, provider, lunaFree] of [
+  for (const [haiku55Enabled, plan, provider, lunaFree, haikuDefaultEnabled = false] of [
     [false, "Pro", null, true], [true, "Pro", null, true], [true, "Free", null, true],
-    [true, "Free", "openrouter", true], [true, "Free", null, false], [false, "Pro", null, true],
+    [true, "Free", "openrouter", true], [true, "Free", null, false], [true, "Free", null, true, true], [false, "Pro", null, true],
   ]) {
     formValuesRef.current.currentProject = { teamId: "fixture-team", billing: { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] } };
     const loaded = { exports: {} };
     vm.runInNewContext(code, {
-      module: loaded, useCallback, haiku55Enabled, lunaFree,
+      module: loaded, useCallback, haiku55Enabled, haikuDefaultEnabled, lunaFree,
       getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags,
       defaultModelOption: haiku55Enabled ? haiku : catalog.defaultAiModelOption,
       formValuesRef, aiModelPreferencesRef: { current: {} },
@@ -219,7 +219,7 @@ test("title callback dependencies refresh the model when the flag changes while 
       extractTitleAndDescription: (title) => ({ title }),
     });
     await loaded.exports("fixture description", new AbortController().signal);
-    const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : lunaFree ? "gpt-6-luna" : catalog.defaultAiModelOption.id;
+    const expected = haikuDefaultEnabled ? haiku.id : !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : lunaFree ? "gpt-6-luna" : catalog.defaultAiModelOption.id;
     assert.equal(requests.at(-1).modelOptionId, expected);
   }
 });
@@ -262,7 +262,7 @@ test("server BYOK eligibility preserves Free-plan BYOK restrictions and skips un
             "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
             "@/lib/ai/customEndpoint": {},
             "@/app/api/ai/_lib/managedGatewayKeys": { MANAGED_TEAM_GATEWAY_PROVIDER: "managed_gateway" },
-            "@/app/api/ai/_lib/planGate": { haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
+            "@/app/api/ai/_lib/planGate": { haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => enabled, storePlanIdForProject: async () => plan },
             "@/app/api/ai/chat/stream/modelFallback": fallback,
           });
           const context = await api.getAiDefaultModelContext({ userId: 985, trustedTeamId: "fixture-team" });
@@ -297,12 +297,12 @@ test("default sites use shared plan-aware policy on client and server", () => {
     visit(ast);
     assert.ok(expression, file);
     assert.match(expression, /getDefaultAiModelOptionForPlan/);
-    for (const haiku55Enabled of [false, true]) {
+    for (const [haiku55Enabled, haikuDefaultEnabled] of [[false, false], [true, false], [true, true]]) {
       for (const plan of ["Free", "Pro", "AI", "BYOK"]) {
         for (const provider of [null, "claude", "gateway", "openrouter", "openai"]) {
           const billing = { storePlanId: plan, byokProviderFlags: provider ? [{ provider, enabled: true }] : [] };
-          const actual = vm.runInNewContext(expression, { haiku55Enabled, lunaFree: true, defaultBilling: billing, defaultAiModelOption: catalog.defaultAiModelOption, getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags });
-          const expected = !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : "gpt-6-luna";
+          const actual = vm.runInNewContext(expression, { haiku55Enabled, haikuDefaultEnabled, lunaFree: true, defaultBilling: billing, defaultAiModelOption: catalog.defaultAiModelOption, getDefaultAiModelOptionForPlan: catalog.getDefaultAiModelOptionForPlan, hasHaikuByokProviderFlags: flags.hasHaikuByokProviderFlags });
+          const expected = haikuDefaultEnabled ? haiku.id : !haiku55Enabled ? catalog.defaultAiModelOption.id : plan !== "Free" ? haiku.id : "gpt-6-luna";
           assert.equal(actual.id, expected, `${file}: ${plan}, ${provider}, ${haiku55Enabled}`);
         }
       }
