@@ -195,6 +195,26 @@ test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty sh
   await assert.rejects(check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"></div>'));
 });
 
+test('early-failure summary prints the saved reason without requiring browser conditions', async () => {
+  const { printSummary } = await analyst;
+  const lines = [];
+  const original = console.log;
+  console.log = line => lines.push(line);
+  try {
+    assert.doesNotThrow(() => printSummary({ started: '2026-10-10T12:00:00Z', status: 'failed', failure: { reason: 'Tool, auth or selector unavailable' } }, []));
+  } finally { console.log = original; }
+  assert.equal(lines.length, 1);
+  assert.match(lines[0], /failed: Tool, auth or selector unavailable/);
+  assert.match(lines[0], /not verified speed evidence/);
+});
+
+test('end-of-run native fetch checks its boolean status, unlike Playwright APIResponse', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /const response = await fetch\(/);
+  assert.match(source, /if \(!response\.ok \|\| run\.productionCommitEnd !== run\.productionCommit\)/);
+  assert.doesNotMatch(source, /response\.ok\(\)/);
+});
+
 test('invalid CLI errors never echo unknown credential-like arguments', () => {
   const result = spawnSync(process.execPath, ['scripts/speed/measure.mjs', '--unknown-secret-token'], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
   assert.equal(result.status, 1);

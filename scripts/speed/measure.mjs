@@ -74,6 +74,7 @@ export function verifyRun(run) {
 }
 
 export function printSummary(run, history) {
+  if (run.status !== 'complete') return console.log(`${run.started} ${run.status}: ${run.failure?.reason || 'Incomplete live run'}. Partial samples are not verified speed evidence.`);
   console.log(`${run.started} production ${run.productionCommit}; QA 2343; ${run.conditions.samples} samples/path/profile; ${run.status}`);
   console.log(`Host load ${run.hostLoad.map(n => n.toFixed(1)).join('/')}, ${run.cpus} CPUs. Phone: 390x844, 4x CPU, 150ms RTT, 1.6Mbps. Desktop: 1440x900, unthrottled.`);
   const comparisons = compare(run, history);
@@ -217,10 +218,7 @@ async function measure(shared, browser, profile, index, run) {
       await navigate(BOARD);
       await ready(page, 'board');
       await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
-      await navigate('/search');
-      await page.locator('#search-input').waitFor({ state: 'visible' });
-      await page.locator('#search-input').fill(TITLE);
-      await sample('search', () => shared.action(page, () => page.keyboard.press('Enter'), run.actions, 'client', '/search'), false);
+      await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
       await sample('my-tasks', () => navigate('/my-tasks'));
       await page.evaluate(() => document.activeElement?.blur());
       await sample('page-navigation', () => shared.action(page, async () => { await page.keyboard.press('g'); await page.keyboard.press('b'); }, run.actions, 'client', BOARD), false);
@@ -230,7 +228,8 @@ async function measure(shared, browser, profile, index, run) {
       await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press('Control+j'), run.actions, 'client', BOARD), false);
       await page.keyboard.press('Escape');
     } catch {
-      run.failure = { profile, surface, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
+      const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
+      run.failure = { profile, surface, dom, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
       throw new Error('Path unavailable');
     } finally { net.stop(); await context.close(); }
   }
@@ -276,7 +275,7 @@ async function main() {
     for (const profile of ['desktop', 'phone']) for (let index = 1; index <= samples; index++) await measure(shared, browser, profile, index, run);
     const response = await fetch(BASE + '/api/version', { signal: AbortSignal.timeout(15000) });
     run.productionCommitEnd = (await response.json()).buildId;
-    if (!response.ok() || run.productionCommitEnd !== run.productionCommit) throw new Error('Production changed during run');
+    if (!response.ok || run.productionCommitEnd !== run.productionCommit) throw new Error('Production changed during run');
     run.groups = summarize(run.samples);
     run.status = 'complete';
     verifyRun(run);

@@ -15,14 +15,14 @@ node scripts/speed/measure.mjs --latest
 node scripts/speed/measure.mjs --verify-history
 ```
 
-Default: five samples of each of seven paths on each profile, run serially. QA Sandbox board 6859, existing ticket 43, expected title `QA 6667 Enter verification`. No fixture creation. Actions are at least two seconds apart. Desktop 1440x900, no throttling. Phone 390x844, touch/mobile Chromium, 150ms latency, 1.6Mbps down/750Kbps up, 4x CPU. This is phone emulation on a VPS, not a physical-device field measurement.
+Default: five samples of each of seven paths on each profile, run serially. Search uses the canonical query URL so legacy live-search debounce and Enter-to-open cannot race the measurement. QA Sandbox board 6859, existing ticket 43, expected title `QA 6667 Enter verification`. No fixture creation. Actions are at least two seconds apart. Desktop 1440x900, no throttling. Phone 390x844, touch/mobile Chromium, 150ms latency, 1.6Mbps down/750Kbps up, 4x CPU. This is phone emulation on a VPS, not a physical-device field measurement.
 
 | Path | Timed start and visible completion |
 |---|---|
 | Board | Fresh context hard navigation to QA Sandbox, actual fixture card visible and board identity present |
 | Ticket cold | Separate fresh context hard navigation, exact title, description container and primary actions present |
 | Ticket warm | Same context, return to board, actual card click, same ticket completion; board setup excluded |
-| Search | Existing search page, typed exact fixture title, Enter to visible matching result; setup excluded |
+| Search | Hard navigation to the existing search URL with the exact fixture title, to the visible matching result; includes real search fetching |
 | My Tasks | Hard navigation, SSR-seeded title and actual table header visible; server loading fallback cannot pass; empty list allowed |
 | Ctrl+J | Keydown on the selected QA board column to the visible existing AI Task Writer field; no text entered or submitted; Escape closes it |
 | Page navigation | My Tasks `g` then `b` to the actual QA board card, not a document reload |
@@ -60,4 +60,4 @@ journalctl --user -u speed-measure.service -n 30 --no-pager
 
 For a different permanent checkout, override `WorkingDirectory`, `ExecStart`, `COMPANY_SKILLS_DIR` and `PLAYWRIGHT_NODE_MODULES` in the drop-in, using absolute paths. The daily schedule is 04:30 UTC plus up to 15 minutes jitter, with missed-run catch-up. The timer measures only; SPEED RUNNER reads the report in its session. Weekly research is part of that session, not a second scheduled LLM job. The owner must confirm user-manager persistence if measurements must run after logout; do not alter host/login policy here.
 
-Stop: `systemctl --user disable --now speed-measure.timer`. Stop an active measurement with `systemctl --user stop speed-measure.service`, then inspect the lock as above. Tests: `node --test tests/speed-analyst.test.mjs`. Units: `systemd-analyze --user verify scripts/speed/systemd/speed-measure.{service,timer}`.
+Stop: `systemctl --user disable --now speed-measure.timer`. Stop an active measurement with `systemctl --user stop speed-measure.service`, then inspect the lock as above. Tests: `node --test tests/speed-analyst.test.cjs`. Units: `systemd-analyze --user verify scripts/speed/systemd/speed-measure.{service,timer}`.
