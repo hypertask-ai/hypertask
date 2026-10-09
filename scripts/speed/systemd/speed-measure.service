@@ -1,0 +1,11 @@
+[Unit]
+Description=Read-only Hypertask daily speed measurements (QA-normal)
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/projects/hypertask
+Environment=COMPANY_SKILLS_DIR=%h/projects/company-skills
+Environment=PLAYWRIGHT_NODE_MODULES=%h/projects/hypertask/node_modules
+ExecStart=/usr/bin/env node %h/projects/hypertask/scripts/speed/measure.mjs
+TimeoutStartSec=30min
+UMask=0077
