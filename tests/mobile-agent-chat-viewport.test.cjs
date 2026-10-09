@@ -12,15 +12,16 @@ const narrowLayout = chat.slice(
   chat.indexOf("const content =", chat.indexOf("if (isNarrow)")),
 );
 
-test("mobile Agent Chat follows the keyboard-visible viewport behind its ticket flag", () => {
-  assert.match(
-    chat,
-    /useFlag\(\s*"htpr-6129-mobile-agent-chat-viewport",?\s*\)/,
+test("mobile Agent Chat always follows the keyboard-visible viewport", () => {
+  const retired = /htpr-6129-mobile-agent-chat-viewport|mobileAgentChatViewportEnabled/;
+  assert.throws(() => assert.doesNotMatch("mobileAgentChatViewportEnabled", retired));
+  assert.doesNotMatch(chat, retired);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"),
+    retired,
   );
-  assert.match(
-    chat,
-    /useMobileVisualViewport\(\s*isMbl\s*&&\s*\([\s\S]*mobileAgentChatViewportEnabled \|\|[\s\S]*mobileLayoutEnabled \|\|[\s\S]*mobileFullscreenFlag && Boolean\(selectedId\)[\s\S]*\)\s*\)/,
-  );
+  assert.match(chat, /useMobileVisualViewport\(isMbl\)/);
+  assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
   assert.match(
     narrowLayout,
     /!\(isMbl && \(mobileLayoutEnabled \|\| mobileFullscreenChrome\)\) &&\s*\n\s*"h-screen"/,

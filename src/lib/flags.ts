@@ -155,6 +155,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6160-inbox-archive-cluster",
   "htpr-6157-new-task-auto-description",
   "htpr-6166-scoped-board-refetch",
+  "htpr-6129-mobile-agent-chat-viewport",
   "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
@@ -209,6 +210,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6254-heic-heif-attachments": true,
   "htpr-6035-agent-chat-skills": true,
   "htpr-6166-scoped-board-refetch": true,
+  "htpr-6129-mobile-agent-chat-viewport": true,
 } as const;
 
 export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
@@ -686,11 +688,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     description: "Enables typed thought, action, response, error, and question updates for agent runs.",
   },
   {
-    key: "htpr-6129-mobile-agent-chat-viewport",
-    shippedOn: "2026-09-04",
-    description: "Keeps the full Agent Chat visible on mobile when the keyboard is open.",
-  },
-  {
     key: HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
     shippedOn: "2026-09-11",
     description:
@@ -1091,7 +1088,6 @@ const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
   [LOCAL_WRITING_ASSISTANCE_FLAG]: "bugfix",
   [HTPR_6278_CHAT_TURN_FAILURE_FLAG]: "bugfix",
   ["htpr-6112-copy-current-url"]: "bugfix",
-  ["htpr-6129-mobile-agent-chat-viewport"]: "bugfix",
   [HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG]: "bugfix",
   ["htpr-6363-task-writer-research"]: "bugfix",
   [AUTO_TASK_DESCRIPTIONS_FLAG]: "bugfix",

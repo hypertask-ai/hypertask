@@ -518,11 +518,6 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6129-mobile-agent-chat-viewport",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
       { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
@@ -955,6 +950,30 @@ for (const key of ["htpr-6072-shallow-board-switch", "htpr-6254-heic-heif-attach
   await assert.rejects(flags.setFeatureFlagMode(key, "OFF"), /Unknown feature flag/);
   listedRows = [];
   assert.equal((await flags.featureFlagsForUser(42))[key], true);
+});
+
+test("the retired mobile Agent Chat viewport flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6129-mobile-agent-chat-viewport";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
 });
 
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
