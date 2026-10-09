@@ -160,6 +160,7 @@ export const FEATURE_FLAG_QA_USER = {
 
 // Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
+  "htpr-5913-consistent-comment-shortcuts",
   "htpr-6160-inbox-archive-cluster",
   "htpr-6157-new-task-auto-description",
   "htpr-6166-scoped-board-refetch",
@@ -196,6 +197,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
 // Old tabs read these infra flags as enabled; keep them until old deployments and tabs expire.
 // Existing product retirement dates: remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16, htpr-6166 after 2026-10-20.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
+  "htpr-5913-consistent-comment-shortcuts": true,
   "htpr-6091-feature-flags": true,
   "htpr-6133-feature-flag-details": true,
   "htpr-6176-flag-ticket-title": true,
@@ -716,12 +718,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
-  },
-  {
-    key: "htpr-5913-consistent-comment-shortcuts",
-    shippedOn: "2026-09-04",
-    description:
-      "Makes comment shortcuts consistent: Ctrl+Enter sends and moves on, while Ctrl+Shift+Enter sends and stays.",
   },
   {
     key: "htpr-5993-optimistic-task-uploads",
