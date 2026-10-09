@@ -20,9 +20,6 @@ export function useAgentChatState(props: IProp) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const isMbl = useContext(MobileViewContext);
-  const mobileAgentChatViewportEnabled = useFlag(
-    "htpr-6129-mobile-agent-chat-viewport",
-  );
   const mobileLayoutEnabled = useFlag(HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG);
   const mobileFullscreenFlag = useFlag(HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG);
   const activityRowsEnabled = useFlag("htpr-6094-agent-activity-rows");
@@ -49,12 +46,7 @@ export function useAgentChatState(props: IProp) {
   const [search, setSearch] = useState("");
   const [teamId, setTeamId] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const mobileAgentChatViewport = useMobileVisualViewport(
-    isMbl &&
-      (mobileAgentChatViewportEnabled ||
-        mobileLayoutEnabled ||
-        (mobileFullscreenFlag && Boolean(selectedId))),
-  );
+  const mobileAgentChatViewport = useMobileVisualViewport(isMbl);
   const [session, setSession] = useState<TAgentChatSession | null>(null);
   const [sessionLoading, setSessionLoading] = useState(false);
   const [messages, setMessages] = useState<TChatMessage[] | null>(null);
@@ -181,7 +173,7 @@ export function useAgentChatState(props: IProp) {
   };
 
   return {
-    currentUser, roomsEnabled, router, searchParams, isMbl, mobileAgentChatViewportEnabled,
+    currentUser, roomsEnabled, router, searchParams, isMbl,
     mobileLayoutEnabled, mobileFullscreenFlag, activityRowsEnabled, rosterNow, liveSortEnabled,
     chatStopAndTimeoutEnabled, pollingChatEnabled, appShellRailOn, setMobileTopBarTitle,
     setAgentChatMobileFullscreen, agents, setAgents, rosterError, setRosterError, search, setSearch,
