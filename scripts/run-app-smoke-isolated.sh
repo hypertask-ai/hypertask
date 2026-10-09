@@ -242,7 +242,7 @@ docker run -d --name "$database" --network "$network" \
   -e POSTGRES_DB=postgres \
   -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD="$postgres_admin_password" \
-  public.ecr.aws/docker/library/postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825 >/dev/null
+  ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825 >/dev/null
 
 for attempt in $(seq 1 30); do
   if docker logs "$database" 2>&1 | grep -q 'PostgreSQL init process complete; ready for start up.' &&

@@ -56,8 +56,9 @@ jobs:
       # "Skip the build when the review is already red" reads commit statuses
       # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
+      packages: read
     env:
-      HTPR_PG_IMAGE: public.ecr.aws/docker/library/postgres:16-alpine
+      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     outputs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
       failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
@@ -294,6 +295,14 @@ jobs:
             fi
           fi
 
+      - name: Authenticate CI image pulls
+        if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Pull PostgreSQL test image
         if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
         run: docker pull "$HTPR_PG_IMAGE"
@@ -355,9 +364,13 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      packages: read
     services:
       postgres:
-        image: public.ecr.aws/docker/library/postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           POSTGRES_DB: hypertask_smoke
           POSTGRES_USER: browser_smoke
@@ -370,7 +383,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       redis:
-        image: public.ecr.aws/docker/library/redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         ports:
           - 6379:6379
         options: >-
@@ -379,7 +395,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       soketi:
-        image: quay.io/soketi/soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           SOKETI_DEFAULT_APP_ID: app-id
           SOKETI_DEFAULT_APP_KEY: app-key
