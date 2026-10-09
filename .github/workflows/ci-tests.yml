@@ -294,6 +294,10 @@ jobs:
             fi
           fi
 
+      - name: Pull PostgreSQL test image
+        if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
+        run: docker pull "$HTPR_PG_IMAGE"
+
       - name: Test
         if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
         env:
