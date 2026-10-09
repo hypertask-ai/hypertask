@@ -4,6 +4,7 @@ import { CreateLogInput, IMember, IViewType } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 
 import prisma from "@/lib/prisma";
+import { HTPR_7031_INVITE_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
@@ -146,7 +147,7 @@ async function sendInviteToNonMember(
       expired: false,
     },
     include: {
-      invitedBy: true,
+      invitedBy: { include: { userPicture: { select: { nameSet: true, displayName: true } } } },
       project: {
         select: {
           project_view: getProjectViewInclude({
@@ -167,11 +168,12 @@ async function sendInviteToNonMember(
   const activeView = getViewFromProject(invite.project);
   viewSlug = setViewSlug(activeView);
 
-  const inviteLink = generateInviteLink(
+  const inviteLink = await generateInviteLink(
     invite.id,
     projectId,
     invite.project.title ?? "",
     viewSlug,
+    userId,
   );
   const createLogBody: CreateLogInput = {
     log: `${invite.invitedBy.displayName} sent an invite to "${email}" for board "${invite.project?.title}"`,
@@ -183,19 +185,34 @@ async function sendInviteToNonMember(
   createNotification(email, inviteLink, userId, invite.id, projectId);
   await sendEmailNotification("Invite", {
     sender: invite.invitedBy.displayName ?? "",
+    senderUserId: userId,
+    senderEmail: invite.invitedBy.email,
+    senderName: invite.invitedBy.userPicture?.nameSet
+      ? invite.invitedBy.userPicture.displayName ?? undefined
+      : undefined,
     recipient: email,
     title: invite.project.title ?? "",
     link: inviteLink,
   });
 }
 
-export const generateInviteLink = (
+export const generateInviteLink = async (
   inviteId: string,
   projectId: number,
   projectName: string,
   viewSlug: string | undefined,
+  userId: number,
 ) => {
   const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
+  if (await isFeatureEnabled(HTPR_7031_INVITE_EMAIL_FLAG, userId)) {
+    const params = new URLSearchParams({
+      key: inviteId,
+      project: projectName,
+      projectId: String(projectId),
+    });
+    if (viewSlug) params.set("view", viewSlug);
+    return `${baseURL}/invite?${params}`;
+  }
   return `${baseURL}/invite?key=${inviteId}&project=${projectName}&projectId=${projectId}${viewSlug ? `&view=${viewSlug}` : ""}`;
 };
 

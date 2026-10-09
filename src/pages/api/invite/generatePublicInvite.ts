@@ -84,7 +84,7 @@ export default  async function handler(
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)
-        return res.status(200).json({inviteLink:generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug), amountUsed:(newInvite.uses*-1)-1})
+        return res.status(200).json({inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, session.userId), amountUsed:(newInvite.uses*-1)-1})
     }
 
     return res.status(200).json({})

@@ -110,6 +110,19 @@ test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
   assert.equal(await flags.isFeatureEnabled(flagName, 985), false);
 });
 
+test("invite email bugfix defaults to Everyone and respects OFF", async () => {
+  const { HTPR_7031_INVITE_EMAIL_FLAG: key } = flags;
+  assert.equal(key, "htpr-7031-invite-email");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 2343), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+});
+
 test("phone New Task title fix defaults to Everyone as a bugfix", async () => {
   const key = flags.HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG;
   assert.equal(key, "htpr-6970-phone-new-task-title");
@@ -243,7 +256,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
+      [true, true, [flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, flags.HTPR_7031_INVITE_EMAIL_FLAG, flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
       `${key} should use its declared rollout default`,
     );
   }
@@ -780,6 +793,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7009-dedupe-task-detail-reads", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7031-invite-email", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7032-email-expiry-copy", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7032-first-time-email", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7033-cli-install-command", mode: "EVERYONE", updatedAt: null },

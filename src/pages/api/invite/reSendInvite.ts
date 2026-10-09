@@ -26,7 +26,7 @@ export default  async function handler(
     }
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
-      select: { id: true, displayName: true },
+      select: { id: true, displayName: true, email: true, userPicture: { select: { nameSet: true, displayName: true } } },
     });
     if (!user) {
       return res.status(401).json({ message: "Unauthorized" });
@@ -59,7 +59,7 @@ export default  async function handler(
       viewSlug = setViewSlug(activeView)
 
       // ========= invite was found, create the link again, and resend the email
-      if (invite){inviteLink = generateInviteLink(invite.id, projectId, invite.project.name, viewSlug)} 
+      if (invite){inviteLink = await generateInviteLink(invite.id, projectId, invite.project.title ?? "", viewSlug, user.id)}
         
 
       // ========= invite wasn't found so create a new one and set the invite link's value
@@ -86,7 +86,7 @@ export default  async function handler(
         activeView = getViewFromProject(invite.project)
         viewSlug = setViewSlug(activeView)
     
-        inviteLink = generateInviteLink(invite.id, projectId, invite.project.name, viewSlug)
+        inviteLink = await generateInviteLink(invite.id, projectId, invite.project.title ?? "", viewSlug, user.id)
       }
 
       await cancelInvite(invite.id, email, projectId)
@@ -94,8 +94,13 @@ export default  async function handler(
       await createNotification(email, inviteLink, user.id, invite.id, projectId)
       await sendEmailNotification("Invite", {
         sender: user.displayName ?? "",
+        senderUserId: user.id,
+        senderEmail: user.email,
+        senderName: user.userPicture?.nameSet
+          ? user.userPicture.displayName ?? undefined
+          : undefined,
         recipient: email,
-        title: invite.project.name,
+        title: invite.project.title ?? "",
         link: inviteLink,
       })
       
