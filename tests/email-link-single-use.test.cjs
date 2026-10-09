@@ -85,6 +85,7 @@ function makeHarness(redis = makeRedis()) {
     '@/lib/auth/session': loadTs('src/lib/auth/session.ts'),
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },
     '@/utils/controllers/demo/adoptGuestBoards': { adoptGuestBoards: async () => {} },
+    '@/utils/controllers/demo/resolveLoginBoard': { resolveLoginBoard: async () => undefined },
     '@/lib/auth/slimUserCookie': loadTs('src/lib/auth/slimUserCookie.ts'),
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },

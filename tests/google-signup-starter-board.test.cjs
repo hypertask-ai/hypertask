@@ -125,6 +125,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     return onboarding.CompleteOnboardingFirstStep(...args)
   } }
   aliases['@/utils/controllers/demo/adoptGuestBoards'] = loadTs('src/utils/controllers/demo/adoptGuestBoards.ts', aliases)
+  aliases['@/utils/controllers/demo/resolveLoginBoard'] = loadTs('src/utils/controllers/demo/resolveLoginBoard.ts', aliases)
   aliases['@/utils/controllers/users/provisionFirstWorkspace'] = loadTs('src/utils/controllers/users/provisionFirstWorkspace.ts', aliases)
   const legacy = loadTs('src/lib/auth/legacyCookiePlugin.ts', aliases)
   aliases['@/lib/auth/legacyCookiePlugin'] = legacy

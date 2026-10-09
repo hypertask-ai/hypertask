@@ -503,6 +503,7 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
       signSession: () => 'session',
     },
     '@/utils/controllers/demo/adoptGuestBoards': { adoptGuestBoards: async () => {} },
+    '@/utils/controllers/demo/resolveLoginBoard': { resolveLoginBoard: async () => undefined },
     '@/lib/auth/slimUserCookie': loadTypescriptModule('src/lib/auth/slimUserCookie.ts'),
     '@/lib/auth/emailCodeRateLimit': {
       getEmailCodeClientIp: () => clientIp,
