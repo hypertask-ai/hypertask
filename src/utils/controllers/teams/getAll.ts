@@ -73,7 +73,8 @@ const getAllTeams = async (userId:number) => {
                     userId: true
                 },
                 where: {
-                    userId: parseInt(userId.toString())
+                    userId: parseInt(userId.toString()),
+                    agentId: null,
                 }
             })
 

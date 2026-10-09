@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { broadcastTaskChange } from "@/lib/realtime/server";
@@ -168,10 +169,7 @@ export function taskWhere(
     project: {
       id: slug.projectId,
       status: { not: Status.Deleted },
-      OR: [
-        { members: { some: { userId } } },
-        { ownerId: userId },
-      ],
+      ...projectContentAccessWhere(userId),
     },
   };
 }
@@ -198,7 +196,7 @@ export async function findTaskNumberAlias(slug: TaskDetailSlug, userId: number) 
 export async function findTaskByTicketNumber(ticketNumber: string, userId: number, projectId?: number) {
   const projectAccess = {
     status: { not: Status.Deleted },
-    OR: [{ members: { some: { userId } } }, { ownerId: userId }],
+    ...projectContentAccessWhere(userId),
   };
   try {
     const task = await findTaskByIdentifier(
@@ -643,6 +641,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
         AND t.status <> 'Deleted'::"Status" AND p.status <> 'Deleted'::"Status"
         AND (p."ownerId" = ${userId} OR EXISTS (
           SELECT 1 FROM "Member" m WHERE m."projectId" = p.id AND m."userId" = ${userId}
+            AND m."agentId" IS NULL
         ))
       LIMIT 1
     ),

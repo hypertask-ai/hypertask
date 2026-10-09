@@ -177,7 +177,7 @@ test("personal empty-column visibility writes only the authenticated user's view
   ]);
   assert.deepEqual(where.project_view.project.OR, [
     { ownerId: 6 },
-    { members: { some: { userId: 6, status: "Accepted" } } },
+    { members: { some: { userId: 6, agentId: null, status: "Accepted" } } },
   ]);
 });
 

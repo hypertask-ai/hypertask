@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 export const includeSavedContentComment = (
   userId: number,
@@ -64,20 +65,7 @@ export const includeSavedContentComment = (
 export const fetchProjectIds = async (userId: number) => {
   const projectIds = await prisma.project.findMany({
     where: {
-      OR: [
-        {
-          members: {
-            some: {
-              userId,
-            },
-          },
-        },
-        {
-          ownerId: {
-            in: [userId],
-          },
-        },
-      ],
+      ...projectContentAccessWhere(userId),
     },
     select: {
       id: true,

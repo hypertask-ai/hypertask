@@ -40,7 +40,7 @@ const getAllTeamsSidebar = async (userId: number) => {
                                 ownerId: parseInt(userId.toString())
                             },
                             {
-                                members: { some: { userId: userId } }
+                                members: { some: { userId: userId, agentId: null } }
                             }
                         ],
                         status: "Normal",
@@ -68,7 +68,8 @@ const getAllTeamsSidebar = async (userId: number) => {
                 userId: true
             },
             where: {
-                userId: parseInt(userId.toString())
+                userId: parseInt(userId.toString()),
+                agentId: null,
             }
         })
         console.log("Member projects:", member_projects);
@@ -106,7 +107,7 @@ const getAllTeamsSidebar = async (userId: number) => {
                         OR: [
                             {
                                 // Projects where user is a member
-                                members: { some: { userId: userId } }
+                                members: { some: { userId: userId, agentId: null } }
                             },
                             {
                                 // Projects where user is the owner

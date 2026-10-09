@@ -39,7 +39,8 @@ export const getTeamInviteUrl = async (userId: number, teamId: string) => {
         {
           members: {
             some: {
-              userId
+              userId,
+              agentId: null,
             }
           }
         }

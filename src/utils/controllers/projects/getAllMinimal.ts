@@ -1,3 +1,4 @@
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
@@ -95,10 +96,7 @@ export const extraMinimalProjectWhere = (
   status: "Normal",
   teamId: { not: null },
   googleAccount: { isNot: null },
-  OR: [
-    { ownerId: parseInt(userId.toString(), 10) },
-    { members: { some: { userId } } },
-  ],
+  ...getProjectWhere(userId),
 });
 
 const getAllMinimal = async (
