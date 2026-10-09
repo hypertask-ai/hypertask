@@ -156,7 +156,7 @@ export function renderAgentFirstTaskEmail(input: {
     html: renderLayout(
       {
         heading: subject,
-        listHtml: `<div class="content-list" style="margin:0 0 24px;color:#262525;font-size:15px;line-height:1.6;"><p>${escapeHtml(input.agentName)} completed '${escapeHtml(input.taskTitle)}' on ${escapeHtml(input.boardName)}.</p><p>Hypertask works best when your team and your agents share the board.</p></div>`,
+        listHtml: `<div class="content-list" style="margin:0 0 24px;color:#18181b;font-size:15px;line-height:1.6;"><p>${escapeHtml(input.agentName)} completed '${escapeHtml(input.taskTitle)}' on ${escapeHtml(input.boardName)}.</p><p>Hypertask works best when your team and your agents share the board.</p></div>`,
         ctaLabel: "Review the work",
         secondaryCta: {
           label: "Invite a teammate",

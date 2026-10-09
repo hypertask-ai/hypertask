@@ -403,14 +403,14 @@ test("screenshot renders the actual email HTML locally without sending", { skip:
       const style = getComputedStyle(link);
       return { background: style.backgroundColor, border: style.borderWidth, color: style.color };
     });
-    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(133, 133, 133)" });
+    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(114, 114, 121)" });
     await page.screenshot({ path: path.join(directory, "email-v2.png"), fullPage: true });
     await page.screenshot({ path: path.join(directory, "first-task-email-desktop.png"), fullPage: true });
     await page.setViewportSize({ width: 390, height: 700 });
     await page.screenshot({ path: path.join(directory, "first-task-email-phone.png"), fullPage: true });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     await page.emulateMedia({ colorScheme: "dark" });
-    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(165, 165, 165)" });
+    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(142, 144, 147)" });
     await page.screenshot({ path: path.join(directory, "first-task-email-dark.png"), fullPage: true });
   } finally { await browser.close(); }
 });
