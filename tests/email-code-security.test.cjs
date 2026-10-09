@@ -483,8 +483,8 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/themePreferences': loadTypescriptModule('src/lib/themePreferences.ts'),
     '@/utils/controllers/users/autoJoinByEmailDomain': async () => {},
-    '@/utils/controllers/users/completeOnboardingStep': {
-      CompleteOnboardingFirstStep: async () => {},
+    '@/utils/controllers/users/provisionFirstWorkspace': {
+      provisionFirstWorkspace: async () => {},
     },
     '@/lib/constants/constants': { companyRoleOptions: [], companySizeOptions: [] },
     '@/lib/prisma': {

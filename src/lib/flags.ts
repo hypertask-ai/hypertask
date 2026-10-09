@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
@@ -222,6 +223,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Keeps demo work when signing up by email instead of creating an extra starter board and task.",
+  },
   {
     key: HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
     kind: "bugfix",

@@ -5,7 +5,7 @@ import update_or_create_user from '@/utils/controllers/users/update_or_create_us
 import { IProject, ITaskShare } from '@/models/model'
 import authConfig from '@/lib/configs/auth.config'
 import autoJoinByEmailDomain from '@/utils/controllers/users/autoJoinByEmailDomain'
-import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep'
+import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, clearBetterAuthSessionCookies, sessionCookieOptions, signSession } from '@/lib/auth/session'
@@ -195,8 +195,9 @@ export async function POST(request: NextRequest) {
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
         console.log('🚀 Completing onboarding step 1 for new email-link user')
-        const onboardingResult = await CompleteOnboardingFirstStep(
+        const onboardingResult = await provisionFirstWorkspace(
           userData as any,
+          request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam', // Default team title
           'MyBoard', // Default board title
           companySizeOptions[0], // Default: "Just me"
@@ -210,9 +211,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // HTPR-4893: this browser may still be carrying the guest session it signed in
-    // from, so hand that guest's boards over before we read the board list below —
-    // then the adopted board is what prevBoard points the user at.
+    // Returning users and flag-Off signups still need the original adoption hook.
+    // Flag-On signups adopt before provisioning in provisionFirstWorkspace.
     await adoptGuestBoards(request.cookies.get(SESSION_COOKIE)?.value, userData!.id)
 
     // Get user's projects (EXACTLY like verify-code route)
