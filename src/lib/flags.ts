@@ -72,7 +72,6 @@ import {
   FIGMA_CONNECT_FLAG,
   GOOGLE_CALENDAR_FLAG,
   CONFIRMED_PROPOSAL_HEADING_FLAG,
-  LAZY_EMOJI_LIST_FLAG,
   LOCAL_WRITING_ASSISTANCE_FLAG,
   PAGE_MENTIONS_FLAG,
   SHORTCUT_NUDGES_FLAG,
@@ -165,6 +164,7 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6157-new-task-auto-description",
   "htpr-6166-scoped-board-refetch",
   "htpr-6129-mobile-agent-chat-viewport",
+  "htpr-6059-lazy-emoji-list",
   "htpr-6322-agent-chat-parked-reply",
   "hyfa-43-factory-owner-preview",
   "htpr-6072-shallow-board-switch",
@@ -220,6 +220,7 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-6035-agent-chat-skills": true,
   "htpr-6166-scoped-board-refetch": true,
   "htpr-6129-mobile-agent-chat-viewport": true,
+  "htpr-6059-lazy-emoji-list": true,
 } as const;
 
 export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
@@ -900,13 +901,6 @@ const FEATURE_FLAG_DEFINITIONS = [
     shippedOn: "2026-09-08",
     description:
       "Shows each scheduled Manager loop cycle in Agent Chat as a timestamped activity entry, including quiet and failed cycles.",
-  },
-  {
-    key: LAZY_EMOJI_LIST_FLAG,
-    kind: "improvement",
-    shippedOn: "2026-09-08",
-    description:
-      "Downloads the editor's big emoji list only when you type a colon, instead of on every task open. Nothing visible changes.",
   },
   {
     key: POSTHOG_ERROR_ALERT_FLAG,

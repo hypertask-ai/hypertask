@@ -28,11 +28,7 @@ import SlashCommands from "./Extensions/SlashCommands/SlashCommands";
 import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
 import LazyEmoji from "./Extensions/LazyEmoji";
-import { ensureEmojiData } from "./Extensions/lazyEmojiData";
-import {
-  LAZY_EMOJI_LIST_FLAG,
-  LOCAL_WRITING_ASSISTANCE_FLAG,
-} from "@/lib/flags/keys";
+import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import suggestion from "./suggestion";
 import { createMentionData } from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
@@ -102,11 +98,6 @@ const useTiptap = ({
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
-  // HTPR-6059: with the flag on, the emoji dataset downloads only when the
-  // first colon is typed (see suggestion.js items). With the flag off, the
-  // eager fetch below restores the old availability, as one async chunk
-  // instead of bytes bundled into the editor chunk.
-  const lazyEmojiList = useFlag(LAZY_EMOJI_LIST_FLAG);
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
@@ -286,13 +277,6 @@ const useTiptap = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   );
-  useEffect(() => {
-    if (!lazyEmojiList) {
-      void ensureEmojiData().catch((error) => {
-        console.warn("[emoji] eager emoji dataset load failed", error);
-      });
-    }
-  }, [lazyEmojiList]);
   const editor = useEditor({
     extensions,
     content: initialContent,

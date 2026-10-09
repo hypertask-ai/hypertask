@@ -168,6 +168,33 @@ test("dataset install activates lookup, storage, and the emoticon rule", async (
   assert.equal((found as { name: string }).name, emoticonItem.name);
 });
 
+test("the editor always uses lazy emoji loading without a feature flag or eager effect", () => {
+  const tiptap = fs.readFileSync(
+    path.join(root, "src/components/RTE/Tiptap.ts"),
+    "utf8",
+  );
+  const retired = /LAZY_EMOJI_LIST_FLAG|htpr-6059-lazy-emoji-list|lazyEmojiList|ensureEmojiData/;
+  assert.throws(() => assert.doesNotMatch("void ensureEmojiData()", retired));
+  assert.doesNotMatch(tiptap, retired);
+  assert.doesNotMatch(
+    fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"),
+    retired,
+  );
+  assert.equal(
+    Object.hasOwn(
+      JSON.parse(fs.readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8")).modes,
+      "htpr-6059-lazy-emoji-list",
+    ),
+    false,
+  );
+  assert.match(tiptap, /LazyEmoji\.configure\(\{\s*enableEmoticons: true,\s*suggestion: suggestion,/);
+  const suggestion = fs.readFileSync(
+    path.join(root, "src/components/RTE/suggestion.js"),
+    "utf8",
+  );
+  assert.match(suggestion, /items: async[\s\S]*await ensureEmojiData\(\)[\s\S]*return editor\.storage\.emoji\.emojis/);
+});
+
 test("no source file statically imports the emoji package data", () => {
   const tiptap = fs.readFileSync(
     path.join(root, "src/components/RTE/Tiptap.ts"),
