@@ -105,8 +105,10 @@ that silently reintroduces anonymous pulls.
 Fallback for a GHCR outage: open an explicit recovery PR that restores the CI
 image references to `public.ecr.aws/docker/library/<image>:<tag>@<same digest>`
 (Soketi uses `quay.io/soketi/soketi:<tag>@<same digest>`). In that same PR,
-update the registry-specific assertions in `tests/ci-images.test.cjs` and
-`tests/browser-smoke-workflow.test.cjs` to expect those fallback references;
+remove GHCR login steps and service credentials from the fallback consumers
+so a GHCR login outage cannot block recovery. Update the registry-specific
+assertions in `tests/ci-images.test.cjs` and `tests/browser-smoke-workflow.test.cjs`
+to expect those fallback references;
 otherwise the recovery PR will fail the GHCR-only assertions. Retain exact
 digest checks, required check names, and the mirror workflow, then rerun the
 checks. Do not change production deployment configuration. Both
