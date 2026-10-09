@@ -263,7 +263,7 @@ test("changed-file typecheck has no diagnostics in feature code", { skip: !proce
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   assert.equal(parsed.errors.length, 0);
   const program = ts.createProgram(parsed.fileNames, { ...parsed.options, incremental: false, noEmit: true });
-  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts"];
+  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "src/utils/controllers/section/sectionService.ts", "src/lib/ai/tools/section.ts"];
   const diagnostics = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
   for (const file of files) {
     const source = program.getSourceFile(path.join(root, file));
