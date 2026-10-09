@@ -64,7 +64,7 @@ G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
 unset -f gh
 
-# Merge scope: other repos need neither a Hypertask title nor premerge evidence.
+# Only an exact, plain single-command allowlist can exempt an unrelated repo.
 gh() {
   if [[ ${1:-} == pr && ${2:-} == view && "$*" == *'--json title'* ]]; then
     echo "${GUARD_TITLE:-Invalid PR title}"
@@ -72,13 +72,18 @@ gh() {
 }
 hypertask() { echo '{"success":true,"tasks":[{"id":1}]}'; }
 export -f gh hypertask
-for option in '-R valentinyeo/wazig' '--repo valentinyeo/wazig' '--repo=valentinyeo/wazig' '-Rvalentinyeo/wazig'; do
-  G 0 $M 180 "$option"
+for option in '-R valentinyeo/wazig' '--repo valentinyeo/wazig' '--repo=valentinyeo/wazig'; do
+  G 0 $M 180 "$option" --squash
+  G 0 FOO=a_b./:- SHIP_BASE=main $M 180 --delete-branch "$option" --merge --rebase
+  G 2 $M 180 "$option" --auto
+  G 2 $M 180 "$option" --body release
+  G 2 $M 180 "$option" -R valentinyeo/wazig
+  G 2 $M 180 "$option" --repo=valentinyeo/wazig
 done
 G 0 SHIP_REPO=valentinyeo/wazig SHIP_BASE=main $M 180 -R valentinyeo/wazig
-G 0 SHIP_REPO=valentinyeo/wazig SHIP_BASE=main $M 180
-SHIP_REPO=valentinyeo/wazig SHIP_BASE=main G 0 $M 180
 G 0 SHIP_REPO=hypertask-ai/hypertask $M 180 -R valentinyeo/wazig
+G 2 SHIP_REPO=valentinyeo/wazig SHIP_BASE=main $M 180
+SHIP_REPO=valentinyeo/wazig SHIP_BASE=main G 2 $M 180
 for repo in hypertask-ai/hypertask hypertask-ai/cli; do
   G 2 $M 180 -R "$repo"
   G 2 SHIP_REPO=valentinyeo/wazig $M 180 --repo="$repo"
@@ -86,35 +91,47 @@ for repo in hypertask-ai/hypertask hypertask-ai/cli; do
   G 2 SHIP_REPO="$repo" $M 180
   SHIP_REPO="$repo" G 2 $M 180
 done
+G 2 $M 180 -R Hypertask-AI/Hypertask --squash
+G 2 $M 180 -R Hypertask-AI/CLI --squash
 G 2 $M 180 --repo=github.com/Hypertask-AI/Hypertask
 G 2 $M 180 '# -R valentinyeo/wazig'
-G 2 SHIP_REPO=hypertask-ai/hypertask $M 180 '# --repo=valentinyeo/wazig'
+G 2 SHIP_REPO=valentinyeo/wazig $M 180 --body release#1 -R hypertask-ai/hypertask
+G 2 $M 180 -R valentinyeo/wazig --body "'a; b'"
+G 2 cd x '&&' $M 180 -R valentinyeo/wazig
+G 2 $M 180
+G 2 $M 180 -R valentinyeo/wazig -R valentinyeo/wazig
+G 2 $M 180 -Rvalentinyeo/wazig
+G 2 $M 180 -R 'valentinyeo/"wa"zig'
 G 2 $M 180 -R 'hypertask-ai/"hyper"task'
 G 2 $M 180 --repo='hypertask-ai/'"'cli'"
-G 0 $M 180 -R 'valentinyeo/"wa"zig'
 G 2 $M 180 --subject "'-Rvalentinyeo/wazig'"
 G 2 $M 180 --body "'text -R valentinyeo/wazig'"
-G 0 $M 180 -R valentinyeo/wazig --subject "'-Rhypertask-ai/hypertask'"
+G 2 $M 180 -R valentinyeo/wazig --subject "'-Rhypertask-ai/hypertask'"
 G 2 $M 180 -R '"$TARGET_REPO"'
-G 0 $M 180 -R valentinyeo/wazig '&&' $M 180 -R valentinyeo/wazig
+G 2 $M 180 -R valentinyeo/wazig '&&' $M 180 -R valentinyeo/wazig
 G 2 SHIP_REPO=valentinyeo/wazig $M 180 '&&' $M 180 -R hypertask-ai/hypertask
+for suffix in '""' "''" '#' ';' '&' '|' '$' '`' '(' ')' '<' '>' $'\n'; do
+  G 2 "$M 180 -R valentinyeo/wazig --squash$suffix"
+done
+for repo in valentinyeo/wazig/extra github.com:valentinyeo/wazig; do
+  G 2 $M 180 -R "$repo"
+done
+G 2 $M branch-name -R valentinyeo/wazig
+G 2 $M 180 -R valentinyeo/wazig --
+G 2 FOO='"plain"' $M 180 -R valentinyeo/wazig
 GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 0 SHIP_REPO=hypertask-ai/cli SHIP_BASE=main $M 180
 GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 0 $M 180 -R hypertask-ai/cli
 GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 2 $M -R hypertask-ai/cli # CLI still requires a PR number.
 
-# Resolve the cwd remote when neither a repo option nor SHIP_REPO is provided.
+# No cwd or remote fallback can exempt a merge without an explicit repo.
 git init -q "$E/guard-repo"
 ln -s "$PWD/ship-check" "$E/guard-repo/ship-check"
 pushd "$E/guard-repo" >/dev/null
 for remote in https://github.com/valentinyeo/wazig.git git@github.com:valentinyeo/wazig.git ssh://git@github.com/valentinyeo/wazig.git; do
   git config remote.origin.url "$remote"
-  SHIP_REPO= G 0 $M 180
-  SHIP_REPO= G 2 cd /path/to/hypertask '&&' $M 180
-  SHIP_REPO= G 0 cd /path/to/hypertask '&&' $M 180 -R valentinyeo/wazig
-done
-for repo in hypertask-ai/hypertask hypertask-ai/cli; do
-  git config remote.origin.url "git@github.com:$repo.git"
   SHIP_REPO= G 2 $M 180
+  SHIP_REPO= G 2 cd /path/to/hypertask '&&' $M 180
+  SHIP_REPO= G 2 cd /path/to/hypertask '&&' $M 180 -R valentinyeo/wazig
 done
 popd >/dev/null
 unset -f gh hypertask

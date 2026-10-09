@@ -522,7 +522,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted cwd_changed=false
+  local cmd seg rest t c pr out checks setting v part unquoted
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
@@ -530,10 +530,21 @@ guard() {
   export SHIP_CHECKOUT SHIP_WORKER
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
-  cmd=$(jq -r '.tool_input.command // empty')
+  local repo_name='[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+'
+  local flags='([[:blank:]]+--(squash|merge|rebase|delete-branch))*'
+  local exemption="^[[:blank:]]*([A-Za-z_][A-Za-z0-9_]*=[A-Za-z0-9_./:-]+[[:blank:]]+)*gh[[:blank:]]+pr[[:blank:]]+merge[[:blank:]]+[0-9]+${flags}[[:blank:]]+(-R[[:blank:]]+|--repo([[:blank:]]+|=))($repo_name)${flags}[[:blank:]]*$"
+  # Preserve trailing newlines so the whole-command allowlist cannot hide shell syntax.
+  cmd=$(jq -jr '.tool_input.command // empty'; printf '.')
+  cmd=${cmd%.}
+  if [[ $cmd =~ $exemption ]]; then
+    case "${BASH_REMATCH[6],,}" in
+      hypertask-ai/hypertask|hypertask-ai/cli) ;;
+      *) exit 0 ;;
+    esac
+  fi
   # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
-    REPO=${SHIP_REPO:-}; BASE=${SHIP_BASE:-production}
+    REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
     SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
@@ -556,40 +567,8 @@ guard() {
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
       echo "ship-check blocked: cannot parse the leading environment assignments before the protected command." >&2; exit 2
     fi
-    [[ $rest =~ ^(cd|pushd|popd)([[:space:]]|$) ]] && cwd_changed=true
-    # Only the app and CLI repos use the Hypertask ticket-title contract.
     if [[ $rest =~ ^$merge ]]; then
-      # Shell comments and merge-message text cannot select a different repo.
-      REPO=$(python3 - "$rest" "$REPO" <<'PY'
-import re, shlex, sys
-try:
-    repo = sys.argv[2]
-    args = iter(shlex.split(sys.argv[1], comments=True)[3:])
-    for arg in args:
-        if arg == '--':
-            break
-        if arg in ('-R', '--repo'):
-            repo = next(args)
-        elif arg.startswith('--repo='):
-            repo = arg.split('=', 1)[1]
-        elif arg.startswith('-R'):
-            repo = arg[2:]
-        elif arg in ('-A', '--author-email', '-b', '--body', '-F', '--body-file',
-                     '--match-head-commit', '-t', '--subject'):
-            next(args)
-    if repo and not re.fullmatch(r'[A-Za-z0-9_./:@-]+', repo):
-        raise ValueError('non-literal repo')
-    print(repo)
-except (ValueError, StopIteration):
-    sys.exit(1)
-PY
-      ) || { echo "ship-check blocked the merge: cannot parse the target repo." >&2; exit 2; }
-      if [ -z "$REPO" ]; then
-        [ "$cwd_changed" = false ] || { echo "ship-check blocked the merge: specify --repo after changing directories." >&2; exit 2; }
-        REPO=$(git remote get-url origin 2>/dev/null) || { echo "ship-check blocked the merge: cannot determine the target repo." >&2; exit 2; }
-      fi
-      REPO=${REPO,,}; REPO=${REPO%/}; REPO=${REPO%.git}; REPO=${REPO##*github.com[:/]}
-      case "$REPO" in hypertask-ai/hypertask|hypertask-ai/cli) ;; *) continue ;; esac
+      [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist)." >&2; exit 2; }
