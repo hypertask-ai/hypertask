@@ -119,7 +119,7 @@ const restoreReminderNotifications = async (
             {
               OR:[
                 {
-                  members:{some:{userId:reminder.userId}}
+                  members:{some:{userId:reminder.userId,agentId:null}}
                 },
                 {
                   ownerId:reminder.userId

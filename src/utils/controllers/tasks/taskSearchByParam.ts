@@ -1,4 +1,5 @@
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import {
   aiImageModelDefinitions,
@@ -29,6 +30,7 @@ const taskSearchByParam = async (
         where: {
           id: projectId,
           status: "Normal",
+          ...projectContentAccessWhere(userid),
         },
         select: {
           owner: true,
@@ -53,7 +55,7 @@ const taskSearchByParam = async (
     ]);
 
     if (!projectIds.includes(projectId)) {
-      return { status: 403, json: [] };
+      return { status: 404, json: [] };
     }
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
@@ -365,20 +367,7 @@ const fetchidlist = async (id: number) => {
     if (id) {
       const projectid = await prisma.project.findMany({
         where: {
-          OR: [
-            {
-              members: {
-                some: {
-                  userId: id,
-                },
-              },
-            },
-            {
-              ownerId: {
-                in: [id],
-              },
-            },
-          ],
+          ...projectContentAccessWhere(id),
         },
         select: {
           id: true,

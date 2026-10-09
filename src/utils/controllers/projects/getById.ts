@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 
 const getProjectById = async (projectId: number, userId: number) => {
@@ -7,10 +8,7 @@ const getProjectById = async (projectId: number, userId: number) => {
         project = await prisma.project.findFirst({
             where: {
                 id: projectId,
-                OR: [
-                    { ownerId: userId },
-                    { members: { some: { userId: userId } } }
-                ]
+                ...projectContentAccessWhere(userId)
             },
             include: {
                 section: {

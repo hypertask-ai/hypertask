@@ -25,7 +25,7 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                             some: {
                                 OR: [
                                     { ownerId: userId },
-                                    { members: { some: { userId: userId } } }
+                                    { members: { some: { userId: userId, agentId: null } } }
                                 ],
                                 status: "Normal"
                             }
@@ -47,7 +47,7 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                     where: {
                         OR: [
                             { ownerId: userId },
-                            { members: { some: { userId: userId } } }
+                            { members: { some: { userId: userId, agentId: null } } }
                         ],
                         status: "Normal"
                     },

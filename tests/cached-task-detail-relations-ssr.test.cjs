@@ -26,6 +26,7 @@ function load({ enabled = [], task = null, legacy = false } = {}) {
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   };
+  mocks["@/utils/controllers/projects/getAllIncludes"] = require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", mocks);
   const source = fs.readFileSync(legacy ? path.join(__dirname, "fixtures/htpr-6972/load.ts.txt") : path.join(root, file), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   const exports = {};
@@ -72,7 +73,7 @@ test("flagged SSR relations carry known full and empty descriptions for cold cac
 test("relation body projection is source-board scoped and deleted or cross-board relations cannot open", () => {
   const { taskDetailInclude, taskWhere } = load();
   assert.deepEqual(taskWhere({ projectId: 15, uniqueIndex: 7 }, 6).project, {
-    id: 15, status: { not: "Deleted" }, OR: [{ members: { some: { userId: 6 } } }, { ownerId: 6 }],
+    id: 15, status: { not: "Deleted" }, OR: [{ ownerId: 6 }, { members: { some: { userId: 6, agentId: null } } }],
   });
   const include = taskDetailInclude(6, 15, true);
   const client = new QueryClient();

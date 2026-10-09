@@ -373,7 +373,7 @@ test("unscheduled query retains membership, limits, saved content and the search
   for (const query of [{ searchQuery: "term" }, {}]) {
     const fx = fixture("getUnscheduled", {}, true);
     await invoke(fx, "getUnscheduled", { query }, "current");
-    assert.deepEqual(fx.effects[0], ["boards", { where: { OR: [{ members: { some: { userId: 985 } } }, { ownerId: { in: [985] } }] }, select: { id: true } }]);
+    assert.deepEqual(fx.effects[0], ["boards", { where: { ownerId: 985 }, select: { id: true } }]);
     const args = fx.effects[1][1];
     assert.equal(args.take, 10);
     assert.deepEqual(args.orderBy, query.searchQuery ? { createdAt: "desc" } : { updatedAt: "desc" });
