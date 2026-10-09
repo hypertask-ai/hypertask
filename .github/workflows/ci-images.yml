@@ -38,6 +38,7 @@ jobs:
       packages: write
     strategy:
       fail-fast: false
+      max-parallel: 1
       matrix:
         include: ${{ fromJSON(needs.inventory.outputs.images) }}
     steps:
@@ -61,7 +62,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker buildx imagetools create --prefer-index=false --tag "$DESTINATION" "$SOURCE"
+          for attempt in 1 2 3; do
+            if docker buildx imagetools create --prefer-index=false --tag "$DESTINATION" "$SOURCE"; then break; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 30))"
+          done
           actual="sha256:$(docker buildx imagetools inspect --raw "$DESTINATION" | sha256sum | cut -d' ' -f1)"
           [ "$actual" = "$DIGEST" ] || { echo "::error::Mirror digest changed: $actual != $DIGEST"; exit 1; }
           printf '%s -> %s@%s\n' "$SOURCE" "$DESTINATION" "$actual" >> "$GITHUB_STEP_SUMMARY"
