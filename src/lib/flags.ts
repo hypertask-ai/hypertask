@@ -13,6 +13,7 @@ import {
   HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
+  HTPR_7025_WELCOME_EMAIL_FLAG,
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
   HTPR_7031_INVITE_EMAIL_FLAG,
   HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
@@ -148,7 +149,7 @@ const FEATURE_FLAG_OWNER = {
   email: "valentin.yeo@gmail.com",
 } as const;
 export const FEATURE_FLAG_QA_USER_ID = 985;
-const FEATURE_FLAG_QA_USER = {
+export const FEATURE_FLAG_QA_USER = {
   userId: FEATURE_FLAG_QA_USER_ID,
   email: "valentin@hypertask.ai",
 } as const;
@@ -266,6 +267,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     defaultMode: "OWNER_AND_QA",
     shippedOn: "2026-10-09",
     description: "Introduces the board in sign-in emails for new recipients. Recipients without an account are ineligible for Owner + QA; this variant stays off until the owner selects Everyone.",
+  },
+  {
+    key: HTPR_7025_WELCOME_EMAIL_FLAG,
+    kind: "feature",
+    shippedOn: "2026-10-09",
+    description: "Sends new verified users a welcome email after sign-in with Claude Code connection instructions and their board link.",
   },
   {
     key: HTPR_7033_CLI_INSTALL_COMMAND_FLAG,

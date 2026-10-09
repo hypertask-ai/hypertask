@@ -285,6 +285,8 @@ async function loginRun(before, missing = false) {
     "@/utils/controllers/demo/adoptGuestBoards": { adoptGuestBoards: async (...input) => { effects.push(["adopt", input]); } },
     "@/lib/auth/slimUserCookie": { slimUserForCookie: (user) => ({ id: user.id }) },
     "@/lib/auth/themeCookie": { seedResponseThemeCookie: () => {} },
+    "@/lib/onboarding/emails/welcome": { maybeSendWelcomeEmail: async () => "flag_off" },
+    "@vercel/functions": { waitUntil: () => {} },
     "@/lib/auth/emailCodeRateLimit": { getEmailCodeClientIp: () => "198.51.100.4", claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }) },
     "@/lib/telemetry/signupAnalytics": { signupAttributionFromHeaders: () => ({}) },
   });

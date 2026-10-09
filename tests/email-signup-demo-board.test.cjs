@@ -132,6 +132,8 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     } },
     '../assignees/assign': async () => {},
     '@/lib/stripeCustomerName': { stripeCustomerName: () => 'New' },
+    '@vercel/functions': { waitUntil: () => {} },
+    '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
   }
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
