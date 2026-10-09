@@ -54,6 +54,7 @@ const prisma = {
 const mocks = {
   "@/lib/prisma": { default: prisma },
   "@/lib/flags": flagsMock,
+  "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "TEST" },
   "@/lib/subscription": { stripe: {} },
   "@/lib/stripeCustomerName": { stripeCustomerName: () => "Test" },

@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -81,6 +82,7 @@ export default  async function handler(
             },
             include:{project:{select:{name:true}}},
         })
+        recordActivationOccurrence(newInvite.userId, "teammate_invited", newInvite.id, { method: "link" });
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)

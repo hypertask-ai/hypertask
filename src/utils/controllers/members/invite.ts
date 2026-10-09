@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import createLog from "../logs/createLog";
@@ -267,6 +268,8 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                                     }
                                 }
                             })
+
+                            recordActivationOccurrence(fetchedInvite.userId, "invite_accepted", `${fetchedInvite.id}:${userId}`, { inviteeId: userId });
 
                             if(PaymentResponse ==="OK" || PaymentResponse === "Awaiting") {
                                 // Awaited on purpose. The response reports trialStatus: true either

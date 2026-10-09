@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";
@@ -263,6 +264,8 @@ export const createOnboardingSampleBoardProject = async ({
     // in sync with the relational sections we create below.
     sections: STARTER_BOARD_SECTIONS.map((s) => s.section_title),
   });
+
+  recordActivationOccurrence(exist_user.id, "board_created", String(Project.id), { source: "seeded" });
 
   const projectIdentifier = (
     Project.uniqueIdentifier ?? uniqueIdentifier

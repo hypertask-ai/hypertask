@@ -114,6 +114,7 @@ function fixture(options = {}) {
         return options.enabled !== false;
       },
     },
+    "@/lib/telemetry/activationAnalytics": { trackActivation: () => {} },
     "@/lib/email/sendEmail": { sendEmail: async (input) => {
       calls.sent.push(input);
       if (options.sendFailure) throw new Error("Provider failed");

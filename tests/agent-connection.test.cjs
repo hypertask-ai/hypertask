@@ -14,6 +14,7 @@ function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, r
   const sends = [];
   const queries = [];
   const updates = [];
+  const activations = [];
   const prisma = {
     logs: {
       findFirst: async (query) => {
@@ -41,6 +42,7 @@ function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, r
     },
   };
   const mocks = {
+    "@/lib/telemetry/activationAnalytics": { trackActivation: (...args) => { activations.push(args); return new Promise(() => {}); } },
     "@prisma/client": enums,
     "@/lib/prisma": prisma,
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: LAYOUT_FLAG, isFeatureEnabled: async (key, id) => { assert.ok([FLAG, LAYOUT_FLAG].includes(key)); assert.ok([42, 985].includes(id)); flagReads.push([key, id]); return key === LAYOUT_FLAG || (id === 985 ? qaEnabled : enabled); } },
@@ -50,7 +52,7 @@ function harness({ rows = [], enabled = true, qaEnabled = true, armed = false, r
     "@/lib/onboarding/emails/agentConnected": { renderAgentConnectedEmail: (client, boardId) => ({ subject: "Your agent is connected", html: `${client}:${boardId}` }) },
     "@/utils/controllers/notifications/emailTemplates": {},
   };
-  return { module: load("src/lib/onboarding/agentConnection.ts", mocks), prisma, rows, sends, claims, queries, updates, flagReads, redisReads };
+  return { module: load("src/lib/onboarding/agentConnection.ts", mocks), prisma, rows, sends, claims, queries, updates, flagReads, redisReads, activations };
 }
 const row = (id, log, at = id) => ({ id, log, LoggedById: 42, createdAt: new Date(at * 1000) });
 
@@ -82,6 +84,7 @@ test("email sends only once for first row, even concurrent first-row callbacks a
   assert.equal(h.claims.size, 1);
   assert.equal(h.updates.length, 1);
   assert.equal(h.updates[0].data.success, true);
+  assert.deepEqual(h.activations, [[42, "lifecycle_email_sent", { type: "agent_connected" }]]);
   const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
   assert.match(schema.match(/model WebhookEvent \{[\s\S]*?\n\}/)[0], /@@unique\(\[userId, eventType\]\)/);
 });
@@ -169,6 +172,7 @@ test("email failures do not throw, and keep the durable claim against uncertain 
   assert.equal(h.sends.length, 1);
   assert.equal(h.claims.size, 1);
   assert.equal(h.updates.length, 0);
+  assert.deepEqual(h.activations, []);
 });
 
 test("dismissal is server persisted and already-connected state survives reload", async () => {

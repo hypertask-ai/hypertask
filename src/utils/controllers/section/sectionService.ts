@@ -6,6 +6,7 @@
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
+import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
 import {
@@ -338,14 +339,16 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
           }))
         })
       }
-      return { tasks, beforeTasks }
+      return { tasks, beforeTasks, timestamp }
     })
     movedTaskCount = moved.tasks.length
     if (agentId && moved.beforeTasks.length) {
       const afterTasks = new Map(moved.tasks.map((task) => [task.id, task]))
       scheduleAgentFirstTaskEmailBatch(moved.beforeTasks.flatMap((before) => {
         const after = afterTasks.get(before.id)
-        return after ? [{ before, after }] : []
+        if (!after) return []
+        recordAgentTaskCompletion(before, { ...after, updatedAt: moved.timestamp }, agentId)
+        return [{ before, after }]
       }), userId, agentId)
     }
   }

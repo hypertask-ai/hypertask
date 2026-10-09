@@ -8,6 +8,9 @@ import {
 const root = process.cwd();
 const testsRoot = path.join(root, "tests");
 
+// Match Next's server alias in plain Node tests, including nested test processes.
+process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${path.join(testsRoot, "helpers/register-server-only.cjs")}`.trim();
+
 function relative(absolute) {
   return path.relative(root, absolute).split(path.sep).join("/");
 }
@@ -62,6 +65,7 @@ const isolatedCjsTests = new Set([
   "tests/action-archive-cache.test.cjs",
   "tests/agent-run-activities.test.cjs",
   "tests/feature-flags.test.cjs",
+  "tests/htpr-6478-regressions.test.cjs",
   "tests/management-key-route.test.cjs",
   "tests/management-key-route-wiring.test.cjs",
   "tests/mcp-usage-auth.test.cjs",

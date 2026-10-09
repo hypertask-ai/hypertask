@@ -151,6 +151,7 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     "@vercel/functions": { waitUntil: (work) => scheduled.push(work) },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": flags,
+    "@/lib/telemetry/activationAnalytics": { trackActivation: async () => {} },
     "@/lib/redis": { getRedis: async () => ({}) },
     "@/lib/onboarding/qaArm": { isOnboardingQaArmed: async () => true },
     "@/lib/email/sendEmail": { sendEmail: async (mail) => sent.push(mail) },

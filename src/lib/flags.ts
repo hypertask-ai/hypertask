@@ -14,6 +14,7 @@ import {
   HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
   HTPR_7028_FIRST_TASK_EMAIL_FLAG,
   HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
+  HTPR_7034_ACTIVATION_ANALYTICS_FLAG,
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7025_WELCOME_EMAIL_FLAG,
@@ -288,6 +289,13 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Keeps demo work when signing up by email instead of creating an extra starter board and task.",
+  },
+  {
+    key: HTPR_7034_ACTIVATION_ANALYTICS_FLAG,
+    kind: "feature",
+    shippedOn: "2026-10-09",
+    defaultMode: "OWNER_AND_QA",
+    description: "Records server-side board, agent and invitation activation milestones in PostHog.",
   },
   {
     key: HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,

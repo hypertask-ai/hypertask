@@ -9,6 +9,7 @@ import { MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
 import prisma from "@/lib/prisma";
 import { publishJob } from "@/lib/qstash";
 import { getRedis } from "@/lib/redis";
+import { trackActivation } from "@/lib/telemetry/activationAnalytics";
 import { onboardingEmailSkipReason, onboardingIdentitySkipReason } from "./eligibility";
 import { renderOnboardingEmail } from "./layout";
 
@@ -92,8 +93,8 @@ export async function sendAgentNudgeEmail(userId: number) {
       headers: unsubscribeHeaders(userId, email),
       idempotencyKey: `htpr-7027/user/${userId}`,
     });
-    // HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "agent_nudge" })
     sent = true;
+    void trackActivation(userId, "lifecycle_email_sent", { type: "agent_nudge" });
     try {
       await prisma.logs.create({ data: { log: "agent_nudge_email_sent", type: LogType.Signup, status: Status.Normal, LoggedById: userId } });
     } catch (error) {

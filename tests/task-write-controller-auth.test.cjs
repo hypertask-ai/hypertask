@@ -243,6 +243,7 @@ function loadUpdateController(
     return { newComment: { id: 1 }, shouldNotify: moveShouldNotify };
   };
   const stubs = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/models/ActivityModels.ts": {},
@@ -841,6 +842,7 @@ function loadMoveController({
   };
   let taskCount = 0;
   const stubs = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/utils/controllers/getMemberAndOwnerForBoard": async () => [],

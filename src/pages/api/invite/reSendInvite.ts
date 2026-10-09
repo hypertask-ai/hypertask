@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next/dist/shared/lib/utils'
@@ -92,7 +93,7 @@ export default  async function handler(
       await cancelInvite(invite.id, email, projectId)
       // ============== create a new notification and another email
       await createNotification(email, inviteLink, user.id, invite.id, projectId)
-      await sendEmailNotification("Invite", {
+      const sent = await sendEmailNotification("Invite", {
         sender: user.displayName ?? "",
         senderUserId: user.id,
         senderEmail: user.email,
@@ -103,6 +104,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
+      if (sent) recordActivationOccurrence(user.id, "teammate_invited", invite.id, { method: "email" });
       
   } catch (error) {
       console.log(error)

@@ -62,6 +62,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("activation analytics defaults Owner + QA and respects OFF", async () => {
+  const key = flags.HTPR_7034_ACTIVATION_ANALYTICS_FLAG;
+  assert.equal(key, "htpr-7034-activation-analytics");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
 test("sign-in expiry copy is an Everyone bugfix including anonymous recipients and respects OFF", async () => {
   const { HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: key } = flags;
   assert.equal(key, "htpr-7032-email-expiry-copy");
@@ -887,6 +898,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7032-email-expiry-copy", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7032-first-time-email", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7033-cli-install-command", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7034-activation-analytics", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },

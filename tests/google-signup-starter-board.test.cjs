@@ -114,6 +114,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
+    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
