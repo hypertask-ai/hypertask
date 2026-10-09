@@ -164,6 +164,33 @@ test("Codex is accepted without a flag; malformed choices and anonymous users re
   assert.equal((await anonymous.POST({})).status, 401);
 });
 
+test("legacy status omits client with flag off and includes it only with flag on", async () => {
+  for (const enabled of [false, true]) {
+    for (const match of [null, { at: new Date(2000), client: "Cursor" }]) {
+      for (const query of ["", "?since=1970-01-01T00:00:01.000Z"]) {
+        const h = routeHarness(enabled);
+        h.common["@/lib/flags"].isFeatureEnabled = async (key, id) => {
+          assert.equal(key, FLAG);
+          assert.equal(id, 42);
+          return enabled;
+        };
+        h.common["@/lib/onboarding/agentConnection"].getFirstAgentConnection = async (id, since) => {
+          assert.equal(id, 42);
+          assert.ok(since instanceof Date);
+          if (query) assert.equal(since.getTime(), 1000);
+          return match;
+        };
+        const api = load("src/app/api/users/ai-connection-status/route.ts", h.common);
+        const response = await api.GET({ nextUrl: new URL(`https://fixture.test/api${query}`) });
+        assert.equal(response.status, 200);
+        const legacy = { connected: !!match, at: match?.at };
+        assert.deepEqual(response.body, enabled ? { ...legacy, client: match?.client } : legacy);
+        assert.equal(Object.hasOwn(response.body, "client"), enabled);
+      }
+    }
+  }
+});
+
 test("new first-state reads and dismissal require the server flag and authenticated identity", async () => {
   for (const enabled of [true, false]) {
     const h = routeHarness(enabled);

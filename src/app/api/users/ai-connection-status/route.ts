@@ -27,7 +27,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Invalid since date" }, { status: 400 });
     }
     const match = await getFirstAgentConnection(user.id, sinceDate);
-    return NextResponse.json({ connected: !!match, at: match?.at, client: match?.client });
+    const enabled = await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, user.id);
+    const status = enabled
+      ? { connected: !!match, at: match?.at, client: match?.client }
+      : { connected: !!match, at: match?.at };
+    return NextResponse.json(status);
   } catch {
     console.error("GET [users/ai-connection-status] failed");
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

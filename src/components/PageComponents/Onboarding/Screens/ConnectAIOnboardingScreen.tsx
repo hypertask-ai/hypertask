@@ -114,6 +114,7 @@ interface ConnectionStatusProps {
 }
 
 function ConnectionStatus({ label, onConnected, first = false, visible = true }: ConnectionStatusProps) {
+  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const [connected, setConnected] = useState(false);
   const [client, setClient] = useState(label);
   const enteredAt = useRef(new Date().toISOString());
@@ -137,9 +138,10 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
 
         const data = (await response.json()) as { connected?: boolean; client?: string };
         if (!cancelled && data.connected) {
+          const connectedLabel = enabled ? data.client || label : label;
           setConnected(true);
-          setClient(data.client || label);
-          onConnected(data.client || label);
+          setClient(connectedLabel);
+          onConnected(connectedLabel);
           if (intervalId) clearInterval(intervalId);
         }
       } catch {
@@ -157,7 +159,7 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
       controller.abort();
       if (intervalId) clearInterval(intervalId);
     };
-  }, [connected, first, label, onConnected, visible]);
+  }, [connected, enabled, first, label, onConnected, visible]);
 
   return (
     <div role="status" className="flex items-center gap-2 text-content">
@@ -280,7 +282,7 @@ const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
       <div className="space-y-3">
         {liveStatus}
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {renderTools(["claude-code", "cursor", "codex", "claude", "chatgpt", "vscode", "builtin"])}
+          {renderTools(["claude-code", "cursor", "codex", "claude", "chatgpt", "vscode"])}
         </div>
       </div>
     );

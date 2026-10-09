@@ -44,7 +44,7 @@ test("compact shared picker is terminal-first, reuses CLI and MCP config, and ke
     await act(async () => reactRoot.render(React.createElement(Screen, { compact: true, visible: false, onNextScreen() {} })));
     const buttons = [...container.querySelectorAll("button")];
     assert.deepEqual(buttons.slice(0, 3).map((button) => button.textContent), ["Claude Code", "Cursor", "Codex"]);
-    assert.equal(buttons.at(-1).textContent, "Hypertask AI");
+    assert.deepEqual(buttons.map((button) => button.textContent), ["Claude Code", "Cursor", "Codex", "Claude (desktop / web)", "ChatGPT", "VS Code"]);
     assert.match(container.textContent, /Waiting for your agent\.\.\./);
     await act(async () => buttons[0].dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
     assert.match(container.textContent, /hypertask login/);
@@ -54,8 +54,27 @@ test("compact shared picker is terminal-first, reuses CLI and MCP config, and ke
     const Off = loadScreen(false);
     await act(async () => reactRoot.render(React.createElement(Off, { compact: true, onNextScreen() {} })));
     assert.match(container.textContent, /Which AI will you drive Hypertask with/);
+    assert.ok([...container.querySelectorAll("button")].some((button) => button.textContent.includes("Hypertask AI, built in")));
     assert.doesNotMatch(container.textContent, /Waiting for your agent/);
   });
+});
+
+test("shared confirmation uses the selected tool with flag off and the resolved client only with flag on", async () => {
+  for (const enabled of [false, true]) {
+    await withDOM(async ({ container, reactRoot, act, dom }) => {
+      global.fetch = async (url) => {
+        if (url.startsWith("/api/users/ai-connection-status")) {
+          assert.match(url, /\?since=/);
+        }
+        return { ok: true, json: async () => ({ connected: true, client: "Cursor" }) };
+      };
+      const Screen = loadScreen(enabled);
+      await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
+      const tool = [...container.querySelectorAll("button")].find((button) => button.textContent === "Claude Code");
+      await act(async () => tool.dispatchEvent(new dom.window.MouseEvent("click", { bubbles: true })));
+      assert.equal(container.querySelector('[role="status"]').textContent, `Connected! ${enabled ? "Cursor" : "Claude Code"} just talked to Hypertask.`);
+    });
+  }
 });
 
 test("live check polls every four seconds only while visible, uses returned client, and stops at connected", async () => {
