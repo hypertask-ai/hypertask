@@ -178,13 +178,19 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true }:
   );
 }
 
-export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = ({
+export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
+  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const screen = enabled
+    ? <ConnectAISetup {...props} />
+    : <ConnectAISetup onNextScreen={props.onNextScreen} />;
+  return screen;
+};
+
+const ConnectAISetup: React.FC<IConnectAIOnboardingScreen> = ({
   onNextScreen,
-  compact = false,
+  compact: isCompact = false,
   visible = true,
 }) => {
-  const connectCheckEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const isCompact = connectCheckEnabled ? compact : false;
   const [phase, setPhase] = useState<"choose" | "connect">("choose");
   const [chosenTool, setChosenTool] = useState<ToolChoice | null>(null);
   const [method, setMethod] = useState<ConnectMethod>("mcp");
