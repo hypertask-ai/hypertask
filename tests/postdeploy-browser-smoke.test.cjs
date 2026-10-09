@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const vm = require('node:vm');
 const ts = require('typescript');
@@ -112,6 +114,30 @@ test('missing Actions secret fails the job rather than warning and reporting gre
   const smoke = workflow.jobs.smoke.steps.find((item) => item.id === 'smoke');
   assert.equal(smoke.env.SMOKE_POSTDEPLOY, '1');
   assert.match(smoke.run, /--project Desktop --project Mobile/);
+});
+
+test('smoke setup generates Prisma after npm ci and fails closed if generation fails', () => {
+  const step = workflow.jobs.smoke.steps.find((item) => item.id === 'setup-npm');
+  const directory = mkdtempSync(path.join(tmpdir(), 'smoke-prisma-'));
+  try {
+    for (const command of ['npm', 'npx']) {
+      writeFileSync(path.join(directory, command), `#!/bin/sh\nprintf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"\nif [ '${command}' = npx ]; then exit "$GENERATE_STATUS"; fi\n`, { mode: 0o700 });
+    }
+    for (const status of [0, 1]) {
+      const log = path.join(directory, `commands-${status}.log`);
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, COMMAND_LOG: log, GENERATE_STATUS: String(status) },
+      });
+      assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), ['npm ci', 'npx prisma generate']);
+      assert.equal(result.status, status, result.stdout + result.stderr);
+    }
+    assert.equal(step['continue-on-error'], true);
+    const preflight = workflow.jobs.smoke.steps.find((item) => item.name === 'Record a setup failure as unrunnable');
+    assert.match(preflight.if, /steps\.setup-npm\.outcome == 'failure'/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('branch smoke proof skips all board-writing jobs with the documented dispatch input', () => {
