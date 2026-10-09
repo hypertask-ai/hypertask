@@ -264,7 +264,13 @@ test('bugfix flag defaults to Everyone without a stored row and is registered as
   assert.equal(entry.kind, 'bugfix')
 })
 
-for (const options of [{ ownedBoard: true }, { memberships: 1 }, { teamMemberships: 1 }]) {
+test('a team-only domain join still gets a starter board', async () => {
+  const h = await signup({ teamMemberships: 1 })
+  assert.equal(h.calls.provision.length, 1)
+  assert.equal(h.projects.length, 1)
+})
+
+for (const options of [{ ownedBoard: true }, { memberships: 1 }]) {
   test(`new signup rechecks emptiness before creating: ${JSON.stringify(options)}`, async () => {
     const h = await signup(options)
     assert.equal(h.calls.provision.length, 0)

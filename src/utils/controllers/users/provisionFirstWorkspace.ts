@@ -34,12 +34,12 @@ export async function provisionFirstWorkspace(
   }
 
   if (onlyIfEmpty) {
-    const [ownedBoards, memberships, teamMemberships] = await Promise.all([
+    // A team-only domain join still leaves "No boards yet", so only boards count.
+    const [ownedBoards, memberships] = await Promise.all([
       prisma.project.count({ where: { ownerId: user.id } }),
       prisma.member.count({ where: { userId: user.id } }),
-      prisma.member_Team.count({ where: { userId: user.id } }),
     ]);
-    if (ownedBoards > 0 || memberships > 0 || teamMemberships > 0) return null;
+    if (ownedBoards > 0 || memberships > 0) return null;
   }
 
   return CompleteOnboardingFirstStep(user, teamTitle, boardTitle, companySize, companyRole, onboardingOptions);
