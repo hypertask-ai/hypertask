@@ -167,6 +167,32 @@ test("board card honors server eligibility with flag off, existing connection, d
   }
 });
 
+test("board card clears armed eligibility when user or board changes and ignores aborted responses", async () => {
+  await withDOM(async ({ container, reactRoot, act }) => {
+    const pending = [];
+    global.fetch = async (url, options) => new Promise((resolve) => pending.push({ resolve, signal: options.signal }));
+    global.IntersectionObserver = class { observe() {} disconnect() {} };
+    const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
+      "@/hooks/useFlag": { useFlag: () => false },
+      "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+      "next/dynamic": () => () => React.createElement("div", null, "Shared connection screen"),
+    });
+    const render = (userId, projectId) => reactRoot.render(React.createElement(AgentConnectCard, { userId, projectId }));
+    const respond = (request, state) => request.resolve({ ok: true, json: async () => state });
+    await act(async () => render(42, 7));
+    await act(async () => respond(pending[0], { eligible: true, boardId: 7 }));
+    assert.ok(container.querySelector("section"));
+    await act(async () => render(99, 7));
+    assert.equal(container.querySelector("section"), null);
+    assert.equal(pending[0].signal.aborted, true);
+    await act(async () => render(99, 8));
+    await act(async () => respond(pending[1], { eligible: true, boardId: 7 }));
+    assert.equal(container.querySelector("section"), null);
+    await act(async () => respond(pending[2], { eligible: false, boardId: 8 }));
+    assert.equal(container.querySelector("section"), null);
+  });
+});
+
 test("connected email shares the current layout, escapes the client and has exactly one absolute board CTA", () => {
   const { load } = require("./helpers/agent-connection.cjs");
   const { renderAgentConnectedEmail } = load("src/utils/controllers/notifications/emailTemplates.ts", {

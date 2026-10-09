@@ -184,9 +184,8 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
 }
 
 export const ConnectAIOnboardingScreen: React.FC<IConnectAIOnboardingScreen> = (props) => {
-  const enabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
-  const showCard = enabled ? true : props.serverEligible === true;
-  const screen = showCard
+  const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
+  const screen = (flagEnabled ? true : props.serverEligible === true)
     ? <ConnectAISetup {...props} />
     : <ConnectAISetup onNextScreen={props.onNextScreen} />;
   return screen;
