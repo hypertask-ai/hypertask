@@ -1,3 +1,5 @@
+export const HTPR_7026_AGENT_CONNECT_CHECK_FLAG = "htpr-7026-agent-connect-check";
+
 export const HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG = "htpr-7030-google-signup-starter-board";
 export const HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email";
 export const HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG = "htpr-7029-keep-demo-board-on-email-signup";

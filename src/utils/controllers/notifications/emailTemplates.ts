@@ -168,6 +168,20 @@ export function renderAgentFirstTaskEmail(input: {
   };
 }
 
+export function renderAgentConnectedEmail(client: string, boardId?: number): { subject: string; html: string } {
+  return {
+    subject: "Your agent is connected",
+    html: renderLayout(
+      {
+        heading: "Your agent is connected",
+        preview: `${client} just talked to Hypertask. Ask your agent to pick up the top task on your board.`,
+        ctaLabel: "Open your board",
+      },
+      boardId ? `https://app.hypertask.ai/project?id=${boardId}` : "https://app.hypertask.ai",
+    ),
+  };
+}
+
 export interface IDigestEvent {
   /** Already-phrased actor + action, e.g. "Alice commented". */
   line: string;

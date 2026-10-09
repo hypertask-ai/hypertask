@@ -1,3 +1,4 @@
+import { waitUntil } from "@vercel/functions";
 import {  CreateLogInput } from "@/models/model";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 
@@ -17,6 +18,15 @@ const createLog = async (data: CreateLogInput): Promise<any> => {
 
                 }
             })
+
+            if (data.LoggedById && (data.log === "cli_token_exchange" || data.log.startsWith("mcp_connected"))) {
+                const userId = data.LoggedById;
+                const work = Promise.resolve().then(async () => {
+                    const { sendFirstAgentConnectedEmail } = await import("@/lib/onboarding/agentConnection");
+                    await sendFirstAgentConnectedEmail(userId, allLogs.id);
+                }).catch(() => console.error("Agent connection email scheduling failed"));
+                try { waitUntil(work); } catch { void work; }
+            }
 
             return ({
                 status:200,

@@ -33,6 +33,7 @@ import { useGetNotificationCount } from "@/hooks/Inbox/useGetNotifications";
 import { useQueryClient } from "@tanstack/react-query";
 
 import HomePage from "@/components/PageComponents/Kanban/KanbanHomepageComponents/Homepage";
+import { AgentConnectCard } from "@/components/PageComponents/Onboarding/AgentConnectCard";
 import { KanbanModalsProvider } from "@/lib/contexts/Kanban/KanbanContainer/KanbanModalContext";
 
 import { addLastActivityAt } from "@/utils/api/helperFunctions";
@@ -1361,6 +1362,9 @@ return (
               ? 'bg-pageBackground homepage-container-tag ml-[var(--app-shell-rail-w,48px)] !w-[calc(100%-var(--app-shell-rail-w,48px))] flex-col gap-4 flex items-center'
               : 'bg-pageBackground homepage-container-tag flex-col gap-4 flex items-center'}
             >
+            {_currentProject && _currentUser?.id && (
+              <AgentConnectCard projectId={_currentProject.id} userId={_currentUser.id} />
+            )}
             {boardLayout === "table" ? (
               <BoardDocumentBoundary
                 fallback={(
