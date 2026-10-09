@@ -5,10 +5,20 @@ import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { sendEmail } from '@/lib/email/sendEmail'
+import prisma from '@/lib/prisma'
+import {
+  HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
+  HTPR_7032_FIRST_TIME_EMAIL_FLAG,
+  isFeatureEnabled,
+} from '@/lib/flags'
 
 // --------- Config & Helpers ---------
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
 const JWT_AUDIENCE = process.env.JWT_AUDIENCE || 'email-link'
+const LINK_EXPIRY_MINUTES = 15
+const CODE_EXPIRY_MINUTES = 30
+
+type EmailVariant = { correctExpiry: boolean, firstTime: boolean }
 
 // Resend configuration
 const RESEND_API_KEY = process.env.RESEND_API_KEY
@@ -22,10 +32,10 @@ function getJwtSecret() {
   return jwtSecret
 }
 
-async function sendEmailWithLink(to: string, link: string, code: string) {
+async function sendEmailWithLink(to: string, link: string, code: string, variant: EmailVariant) {
   if (RESEND_API_KEY) {
     try {
-      await sendEmailWithResend(to, link, code)
+      await sendEmailWithResend(to, link, code, variant)
     } catch (error) {
       console.error('❌ Resend failed:', error)
       throw error
@@ -35,21 +45,28 @@ async function sendEmailWithLink(to: string, link: string, code: string) {
   }
 }
 
-async function sendEmailWithResend(to: string, link: string, code: string) {
+async function sendEmailWithResend(to: string, link: string, code: string, variant: EmailVariant) {
   if (!RESEND_API_KEY) {
     throw new Error('Resend API key not configured')
   }
 
+  const heading = variant.firstTime
+    ? 'Confirm your email to open your Hypertask board'
+    : 'Sign in to Hypertask'
+  const introduction = variant.firstTime
+    ? 'Confirm your email to land on your board, where people and AI agents work together.'
+    : 'Choose your preferred sign-in method below'
+
   await sendEmail({
     to,
     from: `Hypertask <${EMAIL_FROM}>`,
-    subject: 'Sign in to Hypertask',
+    subject: heading,
     html: `
           <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fafb; padding: 40px 20px;">
             <div style="background-color: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);">
               <div style="text-align: center; margin-bottom: 32px;">
-                <h1 style="color: #111827; font-size: 24px; font-weight: 600; margin: 0;">Sign in to Hypertask</h1>
-                <p style="color: #6b7280; font-size: 16px; margin: 16px 0 0 0;">Choose your preferred sign-in method below</p>
+                <h1 style="color: #111827; font-size: 24px; font-weight: 600; margin: 0;">${heading}</h1>
+                <p style="color: #6b7280; font-size: 16px; margin: 16px 0 0 0;">${introduction}</p>
               </div>
               
               <!-- Option 1: Magic Link -->
@@ -63,7 +80,7 @@ async function sendEmailWithResend(to: string, link: string, code: string) {
                   </a>
                 </div>
                 <p style="color: #9ca3af; font-size: 12px; margin: 12px 0 0 0; text-align: center;">
-                  This link expires in 30 minutes
+                  This link expires in ${variant.correctExpiry ? LINK_EXPIRY_MINUTES : 30} minutes
                 </p>
               </div>
               
@@ -77,7 +94,7 @@ async function sendEmailWithResend(to: string, link: string, code: string) {
                   </div>
                 </div>
                 <p style="color: #9ca3af; font-size: 12px; margin: 12px 0 0 0; text-align: center;">
-                  This code expires in 15 minutes
+                  This code expires in ${variant.correctExpiry ? CODE_EXPIRY_MINUTES : 15} minutes
                 </p>
               </div>
               
@@ -107,7 +124,7 @@ function createEmailLoginToken(email: string) {
   const jti = crypto.randomUUID()
   const payload = { sub: email }
   const token = jwt.sign(payload, getJwtSecret(), {
-    expiresIn: '15m',           // keep short
+    expiresIn: LINK_EXPIRY_MINUTES * 60,
     issuer: JWT_ISSUER,
     audience: JWT_AUDIENCE,
     jwtid: jti,
@@ -131,23 +148,25 @@ function buildSignInLinkWithUTM(
   const url = new URL(baseUrl);
   url.searchParams.set('token', token);
 
-  // Add UTM parameters to the URL
-  Object.entries(utmData).forEach(([key, value]) => {
-    if (value) {
+  // Only campaign attribution belongs in an emailed URL, never request metadata.
+  for (const key of ['utm_source', 'utm_medium', 'utm_campaign']) {
+    const value = utmData[key];
+    if (typeof value === 'string' && value) {
       url.searchParams.set(key, value);
     }
-  });
+  }
   
   //!!!!VERY IMPORTANT YOU SHOULD READ THIS 
   // There is a key-val pair that is "key": 'randomtokenajsdkahbsdkasd".
   // So make sure to use some other name than key for the other params if youre thinking about using "key". 
 
   // Add invite parameters to the URL
-  Object.entries(inviteData).forEach(([key, value]) => {
-    if (value) {
+  for (const key of ['project', 'key', 'projectId'] as const) {
+    const value = inviteData[key];
+    if (typeof value === 'string' && value) {
       url.searchParams.set(key, value);
     }
-  });
+  }
   if (safeReturnTo) {
     url.searchParams.set('returnTo', safeReturnTo);
   }
@@ -187,7 +206,6 @@ export async function POST(request: NextRequest) {
     
     // Use UTM data from request body (or empty object if not provided)
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
-    console.log('📊 UTM Data from request body:', utmParams)
     
     const safeReturnTo = parseSafeReturnTo(
       typeof rawReturnTo === 'string' ? rawReturnTo : null
@@ -204,9 +222,18 @@ export async function POST(request: NextRequest) {
     )
     
     // Store the verification code for later verification
-    await VerificationCodeService.storeCode(verificationCode, normalizedEmail, 30)
+    await VerificationCodeService.storeCode(verificationCode, normalizedEmail, CODE_EXPIRY_MINUTES)
 
-    await sendEmailWithLink(normalizedEmail, signInLink, verificationCode)
+    const existingUser = await prisma.user.findFirst({
+      where: { email: normalizedEmail },
+      select: { id: true },
+    })
+    // Flags require account IDs. ID 0 has no Owner + QA eligibility, even if the sender is signed in.
+    const recipientId = existingUser?.id ?? 0
+    const correctExpiry = await isFeatureEnabled(HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, recipientId)
+    const firstTime = !existingUser && await isFeatureEnabled(HTPR_7032_FIRST_TIME_EMAIL_FLAG, recipientId)
+
+    await sendEmailWithLink(normalizedEmail, signInLink, verificationCode, { correctExpiry, firstTime })
 
     return NextResponse.json({
       success: true,

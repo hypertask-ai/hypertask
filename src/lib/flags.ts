@@ -7,6 +7,8 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
+  HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
   HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
@@ -218,6 +220,19 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Shows sign-in link and code expiry times from their actual TTLs instead of swapping them.",
+  },
+  {
+    key: HTPR_7032_FIRST_TIME_EMAIL_FLAG,
+    kind: "feature",
+    defaultMode: "OWNER_AND_QA",
+    shippedOn: "2026-10-09",
+    description: "Introduces the board in sign-in emails for new recipients. Recipients without an account are ineligible for Owner + QA; this variant stays off until the owner selects Everyone.",
+  },
   {
     key: HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
     kind: "bugfix",
