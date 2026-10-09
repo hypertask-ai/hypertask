@@ -501,6 +501,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
         flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
         flags.HTPR_7020_TAG_FULL_NAME_FLAG,
+        flags.HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -1053,6 +1054,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7051-task-writer-image-unfurl", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7056-ctrlj-split-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },

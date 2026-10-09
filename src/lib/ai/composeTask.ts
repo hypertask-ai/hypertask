@@ -6,7 +6,7 @@ import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import { extractTitleAndDescription } from "@/utils/aiWriterUtils";
 import { escapeHtml } from "@/utils/htmlEscape";
-import { extractTaskWriterMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia } from "./taskWriterMedia";
+import { extractTaskWriterMedia, extractTaskWriterPromptMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia } from "./taskWriterMedia";
 import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, retryCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -44,9 +44,11 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress, viewProject, fields,
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, unfurlImageUrls = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
+  /** HTPR-7051: pasted image URLs keep their link and show the image, like a manual paste. */
+  unfurlImageUrls?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
@@ -66,16 +68,20 @@ export async function createComposedTask({
     const { url } = await upload.promise;
     return { fileName: file.name, url, mimeType: file.type };
   }));
-  const rawDescription = `<p>${escapeHtml(text).replace(/\n/g, "<br>")}</p>` +
+  const nextMediaToken = createTaskWriterMediaTokenFactory(text, ...uploads.flatMap(({ url, fileName }) => [url, fileName]));
+  const promptMedia = unfurlImageUrls ? extractTaskWriterPromptMedia(text, nextMediaToken) : { html: text, media: [] };
+  const draftDescription = `<p>${escapeHtml(promptMedia.html).replace(/\n/g, "<br>")}</p>` +
     uploads.map(({ url, fileName, mimeType }) => isBrowserRenderableImage(mimeType, fileName)
       ? `<p><img src="${escapeHtml(url)}" alt="${escapeHtml(fileName)}"></p>`
       : `<p><a href="${escapeHtml(url)}">${escapeHtml(fileName)}</a></p>`).join("");
+  const uploadMedia = extractTaskWriterMedia(draftDescription, nextMediaToken);
+  const media = { html: uploadMedia.html, media: [...promptMedia.media, ...uploadMedia.media] };
+  const rawDescription = restoreTaskWriterMedia(media.html, media.media);
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
   let drafts: { title: string; description: string }[] = [];
   try {
-    const media = extractTaskWriterMedia(rawDescription, createTaskWriterMediaTokenFactory(rawDescription, text));
     onProgress?.("Reading past tickets");
     const response = await fetch(taskWriterRoute, {
       method: "POST",

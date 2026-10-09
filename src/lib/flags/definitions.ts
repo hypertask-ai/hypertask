@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG,
   HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
   HTPR_7020_TAG_FULL_NAME_FLAG,
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
@@ -163,6 +164,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Image URLs pasted into the Ctrl+J task writer keep their link and show the image in the description, like a manual paste.",
+  },
   {
     key: HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
     kind: "feature",
