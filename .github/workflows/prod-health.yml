@@ -515,8 +515,9 @@ jobs:
           SMOKE_POSTDEPLOY: '1'
           QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
           QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
-          SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
-          SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
+          # This persistent fixture belongs to QA 985, unlike the old QA 2343 vars.
+          SMOKE_BOARD_PATH: '/project?id=6121&surface=board'
+          SMOKE_TASK_PATH: '/detail/project-6121/1'
         run: npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile
 
       # Playwright traces are disabled because they include authenticated

@@ -28,10 +28,12 @@ just skips every write test — see "Write journeys" below.
 - `HYPERTASK_MCP_TOKEN` (existing agent ticket mechanism): creates or updates
   one monitoring ticket per setup cause on board 4060, at most once daily.
   Failure to record a ticket remains a job annotation and summary.
-- `SMOKE_BOARD_PATH` (var): `/project?id=6859&surface=board`, the existing
-  QA Sandbox board (must be accessible to user 985).
-- `SMOKE_TASK_PATH` (var): `/detail/project-6859/43`, an existing card on
-  that board. Keep both paths pointing at a card visible to the QA account.
+- The workflow pins `SMOKE_BOARD_PATH` to `/project?id=6121&surface=board`
+  and `SMOKE_TASK_PATH` to `/detail/project-6121/1`: the existing private
+  "Midscene nightly QA fixture" board and "Midscene persistent browser target"
+  ticket, both owned by QA user 985. These checks only read this fixture.
+  The old repository vars point at QA user 2343's private board, which user
+  985 cannot access, so post-deploy smoke no longer reads those vars.
 
 Post-deploy runs set `SMOKE_POSTDEPLOY=1`. Both paths are required: a missing
 fixture is not a passing test. On desktop and phone, the board check clicks
