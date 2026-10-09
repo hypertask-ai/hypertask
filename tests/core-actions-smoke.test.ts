@@ -14,6 +14,7 @@ import {
 } from "../src/lib/productionSmoke/access";
 import {
   CoreSmokeLockUnavailableError,
+  CoreSmokeRunDeadlineError,
   withCoreSmokeLock,
   type CoreSmokeRedisClient,
 } from "../src/lib/productionSmoke/lock";
@@ -947,6 +948,188 @@ test("cleanup preserves another user's comment even when it copies the marker", 
 
   assert.equal(result.ok, true);
   assert.ok(app.state.comments.some((comment) => comment.creatorId === 999));
+});
+
+for (const phase of ["before delete", "after delete", "response body"] as const) {
+  test(`cleanup retries a timeout ${phase} once with a fresh 15-second budget`, async (t) => {
+    const app = fakeApp({ unrelatedAfterMarker: true });
+    const budgets = new Map<AbortSignal, { controller: AbortController; milliseconds: number }>();
+    t.mock.method(AbortSignal, "timeout", (milliseconds: number) => {
+      const controller = new AbortController();
+      budgets.set(controller.signal, { controller, milliseconds });
+      return controller.signal;
+    });
+    const deletes: Array<{ id: number; signal: AbortSignal }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      if (new URL(String(input)).pathname !== "/api/comments/deleteCommentById") {
+        return app.fetchImpl(input, init);
+      }
+      const id = JSON.parse(String(init?.body)).id;
+      const signal = init!.signal as AbortSignal;
+      deletes.push({ id, signal });
+      if (deletes.length === 1) {
+        const response = phase === "before delete" ? null : await app.fetchImpl(input, init);
+        const fail = () => {
+          budgets.get(signal)!.controller.abort(
+            new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+          );
+          signal.throwIfAborted();
+          throw new Error("timeout did not abort");
+        };
+        if (phase === "response body") {
+          response!.text = async () => fail();
+          return response!;
+        }
+        return fail();
+      }
+      if (!app.state.comments.some((comment) => comment.id === id)) {
+        return Response.json({ message: "Comment not found" }, { status: 404 });
+      }
+      return app.fetchImpl(input, init);
+    };
+    const result = await runCoreActionsSmoke({
+      baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+      fixture, runId: "cleanup-timeout", fetchImpl,
+    });
+
+    assert.equal(result.ok, true);
+    assert.equal(deletes.filter((attempt) => attempt.id === deletes[0].id).length, 2);
+    assert.notEqual(deletes[0].signal, deletes[1].signal);
+    assert.equal(deletes[0].signal.aborted, true);
+    assert.equal(deletes[1].signal.aborted, false);
+    assert.ok(deletes.every(({ signal }) => budgets.get(signal)?.milliseconds === 15_000));
+    assert.deepEqual(app.state.comments.map((comment) => comment.text), ["A separate note"]);
+    assert.ok(result.cleanup.includes("deleted run comments and activity"));
+  });
+}
+
+test("preflight also retries deleting an interrupted run's owned marker", async () => {
+  const app = fakeApp();
+  app.state.comments.push({
+    id: 50, creatorId: fixture.userId,
+    text: "<p>[core-actions-smoke:stale] interrupted</p>",
+  });
+  let attempts = 0;
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+    fixture, runId: "cleanup-preflight-timeout",
+    fetchImpl: async (input, init) => {
+      if (new URL(String(input)).pathname === "/api/comments/deleteCommentById" &&
+        JSON.parse(String(init?.body)).id === 50) {
+        attempts += 1;
+        if (attempts === 1) throw new TypeError("fetch failed");
+      }
+      return app.fetchImpl(input, init);
+    },
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(attempts, 2);
+  assert.equal(app.state.comments.length, 0);
+});
+
+test("persistent cleanup transport failure stops after two attempts and never passes", async () => {
+  const app = fakeApp();
+  const deletedIds: number[] = [];
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+    fixture, runId: "cleanup-persistent-timeout",
+    fetchImpl: async (input, init) => {
+      if (new URL(String(input)).pathname === "/api/comments/deleteCommentById") {
+        deletedIds.push(JSON.parse(String(init?.body)).id);
+        throw new DOMException("The operation was aborted due to timeout", "TimeoutError");
+      }
+      return app.fetchImpl(input, init);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, "unrunnable");
+  assert.equal(result.action, "cleanup comment delete");
+  assert.match(result.detail, /timeout/);
+  assert.equal(deletedIds.length, 2);
+  assert.equal(deletedIds[0], deletedIds[1]);
+  assert.ok(app.state.comments.length > 0);
+});
+
+for (const status of [302, 401, 403, 429, 500, 503]) {
+  test(`cleanup does not retry an HTTP ${status} response`, async () => {
+    const app = fakeApp();
+    let deletes = 0;
+    const result = await runCoreActionsSmoke({
+      baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+      fixture, runId: `cleanup-http-${status}`,
+      fetchImpl: async (input, init) => {
+        if (new URL(String(input)).pathname === "/api/comments/deleteCommentById") {
+          deletes += 1;
+          return Response.json({ message: "delete rejected" }, { status });
+        }
+        return app.fetchImpl(input, init);
+      },
+    });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.action, "cleanup comment delete");
+    assert.equal(result.status, status);
+    assert.equal(deletes, 1);
+  });
+}
+
+for (const deadline of [false, true]) {
+  test(`cleanup ${deadline ? "can retry after the action deadline" : "never retries after losing its fixture lock"}`, async () => {
+    const app = fakeApp();
+    const controller = new AbortController();
+    let deletes = 0;
+    const result = await runCoreActionsSmoke({
+      baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+      fixture, runId: "cleanup-cancellation", signal: controller.signal,
+      fetchImpl: async (input, init) => {
+        if (new URL(String(input)).pathname === "/api/comments/deleteCommentById") {
+          deletes += 1;
+          if (deletes === 1) {
+            controller.abort(deadline
+              ? new CoreSmokeRunDeadlineError("action deadline")
+              : new CoreSmokeLockUnavailableError("fixture lock lost"));
+            init!.signal!.throwIfAborted();
+          }
+          assert.equal(init!.signal!.aborted, false);
+        }
+        return app.fetchImpl(input, init);
+      },
+    });
+
+    assert.equal(result.ok, deadline);
+    if (deadline) {
+      assert.ok(deletes > 1);
+      assert.equal(app.state.comments.length, 0);
+    } else {
+      assert.equal(deletes, 1);
+      assert.equal(result.kind, "unrunnable");
+      assert.match(result.detail, /fixture lock lost/);
+    }
+  });
+}
+
+test("cleanup still verifies deletion after a successful retry", async () => {
+  const app = fakeApp();
+  let deletes = 0;
+  const result = await runCoreActionsSmoke({
+    baseUrl: "https://app.hypertask.ai", cookieHeader: "test-session",
+    fixture, runId: "cleanup-false-success",
+    fetchImpl: async (input, init) => {
+      if (new URL(String(input)).pathname === "/api/comments/deleteCommentById") {
+        deletes += 1;
+        if (deletes === 1) throw new TypeError("fetch failed");
+        return Response.json({ message: "Comment deleted" });
+      }
+      return app.fetchImpl(input, init);
+    },
+  });
+
+  assert.equal(result.ok, false);
+  assert.equal(result.kind, "application");
+  assert.equal(result.action, "cleanup comments");
+  assert.match(result.detail, /remained after cleanup/);
 });
 
 test("reports cleanup failure as the action that needs intervention", async () => {
