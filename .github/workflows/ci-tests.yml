@@ -56,6 +56,8 @@ jobs:
       # "Skip the build when the review is already red" reads commit statuses
       # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
+    env:
+      HTPR_PG_IMAGE: public.ecr.aws/docker/library/postgres:16-alpine
     outputs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
       failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
@@ -351,7 +353,7 @@ jobs:
       contents: read
     services:
       postgres:
-        image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        image: public.ecr.aws/docker/library/postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
         env:
           POSTGRES_DB: hypertask_smoke
           POSTGRES_USER: browser_smoke
@@ -364,7 +366,7 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       redis:
-        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        image: public.ecr.aws/docker/library/redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
         ports:
           - 6379:6379
         options: >-
