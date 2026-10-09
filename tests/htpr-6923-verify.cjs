@@ -459,14 +459,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "5a6c0939ce91e81220e4341f60c7bfb3ed7bfd3b10759b2207ab36eecbcae90b",
+    "hash": "69673c5584356bdd3ff76ae6ed4596bf3c07f9e5e95f7f4b09b77979b5fe0694",
     "export": "export default handler;"
   },
   "update-view": {
     "methods": [
       "POST"
     ],
-    "hash": "2b3b0dbcfa576f5a36b880a840604456d87afbee3de0e32259489f9c21953dd5",
+    "hash": "da790e03d7efa417971370f650e5c1e31e583e1ccc7a87294605cc71f7330947",
     "export": "export default handler;"
   },
   "delete-rename-view": {
@@ -489,14 +489,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "f717f6eaf695114f3debbadf6267b061bd54adb56efcaea9e45627e17bd7de06",
+    "hash": "df9159817d1d9e5f0006c2d1d8ea94c5a28ef61e7915ced04f886881ed7a8a49",
     "export": "export default handler;"
   },
   "reset-to-default": {
     "methods": [
       "POST"
     ],
-    "hash": "b4eded269799550b856001b4ab8a633f0f508a67137b828c4b7bd5866d3dc016",
+    "hash": "394dec4b415609986b7ee23b160aeb4792ae5e15cd8620e606156c8e7a814c2e",
     "export": "export default handler;"
   },
   "update-order": {
