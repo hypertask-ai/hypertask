@@ -214,6 +214,7 @@ function serviceController(name, effects, options = {}) {
   };
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => assert.fail("human section writes must not schedule agent email") },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }) },
     "@/utils/generateRank": load("src/utils/generateRank.ts", {}),
     "./viewHelpers": {

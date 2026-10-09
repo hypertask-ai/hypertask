@@ -131,6 +131,7 @@ function loadDeleteController(deleteOutcome) {
       autoAssignForSection: () => undefined,
     },
     "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: () => undefined },
+    "../notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => undefined },
     "./spawnRecurrence": {
       sectionIsDone: () => undefined,
       spawnNextRecurrence: () => undefined,

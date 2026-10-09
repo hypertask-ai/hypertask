@@ -75,6 +75,21 @@ function execute(javascript, stubs) {
   }
 }
 
+test("first-task email integration schedules the committed transition with authenticated actor", async () => {
+  const { updateTaskSingle, calls } = loadUpdateController(OWNER_PROJECT, OWNER_PROJECT, {
+    stateAtFence: { title: "Latest title under the fence" },
+  });
+  const result = await updateTaskSingle({ id: TASK_ID, sectionId: SECTION_ID }, { id: USER_ID }, OWNED_AGENT, { skipAutoAssign: true, taskMovedActivity: { fromAgent: { id: OWNED_AGENT, userId: USER_ID, displayName: "Test agent" } } });
+  assert.equal(result.status, 200);
+  assert.equal(calls.transactionActive, false);
+  assert.equal(calls.firstTaskEmails.length, 1);
+  const scheduled = calls.firstTaskEmails[0];
+  assert.equal(scheduled.before.title, "Latest title under the fence");
+  assert.equal(scheduled.after.sectionId, SECTION_ID);
+  assert.equal(scheduled.userId, USER_ID);
+  assert.equal(scheduled.agentId, OWNED_AGENT);
+});
+
 function loadUpdateController(
   projectId,
   destinationSectionProjectId,
@@ -261,6 +276,11 @@ function loadUpdateController(
     "../assignees/autoAssignForSection": { autoAssignForSection: noop },
     "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: noop },
     "./spawnRecurrence": { sectionIsDone: noop, spawnNextRecurrence: noop },
+    "../notifications/agentFirstTaskEmail": {
+      scheduleAgentFirstTaskEmail: (before, after, userId, agentId) => {
+        (calls.firstTaskEmails ??= []).push({ before, after, userId, agentId });
+      },
+    },
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere },
     "@/lib/mcp/tasks/agentMutationFence": {
       AgentMutationLeaseConflictError: class extends Error {},

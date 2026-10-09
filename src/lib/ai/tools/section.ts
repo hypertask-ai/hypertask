@@ -10,7 +10,7 @@ import { sanitizeForJson, assertAccessibleProject } from "@/lib/ai/tools/helpers
 import type { ToolContext } from "./context";
 
 export function createSectionTool(context: ToolContext) {
-  const { sendStatus, user, confirmationSessionId, bulkPreviewsIssued } = context;
+  const { sendStatus, user, actingAgentId, confirmationSessionId, bulkPreviewsIssued } = context;
   return {
     hypertask_section: tool({
       description:
@@ -171,7 +171,7 @@ export function createSectionTool(context: ToolContext) {
             projectId: input.project_id,
             sectionId: input.section_id,
             userId: user.id,
-          });
+          }, actingAgentId);
           if (!result.success) {
             return {
               success: false,

@@ -45,6 +45,7 @@ const moduleMocks = {
   },
   "@tanstack/react-query": { useQueryClient: () => queryClient },
   "@/store": atoms,
+  "@/models/enums": { CommandMode: { InviteMember: "InviteMember" } },
   "@/lib/state": {
     useRecoilState: (atom) => [atom === "boardLayoutAtom" ? "board" : false, noop],
     useRecoilValue: () => false,
