@@ -13,7 +13,6 @@
     "htpr-5993-optimistic-task-uploads": "EVERYONE",
     "htpr-6002-shared-agent-chat": "OWNER_AND_QA",
     "htpr-6006-chat-confirm-ticket": "OWNER_AND_QA",
-    "htpr-6059-lazy-emoji-list": "EVERYONE",
     "htpr-6094-agent-activity-rows": "OWNER_AND_QA",
     "htpr-6112-copy-current-url": "EVERYONE",
     "htpr-6115-agent-sdk": "OWNER_AND_QA",
