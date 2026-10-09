@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
   HTPR_7028_FIRST_TASK_EMAIL_FLAG,
   HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
@@ -226,6 +227,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Gives new Google signups a starter board and agent connection task when they have no demo workspace to keep.",
+  },
   {
     key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,
     kind: "feature",

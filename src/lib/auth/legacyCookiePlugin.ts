@@ -20,6 +20,13 @@ import authConfig from '@/lib/configs/auth.config'
 import { themeCookieSeedValue } from '@/lib/themePreferences'
 import prisma from '@/lib/prisma'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
+import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
+import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
+import { HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, isFeatureEnabled } from '@/lib/flags'
+import type { IUser } from '@/models/model'
+
+// The same Request reaches user.create.after and the new-session hook; no time-window guesses.
+export const newGoogleSignupRequests = new WeakMap<Request, number>()
 
 type LegacyCookieCtx = {
   setCookie: (name: string, value: string, options: Record<string, unknown>) => void
@@ -186,6 +193,27 @@ export function legacyCookiePlugin() {
             // still carries the guest's ht_session when one was signed in from the
             // demo board. Adopt BEFORE minting the new cookies, so previousBoard is
             // seeded from a board list that already includes the adopted board.
+            if (ctx.path === '/callback/google' && ctx.request && newGoogleSignupRequests.get(ctx.request) === userId) {
+              newGoogleSignupRequests.delete(ctx.request)
+              try {
+                if (await isFeatureEnabled(HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, userId)) {
+                  const user = await prisma.user.findUnique({ where: { id: userId } })
+                  if (!user) throw new Error('New Google signup user not found')
+                  await provisionFirstWorkspace(
+                    user as unknown as IUser,
+                    ctx.getCookie?.(SESSION_COOKIE),
+                    'MyTeam',
+                    'MyBoard',
+                    companySizeOptions[0],
+                    companyRoleOptions[0],
+                    // Google rollout must not depend on the email signup flag.
+                    { keepDemoBoard: true, onlyIfEmpty: true },
+                  )
+                }
+              } catch (error) {
+                console.error('Google signup workspace provisioning failed (non-fatal):', { userId, error })
+              }
+            }
             await adoptGuestBoards(ctx.getCookie?.(SESSION_COOKIE), userId)
 
             await setLegacyCookiesForUser(ctx, userId)

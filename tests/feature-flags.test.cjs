@@ -268,7 +268,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
     assert.deepEqual(
       await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG, flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, flags.HTPR_7031_INVITE_EMAIL_FLAG, flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
+      [true, true, [flags.HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG, flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG, flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, flags.HTPR_7031_INVITE_EMAIL_FLAG, flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, flags.HTPR_6962_KEEP_ASSIGNEE_FLAG, flags.HTPR_6972_SUBTASK_LINK_FLAG, flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG, flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG, flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG, flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG, flags.HTPR_6991_BACK_FIRST_OPEN_FLAG, flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG, flags.HTPR_7003_BOARD_BACK_FLAG, flags.HTPR_7004_NO_LOADING_FLASH_FLAG, flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG, flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG, flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG].includes(key)],
       `${key} should use its declared rollout default`,
     );
   }
@@ -802,6 +802,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7028-first-task-email", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7029-keep-demo-board-on-email-signup", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7030-google-signup-starter-board", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7031-invite-email", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7032-email-expiry-copy", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7032-first-time-email", mode: "OWNER_AND_QA", updatedAt: null },
