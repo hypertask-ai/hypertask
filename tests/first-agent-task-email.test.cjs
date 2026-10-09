@@ -39,10 +39,18 @@ const before = { id: 42, projectId: 15, uniqueIndex: 7028, title: "Review the re
 const after = { ...before, sectionId: 2, section: "Done" };
 
 function fixture(options = {}) {
-  const calls = { scheduled: [], sent: [], flags: [], locks: [], reads: 0 };
+  const calls = { scheduled: [], sent: [], flags: [], locks: [], reads: 0, markerReads: 0, agentReads: 0, boardReads: 0 };
   const store = options.store ?? [];
   let lockTail = Promise.resolve();
   const prisma = {
+    logs: { findFirst: async ({ where, select }) => {
+      calls.markerReads++;
+      assert.deepEqual(select, { id: true });
+      assert.deepEqual(where, { LoggedById: options.userId ?? 985, log: "htpr-7028:agent-first-task-email:claimed" });
+      if (calls.markerReads === 1) assert.equal(calls.reads + calls.agentReads + calls.boardReads + calls.flags.length, 0);
+      if (options.suppressionFailure) throw new Error("Marker read unavailable");
+      return store.find((row) => row.LoggedById === where.LoggedById && row.log === where.log) ?? null;
+    } },
     section: { findMany: async () => {
       calls.reads++;
       return options.sections ?? [
@@ -52,13 +60,17 @@ function fixture(options = {}) {
       ];
     } },
     agent: { findFirst: async ({ where }) => {
+      calls.agentReads++;
       assert.equal(where.userId, options.userId ?? 985);
       return options.missingAgent ? null : { displayName: "Release agent", userId: options.agentOwner ?? where.userId };
     } },
-    project: { findUnique: async () => ({
-      ownerId: options.boardOwner ?? 985, title: "Release board", name: "release-board",
-      owner: { email: options.noEmail ? null : "qa@example.invalid" },
-    }) },
+    project: { findUnique: async () => {
+      calls.boardReads++;
+      return {
+        ownerId: options.boardOwner ?? 985, title: "Release board", name: "release-board",
+        owner: { email: options.noEmail ? null : "qa@example.invalid" },
+      };
+    } },
     $transaction: async (callback) => {
       let release;
       let locked = false;
@@ -131,13 +143,17 @@ test("second agent completion and a fresh process reuse the durable marker", asy
   const f = fixture();
   f.schedule();
   await f.settle();
+  const initialReads = [f.calls.reads, f.calls.agentReads, f.calls.boardReads, f.calls.flags.length, f.calls.locks.length];
   f.schedule(before, { ...after, id: 43, projectId: 16 }, 985, "another-agent");
   await f.settle();
+  assert.deepEqual([f.calls.reads, f.calls.agentReads, f.calls.boardReads, f.calls.flags.length, f.calls.locks.length], initialReads);
   const restarted = fixture({ store: f.store });
   restarted.schedule();
   await restarted.settle();
   assert.equal(f.calls.sent.length, 1);
   assert.equal(restarted.calls.sent.length, 0);
+  assert.equal(restarted.calls.markerReads, 1);
+  assert.deepEqual([restarted.calls.reads, restarted.calls.agentReads, restarted.calls.boardReads, restarted.calls.flags.length, restarted.calls.locks.length], [0, 0, 0, 0, 0]);
   assert.equal(f.store.length, 1);
 });
 
@@ -200,7 +216,7 @@ test("email failure does not throw and retains marker against ambiguous delivery
 });
 
 test("flag, marker and scheduling failures never reject the task-side work", async () => {
-  for (const options of [{ flagFailure: true }, { markerFailure: true }, { schedulerFailure: true }]) {
+  for (const options of [{ flagFailure: true }, { markerFailure: true }, { suppressionFailure: true }, { schedulerFailure: true }]) {
     const f = fixture(options);
     assert.doesNotThrow(() => f.schedule());
     await assert.doesNotReject(f.settle());
@@ -318,17 +334,36 @@ test("invite param opens existing dialog once only with flag on and keeps board 
 
 test("template escapes task title and names, preserves copy, and uses absolute CTA URLs", () => {
   const { subject, html } = templates().renderAgentFirstTaskEmail({
-    agentName: "Agent <script>&", taskTitle: "Fix 'quotes' <img src=x onerror=alert(1)>",
+    agentName: "Agent <SCRIPT>&", taskTitle: "Fix 'quotes' <img src=x onerror=alert(1)>",
     boardName: "Board <b>&", projectId: 15, uniqueIndex: 7028,
   });
   assert.equal(subject, "Your agent just finished its first task");
-  assert.match(html, /Agent &lt;script&gt;&amp; completed/);
+  assert.ok(html.includes("Agent &lt;SCRIPT&gt;&amp; completed"));
   assert.match(html, /Fix &#39;quotes&#39; &lt;img src=x onerror=alert\(1\)&gt;/);
   assert.match(html, /on Board &lt;b&gt;&amp;\./);
   assert.match(html, /Hypertask works best when your team and your agents share the board\./);
   assert.match(html, /href="https:\/\/app.hypertask.ai\/detail\/project-15\/7028"[^>]*>Review the work<\/a>/);
   assert.match(html, /href="https:\/\/app.hypertask.ai\/project\?id=15&amp;invite=1"[^>]*>Invite a teammate<\/a>/);
-  assert.doesNotMatch(html, /<script>|<img|<b>/);
+  for (const rawTag of ["<script", "<img", "<b>"]) {
+    assert.equal(html.toLowerCase().includes(rawTag), false);
+  }
+  assert.equal("<SCRIPT>alert(1)</SCRIPT>".toLowerCase().includes("<script"), true);
+});
+
+test("template button hierarchy has one primary and a borderless muted secondary link", () => {
+  const { html } = templates().renderAgentFirstTaskEmail({
+    agentName: "Agent", taskTitle: "Task", boardName: "Board", projectId: 15, uniqueIndex: 7028,
+  });
+  assert.equal(html.split('class="cta"').length - 1, 1);
+  assert.match(html, /class="cta"[^>]*background-color:#4455BB[^>]*>Review the work<\/a>/);
+  const secondary = html.match(/<a class="secondary-cta"[^>]*>Invite a teammate<\/a>/)?.[0];
+  assert.ok(secondary);
+  assert.ok(secondary.includes("color:#858585"));
+  for (const property of ["background", "border", "padding", "font-weight:600"]) {
+    assert.equal(secondary.includes(property), false);
+  }
+  assert.match(html, /\.secondary-cta \{ color: #a5a5a5 !important; \}/);
+  assert.ok(html.indexOf('class="secondary-cta"') < html.indexOf('class="cta"'), "primary action comes last");
 });
 
 test("commit scope preserves the requested worktree, trailers and forbidden-file constraints", { skip: !process.env.HTPR_7028_VERIFY_COMMIT }, () => {
@@ -337,9 +372,9 @@ test("commit scope preserves the requested worktree, trailers and forbidden-file
   assert.equal(fs.realpathSync(root), "/home/valentin/projects/wt-7028");
   assert.equal(git("branch", "--show-current").trim(), "htpr-7028-first-task-email");
   const message = git("log", "-1", "--format=%B");
-  assert.equal(message.split("\n")[0], "HTPR-7028 [FEATURE] Your agent finished its first task email with invite a teammate");
+  assert.equal(message.split("\n")[0], "HTPR-7028 [FEATURE] One primary button in the first task email, fewer bulk lookups");
   assert.match(message, /Co-Authored-By: Claude Opus 5\.5 <noreply@anthropic\.com>\nClaude-Session: https:\/\/claude.ai\/code\/session_015vvpfaf3Uj77guJJ6A7SwJ\n*$/);
-  const allowed = new Set([emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "tests/first-agent-task-email.test.cjs", "tests/board-background-refetch-render.test.cjs", "tests/feature-flags.test.cjs", "tests/task-write-controller-auth.test.cjs", "tests/task-move-error-message.test.cjs"]);
+  const allowed = new Set([emailFile, templateFile, "src/utils/controllers/section/sectionService.ts", "tests/first-agent-task-email.test.cjs", "tests/first-agent-task-email-coverage.test.cjs"]);
   const changed = git("diff", "--name-only", "HEAD^", "HEAD").trim().split("\n");
   assert.equal(changed.length, allowed.size);
   for (const file of changed) assert.ok(allowed.has(file), file);
@@ -362,12 +397,20 @@ test("screenshot renders the actual email HTML locally without sending", { skip:
   try {
     const page = await browser.newPage({ viewport: { width: 800, height: 700 }, colorScheme: "light" });
     await page.setContent(html);
-    assert.equal(await page.locator("a.cta").count(), 2);
+    assert.equal(await page.locator("a.cta").count(), 1);
+    assert.equal(await page.locator("a.cta").textContent(), "Review the work");
+    const secondaryStyles = () => page.locator("a.secondary-cta").evaluate((link) => {
+      const style = getComputedStyle(link);
+      return { background: style.backgroundColor, border: style.borderWidth, color: style.color };
+    });
+    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(133, 133, 133)" });
+    await page.screenshot({ path: path.join(directory, "email-v2.png"), fullPage: true });
     await page.screenshot({ path: path.join(directory, "first-task-email-desktop.png"), fullPage: true });
     await page.setViewportSize({ width: 390, height: 700 });
     await page.screenshot({ path: path.join(directory, "first-task-email-phone.png"), fullPage: true });
     assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
     await page.emulateMedia({ colorScheme: "dark" });
+    assert.deepEqual(await secondaryStyles(), { background: "rgba(0, 0, 0, 0)", border: "0px", color: "rgb(165, 165, 165)" });
     await page.screenshot({ path: path.join(directory, "first-task-email-dark.png"), fullPage: true });
   } finally { await browser.close(); }
 });

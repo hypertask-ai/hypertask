@@ -32,7 +32,7 @@ function fixture(options = {}) {
     { id: 43, projectId: 15, uniqueIndex: 7029, title: "Docs review", sectionId: null, section: "Doing", status: "Normal" },
   ];
   const after = before.map((task) => ({ ...task, sectionId: 2, section: "Accepted" }));
-  const calls = { scheduled: [], sent: [], locks: 0, committed: false, history: [], markers: [] };
+  const calls = { scheduled: [], sent: [], locks: 0, committed: false, history: [], markers: [], markerReads: 0, completionReads: 0 };
   let sectionReads = 0;
   let claimTail = Promise.resolve();
   const tx = {
@@ -52,6 +52,10 @@ function fixture(options = {}) {
     section: { update: async ({ data }) => ({ ...source, ...data }) },
   };
   const prisma = {
+    logs: { findFirst: async () => {
+      calls.markerReads++;
+      return options.claimed ? { id: 1 } : calls.markers[0] ?? null;
+    } },
     project: {
       findFirst: async () => options.denied ? null : { id: 15 },
       findUnique: async () => ({ ownerId: userId, title: "Release board", name: "release", owner: { email: "qa@example.invalid" } }),
@@ -59,7 +63,10 @@ function fixture(options = {}) {
     section: {
       findFirst: async () => (++sectionReads === 1 ? source : options.noDestination ? null : destination),
       findUnique: async () => source,
-      findMany: async () => [source, destination, { id: 3, section_title: "Shipped", isDone: true }],
+      findMany: async () => {
+        calls.completionReads++;
+        return [source, destination, { id: 3, section_title: "Shipped", isDone: true }];
+      },
     },
     task: { count: async () => before.length },
     agent: { findFirst: async ({ where }) => {
@@ -104,7 +111,7 @@ function fixture(options = {}) {
       await options.sendBarrier;
     } },
     "@/lib/email/unsubscribe": { unsubscribeHeaders: () => ({}) },
-    "./emailTemplates": { renderAgentFirstTaskEmail: () => ({ subject: "First task", html: "Local test" }) },
+    "./emailTemplates": { renderAgentFirstTaskEmail: ({ taskTitle }) => ({ subject: "First task", html: taskTitle }) },
   });
   const service = load(serviceFile, {
     "@/lib/prisma": { __esModule: true, default: prisma },
@@ -138,8 +145,41 @@ test("agent section deletion bulk move schedules first completion only after com
   assert.equal(result.movedTaskCount, 2);
   assert.equal(f.calls.locks, 1);
   assert.equal(f.calls.history.length, 2);
-  assert.equal(f.calls.scheduled.length, 2);
+  assert.equal(f.calls.scheduled.length, 1);
   assert.equal(f.calls.sent.length, 1, "bulk completion still claims only once per owner");
+  assert.equal(f.calls.markerReads, 1);
+  assert.equal(f.calls.completionReads, 1);
+  assert.equal(f.calls.sent[0].html, "Release review");
+});
+
+test("bulk section deletion picks the first eligible task after already-done title matches", async () => {
+  const f = fixture({ before: [
+    { id: 41, projectId: 15, uniqueIndex: 7027, title: "Already done", sectionId: 3, section: "Doing", status: "Normal" },
+    { id: 42, projectId: 15, uniqueIndex: 7028, title: "First eligible", sectionId: null, section: "Doing", status: "Normal" },
+    { id: 43, projectId: 15, uniqueIndex: 7029, title: "Later eligible", sectionId: 1, section: "Doing", status: "Normal" },
+  ] });
+  assert.equal((await f.run()).status, 204);
+  await f.settle();
+  assert.equal(f.calls.scheduled.length, 1);
+  assert.equal(f.calls.completionReads, 1);
+  assert.equal(f.calls.sent.length, 1);
+  assert.equal(f.calls.sent[0].html, "First eligible");
+});
+
+test("large bulk move schedules one job and claimed owners skip completion lookups", async () => {
+  const before = Array.from({ length: 100 }, (_, i) => ({
+    id: 100 + i, projectId: 15, uniqueIndex: 7028 + i, title: `Task ${i}`, sectionId: 1, section: "Doing", status: "Normal",
+  }));
+  for (const claimed of [false, true]) {
+    const f = fixture({ before, claimed });
+    assert.equal((await f.run()).movedTaskCount, 100);
+    await f.settle();
+    assert.equal(f.calls.history.length, 100);
+    assert.equal(f.calls.scheduled.length, 1);
+    assert.equal(f.calls.markerReads, 1);
+    assert.equal(f.calls.completionReads, claimed ? 0 : 1);
+    assert.equal(f.calls.sent.length, claimed ? 0 : 1);
+  }
 });
 
 test("section deletion human path has no email scheduling or extra row locks", async () => {

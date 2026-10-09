@@ -114,6 +114,7 @@ function renderLayout(content: NotificationContent, link: string): string {
         .preview { background-color: #2F343C !important; color: #ffffff !important; border-left-color: #4455BB !important; }
         .mention-hl { background-color: #403a28 !important; color: #d29f02 !important; }
         .cta { background-color: #4455BB !important; color: #ffffff !important; }
+        .secondary-cta { color: #a5a5a5 !important; }
         .footer { color: #858585 !important; }
         .footer-link { color: #4455BB !important; }
 ${identityDarkModeStyles}      }
@@ -131,8 +132,8 @@ ${identityDarkModeStyles}      }
             <div class="wordmark" style="margin:0 0 28px;color:#262525;font-size:13px;font-weight:700;letter-spacing:0.04em;">Hypertask</div>
             <h1 style="margin:0 0 20px;font-size:20px;line-height:1.4;font-weight:600;">${content.heading}</h1>
             ${identity}${eyebrow}${contextTitle}${preview}
+            ${content.secondaryCta ? `<a class="secondary-cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:0 16px 12px 0;color:#858585;font-size:15px;text-decoration:none;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
             <a class="cta" href="${escapeHtml(link)}" style="display:inline-block;padding:10px 16px;background-color:${content.ctaColor ?? "#4455BB"};color:#ffffff;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${content.ctaLabel}</a>
-            ${content.secondaryCta ? `<a class="cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:12px 0 0;padding:10px 16px;background-color:#4455BB;color:#ffffff;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
             <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a></p>
           </div>
         </td>

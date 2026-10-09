@@ -19,13 +19,22 @@ export function scheduleAgentFirstTaskEmail(
   userId: number,
   agentId?: string | null,
 ): void {
-  if (
-    !agentId ||
-    after.status !== "Normal" ||
-    (before.sectionId === after.sectionId && before.section === after.section)
-  ) return;
-  const work = sendAgentFirstTaskEmail(before, after, userId, agentId).catch(() => {
-    console.warn("[agent-first-task-email] Email work failed", { userId, taskId: after.id });
+  scheduleAgentFirstTaskEmailBatch([{ before, after }], userId, agentId);
+}
+
+export function scheduleAgentFirstTaskEmailBatch(
+  tasks: { before: CompletionTask; after: CompletionTask }[],
+  userId: number,
+  agentId?: string | null,
+): void {
+  if (!agentId) return;
+  const candidates = tasks.filter(({ before, after }) =>
+    after.status === "Normal" &&
+    (before.sectionId !== after.sectionId || before.section !== after.section)
+  );
+  if (!candidates.length) return;
+  const work = sendAgentFirstTaskEmail(candidates, userId, agentId).catch(() => {
+    console.warn("[agent-first-task-email] Email work failed", { userId });
   });
   try {
     waitUntil(work);
@@ -35,13 +44,17 @@ export function scheduleAgentFirstTaskEmail(
 }
 
 async function sendAgentFirstTaskEmail(
-  before: CompletionTask,
-  after: CompletionTask,
+  candidates: { before: CompletionTask; after: CompletionTask }[],
   userId: number,
   agentId: string,
 ): Promise<void> {
+  if (await prisma.logs.findFirst({ where: { LoggedById: userId, log: marker }, select: { id: true } })) return;
+
+  const sectionIds = [...new Set(candidates.flatMap(({ before, after }) =>
+    [before.sectionId, after.sectionId].filter((id): id is number => id !== null)
+  ))];
   const sections = await prisma.section.findMany({
-    where: { id: { in: [before.sectionId, after.sectionId].filter((id): id is number => id !== null) } },
+    where: { id: { in: sectionIds } },
     select: { id: true, section_title: true, isDone: true },
   });
   const isDone = (task: CompletionTask) => {
@@ -49,7 +62,9 @@ async function sendAgentFirstTaskEmail(
     return columnRoleFor(section ?? { section_title: task.section }) === "done";
   };
   // HTPR-7034: agent_task_completed is fired by the activation analytics ticket
-  if (isDone(before) || !isDone(after)) return;
+  const candidate = candidates.find(({ before, after }) => !isDone(before) && isDone(after));
+  if (!candidate) return;
+  const { after } = candidate;
 
   const [agent, board] = await Promise.all([
     prisma.agent.findFirst({
