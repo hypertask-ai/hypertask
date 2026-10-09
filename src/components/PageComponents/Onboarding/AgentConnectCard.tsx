@@ -16,16 +16,26 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
 
   useEffect(() => {
     const controller = new AbortController();
-    void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
+    // Revalidate on flag changes and every minute so an expired QA arm or a
+    // flag switched off removes the card.
+    const load = () => void fetch("/api/users/ai-connection-status?mode=first", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!controller.signal.aborted) setState({ identity, eligible: false, show: false });
+          return;
+        }
         const data = await response.json();
         if (!controller.signal.aborted) {
           setState({ identity, eligible: data.eligible === true, show: !data.connected && !data.dismissed && data.boardId === projectId });
         }
       }).catch(() => undefined);
-    return () => controller.abort();
-  }, [identity, projectId]);
+    load();
+    const intervalId = setInterval(load, 60_000);
+    return () => {
+      controller.abort();
+      clearInterval(intervalId);
+    };
+  }, [identity, projectId, flagEnabled]);
 
   return (flagEnabled ? true : serverEligible) && show
     ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
