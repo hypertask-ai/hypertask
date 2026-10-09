@@ -10,6 +10,8 @@ import { createProjectWithStableName } from "../projects/createProjectWithStable
 import { createTaskCore } from "../tasks/createTaskCore";
 import assigneesAssign from "../assignees/assign";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
+import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
 
 type CompleteOnboardingFirstStepOptions = {
   createInitialBoard?: boolean;
@@ -167,18 +169,21 @@ const SEED_STARTER_TASKS: boolean = false;
 
 // HTPR-4866: the one task every fresh board starts with. Assigned to the new
 // user (by HyperAI) so it also lands unread in their inbox.
-const CONNECT_AI_TASK = {
+const CONNECT_AI_TASK = (cliInstallCommandEnabled: boolean) => ({
   title: "Connect Hypertask to Claude or ChatGPT",
   description: [
     "<p><strong>Give Claude or ChatGPT access to this board so it can read, create and update your tasks.</strong></p>",
     "<p>Open <strong>Settings &gt; Connect &gt; MCP</strong>, generate a token, then copy the ready-made config into your AI client. The server is <strong>https://mcp.hypertask.ai/mcp</strong>.</p>",
     "<p>Working in a terminal instead? <strong>Settings &gt; Connect &gt; CLI</strong> covers Claude Code:</p>",
     "<ul>",
-    "<li><strong>npm install -g @hypertask/hypertask_cli</strong></li>",
-    "<li><strong>hypertask login</strong></li>",
+    cliInstallCommandEnabled
+      ? `<li><code>${CLI_INSTALL_COMMAND}</code></li>`
+      : "<li><strong>npm install -g @hypertask/hypertask_cli</strong></li>",
+    `<li><strong>${CLI_LOGIN_COMMAND}</strong></li>`,
     "</ul>",
+    ...(cliInstallCommandEnabled ? [`<p>${CLI_WINDOWS_NOTE}</p>`] : []),
   ].join(""),
-};
+});
 
 const STARTER_BOARD_SECTIONS: {
   section_title: string;
@@ -318,9 +323,12 @@ export const createOnboardingSampleBoardProject = async ({
   // up in their inbox with the blue indicator. Best-effort like the rest.
   if (firstSection) {
     try {
+      const connectAiTask = CONNECT_AI_TASK(
+        await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
+      );
       const { task } = await createTaskCore({
-        title: CONNECT_AI_TASK.title,
-        description: CONNECT_AI_TASK.description,
+        title: connectAiTask.title,
+        description: connectAiTask.description,
         userId: generalConfig.hyperAiId,
         projectId: Project.id,
         sectionId: firstSection.id,
@@ -344,7 +352,7 @@ export const createOnboardingSampleBoardProject = async ({
       }
     } catch (error) {
       console.error(
-        `Error creating onboarding task "${CONNECT_AI_TASK.title}" (skipping):`,
+        `Error creating onboarding task "${CONNECT_AI_TASK(false).title}" (skipping):`,
         error
       );
     }
