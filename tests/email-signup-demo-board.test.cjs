@@ -133,6 +133,8 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '../assignees/assign': async () => {},
     '@/lib/stripeCustomerName': { stripeCustomerName: () => 'New' },
   }
+  aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
+  aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)
   aliases['@/utils/controllers/users/completeOnboardingStep'] = {
     CompleteOnboardingFirstStep: async (...args) => {
@@ -142,7 +144,6 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     },
   }
   aliases['@/utils/controllers/demo/adoptGuestBoards'] = loadTs('src/utils/controllers/demo/adoptGuestBoards.ts', aliases)
-  aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   // Also runs on the pre-fix revision, so a missing helper cannot mask the lost-board assertion.
   const helperPath = 'src/utils/controllers/users/provisionFirstWorkspace.ts'
   if (fs.existsSync(path.join(root, helperPath))) {
