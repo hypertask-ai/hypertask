@@ -57,7 +57,6 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
     if (!(await isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, userId))) return;
     const first = await firstConnectionRow(userId);
     if (!first || first.id !== logId) return;
-    // HTPR-7034: fire agent_connected activation event here
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true } });
     if (!user?.email) return;
     const client = await connectionClient(userId, first);
@@ -84,6 +83,7 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
       where: { userId_eventType: { userId, eventType: "agent_connected_email" } },
       data: { success: true },
     });
+    // HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "agent_connected" })
   } catch {
     console.error("Agent connection email failed");
   }
