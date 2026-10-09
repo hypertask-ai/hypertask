@@ -38,7 +38,7 @@ export function useTeamCustomEndpoint(teamId: string | null | undefined) {
   const custom = query.data?.keys.find((row) => row.provider === "custom");
   const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
-  const modelId = haiku55Enabled
+  const modelId = haikuDefaultEnabled || haiku55Enabled
     ? resolveHaikuModelId(custom?.modelId?.trim() || "", true) || null
     : custom?.modelId?.trim() || null;
 

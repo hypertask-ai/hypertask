@@ -1,6 +1,7 @@
 "use client";
 
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
@@ -98,12 +99,6 @@ const FEATURE_SECTIONS: FeatureSection[] = [
       { feature: "dictation", description: "Turns recorded speech into text" },
     ],
   },
-];
-
-const featureModelsQueryKey = (teamId: string | null, haiku55Enabled: boolean) => [
-  "teamAiFeatureModels",
-  teamId,
-  haiku55Enabled,
 ];
 
 const modelDefinition = (model: string, haiku55Enabled = false) => {
@@ -320,7 +315,7 @@ const AiFeaturesSection = () => {
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
   ) || haikuDefaultEnabled;
-  const visibleModelOptions = haiku55Enabled
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   const queryClient = useQueryClient();
@@ -335,7 +330,7 @@ const AiFeaturesSection = () => {
   const [savingFeature, setSavingFeature] = useState<AiFeature | "reset" | null>(
     null,
   );
-  const queryKey = featureModelsQueryKey(teamId, haiku55Enabled);
+  const queryKey = teamAiFeatureModelsQueryKey(teamId, haiku55Enabled, haikuDefaultEnabled);
   const featureModelsQuery = useQuery<FeatureModelsResponse>({
     queryKey,
     enabled: Boolean(teamId),

@@ -823,7 +823,7 @@ const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
   ) || haikuDefaultEnabled;
-  const visibleModelOptions = haiku55Enabled
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   if (lunaFree) return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} lunaFree />;

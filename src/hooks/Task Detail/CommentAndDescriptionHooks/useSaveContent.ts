@@ -91,7 +91,7 @@ export default function useSaveContent() {
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = currentBoardBilling;
-  const defaultModelOption = haiku55Enabled
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(

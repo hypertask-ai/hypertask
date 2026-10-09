@@ -14,6 +14,7 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
+  teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
 import type { TAiModal } from "@/models/AI_Task_writer_model";
@@ -57,7 +58,7 @@ export function useAiModelPreference(
   const teamFeatureModels = useQuery<
     Record<string, { model: string | null; effectiveModel: string | null }>
   >({
-    queryKey: ["teamAiFeatureModels", currentTeamId, haiku55Enabled, haikuDefaultEnabled],
+    queryKey: teamAiFeatureModelsQueryKey(currentTeamId, haiku55Enabled, haikuDefaultEnabled),
     enabled: Boolean(currentTeamId),
     queryFn: async () => {
       const { data } = await axios.get("/api/teams/aiFeatureModels", {
@@ -74,7 +75,7 @@ export function useAiModelPreference(
     surface,
     currentTeamId,
   );
-  const planDefault = haiku55Enabled
+  const planDefault = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,
         hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),

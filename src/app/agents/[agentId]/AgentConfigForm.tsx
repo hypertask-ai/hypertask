@@ -57,7 +57,7 @@ export function AgentConfigForm({
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
   ) || haikuDefaultEnabled;
-  const visibleModelOptions = haiku55Enabled
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   return (

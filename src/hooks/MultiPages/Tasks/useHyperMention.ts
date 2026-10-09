@@ -52,7 +52,7 @@ export function useHyperMention() {
   const currentBoardBilling = useCurrentBoardBilling();
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = currentBoardBilling;
-  const defaultModelOption = haiku55Enabled
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
     : defaultAiModelOption;
 

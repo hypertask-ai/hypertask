@@ -775,7 +775,7 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
 const ApiKeysSection = () => {
   const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
-  const visibleProviderRows = haiku55Enabled
+  const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled
     ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
     : providerRows;
 

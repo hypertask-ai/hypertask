@@ -53,7 +53,7 @@ function harness(enabled, plan = "Free", legacyHaiku = false) {
     },
   });
   const modelApi = moduleWithStubs("src/app/api/ai/_lib/modelProvider.ts", {
-    "@/lib/flags": flags, "@/lib/flags/keys": keys,
+    "@/app/api/ai/_lib/planGate": gate,
     "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers,
     "@vercel/functions": { waitUntil: () => {} },
     "./aiUsage": { logAiUsage: async () => {} },

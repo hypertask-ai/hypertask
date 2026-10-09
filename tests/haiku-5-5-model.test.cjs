@@ -72,12 +72,17 @@ function harness({ enabled = true, flagError = false, userId = 985, input = 100,
     "@/app/api/ai/_lib/sharedAllowance": pricing,
     "@/lib/aiModelOptions": catalog,
     "@/lib/aiProviders": load(path.join(root, "src/lib/aiProviders.ts")),
-    "@/lib/flags/keys": keys,
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
-      checks.push([key, id]);
-      if (flagError) throw new Error("flag read failed");
-      return key === keys.HTPR_7010_HAIKU_5_5_FLAG && enabled;
-    } },
+    "@/app/api/ai/_lib/planGate": moduleWithStubs("src/app/api/ai/_lib/planGate.ts", {
+      "@/lib/prisma": {}, "@/lib/planFromStripePriceId": {},
+      "@/lib/internalCompTeams": {}, "@/lib/teamComp": {},
+      "@/lib/subscriptionAccess": {}, "@/lib/aiModelOptions": catalog,
+      "@/lib/flags/keys": keys,
+      "@/lib/flags": { isFeatureEnabled: async (key, id) => {
+        checks.push([key, id]);
+        if (flagError) throw new Error("flag read failed");
+        return key === keys.HTPR_7010_HAIKU_5_5_FLAG && enabled;
+      } },
+    }),
     "@/lib/aiAllowancePolicy": { FREE_TEAM_AI_ALLOWANCE_USD: 1, PAID_TEAM_AI_ALLOWANCE_USD: 5 },
     "@/lib/aiUsageClassification": load(path.join(root, "src/lib/aiUsageClassification.ts")),
     "@/lib/ai/customEndpoint": load(path.join(root, "src/lib/ai/customEndpoint.ts")),
@@ -125,12 +130,15 @@ test("web, settings and agent pickers use the flag filter; Android hides it whil
     visit(sourceFile);
     assert.ok(visibilityExpression, `${file} gates its model list explicitly`);
     for (const haiku55Enabled of [false, true]) {
-      const visible = vm.runInNewContext(visibilityExpression, {
-        haiku55Enabled,
-        aiModelOptions: catalog.aiModelOptions,
-        isAiModelOptionVisible: catalog.isAiModelOptionVisible,
-      });
-      assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haiku55Enabled)));
+      for (const haikuDefaultEnabled of [false, true]) {
+        const visible = vm.runInNewContext(visibilityExpression, {
+          haiku55Enabled,
+          haikuDefaultEnabled,
+          aiModelOptions: catalog.aiModelOptions,
+          isAiModelOptionVisible: catalog.isAiModelOptionVisible,
+        });
+        assert.deepEqual(visible, catalog.aiModelOptions.filter((entry) => catalog.isAiModelOptionVisible(entry, haikuDefaultEnabled || haiku55Enabled)));
+      }
     }
   }
   assert.equal(catalog.isAiModelOptionVisible(option, false), false);
@@ -158,7 +166,7 @@ test("server rejects both inference methods, gateway and direct/raw ids when fla
       const h = harness({ enabled: false });
       await assert.rejects(h.makeModel(provider, id, credential)[method](params), /model is unavailable/);
       assert.equal(h.calls.length, 0);
-      assert.deepEqual(h.checks, [["htpr-7010-haiku-5-5", 985], ["htpr-7038-haiku-default", 985]]);
+      assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
     }
   }
 });
@@ -172,7 +180,7 @@ test("missing user or failed flag evaluation fails closed, without altering olde
   const h = harness({ enabled: false });
   await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
   assert.equal(h.calls[0].temperature, 0.2);
-  assert.deepEqual(h.checks, [["htpr-7010-haiku-5-5", 985], ["htpr-7038-haiku-default", 985]]);
+  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
   await h.flush();
 });
 
