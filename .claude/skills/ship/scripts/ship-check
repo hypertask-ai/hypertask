@@ -522,7 +522,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted
+  local cmd seg rest t c pr out checks setting v part unquoted cwd_changed=false
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
@@ -556,11 +556,36 @@ guard() {
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
       echo "ship-check blocked: cannot parse the leading environment assignments before the protected command." >&2; exit 2
     fi
+    [[ $rest =~ ^(cd|pushd|popd)([[:space:]]|$) ]] && cwd_changed=true
     # Only the app and CLI repos use the Hypertask ticket-title contract.
     if [[ $rest =~ ^$merge ]]; then
-      local repo_option="(^|[[:space:]])(-R[[:space:]]*|--repo[[:space:]=]+)[\"']?([^[:space:]\"']+)"
-      [[ $rest =~ $repo_option ]] && REPO=${BASH_REMATCH[3]}
+      # Shell comments and merge-message text cannot select a different repo.
+      REPO=$(python3 - "$rest" "$REPO" <<'PY'
+import re, shlex, sys
+try:
+    repo = sys.argv[2]
+    args = iter(shlex.split(sys.argv[1], comments=True)[3:])
+    for arg in args:
+        if arg == '--':
+            break
+        if arg in ('-R', '--repo'):
+            repo = next(args)
+        elif arg.startswith('--repo='):
+            repo = arg.split('=', 1)[1]
+        elif arg.startswith('-R'):
+            repo = arg[2:]
+        elif arg in ('-A', '--author-email', '-b', '--body', '-F', '--body-file',
+                     '--match-head-commit', '-t', '--subject'):
+            next(args)
+    if repo and not re.fullmatch(r'[A-Za-z0-9_./:@-]+', repo):
+        raise ValueError('non-literal repo')
+    print(repo)
+except (ValueError, StopIteration):
+    sys.exit(1)
+PY
+      ) || { echo "ship-check blocked the merge: cannot parse the target repo." >&2; exit 2; }
       if [ -z "$REPO" ]; then
+        [ "$cwd_changed" = false ] || { echo "ship-check blocked the merge: specify --repo after changing directories." >&2; exit 2; }
         REPO=$(git remote get-url origin 2>/dev/null) || { echo "ship-check blocked the merge: cannot determine the target repo." >&2; exit 2; }
       fi
       REPO=${REPO,,}; REPO=${REPO%/}; REPO=${REPO%.git}; REPO=${REPO##*github.com[:/]}

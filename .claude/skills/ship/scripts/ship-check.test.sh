@@ -87,6 +87,15 @@ for repo in hypertask-ai/hypertask hypertask-ai/cli; do
   SHIP_REPO="$repo" G 2 $M 180
 done
 G 2 $M 180 --repo=github.com/Hypertask-AI/Hypertask
+G 2 $M 180 '# -R valentinyeo/wazig'
+G 2 SHIP_REPO=hypertask-ai/hypertask $M 180 '# --repo=valentinyeo/wazig'
+G 2 $M 180 -R 'hypertask-ai/"hyper"task'
+G 2 $M 180 --repo='hypertask-ai/'"'cli'"
+G 0 $M 180 -R 'valentinyeo/"wa"zig'
+G 2 $M 180 --subject "'-Rvalentinyeo/wazig'"
+G 2 $M 180 --body "'text -R valentinyeo/wazig'"
+G 0 $M 180 -R valentinyeo/wazig --subject "'-Rhypertask-ai/hypertask'"
+G 2 $M 180 -R '"$TARGET_REPO"'
 G 0 $M 180 -R valentinyeo/wazig '&&' $M 180 -R valentinyeo/wazig
 G 2 SHIP_REPO=valentinyeo/wazig $M 180 '&&' $M 180 -R hypertask-ai/hypertask
 GUARD_TITLE='HTPR-999 [INFRA] Fixture' G 0 SHIP_REPO=hypertask-ai/cli SHIP_BASE=main $M 180
@@ -100,6 +109,8 @@ pushd "$E/guard-repo" >/dev/null
 for remote in https://github.com/valentinyeo/wazig.git git@github.com:valentinyeo/wazig.git ssh://git@github.com/valentinyeo/wazig.git; do
   git config remote.origin.url "$remote"
   SHIP_REPO= G 0 $M 180
+  SHIP_REPO= G 2 cd /path/to/hypertask '&&' $M 180
+  SHIP_REPO= G 0 cd /path/to/hypertask '&&' $M 180 -R valentinyeo/wazig
 done
 for repo in hypertask-ai/hypertask hypertask-ai/cli; do
   git config remote.origin.url "git@github.com:$repo.git"
