@@ -113,6 +113,8 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
+  aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
+  aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)
   aliases['@/utils/controllers/users/completeOnboardingStep'] = { CompleteOnboardingFirstStep: async (...args) => {
     calls.provision.push(args)
@@ -121,7 +123,6 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     return onboarding.CompleteOnboardingFirstStep(...args)
   } }
   aliases['@/utils/controllers/demo/adoptGuestBoards'] = loadTs('src/utils/controllers/demo/adoptGuestBoards.ts', aliases)
-  aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/utils/controllers/users/provisionFirstWorkspace'] = loadTs('src/utils/controllers/users/provisionFirstWorkspace.ts', aliases)
   const legacy = loadTs('src/lib/auth/legacyCookiePlugin.ts', aliases)
   aliases['@/lib/auth/legacyCookiePlugin'] = legacy
