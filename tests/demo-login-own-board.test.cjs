@@ -89,6 +89,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/themePreferences': { themeCookieSeedValue: () => undefined },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
+    '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
     '@/lib/auth/emailCodeRateLimit': { getEmailCodeClientIp: () => '192.0.2.1', claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }) },
     '@/lib/services/verificationCodeService': { VerificationCodeService: { verifyCode: async () => user.email } },
     jsonwebtoken: { verify: () => ({ sub: user.email }) },
