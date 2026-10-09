@@ -1167,7 +1167,11 @@ const setShowCommands = useSetRecoilState(showCommandsAtom)
 const inviteProject = useRecoilValue(currentProjectAtom)
 const inviteHandledRef = useRef<string | null>(null)
 useEffect(() => {
-  if (!inviteRequested || !authenticated || isGuest || !boardDataReady ||
+  if (!inviteRequested) {
+    inviteHandledRef.current = null;
+    return;
+  }
+  if (!authenticated || isGuest || !boardDataReady ||
       currentBoardAccessStatus !== "authorized" || readyProject?.id !== requestedProjectId ||
       inviteProject?.id !== requestedProjectId) return;
   const key = `${user.id}:${requestedProjectId}`;
