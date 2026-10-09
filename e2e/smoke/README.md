@@ -102,9 +102,14 @@ weekly schedule work normally. Require a successful mirror run, including
 all five read-only pulls, before merging. There is no automatic fallback
 that silently reintroduces anonymous pulls.
 
-Fallback for a GHCR outage: explicitly revert only the CI image references
-to `public.ecr.aws/docker/library/<image>:<tag>@<same digest>` (Soketi uses
-`quay.io/soketi/soketi:<tag>@<same digest>`), then rerun the checks. Both
+Fallback for a GHCR outage: open an explicit recovery PR that restores the CI
+image references to `public.ecr.aws/docker/library/<image>:<tag>@<same digest>`
+(Soketi uses `quay.io/soketi/soketi:<tag>@<same digest>`). In that same PR,
+update the registry-specific assertions in `tests/ci-images.test.cjs` and
+`tests/browser-smoke-workflow.test.cjs` to expect those fallback references;
+otherwise the recovery PR will fail the GHCR-only assertions. Retain exact
+digest checks, required check names, and the mirror workflow, then rerun the
+checks. Do not change production deployment configuration. Both
 Docker Hub and anonymous ECR Public pulls can be throttled, so this is a
 temporary, visible recovery choice, not the normal path. For a missing copy,
 rerun `Mirror CI images` instead of weakening the digest pin. Keep
