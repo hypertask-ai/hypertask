@@ -194,12 +194,11 @@ test("board card clears armed eligibility when user or board changes and ignores
 });
 
 test("connected email shares the current layout, escapes the client and has exactly one absolute board CTA", () => {
-  const { load } = require("./helpers/agent-connection.cjs");
-  const { renderAgentConnectedEmail } = load("src/utils/controllers/notifications/emailTemplates.ts", {
-    "@/utils/htmlEscape": { escapeHtml: (value) => String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") },
-    "./commentPreview": { commentPreview: () => "" },
-    "./mentionText": { mentionQuoteHtml: () => "" },
-  });
+  const path = require("node:path");
+  const { createJiti } = require("jiti");
+  const root = path.resolve(__dirname, "..");
+  const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") } });
+  const { renderAgentConnectedEmail } = jiti(path.join(root, "src/lib/onboarding/emails/agentConnected.ts"));
   const email = renderAgentConnectedEmail("Claude Code <fixture>", 7);
   assert.equal(email.subject, "Your agent is connected");
   const dom = new JSDOM(email.html);
@@ -210,6 +209,12 @@ test("connected email shares the current layout, escapes the client and has exac
   assert.match(email.html, /Claude Code &lt;fixture&gt;/);
   assert.match(dom.window.document.body.textContent, /Ask your agent to pick up the top task on your board/);
   assert.ok(dom.window.document.querySelector(".email-card"));
+  assert.equal(dom.window.document.querySelector("h1").textContent, email.subject);
+  const paragraph = dom.window.document.querySelector(".content-list p");
+  assert.equal(paragraph.textContent, "Claude Code <fixture> just talked to Hypertask. Ask your agent to pick up the top task on your board.");
+  assert.equal(paragraph.style.margin, "0px 0px 16px");
+  assert.equal(dom.window.document.querySelector("blockquote"), null);
+  assert.ok(email.html.includes(".cta { background-color: #4455BB !important; color: #ffffff !important; }"));
   assert.doesNotMatch(email.html, /\u2014/);
   dom.window.close();
 });

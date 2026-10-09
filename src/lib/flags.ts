@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
   HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
   HTPR_7026_AGENT_CONNECT_CHECK_FLAG,
   HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
@@ -243,6 +244,13 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Returns demo visitors logging into an existing account to an accessible board, while keeping adopted demo boards for new accounts.",
+  },
+  {
+    key: HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
+    kind: "feature",
+    defaultMode: "OWNER_AND_QA",
+    shippedOn: "2026-10-09",
+    description: "Uses the shared onboarding email design for agent connection and first completed task emails.",
   },
   {
     key: HTPR_7026_AGENT_CONNECT_CHECK_FLAG,

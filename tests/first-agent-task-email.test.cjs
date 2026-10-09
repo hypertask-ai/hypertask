@@ -7,7 +7,7 @@ const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const emailFile = "src/utils/controllers/notifications/agentFirstTaskEmail.ts";
-const templateFile = "src/utils/controllers/notifications/emailTemplates.ts";
+const templateFile = "src/lib/onboarding/emails/agentFirstTask.ts";
 const boardFile = "src/app/[...boardURL]/LandingPage.tsx";
 const flag = "htpr-7028-first-task-email";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
@@ -107,6 +107,7 @@ function fixture(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": {
       HTPR_7028_FIRST_TASK_EMAIL_FLAG: flag,
+      HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout",
       isFeatureEnabled: async (key, userId) => {
         calls.flags.push({ key, userId });
         if (options.flagFailure) throw new Error("Flag read failed");
@@ -120,7 +121,8 @@ function fixture(options = {}) {
       return { id: "local-email" };
     } },
     "@/lib/email/unsubscribe": { unsubscribeHeaders: () => ({ "List-Unsubscribe": "<https://example.invalid/unsubscribe>" }) },
-    "./emailTemplates": templates(),
+    "@/lib/onboarding/emails/agentFirstTask": templates(),
+    "./emailTemplates": {},
   });
   const schedule = (oldTask = before, task = after, userId = options.userId ?? 985, agentId = "authenticated-agent") =>
     scheduleAgentFirstTaskEmail(oldTask, task, userId, agentId);
@@ -135,7 +137,7 @@ test("agent completion sends once to the board and agent owner", async () => {
   assert.equal(f.calls.sent.length, 1);
   assert.equal(f.calls.sent[0].to, "qa@example.invalid");
   assert.equal(f.calls.sent[0].subject, "Your agent just finished its first task");
-  assert.deepEqual(f.calls.flags, [{ key: flag, userId: 985 }]);
+  assert.deepEqual(f.calls.flags, [{ key: flag, userId: 985 }, { key: "htpr-7037-shared-email-layout", userId: 985 }]);
   assert.equal(f.store.length, 1);
 });
 
@@ -355,6 +357,10 @@ test("template button hierarchy has one primary and a borderless muted secondary
     agentName: "Agent", taskTitle: "Task", boardName: "Board", projectId: 15, uniqueIndex: 7028,
   });
   assert.equal(html.split('class="cta"').length - 1, 1);
+  assert.ok(html.includes('<div class="content-list" style="margin:0 0 24px;font-size:14px;line-height:1.6;">'));
+  assert.ok(html.includes('<p style="margin:0 0 16px;">Agent completed &#39;Task&#39; on Board.</p>'));
+  assert.ok(html.includes('<p style="margin:0 0 16px;">Hypertask works best when your team and your agents share the board.</p>'));
+  assert.ok(html.includes('.cta { background-color: #4455BB !important; color: #ffffff !important; }'));
   assert.match(html, /class="cta"[^>]*background-color:#4455BB[^>]*>Review the work<\/a>/);
   const secondary = html.match(/<a class="secondary-cta"[^>]*>Invite a teammate<\/a>/)?.[0];
   assert.ok(secondary);

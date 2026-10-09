@@ -1,11 +1,12 @@
 import { waitUntil } from "@vercel/functions";
 import type { Task } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { unsubscribeHeaders } from "@/lib/email/unsubscribe";
-import { renderAgentFirstTaskEmail } from "./emailTemplates";
+import { renderAgentFirstTaskEmail } from "@/lib/onboarding/emails/agentFirstTask";
+import { renderAgentFirstTaskEmail as renderLegacyAgentFirstTaskEmail } from "./emailTemplates";
 
 type CompletionTask = Pick<
   Task,
@@ -94,7 +95,8 @@ async function sendAgentFirstTaskEmail(
   if (!claimed) return;
 
   // Keep the claim even on failure: a lost provider response may already have delivered mail.
-  const { subject, html } = renderAgentFirstTaskEmail({
+  const sharedLayout = await isFeatureEnabled(HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, board.ownerId).catch(() => false);
+  const { subject, html } = (sharedLayout ? renderAgentFirstTaskEmail : renderLegacyAgentFirstTaskEmail)({
     agentName: agent.displayName,
     taskTitle: after.title,
     boardName: board.title || board.name,

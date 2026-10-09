@@ -1,10 +1,11 @@
 import { LogType, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
 import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
-import { renderAgentConnectedEmail } from "@/utils/controllers/notifications/emailTemplates";
+import { renderAgentConnectedEmail } from "@/lib/onboarding/emails/agentConnected";
+import { renderAgentConnectedEmail as renderLegacyAgentConnectedEmail } from "@/utils/controllers/notifications/emailTemplates";
 
 const CLIENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -80,7 +81,8 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
       orderBy: { id: "asc" },
       select: { id: true },
     });
-    const email = renderAgentConnectedEmail(client, board?.id);
+    const sharedLayout = await isFeatureEnabled(HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, userId).catch(() => false);
+    const email = (sharedLayout ? renderAgentConnectedEmail : renderLegacyAgentConnectedEmail)(client, board?.id);
     // This existing unique (userId, eventType) key claims the send across instances.
     // Keep the claim on failure: an uncertain provider response must not duplicate mail.
     try {
