@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
+import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
@@ -192,6 +194,7 @@ export async function POST(request: NextRequest) {
 
     // Auto-provision a team/board for brand-new users so they land on a real
     // board instead of the empty state, matching instant-signup's behavior.
+    let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
         console.log('🚀 Completing onboarding step 1 for new email-link user')
@@ -203,6 +206,7 @@ export async function POST(request: NextRequest) {
           companySizeOptions[0], // Default: "Just me"
           companyRoleOptions[0] // Default: "Founder or leadership team"
         )
+        welcomeBoardId = onboardingResult?.Project?.id
         console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
         console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
@@ -269,6 +273,8 @@ export async function POST(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/'
       })
+
+      waitUntil(maybeSendWelcomeEmail(userData!.id, { boardId: welcomeBoardId }))
 
       console.log('✅ Authentication cookies set successfully (email link)')
     } catch (cookieError) {

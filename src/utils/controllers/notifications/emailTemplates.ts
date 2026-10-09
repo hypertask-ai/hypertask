@@ -64,7 +64,7 @@ interface NotificationContent {
 
 const settingsUrl = "https://app.hypertask.ai/settings";
 
-function renderLayout(content: NotificationContent, link: string): string {
+export function renderLayout(content: NotificationContent, link: string, unsubscribeUrl?: string): string {
   const previewHtml =
     content.previewHtml ??
     (content.preview ? escapeHtml(content.preview) : "");
@@ -111,6 +111,8 @@ function renderLayout(content: NotificationContent, link: string): string {
         .email-body { background-color: #0e0e0e !important; color: #ffffff !important; }
         .email-card { background-color: #27292D !important; border-color: rgb(35,37,42) !important; color: #ffffff !important; }
         .wordmark, .content-list { color: #ffffff !important; }
+        /* Graphite: --bg-comment-description #262a30; --color-white-black #ffffff. */
+        .onboarding-code { background-color: #262a30 !important; color: #ffffff !important; }
         .preview { background-color: #2F343C !important; color: #ffffff !important; border-left-color: #4455BB !important; }
         .mention-hl { background-color: #403a28 !important; color: #d29f02 !important; }
         .cta { background-color: #4455BB !important; color: #ffffff !important; }
@@ -134,7 +136,7 @@ ${identityDarkModeStyles}      }
             ${identity}${eyebrow}${contextTitle}${preview}
             ${content.secondaryCta ? `<a class="secondary-cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:0 16px 12px 0;color:#727279;font-size:14px;text-decoration:none;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
             <a class="cta" href="${escapeHtml(link)}" style="display:inline-block;padding:10px 16px;background-color:${content.ctaColor ?? "#4455BB"};color:#ffffff;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${content.ctaLabel}</a>
-            <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a></p>
+            <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a>${unsubscribeUrl ? ` · <a class="footer-link" href="${escapeHtml(unsubscribeUrl)}" style="color:#4455BB;text-decoration:underline;">Unsubscribe</a>` : ""}</p>
           </div>
         </td>
       </tr>

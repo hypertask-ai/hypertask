@@ -1379,3 +1379,16 @@ test("bugfix kind and default must be immutable literal declarations", async (t)
     assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, head, dir)).pass, false, kind);
   }
 });
+
+test("welcome email registers its ticket-specific feature with the restricted default", () => {
+  const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
+  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  assert.match(keys, /export const HTPR_7025_WELCOME_EMAIL_FLAG = "htpr-7025-welcome-email";/);
+  const definition = flags.match(/\{\s*key: HTPR_7025_WELCOME_EMAIL_FLAG,([\s\S]*?)\n  \}/)?.[1];
+  assert.ok(definition);
+  assert.match(definition, /kind: "feature"/);
+  assert.doesNotMatch(definition, /defaultMode:/);
+  assert.match(flags, /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  const welcome = fs.readFileSync(path.join(root, "src/lib/onboarding/emails/welcome.ts"), "utf8");
+  assert.match(welcome, /isFeatureEnabled\(HTPR_7025_WELCOME_EMAIL_FLAG,/);
+});

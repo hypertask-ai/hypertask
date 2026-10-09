@@ -39,7 +39,7 @@ function normalizeProto(value: string | undefined): 'http' | 'https' {
   return proto === 'http' || proto === 'https' ? proto : 'https'
 }
 
-function fallbackBaseUrl(): string {
+export function fallbackBaseUrl(): string {
   return process.env.NEXT_PUBLIC_SITE_URL || DEFAULT_SITE_URL
 }
 

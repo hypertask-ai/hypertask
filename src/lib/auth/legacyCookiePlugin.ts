@@ -1,4 +1,6 @@
 // HTPR-4146: reverse of bridgePlugin.ts — mints legacy ht_session/nookies_user cookies after a native Better Auth login, so the 140+ files that still read those cookies directly keep working.
+import { waitUntil } from '@vercel/functions'
+import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import type { GenericEndpointContext } from '@better-auth/core'
 import type { BetterAuthPlugin } from 'better-auth'
 import {
@@ -216,7 +218,21 @@ export function legacyCookiePlugin() {
             }
             await adoptGuestBoards(ctx.getCookie?.(SESSION_COOKIE), userId)
 
-            await setLegacyCookiesForUser(ctx, userId)
+            const userData = await setLegacyCookiesForUser(ctx, userId)
+            if (userData && (
+              ctx.path?.startsWith('/callback/') ||
+              ctx.path === '/magic-link/verify' ||
+              ctx.path === '/sign-in/email-otp' ||
+              ctx.path === '/sign-in/email' ||
+              ctx.path === '/sign-in/social' ||
+              ctx.path === '/passkey/verify-authentication'
+            )) {
+              try {
+                waitUntil(maybeSendWelcomeEmail(userId))
+              } catch (error) {
+                console.error('[onboarding/welcome] scheduling failed', error)
+              }
+            }
           }),
         },
       ],
