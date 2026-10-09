@@ -178,7 +178,9 @@ ci_tests:
     push_production:
       scope: full
       coverage: true
-      test_failure_action: warn_only
+      test_failure_action: infra_ticket_and_job_evidence_only
+      telegram: confirmed_live_site_failures_and_rollback_only
+      telegram_dedup: once_per_cause_per_utc_day
       previous_run_comparison: informational_only
       rollback_authority: current_production_health_probe
 

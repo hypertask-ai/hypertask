@@ -315,7 +315,7 @@ jobs:
           echo "failed=${{ steps.push-test.outcome == 'failure' }}" >> "$GITHUB_OUTPUT"
           failures=""
           if [ -f "$RUNNER_TEMP/push-test.log" ]; then
-            failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p' "$RUNNER_TEMP/push-test.log" \
+            failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p; s/^[[:space:]]*✖ (.*) \([0-9.]+ms\)$/\1/p' "$RUNNER_TEMP/push-test.log" \
               | awk 'BEGIN { ORS="" } NR <= 3 { if (NR > 1) printf "; "; printf "%s", $0 }')
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
@@ -490,20 +490,10 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           FAILED_TESTS: ${{ needs.ci-tests.outputs.failed_tests }}
           GH_TOKEN: ${{ github.token }}
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         run: |
           set -euo pipefail
-
-          send_alert() {
-            local message="$1" code
-            code=$(curl -s --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/telegram.json" -w '%{http_code}' \
-              -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$message" 2>/dev/null) || true
-            if [ "${code:-}" != "200" ]; then
-              echo "::error::Telegram alert failed (HTTP ${code:-none}): $(cat "$RUNNER_TEMP/telegram.json" 2>/dev/null || true)"
-            fi
-          }
 
           HISTORY=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$BEFORE_SHA" 2>/dev/null) || HISTORY='{}'
           HISTORY_REASON=$(printf '%s' "$HISTORY" | jq -r '.reason // "previous production test result unavailable"' 2>/dev/null || true)
@@ -512,7 +502,7 @@ jobs:
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           FAILED_TESTS="${FAILED_TESTS:-test command failed before naming a test}"
           MESSAGE=$(printf 'What failed: %s\nLive site changed: no\nNext: production stays live while the test failure is investigated\nRun: %s' "$FAILED_TESTS" "$RUN_URL")
-          send_alert "$MESSAGE"
+          node .github/scripts/production-alert.mjs setup production-tests "$MESSAGE"
           echo "::warning::$FAILED_TESTS failed. Production was not reverted or rolled back."
 
   production-cli-parity:
