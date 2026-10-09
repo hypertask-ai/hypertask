@@ -103,7 +103,7 @@ test("all invite query values round-trip punctuation, unicode and literal percen
   const url = new URL(await generateInviteLink(key, 42, board.title, view, 7), "https://app.hypertask.ai");
   assert.equal(url.hash, "");
   assert.deepEqual(Object.fromEntries(url.searchParams), { key, project: board.title, projectId: "42", view });
-  assert.deepEqual(flagCalls, [{ key: flagKey, userId: 7 }]);
+  assert.deepEqual(flagCalls, []);
   const noView = new URL(await generateInviteLink(key, 42, board.title, undefined, 7), "https://app.hypertask.ai");
   assert.equal(noView.searchParams.has("view"), false);
 });
@@ -124,10 +124,11 @@ test("public invite callers await the shared link builder instead of returning a
   }
 });
 
-test("Off preserves the legacy link builder", async () => {
+test("link encoding does not depend on the flag", async () => {
   enabled = false;
-  const link = await generateInviteLink("test", 42, "Plain board", "kanban", 7);
-  assert.ok(link.endsWith("/invite?key=test&project=Plain board&projectId=42&view=kanban"));
+  const link = await generateInviteLink("test", 42, "Plain & board", "kanban", 7);
+  assert.ok(link.endsWith("/invite?key=test&project=Plain+%26+board&projectId=42&view=kanban"));
+  assert.deepEqual(flagCalls, []);
 });
 
 test("send and resend deliver the board title and normalized inviter to the real email boundary", async () => {

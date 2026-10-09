@@ -4,7 +4,6 @@ import { CreateLogInput, IMember, IViewType } from "@/models/model";
 import createLog from "@/utils/controllers/logs/createLog";
 
 import prisma from "@/lib/prisma";
-import { HTPR_7031_INVITE_EMAIL_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { sendEmailNotification } from "@/utils/controllers/notifications/sendNotification";
@@ -201,19 +200,16 @@ export const generateInviteLink = async (
   projectId: number,
   projectName: string,
   viewSlug: string | undefined,
-  userId: number,
+  _userId: number,
 ) => {
   const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
-  if (await isFeatureEnabled(HTPR_7031_INVITE_EMAIL_FLAG, userId)) {
-    const params = new URLSearchParams({
-      key: inviteId,
-      project: projectName,
-      projectId: String(projectId),
-    });
-    if (viewSlug) params.set("view", viewSlug);
-    return `${baseURL}/invite?${params}`;
-  }
-  return `${baseURL}/invite?key=${inviteId}&project=${projectName}&projectId=${projectId}${viewSlug ? `&view=${viewSlug}` : ""}`;
+  const params = new URLSearchParams({
+    key: inviteId,
+    project: projectName,
+    projectId: String(projectId),
+  });
+  if (viewSlug) params.set("view", viewSlug);
+  return `${baseURL}/invite?${params}`;
 };
 
 export const setViewSlug = (activeView: IViewType | undefined) =>
