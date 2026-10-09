@@ -14,6 +14,7 @@ import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
   HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
+  HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
   HTPR_7031_INVITE_EMAIL_FLAG,
   HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
   HTPR_7010_HAIKU_5_5_FLAG,
@@ -228,6 +229,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Returns demo visitors logging into an existing account to an accessible board, while keeping adopted demo boards for new accounts.",
+  },
   {
     key: HTPR_7026_AGENT_CONNECT_CHECK_FLAG,
     kind: "feature",

@@ -6,6 +6,7 @@ export const HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG = "htpr-7029-keep-de
 export const HTPR_7032_EMAIL_EXPIRY_COPY_FLAG = "htpr-7032-email-expiry-copy";
 export const HTPR_7032_FIRST_TIME_EMAIL_FLAG = "htpr-7032-first-time-email";
 export const HTPR_7033_CLI_INSTALL_COMMAND_FLAG = "htpr-7033-cli-install-command";
+export const HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG = "htpr-7035-demo-login-own-board";
 export const HTPR_7031_INVITE_EMAIL_FLAG = "htpr-7031-invite-email";
 export const HTPR_7016_PHONE_BOARD_COLD_START_FLAG = "htpr-7016-phone-board-cold-start";
 export const HTPR_7010_HAIKU_5_5_FLAG = "htpr-7010-haiku-5-5";

@@ -11,6 +11,7 @@ import prisma from '@/lib/prisma'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, clearBetterAuthSessionCookies, sessionCookieOptions, signSession } from '@/lib/auth/session'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
+import { resolveLoginBoard } from '@/utils/controllers/demo/resolveLoginBoard'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
@@ -215,8 +216,10 @@ export async function POST(request: NextRequest) {
     // Flag-On signups adopt before provisioning in provisionFirstWorkspace.
     await adoptGuestBoards(request.cookies.get(SESSION_COOKIE)?.value, userData!.id)
 
-    // Get user's projects (EXACTLY like verify-code route)
-    const prevBoard = await getProjects(userData!.id, getRequestBaseUrl(request))
+    const loginBoard = await resolveLoginBoard(userData!.id, request.cookies.get('previousBoard')?.value)
+    const prevBoard = loginBoard === undefined
+      ? await getProjects(userData!.id, getRequestBaseUrl(request))
+      : loginBoard
     console.log('📋 User projects fetched (email link):', prevBoard)
 
     // Create response with redirect URL following useAuth.tsx logic
@@ -225,7 +228,7 @@ export async function POST(request: NextRequest) {
       user: userData, // Pass the full user data from database
       prevBoard: prevBoard, // Pass the project data
       isNewUser: userUpdateResult.res.isNewUser, // Pass the isNewUser flag
-      redirectUrl: getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
+      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
       message: 'Email link verified and signed in successfully!',
       abTestVariant: abTestVariant // Pass through for client-side tracking
     })
@@ -260,6 +263,8 @@ export async function POST(request: NextRequest) {
         })
         console.log('✅ Previous board cookie set (email link):', `project-${prevBoard.id}`)
       }
+
+      if (loginBoard === null) response.cookies.delete('previousBoard')
 
       // Track the source for analytics
       response.cookies.set('signup_source', 'email_link', {

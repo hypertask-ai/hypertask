@@ -20,6 +20,7 @@ import authConfig from '@/lib/configs/auth.config'
 import { themeCookieSeedValue } from '@/lib/themePreferences'
 import prisma from '@/lib/prisma'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
+import { resolveLoginBoard } from '@/utils/controllers/demo/resolveLoginBoard'
 import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import { HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, isFeatureEnabled } from '@/lib/flags'
@@ -71,6 +72,23 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     maxAge: 604800,
     path: '/',
   })
+
+  const previousBoard = ctx.getCookie?.('previousBoard')
+  const loginBoard = previousBoard ? await resolveLoginBoard(userId, previousBoard) : undefined
+  if (loginBoard !== undefined) {
+    const value = loginBoard
+      ? previousBoard?.split('|&|')[0] === `project-${loginBoard.id}`
+        ? previousBoard
+        : `project-${loginBoard.id}|&|`
+      : ''
+    ctx.setCookie('previousBoard', value, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: loginBoard ? 604800 : 0,
+      path: '/',
+    })
+  }
 
   // previousBoard drives the middleware's post-login board restoration. It is
   // normally maintained client-side as the user switches boards, but a fresh
