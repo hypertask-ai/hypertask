@@ -4,12 +4,10 @@ set -euo pipefail
 CHECK_DIR=$(mktemp -d)
 trap 'rm -rf "$CHECK_DIR"' EXIT
 FAILURES=""
+LIVE_FAILURE=false
 
 notify() {
-  if [ -n "${TG_TOKEN:-}" ] && [ -n "${TG_CHAT:-}" ]; then
-    curl -s --max-time 20 -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-      -d chat_id="$TG_CHAT" --data-urlencode text="$1" 2>/dev/null || true
-  fi
+  node .github/scripts/production-alert.mjs "$1" "$2" "$3" || true
 }
 
 probe() {
@@ -53,6 +51,7 @@ probe() {
     if [ "$valid" = "true" ]; then return 0; fi
     if [ "$attempt" -lt 3 ]; then sleep 2; fi
   done
+  if [ "$check" != "firewall" ] && [ -z "$mitigated" ]; then LIVE_FAILURE=true; fi
   FAILURES+="$url: status=$status, x-vercel-mitigated=${mitigated:-none} (expected $expected with valid $check response)"$'\n'
 }
 
@@ -80,7 +79,7 @@ fi
 if [ -n "$FAILURES" ]; then
   MSG="🔴 hypertasks: API reachability check failed.
 ${FAILURES}Likely fix: the Vercel firewall system bypass for the affected host on project hypertasks-prod. Ensure all-sources bypass entries for mcp.hypertask.ai."
-  notify "$MSG"
+  if $LIVE_FAILURE; then notify live api-reachability "$MSG"; else notify setup api-probe-inconclusive "$MSG"; fi
   echo "::error::$MSG"
   exit 1
 fi

@@ -40,6 +40,7 @@ function setupHarness({ state = { cookies: [{ name: 'ht_session', value: 'fixtur
         writeFileSync(_file, value) { results.push(JSON.parse(value)); },
       };
       if (name === '../../src/lib/auth/session') return { verifySession() { throw new Error('unexpected PR session check'); } };
+      if (name === './lib/qa-session') return { renewQaSession: async () => {} };
       if (name === './lib/realtime') return { withRealtime: (route) => route };
       return require(name);
     },
@@ -98,13 +99,14 @@ test('demo no-account setting cannot bypass production login', async () => {
 test('missing Actions secret fails the job rather than warning and reporting green', () => {
   const step = workflow.jobs.smoke.steps.find((item) => item.id === 'provisioned');
   assert.notEqual(step['continue-on-error'], true);
-  assert.equal(step.env.SMOKE_SESSION_STATE, '${{ secrets.SMOKE_SESSION_STATE }}');
+  assert.equal(step.env.QA_LOGIN_EMAIL, '${{ secrets.QA_LOGIN_EMAIL }}');
+  assert.equal(step.env.QA_LOGIN_PASSWORD, '${{ secrets.QA_LOGIN_PASSWORD }}');
   for (const [state, expectedStatus] of [['', 1], ['fixture-state', 0]]) {
     const output = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
-      encoding: 'utf8', env: { ...process.env, SMOKE_SESSION_STATE: state, GITHUB_OUTPUT: '/dev/null' },
+      encoding: 'utf8', env: { ...process.env, QA_LOGIN_EMAIL: state, QA_LOGIN_PASSWORD: state, GITHUB_OUTPUT: '/dev/null', GITHUB_STEP_SUMMARY: '/dev/null' },
     });
     assert.equal(output.status, expectedStatus, output.stdout + output.stderr);
-    if (expectedStatus) assert.match(output.stdout, loginMessage);
+    if (expectedStatus) assert.match(output.stdout, /QA renewal credentials are missing/);
   }
   assert.ok(!workflow.jobs.smoke.steps.some((item) => /skipping smoke QA/.test(item.run || '')));
   const smoke = workflow.jobs.smoke.steps.find((item) => item.id === 'smoke');

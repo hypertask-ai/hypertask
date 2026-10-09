@@ -3,11 +3,12 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { verifySession } from '../../src/lib/auth/session'
 import { withRealtime } from './lib/realtime'
+import { renewQaSession } from './lib/qa-session'
 
 // Confirms the smoke session is actually logged in BEFORE any view test runs.
 // An expired cookie must never look like 16 failed views — it's one
 // unrunnable check, and prod-health.yml reads this file to tell the two
-// apart so it alerts instead of rolling back a healthy deploy.
+// apart so setup evidence never alerts Telegram or rolls back a healthy deploy.
 const PREFLIGHT_FILE = path.join(__dirname, '.state', 'preflight.json')
 const APPLICATION_FAILURE_FILE = path.join(__dirname, '.state', 'application-failure.json')
 const INBOX_PATH = '/inbox'
@@ -46,6 +47,13 @@ export default async function globalSetup(config: FullConfig) {
   const { baseURL, storageState } = project.use
   if (typeof baseURL !== 'string' || !baseURL) fail('smoke config has no baseURL')
   if (typeof storageState !== 'string' || !storageState) fail('not tested: QA login missing/expired (no storageState file)')
+  if (process.env.SMOKE_POSTDEPLOY === '1') {
+    try {
+      await renewQaSession(baseURL, storageState)
+    } catch {
+      fail('not tested: QA login renewal failed (check QA_LOGIN_EMAIL, QA_LOGIN_PASSWORD and /qa/login availability)')
+    }
+  }
   try {
     const state = JSON.parse(readFileSync(storageState, 'utf8'))
     if (!Array.isArray(state.cookies) || !state.cookies.some((cookie: { name: string; value: string }) => cookie.name === 'ht_session' && cookie.value)) {

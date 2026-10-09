@@ -24,12 +24,12 @@ function parseStreak(value) {
 function readState(value) {
   try {
     const state = JSON.parse(value);
-    if (state && Number.isSafeInteger(state.streak) && state.streak >= 0 &&
-        state.episode && typeof state.episode === "object") return state;
+    if (state?.version === 1 && Number.isSafeInteger(state.streak) && state.streak >= 0 &&
+        (state.episode === null || (state.episode && typeof state.episode === "object"))) return state;
   } catch {
-    // Numeric variables from earlier runs remain valid.
+    // Older counters included checks that never ran; reset once on migration.
   }
-  return { streak: parseStreak(value), episode: null };
+  return { version: 1, streak: 0, episode: null };
 }
 
 export function decideSmokeAlarm(previousValue, outcome) {
@@ -131,16 +131,6 @@ async function findOrCreateIncident(fetchImpl, config) {
   return { created: true, task: created.task };
 }
 
-async function sendTelegram(fetchImpl, config, text) {
-  const body = new URLSearchParams({ chat_id: config.telegramChat, text });
-  const response = await fetchImpl(
-    `https://api.telegram.org/bot${config.telegramToken}/sendMessage`,
-    { method: "POST", body },
-  );
-  await responseBody(response);
-  if (!response.ok) throw new Error(`Telegram alert failed with HTTP ${response.status}`);
-}
-
 async function updateStreak(fetchImpl, config, streak) {
   const base = `https://api.github.com/repos/${config.repository}/actions/variables`;
   const headers = authHeaders(config.githubToken);
@@ -162,123 +152,40 @@ async function updateStreak(fetchImpl, config, streak) {
 
 export async function handleSmokeResult(config, fetchImpl = fetch) {
   const state = readState(config.previousStreak);
-  const decision = decideSmokeAlarm(state.streak, config.outcome);
-  const errors = [];
-  const persist = async () => updateStreak(fetchImpl, config, state.episode ? state : state.streak);
-
-  if (config.outcome === "red") {
-    state.streak = decision.streak;
-    if (decision.action === "alarm") {
-      state.episode = {
-        runUrl: config.runUrl, sha: config.sha, failingViews: config.failingViews,
-        incident: false, telegram: false,
-      };
-    }
-    // Reserve this episode before delivery when GitHub is available. The
-    // reservation is a deduplication aid, not an alert gate: a variable-write
-    // outage must not suppress the threshold alarm itself.
-    let reservationFailed = false;
-    try {
-      await persist();
-    } catch (error) {
-      errors.push(error);
-      reservationFailed = true;
-    }
-    // Reserve the threshold before rollback so later reds and reruns cannot
-    // repeat it. Unrunnable browser checks still alarm, but never roll back.
-    if (config.githubOutput) {
-      appendFileSync(config.githubOutput, `rollback=${decision.action === "alarm" && !reservationFailed && Boolean(config.failingViews)}\n`);
-    }
-    if (reservationFailed && !state.episode) {
-      try {
-        await sendTelegram(
-          fetchImpl,
-          config,
-          `🔴 hypertasks: production smoke is red and the consecutive-failure counter could not be persisted. Monitoring is degraded; inspect immediately. ${config.runUrl}`,
-        );
-      } catch (error) {
-        errors.push(error);
-      }
-    }
-    if (state.episode && (!state.episode.incident || !state.episode.telegram)) {
-      const evidence = { ...config, ...state.episode };
-      if (!state.episode.incident) {
-        try {
-          if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
-          await findOrCreateIncident(fetchImpl, evidence);
-          state.episode.incident = true;
-          await persist();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-      if (!state.episode.telegram) {
-        try {
-          await sendTelegram(
-            fetchImpl,
-            config,
-            `🔴 hypertasks: production smoke is red on 2 consecutive deploys. Failing views: ${evidence.failingViews || "see run log"}. ${evidence.runUrl}`,
-          );
-          state.episode.telegram = true;
-          await persist();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-    }
-  } else {
+  // Old versions counted expired logins as reds. Discard those episodes.
+  if (state.episode && !state.episode.failingViews) {
     state.streak = 0;
-    if (decision.action === "recovery" && !state.episode) {
-      state.episode = { incident: true, telegram: true, runUrl: config.runUrl, recovering: true, redStreak: decision.previousStreak };
-    } else if (decision.action === "recovery" && state.episode) {
-      state.episode.recovering = true;
-      state.episode.redStreak = decision.previousStreak;
-    }
-    if (state.episode?.recovering) {
-      // Keep incomplete work across green runs as well; don't send a stale
-      // red alert after recovery, but do file its evidence for human review.
-      // Recovery delivery remains independent of the state store too.
-      try {
-        await persist();
-      } catch (error) {
-        errors.push(error);
-      }
-      if (!state.episode.incident) {
-        try {
-          if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
-          await findOrCreateIncident(fetchImpl, { ...config, ...state.episode });
-          state.episode.incident = true;
-          await persist();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-      if (!state.episode.recovery) {
-        try {
-          await sendTelegram(
-            fetchImpl,
-            config,
-            `🟢 hypertasks: production smoke returned to green after ${state.episode.redStreak} consecutive red deploys. ${config.runUrl}`,
-          );
-          state.episode.recovery = true;
-          await persist();
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-      if (state.episode.incident && state.episode.recovery) {
-        try {
-          await updateStreak(fetchImpl, config, 0);
-        } catch (error) {
-          errors.push(error);
-        }
-      }
-    } else {
-      await persist();
-    }
+    state.episode = null;
   }
-  if (errors.length) throw new AggregateError(errors, errors.map((error) => error.message).join("; "));
-  return state.episode?.recovering && decision.action === "none" ? { ...decision, action: "recovery" } : decision;
+  if (config.outcome === "red" && !config.failingViews) {
+    if (config.githubOutput) appendFileSync(config.githubOutput, "rollback=false\n");
+    return { previousStreak: state.streak, streak: state.streak, action: "none" };
+  }
+  const decision = decideSmokeAlarm(state.streak, config.outcome);
+  state.streak = decision.streak;
+  if (decision.action === "alarm") {
+    state.episode = {
+      runUrl: config.runUrl, sha: config.sha, failingViews: config.failingViews,
+      incident: false,
+    };
+  }
+  // Telegram is owned by the classifier, with daily per-cause deduplication.
+  // The consecutive alarm only records incidents and authorizes rollback.
+  await updateStreak(fetchImpl, config, state);
+  if (config.githubOutput) {
+    appendFileSync(config.githubOutput, `rollback=${decision.action === "alarm"}\n`);
+  }
+  if (state.episode && !state.episode.incident) {
+    if (!config.mcpToken) throw new Error("HYPERTASK_MCP_TOKEN is not configured");
+    await findOrCreateIncident(fetchImpl, { ...config, ...state.episode });
+    state.episode.incident = true;
+    await updateStreak(fetchImpl, config, state);
+  }
+  if (config.outcome === "green") {
+    state.episode = null;
+    await updateStreak(fetchImpl, config, state);
+  }
+  return decision;
 }
 
 function failingViews() {
@@ -300,8 +207,6 @@ async function main() {
     githubToken: process.env.GITHUB_TOKEN || "",
     repository,
     mcpToken: process.env.HYPERTASK_MCP_TOKEN || "",
-    telegramToken: process.env.TELEGRAM_BOT_TOKEN || "",
-    telegramChat: process.env.TELEGRAM_CHAT_ID || "",
     runUrl,
     sha: process.env.GITHUB_SHA || "",
     failingViews: failingViews(),

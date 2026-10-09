@@ -53,6 +53,8 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHA: ${{ github.sha }}
@@ -63,8 +65,7 @@ jobs:
 
           api() { curl -s -H "Authorization: Bearer $VERCEL_TOKEN" "https://api.vercel.com$1"; }
           notify() {
-            curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || true
+            node .github/scripts/production-alert.mjs "$1" "$2" "$3" || true
           }
           # Drift must not treat a green workflow run as "this SHA was probed".
           # NOTFOUND / superseded / challenged-only also exit 0. This status is
@@ -117,7 +118,7 @@ jobs:
 
           if [ "$STATE" = "ERROR" ]; then
             # Build failed -> Vercel never switched domains, old deploy still serves.
-            notify "⚠️ hypertasks: production BUILD FAILED for $SHA. Live site still on the previous deploy. https://github.com/${{ github.repository }}/commit/$SHA"
+            notify setup deploy-build "⚠️ hypertasks: production BUILD FAILED for $SHA. Live site still on the previous deploy. https://github.com/${{ github.repository }}/commit/$SHA"
             echo "::error::Production build failed (live site unaffected)"
             exit 1
           fi
@@ -125,7 +126,7 @@ jobs:
           if [ "$STATE" != "READY" ]; then
             DEPLOY_UID=$(echo "$DEPLOY_JSON" | jq -r '.uid')
             MSG="Deployment $DEPLOY_UID for $SHA still $STATE after $i checks; not verified"
-            notify "⚠️ hypertasks: $MSG"
+            notify setup deploy-wait "$MSG"
             echo "::error::$MSG"
             exit 1
           fi
@@ -170,7 +171,7 @@ jobs:
           done
 
           if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ -z "$LIVE_BUILD" ]; then
-            notify "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); skipping health check"
+            notify setup live-identity "⚠️ hypertasks: could not verify live build id for $SHA (status $version_code, challenged=$version_challenged); skipping health check"
             echo "::error::Could not verify live build id; skipping health check"
             exit 1
           fi
@@ -209,7 +210,7 @@ jobs:
             fi
             if [ "$version_code" != "200" ] || [ "$version_challenged" = "yes" ] || [ "$LIVE_BUILD" != "$SHA" ]; then
               MSG="🔴 hypertasks: production serves ${LIVE_BUILD:-none}, expected $SHA after READY. Alert only; investigate Vercel aliasing."
-              notify "$MSG"
+              notify setup deploy-alias "$MSG"
               echo "::error::$MSG"
               exit 1
             fi
@@ -362,7 +363,7 @@ jobs:
             # definitive failure standing on the final attempt still fails loudly,
             # so a setup problem can never mask a proven outage.
             if [ "$probe_status" = "misconfigured" ]; then
-              notify "🔴 hypertasks: the task-write probe for $SHA is NOT PROVISIONED, so the write health gate is not running. Run scripts/ensure-task-write-probe-fixture.mjs for the health identity. NOT rolling back."
+              notify setup task-write-fixture "🔴 hypertasks: the task-write probe for $SHA is NOT PROVISIONED, so the write health gate is not running. Run scripts/ensure-task-write-probe-fixture.mjs for the health identity. NOT rolling back."
               echo "::error::Task-write probe fixture missing; the write gate is inactive"
               exit 1
             fi
@@ -373,7 +374,7 @@ jobs:
             # healthy either — the failure was real at least once — so it gets a
             # distinct warning instead of the healthy path.
             if $earlier_unchallenged_failure; then
-              notify "⚠️ hypertasks: an earlier health-check attempt for $SHA saw a definitive failure that did NOT recur on the final attempt (final attempt challenged or inconclusive). NOT rolling back and NOT declaring healthy. Verify manually: https://app.hypertask.ai"
+              notify setup health-inconclusive "⚠️ hypertasks: an earlier health-check attempt for $SHA saw a definitive failure that did NOT recur on the final attempt (final attempt challenged or inconclusive). NOT rolling back and NOT declaring healthy. Verify manually: https://app.hypertask.ai"
               echo "::warning::Earlier definitive failure not confirmed on final attempt; skipping rollback"
               exit 0
             fi
@@ -385,7 +386,7 @@ jobs:
             # green on a deployment whose write path was never proven, but an
             # unproven probe is not grounds to promote the previous deployment.
             if [ "$home" = "200" ] && [ "$apic" = "200" ] && [ "$probe_status" = "inconclusive" ]; then
-              notify "⚠️ hypertasks: READ checks pass for $SHA but the task-write probe was INCONCLUSIVE. NOT rolling back and NOT declaring healthy. Verify the write path manually: https://app.hypertask.ai"
+              notify setup task-write-inconclusive "⚠️ hypertasks: READ checks pass for $SHA but the task-write probe was INCONCLUSIVE. NOT rolling back and NOT declaring healthy. Verify the write path manually: https://app.hypertask.ai"
               echo "::error::Task-write probe inconclusive; not healthy, skipping rollback"
               exit 1
             fi
@@ -393,14 +394,14 @@ jobs:
             # Every definitive failure in this run was Vercel-challenged. A
             # challenge proves nothing about the app, so a genuinely
             # challenged-only run never rolls back.
-            notify "⚠️ hypertasks: health check INCONCLUSIVE for $SHA — Vercel bot-challenged the runner IP. NOT rolling back. Verify manually: https://app.hypertask.ai"
+            notify setup runner-challenged "⚠️ hypertasks: health check INCONCLUSIVE for $SHA — Vercel bot-challenged the runner IP. NOT rolling back. Verify manually: https://app.hypertask.ai"
             echo "::warning::Bot-challenged responses only; skipping rollback"
             exit 0
           fi
 
           echo "rollback=true" >> "$GITHUB_OUTPUT"
           publish_health_gate "$SHA" failure "Health probes failed; rollback requested"
-          notify "🔴 hypertasks: production FAILED health checks for $SHA (home=$home, api=$apic, probe=$probe_code/$probe_status). Guarded rollback requested; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          notify live health-failure "🔴 hypertasks: production FAILED health checks for $SHA (home=$home, api=$apic, probe=$probe_code/$probe_status). Guarded rollback requested; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
           echo "::error::Production health checks failed; guarded rollback requested"
           exit 1
 
@@ -426,23 +427,21 @@ jobs:
     # The GLM QA job (HTPR-6239) reads these: `ran` says the browser checks
     # actually executed (not skipped for a missing session), `ok` its verdict.
     outputs:
-      ran: ${{ steps.smoke.outcome != 'skipped' && steps.smoke.outcome != 'cancelled' && steps.smoke.outcome != '' }}
+      ran: ${{ steps.smoke.outcome == 'success' || steps.decide.outputs.confirmed == 'true' }}
       ok: ${{ steps.smoke.outcome == 'success' }}
       rollback: ${{ steps.alarm.outputs.rollback }}
     steps:
-      # SMOKE_SESSION_STATE: Playwright storageState for plain QA user 2343.
-      # Refresh by signing in as QA (never Valentin) and exporting storageState
-      # to ~/.config/hypertask-videos/storageState-qa-normal.json, then run:
-      # gh secret set SMOKE_SESSION_STATE -R hypertask-ai/hypertask < ~/.config/hypertask-videos/storageState-qa-normal.json
-      # Refresh before its ht_session expires; missing/expired login fails QA,
-      # but is not an application failure and must never authorize rollback.
-      - name: Require the QA login
+      # The existing QA-only password flow pins user 985 on the server.
+      # Mint a fresh browser session in global-setup on every deploy.
+      - name: Require QA renewal credentials
         id: provisioned
         env:
-          SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
         run: |
-          if [ -z "$SMOKE_SESSION_STATE" ]; then
-            echo "::error::not tested: QA login missing/expired (SMOKE_SESSION_STATE is missing)"
+          if [ -z "$QA_LOGIN_EMAIL" ] || [ -z "$QA_LOGIN_PASSWORD" ]; then
+            echo "::error::not tested: QA renewal credentials are missing"
+            echo "QA renewal credentials missing; no Telegram sent." >> "$GITHUB_STEP_SUMMARY"
             exit 1
           fi
           echo "ok=true" >> "$GITHUB_OUTPUT"
@@ -487,13 +486,14 @@ jobs:
 
       # A failed npm ci / playwright install is an UNRUNNABLE check, not a
       # broken app: record it as a failed preflight so the decision step below
-      # alerts on Telegram and never rolls back (PR #366 review).
+      # stays in monitoring evidence and never authorizes rollback.
       - name: Record a setup failure as unrunnable
         if: always() && (steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure')
         run: |
           mkdir -p e2e/smoke/.state
           echo '{"ok":false,"reason":"setup failed (checkout, Node, npm ci, or playwright install)"}' > e2e/smoke/.state/preflight.json
           echo "::error::Smoke setup failed — classified as unrunnable, not a broken app"
+          echo "Smoke setup failed; no Telegram sent. See setup step logs." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Save Playwright browser cache
         if: steps.pw-cache.outputs.cache-hit != 'true' && steps.setup-pw.outcome == 'success'
@@ -503,15 +503,6 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
 
-      - name: Write the smoke session (never logged, never uploaded as an artifact)
-        if: steps.provisioned.outputs.ok == 'true'
-        env:
-          SMOKE_SESSION_STATE: ${{ secrets.SMOKE_SESSION_STATE }}
-        run: |
-          umask 077
-          mkdir -p e2e/smoke/.state
-          printf '%s' "$SMOKE_SESSION_STATE" > e2e/smoke/.state/smoke-state.json
-
       - name: Run the smoke checks
         id: smoke
         if: steps.provisioned.outputs.ok == 'true' && steps.setup-checkout.outcome == 'success' && steps.setup-node.outcome == 'success' && steps.setup-npm.outcome == 'success' && steps.setup-pw.outcome == 'success'
@@ -519,6 +510,8 @@ jobs:
         env:
           SMOKE_BASE_URL: https://app.hypertask.ai
           SMOKE_POSTDEPLOY: '1'
+          QA_LOGIN_EMAIL: ${{ secrets.QA_LOGIN_EMAIL }}
+          QA_LOGIN_PASSWORD: ${{ secrets.QA_LOGIN_PASSWORD }}
           SMOKE_BOARD_PATH: ${{ vars.SMOKE_BOARD_PATH }}
           SMOKE_TASK_PATH: ${{ vars.SMOKE_TASK_PATH }}
         run: npx playwright test -c playwright.config.smoke.ts --project Desktop --project Mobile
@@ -538,6 +531,8 @@ jobs:
         id: decide
         if: ${{ !cancelled() && steps.provisioned.outputs.ok == 'true' && (steps.smoke.outcome == 'failure' || steps.setup-checkout.outcome == 'failure' || steps.setup-node.outcome == 'failure' || steps.setup-npm.outcome == 'failure' || steps.setup-pw.outcome == 'failure') }}
         env:
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
           SHA: ${{ github.sha }}
@@ -546,22 +541,20 @@ jobs:
         run: |
           set -uo pipefail
           notify() {
-            curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || \
-              echo "::warning::Smoke failure alert could not be delivered"
+            node .github/scripts/production-alert.mjs "$1" "$2" "$3" || true
           }
 
           PREFLIGHT=e2e/smoke/.state/preflight.json
           APPLICATION_FAILURE=e2e/smoke/.state/application-failure.json
           if [ ! -f "$PREFLIGHT" ] || [ "$(jq -r '.ok' "$PREFLIGHT" 2>/dev/null)" != "true" ]; then
             REASON=$(jq -r '.reason // "no preflight result written"' "$PREFLIGHT" 2>/dev/null || echo "playwright/install failure before the login check ran")
-            notify "⚠️ hypertasks: smoke QA for $SHA could not run ($REASON). NOT rolling back — this is an unrunnable check, not a proven break. https://app.hypertask.ai"
+            notify setup smoke-unrunnable "⚠️ hypertasks: smoke QA for $SHA could not run ($REASON). NOT rolling back — this is an unrunnable check, not a proven break. https://app.hypertask.ai"
             echo "::error::Smoke QA unrunnable: $REASON"
             exit 1
           fi
 
-          if [ ! -f "$APPLICATION_FAILURE" ]; then
-            notify "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back — check the runner logs. https://app.hypertask.ai"
+          if [ ! -f "$APPLICATION_FAILURE" ] || ! jq -e '(.view | type == "string") and (.view | length > 0)' "$APPLICATION_FAILURE" >/dev/null 2>&1; then
+            notify setup smoke-unconfirmed "⚠️ hypertasks: smoke QA for $SHA failed without a confirmed application-failure verdict. NOT rolling back — check the runner logs. https://app.hypertask.ai"
             echo "::error::Smoke QA failed without a confirmed application-failure verdict"
             exit 1
           fi
@@ -573,19 +566,18 @@ jobs:
               "https://api.github.com/repos/${GITHUB_REPOSITORY}/statuses/${SHA}" \
               -d '{"state":"failure","context":"prod-health-gate","description":"Failed production smoke"}' || true
           fi
-          notify "🔴 hypertasks: smoke QA confirmed an application failure for $SHA. Rollback requires the consecutive smoke alarm; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
+          echo "confirmed=true" >> "$GITHUB_OUTPUT"
+          notify live smoke-failure "🔴 hypertasks: smoke QA confirmed an application failure for $SHA. Rollback requires the consecutive smoke alarm; investigate: https://github.com/${{ github.repository }}/commit/$SHA"
           echo "::error::Smoke QA confirmed an application failure; waiting for consecutive smoke alarm"
           exit 1
 
       - name: Update the consecutive smoke alarm
         id: alarm
-        if: ${{ always() && github.event_name == 'push' && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
+        if: ${{ always() && github.event_name == 'push' && (steps.smoke.outcome == 'success' || steps.decide.outputs.confirmed == 'true') }}
         env:
           SMOKE_OUTCOME: ${{ steps.smoke.outcome == 'success' && 'green' || 'red' }}
           PROD_SMOKE_STREAK: ${{ vars.PROD_SMOKE_STREAK || '0' }}
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
         run: node .github/scripts/prod-smoke-alarm.mjs
 
@@ -594,8 +586,8 @@ jobs:
   # independent of the smoke suite (HTPR-5781): smoke stays skipped while its
   # session secret is unprovisioned, and gating the brief on it kept the pass
   # permanently dead. The dispatcher tells the brief honestly when smoke did
-  # not run. Exploratory, never a gate: a dispatch failure alerts
-  # on Telegram and never blocks, fails, or rolls back the deploy itself.
+  # not run. Exploratory, never a gate: dispatch failures become infra
+  # evidence, never Telegram or an application rollback signal.
   glm-qa:
     needs: [health, smoke]
     if: ${{ !cancelled() && github.event_name == 'push' && needs.health.outputs.live == 'true' && needs.health.result == 'success' && needs.smoke.outputs.rollback != 'true' }}
@@ -677,17 +669,12 @@ jobs:
             $SMOKE_ARGS \
             --changed-files "$CHANGED_FILES"
 
-      - name: Alert when the dispatch failed
+      - name: Record a failed QA dispatch
         if: steps.dispatch.outcome == 'failure'
         env:
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: |
-          if ! curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-            -d chat_id="$TG_CHAT" \
-            --data-urlencode text="⚠️ hypertasks: the GLM exploratory QA brief for ${{ github.sha }} could not be dispatched (see the glm-qa job log). NOT a deploy failure — verify manually: https://app.hypertask.ai"; then
-            echo "::warning::GLM QA dispatch alert could not be delivered"
-          fi
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+        run: node .github/scripts/production-alert.mjs setup qa-dispatch "Exploratory QA could not be dispatched. See the glm-qa job log."
   # ── Deploy drift: is production actually serving the production tip? ──────────
   # A newer merge can go READY and then an older build from another session's
   # worktree takes the production alias, silently reverting shipped work
@@ -708,6 +695,8 @@ jobs:
       - name: Compare the live production deployment against the production tip
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
@@ -770,8 +759,7 @@ jobs:
             MSG="🔴 hypertasks: production is serving ${LIVE:0:9}, which is not an ancestor of the production tip ${TIP:0:9}. The live app is on a commit that is not on production at all."
           fi
 
-          curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-            -d chat_id="$TG_CHAT" --data-urlencode text="$MSG" || true
+          node .github/scripts/production-alert.mjs setup deploy-drift "$MSG" || true
           echo "::error::$MSG"
           exit 1
 
@@ -785,9 +773,6 @@ jobs:
     timeout-minutes: 5
     steps:
       - name: Check Pusher status
-        env:
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           set -uo pipefail
 
@@ -812,19 +797,14 @@ jobs:
           AFFECTED=$(echo "$COMPONENTS_JSON" | jq -r '[.components[]? | select(.name | test("Channels"; "i")) | select(.status != "operational") | "\(.name): \(.status)"] | join(", ")')
           [ -z "$AFFECTED" ] && AFFECTED="no Channels component reported as degraded"
 
-          notify() {
-            curl -s -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$1" || true
-          }
-
           case "$INDICATOR" in
             critical|major)
-              notify "🔴 hypertasks: Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
+              echo "Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
               echo "::error::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
               exit 1
               ;;
             minor)
-              notify "⚠️ hypertasks: Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
+              echo "Pusher (live board/task updates) is reporting '$INDICATOR' — $DESCRIPTION. Affected: $AFFECTED. https://status.pusher.com"
               echo "::warning::Pusher status is $INDICATOR: $DESCRIPTION ($AFFECTED)"
               exit 0
               ;;
@@ -969,6 +949,8 @@ jobs:
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           ROLLBACK_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
@@ -982,9 +964,11 @@ jobs:
             ". Dropped commits: " + ((.revert.dropped // []) | map(.sha + " " + .title) | join("; ")) +
             ". Errors: " + ((.errors // {}) | to_entries | map(.key + ": " + .value) | join("; "))
           ')
-          curl --fail-with-body -sS -o /dev/null "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-            -d chat_id="$TG_CHAT" --data-urlencode text="$MESSAGE" || \
-            echo "::warning::Rollback alert could not be delivered"
+          ACTION=$(echo "$RESULT" | jq -r '.action')
+          case "$ACTION" in
+            requested|failed) node .github/scripts/production-alert.mjs rollback rollback "$MESSAGE" || true ;;
+            *) echo "$MESSAGE" >> "$GITHUB_STEP_SUMMARY" ;;
+          esac
           [ "$(echo "$RESULT" | jq -r '.action')" != "failed" ]
 
   api-reachability:
@@ -998,6 +982,8 @@ jobs:
       - name: Check API reachability and firewall bypass settings
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: bash .github/scripts/api-reachability.sh
