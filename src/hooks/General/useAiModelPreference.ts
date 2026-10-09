@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
@@ -14,6 +14,7 @@ import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
+  teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
 import type { TAiModal } from "@/models/AI_Task_writer_model";
@@ -41,8 +42,9 @@ export function useAiModelPreference(
   } = {},
 ) {
   const currentProject = useRecoilValue(currentProjectAtom);
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
+  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
@@ -56,7 +58,7 @@ export function useAiModelPreference(
   const teamFeatureModels = useQuery<
     Record<string, { model: string | null; effectiveModel: string | null }>
   >({
-    queryKey: ["teamAiFeatureModels", currentTeamId, haiku55Enabled],
+    queryKey: teamAiFeatureModelsQueryKey(currentTeamId, haiku55Enabled, haikuDefaultEnabled),
     enabled: Boolean(currentTeamId),
     queryFn: async () => {
       const { data } = await axios.get("/api/teams/aiFeatureModels", {
@@ -73,12 +75,13 @@ export function useAiModelPreference(
     surface,
     currentTeamId,
   );
-  const planDefault = haiku55Enabled
+  const planDefault = haikuDefaultEnabled || haiku55Enabled
     ? getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,
         hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),
         lunaFree,
         true,
+        haikuDefaultEnabled,
       )
     : getDefaultAiModelOptionForPlan(
         scopedBilling?.storePlanId,

@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import prisma from "@/lib/prisma";
 import {
   aiImageModelDefinitions,
@@ -5,7 +6,7 @@ import {
 } from "@/lib/aiModelOptions";
 import { getBoardAgentMembers } from "@/utils/controllers/agents/boardMembers";
 import { turbopufferFetchMentionTasks } from "../search/document";
-import { isFeatureEnabled, PAGE_MENTIONS_FLAG, HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, PAGE_MENTIONS_FLAG } from "@/lib/flags";
 import {
   matchesMentionName,
   selectMentionAgents,
@@ -48,7 +49,7 @@ const taskSearchByParam = async (
       // on the flag table before, and a read failure there must not blank the
       // whole @ list (people, agents, tasks, boards) for everyone.
       isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
-      isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, userid).catch(() => false),
+      haiku55ModelEnabled(userid),
     ]);
 
     if (!projectIds.includes(projectId)) {

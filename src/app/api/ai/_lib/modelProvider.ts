@@ -32,7 +32,6 @@ import {
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
 import { getAiProviderInfo, type TAiProviderKey } from "@/lib/aiProviders";
-import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import {
   FREE_TEAM_AI_ALLOWANCE_USD,
   PAID_TEAM_AI_ALLOWANCE_USD,
@@ -365,11 +364,9 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
     transformParams: async ({ params }) => {
       if (!isHaiku55Model(modelId)) return params;
       // Check at inference so raw ids, saved choices and BYOK cannot bypass the flag.
-      const enabled = context.userId
-        ? await import("@/lib/flags")
-            .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, context.userId!))
-            .catch(() => false)
-        : false;
+      const enabled = await import("@/app/api/ai/_lib/planGate")
+        .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
+        .catch(() => false);
       if (!enabled) throw new Error("This AI model is unavailable.");
       const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
       // Adaptive thinking shares maxOutputTokens with the answer and can exhaust
@@ -463,11 +460,9 @@ function traceLanguageModel(
   if (replacement && isHaiku45Model(model.modelId)) {
     // Resolve before the original model's allowance and tracing middleware run.
     const upgradedModel = async () => {
-      const enabled = context.userId
-        ? await import("@/lib/flags")
-            .then(({ isFeatureEnabled }) => isFeatureEnabled(HTPR_7010_HAIKU_5_5_FLAG, context.userId!))
-            .catch(() => false)
-        : false;
+      const enabled = await import("@/app/api/ai/_lib/planGate")
+        .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
+        .catch(() => false);
       if (!enabled) return null;
       const upgraded = replacement();
       configureAiModelUsage(upgraded, context);

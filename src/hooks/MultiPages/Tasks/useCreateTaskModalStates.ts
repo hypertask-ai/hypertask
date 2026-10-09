@@ -1,5 +1,5 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   processHtmlForTaskId,
@@ -157,11 +157,12 @@ const useCreateTaskModalGlobalStates = () => {
   const [tempMentionProjectId, setTempMentionProjectId] = useState<string>("");
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
-  const defaultModelOption = haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true)
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -380,7 +381,7 @@ const useCreateTaskModalGlobalStates = () => {
       (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
     const titleBilling = deriveCurrentBoardBilling(project);
     const titleDefaultOption = haiku55Enabled
-      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), lunaFree, true)
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
       : defaultModelOption;
     const titleModel =
       titleOption?.id ??
@@ -424,7 +425,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, defaultModelOption, lunaFree]);
+  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, lunaFree]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);

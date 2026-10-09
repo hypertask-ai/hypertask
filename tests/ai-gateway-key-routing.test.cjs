@@ -48,7 +48,7 @@ function stubPlan(plan = "Pro", lunaFree = false) {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
-    haiku55ModelEnabled: async () => false,
+    haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
     lunaFreePlanEnabled: async () => lunaFree,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,

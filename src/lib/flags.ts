@@ -23,6 +23,7 @@ import {
   HTPR_7031_INVITE_EMAIL_FLAG,
   HTPR_7016_PHONE_BOARD_COLD_START_FLAG,
   HTPR_7010_HAIKU_5_5_FLAG,
+  HTPR_7038_HAIKU_DEFAULT_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
   HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
@@ -334,6 +335,12 @@ const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-08",
     description: "Loads each ticket detail snapshot once when opening it, while keeping realtime and reconnect refreshes.",
+  },
+  {
+    key: HTPR_7038_HAIKU_DEFAULT_FLAG,
+    kind: "feature",
+    shippedOn: "2026-10-09",
+    description: "Defaults all accounts without a saved model to Haiku 5.5 and uses it for automatic summaries and fast system calls.",
   },
   {
     key: HTPR_7010_HAIKU_5_5_FLAG,

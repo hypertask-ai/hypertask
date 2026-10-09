@@ -14,6 +14,8 @@ regexes = [
   '''sk_test_placeholder''',
   # Feature-flag keys are always "htpr-<ticket>-<slug>", never credentials.
   '''htpr-[0-9]{3,6}-[a-z0-9-]+''',
+  # These two flag constants also occur in the PR's historical test diffs.
+  '''^(?:flags|keys)\.HTPR_(?:7038_HAIKU_DEFAULT|7010_HAIKU_5_5)_FLAG$''',
   # QA login unit-test fixture, never a live secret.
   '''correct-horse-battery-staple-32b''',
 ]

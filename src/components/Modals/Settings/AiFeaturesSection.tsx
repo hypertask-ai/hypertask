@@ -1,9 +1,10 @@
 "use client";
 
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -98,12 +99,6 @@ const FEATURE_SECTIONS: FeatureSection[] = [
       { feature: "dictation", description: "Turns recorded speech into text" },
     ],
   },
-];
-
-const featureModelsQueryKey = (teamId: string | null, haiku55Enabled: boolean) => [
-  "teamAiFeatureModels",
-  teamId,
-  haiku55Enabled,
 ];
 
 const modelDefinition = (model: string, haiku55Enabled = false) => {
@@ -316,17 +311,18 @@ function DictationProviderDropdown({
 }
 
 const AiFeaturesSection = () => {
+  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
-  );
-  const visibleModelOptions = haiku55Enabled
+  ) || haikuDefaultEnabled;
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
-  const defaultContext = { plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const defaultContext = { haikuDefaultEnabled, plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
   const { isLoading: providersLoading, providers } =
     useTeamAiProviders(teamId);
   const customEndpoint = useTeamCustomEndpoint(teamId);
@@ -334,7 +330,7 @@ const AiFeaturesSection = () => {
   const [savingFeature, setSavingFeature] = useState<AiFeature | "reset" | null>(
     null,
   );
-  const queryKey = featureModelsQueryKey(teamId, haiku55Enabled);
+  const queryKey = teamAiFeatureModelsQueryKey(teamId, haiku55Enabled, haikuDefaultEnabled);
   const featureModelsQuery = useQuery<FeatureModelsResponse>({
     queryKey,
     enabled: Boolean(teamId),
@@ -443,7 +439,7 @@ const AiFeaturesSection = () => {
         feature as UserFacingModelFeature,
         providerSettings,
         undefined,
-        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, lunaFree, true) } : {}) },
+        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, lunaFree, true, haikuDefaultEnabled) } : {}) },
       )?.id ?? aiModelOptions[0].id
     );
   };
