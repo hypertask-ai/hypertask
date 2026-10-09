@@ -116,6 +116,14 @@ test('missing Actions secret fails the job rather than warning and reporting gre
   assert.match(smoke.run, /--project Desktop --project Mobile/);
 });
 
+test('post-deploy smoke pins the persistent QA 985 fixture instead of the old QA 2343 vars', () => {
+  const { env } = workflow.jobs.smoke.steps.find((item) => item.id === 'smoke');
+  assert.equal(env.SMOKE_BOARD_PATH, '/project?id=6121&surface=board');
+  assert.equal(env.SMOKE_TASK_PATH, '/detail/project-6121/1');
+  const boardId = new URL(env.SMOKE_BOARD_PATH, env.SMOKE_BASE_URL).searchParams.get('id');
+  assert.equal(env.SMOKE_TASK_PATH.split('/')[2], `project-${boardId}`);
+});
+
 test('smoke setup generates Prisma after npm ci and fails closed if generation fails', () => {
   const step = workflow.jobs.smoke.steps.find((item) => item.id === 'setup-npm');
   const directory = mkdtempSync(path.join(tmpdir(), 'smoke-prisma-'));
