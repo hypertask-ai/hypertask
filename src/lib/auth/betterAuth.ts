@@ -8,7 +8,7 @@ import { randomUUID } from 'crypto'
 
 import { bridgeSessionPlugin } from '@/lib/auth/bridgePlugin'
 import authConfig from '@/lib/configs/auth.config'
-import { legacyCookiePlugin } from '@/lib/auth/legacyCookiePlugin'
+import { legacyCookiePlugin, newGoogleSignupRequests } from '@/lib/auth/legacyCookiePlugin'
 import { sendEmail } from '@/lib/email/sendEmail'
 import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
@@ -251,6 +251,9 @@ export const auth = betterAuth({
               isVerified: true,
               createGoogleAccount: context?.path === '/callback/google',
             })
+            if (context?.path === '/callback/google' && context.request) {
+              newGoogleSignupRequests.set(context.request, userId)
+            }
           } catch (error) {
             console.error('CRITICAL: Better Auth user provisioning failed', {
               userId: user.id,

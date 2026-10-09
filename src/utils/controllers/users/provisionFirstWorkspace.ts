@@ -12,9 +12,13 @@ export async function provisionFirstWorkspace(
   boardTitle: string,
   companySize: string,
   companyRole: string,
-  options: Parameters<typeof CompleteOnboardingFirstStep>[5] = {},
+  options: Parameters<typeof CompleteOnboardingFirstStep>[5] & {
+    keepDemoBoard?: boolean;
+    onlyIfEmpty?: boolean;
+  } = {},
 ) {
-  const keepDemoBoard = await isFeatureEnabled(
+  const { keepDemoBoard: keepDemoBoardOverride, onlyIfEmpty, ...onboardingOptions } = options;
+  const keepDemoBoard = keepDemoBoardOverride ?? await isFeatureEnabled(
     HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
     user.id,
   ).catch(() => false);
@@ -29,5 +33,14 @@ export async function provisionFirstWorkspace(
     return { Project, Team: Project.team };
   }
 
-  return CompleteOnboardingFirstStep(user, teamTitle, boardTitle, companySize, companyRole, options);
+  if (onlyIfEmpty) {
+    // A team-only domain join still leaves "No boards yet", so only boards count.
+    const [ownedBoards, memberships] = await Promise.all([
+      prisma.project.count({ where: { ownerId: user.id } }),
+      prisma.member.count({ where: { userId: user.id } }),
+    ]);
+    if (ownedBoards > 0 || memberships > 0) return null;
+  }
+
+  return CompleteOnboardingFirstStep(user, teamTitle, boardTitle, companySize, companyRole, onboardingOptions);
 }
