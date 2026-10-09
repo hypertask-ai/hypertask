@@ -7,3 +7,5 @@ actions/upload-artifact ea165f8d65b6e75b540449e92b4886f43607fa02 v4
 actions/github-script 60a0d83039c74a4aee543508d2ffcb1c3799cdea v7
 anthropics/claude-code-action 1d9782c6c3a2eaaf8845d33b203bea0ec00c1596 v1
 oven-sh/setup-bun 0c5077e51419868618aeaa5fe8019c62421857d6 v2.2.0
+docker/login-action c94ce9fb468520275223c153574b00df6fe4bcc9 v3
+docker/setup-buildx-action 8d2750c68a42422c14e847fe6c8ac0403b4cbd6f v3
