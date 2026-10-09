@@ -130,7 +130,7 @@ for (const mode of ["pages-off", "pages-on", "typed"]) {
     test(`${mode}: legacy raw filename spaces still resolve the board row ${userId}`, async () => {
       const rawSource = base + "tasks/attachments/123_private image.png";
       const h = harness({ mode, userId, attachments: [{ fileSource: rawSource, task: { projectId: board.id } }] });
-      assert.equal((await h.request(rawSource.replace(" ", "%20"))).statusCode, userId === 985 ? 200 : 404);
+      assert.equal((await h.request(rawSource.replaceAll(" ", "%20"))).statusCode, userId === 985 ? 200 : 404);
     });
   }
   test(`${mode}: raw-space description references and HEIC original URLs remain supported`, async () => {
