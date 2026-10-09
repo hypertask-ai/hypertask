@@ -27,8 +27,9 @@ export function AgentConnectCard({ projectId, userId }: { projectId: number; use
     return () => controller.abort();
   }, [identity, projectId]);
 
-  if (!(flagEnabled ? true : serverEligible) || !show) return null;
-  return <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />;
+  return (flagEnabled ? true : serverEligible) && show
+    ? <EligibleAgentConnectCard key={identity} serverEligible={serverEligible} />
+    : null;
 }
 
 function EligibleAgentConnectCard({ serverEligible }: { serverEligible: boolean }) {
