@@ -142,7 +142,10 @@ const scrollToTop = (page: Page) => page.evaluate(() => {
 })
 
 // Two animation frames, then the same boxes twice in a row: the layout has stopped changing.
-async function settle(page: Page, targets: Record<string, Target>) {
+// Parts the baseline expects must be on the page first: the phone top bar mounts lazily and the phone
+// comment box waits for the thread to settle, so "missing twice in a row" is not "settled". A part that
+// stays missing for the whole 8s still fails as missing.
+async function settle(page: Page, targets: Record<string, Target>, required: string[] = []) {
   await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
   await page.waitForLoadState('networkidle', { timeout: 2_000 }).catch(() => undefined)
   let previous = ''
@@ -152,7 +155,7 @@ async function settle(page: Page, targets: Record<string, Target>) {
   while (!stable && Date.now() < deadline) {
     actual = await measure(page, targets)
     const next = JSON.stringify(actual)
-    stable = previous === next
+    stable = previous === next && required.every(name => actual[name])
     previous = next
     if (!stable) await page.waitForTimeout(120)
   }
@@ -247,11 +250,17 @@ for (const definition of selected) {
         const label = describeCombo(definition.name, width, state)
         await page.setViewportSize({ width, height: 900 })
         await scrollToTop(page)
-        const { actual, stable } = await settle(page, definition.targets)
-        // On a phone the AI chat is an animated sheet over the page, not part of the layout.
-        if (width < 768) actual['ai-sidebar'] = null
         const expected = baseline?.pages[definition.name]?.[stateKey(state)]?.[String(width)]
         const found: string[] = []
+        // HTPR-7074 hides the comment box until the thread settles (2s hard stop). Still hidden after 3s is a real failure.
+        const slot = page.locator('[data-composer-slot-settled]').first()
+        if (definition.thread && await slot.count() > 0 && !await expect(slot).toHaveAttribute('data-composer-slot-settled', 'true', { timeout: 3_000 }).then(() => true, () => false)) {
+          found.push(`${label}: comment box still hidden 3s after the window changed width`)
+        }
+        const required = Object.keys(expected ?? {}).filter(name => width >= 768 || name !== 'ai-sidebar')
+        const { actual, stable } = await settle(page, definition.targets, required)
+        // On a phone the AI chat is an animated sheet over the page, not part of the layout.
+        if (width < 768) actual['ai-sidebar'] = null
         if (!stable) found.push(`${label}: layout never settled within 8s`)
         if (update) {
           recorded[stateKey(state)] ??= {}
