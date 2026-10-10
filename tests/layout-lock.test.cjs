@@ -119,9 +119,7 @@ test('spec validates the registry in both modes and applies allowances only to a
   const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
   const screens = Object.fromEntries(Object.entries(committed.viewports).flatMap(([device, viewport]) =>
     Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value])));
-  const keys = require('jiti')(__filename)('../src/lib/flags/keys.ts');
-  const definitions = fs.readFileSync(path.join(__dirname, '../src/lib/flags/definitions.ts'), 'utf8').split('const FEATURE_FLAG_DEFINITIONS = [')[1].split('] as const')[0];
-  const registry = [...definitions.matchAll(/key: ([A-Z_0-9]+),/g)].map(match => keys[match[1]]).filter(Boolean);
+  const registry = require("./helpers/flag-files.cjs").definitions().map(({ key }) => key);
   assert.deepEqual(validateFlagChanges(entries, registry, screens), []);
 });
 

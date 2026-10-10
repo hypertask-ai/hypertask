@@ -476,7 +476,7 @@ test("the flag and its constant are removed from the registry and runtime code",
 });
 
 test("the flag stays retired, not deleted, so older deployments keep reading it as Off", () => {
-  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
+  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
   const retiredSet = flags.match(/RETIRED_FEATURE_FLAG_KEYS = new Set\(\[([\s\S]*?)\]\)/);
   assert.ok(retiredSet, "RETIRED_FEATURE_FLAG_KEYS exists");
   assert.match(retiredSet[1], /"htpr-6322-agent-chat-parked-reply"/);

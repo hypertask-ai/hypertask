@@ -349,11 +349,11 @@ test("bottom shortcut hint follows all three flags; top hint and clicks stay unc
 }));
 
 test("flag registration, reused hints and existing full-editor scope are explicit", () => {
-  assert.match(source("src/lib/flags/keys.ts"), /HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add"/);
-  assert.match((source("src/lib/flags.ts") + source("src/lib/flags/definitions.ts")), /key: HTPR_6902_N_QUICK_ADD_FLAG/);
-  assert.match(source("src/lib/flags/keys.ts"), /HTPR_6914_SHIFT_C_QUICK_ADD_FLAG = "htpr-6914-shift-c-quick-add"/);
-  assert.match((source("src/lib/flags.ts") + source("src/lib/flags/definitions.ts")), /key: HTPR_6914_SHIFT_C_QUICK_ADD_FLAG,[\s\S]*?description: "Shift\+C opens the quick add box like N"/);
-  assert.match((source("src/lib/flags.ts") + source("src/lib/flags/definitions.ts")), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6902_N_QUICK_ADD_FLAG = "htpr-6902-n-quick-add"/);
+  assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6902_N_QUICK_ADD_FLAG/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6914_SHIFT_C_QUICK_ADD_FLAG = "htpr-6914-shift-c-quick-add"/);
+  assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6914_SHIFT_C_QUICK_ADD_FLAG,[\s\S]*?description: "Shift\+C opens the quick add box like N"/);
+  assert.match((source("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   assert.match(source("src/components/Global/BottomSettings_QuickTips.tsx"), /boardTips=\{shiftCQuickAddEnabled[\s\S]*key: \["N \/ Shift\+C"\]/);
   assert.match(source("src/components/PageComponents/Kanban/KanbanSectionComponents/NewTaskButton.tsx"), /nQuickAddEnabled && quickEntryCardsEnabled \? \(shiftCQuickAddEnabled \? \["N \/ Shift\+C"\] : \["N"\]\) : \["C"\]/);
   assert.match(source(sectionPath), /useEffect\(nQuickAddEnabled && quickEntryCardsEnabled \?/);

@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const noop = () => null;
 
 function load(relative, dependencies, declaration) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relative)) return require("./helpers/flag-files.cjs").load(relative);
   let source = fs.readFileSync(path.join(root, relative), "utf8");
   if (declaration) {
     const tree = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

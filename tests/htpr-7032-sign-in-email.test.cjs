@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..')
 const testSecret = 'htpr-7032-unit-test-signing-key'
 
 function loadTs(relativePath, aliases = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: {

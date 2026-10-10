@@ -49,6 +49,8 @@ require.cache[authPath] = {
 };
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src"), react: require.resolve("react") } });
 const flags = jiti(path.join(root, "src/lib/flags.ts"));
+const definitions = require("./helpers/flag-files.cjs").definitions();
+const declaredDefault = (definition) => definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA");
 
 test.beforeEach(() => {
   row = null;
@@ -322,9 +324,7 @@ test("new-task window view context defaults to Everyone as a bugfix and respects
 test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG;
   assert.equal(key, "htpr-6999-ctrl-j-view-context");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
-    .match(/key: HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,[\s\S]*?\n  \},/)?.[0];
-  assert.match(definition, /kind: "bugfix",\n  \},$/);
+  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
@@ -340,9 +340,7 @@ test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", as
 test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
   assert.equal(key, "htpr-7002-inbox-e-first-press");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
-    .match(/key: HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,[\s\S]*?\n  \},/)?.[0];
-  assert.match(definition, /kind: "bugfix",\n  \},$/);
+  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
@@ -484,52 +482,12 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
-  // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context", "htpr-7002-inbox-e-first-press", "htpr-7016-phone-board-cold-start"]);
-  for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
+  for (const definition of definitions) {
+    const mode = declaredDefault(definition);
     assert.deepEqual(
-      await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [
-        flags.HTPR_6962_KEEP_ASSIGNEE_FLAG,
-        flags.HTPR_6972_SUBTASK_LINK_FLAG,
-        flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG,
-        flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
-        flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG,
-        flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
-        flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
-        flags.HTPR_6991_BACK_FIRST_OPEN_FLAG,
-        flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG,
-        flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG,
-        flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG,
-        flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG,
-        flags.HTPR_7003_BOARD_BACK_FLAG,
-        flags.HTPR_7004_NO_LOADING_FLASH_FLAG,
-        flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG,
-        flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG,
-        flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG,
-        flags.HTPR_7020_TAG_FULL_NAME_FLAG,
-        flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
-        flags.HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
-        flags.HTPR_7031_INVITE_EMAIL_FLAG,
-        flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
-        flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
-        flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
-        flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
-        flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
-        flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
-        flags.HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
-        flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
-        flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
-        flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
-        flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
-        flags.HTPR_7050_CTRL_O_LINKS_FLAG,
-        flags.HTPR_7054_CTRLJ_DUE_DATE_FLAG,
-        flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
-        flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
-        flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG,
-        flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
-      ].includes(key)],
-      `${key} should use its declared rollout default`,
+      await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(definition.key, userId))),
+      [6, 985, 7].map((id) => flags.featureFlagModeEnabled(mode, id === 6, id === 985)),
+      `${definition.key} should use its declared rollout default`,
     );
   }
 });
@@ -745,349 +703,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   const listed = await flags.listFeatureFlagModes();
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
-    [
-      { key: "htpr-3533-google-calendar", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-4228-admin-only-time-reports",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-4857-add-to-slack", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-5908-local-writing-assistance",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-5937-show-column-in-all-views",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6002-shared-agent-chat", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6177-auto-task-descriptions",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6197-confirmed-proposal-heading",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6215-my-tasks-cross-board-priority-sort",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6238-posthog-error-alert",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6243-manager-loop-activity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6278-chat-turn-failure-state",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6283-agent-chat-live-sort",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6284-agent-mention-routing",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6287-agent-chat-roster-status",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6312-my-tasks-priority-filter",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6354-ai-chat-alerts",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6363-task-writer-research",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6369-search-operators",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6370-search-chips",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6372-search-ranking",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6407-mobile-agent-chat-layout",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6421-my-tasks-shortcuts-width",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6422-my-tasks-views",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6427-row-shortcuts",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6444-my-tasks-bulk-selection",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6447-my-tasks-filter-parity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6455-my-tasks-time-group",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6456-my-tasks-table-columns",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6457-my-tasks-scopes",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6458-my-tasks-live-updates",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6459-my-tasks-overdue-badges",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6460-my-tasks-quick-add",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6461-my-tasks-snooze",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6470-project-delete",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6476-mobile-agent-chat-fullscreen",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6512-seed-team-agent",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6516-agent-attribution",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6533-mcp-client-eval",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6536-qa-login",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6542-team-scoped-management-keys",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6551-quiet-run-activity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6553-agent-chat-polling",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6555-idle-comment-mic",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6556-mobile-description-first",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6557-agent-rooms",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6567-command-scope-picker", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6662-agent-log-name", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6688-search-autocomplete",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6722-latest-models",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6752-instant-ticket-open", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6804-mcp-tools", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6817-slack-app", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6860-mobile-page-hide-dock", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6861-mobile-page-back-row", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6865-search-layout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6868-ticket-prefix", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6872-page-image-gallery", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6873-quick-entry-grow", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6878-search-label-scope", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6879-search-esc-back", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6880-search-commenter", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6881-search-fuzzy-person", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6882-search-match-highlights", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6885-single-undo-toast", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6892-cmdk-version", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6899-stable-layout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6902-n-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6909-search-one-board-tabs", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6911-search-row-highlight", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6921-slack-marketplace", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6923-app-router-writes", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6924-rest-compat", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6926-mcp-route-wrapper", mode: "OFF", updatedAt: null },
-      { key: "htpr-6927-mcp-v2", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6934-server-first-screen", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6936-ask-ai-fullscreen", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6937-new-task-window", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6950-tooltip-top-layer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6962-keep-assignee", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6967-typed-task-reads", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6970-phone-new-task-title", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6972-subtask-link", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6975-typed-writes", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6978-size-label-click", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6979-typed-writes-sections-notifications", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6980-instant-column-delete", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6985-delete-view-once", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6989-bulk-archive-undo", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6990-narrow-sidebar-width", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6991-back-first-open", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6993-quick-add-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6994-search-esc-leaves", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6997-new-task-window-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6998-board-scroll-restore", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6999-ctrl-j-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7000-inbox-next-open", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7001-inbox-next-cached", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7002-inbox-e-first-press", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7003-board-back", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7004-no-loading-flash", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7008-phone-first-load-js", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7008-phone-first-paint", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7009-dedupe-task-detail-reads", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7020-tag-full-name", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7025-welcome-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7026-agent-connect-check", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7027-agent-nudge-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7028-first-task-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7029-keep-demo-board-on-email-signup", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7030-google-signup-starter-board", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7031-invite-email", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7032-email-expiry-copy", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7032-first-time-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7033-cli-install-command", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7034-activation-analytics", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7038-reset-saved-model-choices", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7038-task-writer-sonnet", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7043-no-empty-board-flash", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7044-double-click-to-edit", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7045-shortcuts-help-phone", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7054-ctrlj-due-date", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7056-ctrlj-split-tasks", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7060-task-writer-empty-and-research", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7064-inbox-remind-returns", mode: "EVERYONE", updatedAt: null },
-    ],
+    definitions.map((definition) => ({ key: definition.key, mode: declaredDefault(definition), updatedAt: null })),
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
     assert.ok(description.length > 20, `${key} needs a useful description`);
@@ -1424,8 +1040,7 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
   // Classify one real definition only in this module fixture, not in the production registry.
-  fs.writeFileSync(path.join(dir, "definitions.ts"), fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
-    .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", 'key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix",'));
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6950-tooltip-top-layer" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
     .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
@@ -1459,8 +1074,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const key = "htpr-6950-tooltip-top-layer";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
-    fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
-      .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", `key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix", defaultMode: "${mode}",`));
+    fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);
     fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
       .replaceAll("@/lib/flags/definitions", `./definitions-${mode}.ts`));
     const fixtureFlags = jiti(fixture);

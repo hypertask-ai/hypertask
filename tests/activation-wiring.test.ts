@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { activationHarness } from "./helpers/activation-harness";
+import * as flagKeys from "../src/lib/flags/keys";
 
 // Production versions saved when HTPR-7034 shipped, so CI (shallow clone) and later commits compare against the same baseline.
 const productionSource = (file: string) =>
@@ -430,7 +431,7 @@ for (const scenario of ["sent", "send-failure", "flag-off", "connected"] as cons
     const sending = new Promise<void>((resolve) => { started = resolve; });
     h.setEnabled(scenario !== "flag-off");
     Object.assign(h.mocks, {
-      "@/lib/flags/keys": h.load("src/lib/flags/keys.ts"),
+      "@/lib/flags/keys": flagKeys,
       "@/lib/onboarding/emails/eligibility": { onboardingEmailSkipReason: () => null },
       "@/lib/onboarding/emails/layout": { renderOnboardingEmail: () => ({ subject: "mock", html: "mock" }) },
       "@/lib/onboarding/agentConnection": { getFirstAgentConnection: async () => scenario === "connected" ? {} : null },

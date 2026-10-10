@@ -1393,10 +1393,10 @@ test("bugfix kind and default must be immutable literal declarations", async (t)
 });
 
 test("welcome email registers its ticket-specific feature with the restricted default", () => {
-  const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
-  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8");
+  const keys = require("./helpers/flag-files.cjs").source();
+  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source();
   assert.match(keys, /export const HTPR_7025_WELCOME_EMAIL_FLAG = "htpr-7025-welcome-email";/);
-  const definition = flags.match(/\{\s*key: HTPR_7025_WELCOME_EMAIL_FLAG,([\s\S]*?)\n  \}/)?.[1];
+  const definition = flags.match(/\{\s*key: HTPR_7025_WELCOME_EMAIL_FLAG,([\s\S]*?)\n\}/)?.[1];
   assert.ok(definition);
   assert.match(definition, /kind: "feature"/);
   assert.doesNotMatch(definition, /defaultMode:/);
@@ -1569,5 +1569,81 @@ test("new flag risk entries reject invalid labels, blank reasons and unsafe obje
     writeFile(dir, "src/lib/flags/releaseRisk.ts", `export const FEATURE_FLAG_RELEASE_RISKS = { "htpr-2-new": ${entry} };`);
     const head = commit(git, "invalid risk");
     assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false, entry);
+  }
+});
+
+function perFlagLayout(dir) {
+  writeFile(dir, "src/lib/flags/keys.ts", 'export * from "./definitions/index.generated";\n');
+  writeFile(dir, "src/lib/flags/definitions.ts", 'import { FLAG_DEFINITIONS } from "./definitions/index.generated";\nexport const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nconst DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\nexport const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);\n');
+  writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
+}
+
+test("per-flag registry handles legacy inline and extracted base refs without a generated index", async (t) => {
+  for (const extracted of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    if (extracted) {
+      writeFile(dir, "src/lib/flags/definitions.ts", flagsSource().replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, ""));
+      writeFile(dir, "src/lib/flags.ts", 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    }
+    const base = commit(git, "old layout");
+    perFlagLayout(dir);
+    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+    writeFile(dir, "src/components/Widget.tsx", 'import { WIDGET_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div>Widget</div> : null;\n');
+    const head = commit(git, "new layout and widget");
+    const result = await evaluate("HTPR-5 [FEATURE] Widget", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+  }
+});
+
+test("per-flag additions enforce the release-risk cutoff and registry defaults even on infra PRs", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "per flag base");
+  const filename = "src/lib/flags/definitions/htpr-2-new.ts";
+  const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "New flag" EXTRA } as const;`;
+  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
+    writeFile(dir, filename, source.replace(" EXTRA", extra));
+    const head = commit(git, "add flag " + extra);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, head, dir);
+    assert.equal(result.pass, pass, result.reason);
+  }
+  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ""));
+  assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "pre cutoff"), dir)).pass, true);
+});
+
+test("registry parser reads sorted per-flag keys and dates and rejects policy mutation or committed generated indexes", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", 'export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, description: "New flag", shippedOn: "2026-10-10" } as const;\n');
+  const ref = commit(git, "registry");
+  const previous = process.cwd();
+  process.chdir(dir);
+  try {
+    const { parseFlagRegistry, parseDefinitions } = await import("../.github/scripts/feature-flag-registry.mjs");
+    assert.deepEqual([...parseFlagRegistry(ref).byIdentifier], [["OTHER_FLAG", "htpr-1-other"], ["NEW_FLAG", "htpr-2-new"]]);
+    assert.deepEqual([...parseDefinitions(ref).shippedOn], [["htpr-1-other", "2026-10-09"], ["htpr-2-new", "2026-10-10"]]);
+    fs.appendFileSync(path.join(dir, "src/lib/flags/definitions.ts"), 'FEATURE_FLAG_DEFINITIONS.push({ key: "htpr-2-new" });\n');
+    assert.throws(() => parseDefinitions(commit(git, "mutation")), /must not be/);
+    writeFile(dir, "src/lib/flags/definitions/index.generated.ts", 'export const FAKE_FLAG = "htpr-3-fake";');
+    assert.throws(() => parseFlagRegistry(commit(git, "bad generated index")), /invalid .*index.generated.ts/);
+  } finally { process.chdir(previous); }
+});
+
+
+test("per-flag wrapper cannot mutate generated data through imports or aliases", async (t) => {
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "data-only base");
+  const wrapper = fs.readFileSync(path.join(dir, "src/lib/flags/definitions.ts"), "utf8");
+  for (const extra of [
+    'FLAG_DEFINITIONS[0].defaultMode = "EVERYONE";',
+    'const alias = FLAG_DEFINITIONS; alias.push({ key: "htpr-2-new" });',
+    'import flag from "./definitions/htpr-1-other"; flag.kind = "bugfix";',
+  ]) {
+    writeFile(dir, "src/lib/flags/definitions.ts", wrapper + extra + "\n");
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "unsafe wrapper " + extra), dir);
+    assert.equal(result.pass, false, extra);
+    assert.match(result.reason, /data-only generated registry wrapper/);
   }
 });

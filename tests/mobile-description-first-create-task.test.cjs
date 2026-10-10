@@ -14,8 +14,8 @@ const properties = read(
 );
 const attachments = read("src/components/Common/AttachmentsUpload/index.tsx");
 const createTaskEditor = read("src/components/RTE/TiptapCreateTaskModal.tsx");
-const flagKeys = read("src/lib/flags/keys.ts");
-const flags = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
+const flagKeys = require("./helpers/flag-files.cjs").source();
+const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
 
 const mobileBarStart = attachments.indexOf("const MobileBottomBar");
 const mobileBarEnd = attachments.indexOf(

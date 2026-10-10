@@ -25,7 +25,16 @@
     "ai:provision-managed-team-keys": "node scripts/provision-managed-team-gateway-keys.mjs",
     "realtime:soketi": "docker run --rm -p 6001:6001 -v \"$PWD/soketi.json:/app/soketi.json\" quay.io/soketi/soketi:1.6-16-alpine start --config=/app/soketi.json",
     "cleanup:verification-codes": "tsx src/scripts/cleanup-verification-codes.ts",
-    "cleanup:oauth-codes": "tsx src/scripts/cleanup-oauth-codes.ts"
+    "cleanup:oauth-codes": "tsx src/scripts/cleanup-oauth-codes.ts",
+    "flags:generate": "node scripts/generate-flag-index.mjs",
+    "postinstall": "npm run flags:generate",
+    "predev": "npm run flags:generate",
+    "prebuild": "npm run flags:generate",
+    "pretypecheck": "npm run flags:generate",
+    "pretest": "npm run flags:generate",
+    "pretest:file": "npm run flags:generate",
+    "prelint": "npm run flags:generate",
+    "prelint:changed": "npm run flags:generate"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.68",

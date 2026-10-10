@@ -284,7 +284,7 @@ for (const { keys, flag, file, uiFlag } of gatedCommands) {
       const call = declaration(file, name);
       assert.equal(call.expression.getText(), "useFlag");
       const key = call.arguments[0];
-      return ts.isStringLiteral(key) ? key.text : strings(declaration("src/lib/flags/keys.ts", key.getText()))[0];
+      return ts.isStringLiteral(key) ? key.text : require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts")[key.getText()];
     };
     assert.equal(flagKey(menuFile, flag), flagKey(file.startsWith("src/") ? file : `${settingsDir}/${file}`, uiFlag));
     let predicate;

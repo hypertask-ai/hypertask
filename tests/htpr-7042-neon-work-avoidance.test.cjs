@@ -16,7 +16,7 @@ function load(file, mocks = {}, modules = new Map()) {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
     const base = name.startsWith("@/") ? `src/${name.slice(2)}` : path.join(path.dirname(file), name);
-    const resolved = [base, `${base}.ts`, `${base}.tsx`].find((item) => fs.existsSync(path.join(root, item)));
+    const resolved = [base, `${base}.ts`, `${base}.tsx`].find((item) => fs.existsSync(path.join(root, item)) && fs.statSync(path.join(root, item)).isFile());
     assert.ok(resolved, `Missing import ${name}`);
     return load(resolved, mocks, modules);
   };

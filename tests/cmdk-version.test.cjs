@@ -105,15 +105,19 @@ function renderPalette({ enabled = true, mobile = false, env = buildEnv, rows = 
 
 function buildConfig(env = {}, gitSha = "a91d448", gitAvailable = true) {
   const configModule = { exports: {} };
-  new Function("require", "module", "process", read("next.config.js"))((specifier) => {
+  new Function("require", "module", "process", "__dirname", read("next.config.js"))((specifier) => {
     if (["@next/bundle-analyzer", "next-pwa"].includes(specifier)) return () => (config) => config;
     if (specifier === "@posthog/nextjs-config") return { withPostHogConfig: (config) => config };
+    if (specifier === "node:child_process") return { execFileSync: (_node, args, options) => {
+      assert.deepEqual(args, ["scripts/generate-flag-index.mjs"]);
+      assert.equal(options.cwd, root);
+    } };
     if (specifier === "child_process") return { execSync: () => {
       if (!gitAvailable) throw new Error("No git checkout");
       return Buffer.from(gitSha);
     } };
     throw new Error(`Unexpected config import: ${specifier}`);
-  }, configModule, { env });
+  }, configModule, { env, execPath: process.execPath }, root);
   return configModule.exports;
 }
 
@@ -196,8 +200,8 @@ if (require.main === module) {
   });
 
   test("ticket-specific registry entry inherits Owner+QA and reuses muted micro footer styles", () => {
-    const keys = read("src/lib/flags/keys.ts");
-    const flags = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
+    const keys = require("./helpers/flag-files.cjs").source();
+    const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
     assert.match(keys, /HTPR_6892_CMDK_VERSION_FLAG = "htpr-6892-cmdk-version"/);
     assert.match(flags, /key: HTPR_6892_CMDK_VERSION_FLAG,\s*shippedOn: "2026-10-03",\s*description:/);
     assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
