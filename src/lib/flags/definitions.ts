@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7047_SHARP_PLUS_SIGNS_FLAG,
   HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
   HTPR_7020_TAG_FULL_NAME_FLAG,
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
@@ -163,6 +164,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7047_SHARP_PLUS_SIGNS_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Keeps the small and large add-task plus signs in board columns sharp at their existing sizes and positions.",
+  },
   {
     key: HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
     kind: "feature",
