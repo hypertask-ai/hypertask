@@ -15,7 +15,6 @@ import {
 } from "@/lib/agentWebhooks/outbox";
 import {
   HTPR_6551_QUIET_RUN_ACTIVITY_FLAG,
-  featureFlagCandidateUserIds,
   isFeatureEnabled,
 } from "@/lib/flags";
 import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
@@ -24,7 +23,6 @@ import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import {
   AGENT_CHAT_STOPPED_MESSAGE,
-  AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
   AGENT_CHAT_TIMEOUT_MESSAGE,
   AGENT_RUN_ACTIVITY_FEATURE_FLAG,
   AGENT_RUN_FEATURE_FLAG,
@@ -367,7 +365,7 @@ async function reconcileAgentChatTurn(
   stop: boolean,
   now: Date,
 ) {
-  if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
+  if (principal.source !== "browser") return null;
   const result = await prisma.$transaction(async (tx) => {
     const [lockedSession] = await tx.$queryRaw<Array<{ id: string }>>`SELECT id FROM "ChatSession" WHERE id = ${sessionId} AND "userId" = ${principal.userId} AND "agentId" IS NOT NULL FOR UPDATE`;
     if (!lockedSession) return null;
@@ -453,7 +451,7 @@ async function reconcileAgentChatTurn(
 }
 
 export async function readAgentChatTurn(principal: AgentRunPrincipal, sessionId: string, now = new Date()) {
-  if (principal.source !== "browser" || !(await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, principal.userId))) return null;
+  if (principal.source !== "browser") return null;
   // The client polls this every few seconds per open tab. Only an expired turn
   // can change anything, so decide that with a plain read rather than taking
   // the session row lock every tick.
@@ -473,14 +471,11 @@ export async function stopAgentChatTurn(principal: AgentRunPrincipal, sessionId:
 }
 
 export async function sweepExpiredAgentChatTurns(now = new Date()) {
-  const candidates = await featureFlagCandidateUserIds(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG);
-  if (candidates?.length === 0) return 0;
   const sessions = await prisma.$queryRaw<Array<{ id: string; userId: number }>>`
     SELECT s.id, s."userId" FROM "ChatSession" s
     JOIN LATERAL (SELECT m.id, m.role, m."createdAt", m."isDelivered" FROM "ChatMessage" m WHERE m."sessionId" = s.id ORDER BY m."createdAt" DESC, m.id DESC LIMIT 1) latest ON true
     WHERE s."agentId" IS NOT NULL AND latest.role = 'human' AND latest."isDelivered"
       AND latest."createdAt" <= ${new Date(now.getTime() - AGENT_RUN_STALE_AFTER_MS)}
-      AND (${candidates === null} OR s."userId" = ANY(${candidates ?? []}))
       AND NOT EXISTS (SELECT 1 FROM "AgentRun" r JOIN "AgentRunActivity" a ON a."runId" = r.id
         WHERE r."chatSessionId" = s.id AND r.status::text = ANY(${[...NONTERMINAL_AGENT_RUN_STATUSES]}) AND a.type = 'ELICITATION' AND a."selectedAt" IS NULL AND a."createdAt" >= latest."createdAt")
     ORDER BY latest."createdAt", latest.id LIMIT 25
@@ -691,8 +686,7 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
-  const exactChatReply = input.type === "RESPONSE" && run.chatSession &&
-    await isFeatureEnabled(AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG, run.chatSession.userId);
+  const exactChatReply = input.type === "RESPONSE" && Boolean(run.chatSession);
   if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 
   if (idempotencyKey !== null) {

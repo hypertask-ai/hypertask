@@ -33,7 +33,7 @@ function harness({ mode = null, denied = true, failure, user = { id: 2343 } } = 
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => ({ members: { some: { userId } } }) },
     "@/utils/controllers/teams/hasTeamMembershipAccess": { hasTeamMembershipAccess: async () => true },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => assert.fail("No session lookup expected") },
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
     "@/lib/ai/prompts/registry": {},
     "@/app/api/ai/_lib/modelProvider": {},
     "@/app/api/ai/_lib/byokKeys": {},

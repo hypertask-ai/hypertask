@@ -72,7 +72,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
   const aliases = {
     '@/lib/prisma': prisma,
     '@/lib/auth/getSessionUser': {},
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'test-agent-flag' },
+    '@/lib/agentRuns/model': {},
     '@/lib/flags/keys': loadTs('src/lib/flags/keys.ts', {}),
     '@/lib/auth/session': {
       SESSION_COOKIE: 'ht_session', SESSION_TTL_SECONDS: 3600,

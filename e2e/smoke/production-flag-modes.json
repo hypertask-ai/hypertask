@@ -18,7 +18,6 @@
     "htpr-6122-agent-run-activities": "OWNER_AND_QA",
     "htpr-6136-figma-connect": "EVERYONE",
     "htpr-6141-ai-first-task-writer": "OWNER_AND_QA",
-    "htpr-6154-chat-stop-and-timeout": "EVERYONE",
     "htpr-6155-chat-agent-brief": "OWNER_AND_QA",
     "htpr-6157-new-task-auto-description": "OFF",
     "htpr-6160-inbox-archive-cluster": "OFF",

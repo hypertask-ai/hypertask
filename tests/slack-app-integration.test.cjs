@@ -177,7 +177,7 @@ test("server flag uses the actual linked user, installation fallback and Owner +
   assert.deepEqual(calls, [["htpr-6817-slack-app", 42], ["htpr-6817-slack-app", 6]]);
   const { isFeatureEnabled } = loadTs("src/lib/flags.ts", {
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "test-flag" },
+    "@/lib/agentRuns/model": {},
   });
   const db = {
     featureFlag: { findUnique: async () => null },

@@ -23,7 +23,7 @@ function registry(mode = null, fail = false) {
   const flags = load('src/lib/flags.ts', {
     '@/lib/prisma': { default: db },
     '@/lib/auth/getSessionUser': {},
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6154-chat-stop-and-timeout' },
+    '@/lib/agentRuns/model': {},
   });
   return { flags, checks, users };
 }

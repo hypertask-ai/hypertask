@@ -470,7 +470,7 @@ test("nudge is registered as a feature with Owner + QA default, server-gated wit
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { __esModule: true, default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7027_AGENT_NUDGE_EMAIL_FLAG, key); assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
   assert.equal((await registry.listFeatureFlagModes()).find((entry) => entry.key === key).kind, "feature");

@@ -149,7 +149,7 @@ test("ticket flag defaults to Everyone as a bugfix and respects OFF", async () =
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { default: { featureFlag: { findUnique: async () => row, findMany: async () => [] } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, key);
   assert.equal(registry.defaultFeatureFlagMode(key), "EVERYONE");

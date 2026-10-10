@@ -69,9 +69,9 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     '@/lib/flags/keys': keys,
     '@/lib/flags/definitions': loadTs('src/lib/flags/definitions.ts', {
       '@/lib/flags/keys': keys,
-      '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6282-agent-chat-stop-timeout' },
+      '@/lib/agentRuns/model': {},
     }),
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6282-agent-chat-stop-timeout' },
+    '@/lib/agentRuns/model': {},
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
     '@/lib/prisma': { default: prisma, __esModule: true },

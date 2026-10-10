@@ -95,11 +95,11 @@ test("shared email layout has its own feature flag restricted to Owner + QA", as
     "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
     "@/lib/flags/definitions": load("src/lib/flags/definitions.ts", {
       "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
-      "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+      "@/lib/agentRuns/model": {},
     }),
     "@/lib/prisma": { __esModule: true, default: { featureFlag: { findMany: async () => [] } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   const modes = await registry.listFeatureFlagModes();
   assert.equal(registry.HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, flag);
