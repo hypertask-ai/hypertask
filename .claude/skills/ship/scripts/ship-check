@@ -95,7 +95,7 @@ check_dropped() {
     || fail "PR $2 not found in $REPO"
   [[ $s == "CLOSED $BASE $1 "* ]] || fail "PR $2 must be a CLOSED (not merged, not open) PR of $1 into $BASE, got: $s"
   hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[]; (.text // "") as $x
-      | ($x | test("Decided against:"; "i")) and ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
+      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Decided against:"; "i")) and ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
         and ($x | test("\"|&quot;|&#x22;|“")))' >/dev/null \
     || fail "$1 has no \"Decided against:\" comment quoting Valentin's dated decision (needs \"Decided against:\", \"Valentin\", a date like 2026-10-10 and a quote mark)"
   mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
