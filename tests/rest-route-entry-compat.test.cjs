@@ -64,7 +64,7 @@ async function run(operation, mode = 'OFF', options = {}) {
       deleteMany: fn('authCodesDelete', { count: 2 }), update: fn('authCodeUpdate', {}),
     },
     oAuthClientGrant: { deleteMany: fn('grantDelete', { count: 1 }) },
-    user: { update: fn('userUpdate', actor) }, revokedToken: { upsert: fn('tokenRevoke', {}) },
+    user: { update: fn('userUpdate', actor), findUnique: fn('userFind', ({ where }) => options.noUserRow ? null : { id: where.id, displayName: 'Actor', email: 'actor@fixture.invalid', UserSetting: null, userPicture: null }) }, revokedToken: { upsert: fn('tokenRevoke', {}) },
     userSetting: { update: fn('preferencesUpdate', { playGifs: false }), findUnique: fn('preferencesFind', null) },
     agent: { findFirst: fn('agent', { id: agentId, userId, displayName: 'Agent' }) },
     $transaction: fn('transaction', async (promises) => Promise.all(promises)),
@@ -137,7 +137,8 @@ async function run(operation, mode = 'OFF', options = {}) {
     return { status: response.status, text: await response.text(), headers: [...response.headers], calls: JSON.parse(JSON.stringify(calls)), probes, limits, readers, jsonReads, requestHeaders: request.headers };
   } finally { global.Date = RealDate; console.error = originalError; console.log = originalLog; }
 }
-const contract = ({ status, text, headers, calls }) => ({ status, text, headers, calls });
+// The session-profile query (HTPR-7073) is asserted explicitly; the frozen baselines cover the route's own calls.
+const contract = ({ status, text, headers, calls }) => ({ status, text, headers, calls: calls.filter(([name]) => name !== 'userFind') });
 
 // Frozen before PR 2 edits; no Git or runtime baseline rewrite in CI.
 const baseline = {
@@ -1946,23 +1947,40 @@ if (require.main === module) {
       }
     });
     if (preferenceOperations.includes(operation)) continue;
-    test(`${operation}: missing/invalid profile returns original 401 before JSON and writes`, async () => {
-      for (const mode of ['ON', 'OFF']) for (const options of [{ noProfile: true }, { badCookie: true }]) {
-        const result = await run(operation, mode, { ...options, raw: '{' });
+    // HTPR-7073: a missing, invalid or mismatched profile cookie no longer 401s a signed session
+    // when the REST compat flag is on; the profile is loaded for the session user from the database.
+    test(`${operation}: flag OFF keeps the original 401 for a missing/invalid profile (flag probed once, no profile query)`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }]) {
+        const result = await run(operation, 'OFF', { ...options, raw: '{' });
         assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
         assert.equal(result.jsonReads, 0);
         assert.deepEqual(result.limits, []);
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
+        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
+        assert.ok(!result.calls.some(([name]) => name === 'userFind'));
       }
     });
-    test(`${operation}: unsigned/mismatched profile cannot enable new path; direct-handler legacy remains intact`, async () => {
-      for (const mode of ['ON', 'OFF', 'NO_SESSION']) {
-        const result = await run(operation, mode, { profileId: 7 });
-        assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { profileId: 7 })));
-        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
-        assert.deepEqual(result.limits, []);
-        assert.deepEqual(result.readers, []);
+    test(`${operation}: flag ON loads the profile of the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }, { profileId: 7 }]) {
+        const result = await run(operation, 'ON', { ...options, raw: JSON.stringify(operations[operation][2] ?? {}) });
+        // A mismatched cookie (profileId 7) also moves the fixture owner, so only the lookup is compared there.
+        if (!options.profileId) assert.deepEqual(contract(result), baseline[operation]);
+        assert.equal(result.calls.filter(([name]) => name === 'userFind').length, 1);
+        assert.deepEqual(result.calls.find(([name]) => name === 'userFind')[1], [{ where: { id: 985 }, include: { UserSetting: true, userPicture: true } }]);
+        assert.ok(!result.calls.some(([name, args]) => name !== 'userFind' && args.includes(7)), 'must never act as the cookie user 7');
       }
+    });
+    test(`${operation}: no session or no user row keeps the original 401 and a mismatched profile stays legacy with the flag OFF`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }]) {
+        const result = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
+        assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
+        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
+        assert.ok(!result.calls.some(([name]) => name === 'userFind'));
+      }
+      const noRow = await run(operation, 'ON', { noProfile: true, noUserRow: true, raw: '{' });
+      assert.deepEqual(contract(noRow), baseline[`${operation}:unauthorized`]);
+      const legacy = await run(operation, 'OFF', { profileId: 7 });
+      assert.ok(!legacy.calls.some(([name]) => name === 'userFind'));
+      assert.deepEqual(contract(await run(operation, 'NO_SESSION', { profileId: 7 })), contract(legacy));
     });
   }
   // HTPR-7068: preferences identify the user from the signed session alone when the REST compat flag is on.

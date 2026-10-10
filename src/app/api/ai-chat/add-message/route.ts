@@ -55,9 +55,6 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
 
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
     let restCompat = false;
@@ -70,7 +67,7 @@ export async function POST(request: NextRequest) {
     }
     const { isValid, user } = restCompat && currentUser
       ? { isValid: true, user: currentUser.user }
-      : isValidUser(userCookie.value);
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
