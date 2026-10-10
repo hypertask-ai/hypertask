@@ -14,13 +14,8 @@ export function isQuestionComment(text: string | null | undefined): boolean {
     .split(
       /<\/(?:p|li|h[1-6]|blockquote|div)\s*>|<br\b[^>]*>|<(?:p|li|div|h[1-6]|blockquote)\b[^>]*>|\r?\n/i,
     )
-    .some((part) =>
-      part
-        .replace(/<[^>]*>/g, "")
-        .replace(/&nbsp;/gi, " ")
-        .trim()
-        .startsWith("Question:"),
-    );
+    // Match past leading inline tags and spaces; no tag stripping, the text is never rendered.
+    .some((part) => /^(?:\s|&nbsp;|<[^>]*>)*Question:/.test(part));
 }
 
 type MentionRow = {
