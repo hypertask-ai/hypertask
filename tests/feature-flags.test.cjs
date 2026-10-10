@@ -948,8 +948,8 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
     ],
   );
