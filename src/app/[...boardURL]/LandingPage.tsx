@@ -19,7 +19,7 @@ import nookies from "nookies"
 import { IProject, IProjectsAll, IUser } from "@/models/model";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7028_FIRST_TASK_EMAIL_FLAG, HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG, HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG } from "@/lib/flags/keys";
 import { CommandMode } from "@/models/enums";
 import { showCommandsAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom } from "@/store";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
@@ -1273,7 +1273,9 @@ export default LandingPage
 
 const SectionComp = (props: SectionCompProps) => {
   const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
-  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness), connectBlockRemoved);
+  const connectOverlayOn = useFlag(HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG)
+  // With the 7041 overlay on, AgentConnectCard renders only the dialog, never the block.
+  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness), connectBlockRemoved && !connectOverlayOn);
 };
 
 function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean) {
