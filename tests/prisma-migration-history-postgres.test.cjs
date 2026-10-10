@@ -30,7 +30,7 @@ const ticketIdentityRepairMigration = path.join(
   "20260904132500_repair_cross_board_ticket_numbers",
   "migration.sql",
 );
-const image = process.env.HTPR_PG_IMAGE || "postgres:16-alpine";
+const image = process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
 const requirePostgres = process.env.HT_REQUIRE_PG_TESTS === "1";
 
 function run(command, args, options = {}) {

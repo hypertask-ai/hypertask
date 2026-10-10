@@ -128,6 +128,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Guard CI image sources
+        run: node --test tests/ci-image-sources.test.cjs
+
       # ci-build is a required status check, so path-filtered PRs must still
       # report success (paths-ignore at the trigger level would leave it
       # pending forever). Instead: diff against the PR base here and skip the
@@ -296,7 +299,7 @@ jobs:
           fi
 
       - name: Authenticate CI image pulls
-        if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           registry: ghcr.io
