@@ -3,7 +3,6 @@ import prisma from "@/lib/prisma";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
 import { inboxConfig } from "@/lib/configs/inbox.config";
-import { getDecisionTaskIds } from "@/utils/controllers/notifications/decisionTasks";
 import { generalConfig } from "@/lib/configs/general.config";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
 import {
@@ -666,16 +665,7 @@ const notificationGetAll = async (userId: string | string[]) => {
         fromAgentId: null,
       };
     });
-    // HTPR-7092: flag-gated on the server; an empty set means no Decisions split.
-    const decisionTaskIds = await getDecisionTaskIds(parsedUserId, inboxWhere);
-    const decisionNotifications = decisionTaskIds.size
-      ? displayedNotifications.map((notification) =>
-          notification.taskId != null && decisionTaskIds.has(notification.taskId)
-            ? { ...notification, isDecision: true }
-            : notification
-        )
-      : displayedNotifications;
-    const inboxRows = [...decisionNotifications, ...blockedByYouRows];
+    const inboxRows = [...displayedNotifications, ...blockedByYouRows];
 
     // Process the notifications to keep only one notification per task.
     // getInboxTabs recognizes the task-backed synthetic rows and keeps them only

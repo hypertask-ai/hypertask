@@ -8,7 +8,7 @@ const toLines = (html: string) => {
   let previous;
   do {
     previous = text;
-    text = text.replace(/<[^<>]*>/g, " ");
+    text = text.replace(/<[^<>]*>/g, "");
   } while (text !== previous);
   return text
     .replace(/&nbsp;/g, " ")

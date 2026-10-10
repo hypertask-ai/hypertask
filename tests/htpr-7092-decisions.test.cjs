@@ -182,10 +182,41 @@ test("server: flag on returns unanswered Question tasks with two queries", async
   assert.deepEqual(calls, [["notification", "Mentioned"], ["comment", 6]]);
 });
 
-test("server: getAll marks rows only through the gated helper", () => {
-  const source = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8");
-  assert.match(source, /getDecisionTaskIds\(parsedUserId, inboxWhere\)/);
-  assert.match(source, /isDecision: true/);
+test("server: getAll.ts stays untouched; the wrapper marks rows through the gated helper", () => {
+  const wrapper = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAllWithDecisions.ts"), "utf8");
+  assert.match(wrapper, /getDecisionTaskIds\(parsedUserId, visibleUserInboxWhere\(parsedUserId\)\)/);
+  assert.match(wrapper, /isDecision: true/);
+  assert.doesNotMatch(fs.readFileSync(path.join(root, "src/utils/controllers/notifications/getAll.ts"), "utf8"), /isDecision/);
+  for (const file of ["src/lib/api/notification-writes/all-read.ts", "src/lib/firstScreen/serverInboxDocument.ts"]) {
+    assert.match(fs.readFileSync(path.join(root, file), "utf8"), /notifications\/getAllWithDecisions/);
+  }
+});
+
+test("wrapper: flag off or no pending Question returns the original response unchanged", async () => {
+  const original = { status: 200, json: { notifications: [{ id: "1", taskId: 5 }], structuredData: { tabs: [], data: [] } } };
+  const run = async (ids) => {
+    const mod = loadTsModule("src/utils/controllers/notifications/getAllWithDecisions.ts", {
+      "@/utils/controllers/notifications/getAll": { __esModule: true, default: async () => original },
+      "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
+      "@/utils/controllers/notifications/decisionTasks": { getDecisionTaskIds: async () => ids },
+      "@/utils/helperFunctions/helperFunctions": { getInboxTabs: (rows) => ({ tabs: [{ project: "Decisions" }], data: [rows.map((_, i) => i)] }) },
+    });
+    return mod.default("6");
+  };
+  assert.equal(await run(new Set()), original);
+  const marked = await run(new Set([5]));
+  assert.equal(marked.json.notifications[0].isDecision, true);
+  assert.equal(marked.json.structuredData.tabs[0].project, "Decisions");
+});
+
+test("server: activity-only viewer entries never count as an answer", () => {
+  const source = fs.readFileSync(path.join(root, "src/utils/controllers/notifications/decisionTasks.ts"), "utf8");
+  assert.match(source, /activity: \{ equals: Prisma\.DbNull \}/);
+});
+
+test("Question with the colon outside the bold element still matches", () => {
+  assert.equal(isQuestionComment("<p><strong>Question</strong>: proceed?</p>"), true);
+  assert.equal(isQuestionComment("<p><strong>Ques</strong>tion: proceed?</p>"), true);
 });
 
 test("Question in a later paragraph matches (summary sentence first)", () => {

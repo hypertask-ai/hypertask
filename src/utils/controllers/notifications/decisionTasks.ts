@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7092_DECISIONS_FLAG } from "@/lib/flags/keys";
@@ -50,7 +50,7 @@ export async function getDecisionTaskIds(
   if (!taskIds.length) return new Set();
 
   const viewerComments = await prisma.comment.findMany({
-    where: { creatorId: userId, agentId: null, taskId: { in: taskIds } },
+    where: { creatorId: userId, agentId: null, activity: { equals: Prisma.DbNull }, taskId: { in: taskIds } },
     select: { taskId: true, createdAt: true },
   });
   return pickDecisionTaskIds(candidates, viewerComments);

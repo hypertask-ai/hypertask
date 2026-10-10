@@ -18,10 +18,10 @@ import useViewOrderActions from "@/hooks/Homepage/Views/useViewOrderActions";
 import toast from "react-hot-toast";
 import axios from "axios";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6985_DELETE_VIEW_ONCE_FLAG, HTPR_7092_DECISIONS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6985_DELETE_VIEW_ONCE_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { asViewOrder, sortViewsByOrder } from "@/utils/helperFunctions/Views/ViewOrderHelperFunctions";
-import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
+import { BUILTIN_VIEWS, isBuiltinView, viewTabPreferenceKey, type BoardView } from "@/lib/constants/builtinViews";
 import { useGetAllProjectLabels } from "@/hooks/MultiPages/useGetAllProjectLabels";
 import { getSmartSplitLabel } from "@/lib/smartSplits";
 import SmartSplitModal from "./SmartSplitModal";
@@ -57,7 +57,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
     const [smartSplitToEdit, setSmartSplitToEdit] = useState<{ view: IView; label: ILabel } | null>(null)
     const cancelInlineRenameRef = useRef(false)
     const deleteViewOnce = useFlag(HTPR_6985_DELETE_VIEW_ONCE_FLAG)
-    const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
     const deleteInFlightRef = useRef(false)
     const {
         data: projectLabelsFromTQ,
@@ -126,7 +125,7 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         const { allViews = [], default_view_id, user_project_views } = currentProject.project_view ?? {}
         const unsavedViewId = user_project_views?.[0]?.unsavedView?.id
         const resetViews = sortViewsByOrder<BoardView>(
-            [...allViews.filter((view) => view.id !== unsavedViewId), ...BUILTIN_VIEWS.filter((view) => view.id !== BUILTIN_VIEW_IDS.decisions || decisionsEnabled)],
+            [...allViews.filter((view) => view.id !== unsavedViewId), ...BUILTIN_VIEWS],
             projectDefaultOrder,
             default_view_id
         )

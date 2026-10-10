@@ -101,6 +101,8 @@ function fixture(endpoint, scenario = {}, mode = false) {
     "@/utils/controllers/notifications/getCount": { default: async id => { step("inbox-count", id); return { status: scenario.controllerStatus ?? 200, json: { all: 3, unseen: 1 } }; } },
     "@/utils/controllers/notifications/getAccessibleProjectIds": { getInboxAccessibleProjectIds: async id => { step("inbox-access", id); return scenario.noRows ? [] : [15, 16]; } },
   };
+  // HTPR-7092: all-read now reads through the Decisions wrapper, a pass-through while the flag is off.
+  mocks["@/utils/controllers/notifications/getAllWithDecisions"] = mocks["@/utils/controllers/notifications/getAll"];
   mocks["@/lib/inboxSplitSettings"] = load("src/lib/inboxSplitSettings.ts", mocks);
   const web = load(`src/lib/api/notification-writes/${endpoint.module}.ts`, mocks)[endpoint.method];
   const routeModule = {};
