@@ -54,6 +54,7 @@ import {
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
+  HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
   HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
@@ -100,6 +101,7 @@ const Commands = (props: Props) => {
   } = props;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
@@ -644,13 +646,14 @@ const Commands = (props: Props) => {
     if (!composeEnabled) return;
     const close = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (composeBoardChipEnabled && document.querySelector("[data-compose-board-picker-open]")) return;
       event.preventDefault();
       event.stopImmediatePropagation();
       toggle();
     };
     document.addEventListener("keydown", close, true);
     return () => document.removeEventListener("keydown", close, true);
-  }, [composeEnabled, writing]);
+  }, [composeEnabled, writing, composeBoardChipEnabled]);
   useEffect(() => {
     if (composeEnabled && !isCompose) inputRef.current?.focus();
   }, [composeEnabled, isCompose]);
@@ -660,6 +663,8 @@ const Commands = (props: Props) => {
     const switchTab = (event: KeyboardEvent) => {
       if (event.key !== "Tab" || event.altKey || event.ctrlKey || event.metaKey || event.isComposing || writing) return;
       const target = event.target as HTMLElement;
+      if (composeBoardChipEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
+          document.querySelector("[data-compose-board-chip]")) return;
       // Leave attachment dialogs, mic controls and other focus traps alone.
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
@@ -668,7 +673,7 @@ const Commands = (props: Props) => {
     };
     document.addEventListener("keydown", switchTab, true);
     return () => document.removeEventListener("keydown", switchTab, true);
-  }, [newTaskWindow, isCompose, writing, setShowCommands]);
+  }, [newTaskWindow, isCompose, writing, setShowCommands, composeBoardChipEnabled]);
 
   const modeSwitch = composeTaskWriterEnabled && !isDemo && !isInteractive ? (
     <div className="absolute -top-12 left-0 flex w-full justify-center">

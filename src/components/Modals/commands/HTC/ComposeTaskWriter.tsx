@@ -23,11 +23,14 @@ import globalAPIHandlers from "@/utils/api/global";
 import useAddDeleteTaskInBoards from "@/hooks/MultiPages/useAddDeleteTaskInBoards";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG, HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { resolveComposeBoardTarget } from "./composeBoardTarget";
+import { ChatScopeChip } from "@/components/AI_CHAT/ChatScopeChip";
+import MoveTaskGlobal from "@/components/Modals/MoveTaskToBoard";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
@@ -45,6 +48,11 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
+  const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const [selectedBoardId, setSelectedBoardId] = useState<number>();
+  const [boardPickerOpen, setBoardPickerOpen] = useState(false);
+  const boardChip = useRef<HTMLButtonElement>(null);
+  const caret = useRef<{ start: number; end: number; direction: "forward" | "backward" | "none" } | null>(null);
   let showProgress = false;
   if (progressFlag && newTaskWindow) showProgress = true;
   const taskContext = useContext(TaskContext);
@@ -87,6 +95,40 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const { updateTaskInCache } = UpdateKanban();
   const queryClient = useQueryClient();
   const { fileItems, files, fileInputRef, handleDroppedFiles, handleAttachmentClick, removeFile } = useFileUpload();
+  const { data: boards = [], isFetching: loadingBoards } = useQuery<IProject[]>({
+    queryKey: ["projectsAllMinimal", user?.id],
+    queryFn: () => globalAPIHandlers.getAllProjectsMinimal("ExtraMinimal"),
+    enabled: boardChipEnabled && enabled && active && Boolean(user?.id),
+  });
+  let targetBoardId: number | undefined;
+  let showBoardChip = false;
+  if (boardChipEnabled) {
+    const target = resolveComposeBoardTarget({
+      url: typeof window === "undefined" ? "/" : window.location.href,
+      focusedTicketBoardId: inView?.taskId ? inView.taskProjectId : undefined,
+      lastUsedBoardId: composeTaskBoardId("/", parseCookies().previousBoard, lastUsedBoards),
+      destinationBoardId: destinationProject?.id,
+      selectedBoardId,
+    });
+    targetBoardId = target.boardId;
+    showBoardChip = target.showChip;
+  } else {
+    targetBoardId = undefined;
+    showBoardChip = false;
+  }
+  const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
+    ?? (destinationProject?.id === targetBoardId ? destinationProject : undefined)
+    ?? (currentProject?.id === targetBoardId ? currentProject : undefined);
+  const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
+  const openBoardPicker = () => {
+    if (!boardChipEnabled || writing || dictating) return;
+    const field = input.current;
+    if (field) caret.current = { start: field.selectionStart, end: field.selectionEnd, direction: field.selectionDirection };
+    setBoardPickerOpen(true);
+  };
+  useEffect(() => {
+    if (!active || !boardChipEnabled) setBoardPickerOpen(false);
+  }, [active, boardChipEnabled]);
 
   useEffect(() => {
     if (!newTaskWindow || !active || !input.current) return;
@@ -104,22 +146,36 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     };
   }, []);
   useEffect(() => {
-    if (!active || writing || dictating) return;
+    if (!active || writing || dictating || (boardChipEnabled && boardPickerOpen)) return;
     let cancelled = false;
     let tries = 0;
     const focus = () => {
       const field = input.current;
-      if (cancelled || !field || document.activeElement === field) return;
+      if (cancelled || !field || (document.activeElement === field && !(boardChipEnabled && caret.current))) return;
       field.focus({ preventScroll: true });
+      if (boardChipEnabled && caret.current && document.activeElement === field) {
+        const { start, end, direction } = caret.current;
+        field.setSelectionRange(start, end, direction);
+        caret.current = null;
+      }
       // The phone sheet's entry animation can reject the first focus call.
       if (mobile && document.activeElement !== field && ++tries < 30) requestAnimationFrame(focus);
     };
     focus();
     return () => { cancelled = true; };
-  }, [active, writing, mobile, dictating]);
+  }, [active, writing, mobile, dictating, boardChipEnabled, boardPickerOpen]);
   useEffect(() => {
     if (!enabled || !active || writing) return;
     const attachShortcut = (event: KeyboardEvent) => {
+      if (boardChipEnabled && boardPickerOpen) return;
+      if (boardChipEnabled && event.target === input.current && !event.isComposing &&
+          ((isApple && event.metaKey && !event.ctrlKey) || (!isApple && event.ctrlKey && !event.metaKey)) &&
+          !event.altKey && event.shiftKey && event.code === "KeyB") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openBoardPicker();
+        return;
+      }
       if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey &&
           !event.isComposing && event.code === "KeyU") {
         event.preventDefault();
@@ -129,7 +185,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     };
     document.addEventListener("keydown", attachShortcut, true);
     return () => document.removeEventListener("keydown", attachShortcut, true);
-  }, [enabled, active, writing, addingImages, handleAttachmentClick]);
+  }, [enabled, active, writing, addingImages, handleAttachmentClick, boardChipEnabled, boardPickerOpen, isApple, dictating]);
 
   const addImages = async (images: File[]) => {
     if (sending.current || dictating) return;
@@ -164,16 +220,22 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       let existingTaskId: number | undefined;
       let targetProjectId: number | undefined;
       const detail = window.location.pathname.match(/^\/detail\/project-(\d+)\/(\d+)$/);
-      if (newTaskWindow && !destinationProject && detail && inView?.taskId) {
+      if (newTaskWindow && !destinationProject && detail && inView?.taskId &&
+          (!boardChipEnabled || targetBoardId === Number(detail[1]))) {
         const { data: task } = await axios.get("/api/tasks/single", { params: { id: inView.taskId } });
         if (task.projectId === Number(detail[1]) && task.uniqueIndex === Number(detail[2]) && isEmptyComposeTarget(task)) {
           existingTaskId = task.id;
           targetProjectId = task.projectId;
         }
       }
-      const projectId = destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
+      let projectId: number | undefined;
+      if (boardChipEnabled) {
+        projectId = targetBoardId;
+      } else {
+        projectId = destinationProject?.id ?? targetProjectId ?? composeTaskBoardId(window.location.href, parseCookies().previousBoard, lastUsedBoards);
+      }
       if (!projectId || !user?.id) throw new Error("Open a board first, then try again. Your note is still here.");
-      let project = destinationProject ?? (currentProject?.id === projectId ? currentProject : undefined);
+      let project = destinationProject?.id === projectId ? destinationProject : (currentProject?.id === projectId ? currentProject : undefined);
       if (!project) {
         const projects: IProject[] = await globalAPIHandlers.getAllProjectsMinimal();
         project = projects.find((item) => item.id === projectId);
@@ -257,7 +319,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   );
 
   return enabled ? (
-    <div hidden={!active} data-compose-task-writer className={newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
+    <div hidden={!active} data-compose-task-writer data-compose-board-picker-open={boardChipEnabled && active && boardPickerOpen ? "" : undefined} className={newTaskWindow && mobile ? "max-h-[65dvh] overflow-y-auto" : undefined}
       onDragOver={(event) => { if (!writing && event.dataTransfer.types.includes("Files")) event.preventDefault(); }}
       onDrop={(event) => {
         if (!event.dataTransfer.files.length) return;
@@ -291,6 +353,13 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
               }}
               disabled={dictating}
               onKeyDown={(event) => {
+                if (boardChipEnabled && showBoardChip && event.key === "Tab" && !event.shiftKey &&
+                    !event.ctrlKey && !event.metaKey && !event.altKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  boardChip.current?.focus();
+                  return;
+                }
                 if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                   event.preventDefault();
                   event.stopPropagation();
@@ -304,13 +373,30 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
                 {!recording && <AttachmentButton disabled={addingImages || dictating} mobile={mobile} onClick={handleAttachmentClick} />}
                 {newTaskWindow && <AudioButton id="compose-task-audio-button" ariaLabel="Start dictation" editor={null}
                   defaultContent={text} hasText={Boolean(text.trim())} toggleRecording={setRecording} onProcessingChange={setTranscribing}
-                  disabled={!active || addingImages} projectId={destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
+                  disabled={!active || addingImages} projectId={boardChipEnabled ? targetBoardId : destinationProject?.id} mobilePrimaryTone="primary" mobilePresentation="compact"
                   callbackHandler={(transcript, replace) => {
                     if (replace) {
                       const plain = new DOMParser().parseFromString(transcript, "text/html").body.textContent ?? "";
                       setText((previous) => `${previous} ${plain}`.trim());
                     } else setText((previous) => previous + transcript);
                   }} />}
+                {boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
+                  <ChatScopeChip ref={boardChip} compose kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
+                    aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
+                    aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
+                    disabled={dictating} onClick={openBoardPicker}
+                    onKeyDown={(event) => {
+                      if (event.key === "Tab" && event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        input.current?.focus({ preventScroll: true });
+                      } else if ((event.key === "Enter" || event.key === " ") && !event.nativeEvent.isComposing) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        openBoardPicker();
+                      }
+                    }} />
+                </div>}
               </div>
               <SendMessageButton disabled={addingImages || dictating || !text.trim()} mobile={mobile} onClick={() => void send()} />
             </div>
@@ -326,8 +412,17 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         <span><HintKey>Enter</HintKey> Send</span>
         <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 85, modifiers: ["ctrl"], description: "Attach" }, isApple).join("+") : "Ctrl+U"}</HintKey> {newTaskWindow ? "Attach files" : "Add images"}</span>
         <span><HintKey>{newTaskWindow ? getShortcutDisplay({ key: 75, modifiers: ["ctrl"], description: "Search" }, isApple).join("+") : "Ctrl+K"}</HintKey> Search</span>
+        {boardChipEnabled && <span><HintKey>{boardShortcut}</HintKey> Board</span>}
         <span><HintKey>Esc</HintKey> Close</span>
       </div>
+      {boardChipEnabled && active && boardPickerOpen && <MoveTaskGlobal
+        boards={loadingBoards && !boards.length ? undefined : boards}
+        closeHTC={() => setBoardPickerOpen(false)}
+        onSelectBoard={(boardId) => {
+          setSelectedBoardId(boardId);
+          setBoardPickerOpen(false);
+        }}
+      />}
     </div>
   ) : null;
 }

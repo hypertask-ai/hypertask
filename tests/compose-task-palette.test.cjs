@@ -23,6 +23,7 @@ const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, in
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
+const boardChipFlag = 'htpr-7053-compose-board-chip';
 
 async function withPalette(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: `https://example.test${config.url ?? '/project?id=7'}` });
@@ -43,7 +44,7 @@ async function withPalette(t, config, check) {
   const stubbed = new Set();
   const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
-  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false };
+  const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false, [boardChipFlag]: config.boardChip ?? false };
   const TaskContext = React.createContext(undefined);
   const atomNames = ['boardLayoutAtom', 'calendarSettingsAtom', 'currentProjectAtom', 'currentUserAtom', 'frequentlyUsedHTCAton', 'tableTitleWrapAtom', 'showCommandsAtom', 'lastUsedBoardsAtom', 'composeTaskChatIntroAtom', 'showAIChatInterfaceAtom', 'isAiChatSidebarModeAtom', 'aiChatAutoOpenSuppressedAtom', 'aiChatExplicitOpenAtAtom', 'dockedChatScopeAtom', 'showCreateTaskModalAtom', 'showShortcutsAtom', 'showSidebarAtom', 'showBoardManagerAtom', 'inViewObjectAtom', 'uploadingStateCreateTaskModalAtom'];
   const atoms = Object.fromEntries(atomNames.map((name) => [name, name]));
@@ -62,6 +63,7 @@ async function withPalette(t, config, check) {
   const state = { useRecoilValue: useValue, useRecoilState: (atom) => [useValue(atom), setters.get(atom)], useSetRecoilState: (atom) => setters.get(atom) };
   const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [];
   const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 1_000 } } });
+  if (config.boards) queryClient.setQueryData(['projectsAllMinimal', 985], config.boards);
   let legacyJ = 0, reactRoot;
   const legacy = (e) => { if (e.ctrlKey && e.code === 'KeyJ' && !e.shiftKey) legacyJ++; };
   const resetShowCommands = () => set('showCommandsAtom', { show: false, mode: 0 });
@@ -79,7 +81,7 @@ async function withPalette(t, config, check) {
     source('src/hooks/RecoilRoot/useHypertasksRecoilStates.ts', { default: () => ({ resetShowCommands, toggleShowCommands }) });
     source('src/lib/contexts/TourContext.tsx', { useTourContext: () => ({ endTour() {} }) });
     source('src/components/PageComponents/Interactive-Onboarding/Components/TutorialTip.tsx', { default: () => null });
-    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: [] }) });
+    source('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: config.boards ?? [] }) });
     source('src/utils/helperFunctions/Views/ViewsHelperFunctions.ts', { getActiveEmptySectionSettingFromProject: () => '', getActiveStalenessFromProject: () => false });
     source('src/styles/linksModal.module.scss', { default: { links_modal: 'links_modal' } });
     if (!config.realTooltip) source('src/components/Common/Tooltip.tsx', { default: ({ text, keyCombination }) => React.createElement('span', { 'data-tooltip': text }, keyCombination.join('+')) });
@@ -1313,4 +1315,136 @@ test('progress steps keep the New Task window height', async (t) => {
     const status = document.querySelector('[role="status"]');
     assert.equal(status.closest('[style]')?.style.minHeight, '184px');
   });
+});
+
+const composeBoards = [
+  { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' },
+  { id: 8, title: 'Product', uniqueIdentifier: 'PROD' },
+  { id: 9, title: 'Design', uniqueIdentifier: 'DES' },
+];
+const chip = () => document.querySelector('[data-compose-board-chip]');
+const boardList = () => document.querySelector('input[id="input-addTask"]');
+const boardKey = (apple = false) => ({ code: 'KeyB', keyCode: 66, shiftKey: true, ...(apple ? { metaKey: true } : { ctrlKey: true }) });
+
+test('board chip flag off preserves legacy inbox board selection, Tab and shortcuts', async (t) => {
+  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox?split=Board&projectId=8', previousBoard: 'project-7|&|QA Sandbox', inView: { taskId: 42, taskProjectId: 9 } }, async ({ type, press, requests, values, queryClient, loadedBoards }) => {
+    assert.equal(chip(), null);
+    assert.equal(queryClient.getQueryData(['projectsAllMinimal', 985]), undefined, 'flag off must not seed an empty shared board cache');
+    assert.equal(loadedBoards.length, 0, 'flag off must not fetch the new board list');
+    assert.doesNotMatch(document.querySelector('[data-compose-task-writer]').textContent, /CTRL\+SHIFT\+B/);
+    await press('B', boardKey());
+    assert.equal(boardList(), null);
+    await type('Legacy target');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.project.id, 7);
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+  });
+  await withPalette(t, { boardChip: false, newWindow: true, tab: 'compose', url: '/inbox' }, async ({ press, values }) => {
+    await press('Tab', { code: 'Tab' });
+    assert.equal(values.get('showCommandsAtom').paletteTab, 'search');
+  });
+});
+
+test('inbox chip shows the rule target and submission uses exactly the displayed board', async (t) => {
+  for (const [url, inView, previousBoard, expected] of [
+    ['/inbox?split=Board&projectId=8', { taskId: 42, taskProjectId: 9 }, 'project-7', 9],
+    ['/inbox?split=Board&projectId=8', { taskId: null, taskProjectId: 9 }, 'project-7', 8],
+    ['/inbox?split=All', { taskId: null }, 'project-7', 7],
+    ['/inbox?split=Important', { taskId: null }, undefined, 8],
+  ]) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, inView, previousBoard, recency: { 7: 1, 8: 2 } }, async ({ type, press, requests }) => {
+      assert.equal(chip().textContent, composeBoards.find((board) => board.id === expected).title);
+      await type('Use this board');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, expected);
+    });
+  }
+});
+
+test('mixed-board views show a chip; board and ticket views hide it until choosing a different board', async (t) => {
+  for (const url of ['/my-tasks', '/search', '/all-tasks', '/calendar', '/starred', '/inbox']) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, previousBoard: 'project-7', url }, async () => {
+      assert.equal(chip().textContent, 'QA Sandbox');
+    });
+  }
+  for (const url of ['/project?id=7', '/detail/project-7/42']) {
+    await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url, previousBoard: 'project-8', inView: { taskId: 42, taskProjectId: 7 }, targetTask: { id: 42, projectId: 7, uniqueIndex: 42, title: '', description_: { content: '' } } }, async ({ input, type, press, requests }) => {
+      assert.equal(chip(), null);
+      await type('Keep my draft');
+      input().setSelectionRange(3, 7, 'backward');
+      await press('B', boardKey());
+      assert.ok(boardList(), 'shortcut works even while chip is hidden');
+      await press('ArrowDown', { code: 'ArrowDown' });
+      await press('Enter', { code: 'Enter' });
+      await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
+      assert.equal(chip().textContent, 'Product');
+      assert.equal(document.activeElement, input());
+      assert.deepEqual([input().selectionStart, input().selectionEnd, input().selectionDirection], [3, 7, 'backward']);
+      assert.equal(input().value, 'Keep my draft');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, 8);
+      assert.equal(requests[0].body.existingTaskId, undefined);
+    });
+  }
+});
+
+test('Tab and Shift+Tab connect textarea and chip, Enter/Space open shared picker, Esc closes only list', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, mobile, tab: 'compose', boards: composeBoards, url: '/inbox', previousBoard: 'project-7' }, async ({ input, type, press, values, requests, capture }) => {
+      await type('Caret stays here');
+      capture(`board-chip-${mobile ? 'mobile' : 'desktop'}`);
+      input().setSelectionRange(6, 6);
+      const tab = await press('Tab', { code: 'Tab' });
+      assert.equal(tab.defaultPrevented, true);
+      assert.equal(document.activeElement, chip());
+      assert.equal(values.get('showCommandsAtom').paletteTab, 'compose');
+      await press('Tab', { code: 'Tab', shiftKey: true });
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 6);
+      for (const key of ['Enter', ' ']) {
+        await press('Tab', { code: 'Tab' });
+        await press(key, { code: key === ' ' ? 'Space' : 'Enter' });
+        assert.equal(document.activeElement, boardList());
+        assert.ok(document.getElementById('command-0'), 'real Shift+M Select Board rows are rendered');
+        capture(`board-list-${mobile ? 'mobile' : 'desktop'}`);
+        assert.equal(requests.length, 0);
+        await press('Escape', { code: 'Escape' });
+        assert.equal(boardList(), null);
+        assert.ok(values.get('showCommandsAtom').show);
+        assert.equal(document.activeElement, input());
+        assert.equal(input().selectionStart, 6);
+      }
+      await press('Escape', { code: 'Escape' });
+      assert.equal(values.get('showCommandsAtom').show, false);
+    });
+  }
+});
+
+test('board shortcut matches platform footer, filters list, and restores caret after Enter picks', async (t) => {
+  for (const apple of [false, true]) {
+    await withPalette(t, { boardChip: true, newWindow: true, apple, tab: 'compose', boards: composeBoards, url: '/search', previousBoard: 'project-7' }, async ({ dom, input, type, press, requests }) => {
+      assert.match(document.querySelector('[data-compose-task-writer]').textContent, apple ? /CMD\+SHIFT\+B/ : /CTRL\+SHIFT\+B/);
+      await type('Still writing');
+      input().setSelectionRange(4, 4);
+      await press('B', { ...boardKey(apple), shiftKey: false });
+      assert.equal(boardList(), null, 'browser bookmark shortcut is not stolen');
+      const event = await press('B', boardKey(apple));
+      assert.equal(event.defaultPrevented, true);
+      assert.equal(document.activeElement, boardList());
+      await React.act(async () => {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(boardList(), 'Design');
+        boardList().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+      });
+      assert.equal(document.querySelectorAll('[id^="command-"]').length, 1);
+      await press('Enter', { code: 'Enter' });
+      await React.act(async () => new Promise((resolve) => setTimeout(resolve, 5)));
+      assert.equal(boardList(), null);
+      assert.equal(chip().textContent, 'Design');
+      assert.equal(document.activeElement, input());
+      assert.equal(input().selectionStart, 4);
+      assert.equal(requests.length, 0, 'picker Enter must not send the task');
+      await press('Enter', { code: 'Enter' });
+      assert.equal(requests[0].body.project.id, 9);
+    });
+  }
 });

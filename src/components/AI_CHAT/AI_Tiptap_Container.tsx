@@ -52,7 +52,8 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
@@ -532,6 +533,7 @@ export function AI_Tiptap_Container({
 }
 
 function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
+  const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -613,7 +615,10 @@ function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
       data-ai-chat-mobile-scope={mobile || undefined}
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
-      <button
+      {composeBoardChipEnabled ? (
+        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
+          mobile={mobile} isOpen={isOpen} onClick={() => setIsOpen((open) => !open)} />
+      ) : <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={isOpen}
@@ -647,7 +652,7 @@ function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
           }`}
           strokeWidth={1.75}
         />
-      </button>
+      </button>}
 
       {isOpen && (
         <div
