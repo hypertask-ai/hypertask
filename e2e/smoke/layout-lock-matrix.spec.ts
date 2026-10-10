@@ -117,12 +117,19 @@ const round = (box: Box) => Object.fromEntries(Object.entries(box).map(([key, va
 async function measure(page: Page, targets: Record<string, Target>): Promise<Record<string, Box | null>> {
   const boxes: Record<string, Box | null> = {}
   for (const [name, { selector }] of Object.entries(targets)) {
-    const locator = page.locator(selector)
-    const box = await locator.count() === 1 && await locator.isVisible() ? await locator.boundingBox() : null
+    // Hidden copies (phone and desktop variants) are not layout; exactly one visible match is the anchor.
+    const visible = page.locator(selector).locator('visible=true')
+    const box = await visible.count() === 1 ? await visible.boundingBox() : null
     boxes[name] = box && round(box)
   }
   return boxes
 }
+// Why an anchor has no box: printed with the failure so CI-only misses can be diagnosed from the log.
+const describeMissing = (page: Page, targets: Record<string, Target>, actual: Record<string, Box | null>) =>
+  Promise.all(Object.entries(actual).filter(([, box]) => box === null).map(async ([name]) => {
+    const all = page.locator(targets[name].selector)
+    return `${name}: ${await all.count()} found, ${await all.locator('visible=true').count()} visible`
+  }))
 const lastCommentBottom = (page: Page) => page.evaluate(() => {
   const comments = [...document.querySelectorAll('[data-testid="ticket-comment"]')]
   return comments.length ? Math.round(Math.max(...comments.map(comment => comment.getBoundingClientRect().bottom))) : null
@@ -259,7 +266,8 @@ for (const definition of selected) {
           if (definition.thread && width >= 768 && composer && expected['comment-box']) found.push(...composerFollowsComments(label, composer.y, await lastCommentBottom(page)))
         }
         if (found.length) {
-          failures.push(...found)
+          const missing = await describeMissing(page, definition.targets, Object.fromEntries(Object.entries(actual).filter(([name]) => width >= 768 || name !== 'ai-sidebar')))
+          failures.push(...found, ...(missing.length ? [`${label}: missing anchors (${missing.join('; ')})`] : []))
           if (shots++ < 28) {
             if (expected) await outline(page, expected)
             await page.screenshot({ path: path.join(outDir, 'after', `${slug(label)}.png`) })
