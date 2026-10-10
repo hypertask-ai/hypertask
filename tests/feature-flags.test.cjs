@@ -75,6 +75,8 @@ test("Ctrl+O ticket sources default to Everyone as a bugfix and respect OFF", as
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
   const snapshot = require("../e2e/smoke/production-flag-modes.json");
   assert.equal(snapshot.modes[key], "EVERYONE");
+});
+
 test("ticket reminders without Inbox items default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG;
   assert.equal(key, "htpr-7061-remind-without-inbox");
