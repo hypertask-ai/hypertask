@@ -613,7 +613,7 @@ async function broadcastActivityChange(
 ) {
   if (run.taskId !== null) {
     if (run.task) {
-      void refreshBoardForAgentRun(run.task.projectId, originUserId, { lifecycle: false }).catch(
+      void refreshBoardForAgentRun(run.task.projectId, originUserId, { lifecycle: false, taskId: run.taskId }).catch(
         (error) => console.warn("[agent-run] board activity broadcast failed", error),
       );
     }

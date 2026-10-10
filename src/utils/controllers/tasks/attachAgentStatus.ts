@@ -1,12 +1,12 @@
 import prisma from "@/lib/prisma";
+import { AGENT_STATUS_MAX_AGE_MS } from "@/lib/agentStatus/chip";
 
 export type AgentStatusSummary = {
   agentName: string;
   at: string;
 };
 
-/** Matches the board's 6 hour claim staleness rule: older runs say nothing useful. */
-export const AGENT_STATUS_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+export { AGENT_STATUS_MAX_AGE_MS };
 
 type TaskWithId = { id: number };
 

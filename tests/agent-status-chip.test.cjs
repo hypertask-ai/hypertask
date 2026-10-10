@@ -24,6 +24,7 @@ const minutesAgo = (n) => new Date(NOW - n * 60_000);
 const loadAttach = (runs) => {
   const calls = [];
   const { attachAgentStatus } = load("src/utils/controllers/tasks/attachAgentStatus.ts", {
+    "@/lib/agentStatus/chip": load("src/lib/agentStatus/chip.ts"),
     "@/lib/prisma": {
       __esModule: true,
       default: { agentRun: { findMany: async (args) => (calls.push(args), runs) } },
@@ -109,13 +110,39 @@ const makeDeps = (candidates, throttle = () => true) => {
   };
 };
 
-test("board activity broadcast is throttled to once per board per window", () => {
+test("board activity broadcast is throttled once per card per window", () => {
   const { shouldBroadcastBoardActivity: fn } = loadRefresh();
   const seen = new Map();
-  assert.equal(fn(1, 1000, seen), true);
-  assert.equal(fn(1, 5000, seen), false);
-  assert.equal(fn(2, 5000, seen), true);
-  assert.equal(fn(1, 16_001, seen), true);
+  assert.equal(fn(1, 10, 1000, seen), true);
+  assert.equal(fn(1, 10, 5000, seen), false);
+  assert.equal(fn(2, 10, 5000, seen), true);
+  assert.equal(fn(1, 10, 16_001, seen), true);
+});
+
+test("card B reporting inside card A's window still broadcasts", () => {
+  const { shouldBroadcastBoardActivity: fn } = loadRefresh();
+  const seen = new Map();
+  assert.equal(fn(1, 10, 1000, seen), true);
+  assert.equal(fn(1, 11, 2000, seen), true);
+  assert.equal(fn(1, 10, 3000, seen), false);
+  assert.equal(fn(1, 11, 3000, seen), false);
+});
+
+test("the throttle map prunes expired cards when it grows past 500", () => {
+  const { shouldBroadcastBoardActivity: fn } = loadRefresh();
+  const seen = new Map();
+  for (let id = 0; id < 500; id++) fn(1, id, 1000, seen);
+  assert.equal(seen.size, 500);
+  assert.equal(fn(1, 9999, 1000 + 15_000, seen), true);
+  assert.equal(seen.size, 1);
+});
+
+test("chip hides once the last report is six hours old", () => {
+  const { agentStatusIsFresh } = load("src/lib/agentStatus/chip.ts");
+  const minute = Math.floor(NOW / 60_000);
+  assert.equal(agentStatusIsFresh(minutesAgo(359).toISOString(), minute), true);
+  assert.equal(agentStatusIsFresh(minutesAgo(360).toISOString(), minute), false);
+  assert.equal(agentStatusIsFresh(minutesAgo(420).toISOString(), minute), false);
 });
 
 test("board refresh fires for OWNER_AND_QA candidates regardless of the task creator", async () => {
@@ -143,7 +170,7 @@ test("run start and stop bypass the throttle, activity inside the window does no
   assert.equal(sent.length, 2);
   const source = fs.readFileSync(path.join(root, "src/lib/agentRuns/service.ts"), "utf8");
   assert.equal((source.match(/lifecycle: true/g) ?? []).length, 2);
-  assert.match(source, /refreshBoardForAgentRun\(run\.task\.projectId, originUserId, \{ lifecycle: false \}\)/);
+  assert.match(source, /refreshBoardForAgentRun\(run\.task\.projectId, originUserId, \{ lifecycle: false, taskId: run\.taskId \}\)/);
   assert.doesNotMatch(source, /setTimeout/);
 });
 

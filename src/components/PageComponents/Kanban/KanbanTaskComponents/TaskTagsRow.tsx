@@ -14,7 +14,7 @@ import axios from 'axios';
 import React from 'react'
 import { useFlag } from '@/hooks/useFlag';
 import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from '@/lib/flags/keys';
-import { agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
+import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
 import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 
@@ -52,8 +52,8 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
         timeTotals,
       } = useBoardRunningTimers(task.projectId, { project })
       const agentStatusEnabled = useFlag(HTPR_7071_AGENT_STATUS_CHIP_FLAG)
-      useMinuteClock(Boolean(agentStatusEnabled && task.agentStatus))
-      const agentStatusLine = agentStatusEnabled && task.agentStatus
+      const agentMinute = useMinuteClock(Boolean(agentStatusEnabled && task.agentStatus))
+      const agentStatusLine = agentStatusEnabled && task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
         ? agentStatusText(
             task.agentStatus.agentName,
             agentStepFor(
