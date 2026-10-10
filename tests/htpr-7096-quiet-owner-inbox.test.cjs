@@ -200,10 +200,15 @@ test("4 question detection: attributed p and li, bold variants, mid-sentence", (
   assert.equal(pure.isQuestionComment('<p class="x">FYI</p>'), false);
 });
 
-function mixedDb(events) {
-  return { comment: { groupBy: async () => [] }, notification: { findMany: async () => events } };
+function mixedDb(events, assignedTaskIds = []) {
+  return {
+    comment: { groupBy: async () => [] },
+    notification: { findMany: async () => events },
+    assignees: { findMany: async () => assignedTaskIds.map((taskId) => ({ taskId })) },
+  };
 }
 const ev = (over) => ({
+  type: "Mentioned",
   taskId: 9,
   fromAgentId: null,
   createdAt: new Date("2026-10-10T09:00:00.000Z"),
@@ -244,6 +249,63 @@ test("5 flag on: only agent FYI mentions on the task quiet it", async () => {
   );
   assert.equal(marked[0].quietImportant, true);
   assert.deepEqual(importantOf(marked), []);
+});
+
+const fyi = () => ev({ fromAgentId: "agent-a", comment: q("<p>FYI done</p>") });
+async function markMixed(events, assigned) {
+  const { quiet } = load(true);
+  const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
+  return quiet.markQuietAgentMentions(mixedDb(events, assigned), OWNER, rows);
+}
+
+test("7 flag on: a human Comment on a task the owner is assigned to keeps Important despite a newer agent FYI", async () => {
+  const marked = await markMixed([ev({ type: "Comment" }), fyi()], [9]);
+  assert.equal(marked[0].quietImportant, undefined);
+  assert.deepEqual(importantOf(marked), [0]);
+});
+
+test("7 flag on: a human Comment on a task the owner is not assigned to is not Important today, so the FYI quiets it", async () => {
+  const marked = await markMixed([ev({ type: "Comment" }), fyi()], []);
+  assert.equal(marked[0].quietImportant, true);
+});
+
+test("7 flag on: a personal Assigned event keeps Important despite a newer agent FYI", async () => {
+  const marked = await markMixed([ev({ type: "Assigned" }), fyi()], []);
+  assert.equal(marked[0].quietImportant, undefined);
+  assert.deepEqual(importantOf(marked), [0]);
+});
+
+test("7 flag on: an Assigned event made by an agent is housekeeping and does not keep Important", async () => {
+  const marked = await markMixed([ev({ type: "Assigned", fromAgentId: "agent-a" }), fyi()], []);
+  assert.equal(marked[0].quietImportant, true);
+});
+
+test("7 flag on: a direct reply keeps Important despite a newer agent FYI", async () => {
+  const marked = await markMixed([ev({ type: "Comment", fromAgentId: "agent-a", directReply: true }), fyi()], []);
+  assert.equal(marked[0].quietImportant, undefined);
+});
+
+test("7 flag on: a human mention plus a newer agent FYI keeps Important", async () => {
+  const marked = await markMixed([ev({ type: "Mentioned" }), fyi()], []);
+  assert.equal(marked[0].quietImportant, undefined);
+  assert.deepEqual(importantOf(marked), [0]);
+});
+
+test("7 flag on: only an agent FYI is quiet, an unanswered agent Question stays Important", async () => {
+  const quietOnly = await markMixed([fyi()], []);
+  assert.equal(quietOnly[0].quietImportant, true);
+  assert.deepEqual(importantOf(quietOnly), []);
+  const question = await markMixed(
+    [ev({ fromAgentId: "agent-a", comment: q("<p>Question: ok?</p>") }), fyi()], [],
+  );
+  assert.equal(question[0].quietImportant, undefined);
+});
+
+test("8 bold Question with the colon inside or outside the tags is detected", () => {
+  const { pure } = load(true);
+  assert.equal(pure.isQuestionComment("<p><strong>Question</strong>: ok?</p>"), true);
+  assert.equal(pure.isQuestionComment("<p><strong>Question:</strong> ok?</p>"), true);
+  assert.equal(pure.isQuestionComment("<p><strong>Questions</strong>: ok?</p>"), false);
 });
 
 test("6 flag on: assignee or follower owner is filtered from own agent chatter, mention path stays", async () => {
