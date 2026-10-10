@@ -220,7 +220,7 @@ type AgentWebhookBroadcastInput = Omit<AgentWebhookEventInput, "agentId" | "proj
     | { broadcast: true; agentIds?: never }
   );
 
-async function resolveAgentWebhookActor(
+export async function resolveAgentWebhookActor(
   tx: Prisma.TransactionClient,
   input: AgentWebhookActorInput,
 ): Promise<AgentWebhookActor> {

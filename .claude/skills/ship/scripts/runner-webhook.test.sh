@@ -106,6 +106,24 @@ post 3 comment.mention d-8 "$mn" >/dev/null; wait_sent 1 && ok "mention delivere
 : > "$TMUX_LOG"; eq "unhandled event is 200 and ignored" "$(post 3 task.updated d-9 "$(comment x 700 | jq -c '.event="task.updated"')")" "200"
 sleep 0.4; eq "nothing sent for task.updated" "$(sent)" "0"
 
+# ---- comment.reaction (HTPR-7095) ----
+rx() { jq -nc --arg e "$1" --argjson u "${2:-6}" --argjson agent "${3:-null}" --arg at "${4:-2026-10-10T21:00:00Z}" \
+  '{event:"comment.reaction", agentId:"a", projectId:15, taskId:9, ticketNumber:"HTPR-7095", taskTitle:"Agents hear emoji", commentId:777, emoji:$e, commentExcerpt:"I will start now", occurredAt:$at, actor:({userId:$u, displayName:"Valentin Yeo"} + (if $agent then {agentId:$agent} else {} end))}'; }
+: > "$TMUX_LOG"
+eq "reaction accepted" "$(post 3 comment.reaction d-rx1 "$(rx '👍')")" "200"
+wait_sent 1 && ok "thumbs up delivered" || bad "thumbs up not delivered"
+case "$(lastline)" in *'Board event for Runner 3: Valentin Yeo reacted 👍 to your comment on Agents hear emoji https://app.hypertask.ai/detail/project-15/7095: "I will start now". A thumbs up from Valentin Yeo means yes, go ahead.') ok "thumbs up line says yes";; *) bad "reaction line: $(lastline)";; esac
+: > "$TMUX_LOG"; post 3 comment.reaction d-rx2 "$(rx '👍')" >/dev/null; sleep 0.4
+eq "same reaction occurrence is deduped" "$(sent)" "0"
+post 3 comment.reaction d-rx5 "$(rx '👍' 6 null 2026-10-10T21:05:00Z)" >/dev/null; wait_sent 1 && ok "re-added reaction (new occurrence) delivered" || bad "re-added reaction suppressed"
+: > "$TMUX_LOG"; post 3 comment.reaction d-rx6 "$(rx '👍' 99 null 2026-10-10T21:06:00Z)" >/dev/null; wait_sent 1 && ok "same-name non-owner delivered" || bad "non-owner not delivered"
+case "$(lastline)" in *'go ahead'*) bad "display name alone must not mean yes";; *'reacted 👍'*) ok "non-owner with the owner display name gets no yes";; *) bad "non-owner line: $(lastline)";; esac
+: > "$TMUX_LOG"
+post 3 comment.reaction d-rx3 "$(rx '🎉')" >/dev/null; wait_sent 1 && ok "other emoji delivered" || bad "other emoji not delivered"
+case "$(lastline)" in *'reacted 🎉 to your comment'*'go ahead'*) bad "party emoji must not mean yes";; *'reacted 🎉 to your comment'*) ok "other emoji states the reaction only";; *) bad "party line: $(lastline)";; esac
+: > "$TMUX_LOG"; post 3 comment.reaction d-rx4 "$(rx '👍' 9 '"agent-uuid"')" >/dev/null; sleep 0.4
+eq "agent reaction skipped" "$(sent)" "0"
+
 # ---- infra-manager route ----
 : > "$TMUX_LOG"
 eq "infra-manager route accepted" "$(post infra-manager comment.created d-i1 "$(comment 'for the manager' 900)")" "200"

@@ -25,14 +25,16 @@ export type CommentReactionDependencies<TContext> = {
     target: CommentReactionTarget,
     userId: number,
     emoji: string,
-    active: boolean
+    active: boolean,
+    context: TContext
   ) => Promise<CommentReactionResult>;
   afterChange: (
     target: CommentReactionTarget,
     userId: number,
     emoji: string,
     active: boolean,
-    result: CommentReactionResult
+    result: CommentReactionResult,
+    context: TContext
   ) => Promise<void>;
 };
 
@@ -104,9 +106,9 @@ export function createCommentReactionHandler<TContext>(
       );
     }
     const userId = dependencies.actorUserId(context);
-    const result = await dependencies.setReaction(target, userId, emoji, active);
+    const result = await dependencies.setReaction(target, userId, emoji, active, context);
     try {
-      await dependencies.afterChange(target, userId, emoji, active, result);
+      await dependencies.afterChange(target, userId, emoji, active, result, context);
     } catch (error) {
       // The reaction is already committed. A notification or realtime outage
       // must not turn a successful, idempotent mutation into a client retry.
