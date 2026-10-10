@@ -352,7 +352,13 @@ test('layout lock: ticket page first load stays under the CLS budget', async ({ 
   await expect(page.getByTestId('ticket-comment').first()).toBeVisible({ timeout: 30_000 })
   await expect(page.getByTestId('comment-composer')).toBeVisible({ timeout: 30_000 })
   await expect.poll(() => page.getByTestId('ticket-comment').count(), { message: 'the long thread must render its comments', timeout: 30_000 }).toBeGreaterThanOrEqual(6)
-  await page.waitForTimeout(1500)
+  // Sample the box's own place for a while once it is visible: it may not move more than 24px (phone and desktop).
+  const tops: number[] = []
+  for (let sample = 0; sample < 15; sample += 1) {
+    tops.push(await page.getByTestId('comment-composer').evaluate((el) => Math.round(el.getBoundingClientRect().top + window.scrollY)))
+    await page.waitForTimeout(100)
+  }
+  expect(Math.max(...tops) - Math.min(...tops), `layout lock: the comment box moved after it was visible (${testInfo.project.name}), tops ${tops.join(',')}`).toBeLessThanOrEqual(24)
   const shifts = await page.evaluate(() => (window as unknown as { __shifts: ShiftEntry[] }).__shifts)
   const worst = largestSessionWindow(shifts)
   const detail = worst.shifts.map((shift) => `  ${shift.value.toFixed(4)} at ${Math.round(shift.startTime)}ms\n${shift.sources.map((s) => `    ${s.node} [x,y,w,h] ${s.previous.join(',')} -> ${s.current.join(',')}`).join('\n')}`).join('\n')

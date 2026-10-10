@@ -401,7 +401,7 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
     HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
     HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
-    useThreadSettled: () => true,
+    useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
     SettledComposerSlot: ({ children }) => children,
     useTaskContext: () => ({
       currentTask: { id: 42 }, secondaryPanelsReady: true,
