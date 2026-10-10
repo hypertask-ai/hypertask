@@ -18,6 +18,7 @@ import {
   featureFlagCandidateUserIds,
   isFeatureEnabled,
 } from "@/lib/flags";
+import { refreshBoardForAgentRun } from "@/lib/agentStatus/boardRefresh";
 import { broadcastChatSession } from "@/lib/agents/chatBroadcast";
 import { validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -162,7 +163,7 @@ export async function createRuntimeAgentRun(
           },
         },
       },
-      select: { id: true },
+      select: { id: true, projectId: true },
     });
     if (!task) return null;
 
@@ -212,7 +213,7 @@ export async function createRuntimeAgentRun(
         status: { in: NONTERMINAL_AGENT_RUN_STATUSES },
       },
     });
-    return run ? { run: serializeAgentRun(run), taskId: task.id } : null;
+    return run ? { run: serializeAgentRun(run), taskId: task.id, projectId: task.projectId } : null;
   });
 
   if (result) {
@@ -225,6 +226,10 @@ export async function createRuntimeAgentRun(
       agentId,
     }).catch((error) =>
       console.warn("[agent-run] runtime run agent broadcast failed", error),
+    );
+    // Run start decides whether a chip appears: never throttled.
+    void refreshBoardForAgentRun(result.projectId, principal.userId, { lifecycle: true }).catch(
+      (error) => console.warn("[agent-run] runtime run board broadcast failed", error),
     );
   }
   return result?.run ?? null;
@@ -342,10 +347,17 @@ export async function stopAgentRun(
     return {
       run: serializeAgentRun(stoppedRun),
       deliveryIds: deliveryId ? [deliveryId] : [],
+      stoppedProjectId: run.task?.projectId ?? null,
     };
   });
 
   if (result) await publishAgentWebhookDeliveries(result.deliveryIds);
+  if (result && "stoppedProjectId" in result && result.stoppedProjectId != null) {
+    // Run stop decides whether the chip disappears: never throttled.
+    void refreshBoardForAgentRun(result.stoppedProjectId, principal.userId, { lifecycle: true }).catch(
+      (error) => console.warn("[agent-run] stopped run board broadcast failed", error),
+    );
+  }
   return result?.run ?? null;
 }
 
@@ -499,6 +511,7 @@ type ActivityRunWithContext = AgentRun & {
   task: {
     id: number;
     userId: number;
+    projectId: number;
   } | null;
   chatSession: {
     id: string;
@@ -530,7 +543,7 @@ async function findActivityRun(
           },
         },
       },
-      task: { select: { id: true, userId: true } },
+      task: { select: { id: true, userId: true, projectId: true } },
       chatSession: { select: { id: true, userId: true } },
     },
   }) as Promise<ActivityRunWithContext | null>;
@@ -599,6 +612,11 @@ async function broadcastActivityChange(
   originUserId: number,
 ) {
   if (run.taskId !== null) {
+    if (run.task) {
+      void refreshBoardForAgentRun(run.task.projectId, originUserId, { lifecycle: false, taskId: run.taskId }).catch(
+        (error) => console.warn("[agent-run] board activity broadcast failed", error),
+      );
+    }
     void broadcastTaskComment(run.taskId, { originUserId }).catch((error) =>
       console.warn("[agent-run] task activity broadcast failed", error),
     );
