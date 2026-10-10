@@ -73,7 +73,8 @@ export async function createComposedTask({
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
-  let drafts: { title: string; description: string }[] = [];
+  let drafts: { title: string; description: string; writerDueDate?: string }[] = [];
+  const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     const media = extractTaskWriterMedia(rawDescription, createTaskWriterMediaTokenFactory(rawDescription, text));
     onProgress?.("Reading past tickets");
@@ -89,6 +90,7 @@ export async function createComposedTask({
         modelSelected: project.ai_custom_instructions?.[0]?.model_selected ?? undefined,
         aiMode: "AiTaskWriter",
         requestKind: "compose-task",
+        timeZone: writerTimeZone,
         ...(existingTaskId ? { existingTaskId } : {}),
         images64: uploads.filter((file) => isBrowserRenderableImage(file.mimeType, file.fileName)),
         taskDescription: media.html,
@@ -127,17 +129,22 @@ export async function createComposedTask({
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
-      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string }) => {
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string }) => {
         if (typeof draft?.title !== "string" || !draft.title.trim() ||
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
         }
-        return { title: draft.title, description: draft.description };
+        return { title: draft.title, description: draft.description,
+          ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
+        };
       });
     } else {
       const written = extractTitleAndDescription(html);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
-      drafts = [{ title: written.title, description: written.description }];
+      const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
+        ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
+        : undefined;
+      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
@@ -146,7 +153,7 @@ export async function createComposedTask({
           body += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
         }
       }
-      return { title: draft.title, description: body };
+      return { ...draft, description: body };
     });
     title = drafts[0].title;
     description = drafts[0].description;
@@ -182,6 +189,7 @@ export async function createComposedTask({
         sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
         ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
         ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
+        ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
       if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here. Try again.");

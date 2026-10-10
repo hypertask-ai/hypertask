@@ -1,3 +1,5 @@
+import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 /**
@@ -78,6 +80,7 @@ export const taskWriterRequestSchema = z.object({
   sourceSelected: z.string().optional().default("openai"),
   modelSelected: z.string().nullable().optional(),
   modelOptionId: z.string().nullable().optional(),
+  timeZone: z.string().max(64).optional(),
   aiMode: z.string().optional().default("AiTaskWriter"),
   images64: z.array(taskWriterFileSchema).optional().default([]),
   pdfs64: z.array(taskWriterFileSchema).optional().default([]),
@@ -98,6 +101,7 @@ export const tasksOutputSchema = z.object({
   tasks: z.array(z.object({
     title: z.string().trim().min(1),
     description: z.string().trim().min(1),
+    dueDate: z.string().nullish(),
   })).min(1).max(10),
 });
 
@@ -352,6 +356,13 @@ export async function prepareTaskWriterRun(
   if (validateDraft && body.aiMode === "AiTaskWriter") {
     instructions += `\n\n${TASK_WRITER_RESEARCH_REQUEST_RULE}`;
   }
+  const dueDateEnabled = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+  const dueDateContext = dueDateEnabled ? taskWriterDateContext(body.timeZone) : null;
+  if (dueDateContext) {
+    instructions += `\n\n${taskWriterDueDateInstructions(dueDateContext)}`;
+    if (splitTasks) instructions += "\nFor structured tasks, put each task's own date in that task's dueDate field instead of a marker, and leave it null when that task has no deadline.";
+  }
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
     {
@@ -374,6 +385,7 @@ export async function prepareTaskWriterRun(
     validateDraft,
     skills: skillResolution.skills,
     usageTaskId,
+    dueDateContext,
   };
 }
 

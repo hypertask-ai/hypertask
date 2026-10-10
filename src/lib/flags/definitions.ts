@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7054_CTRLJ_DUE_DATE_FLAG,
   HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
   HTPR_7020_TAG_FULL_NAME_FLAG,
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
@@ -164,6 +165,13 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7054_CTRLJ_DUE_DATE_FLAG,
+    kind: "bugfix",
+    defaultMode: "EVERYONE",
+    shippedOn: "2026-10-10",
+    description: "Sets the task due date from an explicit deadline in the Ctrl+J task writer note, using the user's local date and time zone.",
+  },
   {
     key: HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
     kind: "feature",

@@ -1,3 +1,4 @@
+import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext } =
       await prepareTaskWriterRun(body, userId);
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
@@ -64,10 +65,12 @@ export async function POST(request: NextRequest) {
         output: Output.object({ schema: tasksOutputSchema }),
       });
       const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
-      return NextResponse.json({ tasks: tasks.map((task) => ({
-        ...task,
-        description: allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description,
-      })) });
+      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...task }) => {
+        const description = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
+        if (!dueDateContext) return { ...task, description };
+        const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
+        return { ...task, description, ...(dueDate ? { dueDate } : {}) };
+      }) }, dueDateContext ? { headers: { "X-Task-Writer-Due-Date": "enabled" } } : undefined);
     }
     const encoder = new TextEncoder();
 
@@ -78,8 +81,9 @@ export async function POST(request: NextRequest) {
         let streamCompleted = false;
 
         const enqueueText = (text: string) => {
-          if (validateDraft) draft += text;
-          if (text) controller.enqueue(encoder.encode(text));
+          if (validateDraft || dueDateContext) draft += text;
+          // Compose consumes completed HTML, so a due-date request is validated before it is sent.
+          if (text && !dueDateContext) controller.enqueue(encoder.encode(text));
         };
         const enqueueError = (status: "error" | "interrupted", content: string, code?: string) => {
           controller.enqueue(
@@ -132,6 +136,7 @@ export async function POST(request: NextRequest) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
+          if (dueDateContext) controller.enqueue(encoder.encode(applyTaskWriterDueDate(draft, dueDateContext).html));
           streamCompleted = true;
         } catch (error) {
           await reportError({
@@ -155,7 +160,8 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    return new Response(stream, { headers: SSE_HEADERS });
+    const headers = dueDateContext ? { ...SSE_HEADERS, "X-Task-Writer-Due-Date": "enabled" } : SSE_HEADERS;
+    return new Response(stream, { headers });
   } catch (error) {
     if (
       error instanceof AiFeatureDisabledError ||

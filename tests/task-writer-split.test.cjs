@@ -5,9 +5,14 @@ const path = require("node:path");
 const ts = require("typescript");
 const { z } = require("zod");
 const { Output } = require("ai");
+const { createJiti } = require("jiti");
 const { load } = require("./helpers/create-view-context.cjs");
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-7056-ctrlj-split-tasks";
+const dueDateFlag = "htpr-7054-ctrlj-due-date";
+const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
+const dates = jiti(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
+const { escapeHtml } = jiti(path.join(root, "src/utils/htmlEscape.ts"));
 const multiPrompt = "Create three separate tasks: focus search with a shortcut, export CSV, and fix the settings typo.";
 const drafts = ["Focus search", "Export CSV", "Fix settings typo"].map(title => ({ title, description: `<p>${title}</p>` }));
 const labels = [{ id: "label-1", value: "Frontend" }];
@@ -16,13 +21,13 @@ const priority = { priority_index: 2, priority_title: "High" };
 const estimate = { estimate_index: 4, estimate_title: "Large" };
 const board = { id: 15, uniqueIdentifier: "HTPR" };
 
-function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, malformed = false } = {}) {
+function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = [], sonnet = true, malformed = false } = {}) {
   const checks = [], calls = [], creates = [], bindings = [], usage = [];
   const flags = {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-window",
     HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: flag,
     HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG: "empty-research",
-    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === "compose" || key === "new-window"; },
+    isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === dueDateFlag ? dueDates : key === "compose" || key === "new-window"; },
   };
   const editor = {
     selectTaskWriterModel: async () => ({ model: sonnet ? "sonnet-5.5-medium" : "saved-model", settings: { maxOutputTokens: 16000 }, teamId: "team", usageProvider: "fixture" }),
@@ -37,6 +42,8 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
   };
   const run = load("src/app/api/ai/_lib/taskWriterRun.ts", {
     zod: { z }, "@/lib/flags": flags,
+    "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },
+    "@/lib/ai/taskWriterDueDate": dates,
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), taskWriteAccessWhere: () => ({}) },
     "@/lib/ai/composeTaskTarget": { isEmptyComposeTarget: () => true },
     "@/app/api/ai/_lib/editorAi": editor,
@@ -53,6 +60,8 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
     zod: { z },
+    "@/lib/ai/taskWriterDueDate": dates,
+    "@/utils/htmlEscape": { escapeHtml },
     ai: {
       Output,
       generateText: async options => { calls.push({ kind: "structured", ...options }); return { output: malformed ? { tasks: [{ title: "", description: "" }] } : { tasks } }; },
@@ -69,7 +78,6 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
     "@/app/api/ai/_lib/taskWriterRun": run,
     "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: html => ({ description: html }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },
   });
-  const escapeHtml = value => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   const composer = load("src/lib/ai/composeTask.ts", {
     "@/lib/media/browserRenderableImage": { isBrowserRenderableImage: () => false },
     axios: { default: { get: async () => ({ data: { sectionId: 12, section: "Todo", ranking: "a" } }) } },
@@ -124,6 +132,58 @@ for (const sonnet of [true, false]) {
     for (const task of result.tasks) assert.ok(message.includes(`<a href="/detail/project-15/${task.uniqueIndex}">${task.ticketNumber}: ${task.title}</a>`));
   });
 }
+
+const inDays = (days) => new Date(Date.now() + days * 864e5).toISOString().slice(0, 10);
+
+test("both flags keep each split task's own model date and save it with the browser time zone", async () => {
+  const first = inDays(4), second = inDays(6);
+  const tasks = [
+    { title: "Focus search", description: "<p>Focus search</p>", dueDate: first },
+    { title: "Export CSV", description: "<p>Export CSV</p>", dueDate: second },
+    { ...drafts[2], dueDate: null },
+  ];
+  const h = harness({ dueDates: true, tasks });
+  const result = await h.compose("Create separate tasks: focus search, due soon; export CSV, due later; fix the settings typo.");
+  assert.equal(result.writerFailed, false);
+  assert.equal(result.tasks.length, 3);
+  assert.deepEqual(h.creates.map(body => body.writerDueDate), [first, second, undefined]);
+  assert.deepEqual(h.creates.map(body => body.title), ["Focus search", "Export CSV", "Fix settings typo"]);
+  for (const body of h.creates.slice(0, 2)) assert.equal(body.writerTimeZone, Intl.DateTimeFormat().resolvedOptions().timeZone);
+  assert.equal(h.creates[2].writerTimeZone, undefined);
+  assert.match(h.calls[0].instructions, /Today's local date is \d{4}-\d{2}-\d{2}/);
+  assert.match(h.calls[0].instructions, /dueDate field/);
+});
+
+test("a single structured task keeps its own model date and an invalid or past date is dropped", async () => {
+  const date = inDays(3);
+  const one = harness({ dueDates: true, tasks: [{ title: "Export CSV", description: "<p>Export CSV</p>", dueDate: date }] });
+  assert.equal((await one.compose("Export CSV by Friday")).writerFailed, false);
+  assert.equal(one.creates[0].writerDueDate, date);
+  assert.equal(one.creates.length, 1);
+  for (const bad of ["2026-02-30", inDays(-3), inDays(900), "soon", null]) {
+    const h = harness({ dueDates: true, tasks: [{ ...drafts[0], dueDate: bad }, drafts[1]] });
+    assert.equal((await h.compose(multiPrompt)).writerFailed, false);
+    for (const body of h.creates) assert.equal(body.writerDueDate, undefined);
+  }
+});
+
+test("due-date flag off preserves the upstream structured output and save payload", async () => {
+  const tasks = [{ title: "Export CSV, due 2026-10-16", description: '<p>Export CSV</p><span id="ai-generated-task-due-date">2026-10-16</span>' }];
+  const h = harness({ dueDates: false, tasks });
+  const response = await h.route.POST({ json: async () => ({ projectId: 15, PROMPT: "Export CSV, due 2026-10-16", requestKind: "compose-task" }) });
+  assert.equal(response.headers.get("X-Task-Writer-Due-Date"), null);
+  assert.deepEqual(await response.json(), { tasks });
+  const stray = harness({ dueDates: false, tasks: [{ ...tasks[0], dueDate: inDays(3) }] });
+  const strayBody = await (await stray.route.POST({ json: async () => ({ projectId: 15, PROMPT: "Export CSV", requestKind: "compose-task" }) })).json();
+  assert.equal(strayBody.tasks[0].dueDate, undefined);
+  const result = await h.compose("Export CSV, due 2026-10-16");
+  assert.equal(result.writerFailed, false);
+  assert.equal(h.creates[0].title, tasks[0].title);
+  assert.equal(h.creates[0].description, tasks[0].description);
+  assert.equal(h.creates[0].writerDueDate, undefined);
+  assert.equal(h.creates[0].writerTimeZone, undefined);
+  assert.doesNotMatch(h.calls[0].instructions, /Today's local date/);
+});
 
 test("single task with sub-steps creates one ticket and keeps the exact existing result", async () => {
   const h = harness({ tasks: [{ title: "Export CSV", description: "<p>Add a button, serialize columns, and test quoting.</p>" }] });

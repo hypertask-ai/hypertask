@@ -95,7 +95,8 @@ function fixture(kind, scenario, mode) {
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows ? "Actor unavailable" : null) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: (token) => { effects.push(["signed-session", token]); return token === "agent-token" ? { agentId: "owned" } : null; } },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: load("src/lib/auth/resolveActingAgent.ts", {}).resolveActingAgent },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
+    "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => { throw new Error("Legacy parity must not resolve writer dates"); } },
+    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes", HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" },
     "@/lib/flags": {
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
       isFeatureEnabled: async (key, userId) => {

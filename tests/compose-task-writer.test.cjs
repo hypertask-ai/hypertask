@@ -185,6 +185,8 @@ test('actual create endpoint rejects disabled Compose before database work and p
   const stubs = {
     '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
     '@/lib/api/task-writes/create-global-effects': {},
+    '@/lib/ai/taskWriterDueDate': {},
+    '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key, userId) => {
       assert.equal(key, flag); assert.equal(userId, 985); flagReads++; return enabled;
@@ -311,6 +313,8 @@ test('save existing target enforces both flags, edit permissions, board match an
   const stubs = {
     '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
     '@/lib/api/task-writes/create-global-effects': {},
+    '@/lib/ai/taskWriterDueDate': {},
+    '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
       isFeatureEnabled: async (key) => { flags.push(key); return key === flag ? compose : newWindow; } },

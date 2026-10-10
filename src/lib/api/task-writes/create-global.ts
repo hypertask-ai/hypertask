@@ -1,3 +1,5 @@
+import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseCookies } from "better-auth/cookies";
@@ -33,7 +35,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       sectionId,
       priority,
       estimate,
-      dueDate,
+      dueDate: requestedDueDate,
       startDate,
       tags,
       parentTask,
@@ -105,6 +107,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
+    const dueDateEnabled = body.requestKind === "compose-task" && body.writerDueDate != null &&
+      await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+    const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(body.writerDueDate, body.writerTimeZone) : undefined;
+    const dueDate = writerDueDate ?? requestedDueDate;
     if (body.existingTaskId != null) {
       const taskId = Number(body.existingTaskId);
       if (!Number.isSafeInteger(taskId) || taskId <= 0) {
@@ -117,13 +123,20 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       if (!target) return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
       if (!isEmptyComposeTarget(target)) return NextResponse.json({ message: "This task is no longer empty. Your note is still here." }, { status: 409, headers: responseHeaders });
       const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
-      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {
+      const result = await updateTaskSingle({ id: taskId, title, description,
+        ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
+      }, currentUser, agentId, {
         expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
         expectedProjectId: target.projectId,
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
+      if (writerDueDate) {
+        const { cancelDueDateJob, scheduleDueDateJob } = await import("@/pages/api/queues/duedateQueue");
+        await cancelDueDateJob(taskId, projectId);
+        await scheduleDueDateJob({ taskId, projectId }, writerDueDate);
+      }
       const { broadcastBoardChange, broadcastTaskChange } = await import("@/lib/realtime/server");
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return NextResponse.json({ newTask: result.json }, { status: 200, headers: responseHeaders });
