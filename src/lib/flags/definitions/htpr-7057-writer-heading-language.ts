@@ -11,6 +11,6 @@ export default {
     "Writes the entire Task Writer ticket, including section headings, in the requested language or the language of the request while preserving section structure.",
   releaseRisk: {
     "risk": "small",
-    "reason": "Task Writer tickets, including their section headings, are written in the language you asked for or wrote the request in."
+    "reason": "Task Writer uses the requested language for section headings as well as the ticket text, keeping the existing section structure."
   },
 } as const satisfies FeatureFlagDefinition;
