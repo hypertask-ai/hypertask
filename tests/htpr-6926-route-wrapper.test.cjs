@@ -370,7 +370,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
             Object.assign(mocks, {
               'next/server': { NextRequest, NextResponse },
               '@/lib/mcp/auth': auth,
-              '@/lib/flags': { isFeatureEnabled: async () => false },
+              '@/lib/flags': { isFeatureEnabled: async () => false, canUseAgentChatUser: async () => true },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },
               '@/lib/mcp/readJsonBody': json,

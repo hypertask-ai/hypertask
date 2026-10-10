@@ -167,7 +167,7 @@ test("owner-only flag on: owner and QA decisions come from one helper", async ()
   ownerGateMode = "OWNER_ONLY";
   assert.equal(await flags.canUseAgentChatUser(6), true);
   userId = 0;
-  assert.equal(await flags.canUseAgentChat(new Headers()), true);
+  assert.equal(await flags.canUseAgentChat(new Headers()), false);
   ownerGateMode = "EVERYONE";
   assert.equal(await flags.canUseAgentChat(new Headers()), false);
 });
@@ -277,9 +277,10 @@ test("navigation commands, local palette group and shortcut help are absent for 
 test("Agent Chat entry points stay hidden until flags load, then follow the owner-only flag and owner capability", () => {
   let ctx;
   let hydrated;
-  const hook = load("src/hooks/useFlag.tsx", {
-    react: { ...React, createContext: () => ({}), useContext: () => ctx },
+  const hook = load("src/hooks/useAgentChatAllowed.ts", {
+    react: { ...React, useContext: () => ctx },
     "@/hooks/General/useHydrated": { useHydrated: () => hydrated },
+    "@/hooks/featureFlagsContext": { FeatureFlagsContext: {} },
   }).useAgentChatAllowed;
   const gate = "htpr-7070-agent-chat-owner-only";
   const base = { seeded: false, fallback: false };

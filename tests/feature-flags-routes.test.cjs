@@ -22,6 +22,7 @@ stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FEATURE_FLAG_OWNER_USER_ID: 6,
   FeatureFlagInputError,
+  isFeatureFlagOwnerUser: async (id) => id === 6,
   isFeatureFlagOwner: async () => {
     if (authFails) throw new Error("auth unavailable");
     return userId === 6;
@@ -227,7 +228,7 @@ test("user flag responses are private, per-user booleans", async () => {
   const response = await flagsRoute.GET(request());
   assert.deepEqual(await json(response), {
     status: 200,
-    body: { flags: { example: false } },
+    body: { flags: { example: false }, isOwner: false },
   });
   assert.equal(response.headers.get("cache-control"), "private, no-store");
 });

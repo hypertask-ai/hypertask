@@ -13,7 +13,8 @@ import { createGeneralCommandActions } from "./generalCommandActions";
 import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
-import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
+import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed } from "@/hooks/useAgentChatAllowed";
 import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 

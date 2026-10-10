@@ -48,7 +48,8 @@ import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
-import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
+import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed } from "@/hooks/useAgentChatAllowed";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,

@@ -188,6 +188,7 @@ test("registry and uncached flag reads and writes do not load optional cache plu
       "@/lib/auth/getSessionUser": {},
       "@/lib/agentRuns/model": {},
       "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
+      "@/lib/flags/parked": load("src/lib/flags/parked.ts"),
       react: require("react"),
     };
     mocks["@/lib/flags/definitions"] = load("src/lib/flags/definitions.ts", mocks);

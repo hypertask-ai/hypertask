@@ -183,8 +183,10 @@ export async function canUseAgentChatUser(userId: number): Promise<boolean> {
 
 export async function canUseAgentChat(headers: Headers): Promise<boolean> {
   const session = await getSessionUser(headers);
-  // User 0 never exists, so this reads the flag's audience for a signed-out caller.
-  return canUseAgentChatUser(session ? session.userId : 0);
+  // A signed-out caller is refused without a database read, so write routes
+  // still reject a request with no session before touching any data.
+  if (!session) return false;
+  return canUseAgentChatUser(session.userId);
 }
 
 // Historical bug flags predate kind-based defaults. Classify them for display only:

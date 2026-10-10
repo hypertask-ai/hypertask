@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  createContext,
   useContext,
   useEffect,
   useMemo,
@@ -18,11 +17,10 @@ import {
   featureFlagsChannel,
 } from "@/lib/realtime/shared";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG } from "@/lib/flags/keys";
+import { FeatureFlagsContext } from "@/hooks/featureFlagsContext";
 
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 
-const FeatureFlagsContext = createContext<{ values: Record<string, boolean>; seeded: boolean; fallback: boolean }>({ values: {}, seeded: false, fallback: true });
 const FLAGS_ROUTE = "/api/flags";
 const FLAGS_REFRESH_MS = 60_000;
 export const FEATURE_FLAGS_QUERY_PREFIX = ["feature-flags"] as const;
@@ -138,19 +136,6 @@ export function useFlag(key: string): boolean {
   const { values, seeded } = useContext(FeatureFlagsContext);
   const hydrated = useHydrated();
   return (seeded || hydrated) && values[key] === true;
-}
-
-/**
- * HTPR-7070: the one client check for Agent Chat entry points. Hidden until the
- * flag values have loaded. After that it is allowed when the owner-only flag is
- * off, or when it is on and the server-verified owner capability is true. The
- * server routes enforce the same rule.
- */
-export function useAgentChatAllowed(): boolean {
-  const { values } = useContext(FeatureFlagsContext);
-  const loaded = useFlagLoaded(HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG);
-  if (!loaded) return false;
-  return values[HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG] !== true || values.__featureFlagOwner === true;
 }
 
 export function useFlagLoaded(key: string): boolean {

@@ -12,7 +12,7 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
-  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
+  if (/src\/lib\/flags\/(?:keys|definitions|parked)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
@@ -122,6 +122,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/routing/detailWithoutTicket': { detailWithoutTicketRedirect: () => null },
     '@/lib/tutorial/keyboardShortcutTutorial': { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
   }
+  aliases['@/lib/flags/parked'] = loadTs('src/lib/flags/parked.ts', aliases)
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})

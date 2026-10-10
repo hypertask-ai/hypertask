@@ -54,7 +54,7 @@ function paletteGroups(enabled, frequent = {}, contextOptions) {
     useMemo: (callback) => callback(),
     boardLayout: "board", calendarSettings: { showWeekends: true },
     currentProject: { id: 15 }, frequentlyUsed: frequent, projects: [],
-    contextOptions, appShellRailOn: false, onAgentChat: false,
+    contextOptions, appShellRailOn: false, onAgentChat: false, agentChatOwner: false,
     onCalendar: false, onMyTasks: false, isMobile: false, showByokApiKeys: false,
     pinCommentActions: false, pageActions: null,
     getActiveEmptySectionSettingFromProject: () => "Hidden",
