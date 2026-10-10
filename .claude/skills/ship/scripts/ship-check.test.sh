@@ -451,7 +451,9 @@ PY
 
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
+mkdir -p "$E/HTPR-6823" && echo 999 > "$E/HTPR-6823/dropped"
 ./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"
+[ ! -e "$E/HTPR-6823/dropped" ] && ok "duplicate clears a stale dropped record" || bad "duplicate kept a dropped record"
 ./ship-check merged HTPR-6823 | grep -q 'merged ok' && ok "duplicate passes the merged gate" || bad "duplicate merged gate"
 ./ship-check deployed HTPR-6823 | grep -q 'deployed ok' && ok "duplicate passes the deployed gate" || bad "duplicate deployed gate"
 G 2 vcc task move HTPR-6823 $DONE
@@ -1063,7 +1065,9 @@ echo CLOSED > "$DROP_DIR/state-901"; echo OPEN > "$DROP_DIR/state-902"; echo MER
 D dropped YPER4-777 901 >/dev/null && bad "dropped accepted without a decision comment" || ok "dropped refuses a ticket without a quoted dated decision"
 echo '{"success":true,"comments":[{"text":"<p>Valentin decided on 2026-10-10 not to ship this.</p>"}]}' > "$DROP_DIR/comments"
 D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unquoted decision" || ok "dropped refuses a decision without a quote"
-echo '{"success":true,"comments":[{"text":"<p>Valentin, 2026-10-10: &quot;drop it, not needed&quot;.</p>"}]}' > "$DROP_DIR/comments"
+echo '{"success":true,"comments":[{"text":"<p>Valentin, 2026-10-10: &quot;ship it&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unrelated quoted decision" || ok "dropped refuses a quoted decision without Decided against:"
+echo '{"success":true,"comments":[{"text":"<p>Decided against: Valentin, 2026-10-10: &quot;drop it, not needed&quot;.</p>"}]}' > "$DROP_DIR/comments"
 D dropped YPER4-777 902 >/dev/null && bad "dropped accepted an open PR" || ok "dropped refuses an open PR"
 D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "dropped refuses a merged PR"
 [ ! -e "$E/YPER4-777/dropped" ] && ok "refused dropped writes no record" || bad "refused dropped wrote a record"

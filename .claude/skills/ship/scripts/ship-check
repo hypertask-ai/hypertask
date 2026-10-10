@@ -4,7 +4,7 @@
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
-#   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and the ticket quotes his dated decision
+#   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a "Decided against:" comment quotes his dated decision
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
@@ -85,19 +85,19 @@ check_duplicate() {
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
 
-# Valentin decided against the ticket: the PR is closed unmerged and a ticket comment quotes his dated decision.
+# Valentin decided against the ticket: the PR is closed unmerged and a "Decided against:" comment quotes his dated decision.
 check_dropped() {
   local s; s=$(gh pr view "$2" -R "$REPO" --json title,state,baseRefName --jq '"\(.state) \(.baseRefName) \(.title)"' 2>/dev/null) \
     || fail "PR $2 not found in $REPO"
   [[ $s == "CLOSED $BASE $1 "* ]] || fail "PR $2 must be a CLOSED (not merged, not open) PR of $1 into $BASE, got: $s"
   hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[]; (.text // "") as $x
-      | ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
+      | ($x | test("Decided against:"; "i")) and ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
         and ($x | test("\"|&quot;|&#x22;|“")))' >/dev/null \
-    || fail "$1 has no comment quoting Valentin's dated decision (needs \"Valentin\", a date like 2026-10-10 and a quote mark)"
+    || fail "$1 has no \"Decided against:\" comment quoting Valentin's dated decision (needs \"Decided against:\", \"Valentin\", a date like 2026-10-10 and a quote mark)"
   mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
     && echo "recorded $1 as dropped (PR $2 closed unmerged)"
 }
