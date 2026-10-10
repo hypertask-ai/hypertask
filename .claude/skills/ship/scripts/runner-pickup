@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# runner-pickup: tickets assigned to a runner's agent on the board reach that runner (YPER4-244).
+#   runner-pickup run <n>      one timer tick: one board read, update the runner's inbox
+#   runner-pickup install <n>  copy script, hook and units to ~/.local/lib, enable the timer, register the hooks
+# Never calls GitHub. One read per tick, exponential backoff on errors, honors the agent-board-poll rate-limit marker.
+set -uo pipefail
+STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
+VCC=${RUNNER_PICKUP_VCC:-vcc}
+INTERVAL=${RUNNER_PICKUP_INTERVAL:-180}
+CAP=${RUNNER_PICKUP_BACKOFF_CAP:-3600}
+MAX_AGE_DAYS=${RUNNER_PICKUP_MAX_AGE_DAYS:-7}
+RATE_MARKER=${RUNNER_PICKUP_RATE_MARKER:-$HOME/.local/state/agent-board-poll/rate-limited}
+NOW=${RUNNER_PICKUP_NOW:-$(date +%s)}
+# Columns where a ticket is already claimed or settled; everything else counts as not yet claimed.
+SKIP='^(In Progress|AI Review|QA|Valentin Review|Review|Done|Archive|Archived|Blocked)$'
+log() { printf '%s runner-pickup: %s\n' "$(date -Is)" "$*" >&2; }
+die() { log "$*"; exit 1; }
+
+install_units() {
+  local n=$1 here repo lib unit_dir settings hook_cmd tmp
+  here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
+  repo=$(cd "$here/../../.." && pwd)
+  lib=$HOME/.local/lib/hypertask/runner-pickup
+  unit_dir=${RUNNER_PICKUP_UNIT_DIR:-$HOME/.config/systemd/user}
+  settings=${RUNNER_PICKUP_SETTINGS:-$HOME/projects/hypertask/.claude/settings.local.json}
+  mkdir -p "$lib" "$unit_dir"
+  install -m 0755 "$here/runner-pickup" "$lib/runner-pickup"
+  install -m 0755 "$repo/hooks/runner-inbox-stop.sh" "$lib/runner-inbox-stop.sh"
+  install -m 0644 "$repo/systemd/runner-pickup@.service" "$repo/systemd/runner-pickup@.timer" "$unit_dir/"
+  # Register both hooks in the runner checkout's untracked local settings (idempotent).
+  hook_cmd="$lib/runner-inbox-stop.sh"
+  [ -s "$settings" ] || { mkdir -p "$(dirname "$settings")"; echo '{}' > "$settings"; }
+  tmp=$(mktemp "$settings.XXXXXX")
+  jq --arg c "$hook_cmd" '
+    def addhook(ev; arg): .hooks[ev] = ((.hooks[ev] // []) | if any(.[]?.hooks[]?; .command == ($c + " " + arg)) then . else . + [{hooks:[{type:"command", command:($c + " " + arg)}]}] end);
+    .hooks = (.hooks // {}) | addhook("Stop"; "stop") | addhook("UserPromptSubmit"; "prompt")' "$settings" > "$tmp" \
+    && mv "$tmp" "$settings" || { rm -f "$tmp"; die "cannot update $settings"; }
+  systemctl --user daemon-reload && systemctl --user enable --now "runner-pickup@$n.timer" || die "cannot enable runner-pickup@$n.timer"
+  echo "runner-pickup: installed for RUNNER $n (timer runner-pickup@$n.timer, hooks in $settings)"
+}
+
+run_tick() {
+  local n=$1 inbox lock bfile fails until delay resp cand cutoff prev merged tickets t
+  inbox=$STATE/runner-$n.json; lock=$STATE/runner-$n.lock; bfile=$STATE/runner-$n.backoff.json
+  mkdir -p "$STATE" || die "cannot create $STATE"
+  until=$(jq -r '.until // 0' "$bfile" 2>/dev/null || echo 0); fails=$(jq -r '.fails // 0' "$bfile" 2>/dev/null || echo 0)
+  [[ $until =~ ^[0-9]+$ ]] || until=0; [[ $fails =~ ^[0-9]+$ ]] || fails=0
+  [ "$NOW" -ge "$until" ] || { log "backing off until $until"; exit 0; }
+  if [ -r "$RATE_MARKER" ]; then
+    t=$(cat "$RATE_MARKER" 2>/dev/null); [[ $t =~ ^[0-9]+$ ]] || t=0
+    [ $((NOW - t)) -ge 300 ] || { log "board API rate limited recently, skipping"; exit 0; }
+  fi
+  fail_tick() {
+    fails=$((fails + 1)); delay=$((INTERVAL * (1 << (fails > 10 ? 10 : fails))))
+    [ "$delay" -le "$CAP" ] || delay=$CAP
+    printf '{"fails":%s,"until":%s}\n' "$fails" "$((NOW + delay))" > "$bfile"
+    die "$1 (failure $fails, next try in ${delay}s)"
+  }
+  # The one read: tickets assigned to the owner (a runner's agent assigns as the owner), newest changes first.
+  resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --json 2>/dev/null) \
+    || fail_tick 'board read failed'
+  jq -e '.success == true and (.tasks | type == "array")' <<<"$resp" >/dev/null 2>&1 || fail_tick 'board read returned no task list'
+  rm -f "$bfile"
+  cutoff=$(date -u -d "@$((NOW - MAX_AGE_DAYS * 86400))" +%Y-%m-%dT%H:%M:%S)
+  cand=$(jq -c --arg name "Runner $n" --arg skip "$SKIP" --arg cutoff "$cutoff" '
+    [.tasks[] | select(any(.assignees[]?; .agent.displayName == $name))
+      | select(.projectId == 15 or .projectId == 4060)
+      | select((.section // "") | test($skip) | not)
+      | select((.updatedAt // "") >= $cutoff)
+      | {ticket: .ticketNumber, title: .title, url: "https://app.hypertask.ai/detail/project-\(.projectId)/\(.uniqueIndex)", section: .section, createdAt: .createdAt}]
+    | sort_by(.createdAt)' <<<"$resp") || die 'cannot parse board read'
+  exec 8>"$lock"; flock -x 8
+  prev=$(jq -c '.items // []' "$inbox" 2>/dev/null || echo '[]')
+  merged=$(jq -c --argjson prev "$prev" --argjson now "$NOW" '
+    map(. as $c | ($prev | map(select(.ticket == $c.ticket)) | first) as $old
+      | if $old then $old + {title: $c.title, url: $c.url, section: $c.section}
+        else $c + {queuedAt: $now, delivered: false, notified: false, seen: false} end)' <<<"$cand")
+  # One activity line per ticket, only when it is still undelivered one tick after it was queued (the runner is busy).
+  tickets=$(jq -r '.[] | select(.seen and (.delivered | not) and (.notified | not)) | .ticket' <<<"$merged")
+  for t in $tickets; do
+    if SHIP_SESSION_NAME="RUNNER $n" "$VCC" activity add "$t" "Queued for Runner $n: it is busy with other work and will start this ticket when it is free." >/dev/null 2>&1; then
+      merged=$(jq -c --arg t "$t" 'map(if .ticket == $t then .notified = true else . end)' <<<"$merged")
+    else log "activity line for $t failed, will retry next tick"; fi
+  done
+  merged=$(jq -c 'map(.seen = true)' <<<"$merged")
+  jq -n --argjson items "$merged" --argjson n "$n" --argjson now "$NOW" '{runner: $n, updatedAt: $now, items: $items}' > "$inbox.tmp" \
+    && mv "$inbox.tmp" "$inbox"
+  log "RUNNER $n: $(jq 'length' <<<"$merged") queued"
+}
+
+cmd=${1:-}; num=${2:-}
+[[ $num =~ ^[1-9][0-9]*$ ]] || { echo 'usage: runner-pickup run|install <runner number>' >&2; exit 2; }
+case "$cmd" in
+  run) run_tick "$num" ;;
+  install) install_units "$num" ;;
+  *) echo 'usage: runner-pickup run|install <runner number>' >&2; exit 2 ;;
+esac
