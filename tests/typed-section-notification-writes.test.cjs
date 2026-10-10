@@ -191,7 +191,7 @@ for (const flag of [false, undefined, true]) {
     const write = async (...args) => { calls.push(["write", ...args]); if (failure) throw new Error("denied"); };
     const fn = declaration("src/components/Modals/commands/manageColumn.tsx", "handleSectionUpdateVis", {
       typedWrite: flag ? (...args) => write("typed", ...args) : undefined, axios: { post: (...args) => write("legacy", ...args) },
-      sections: [section], updating: false, lastColumnDeleteMessage: false, title: "Renamed", ticketsFinished: true, currentUser: { id: 985 }, currentProject: { id: 15, section: [section], sections: [section] },
+      sections: [section], updating: false, lastColumnDeleteMessage: false, noEmptyBoardFlash: false, title: "Renamed", ticketsFinished: true, currentUser: { id: 985 }, currentProject: { id: 15, section: [section], sections: [section] },
       setUpdating: (value) => calls.push(["updating", value]),
       updateSection: (rows, updated, mode) => mode === "Delete" ? [] : rows.map((row) => ({ ...row, ...updated })),
       globalConstants: { GetAllManageColumnsPrefixKey: "manageColumns" },

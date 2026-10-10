@@ -1,5 +1,5 @@
 import { updateSection as writeSection } from "@/lib/api/typedClient";
-import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6979_TYPED_WRITES_FLAG, HTPR_6980_INSTANT_COLUMN_DELETE_FLAG, HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG, HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG } from "@/lib/flags/keys";
 import { IMember, IProject, IProjectsAll, ISection, IUser } from "@/models/model";
 import type { IAgent } from "@/models/model";
 import { currentProjectAtom, currentUserAtom, showCommandsAtom } from "@/store";
@@ -55,6 +55,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   const instantColumnDelete = useFlag(HTPR_6980_INSTANT_COLUMN_DELETE_FLAG);
   const lastColumnDeleteMessage = useFlag(HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG);
+  const noEmptyBoardFlash = useFlag(HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG);
   let typedWrite: typeof writeSection | undefined;
   if (typedWrites) typedWrite = writeSection;
   const isMobile = useContext(MobileViewContext);
@@ -231,6 +232,31 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     }
   };
 
+  const refuseLastColumnDelete = (section: ISection, project = currentProject) => {
+    if (!noEmptyBoardFlash || !project) return false;
+    const sectionId = section.id ?? section.sectionId;
+    if (typeof sectionId !== "number") return false;
+    const columns = project.section ?? project.sections;
+    // The saved view can hide other columns. Only canonical board columns decide
+    // whether this is the last one; rendered items also cover filtered-out cards.
+    const matches = (candidate: ISection) =>
+      (candidate.id ?? candidate.sectionId) === sectionId;
+    if (!columns.some(matches) || columns.some((candidate) => !candidate.deleted && !matches(candidate))) {
+      return false;
+    }
+    const hasCards = (project.tasks ?? []).some((task) =>
+      (!task.status || task.status === "Normal") &&
+      (task.sectionId === sectionId || task.section === section.section_title)
+    ) || [project.section, project.sections, project.filteredSections].some((list) =>
+      list?.some((candidate) => matches(candidate) && candidate.items?.some((task) =>
+        !task.status || task.status === "Normal"
+      ))
+    );
+    if (!hasCards) return false;
+    toast.error("This is the board's last column. Move or delete its cards first.");
+    return true;
+  };
+
   // ================ update section's visibility.
   // `overrides` exists because the setting rows save on change. A toggle that
   // calls this straight after setTicketsFinished would still read the previous
@@ -245,6 +271,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
     try {
       var updatedSections = [...sections];
       if (!section || (updating && !rollbackDelete)) return;
+      if (saveMode === "DELETE" && noEmptyBoardFlash && refuseLastColumnDelete(
+        section,
+        queryClient.getQueryData<IProjectsAll>(["projectsAll"])
+          ?.updatedProjects.find((project) => project.id === currentProject?.id) ?? currentProject
+      )) return;
       setUpdating(true);
       var sendUpdateSection: ISection;
 
@@ -343,7 +374,7 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       rollbackDelete?.();
       if (
         saveMode === "DELETE" &&
-        lastColumnDeleteMessage &&
+        (lastColumnDeleteMessage || noEmptyBoardFlash) &&
         axios.isAxiosError(error) &&
         error.response?.status === 400 &&
         error.response.data?.code === "LAST_COLUMN_HAS_CARDS" &&
@@ -621,7 +652,11 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       ];
       const matches = (section: ISection) =>
         (section.id ?? section.sectionId) === editSection.id;
-      const removeSection = (list?: ISection[]) => list?.filter((section) => !matches(section));
+      // A stale cache variant may contain only this column even on a larger board.
+      const removeSection = (list?: ISection[]) =>
+        noEmptyBoardFlash && list?.every(matches)
+          ? list
+          : list?.filter((section) => !matches(section));
       // Put back only the deleted column, at its old place, so edits saved
       // meanwhile survive a failed delete.
       const restoreSection = (list?: ISection[], original?: ISection[]) => {
@@ -648,6 +683,19 @@ const ManageColumns = ({ toggleModal }: { toggleModal: (add: boolean) => void })
       // Removal runs inside the save queue, after any pending rename, so it
       // patches the latest data and no earlier save can bring the column back.
       await queueSave(async () => {
+        if (noEmptyBoardFlash) {
+          const latestProject = queryClient.getQueryData<IProjectsAll>(["projectsAll"])
+            ?.updatedProjects.find((project) => project.id === projectId) ?? currentProject;
+          if (refuseLastColumnDelete(editSection, latestProject)) return;
+          // Even if local cards are stale or filtered out, a server refusal must
+          // not require restoring an empty board. Wait if any list would empty.
+          if ([latestProject.section, latestProject.sections, latestProject.filteredSections, sections].some(
+            (list) => list?.some(matches) && !list.some((section: ISection) => !matches(section))
+          )) {
+            await handleSectionUpdateVis(editSection, "DELETE", undefined, undefined, () => {});
+            return;
+          }
+        }
         void queryClient.cancelQueries({ queryKey: ["projectsAll"], exact: true });
         void queryClient.cancelQueries({ queryKey: ["projectsAllMinimal"] });
         void queryClient.cancelQueries({ queryKey, exact: true });

@@ -117,6 +117,7 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
   const client = (typed) => {
     const bindings = {
       sections, currentProject: { id: 15, section: sections, sections }, currentUser: { id: 6 },
+      noEmptyBoardFlash: false, lastColumnDeleteMessage: false,
       updating: false, title: "Unused", ticketsFinished: false,
       typedWrite: typed ? (body) => post(body, true) : undefined,
       axios: { post: (url, body) => { assert.equal(url, "/api/section/update"); return post(body, false); } },

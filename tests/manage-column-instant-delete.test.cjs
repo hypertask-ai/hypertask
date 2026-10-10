@@ -60,7 +60,7 @@ function setup(t, { enabled = true, typed = false, updating = false, pending = t
     return network.promise;
   };
   const bindings = {
-    queryClient, instantColumnDelete: enabled, lastColumnDeleteMessage: false, editSection: sections[1], currentProject: project,
+    queryClient, noEmptyBoardFlash: false, instantColumnDelete: enabled, lastColumnDeleteMessage: false, editSection: sections[1], currentProject: project,
     currentUser: { id: 985 }, globalConstants: { GetAllManageColumnsPrefixKey: "GetAllManageColumns" },
     sections, updating, typedWrite: typed ? write : undefined, axios: { post: write },
     setCurrentProject: (value) => { state.project = typeof value === "function" ? value(state.project) : value; },
