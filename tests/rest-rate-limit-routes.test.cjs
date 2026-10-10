@@ -49,7 +49,8 @@ for (const [operation, [, method]] of Object.entries(pages)) {
       const limits = [];
       const mocks = { '@/lib/api/rateLimit': { checkRestRateLimit: async (...args) => { limits.push(args); return new Response(text429, { status: 429, headers: Object.fromEntries(limitHeaders) }); } } };
       const result = await runPage(operation, mode, { ...options, mocks });
-      if (mode === 'ON' && !Object.keys(options).length) {
+      // HTPR-7073: with the flag ON a mismatched or missing profile cookie no longer downgrades a signed session.
+      if (mode === 'ON') {
         assert.deepEqual({ status: result.status, text: result.text, headers: result.headers }, { status: 429, text: text429, headers: limitHeaders });
         assert.deepEqual(result.calls, []);
         assert.deepEqual(limits, [[985, bucket]]);

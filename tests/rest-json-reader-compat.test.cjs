@@ -1655,7 +1655,8 @@ for (const operation of operations) {
     }
   });
   test(`${operation}: unauthorized body is not parsed and reader cannot run`, async () => {
-    for (const mode of ['ON', 'OFF']) {
+    // HTPR-7073: with the flag ON a signed session no longer needs the profile cookie, so only OFF stays unauthorized.
+    for (const mode of ['OFF']) {
       // create-session is signed-session-only, unlike the profile-required routes.
       // HTPR-7068: preferences accept the signed session alone when the flag is on.
       const signedSessionOnly = operation === 'createSession' || (mode === 'ON' && preferenceOperations.has(operation));

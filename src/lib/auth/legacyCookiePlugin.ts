@@ -50,7 +50,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 2592000, // 30 days, matches the Better Auth session lifetime
+    maxAge: SESSION_TTL_SECONDS, // same lifetime as the signed session (HTPR-7073)
     path: '/',
   })
   ctx.setCookie(
