@@ -13,6 +13,7 @@ function stub(filename, exports) {
 }
 let owner = true;
 let discoveryEnabled = false;
+let urlFiltersEnabled = false;
 let reads = 0;
 let rows = [];
 stub(path.join(root, "src/lib/flags.ts"), {
@@ -23,6 +24,7 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
+    if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     assert.equal(key, "htpr-6964-flags-page-type-search");
     return discoveryEnabled;
   },
@@ -42,7 +44,7 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
-  owner = true; reads = 0; discoveryEnabled = false;
+  owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false;
   rows = [fixture("htpr-6752-instant-ticket-open"), fixture("yper4-123-board-check")];
 });
 
@@ -64,8 +66,8 @@ test("known and legacy flags reuse the admin component; unknown keys return not 
   assert.equal((await Overview()).type, Admin);
 });
 
-async function withAdmin(props, data, run) {
-  const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/admin/flags" });
+async function withAdmin(props, data, run, query = "") {
+  const dom = new JSDOM('<div id="root"></div>', { url: `https://app.hypertask.ai/admin/flags${query}` });
   const names = ["window", "self", "document", "HTMLElement", "navigator", "IS_REACT_ACT_ENVIRONMENT", "fetch"];
   const previous = names.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity, gcTime: Infinity }, mutations: { retry: false } } });
@@ -314,4 +316,57 @@ test("detail related links point to anchored cards on the overview", async () =>
     assert.equal(document.querySelectorAll(".label-pill").length, 1);
     assert.equal(document.querySelector('input[type="search"]'), null);
   });
+});
+
+
+test("flagged page restores type and risk filters, excludes Off from waiting, and displays risk reasons", async () => {
+  urlFiltersEnabled = true;
+  const { FEATURE_FLAG_RELEASE_RISKS: risks } = jiti(path.join(root, "src/lib/flags/releaseRisk.ts"));
+  const key = value => Object.keys(risks).find(key => risks[key].risk === value);
+  const flags = [
+    fixture(key("none"), { kind: "improvement", mode: "OWNER_ONLY" }),
+    fixture(key("small"), { kind: "bugfix", mode: "OFF" }),
+    fixture(key("new"), { kind: "feature" }),
+    fixture("released", { mode: "EVERYONE" }),
+  ];
+  await withAdmin({}, { flags }, async ({ document, click }) => {
+    const chips = label => [...document.querySelectorAll(`[aria-label="${label}"] button`)];
+    const shown = () => [...document.querySelectorAll("code")].map(node => node.textContent);
+    assert.match(document.body.textContent, /2 unreleased flags waiting for release/);
+    assert.deepEqual(shown(), [key("none")]);
+    assert.match(document.body.textContent, /No visible change/);
+    assert.ok(document.body.textContent.includes(risks[key("none")].reason));
+    assert.match(document.body.textContent, /days waiting/);
+    await click(chips("Filter by release risk")[0]);
+    assert.deepEqual(shown(), [key("none")]);
+    await click(chips("Filter by type").find(button => button.textContent === "Feature"));
+    assert.deepEqual(shown(), [key("none"), key("new")]);
+    await click(chips("Filter by audience").find(button => button.textContent === "Off 1"));
+    assert.deepEqual(shown(), []);
+    await click(chips("Filter by type").find(button => button.textContent === "Bug"));
+    assert.deepEqual(shown(), [key("small")]);
+    assert.ok(document.body.textContent.includes(risks[key("small")].reason));
+    assert.doesNotMatch(document.body.textContent, /days waiting/);
+    const sort = [...document.querySelectorAll("button")].find(button => button.textContent === "Release risk first");
+    await click(sort);
+    assert.equal(sort.textContent, "Newest first");
+    await click(sort);
+    assert.equal(sort.textContent, "Oldest first");
+    assert.equal(new URLSearchParams(window.location.search).get("sort"), "oldest");
+  }, "?tab=unreleased&type=improvement&risk=none");
+});
+
+test("flag Off leaves URL, legacy waiting count, sort and cards unchanged", async () => {
+  const flags = [fixture("htpr-7058-flags-page-url-filters", { mode: "OFF" })];
+  await withAdmin({}, { flags }, async ({ document, click }) => {
+    const before = window.location.href;
+    assert.match(document.body.textContent, /1 unreleased flag waiting for release/);
+    assert.equal(document.querySelector('[aria-label="Filter by type"]'), null);
+    assert.equal(document.querySelector('[aria-label="Filter by release risk"]'), null);
+    assert.doesNotMatch(document.body.textContent, /Small change|days waiting|Release risk first/);
+    const sort = [...document.querySelectorAll("button")].find(button => button.textContent === "Newest first");
+    await click(sort);
+    assert.equal(sort.textContent, "Oldest first");
+    assert.equal(window.location.href, before);
+  }, "?tab=unreleased&type=bug&risk=none&sort=oldest&q=missing");
 });

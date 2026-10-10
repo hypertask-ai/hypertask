@@ -1,6 +1,7 @@
 export const HTPR_7064_INBOX_REMIND_RETURNS_FLAG = "htpr-7064-inbox-remind-returns";
 export const HTPR_7050_CTRL_O_LINKS_FLAG = "htpr-7050-ctrl-o-links";
 export const HTPR_7061_REMIND_WITHOUT_INBOX_FLAG = "htpr-7061-remind-without-inbox";
+export const HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG = "htpr-7058-flags-page-url-filters";
 export const HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG = "htpr-7055-ai-sidebar-detail-fit";
 export const HTPR_7042_NEON_WORK_AVOIDANCE_FLAG = "htpr-7042-neon-work-avoidance";
 export const HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG = "htpr-7049-reload-after-image-chat";
