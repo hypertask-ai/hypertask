@@ -1,5 +1,5 @@
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
-import { reportError } from "@/lib/errors/reportError";
+import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText, Output, streamText } from "ai";
@@ -32,12 +32,28 @@ async function isRealErrorEnabled(userId: number) {
   return isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId);
 }
 
+// HTPR-7086: a team using up its monthly AI allowance is a plan limit the user already sees, not a production error.
+async function isAllowanceLimitMessage(message: string) {
+  // Cheap pre-check first so ordinary errors never load the policy module.
+  if (!message.includes("AI allowance")) return false;
+  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
+  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
+}
+
 export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
     return createSseErrorResponse("Unauthorized", 401);
   }
   const userId = requestUser.id;
+  // Same call shape as reportError; the allowance limit is skipped, every other error is reported.
+  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
+    if (await isAllowanceLimitMessage(payload.message)) {
+      const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+      if (await isFeatureEnabled(HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, userId)) return;
+    }
+    await reportErrorToBoard(payload);
+  };
 
   let body: TaskWriterRequest;
   try {
