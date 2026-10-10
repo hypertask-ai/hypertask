@@ -1408,6 +1408,7 @@ function atomicCommentHarness() {
           : [];
       },
     },
+    follower: { findMany: async () => [] },
   };
   const prisma = {
     ...tx,

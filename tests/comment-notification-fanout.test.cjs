@@ -223,7 +223,7 @@ function loadFanout(database) {
       publishBoardWebhookDeliveries: async () => {},
     },
     "src/lib/configs/general.config.ts": { generalConfig: { hyperAiId: 332 } },
-    "src/lib/flags.ts": { isFeatureEnabled: async () => true },
+    "src/lib/flags.ts": { isFeatureEnabled: async () => false },
     "src/utils/controllers/comments/agentInvocationCorrelation.ts": {
       buildAgentInvocationSelector: () => null,
       claimPendingAgentInvocation: async () => null,
