@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# runner-chat-reply <n> <session-id> <text>: answer an Agent Chat thread as RUNNER <n>'s own agent (YPER4-256).
-# The vcc CLI has no chat command, so this posts POST /api/mcp/chat/sessions/<session-id>/messages {text}
+# runner-chat-reply <target> <session-id> <message-id> <text>: answer an Agent Chat thread as RUNNER <n>'s own agent (YPER4-256).
+# The vcc CLI has no chat command, so this posts POST /api/mcp/chat/sessions/<session-id>/messages {text, replyToMessageId}
 # with the runner agent's credential, read here at run time from the file ship-identity names (never printed).
 set -uo pipefail
-n=${1:-}; sid=${2:-}; text=${3:-}
-# <n> is a runner number or the literal infra-manager (identity "INFRA MANAGER").
-if [ "$n" = infra-manager ]; then who="INFRA MANAGER"; else who="RUNNER $n"; fi
-[[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager ]] && [[ $sid =~ ^[A-Za-z0-9_-]+$ ]] && [ -n "$text" ] || { echo 'usage: runner-chat-reply <runner number> <session-id> <text>' >&2; exit 2; }
+n=${1:-}; sid=${2:-}; mid=${3:-}; text=${4:-}
+# <n> is a runner number or a named slug (identity = session name).
+case "$n" in infra-manager) who="INFRA MANAGER" ;; speed-runner) who="SPEED RUNNER" ;; *) who="RUNNER $n" ;; esac
+[[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager || $n = speed-runner ]] && [[ $sid =~ ^[A-Za-z0-9_-]+$ ]] && [[ $mid =~ ^[A-Za-z0-9_-]+$ ]] && [ -n "$text" ] || { echo 'usage: runner-chat-reply <runner number|infra-manager|speed-runner> <session-id> <message-id> <text>' >&2; exit 2; }
 here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 ident=${RUNNER_CHAT_IDENTITY:-$here/ship-identity}; [ -x "$ident" ] || ident=$HOME/.agents/skills/ship/scripts/ship-identity
 IFS=$'\t' read -r name credfile < <(SHIP_SESSION_NAME="$who" "$ident")
@@ -15,7 +15,7 @@ base=${RUNNER_CHAT_BASE:-https://app.hypertask.ai/api/mcp}
 body=$(mktemp); trap 'rm -f "$body"' EXIT
 code=$(printf 'header = "Authorization: Bearer %s"\n' "$(cat "$credfile")" |
   curl --config - --silent --show-error --connect-timeout 10 --max-time 30 --request POST \
-    --header 'Content-Type: application/json' --data "$(jq -nc --arg t "$text" '{text:$t}')" \
+    --header 'Content-Type: application/json' --data "$(jq -nc --arg t "$text" --arg m "$mid" '{text:$t, replyToMessageId:$m}')" \
     --output "$body" --write-out '%{http_code}' "$base/chat/sessions/$sid/messages") || { echo 'runner-chat-reply: request failed' >&2; exit 1; }
 if [[ $code == 2?? ]] && jq -e '.success == true' "$body" >/dev/null 2>&1; then echo "reply sent to chat $sid"; exit 0; fi
 echo "runner-chat-reply: HTTP $code: $(jq -r '.error // .message // "request failed"' "$body" 2>/dev/null)" >&2; exit 1

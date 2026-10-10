@@ -23,11 +23,12 @@ HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te"
 SEEN_CAP = 4000
 LOCK = threading.Lock()
 EVENTS = {"comment.created", "comment.mention", "task.assigned", "chat.message"}
-ROUTE = re.compile(r"^/webhook/(runner-[1-9][0-9]*|infra-manager)$")
+SLUGS = {"infra-manager": "INFRA MANAGER", "speed-runner": "SPEED RUNNER"}
+ROUTE = re.compile(r"^/webhook/(runner-[1-9][0-9]*|" + "|".join(SLUGS) + ")$")
 
 
 def label(t):
-    return "INFRA MANAGER" if t == "infra-manager" else f"Runner {t}"
+    return SLUGS.get(t, f"Runner {t}")
 
 
 def log(msg):
@@ -116,11 +117,12 @@ def build_message(n, p):
     if event == "chat.message":
         chat = p.get("chat") or {}
         sid = re.sub(r"[^A-Za-z0-9_-]", "", str(chat.get("sessionId") or ""))
-        if not sid:
+        mid = re.sub(r"[^A-Za-z0-9_-]", "", str(chat.get("messageId") or ""))
+        if not sid or not mid:
             return None
         who = chat.get("userName") or actor
         return (f'Agent Chat for {label(n)}: {who} wrote: "{strip_html(chat.get("text") or "")}". Answer in the same chat with: '
-                f'{CHAT_REPLY} {n} {sid} "<your answer>"')
+                f'{CHAT_REPLY} {n} {sid} {mid} "<your answer>"')
     return None
 
 

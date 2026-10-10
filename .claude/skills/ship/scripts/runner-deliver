@@ -8,8 +8,13 @@ STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
 TMUX=${RUNNER_PICKUP_TMUX:-tmux}
 SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
 MAXLEN=${RUNNER_DELIVER_MAXLEN:-3000}
-# <target> is a runner number or the literal infra-manager (only the "INFRA MANAGER" session, no fallback).
-n=${1:-}; [[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager ]] || { echo 'usage: runner-deliver <runner number|infra-manager> < message' >&2; exit 2; }
+# <target> is a runner number or a named slug. Slug table: "slug|session name|fall back to INFRA MANAGER (1/0)".
+SLUGS='infra-manager|INFRA MANAGER|0
+speed-runner|SPEED RUNNER|1'
+n=${1:-}; fallback=1
+if [[ $n =~ ^[1-9][0-9]*$ ]]; then session="RUNNER $n"
+elif row=$(grep "^$n|" <<<"$SLUGS" 2>/dev/null) && [ -n "$n" ]; then IFS='|' read -r _ session fallback <<<"$row"
+else echo 'usage: runner-deliver <runner number|infra-manager|speed-runner> < message' >&2; exit 2; fi
 
 # Single literal line: control characters out, whitespace collapsed, capped.
 text=$(head -c 20000 | tr '\000-\037\177' ' ' | tr -s ' ')
@@ -42,13 +47,15 @@ find_pane() {
 }
 send() { "$TMUX" send-keys -t "$1" -l "$2" >/dev/null 2>&1 && "$TMUX" send-keys -t "$1" Enter >/dev/null 2>&1; }
 
-pane=""
-if [ "$n" != infra-manager ]; then
-  if pid=$(find_pid "RUNNER $n"); then pane=$(find_pane "$pid") || pane=""; fi
-  if [ -n "$pane" ] && send "$pane" "$text"; then echo "delivered to RUNNER $n"; exit 0; fi
-  pane=""; prefix="No live Runner $n: "
+pane=""; prefix=""
+if [ "$session" != "INFRA MANAGER" ]; then
+  if pid=$(find_pid "$session"); then pane=$(find_pane "$pid") || pane=""; fi
+  if [ -n "$pane" ] && send "$pane" "$text"; then echo "delivered to $session"; exit 0; fi
+  pane=""; prefix="No live ${session,,}: "; [[ $n =~ ^[1-9] ]] && prefix="No live Runner $n: "
 fi
-if pid=$(find_pid "INFRA MANAGER"); then pane=$(find_pane "$pid") || pane=""; fi
-if [ -n "$pane" ] && send "$pane" "${prefix:-}$text"; then echo "delivered to INFRA MANAGER"; exit 0; fi
+if [ "$fallback" = 1 ] || [ "$session" = "INFRA MANAGER" ]; then
+  if pid=$(find_pid "INFRA MANAGER"); then pane=$(find_pane "$pid") || pane=""; fi
+  if [ -n "$pane" ] && send "$pane" "$prefix$text"; then echo "delivered to INFRA MANAGER"; exit 0; fi
+fi
 mkdir -p "$STATE" && jq -nc --arg t "$text" --argjson ts "$(date +%s)" '{ts:$ts, text:$t}' >> "$STATE/runner-$n.pending.jsonl"
 echo "queued for $n"; exit 3

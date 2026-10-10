@@ -39,7 +39,7 @@ echo "$RANDOM-infra-key" > "$T/keys/infra-manager"; chmod 600 "$T/keys/infra-man
 RUNNER_WEBHOOK_PORT=$PORT RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$PORT/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
 post() { # runner|infra-manager event deliveryId body [badsig]
-  local ts=${TS:-$(date +%s)} sig name=runner-$1; [ "$1" != infra-manager ] || name=infra-manager
+  local ts=${TS:-$(date +%s)} sig name=runner-$1; case "$1" in infra-manager|speed-runner) name=$1;; esac
   sig=$(python3 -c 'import hmac,hashlib,sys;k=open(sys.argv[1],"rb").read().strip();print("sha256="+hmac.new(k,sys.argv[2].encode()+b"."+sys.argv[3].encode(),hashlib.sha256).hexdigest())' "$T/keys/$name" "$ts" "$4")
   [ -z "${5:-}" ] || sig="sha256=$(printf '0%.0s' $(seq 64))"
   curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/webhook/$name" -H "X-Hypertask-Event: $2" \
@@ -95,7 +95,7 @@ chat=$(jq -nc '{event:"chat.message", agentId:"a", projectId:null, taskId:null, 
 eq "chat.message accepted" "$(post 3 chat.message d-6 "$chat")" "200"
 wait_sent 1 && ok "chat delivered" || bad "chat not delivered"
 case "$(lastline)" in
-  *'Agent Chat for Runner 3: Valentin Yeo wrote: "are you there?". Answer in the same chat with: /lib/runner-chat-reply 3 sess-42 "<your answer>"') ok "chat message carries the exact reply command";;
+  *'Agent Chat for Runner 3: Valentin Yeo wrote: "are you there?". Answer in the same chat with: /lib/runner-chat-reply 3 sess-42 m-7 "<your answer>"') ok "chat message carries the exact reply command";;
   *) bad "chat message: $(lastline)";;
 esac
 : > "$TMUX_LOG"
@@ -114,8 +114,24 @@ case "$(lastline)" in '%2|literal|Board event for INFRA MANAGER: Valentin Yeo co
 : > "$TMUX_LOG"
 ichat=$(jq -nc '{event:"chat.message", agentId:"a", actor:{userId:6, displayName:"Valentin Yeo"}, chat:{sessionId:"sess-9", messageId:"m-9", text:"status?", userName:"Valentin Yeo"}}')
 post infra-manager chat.message d-i2 "$ichat" >/dev/null; wait_sent 1
-case "$(lastline)" in *'Agent Chat for INFRA MANAGER: '*'/lib/runner-chat-reply infra-manager sess-9 "<your answer>"') ok "infra chat reply command uses infra-manager";; *) bad "infra chat: $(lastline)";; esac
+case "$(lastline)" in *'Agent Chat for INFRA MANAGER: '*'/lib/runner-chat-reply infra-manager sess-9 m-9 "<your answer>"') ok "infra chat reply command uses infra-manager";; *) bad "infra chat: $(lastline)";; esac
 eq "wrong secret file for infra-manager rejected" "$(post infra-manager comment.created d-i3 "$(comment x 901)" bad)" "401"
+
+# ---- speed-runner route ----
+echo "$RANDOM-speed-key" > "$T/keys/speed-runner"; chmod 600 "$T/keys/speed-runner"
+(sleep 300; true) & SSUB=$!; sleep 0.3; SPID=$(pgrep -P "$SSUB" | head -1); PIDS="$PIDS $SSUB $SPID"
+session speed "SPEED RUNNER" "$SPID"; printf '%%1 %s\n%%2 %s\n%%3 %s\n' "$SUB" "$INFRA" "$SSUB" > "$FAKE_PANES"
+: > "$TMUX_LOG"
+eq "speed-runner route accepted" "$(post speed-runner comment.created d-s1 "$(comment 'for speed' 950)")" "200"
+wait_sent 1 && ok "speed-runner event delivered" || bad "speed-runner not delivered"
+case "$(lastline)" in '%3|literal|Board event for SPEED RUNNER: '*'"for speed"'*) ok "typed into the SPEED RUNNER pane";; *) bad "speed line: $(lastline)";; esac
+: > "$TMUX_LOG"; post speed-runner chat.message d-s2 "$(jq -nc '{event:"chat.message",actor:{userId:6,displayName:"V"},chat:{sessionId:"sess-s",messageId:"m-s",text:"hi"}}')" >/dev/null; wait_sent 1
+case "$(lastline)" in *'/lib/runner-chat-reply speed-runner sess-s m-s "<your answer>"') ok "speed chat reply command";; *) bad "speed chat: $(lastline)";; esac
+eq "bad signature for speed-runner rejected" "$(post speed-runner comment.created d-s3 "$(comment x 951)" bad)" "401"
+rm -f "$T/sessions/speed.json"; : > "$TMUX_LOG"; printf 'x' | ./runner-deliver speed-runner >/dev/null
+eq "no live SPEED RUNNER: INFRA MANAGER with prefix" "$(lastline)" '%2|literal|No live speed runner: x'
+printf '%%1 %s\n%%2 %s\n' "$SUB" "$INFRA" > "$FAKE_PANES"
+rm -f "$T/sessions/runner.json"
 
 # ---- runner-deliver fallbacks ----
 deliver() { printf '%s' "$2" | ./runner-deliver "$1" >/dev/null; echo $?; }

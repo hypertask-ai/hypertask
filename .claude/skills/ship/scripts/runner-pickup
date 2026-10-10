@@ -132,7 +132,7 @@ backstop() {
     # 0 delivered, 3 queued by runner-deliver (it keeps the queue); anything else retries next tick.
     if [ "$rc" = 0 ] || [ "$rc" = 3 ]; then jq -r '.keys[]' <<<"$(head -n "$EVENT_CAP" <<<"$events")" >> "$seenf"; fi
   fi
-  retry_pending "$n" "$pend"; retry_pending infra-manager "$STATE/runner-infra-manager.pending.jsonl"
+  retry_pending "$n" "$pend"; local slug; for slug in infra-manager speed-runner; do retry_pending "$slug" "$STATE/runner-$slug.pending.jsonl"; done
   if [ -f "$seenf" ] && [ "$(wc -l < "$seenf")" -gt $((SEEN_CAP * 2)) ]; then
     tail -n "$SEEN_CAP" "$seenf" > "$seenf.x" && mv "$seenf.x" "$seenf"
   fi
