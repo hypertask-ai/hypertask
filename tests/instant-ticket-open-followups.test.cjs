@@ -137,7 +137,8 @@ test("quiet: deferred activity/comments suspend without loading text, with a fla
     "@/lib/constants/TaskDetail": {},
     "lucide-react": { Reply: noop },
     "@/hooks/useFlag": { useFlag: (key) => key === flag && enabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: flag },
+    "@/lib/flags/keys": compile(read("src/lib/flags/keys.ts"), {}),
+    "@/lib/taskDetailEditTarget": compile(read("src/lib/taskDetailEditTarget.ts"), {}),
     "@/lib/htc/isCommentCreatedByUser": { isCommentCreatedByUser: () => false },
     "@/components/Common/AttachmentsView": { __esModule: true, default: noop },
   };

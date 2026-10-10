@@ -44,6 +44,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const description = { description: task.description_.content, descriptionAttachments: [], uploadingDescription: null };
   const { armBackDismiss } = load("src/lib/mobile/backDismiss.ts");
   const useDoubleTap = load("src/hooks/MultiPages/useDoubleTap.ts");
+  const flags = load("src/lib/flags/keys.ts");
   const guest = {
     GUEST_DESCRIPTION_EDITOR_ID: "description",
     GUEST_DESCRIPTION_INTERACTIVE_TARGET: "a,button",
@@ -152,6 +153,9 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "@/lib/contexts/mobileContext": { MobileViewContext },
     "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container", DELIBERATE_DOUBLE_CLICK_MS: 500 },
     "@/hooks/MultiPages/useDoubleTap": useDoubleTap,
+    "@/hooks/useFlag": { useFlag: key => { assert.equal(key, flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG); return true; } },
+    "@/lib/flags/keys": flags,
+    "@/lib/taskDetailEditTarget": load("src/lib/taskDetailEditTarget.ts"),
     "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
     "@/store": {},
     "@/lib/demo/guest": { isGuestUser: () => false },

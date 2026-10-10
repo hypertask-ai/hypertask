@@ -6,6 +6,7 @@ import {
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
   HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
   HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
+  HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
   HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
   HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
@@ -186,6 +187,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Keeps board columns and cards on screen when deleting the last populated column is refused, from every column-delete entry point.",
+  },
+  {
+    key: HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Keeps hover controls out of comment and description editing, restores deliberate double-click editing, and preserves phone double tap and Edit actions.",
   },
   {
     key: HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,

@@ -20,7 +20,8 @@ import ReplyToComment from "./CommentOptions/ReplyToComment";
 import SwipeableCommentRow from "./SwipeableCommentRow";
 import { Reply } from "lucide-react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG } from "@/lib/flags/keys";
+import { isTaskDetailEditTarget } from "@/lib/taskDetailEditTarget";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 const CommentReactions = dynamic(() => import("./CommentReactions"));
 
@@ -82,8 +83,12 @@ const CommentsContainer = () => {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setShowCommands] = useRecoilState(showCommandsAtom);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
   const bind = useDoubleTap(handleDoubleTap, 200, {
     onSingleTap: handleSingleTap,
+    shouldHandleEvent: doubleClickToEdit
+      ? (event) => isTaskDetailEditTarget(event.target, event.currentTarget)
+      : undefined,
   });
 
   function handleDoubleTap() {
@@ -100,7 +105,7 @@ const CommentsContainer = () => {
   // browser's, so on desktop it committed the first click as a single tap and
   // the still-live native sequence then opened the editor, reading as "a
   // single click starts edit mode".
-  const pressStartRef = useRef({ id: comment.id, collapsed: isStacked, at: 0 });
+  const pressStartRef = useRef({ id: comment.id, collapsed: isStacked, at: 0, editable: true });
 
   function rememberPressStart(event: React.MouseEvent) {
     // Capture phase on mousedown: detail <= 1 is the opening press of a
@@ -111,10 +116,12 @@ const CommentsContainer = () => {
         id: comment.id,
         collapsed: isStacked,
         at: event.timeStamp,
+        editable: !doubleClickToEdit || isTaskDetailEditTarget(event.target, event.currentTarget),
       };
   }
   function handleDesktopDoubleClick(event: React.MouseEvent) {
     const pressStart = pressStartRef.current;
+    if (doubleClickToEdit && (!pressStart.editable || !isTaskDetailEditTarget(event.target, event.currentTarget))) return;
     // The virtualized row can be handed a different comment between the two
     // presses; that sequence belongs to the comment that is gone, not this one.
     if (pressStart.id !== comment.id) return;
