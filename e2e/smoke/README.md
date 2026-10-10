@@ -75,6 +75,17 @@ hosted realtime even if it adds `?realtime=on`.
 `browser-smoke` is required by the production ruleset, the live-ruleset
 assertion, and automerge. A failed or missing result blocks merging.
 
+## Layout lock matrix (YPER4-252)
+
+`browser-smoke` also runs `e2e/smoke/layout-lock-matrix.spec.ts`, once with live-like flags and once with every flag on. It opens the ticket page (short and long comment thread), board, inbox and search once per sidebar state (AI sidebar open or closed, left sidebar collapsed or expanded) and resizes the window through 1920, 1440, 1280, 1100, 950, 768 and 390 wide. Each main part (title, description, comment list, comment box, properties panel, board columns, left sidebar, AI sidebar) is compared with `e2e/smoke/layout-lock-matrix.baseline.json`. A part that moves more than 8px, changes column, wraps below its neighbour, or leaves the comment box above the last comment fails with `<page> @ <width>px, AI sidebar <open|closed>, left sidebar <collapsed|expanded>: <part> moved <dx>,<dy>px`. Failing runs upload an "after" screenshot with the baseline boxes outlined (artifact `layout-lock-matrix`).
+
+- An intended layout change regenerates the baseline from the `origin/production` build (steps are in the header of `layout-lock-matrix.spec.ts`) and adds the page to the baseline's `approvedIn` map with the full URL of the ticket where Valentin approved it. The PR body needs the line `Layout change approved: <that URL>`.
+- `.github/scripts/layout-lock-approval.mjs` enforces this on every pull request for `layout-lock.baseline.json`, `layout-lock-matrix.baseline.json` and both `*.flag-changes.json` ratchets, and prints the ticket it expects.
+- The /admin/flags page is not in the matrix: only user 6 may open it and the smoke session must never be user 6.
+- First-load jump (CLS under 0.05) is HTPR-7074, not this check.
+
+Run it locally with `scripts/premerge-local.sh`, then `PREMERGE_LOCAL=1 BASE_URL=<build url> SMOKE_BOARD_PATH=... npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock-matrix.spec.ts`. `LAYOUT_LOCK_MATRIX_PAGES=board,inbox` limits the pages.
+
 ## CI container images
 
 CI pulls the exact official images from `ghcr.io/hypertask-ai/ci-<image>`:
