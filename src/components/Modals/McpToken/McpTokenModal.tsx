@@ -19,20 +19,26 @@ import {
   ExternalConnectionsList,
   DisconnectAllSection,
 } from "./components"
+import { useFlag } from "@/hooks/useFlag"
+import { HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys"
+import { AgentWaitingLine } from "./components/AgentWaitingLine"
 import { MCP_DOCS_URL } from "./utils"
 import type { IntegrationId } from "./utils"
 import { IUser } from "@/models/model"
 
 interface IProps {
-  currentUser: IUser
+  currentUser?: IUser
   closeHandler: () => void
   onOpenCli?: () => void
+  /** HTPR-7041: show the live "Waiting for your agent..." line under the status bar. */
+  waitingForAgent?: boolean
 }
 
-const McpTokenModal: React.FC<IProps> = ({ currentUser, closeHandler, onOpenCli }) => {
+const McpTokenModal: React.FC<IProps> = ({ currentUser, closeHandler, onOpenCli, waitingForAgent = false }) => {
   const [selectedIntegration, setSelectedIntegration] =
     useState<IntegrationId>("claude-code")
   const [useBearer, setUseBearer] = useState(false)
+  const overlayFlagOn = useFlag(HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG)
 
   const {
     token,
@@ -81,6 +87,8 @@ const McpTokenModal: React.FC<IProps> = ({ currentUser, closeHandler, onOpenCli 
           isGenerating={isGenerating}
           onGenerate={generateToken}
         />
+
+        {waitingForAgent && overlayFlagOn && <AgentWaitingLine />}
 
         <McpServerUrlSection />
 

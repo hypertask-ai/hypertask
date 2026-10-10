@@ -1,6 +1,6 @@
 import { LogType, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID, HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
 import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
@@ -69,6 +69,15 @@ export async function isAgentConnectCheckEnabledFor(userId: number): Promise<boo
   return isFeatureEnabled(HTPR_7026_AGENT_CONNECT_CHECK_FLAG, armed ? FEATURE_FLAG_QA_USER_ID : userId);
 }
 
+/** HTPR-7041: the dialog shares the card's state and dismissal. The connected email stays on the 7026 flag only. */
+export async function isAgentConnectOverlayEnabledFor(userId: number): Promise<boolean> {
+  return isFeatureEnabled(HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG, userId).catch(() => false);
+}
+
+export async function isAgentConnectStateEnabledFor(userId: number): Promise<boolean> {
+  return (await isAgentConnectCheckEnabledFor(userId)) || (await isAgentConnectOverlayEnabledFor(userId));
+}
+
 export async function sendFirstAgentConnectedEmail(userId: number, logId: number): Promise<void> {
   try {
     if (!(await isAgentConnectCheckEnabledFor(userId))) return;
@@ -108,7 +117,7 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
 }
 
 export async function getAgentConnectCardState(userId: number) {
-  const eligible = await isAgentConnectCheckEnabledFor(userId);
+  const eligible = await isAgentConnectStateEnabledFor(userId);
   if (!eligible) return { eligible, connected: false, dismissed: false };
   const [connection, dismissed, board] = await Promise.all([
     getFirstAgentConnection(userId),
