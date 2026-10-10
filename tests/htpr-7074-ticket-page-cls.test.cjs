@@ -91,3 +91,9 @@ test("the CLS fix is a registered bugfix flag", () => {
   assert.match(definition, /export const HTPR_7074_TICKET_PAGE_CLS_FLAG = "htpr-7074-ticket-page-cls"/);
   assert.match(definition, /kind: "bugfix"/);
 });
+
+test("the 2 s hard stop runs even when the flags request never answers", () => {
+  const source = read("src/hooks/Task Detail/useThreadSettled.ts");
+  assert.match(source, /const holding = waiting;/);
+  assert.match(source, /setTimeout\(\(\) => setSettled\(true\), MAX_HOLD_MS\)/);
+});
