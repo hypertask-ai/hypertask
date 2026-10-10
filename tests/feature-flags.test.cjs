@@ -62,6 +62,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("Inbox reminder returns default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG;
+  assert.equal(key, "htpr-7064-inbox-remind-returns");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
 test("Ctrl+O ticket sources default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7050_CTRL_O_LINKS_FLAG;
   assert.equal(key, "htpr-7050-ctrl-o-links");
@@ -424,6 +435,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
+        flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -972,6 +984,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7064-inbox-remind-returns", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

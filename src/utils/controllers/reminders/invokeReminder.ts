@@ -6,7 +6,11 @@ import {
   withTaskInboxWriteLock,
 } from "@/lib/taskCardActions/writeLocks";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
-import { isFeatureEnabled, HTPR_7061_REMIND_WITHOUT_INBOX_FLAG } from "@/lib/flags";
+import {
+  isFeatureEnabled,
+  HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
+  HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
+} from "@/lib/flags";
 
 
 type ClaimedReminderRow = {
@@ -135,6 +139,9 @@ const restoreReminderNotifications = async (
     })
   console.log("🚀 ~ notifications:", notifications)
 
+  const restoreArchivedAt = notifications.length > 0 &&
+    await isFeatureEnabled(HTPR_7064_INBOX_REMIND_RETURNS_FLAG, reminder.userId);
+
   for (const notf of notifications){
     await client.notification.update({
       where:{
@@ -143,7 +150,8 @@ const restoreReminderNotifications = async (
       data:{
         status:"Normal",
         returnedFromReminders:true,
-        seen:false
+        seen:false,
+        ...(restoreArchivedAt ? { archivedAt: null } : {}),
       }
     })
   }
