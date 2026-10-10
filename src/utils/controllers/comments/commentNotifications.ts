@@ -1,6 +1,7 @@
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
 import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
+import { isQuietOwnerInboxOn } from '@/utils/controllers/notifications/quietOwnerInbox';
 
 export async function resolveCommentRecipientUserIds(
   dependencies: CommentDependencies,
@@ -8,6 +9,7 @@ export async function resolveCommentRecipientUserIds(
   creatorId: number,
   ownerId: number,
   fromAgentId?: string | null,
+  commentText?: string,
 ): Promise<number[]> {
   const { includeSenderInRecipients, prisma, shouldNotifyTaskOwnerForComment } = dependencies;
   const agentActed = includeSenderInRecipients(fromAgentId);
@@ -41,6 +43,20 @@ export async function resolveCommentRecipientUserIds(
 
   if (shouldNotifyTaskOwnerForComment(creatorId, task.userId, fromAgentId)) {
     recipientUserIds.add(task.userId);
+  }
+
+  // HTPR-7096: an agent comment carries its owner as creatorId. With the flag on,
+  // the owner hears from their own agent only through an @mention (the mention
+  // path notifies then) or an explicit direct reply (added by the caller after
+  // this). Applied after every recipient source, so assignee and follower rows
+  // cannot bring the chatter back.
+  if (
+    fromAgentId &&
+    recipientUserIds.has(creatorId) &&
+    !dependencies.getMentionedUserIdsFromCommentText(commentText ?? "").includes(creatorId) &&
+    (await isQuietOwnerInboxOn(creatorId))
+  ) {
+    recipientUserIds.delete(creatorId);
   }
 
   return [...recipientUserIds];

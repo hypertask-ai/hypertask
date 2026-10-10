@@ -347,6 +347,8 @@ export const getInboxTabs = (
                 new Date(task.sectionChangedAt).getTime()));
         if (
           !isAgentChore &&
+          // HTPR-7096: set on the server only when the flag is on for the viewer.
+          (directReply || !notification.quietImportant) &&
           (directReply || inboxConfig.alsoImportant.includes(effectiveType as any)) &&
           (directReply || mentionSurvives) &&
           (directReply ||
