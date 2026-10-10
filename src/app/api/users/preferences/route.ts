@@ -57,7 +57,8 @@ async function getCurrentUserFromCookies() {
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    // The signed session alone proves identity; preferences only need the id.
+    const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
       }
     }
     const user = restCompat && currentUser
-      ? currentUser.user
+      ? { id: currentUser.userId }
       : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
@@ -115,7 +116,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    // The signed session alone proves identity; preferences only need the id.
+    const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
@@ -125,7 +127,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const user = restCompat && currentUser
-      ? currentUser.user
+      ? { id: currentUser.userId }
       : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(

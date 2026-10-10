@@ -33,6 +33,7 @@ const operations = {
   createSession: ['ai-chat/create-session', 'POST', { taskId: 50 }],
   allSessions: ['ai-chat/all-sessions', 'GET'],
 };
+const preferenceOperations = ['getPreferences', 'preferences', 'patchPreferences'];
 const profileOperations = Object.keys(operations).filter((op) => !['createSession', 'allSessions'].includes(op));
 
 async function run(operation, mode = 'OFF', options = {}) {
@@ -1944,6 +1945,7 @@ if (require.main === module) {
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
     });
+    if (preferenceOperations.includes(operation)) continue;
     test(`${operation}: missing/invalid profile returns original 401 before JSON and writes`, async () => {
       for (const mode of ['ON', 'OFF']) for (const options of [{ noProfile: true }, { badCookie: true }]) {
         const result = await run(operation, mode, { ...options, raw: '{' });
@@ -1961,6 +1963,44 @@ if (require.main === module) {
         assert.deepEqual(result.limits, []);
         assert.deepEqual(result.readers, []);
       }
+    });
+  }
+  // HTPR-7068: preferences identify the user from the signed session alone when the REST compat flag is on.
+  for (const operation of preferenceOperations) {
+    test(`${operation}: flag ON acts as the signed session user when the profile cookie is missing, invalid or mismatched`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }, { profileId: 7 }]) {
+        const result = await run(operation, 'ON', { ...options, raw: JSON.stringify(operations[operation][2] ?? {}) });
+        assert.deepEqual(contract(result), baseline[operation]);
+        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
+        assert.ok(!result.calls.some(([, args]) => args.includes(7)), 'must never act as the cookie user 7');
+      }
+    });
+    test(`${operation}: flag OFF keeps the legacy 401 for a missing or invalid profile and the legacy cookie user for a mismatched one`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }]) {
+        const result = await run(operation, 'OFF', { ...options, raw: '{' });
+        assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
+        assert.equal(result.jsonReads, 0);
+        assert.deepEqual(result.limits, []);
+        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
+      }
+      const legacy = await run(operation, 'OFF', { profileId: 7 });
+      assert.deepEqual(legacy.probes.filter(([kind]) => kind === 'flag'), [['flag', key, 985]]);
+      assert.equal(legacy.status, 200);
+      assert.ok(legacy.calls.some(([, args]) => args.includes(7)), 'flag OFF stays on the legacy cookie user');
+      assert.deepEqual(legacy.readers, []);
+    });
+    test(`${operation}: without a session the legacy path is unchanged and no flag is probed`, async () => {
+      for (const options of [{ noProfile: true }, { badCookie: true }]) {
+        const result = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
+        assert.deepEqual(contract(result), baseline[`${operation}:unauthorized`]);
+        assert.equal(result.jsonReads, 0);
+        assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
+      }
+      const result = await run(operation, 'NO_SESSION', { profileId: 7 });
+      assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { profileId: 7 })));
+      assert.deepEqual(result.probes.filter(([kind]) => kind === 'flag'), []);
+      assert.deepEqual(result.limits, []);
+      assert.deepEqual(result.readers, []);
     });
   }
   for (const operation of ['fields', 'createField', 'patchField', 'deleteField', 'reorder', 'fieldValue', 'bindAgent']) {
