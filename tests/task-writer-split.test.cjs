@@ -42,6 +42,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
   };
   const run = load("src/app/api/ai/_lib/taskWriterRun.ts", {
     zod: { z }, "@/lib/flags": flags,
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },
     "@/lib/ai/taskWriterDueDate": dates,
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), taskWriteAccessWhere: () => ({}) },
