@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 import { Suspense } from "react";
@@ -74,6 +74,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const detailFit = useFlag(HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG);
   const { secondaryPanelsReady, cachedLayout } = useTaskContext();
   if (!currentTask) return <></>;
 
@@ -144,7 +145,13 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
                 className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
-                style={{display: "flex",flex: 1,width: "100%",}}
+                style={{
+                  display: "flex",
+                  flex: 1,
+                  width: "100%",
+                  // Keep the thread's minimum width without pushing properties under AI chat.
+                  flexWrap: detailFit && !_mbl ? "wrap" : undefined,
+                }}
               >
                 {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
                 info column in part of virtualizer when on mobile. So I need to pass on the props inside there. */}
