@@ -1,6 +1,7 @@
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
 import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
+import { isQuietOwnerInboxOn } from '@/utils/controllers/notifications/quietOwnerInbox';
 
 export async function resolveCommentRecipientUserIds(
   dependencies: CommentDependencies,
@@ -8,6 +9,7 @@ export async function resolveCommentRecipientUserIds(
   creatorId: number,
   ownerId: number,
   fromAgentId?: string | null,
+  commentText?: string,
 ): Promise<number[]> {
   const { includeSenderInRecipients, prisma, shouldNotifyTaskOwnerForComment } = dependencies;
   const agentActed = includeSenderInRecipients(fromAgentId);
@@ -40,7 +42,16 @@ export async function resolveCommentRecipientUserIds(
   ]);
 
   if (shouldNotifyTaskOwnerForComment(creatorId, task.userId, fromAgentId)) {
-    recipientUserIds.add(task.userId);
+    // HTPR-7096: the owner's own agent (its comments carry the owner as creator)
+    // reaches the owner only by @mentioning them; the mention path notifies then.
+    const quiet =
+      Boolean(fromAgentId) &&
+      creatorId === task.userId &&
+      (await isQuietOwnerInboxOn(task.userId)) &&
+      !dependencies
+        .getMentionedUserIdsFromCommentText(commentText ?? "")
+        .includes(task.userId);
+    if (!quiet) recipientUserIds.add(task.userId);
   }
 
   return [...recipientUserIds];

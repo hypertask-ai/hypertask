@@ -695,6 +695,8 @@ export interface INotification {
   directReply?: boolean;
   /** Active event types backed by a direct response on this task. */
   directReplyTypes?: NotificationType[];
+  /** HTPR-7096: server-set; keeps an agent mention out of Important (not a Question, or already answered). */
+  quietImportant?: boolean;
   /** When the display-swapped earning event (mention/comment) happened. */
   earnedAt?: string;
   comment?: IComment;
