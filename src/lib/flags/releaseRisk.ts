@@ -13,6 +13,10 @@ export const RELEASE_RISK_LABELS: Record<FeatureFlagReleaseRisk["risk"], string>
 export const RELEASE_RISK_ORDER: FeatureFlagReleaseRisk["risk"][] = ["none", "small", "new"];
 
 export const FEATURE_FLAG_RELEASE_RISKS: Partial<Record<string, FeatureFlagReleaseRisk>> = {
+  "htpr-7056-ctrlj-split-tasks": {
+    risk: "new",
+    reason: "A Ctrl+J message that asks for several separate tasks creates one ticket per task and lists them all.",
+  },
   "htpr-7020-tag-full-name": {
     risk: "small",
     reason: "Hovering a tag in ticket details shows its full name in the existing tooltip.",

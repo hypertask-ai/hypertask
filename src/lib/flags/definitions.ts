@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
   HTPR_7020_TAG_FULL_NAME_FLAG,
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
   HTPR_7050_CTRL_O_LINKS_FLAG,
@@ -162,6 +163,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG,
+    kind: "feature",
+    shippedOn: "2026-10-10",
+    description: "Creates up to ten separate tickets from a Ctrl+J prompt that clearly asks for independent tasks and lists every saved ticket in the result.",
+  },
   {
     key: HTPR_7020_TAG_FULL_NAME_FLAG,
     kind: "bugfix",
