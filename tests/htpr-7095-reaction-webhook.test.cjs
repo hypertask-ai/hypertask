@@ -161,6 +161,7 @@ test("both reaction routes write the outbox row in the reaction transaction, onl
     assert.equal((src.match(/persistCommentReactionWebhook\(tx,/g) || []).length, 1, name);
     assert.match(src, /publishAgentWebhookDeliveries\(deliveryIds\)/, name);
     assert.ok(!/emitCommentReactionWebhook/.test(src), name);
+    assert.match(src, /= await prepareCommentReactionWebhook\(webhookInput\);/, name);
   }
   assert.match(page, /prisma\.\$transaction\(async \(tx\) => \{\s*const reaction = await tx\.reaction\.create/);
   assert.ok(!/added: false/.test(page));

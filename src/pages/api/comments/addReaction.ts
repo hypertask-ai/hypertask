@@ -57,10 +57,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (findReaction.length===0 ){
                 // HTPR-7095: the reaction and its agent webhook outbox row are written together, then published after commit.
                 const webhookInput = { commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true };
-                const preparedWebhook = await prepareCommentReactionWebhook(webhookInput).catch((error) => {
-                    console.error("[comment-reaction] agent webhook prepare failed", error);
-                    return null;
-                });
+                // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
+                const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
                 const { reaction, deliveryIds } = await prisma.$transaction(async (tx) => {
                     const reaction = await tx.reaction.create({
                         data:{
