@@ -102,16 +102,22 @@ test("only an added reaction by a person on an agent comment has a target", () =
   assert.equal(mod.reactionWebhookTarget({ added: true, reactorIsAgent: false, commentAgentId: null }), null);
 });
 
+// Same order as both reaction routes: prepare before the transaction, persist inside it.
+async function deliver(mod, input) {
+  const prepared = await mod.prepareCommentReactionWebhook(input);
+  return prepared ? mod.persistCommentReactionWebhook({}, prepared, input) : [];
+}
+
 test("a person's added reaction is delivered only to the comment's agent", async () => {
   const state = freshState();
-  const { mod, persisted, published } = load(state);
-  await mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
+  const { mod, persisted } = load(state);
+  const ids = await deliver(mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
   assert.equal(persisted.length, 1);
   assert.deepEqual(persisted[0].agentIds, ["agent-1"]);
   assert.equal(persisted[0].broadcast, false);
   assert.equal(persisted[0].event, "comment.reaction");
   assert.equal(persisted[0].commentExcerpt, "Ready to start. Shall I go ahead?");
-  assert.deepEqual(published, [["delivery-1"]]);
+  assert.deepEqual(ids, ["delivery-1"]);
   assert.deepEqual(state.flagCalls, [[FLAG, 6]]);
 });
 
@@ -121,44 +127,45 @@ test("removing a reaction, an agent reacting, or a human comment fires nothing",
     ["human comment", { comment: { id: 55, text: "x", agentId: null, task: { id: 9, projectId: 15, ticketNumber: null, title: "T" } } }, true],
   ]) {
     const { mod, persisted } = load(freshState(overrides));
-    await mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added });
+    await deliver(mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added });
     assert.equal(persisted.length, 0, name);
   }
 });
 
 test("an agent owner reacting as a person fires; an agent call does not", async () => {
   const person = load(freshState());
-  await person.mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
+  await deliver(person.mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
   assert.equal(person.persisted.length, 1);
   const agent = load(freshState());
-  await agent.mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: true, emoji: "\u{1F44D}", added: true });
+  await deliver(agent.mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: true, emoji: "\u{1F44D}", added: true });
   assert.equal(agent.persisted.length, 0);
 });
 
 test("flag OFF for the reacting user fires nothing", async () => {
   const { mod, persisted } = load(freshState({ flagOn: false }));
-  await mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
+  await deliver(mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true });
   assert.equal(persisted.length, 0);
 });
 
-test("a delivery failure never throws into the reaction request", async () => {
-  const state = freshState();
-  const { mod } = load(state);
-  state.comment = null;
-  await assert.doesNotReject(mod.emitCommentReactionWebhook({ commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true }));
+test("a comment that no longer exists fires nothing", async () => {
+  const { mod, persisted } = load(freshState({ comment: null }));
+  assert.deepEqual(await deliver(mod, { commentId: 55, reactorUserId: 6, reactorIsAgent: false, emoji: "\u{1F44D}", added: true }), []);
+  assert.equal(persisted.length, 0);
 });
 
-test("both reaction routes call the emitter only for additions", () => {
+test("both reaction routes write the outbox row in the reaction transaction, only for additions", () => {
   const fs = require("node:fs");
   const page = fs.readFileSync(path.join(root, "src/pages/api/comments/addReaction.ts"), "utf8");
   const mcp = fs.readFileSync(path.join(root, "src/app/api/mcp/comments/[comment_id]/reactions/route.ts"), "utf8");
-  // Web route: the reaction and its outbox row are written in one transaction, published after commit.
-  assert.equal((page.match(/persistCommentReactionWebhook\(tx,/g) || []).length, 1);
+  for (const [name, src] of [["web", page], ["mcp", mcp]]) {
+    assert.equal((src.match(/persistCommentReactionWebhook\(tx,/g) || []).length, 1, name);
+    assert.match(src, /publishAgentWebhookDeliveries\(deliveryIds\)/, name);
+    assert.ok(!/emitCommentReactionWebhook/.test(src), name);
+  }
   assert.match(page, /prisma\.\$transaction\(async \(tx\) => \{\s*const reaction = await tx\.reaction\.create/);
-  assert.match(page, /publishAgentWebhookDeliveries\(deliveryIds\)/);
-  assert.ok(!/emitCommentReactionWebhook\(/.test(page));
   assert.ok(!/added: false/.test(page));
-  assert.match(mcp, /Boolean\(ctx\.agentId\)/);
   assert.match(page, /reactorIsAgent: false/);
-  assert.match(mcp, /result\.changed && active\) \{\s*sideEffects\.push\(emitCommentReactionWebhook/);
+  // MCP: only a reaction that was not active before, and an agent call never counts as a person.
+  assert.match(mcp, /preparedWebhook && !wasActive && active\)/);
+  assert.match(mcp, /setReaction\(target, userId, emoji, active, Boolean\(ctx\.agentId\)\)/);
 });

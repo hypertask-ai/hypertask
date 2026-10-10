@@ -25,7 +25,8 @@ export type CommentReactionDependencies<TContext> = {
     target: CommentReactionTarget,
     userId: number,
     emoji: string,
-    active: boolean
+    active: boolean,
+    context: TContext
   ) => Promise<CommentReactionResult>;
   afterChange: (
     target: CommentReactionTarget,
@@ -105,7 +106,7 @@ export function createCommentReactionHandler<TContext>(
       );
     }
     const userId = dependencies.actorUserId(context);
-    const result = await dependencies.setReaction(target, userId, emoji, active);
+    const result = await dependencies.setReaction(target, userId, emoji, active, context);
     try {
       await dependencies.afterChange(target, userId, emoji, active, result, context);
     } catch (error) {
