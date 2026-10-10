@@ -13,6 +13,10 @@ export const RELEASE_RISK_LABELS: Record<FeatureFlagReleaseRisk["risk"], string>
 export const RELEASE_RISK_ORDER: FeatureFlagReleaseRisk["risk"][] = ["none", "small", "new"];
 
 export const FEATURE_FLAG_RELEASE_RISKS: Partial<Record<string, FeatureFlagReleaseRisk>> = {
+  "htpr-7054-ctrlj-due-date": {
+    risk: "small",
+    reason: "An explicit deadline in a Ctrl+J task note sets the new task's due date using the user's local date and time zone.",
+  },
   "htpr-7056-ctrlj-split-tasks": {
     risk: "new",
     reason: "A Ctrl+J message that asks for several separate tasks creates one ticket per task and lists them all.",

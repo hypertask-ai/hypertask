@@ -201,7 +201,7 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/lib/api/task-writes/create-global-effects": {
         isAgentAssignee: person => typeof person.id === "string", getActiveAgentOwnerId: async () => 42,
       },
-      "@/lib/ai/composeTaskTarget": {}, "@prisma/client": {},
+      "@/lib/ai/composeTaskTarget": {}, "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" }, "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => undefined }, "@prisma/client": {},
       "@/lib/flags": { isFeatureEnabled: async () => true }, "@/utils/generateRank": {},
       "@/lib/prisma": { default: {
         user: { findUnique: async () => ({ id: 985 }) }, project: { findFirst: async () => ({ id: 15 }) },

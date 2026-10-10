@@ -260,6 +260,9 @@ function loadRoute(relativePath, stubs) {
 function routeStubs(error, reports) {
   return {
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    "node-html-parser": require("node-html-parser"),
+    "@/utils/htmlEscape": {},
+    "@/lib/ai/taskWriterDueDate": {},
     "ai": { generateText: async () => { throw error; } },
     "@/lib/errors/reportError": { reportError: async (payload) => reports.push(payload) },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },

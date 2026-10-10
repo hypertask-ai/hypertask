@@ -35,7 +35,25 @@ function lifecycleLegacySources() {
   const types = effects.slice(effects.indexOf("type TaskCreatedGlobally"), effects.indexOf("function schedulePostCreateWork("));
   const helpers = effects.slice(effects.indexOf("function schedulePostCreateWork("), effects.indexOf("\nexport {"))
     .replaceAll('"@/pages/api/queues/FAST/generateSummary"', '"../queues/FAST/generateSummary"');
+  // Reconstruct the original oracle without the later, separately tested writer-date feature.
   let global = unwrap("src/pages/api/tasks/createGlobally.ts")
+    .replace('import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";\n', "")
+    .replace('import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";\n', "")
+    .replace("      dueDate: requestedDueDate,", "      dueDate,")
+    .replace(`    const dueDateEnabled = req.body.requestKind === "compose-task" && req.body.writerDueDate != null &&
+      await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+    const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(req.body.writerDueDate, req.body.writerTimeZone) : undefined;
+    const dueDate = writerDueDate ?? requestedDueDate;
+`, "")
+    .replace(`      const result = await updateTaskSingle({ id: taskId, title, description,
+        ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
+      }, currentUser, agentId, {`, "      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {")
+    .replace(`      if (writerDueDate) {
+        const { cancelDueDateJob, scheduleDueDateJob } = await import("../queues/duedateQueue");
+        await cancelDueDateJob(taskId, projectId);
+        await scheduleDueDateJob({ taskId, projectId }, writerDueDate);
+      }
+`, "")
     .replace(/^import \{ schedulePostCreateWork[^\n]+\n/m, "")
     .replace('import { IAgent, ILabel, IUser } from "@/models/model";\n', 'import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";\nimport { waitUntil } from "@vercel/functions";\nimport {\n  ITaskAssignedActivity,\n  ITaskEstimateActivity,\n  ITaskPriorityActivity,\n} from "@/models/ActivityModels.ts";\n')
     .replace('import { getSessionUser }', 'import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";\nimport { getSessionUser }')

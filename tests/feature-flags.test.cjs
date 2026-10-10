@@ -97,6 +97,18 @@ test("Full task tag names default to Everyone as a bugfix and respect OFF", asyn
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
 });
 
+test("Ctrl+J deadline extraction defaults Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7054_CTRLJ_DUE_DATE_FLAG;
+  assert.equal(key, "htpr-7054-ctrlj-due-date");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(require("../e2e/smoke/production-flag-modes.json").modes[key], "EVERYONE");
+});
+
 test("Inbox reminder returns default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG;
   assert.equal(key, "htpr-7064-inbox-remind-returns");
@@ -495,6 +507,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG,
         flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG,
         flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG,
+        flags.HTPR_7020_TAG_FULL_NAME_FLAG,
         flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
         flags.HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
         flags.HTPR_7031_INVITE_EMAIL_FLAG,
@@ -503,18 +516,18 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
         flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
         flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
-        flags.HTPR_7050_CTRL_O_LINKS_FLAG,
-        flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
-        flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
         flags.HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
         flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
+        flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
+        flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
+        flags.HTPR_7050_CTRL_O_LINKS_FLAG,
+        flags.HTPR_7054_CTRLJ_DUE_DATE_FLAG,
         flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
         flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG,
         flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
-        flags.HTPR_7020_TAG_FULL_NAME_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -1067,6 +1080,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7054-ctrlj-due-date", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7056-ctrlj-split-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
