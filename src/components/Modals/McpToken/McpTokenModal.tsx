@@ -70,6 +70,7 @@ const McpTokenModal: React.FC<IProps> = ({ currentUser, closeHandler, onOpenCli,
       id="mcpTokenModal"
       toggle={closeHandler}
       shouldCloseOnClickOutside={true}
+      autoFocus={waitingForAgent && overlayFlagOn}
       className="font-bold sm:min-w-[600px] sm:max-w-[600px] sm:w-[600px] sm:top-14 "
     >
       <ModalHeaderComp

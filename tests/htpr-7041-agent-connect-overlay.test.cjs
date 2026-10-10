@@ -133,3 +133,11 @@ test("server: card state and dismissal also work for the overlay flag; the email
   assert.match(lib, /if \(!\(await isAgentConnectCheckEnabledFor\(userId\)\)\) return;/, "email stays on the 7026 flag");
   assert.match(route, /POST[\s\S]*isAgentConnectStateEnabledFor\(user\.id\)/);
 });
+
+test("auto-opened dialog takes focus so Escape closes it without a click first", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const src = fs.readFileSync(path.resolve(__dirname, "../src/components/Modals/McpToken/McpTokenModal.tsx"), "utf8");
+  assert.match(src, /autoFocus=\{waitingForAgent && overlayFlagOn\}/);
+  assert.match(src, /toggle=\{closeHandler\}/, "Escape (reactstrap keyboard) calls the same handler as Close");
+});
