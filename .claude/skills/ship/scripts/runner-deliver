@@ -48,7 +48,7 @@ find_pane() {
 # Text plus Enter under a per-pane lock, so two writers never interleave their lines in one prompt.
 send() {
   mkdir -p "$STATE" 2>/dev/null
-  ( flock -w 30 9 || exit 1
+  ( flock -w 10 9 || exit 1
     "$TMUX" send-keys -t "$1" -l "$2" >/dev/null 2>&1 && "$TMUX" send-keys -t "$1" Enter >/dev/null 2>&1 ) 9>"$STATE/pane-${1//[^A-Za-z0-9]/_}.lock"
 }
 
@@ -65,5 +65,5 @@ fi
 # Queue under the per-target lock that runner-pickup also takes when it drains the file. Exit 3 only once the line is written.
 line=$(jq -nc --arg t "$text" --argjson ts "$(date +%s)" '{ts:$ts, text:$t}') || exit 1
 mkdir -p "$STATE" || exit 1
-( flock -w 30 9 || exit 1; printf '%s\n' "$line" >> "$STATE/runner-$n.pending.jsonl" ) 9>"$STATE/runner-$n.queue.lock" || { echo "could not queue for $n" >&2; exit 1; }
+( flock -w 10 9 || exit 1; printf '%s\n' "$line" >> "$STATE/runner-$n.pending.jsonl" ) 9>"$STATE/runner-$n.queue.lock" || { echo "could not queue for $n" >&2; exit 1; }
 echo "queued for $n"; exit 3

@@ -19,6 +19,7 @@ CHAT_REPLY = os.environ.get("RUNNER_CHAT_REPLY_CMD", f"{HOME}/.local/lib/hyperta
 MAX_AGE = int(os.environ.get("RUNNER_WEBHOOK_MAX_AGE", "300"))
 MAX_BODY = 1024 * 1024
 MAX_PROXY_BODY = 4 * 1024 * 1024
+DELIVER_TIMEOUT = 45  # longer than runner-deliver's lock waits (2 x 10 s) so a slow lock never reads as a failure
 FALLBACK_PORT = int(os.environ.get("RUNNER_WEBHOOK_FALLBACK_PORT", "8795"))
 HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade"}
 SEEN_CAP = 4000
@@ -37,18 +38,28 @@ def log(msg):
 
 
 def strip_html(text, limit=400):
-    text = re.sub(r"<(br|/p|/li|/div)[^>]*>", " ", text or "")
-    text = html.unescape(re.sub(r"<[^>]+>", "", text))
+    text = str(text or "")[:20000]  # bound the input before any pattern runs
+    text = re.sub(r"<(?:br|/p|/li|/div)[^<>]{0,200}>", " ", text)
+    text = html.unescape(re.sub(r"<[^<>]{0,2000}>", "", text))
     text = re.sub(r"[\x00-\x1f\x7f]", " ", text)
     text = re.sub(r"\s+", " ", text).strip().replace('"', "'")
     return text if len(text) <= limit else text[: limit - 3] + "..."
 
 
+def safe_join(base, name):
+    """Join name under base; refuse anything that resolves outside it."""
+    base = os.path.realpath(base)
+    path = os.path.realpath(os.path.join(base, name))
+    if os.path.dirname(path) != base:
+        raise ValueError("path outside its directory")
+    return path
+
+
 def read_secret(t):
     try:
-        with open(os.path.join(SECRETS, t), "rb") as fh:
+        with open(safe_join(SECRETS, t), "rb") as fh:
             return fh.read().strip()
-    except OSError:
+    except (OSError, ValueError):
         return b""
 
 
@@ -74,7 +85,7 @@ class Seen:
 
     def __init__(self, name):
         os.makedirs(STATE, exist_ok=True)
-        self.path = os.path.join(STATE, name)
+        self.path = safe_join(STATE, name)
         self.lockfd = os.open(self.path + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
 
     def __enter__(self):
@@ -145,16 +156,24 @@ def dedupe_key(p):
     if p.get("event") == "chat.message":
         return f"chat:{(p.get('chat') or {}).get('messageId')}"
     if p.get("event") == "task.assigned":
-        return f"assign:{p.get('taskId')}:{p.get('occurredAt') or p.get('deliveryId')}"
+        # Only a signed occurrence id counts; without one there is nothing stable to dedupe on (delivery id still does).
+        occurrence = p.get("occurredAt") or p.get("deliveryId")
+        return f"assign:{p.get('taskId')}:{occurrence}" if occurrence else None
     return None
 
 
 def deliver(n, message):
-    """True when runner-deliver typed or durably queued the message."""
+    """True when runner-deliver typed or durably queued the message. A timeout kills its whole process group."""
     try:
-        r = subprocess.run([DELIVER, str(n)], input=message.encode(), timeout=20, check=False,
-                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return r.returncode in (0, 3)
+        proc = subprocess.Popen([DELIVER, str(n)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL, start_new_session=True)
+        try:
+            proc.communicate(message.encode(), timeout=DELIVER_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            os.killpg(proc.pid, 9)
+            proc.wait()
+            return False
+        return proc.returncode in (0, 3)
     except Exception as exc:  # delivery must never crash the receiver
         log(f"runner {n}: deliver failed: {type(exc).__name__}")
         return False
@@ -210,9 +229,9 @@ class Handler(BaseHTTPRequestHandler):
             resp = conn.getresponse()
             payload = resp.read()
             self.send_response(resp.status)
-            for k, v in resp.getheaders():
-                if k.lower() not in HOP and k.lower() != "content-length":
-                    self.send_header(k, v)
+            ctype = resp.getheader("Content-Type")
+            if ctype:
+                self.send_header("Content-Type", re.sub(r"[\r\n\x00]", "", ctype)[:200])
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             if self.command != "HEAD":
@@ -232,7 +251,11 @@ class Handler(BaseHTTPRequestHandler):
     do_GET = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = do_POST = _dispatch
 
     def _runner_post(self, target):
-        n = target[len("runner-"):] if target.startswith("runner-") else target
+        if target in SLUGS:
+            n = target
+        else:  # runner-<number>: rebuild the name from the parsed number only
+            n = str(int(target[len("runner-"):]))
+            target = f"runner-{n}"
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:

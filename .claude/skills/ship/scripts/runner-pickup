@@ -91,10 +91,11 @@ inbox_events() {
 event_phrase() {
   jq -r --argjson lim "$1" '
     (.text | if length > $lim then .[0:($lim - 3)] + "..." else . end) as $t
-    | if .type == "Assigned" then "\(.from) assigned you \(.title) \(.url)"
-      elif .type == "Mentioned" then "\(.from) mentioned you in a comment on \(.title) \(.url): \"\($t)\""
-      elif .type == "AgentMessage" then "\(.from) sent you a notice on \(.title) \(.url): \"\($t)\""
-      else "\(.from) commented on \(.title) \(.url): \"\($t)\"" end' <<<"$2"
+    | (.from | .[0:60]) as $from | (.title | .[0:120]) as $title
+    | if .type == "Assigned" then "\($from) assigned you \($title) \(.url)"
+      elif .type == "Mentioned" then "\($from) mentioned you in a comment on \($title) \(.url): \"\($t)\""
+      elif .type == "AgentMessage" then "\($from) sent you a notice on \($title) \(.url): \"\($t)\""
+      else "\($from) commented on \($title) \(.url): \"\($t)\"" end' <<<"$2"
 }
 
 # Single-line message bundling events while it stays within BUNDLE_BUDGET characters (runner-deliver caps at 3000).
@@ -118,19 +119,29 @@ bundle_message() {
 
 # Re-deliver a queued file's messages ($1 target); runner-deliver re-queues what still cannot be delivered.
 retry_pending() {
-  local target=$1 pend=$2 lock=$STATE/runner-$1.queue.lock work line rc
-  [ -s "$pend" ] || return 0
-  work=$pend.work.$$
-  flock -w 30 "$lock" mv "$pend" "$work" 2>/dev/null || return 0
-  while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    jq -r '.text' <<<"$line" | "$DELIVER" "$target" >/dev/null 2>&1; rc=$?
-    # 0 delivered, 3 re-queued by runner-deliver itself; anything else keeps the record for the next tick.
-    if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then
-      ( flock -w 30 9 && printf '%s\n' "$line" >> "$pend" ) 9>"$lock"
-    fi
-  done < "$work"
-  rm -f "$work"
+  local target=$1 pend=$2 lock=$STATE/runner-$1.queue.lock f line rc
+  # One drainer per target; the lock also means any leftover .work file belongs to an interrupted drain.
+  (
+    flock -n 7 || exit 0
+    if [ -s "$pend" ]; then flock -w 10 "$lock" mv "$pend" "$pend.work.$$" 2>/dev/null || true; fi
+    for f in "$pend".work.*; do
+      case "$f" in *.left) continue ;; esac
+      [ -f "$f" ] || continue
+      : > "$f.left"
+      while IFS= read -r line; do
+        [ -n "$line" ] || continue
+        jq -r '.text' <<<"$line" | "$DELIVER" "$target" >/dev/null 2>&1; rc=$?
+        # 0 delivered, 3 re-queued by runner-deliver itself; anything else stays in the work file.
+        if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then printf '%s\n' "$line" >> "$f.left"; fi
+      done < "$f"
+      if [ -s "$f.left" ]; then
+        # Hand the leftovers back to the live queue; if that fails keep them in the work file for the next tick.
+        if ( flock -w 10 9 && cat "$f.left" >> "$pend" ) 9>"$lock"; then rm -f "$f" "$f.left"; else mv "$f.left" "$f"; fi
+      else
+        rm -f "$f" "$f.left"
+      fi
+    done
+  ) 7>"$STATE/runner-$target.drain.lock"
 }
 
 # Deliver unseen events (first EVENT_CAP per tick), record them as seen once delivered or queued, retry the pending queue.

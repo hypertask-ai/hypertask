@@ -237,6 +237,22 @@ a1=$(jq -nc '{event:"task.assigned", occurredAt:"2026-10-10T10:00:00Z", agentId:
 a2=$(jq -nc '{event:"task.assigned", occurredAt:"2026-10-10T11:00:00Z", agentId:"a", projectId:15, taskId:11, ticketNumber:"HTPR-7000", taskTitle:"A task", actor:{userId:6, displayName:"V"}}')
 post 3 task.assigned d-r1 "$a1" >/dev/null; post 3 task.assigned d-r2 "$a2" >/dev/null; sleep 0.5
 eq "second assignment of the same task is delivered" "$(sent)" "2"
+# Assignments with no occurrence id in the body are not deduped on the task alone.
+: > "$TMUX_LOG"
+a3=$(jq -nc '{event:"task.assigned", agentId:"a", projectId:15, taskId:12, ticketNumber:"HTPR-7001", taskTitle:"B task", actor:{userId:6, displayName:"V"}}')
+post 3 task.assigned d-r3 "$a3" >/dev/null; post 3 task.assigned d-r4 "$a3" >/dev/null; sleep 0.5
+eq "reassignment without an occurrence id is still delivered" "$(sent)" "2"
+# An interrupted drain (leftover .work file) is recovered by the next tick; failures keep the record.
+printf '{"ts":1,"text":"stranded"}\n' > "$T/inbox/runner-3.pending.jsonl.work.99999"; : > "$TMUX_LOG"; inbox
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 12 )) ./runner-pickup run 3 2>/dev/null
+eq "abandoned work file is recovered and delivered" "$(lastline)" '%1|literal|stranded'
+[ ! -e "$T/inbox/runner-3.pending.jsonl.work.99999" ] && ok "work file removed after delivery" || bad "work file kept"
+printf '{"ts":1,"text":"stranded 2"}\n' > "$T/inbox/runner-3.pending.jsonl.work.99998"
+RUNNER_DELIVER=$T/deliver-fail RUNNER_PICKUP_NOW=$(( $(date +%s) + 13 )) ./runner-pickup run 3 2>/dev/null
+eq "failed recovery keeps the record" "$(cat "$T"/inbox/runner-3.pending.jsonl* 2>/dev/null | jq -r .text | grep -c 'stranded 2')" "1"
+# Markup parsing stays fast on hostile input.
+start=$(date +%s); h=$(head -c 100000 /dev/zero | tr '\0' '<'); post 3 comment.created d-h1 "$(comment "$h" 995)" >/dev/null
+[ $(( $(date +%s) - start )) -lt 5 ] && ok "pathological markup handled quickly" || bad "slow markup"
 bash -n runner-webhook.test.sh 2>/dev/null; python3 -m py_compile runner-webhook && ok "runner-webhook compiles" || bad "py_compile"
 
 echo "$passes passed, $fails failed"
