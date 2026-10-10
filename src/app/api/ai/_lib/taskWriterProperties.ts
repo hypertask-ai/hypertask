@@ -114,6 +114,7 @@ export function extractTaskWriterProperties(
   );
   root.querySelector("#ai-generated-task-tags")?.remove();
   root.querySelector("#ai-generated-task-status")?.remove();
+  root.querySelector("#ai-generated-task-properties")?.remove();
 
   // The model prints a human-readable "Priority: High" line next to each hidden
   // span. Once the value is a field, that line is duplicate chrome.

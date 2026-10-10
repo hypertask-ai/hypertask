@@ -251,6 +251,7 @@ export function extractTaskProperties(
   const dueDate = dateFromMarker("ai-generated-task-due-date");
   const startDate = dateFromMarker("ai-generated-task-start-date");
 
+  doc.getElementById("ai-generated-task-properties")?.remove();
   let description = doc.body.innerHTML;
   description = stripPropertyMetadataFromDescription(description);
 

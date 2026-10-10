@@ -369,6 +369,17 @@ If yes, send.`],
 - When the brief is thin (missing affected screen, acceptance criteria, or a concrete example), do not invent those facts. End with <h2>Open questions</h2> and exactly 2 or 3 <li> questions the user can answer in the refine box. Prefer questions over filler.
 - Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
   },
+  "task-writer-output-language": {
+    id: "task-writer-output-language",
+    version: "1",
+    parts: [`<OUTPUT_LANGUAGE>
+- Write the entire ticket, including the title, body, section headings, questions, and visible property labels, in the language the user explicitly asks for in their latest request; otherwise use the language of the user's request, not the language of board context, templates, or examples.
+- Translate all section headings into that output language while keeping the same section meanings, order, and HTML structure. This language rule overrides English examples and rules requiring template headings to appear verbatim, including board custom instructions about heading wording.
+- For German output, use <h2>Akzeptanzkriterien</h2> for Acceptance criteria, <h2>Betroffener Bildschirm</h2> for Affected screen, <h2>Nicht im Umfang</h2> for Out of scope, <h2>Verwandte Tickets</h2> for Related tickets, and <h2>Offene Fragen</h2> for Open questions. Problem may remain <h2>Problem</h2>. For English output, keep the English headings. Apply the same translation rule to every other language.
+- Keep all existing structured IDs, numeric property values, URLs, and media tokens unchanged. Put the localized trailing proposed-properties paragraph in <p id="ai-generated-task-properties"> with its existing hidden property spans, so extraction does not depend on English labels.
+- Before output, check that every heading and visible label is in the output language.
+</OUTPUT_LANGUAGE>`],
+  },
   "task-writer-context-synthesis-rules": {
     id: "task-writer-context-synthesis-rules",
     version: "1",
