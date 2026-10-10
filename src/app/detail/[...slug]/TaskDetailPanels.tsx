@@ -144,13 +144,11 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
-                className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
+                className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} ${detailFit && !_mbl ? "[&>[data-testid=ticket-thread]]:min-w-[320px]" : ""}`}
                 style={{
                   display: "flex",
                   flex: 1,
                   width: "100%",
-                  // Keep the thread's minimum width without pushing properties under AI chat.
-                  flexWrap: detailFit && !_mbl ? "wrap" : undefined,
                 }}
               >
                 {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
