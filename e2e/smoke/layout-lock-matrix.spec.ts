@@ -88,7 +88,7 @@ const PAGES: PageDefinition[] = [
   },
   {
     name: 'search',
-    targets: { panel: target('[data-testid="search-panel"]', true), 'search-box': target('#search-input'), ...frame },
+    targets: { panel: target('div.global-view-width.search-input', true), 'search-box': target('#search-input'), ...frame },
     route: () => '/search',
     ready: async page => { await expect(page.locator('#search-input')).toBeVisible() },
   },
