@@ -163,13 +163,15 @@ export const buildBuiltinViewContext = (
   project: IProject | null | undefined,
   currentUserId?: number | null,
   now?: Date | number,
+  currentUserDisplayName?: string | null,
 ): BuiltinViewContext => {
   const cycleWindow = resolveCycleWindow(project?.cycles ?? [], now);
-  const displayName = currentUserId == null
+  // HTPR-7092: the signed-in user's own name comes first; a board owner has no row in members.
+  const displayName = currentUserDisplayName?.trim() || (currentUserId == null
     ? undefined
     : (project?.members ?? []).find(
         (member) => member.userId === currentUserId && !member.agentId,
-      )?.user?.displayName?.trim();
+      )?.user?.displayName?.trim());
   return {
     currentUserId,
     currentUserNames: displayName

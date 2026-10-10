@@ -126,6 +126,18 @@ test("Decisions board view keeps only the user's Review column and UX Sign-off, 
   assert.deepEqual(hidden.map((s) => s.section_title), ["UX Sign-off"]);
 });
 
+test("Decisions view shows the owner's Review column on a board where the owner has no members row", () => {
+  const project = { members: [{ userId: 7, user: { displayName: "Abdul Dev" } }], sections: [] };
+  const context = builtin.buildBuiltinViewContext(project, 6, undefined, "Valentin Yeo");
+  assert.deepEqual(context.currentUserNames, ["Valentin Yeo", "Valentin"]);
+  const sections = [section("Valentin Review", [task(1, "Valentin Review")]), section("Abdul Review", [task(2, "Abdul Review")])];
+  const out = getFilteredSections(sections, project, builtin.BUILTIN_VIEW_IDS.decisions, context);
+  assert.deepEqual(out.map((s) => s.section_title), ["Valentin Review"]);
+  // without the signed-in name it falls back to the members row (member boards still work)
+  const member = { members: [{ userId: 6, user: { displayName: "Valentin Yeo" } }], sections: [] };
+  assert.deepEqual(builtin.buildBuiltinViewContext(member, 6).currentUserNames, ["Valentin Yeo", "Valentin"]);
+});
+
 test("Decisions is a built-in view available on every board", () => {
   const view = builtin.BUILTIN_VIEWS.find((v) => v.id === "builtin:decisions");
   assert.equal(view.title, "Decisions");
