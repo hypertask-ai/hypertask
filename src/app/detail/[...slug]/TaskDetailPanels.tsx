@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -76,7 +76,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
-  const detailFit = useFlag(HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG);
   const { secondaryPanelsReady, cachedLayout, virtualizer } = useTaskContext();
   // HTPR-7074: the phone composer waits for the thread height to stop growing.
   const threadSettled = useThreadSettled(virtualizer?.getTotalSize() ?? 0, virtualizer?.getVirtualItems().length ?? 0, !cachedLayout && Boolean(_mbl) && !embedded);
@@ -148,7 +147,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
-                className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} ${detailFit && !_mbl ? "[&>[data-testid=ticket-thread]]:min-w-[320px]" : ""}`}
+                className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
                 style={{
                   display: "flex",
                   flex: 1,

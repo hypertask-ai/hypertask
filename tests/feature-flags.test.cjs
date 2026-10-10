@@ -1237,20 +1237,6 @@ test("board scroll restoration is an Everyone-default bugfix and respects OFF", 
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("AI sidebar detail fit is an Everyone-default bugfix and respects OFF", async () => {
-  const key = flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG;
-  assert.equal(key, "htpr-7055-ai-sidebar-detail-fit");
-  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
-  assert.equal(entry.kind, "bugfix");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
-  assert.equal(await flags.isFeatureEnabled(key, 3411), true);
-  row = { mode: "OFF", updatedAt: new Date() };
-  listedRows = [{ key, ...row }];
-  assert.equal(await flags.isFeatureEnabled(key, 3411), false);
-  assert.equal((await flags.listFeatureFlagModes()).find((entry) => entry.key === key).mode, "OFF");
-});
-
 test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async () => {
   const key = flags.HTPR_7074_TICKET_PAGE_CLS_FLAG;
   assert.equal(key, "htpr-7074-ticket-page-cls");
