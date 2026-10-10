@@ -47,7 +47,7 @@ const DecisionInboxPanel = ({ userId }: { userId: number }) => {
     <section
       data-testid="decision-inbox"
       aria-label="Decisions waiting on you"
-      className="w-full px-4 py-2 bg-hoverCardBackground"
+      className="relative z-20 w-full px-4 py-2 bg-hoverCardBackground"
     >
       <h2 className="text-micro font-normal text-text-light-gray pb-1">
         Decisions ({data.length})
