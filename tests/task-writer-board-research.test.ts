@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "./refactored-module-source.cjs";
 import { resolve } from "node:path";
 import test from "node:test";
+import researchFlag from "../src/lib/flags/definitions/htpr-6363-task-writer-research";
 
 import {
   buildTaskWriterRetrievalQuery,
@@ -28,11 +29,9 @@ test("shared source fidelity stays free of board-research exceptions", () => {
 });
 
 test("flag key is registered for Owner+QA rollout", () => {
-  const flagsSource = (readFileSync(resolve("src/lib/flags.ts"), "utf8") + readFileSync(resolve("src/lib/flags/definitions.ts"), "utf8"));
-  assert.match(
-    flagsSource,
-    new RegExp(`key:\\s*"${HTPR_6363_TASK_WRITER_RESEARCH_FLAG}"`)
-  );
+  assert.equal(researchFlag.key, HTPR_6363_TASK_WRITER_RESEARCH_FLAG);
+  assert.equal("kind" in researchFlag ? researchFlag.kind : "feature", "feature");
+  assert.equal("defaultMode" in researchFlag ? researchFlag.defaultMode : "OWNER_AND_QA", "OWNER_AND_QA");
 });
 
 test("retrieval query prefers cumulative user briefs over the conversation blob", () => {

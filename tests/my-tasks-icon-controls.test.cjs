@@ -90,10 +90,10 @@ const controlProps = (config) => ({ variant: "icons", boards, config, onChange: 
 const trigger = (label) => document.querySelector(`button[aria-label="${label}"]`);
 
 test("flag registration, Owner + QA, and added gates on every changed UI entry", () => {
-  assert.match(read("src/lib/flags/keys.ts"), new RegExp(`${flagName} = "${flag}"`));
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), new RegExp(`key: ${flagName},`));
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.ok(read("tests/feature-flags.test.cjs").includes(flag));
+  assert.match(require("./helpers/flag-files.cjs").source(), new RegExp(`${flagName} = "${flag}"`));
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), new RegExp(`key: ${flagName},`));
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  assert.ok(require("./helpers/flag-files.cjs").definitions().some(({ key }) => key === flag));
   for (const file of [controlsFile, tabsFile, shellFile, splitFile, tasksFile]) {
     assert.match(read(file), new RegExp(`useFlag\\(${flagName}\\)`), file);
   }

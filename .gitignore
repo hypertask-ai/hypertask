@@ -61,3 +61,6 @@ src/service_key.json
 # Prod smoke QA (HTPR-6199) — holds the session cookie secret at runtime.
 /e2e/smoke/.state/
 /test-results/
+
+# Rebuilt from one file per flag, never a shared committed insertion point.
+/src/lib/flags/definitions/index.generated.ts

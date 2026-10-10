@@ -131,8 +131,8 @@ test('enabled drafting retains a complete value until acceptance; flag off keeps
     assert.equal(splitSearchChips(query, true, {}, true).chips.length, 0)
     assert.equal(searchCompletion(query).kind, 'value')
   }
-  const flags = (readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + readFileSync(path.join(root, 'src/lib/flags/definitions.ts'), 'utf8'))
-  const keys = readFileSync(path.join(root, 'src/lib/flags/keys.ts'), 'utf8')
+  const flags = (readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + require("./helpers/flag-files.cjs").source())
+  const keys = require("./helpers/flag-files.cjs").source()
   const component = readFileSync(path.join(root, 'src/app/search/SearchComp.tsx'), 'utf8')
   assert.match(keys, /HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG = "htpr-6688-search-autocomplete"/)
   assert.match(flags, /key: HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG/)

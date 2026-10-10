@@ -34,9 +34,9 @@ function declaration(file, name) {
 }
 
 test("flag is registered with the OWNER_AND_QA default and every changed UI entry uses it", () => {
-  assert.match(read("src/lib/flags/keys.ts"), new RegExp(`${flagName} = "${flagKey}"`));
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), new RegExp(`key: ${flagName},`));
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), new RegExp(`${flagName} = "${flagKey}"`));
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), new RegExp(`key: ${flagName},`));
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   for (const file of [controlsFile, tabsFile, sortFile, saveFile, modalFile, commandsFile,
     "src/app/my-tasks/MyTasksInvolvementPicker.tsx", "src/app/my-tasks/MyTasksGroupPicker.tsx",
     "src/app/my-tasks/MyTasksSortPicker.tsx", "src/app/my-tasks/MyTasksKanbanFilterModal.tsx",

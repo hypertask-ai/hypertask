@@ -334,6 +334,33 @@ def resolve(arg, keys):
         return arg[1:-1]
     return keys.get(arg)
 
+def read_registry(ref):
+    text = source('src/lib/flags/keys.ts', ref)
+    keys = constants(text)
+    rows = []
+    if 'definitions/index.generated' in text:
+        listing = gh('api', f'repos/{repo}/contents/src/lib/flags/definitions?ref={ref}')
+        if not isinstance(listing, list) or not listing:
+            raise ValueError('cannot resolve per-flag registry; retry before merging')
+        for item in sorted(listing, key=lambda item: item['name']):
+            if item['name'] == 'index.generated.ts':
+                raise ValueError('generated flag index must not be committed')
+            if item.get('type') != 'file' or not re.fullmatch(r'(?:htpr|hyfa|yper4)-\d+-[a-z0-9-]+\.ts', item['name']):
+                raise ValueError('cannot resolve per-flag registry; invalid flag file')
+            flag = source(item['path'], ref)
+            values = constants(flag)
+            if len(values) != 1 or next(iter(values.values())) + '.ts' != item['name']:
+                raise ValueError('cannot resolve per-flag registry; invalid key')
+            keys.update(values)
+            rows.append(flag)
+    return keys, rows
+
+registry_cache = {}
+def flag_registry(ref):
+    if ref not in registry_cache:
+        registry_cache[ref] = read_registry(ref)
+    return registry_cache[ref]
+
 try:
     # Mutable PR endpoints can briefly serve an earlier head after a push.
     freshness = time.time_ns()
@@ -359,11 +386,18 @@ try:
             if not re.search(r'^src/.*\.(?:[cm]?js|jsx|ts|tsx)$', path):
                 continue
             text = source(path, ref)
+            if path.startswith('src/lib/flags/definitions/'):
+                values = constants(text)
+                if len(values) != 1:
+                    raise ValueError('cannot resolve touched flag definition')
+                touched.update(values.values())
+                if ref == base:
+                    base_touched.update(values.values())
             readers = ['useFlag', 'isFeatureEnabled'] + re.findall(r'\b(?:useFlag|isFeatureEnabled)\s+as\s+(\w+)', text)
             for call in re.finditer(r'\b(?:' + '|'.join(readers) + r')\s*\(\s*([^,)\n]+)', text):
                 if re.search(r'\bfunction\s*$', text[:call.start()]):
                     continue
-                keys = constants(source('src/lib/flags/keys.ts', ref)) | constants(text)
+                keys = flag_registry(ref)[0] | constants(text)
                 key = resolve(call[1], keys)
                 if not key:
                     # Follow one `import { NAME } from "@/..."` hop to the module that defines the key.
@@ -412,28 +446,40 @@ try:
         except Exception:
             pass
     registry = source('src/lib/flags.ts', base)
-    keys = constants(source('src/lib/flags/keys.ts', base))
+    keys, flag_rows = flag_registry(base)
     default = re.search(r'\bDEFAULT_FEATURE_FLAG_MODE[^=]*=\s*[\'\"](\w+)[\'\"]', registry)
     definitions_pattern = r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const'
     definitions = re.search(definitions_pattern, registry)
     if not definitions:
         definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
-    if not default or not definitions:
+    if not default or not (definitions or flag_rows):
         raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
     defaults = {}
-    for block in re.findall(r'\{([^{}]*)\}', definitions[1]):
+    for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):
         key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
         if key:
-            defaults[resolve(key[1], keys)] = default[1]
+            kind = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
+            explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
+            defaults[resolve(key[1], keys)] = explicit[1] if explicit else ('EVERYONE' if kind else default[1])
     live = modes is not None
     if not live:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
-    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
     base_values = set(keys.values()) | set(defaults)
-    head_values = set(constants(source('src/lib/flags/keys.ts', sha)).values())
+    head_keys, head_rows = flag_registry(sha)
+    head_values = set(head_keys.values())
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
+    for block in head_rows:
+        key = re.search(r'\bkey:\s*(\w+)', block)
+        explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
+        bugfix = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
+        key = key and resolve(key[1], head_keys)
+        # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
+        if key in added and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
+            added.discard(key)
+            modes[key] = 'EVERYONE'
+    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
     if not released and not unknown:
         print('no released flag touched')

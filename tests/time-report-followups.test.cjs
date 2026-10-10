@@ -464,11 +464,11 @@ test("the flag-gated report route hides the user filter without other-user scope
     "the User filter must render only when the server allows other users"
   );
 
-  const flags = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
+  const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
 
   assert.match(flags, /HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG/);
   assert.match(
-    read("src/lib/flags/keys.ts"),
+    require("./helpers/flag-files.cjs").source(),
     /htpr-4228-admin-only-time-reports/
   );
 });

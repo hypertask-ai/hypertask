@@ -44,7 +44,7 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
   const description = { description: task.description_.content, descriptionAttachments: [], uploadingDescription: null };
   const { armBackDismiss } = load("src/lib/mobile/backDismiss.ts");
   const useDoubleTap = load("src/hooks/MultiPages/useDoubleTap.ts");
-  const flags = load("src/lib/flags/keys.ts");
+  const flags = require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts");
   const guest = {
     GUEST_DESCRIPTION_EDITOR_ID: "description",
     GUEST_DESCRIPTION_INTERACTIVE_TARGET: "a,button",

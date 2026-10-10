@@ -12,6 +12,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const key = "htpr-7033-cli-install-command";
 
 function load(file, mocks = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
@@ -20,7 +21,7 @@ function load(file, mocks = {}) {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
     const target = name.startsWith("@/") ? `src/${name.slice(2)}` : path.join(path.dirname(file), name);
-    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)));
+    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)) && fs.statSync(path.join(root, candidate)).isFile());
     assert.ok(resolved, `Missing test import ${name}`);
     return load(resolved, mocks);
   };

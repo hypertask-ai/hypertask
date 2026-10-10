@@ -11,10 +11,9 @@ import type {
   AgentWebhookRun,
 } from "@/lib/agentWebhooks/events";
 
-export const AGENT_RUN_FEATURE_FLAG = "htpr-6115-agent-sdk";
-export const AGENT_RUN_ACTIVITY_FEATURE_FLAG = "htpr-6122-agent-run-activities";
-export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG =
-  "htpr-6154-chat-stop-and-timeout";
+export { AGENT_RUN_FEATURE_FLAG } from "../flags/definitions/htpr-6115-agent-sdk";
+export { AGENT_RUN_ACTIVITY_FEATURE_FLAG } from "../flags/definitions/htpr-6122-agent-run-activities";
+export { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "../flags/definitions/htpr-6154-chat-stop-and-timeout";
 export const AGENT_RUN_STALE_AFTER_MS = 5 * 60 * 1000;
 export const AGENT_CHAT_TIMEOUT_MESSAGE = "Agent did not answer, try again";
 export const AGENT_CHAT_STOPPED_MESSAGE = "Run stopped";

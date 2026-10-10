@@ -55,10 +55,10 @@ test("server flag is checked before storing samples or delivering alerts", async
   assert.equal(calls.flags[1][1], 6);
   assert.equal(calls.samples.length, 0);
   assert.equal(calls.deliveries.length, 0);
-  const flags = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
+  const flags = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
   assert.match(flags, /key: HTPR_6354_AI_CHAT_ALERTS_FLAG,/);
   assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
-  assert.match(read("src/lib/flags/keys.ts"), /HTPR_6354_AI_CHAT_ALERTS_FLAG = "htpr-6354-ai-chat-alerts"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6354_AI_CHAT_ALERTS_FLAG = "htpr-6354-ai-chat-alerts"/);
 });
 
 test("alert samples strictly allow only durations and outcome status codes", async () => {

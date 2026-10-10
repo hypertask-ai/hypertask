@@ -1,5 +1,10 @@
 /** @type {import('next').NextConfig} */
 
+require("node:child_process").execFileSync(process.execPath, ["scripts/generate-flag-index.mjs"], {
+  cwd: __dirname,
+  stdio: ["ignore", "ignore", "inherit"],
+});
+
 const withBundleAnalyzer = require("@next/bundle-analyzer")({
   enabled: process.env.ANALYZE === "true",
 });

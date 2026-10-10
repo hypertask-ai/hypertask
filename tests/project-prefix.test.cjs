@@ -10,6 +10,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -891,7 +892,7 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {
   const keys = load("src/lib/flags/keys.ts");
   assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, flagKey);
-  const registry = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
+  const registry = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
   assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });

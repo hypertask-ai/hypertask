@@ -11,8 +11,8 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const key = "htpr-6873-quick-entry-grow";
 
 test("quick-entry growth uses its own registered flag and the shared board/table component", () => {
-  assert.match(read("src/lib/flags/keys.ts"), /HTPR_6873_QUICK_ENTRY_GROW_FLAG = "htpr-6873-quick-entry-grow"/);
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,\s*shippedOn: "2026-10-03"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_6873_QUICK_ENTRY_GROW_FLAG = "htpr-6873-quick-entry-grow"/);
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,\s*shippedOn: "2026-10-03"/);
   for (const file of [
     "src/components/PageComponents/Kanban/KanbanSectionComponents/section.tsx",
     "src/components/PageComponents/Kanban/TableView/TableCreateTaskControl.tsx",

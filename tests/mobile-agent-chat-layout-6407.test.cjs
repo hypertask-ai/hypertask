@@ -19,8 +19,8 @@ const messagesRoute = fs.readFileSync(
   path.join(root, "src/app/api/agent-chat/[sessionId]/messages/route.ts"),
   "utf8",
 );
-const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
-const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
+const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
+const keys = require("./helpers/flag-files.cjs").source();
 const events = fs.readFileSync(
   path.join(root, "src/lib/agentWebhooks/events.ts"),
   "utf8",
@@ -39,7 +39,7 @@ const desktopLayout = chat.slice(chat.indexOf("const content ="));
 test("HTPR-6407 flag is registered", () => {
   assert.match(keys, /HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG/);
   assert.match(keys, /htpr-6407-mobile-agent-chat-layout/);
-  assert.match(keys, /AGENT_CHAT_ADHD_REPLY_GUIDANCE/);
+  assert.match(fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"), /AGENT_CHAT_ADHD_REPLY_GUIDANCE/);
   assert.match(
     flags,
     /key:\s*HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG[\s\S]*?Pins the Agent Chat composer on mobile/,

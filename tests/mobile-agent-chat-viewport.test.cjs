@@ -17,7 +17,7 @@ test("mobile Agent Chat always follows the keyboard-visible viewport", () => {
   assert.throws(() => assert.doesNotMatch("mobileAgentChatViewportEnabled", retired));
   assert.doesNotMatch(chat, retired);
   assert.doesNotMatch(
-    fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"),
+    require("./helpers/flag-files.cjs").source(),
     retired,
   );
   assert.match(chat, /useMobileVisualViewport\(isMbl\)/);

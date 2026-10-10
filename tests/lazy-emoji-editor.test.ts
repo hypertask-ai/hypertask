@@ -177,7 +177,7 @@ test("the editor always uses lazy emoji loading without a feature flag or eager 
   assert.throws(() => assert.doesNotMatch("void ensureEmojiData()", retired));
   assert.doesNotMatch(tiptap, retired);
   assert.doesNotMatch(
-    fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8"),
+    require("./helpers/flag-files.cjs").source(),
     retired,
   );
   assert.equal(

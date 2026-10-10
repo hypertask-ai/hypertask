@@ -542,8 +542,8 @@ test("agent list routes seed behind the HTPR-6512 flag", () => {
     path.join(root, "src/app/api/agents/owned/route.ts"),
     "utf8",
   );
-  const keys = readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
-  const flags = (readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
+  const keys = readFileSync(path.join(root, "src/lib/flags/definitions/htpr-6512-seed-team-agent.ts"), "utf8");
+  const flags = readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + keys;
 
   assert.match(keys, /HTPR_6512_SEED_TEAM_AGENT_FLAG/);
   assert.match(keys, /htpr-6512-seed-team-agent/);

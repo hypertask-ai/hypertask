@@ -43,6 +43,7 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
+      - run: npm run flags:generate
       # Chat schemas use generated Prisma enums, but evals never connect to a database.
       - run: npx prisma generate
       - run: node --test tests/ai-eval.test.cjs tests/ai-prompt-registry.test.cjs

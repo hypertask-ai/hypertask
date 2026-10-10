@@ -39,6 +39,7 @@ const mocks = {
 };
 
 function load(relativePath) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const target = { exports: {} };
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
@@ -216,6 +217,6 @@ test("page wiring reuses ticket carousel, its navigation, download, Escape and b
   assert.match(gallery, /plugins=\{\[Zoom, Download, Fullscreen/);
   assert.match(gallery, /close=\{handleClose\}/);
   assert.match(gallery, /closeOnBackdropClick: true/);
-  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
+  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
   assert.match(flags, /key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,\s*shippedOn: "2026-10-03"/);
 });

@@ -573,7 +573,15 @@ if '/contents/' in url:
         sys.exit(1)
     path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
     ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
-    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    if path == 'src/lib/flags/definitions':
+        folder = os.environ['FLAG_SOURCE'] + '/flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
+        print(json.dumps([{'name': name, 'path': path + '/' + name, 'type': 'file'} for name in os.listdir(folder)]))
+        sys.exit(0)
+    if path.startswith('src/lib/flags/definitions/'):
+        folder = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
+        name = folder + '/' + path.rsplit('/', 1)[1]
+    else:
+        name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
     if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
         name = 'keys-head'
     with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
@@ -586,7 +594,7 @@ elif '/files?' in url:
     if os.environ.get('FLAG_PAGE2'):
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
 else:
-    print(json.dumps({'head': {'sha': 'a' * 40}, 'base': {'sha': 'b' * 40}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
+    print(json.dumps({'head': {'sha': os.environ.get('FLAG_HEAD', 'a' * 40)}, 'base': {'sha': os.environ.get('FLAG_BASE_SHA', 'b' * 40)}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
 MOCK
 cat > "$E/flag-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
@@ -711,6 +719,29 @@ fs.writeFileSync(process.argv[2], fs.readFileSync(process.argv[2], 'utf8').repla
 JS
 P 0 premerge 999
 cp "$premerge" "$E/record"
+# The new layout resolves readers and changed definition files without a committed index.
+cp "$E/flag-source/keys" "$E/keys-legacy"; cp "$E/flag-source/registry" "$E/registry-legacy"
+mkdir -p "$E/flag-source/flags-base" "$E/flag-source/flags-head"
+printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
+cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
+printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
+F 0 ''
+F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+sed 's/Commit:.*/Commit: deadbeef/' "$E/record" > "$premerge"
+F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+cp "$E/record" "$premerge"
+# A new bugfix flag defaults to Everyone, so it is released on merge and needs its own click state.
+printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_FIX_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-9-newfix.ts"
+F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+cp "$E/record" "$premerge"; rm "$E/flag-source/flags-head/htpr-9-newfix.ts"
+cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
+rm "$E/flag-source/definitions"
+
 for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
   '/^Account:/d|missing Account:' \

@@ -12,6 +12,7 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText

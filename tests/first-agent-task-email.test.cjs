@@ -13,6 +13,7 @@ const flag = "htpr-7028-first-task-email";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 function load(file, stubs = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
@@ -280,8 +281,8 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
     assert.match(schema, pattern, name);
     assert.equal(schema.match(pattern)[0], baseline.match(pattern)[0], `${name} email model stays unchanged`);
   }
-  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
-  assert.match(read("src/lib/flags/keys.ts"), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
 });
 
 test("changed-file typecheck has no diagnostics in feature code", { skip: !process.env.HTPR_7028_TYPECHECK }, () => {
