@@ -654,15 +654,6 @@ export function upgradeLegacyClaudeOptionId(id: string): string {
   return `claude-${match[1]}-5-5-${id.includes("thinking") ? "thinking" : "instant"}`;
 }
 
-// Raw model strings ("claude-sonnet-5", "anthropic/claude-opus-4.1") map the
-// same way. Gateway slugs and dotted ids keep the dot spelling.
-export function upgradeLegacyClaudeModelId(modelId: string): string {
-  const match = /^((?:[\w-]+\/)?)claude-(haiku|sonnet|opus)-(?!5[.-]5(?:-\d{8})?$)[\w.-]+$/.exec(modelId);
-  if (!match) return modelId;
-  const dotted = match[1] !== "" || modelId.includes(".");
-  return `${match[1]}claude-${match[2]}-5${dotted ? "." : "-"}5`;
-}
-
 export function isClaude55Model(modelId: string): boolean {
   return /(?:^|\/)claude-(?:haiku|sonnet|opus)-5[.-]5(?:-\d{8})?$/.test(modelId);
 }

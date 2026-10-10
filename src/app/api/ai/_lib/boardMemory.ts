@@ -177,6 +177,8 @@ export async function learnBoardMemoryFromSignal(args: {
   }
   try {
     const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: project.id, userId: args.userId }) : { haiku55Enabled: false, byok: undefined };
+    // HTPR-7075: a team that disabled Anthropic learns nothing rather than switching provider.
+    if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return { enabled: true, learned: [] as string[] };
     const useHaiku = defaultModelKeyFor(defaultContext, BOARD_MEMORY_MODEL) === "claude-haiku-5-5";
     const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
     const gatewayApiKey = (useHaiku ? defaultContext.byok?.credential : undefined) ?? await getByokOrTeamGatewayApiKeyForProvider(

@@ -131,15 +131,25 @@ test("saved picks of older Claude versions read as the 5.5 model of the same cla
   assert.equal(catalog.getAiModelOptionById("claude-haiku-4.5", false)?.id, "claude-haiku-4.5");
 });
 
-test("raw older Claude model strings map to 5.5 and 5.5 ids pass through", () => {
-  assert.equal(catalog.upgradeLegacyClaudeModelId("claude-sonnet-5"), "claude-sonnet-5-5");
-  assert.equal(catalog.upgradeLegacyClaudeModelId("claude-opus-5"), "claude-opus-5-5");
-  assert.equal(catalog.upgradeLegacyClaudeModelId("anthropic/claude-sonnet-5"), "anthropic/claude-sonnet-5.5");
-  assert.equal(catalog.upgradeLegacyClaudeModelId("claude-haiku-4.5"), "claude-haiku-5.5");
-  assert.equal(catalog.upgradeLegacyClaudeModelId("anthropic/claude-haiku-4.5"), "anthropic/claude-haiku-5.5");
-  for (const id of ["claude-haiku-5-5", "claude-sonnet-5.5", "anthropic/claude-opus-5.5", "gpt-6-luna", "google/gemini-3.5-flash-lite"]) {
-    assert.equal(catalog.upgradeLegacyClaudeModelId(id), id);
+test("a team that disabled Anthropic is reported, and callers return no result instead of switching provider", async () => {
+  for (const [settings, disabled] of [[{ providers: { anthropic: false } }, true], [{ providers: { anthropic: true } }, false], [undefined, false]]) {
+    const byok = moduleWithStubs("src/app/api/ai/_lib/byokKeys.ts", {
+      "@/app/api/ai/_lib/planGate": {
+        backgroundClaudeModelEnabled: async () => true,
+        haikuDefaultModelEnabled: async () => true,
+        haiku55ModelEnabled: async () => true,
+        storePlanIdForProject: async () => "Free",
+      },
+      "@/lib/aiProviders": jiti(path.join(root, "src/lib/aiProviders.ts")),
+      "@/lib/prisma": { team: { findUnique: async () => ({ aiProviderSettings: settings }) } },
+    });
+    const context = await byok.getAiDefaultModelContext({ userId: 7, trustedTeamId: "team-1" });
+    assert.equal(context.anthropicDisabled, disabled);
   }
+  const customInstructions = read("src/app/api/ai/_lib/customInstructions.ts");
+  assert.match(customInstructions, /anthropicDisabled\) return "";\n\s*const useHaiku/, "no extraction result");
+  assert.match(read("src/app/api/ai/_lib/boardMemory.ts"), /anthropicDisabled\) return \{ enabled: true, learned: \[\] as string\[\] \};\n\s*const useHaiku/);
+  assert.match(read("src/lib/ai/chatStream/title.ts"), /anthropicDisabled\) return fallback;\n\s*const useHaiku/);
 });
 
 test("a user's explicit non-Claude pick is honoured for user-pick features", () => {

@@ -95,6 +95,7 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
 
   // HTPR-7075: no user exists here, so the flag is read as user 0 (Everyone only).
   const claude = await backgroundClaudeModelEnabled(null);
+  // The demo key routes Claude through the Gateway on purpose, to keep anonymous spend isolated; this predates HTPR-7075.
   const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
   const { object } = await generateObject({
     model,

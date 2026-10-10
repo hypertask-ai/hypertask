@@ -459,6 +459,14 @@ export async function getByokOrTeamGatewayApiKeyForModelOption(
   return getTeamGatewayApiKey(lookup);
 }
 
+// HTPR-7075: Claude 5.5 mode never overrides a team that turned Anthropic off.
+async function isAnthropicDisabledForLookup(lookup: ByokLookupContext) {
+  const teamId = await resolveLookupTeamId(lookup);
+  if (!teamId) return false;
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { aiProviderSettings: true } });
+  return !resolveTeamProviderEnabled(team?.aiProviderSettings, "anthropic");
+}
+
 export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku55Enabled?: boolean, plan?: AiDefaultModelContext["plan"]) {
   const haikuDefaultEnabled = await haikuDefaultModelEnabled(lookup.userId);
   const backgroundClaudeEnabled = await backgroundClaudeModelEnabled?.(lookup.userId) ?? false;
@@ -474,7 +482,8 @@ export async function getAiDefaultModelContext(lookup: ByokLookupContext, haiku5
       }
     }
   }
-  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan: storePlanId, hasByok: Boolean(byok), byok };
+  const anthropicDisabled = backgroundClaudeEnabled && await isAnthropicDisabledForLookup(lookup);
+  return { haiku55Enabled: enabled, haikuDefaultEnabled, backgroundClaudeEnabled, anthropicDisabled, plan: storePlanId, hasByok: Boolean(byok), byok };
 }
 
 export function resolveAutomaticAiModel(
