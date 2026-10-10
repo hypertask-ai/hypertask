@@ -42,10 +42,13 @@ function fakeRedis() {
           values.set(keys[0], String(next));
           return next;
         }
-        if (script.includes('redis.call("exists", KEYS[1])')) {
-          if (values.has(keys[0])) return 0;
-          values.set(keys[0], argv[0]);
-          values.set(keys[1], argv[0]);
+        if (script.includes('redis.call("exists", KEYS[i])')) {
+          // ARGV[3]: leading keys that must be free; ARGV[4]: keys to set; the rest are guards.
+          const activeKeyCount = Number(argv[2]);
+          const setCount = Number(argv[3]);
+          if (keys.slice(0, activeKeyCount).some((key) => values.has(key))) return 0;
+          if (keys.slice(setCount).some((key) => values.has(key))) return 0;
+          for (const key of keys.slice(0, setCount)) values.set(key, argv[0]);
           return 1;
         }
         if (script.includes("local completion = redis.call")) {
