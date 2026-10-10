@@ -44,7 +44,7 @@ Give helpers the ticket scope, observed cause and failing check. Point them at t
      --body-file <path> [--lane <lane>]
    ```
    It pushes the current branch, opens the PR against `production`, titles it `HTPR-NNNN [BUGFIX] ...`, leaves auto-merge off, moves the ticket with `vcc`, and reads the board back with `hypertask`. It does not branch or commit: do that first. Default lane is `ai-review`.
-   **Lane by risk:** `ai-review` for an ordinary bug fix and for an additive migration behind a flag (the ticket goes to AI Review). `valentin-review` for money, auth, security, irreversible data, a destructive migration, or a pull request that widens a flag. Post one question. Never assign userId 6.
+   **Lane by risk:** `ai-review` for an ordinary bug fix and for an additive migration behind a flag (the ticket stays In Progress; Valentin, 2026-10-10). `valentin-review` for money, auth, security, irreversible data, a destructive migration, or a pull request that widens a flag. Post one question. Never assign userId 6.
    Keep the pull request URL in this session's notes.
 13. **Request full CI if the workflow would otherwise skip it**, and confirm required checks and review pass on the final commit head before you merge. A skipped test job is not a pass. If checks read green but GitHub still blocks the merge, look for cancelled duplicate runs of those required jobs and rerun only those, one at a time. Never bypass branch protection and never toggle a label to force a merge green.
 14. **Re-read the ticket's latest comments before merging.** A green CI run does not override a correction posted after it. Don't restart a full review cycle for a small follow-up fix; a fresh look at the delta on top of the already-reviewed diff is enough.

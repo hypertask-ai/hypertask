@@ -42,7 +42,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Before writing UI code | repo `reuse-existing-ui` | You know which existing components you reuse |
 | The fix | repo `fix-slow-page` for speed tickets; otherwise `fix-bug` (restores intended behaviour, bugfix flag default Everyone except saved-data/security/crash fixes) or `ship-feature-behind-flag` (new behaviour, flag named after the ticket) | Tests pass locally |
 | Before the PR | repo `simplify-before-pr`; `blast-radius` for anything outside the usual lane; plus `design-compliance` and `verify-on-phone` for UI; `update-docs` when users see a change | Each skill's own check passes |
-| Open the PR | the PR rule below, then bind it: `~/.agents/skills/ship/scripts/ship-check bind HTPR-NNNN <pr number>` | `ship-check pr HTPR-NNNN` prints `title ok` |
+| Open the PR (ticket stays In Progress) | the PR rule below, then bind it: `~/.agents/skills/ship/scripts/ship-check bind HTPR-NNNN <pr number>` | `ship-check pr HTPR-NNNN` prints `title ok` |
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |
 | Live QA | repo `verify-qa` and its feature map | `ship-check proof HTPR-NNNN` prints `proof ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
@@ -72,7 +72,8 @@ Assigning a ticket to a runner's agent is an equal way to hand it work next to c
   - Tell him in chat: verdict first, the report page link, anything not tested. Example: the QA run 1 page on https://app.hypertask.ai/detail/project-15/6630
 - **Move the ticket as the work moves** (Valentin, 2026-10-01). Via `vcc task move HTPR-NNNN --section "In Progress"` (or the column named below), then read it back:
   - **In Progress** when you claim and whenever you go back to fixing.
-  - **AI Review** as soon as the PR is open, until merged.
+  - **In Progress** also stays the column for the whole time you work: the open PR, CI fixes, review fixes, merge, deploy and live QA (Valentin, 2026-10-10: "move to in progress pls don't leave it in ai review ... agents must move ticket to in progress if they are on this?"). Do not move to AI Review when the PR opens. Move any ticket you find in AI Review back to In Progress when you resume it.
+  - **AI Review** only when you have stopped working and the ticket waits on someone else's review with no runner on it.
   - **Done** once the merge is live and QA passed with evidence on the ticket.
   - **Valentin Review** only for a real decision only he can make (a wireframe he asked for, money, login and access, security, something nobody can undo), with one `Question:` comment. Abandon the remaining gates with that waiting reason per step 3, and say so.
   - **Never Valentin Review to ask about a flag** (Valentin, 2026-10-03: "you cannot put stuff in Valentin review to ask me to turn on the flag. I decide when to turn on the flag"). A flagged ticket goes to **Done** once its live QA passes on Owner + QA. Do not ask him to switch the flag on, in a comment or in chat; he switches it on the flags page when he wants.
