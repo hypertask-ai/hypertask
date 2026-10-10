@@ -62,6 +62,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", async () => {
+  const key = flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG;
+  assert.equal(key, "htpr-7056-ctrlj-split-tasks");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
 test("Full task tag names default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7020_TAG_FULL_NAME_FLAG;
   assert.equal(key, "htpr-7020-tag-full-name");
@@ -1043,6 +1054,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7056-ctrlj-split-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7064-inbox-remind-returns", mode: "EVERYONE", updatedAt: null },

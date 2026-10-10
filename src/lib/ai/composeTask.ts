@@ -28,7 +28,13 @@ export function composeTaskBoardId(
     .map(([id]) => Number(id)).find((id) => Number.isInteger(id) && id > 0);
 }
 
-export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false): string {
+export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }): string {
+  if (batch && (batch.tasks.length > 1 || batch.failedTitles.length)) {
+    const links = batch.tasks.map((task) => `<li><a href="/detail/project-${task.projectId}/${task.uniqueIndex}">${escapeHtml(task.ticketNumber ?? `TASK-${task.uniqueIndex}`)}: ${escapeHtml(task.title ?? "")}</a></li>`).join("");
+    const failures = batch.failedTitles.length
+      ? `<p>Could not save these tasks. Only the linked tickets were saved:</p><ul>${batch.failedTitles.map((title) => `<li>${escapeHtml(title)}</li>`).join("")}</ul>` : "";
+    return `<p>I ${filledExistingTask ? "saved" : "created"} ${batch.tasks.length} tickets from your note.</p><ul>${links}</ul>${failures}`;
+  }
   const greeting = `I ${filledExistingTask ? "filled in" : "created"} ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
   return writerFailed
     ? `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
@@ -44,10 +50,10 @@ export async function createComposedTask({
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean }> {
+}): Promise<{ task: ITask; writerFailed: boolean; tasks: ITask[]; failedTitles: string[] }> {
   // Resolve the destination before spending AI credits; omitting sectionId uses
   // the same first active column as the regular create-task form.
-  const defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
+  let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
   if (!existingTaskId && !defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
@@ -67,6 +73,7 @@ export async function createComposedTask({
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
+  let drafts: { title: string; description: string }[] = [];
   try {
     const media = extractTaskWriterMedia(rawDescription, createTaskWriterMediaTokenFactory(rawDescription, text));
     onProgress?.("Reading past tickets");
@@ -117,17 +124,40 @@ export async function createComposedTask({
     // This endpoint streams raw HTML on success, but SSE error frames can arrive
     // after a 200. A partial answer must not be mistaken for a completed ticket.
     if (/^event:\s*(?:error|done)\b/m.test(html)) throw new Error("Task writer interrupted");
-    const written = extractTitleAndDescription(html);
-    if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
-    title = written.title;
-    description = restoreTaskWriterMedia(written.description, media.media);
-    for (const file of uploads) {
-      if (!isBrowserRenderableImage(file.mimeType, file.fileName) && !description.includes(file.url)) {
-        description += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
-      }
+    if (response.headers?.get("content-type")?.includes("application/json")) {
+      const output = JSON.parse(html);
+      if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string }) => {
+        if (typeof draft?.title !== "string" || !draft.title.trim() ||
+            typeof draft.description !== "string" || !draft.description.trim()) {
+          throw new Error("Task writer returned an incomplete ticket");
+        }
+        return { title: draft.title, description: draft.description };
+      });
+    } else {
+      const written = extractTitleAndDescription(html);
+      if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
+      drafts = [{ title: written.title, description: written.description }];
     }
+    drafts = drafts.map((draft) => {
+      let body = restoreTaskWriterMedia(draft.description, media.media);
+      for (const file of uploads) {
+        if (!isBrowserRenderableImage(file.mimeType, file.fileName) && !body.includes(file.url)) {
+          body += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
+        }
+      }
+      return { title: draft.title, description: body };
+    });
+    title = drafts[0].title;
+    description = drafts[0].description;
   } catch {
     writerFailed = true;
+    drafts = [];
+  }
+  if (!drafts.length) drafts = [{ title, description }];
+  if (existingTaskId && drafts.length > 1) {
+    defaults = await axios.get("/api/tasks/createGlobally", { params: { projectId: project.id, position: "top" } });
+    if (!defaults?.data?.sectionId) throw new Error("This board has no column to create a task in.");
   }
   onProgress?.("Saving the ticket");
   const filters = !existingTaskId && viewProject?.id === project.id
@@ -142,15 +172,26 @@ export async function createComposedTask({
     if (taskFields.priority == null && viewDefaults.priority) taskFields.priority = viewDefaults.priority;
     if (taskFields.estimate == null && viewDefaults.estimate) taskFields.estimate = viewDefaults.estimate;
   }
-  const created = await createNewTaskGloballyAPIHandler({
-    userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
-    title, ...{ description },
-    sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
-    ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
-    ...(existingTaskId ? { existingTaskId } : {}),
-  });
-  const task = created?.resposne?.newTask;
-  if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here. Try again.");
-  bindCreateTaskUploads(task.id, files);
-  return { task, writerFailed };
+  const tasks: ITask[] = [];
+  const failedTitles: string[] = [];
+  for (const [index, draft] of drafts.entries()) {
+    try {
+      const created = await createNewTaskGloballyAPIHandler({
+        userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
+        title: draft.title, ...{ description: draft.description },
+        sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
+        ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
+        ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
+      });
+      const task = created?.resposne?.newTask;
+      if (created?.error || !task?.id) throw new Error("Couldn’t create the task. Your note is still here. Try again.");
+      tasks.push(task);
+      bindCreateTaskUploads(task.id, files);
+    } catch (error) {
+      if (drafts.length === 1 || (existingTaskId && index === 0)) throw error;
+      failedTitles.push(draft.title);
+    }
+  }
+  if (!tasks.length) throw new Error("Couldn’t create the tasks. Your note is still here. Try again.");
+  return { task: tasks[0], writerFailed, tasks, failedTitles };
 }

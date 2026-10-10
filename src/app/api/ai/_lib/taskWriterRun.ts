@@ -43,7 +43,7 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG } from "@/lib/flags";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -91,6 +91,13 @@ export const taskWriterRequestSchema = z.object({
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
   requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
+});
+
+export const tasksOutputSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+  })).min(1).max(10),
 });
 
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
@@ -332,9 +339,14 @@ export async function prepareTaskWriterRun(
           `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
         )
       : null;
-  const instructions = skillResolution.systemPromptAddition
+  const splitTasks = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
+  let instructions = skillResolution.systemPromptAddition
     ? `${researchInstructions ?? baseInstructions}\n\n${skillResolution.systemPromptAddition}`
     : researchInstructions ?? baseInstructions;
+  if (splitTasks) {
+    instructions += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
+  }
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
     {
@@ -350,6 +362,7 @@ export async function prepareTaskWriterRun(
   return {
     aiFeature,
     selected,
+    splitTasks,
     instructions,
     messages,
     allowedImgSrcs,

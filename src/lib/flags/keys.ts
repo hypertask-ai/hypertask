@@ -1,3 +1,4 @@
+export const HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG = "htpr-7056-ctrlj-split-tasks";
 export const HTPR_7020_TAG_FULL_NAME_FLAG = "htpr-7020-tag-full-name";
 export const HTPR_7064_INBOX_REMIND_RETURNS_FLAG = "htpr-7064-inbox-remind-returns";
 export const HTPR_7050_CTRL_O_LINKS_FLAG = "htpr-7050-ctrl-o-links";

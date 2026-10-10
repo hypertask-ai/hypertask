@@ -1,7 +1,7 @@
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
-import { streamText } from "ai";
+import { generateText, Output, streamText } from "ai";
 
 import {
   createSseErrorResponse,
@@ -18,6 +18,7 @@ import {
   missingRequiredFields,
   prepareTaskWriterRun,
   taskWriterRequestSchema,
+  tasksOutputSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
 
@@ -49,8 +50,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks } =
       await prepareTaskWriterRun(body, userId);
+    if (splitTasks) {
+      configureAiModelUsage(selected.model, {
+        userId, teamId: selected.teamId, projectId: body.projectId,
+        taskId: usageTaskId, provider: selected.usageProvider, feature: "task-writer",
+      });
+      const result = await generateText({
+        model: selected.model, instructions, messages, tools: selected.tools,
+        maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
+        output: Output.object({ schema: tasksOutputSchema }),
+      });
+      const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
+      return NextResponse.json({ tasks: tasks.map((task) => ({
+        ...task,
+        description: allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description,
+      })) });
+    }
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream<Uint8Array>({
