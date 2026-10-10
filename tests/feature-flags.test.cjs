@@ -1019,6 +1019,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7038-reset-saved-model-choices", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7038-task-writer-sonnet", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
@@ -1591,6 +1592,19 @@ test("flags page URL filters are an Owner + QA feature and respect Off", async (
   assert.equal(await flags.isFeatureEnabled(key, 985), true);
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("saved-choice reset is an Owner + QA feature and respects OFF", async () => {
+  const key = "htpr-7038-reset-saved-model-choices";
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });

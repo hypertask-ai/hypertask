@@ -23,7 +23,7 @@ function moduleWithStubs(relativePath, stubs, extra = "") {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code + extra, {
     module: loadedModule, exports: loadedModule.exports,
-    require: (id) => stubs[id] ?? require(id),
+    require: (id) => stubs[id] ?? (id === "@/lib/ai/htpr7038ModelReset" ? { ensureHtpr7038ModelReset: async () => false } : require(id)),
     process, performance, setTimeout, clearTimeout, ReadableStream, Response, console,
   }, { filename });
   return loadedModule.exports;

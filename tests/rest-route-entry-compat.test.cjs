@@ -81,6 +81,7 @@ async function run(operation, mode = 'OFF', options = {}) {
       return mode === 'NO_SESSION' ? null : { userId };
     } },
     '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: key, SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
+      if (args[0] === 'htpr-7038-reset-saved-model-choices') return false;
       probes.push(['flag', ...args]);
       if (mode === 'FLAG_FAILURE') throw new Error('flag lookup failed');
       return mode === 'ON';

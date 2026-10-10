@@ -143,6 +143,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
   });
   const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {
     ...providerStubs,
+    "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => "disabled" },
     "@/lib/prisma": prisma, "@/lib/flags": flags, "@/lib/flags/keys": keys,
     "@/lib/aiModelOptions": catalog, "@/lib/aiProviders": providers, "@/lib/systemModelLadder": ladder,
     "@/lib/aiModelPreferences": load(path.join(root, "src/lib/aiModelPreferences.ts")),

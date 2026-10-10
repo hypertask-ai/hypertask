@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
 export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
@@ -589,6 +590,7 @@ async function getPersonalModelOptionId(
 ) {
   const surface = PERSONAL_MODEL_SURFACES[feature];
   if (!userId || !surface) return null;
+  await ensureHtpr7038ModelReset(userId);
   const userSetting = await prisma.userSetting.findUnique({
     where: { userId },
     select: { aiModelPreferences: true },

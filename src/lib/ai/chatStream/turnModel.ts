@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -92,6 +93,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         403,
       );
     }
+    await ensureHtpr7038ModelReset(dbUser.id);
     const userSetting = await prisma.userSetting.findUnique({
       where: { userId: dbUser.id },
       select: { aiModelPreferences: true },

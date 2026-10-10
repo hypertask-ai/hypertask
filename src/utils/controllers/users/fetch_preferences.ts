@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
 
@@ -17,10 +18,11 @@ const preferencesCacheKey = (userId: number) =>
 
 export async function fetchUserPreferenceController(userId: number) {
   try {
+    const reset = await ensureHtpr7038ModelReset(userId);
     const redis = await getRedis();
     const cacheKey = preferencesCacheKey(userId);
     const cached = await redis.get(cacheKey);
-    if (cached && cached !== INVALIDATED) {
+    if (reset !== "reset" && cached && cached !== INVALIDATED) {
       return { status: 200, res: { ...JSON.parse(cached) } };
     }
 

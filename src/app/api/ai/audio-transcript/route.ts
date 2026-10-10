@@ -21,7 +21,7 @@ import {
   resolveDictationLanguage,
   resolveDictationProvider,
 } from "@/lib/dictationProvider";
-import { fetchUserPreferenceController } from "@/utils/controllers/users/fetch_preferences";
+import prisma from "@/lib/prisma";
 import {
   DictationAudioTooLargeError,
   MAX_DICTATION_AUDIO_BYTES,
@@ -61,14 +61,14 @@ async function transcribeAudio(
   if (context.teamId) tags.push(`team:${context.teamId}`);
   if (context.userId) tags.push(`user:${context.userId}`);
 
-  // Per-user dictation language (cached ~5min). resolveDictationLanguage falls
-  // back to English for a missing value or a user with no settings row.
+  // Only read language here; model selection resets saved picks if improvement runs.
   const prefs = context.userId
-    ? await fetchUserPreferenceController(context.userId)
+    ? await prisma.userSetting.findUnique({
+        where: { userId: context.userId },
+        select: { dictationLanguage: true },
+      }).catch(() => null)
     : null;
-  const language = resolveDictationLanguage(
-    (prefs?.res as { dictationLanguage?: unknown } | null)?.dictationLanguage,
-  );
+  const language = resolveDictationLanguage(prefs?.dictationLanguage);
 
   return transcribeAudioFile(provider, file, { language, tags });
 }

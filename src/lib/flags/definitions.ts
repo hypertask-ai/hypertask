@@ -31,6 +31,7 @@ import {
   HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_7038_HAIKU_DEFAULT_FLAG,
   HTPR_7038_TASK_WRITER_SONNET_FLAG,
+  HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
   HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,
@@ -339,6 +340,13 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "feature",
     shippedOn: "2026-10-09",
     description: "Defaults all accounts without a saved model to Haiku 5.5 and uses it for automatic summaries and fast system calls.",
+  },
+  {
+    key: HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG,
+    kind: "feature",
+    defaultMode: "OWNER_AND_QA",
+    shippedOn: "2026-10-09",
+    description: "Resets saved personal text-model choices to Haiku 5.5 once per enabled user, preserving backups and later choices.",
   },
   {
     key: HTPR_7038_TASK_WRITER_SONNET_FLAG,
