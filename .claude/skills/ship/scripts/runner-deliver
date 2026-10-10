@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# runner-deliver <n>: type one message (stdin) into the live "RUNNER <n>" Claude session through tmux (YPER4-256).
+# Falls back to the "INFRA MANAGER" session with a "No live Runner <n>:" prefix; if neither is live the message is
+# queued in $STATE/runner-<n>.pending.jsonl for the next runner-pickup tick. Exit 0 delivered, 3 queued, 2 usage.
+# Claude Code queues typed input while busy, so this works for idle and busy sessions. Text is sent literally (-l).
+set -uo pipefail
+STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
+TMUX=${RUNNER_PICKUP_TMUX:-tmux}
+SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
+MAXLEN=${RUNNER_DELIVER_MAXLEN:-3000}
+# <target> is a runner number or the literal infra-manager (only the "INFRA MANAGER" session, no fallback).
+n=${1:-}; [[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager ]] || { echo 'usage: runner-deliver <runner number|infra-manager> < message' >&2; exit 2; }
+
+# Single literal line: control characters out, whitespace collapsed, capped.
+text=$(head -c 20000 | tr '\000-\037\177' ' ' | tr -s ' ')
+text=${text# }; text=${text% }
+[ -n "$text" ] || exit 0
+[ "${#text}" -le "$MAXLEN" ] || text="${text:0:$MAXLEN}..."
+
+# Live claude pid of the session named $1 (user-given name, text after " | " ignored).
+find_pid() {
+  local f name pid
+  for f in "$SESSIONS"/*.json; do
+    [ -f "$f" ] || continue
+    name=$(jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null) || continue
+    [ "${name%% | *}" = "$1" ] || continue
+    pid=$(jq -r '.pid // empty' "$f" 2>/dev/null); [[ $pid =~ ^[0-9]+$ ]] || pid=$(basename "$f" .json)
+    if [[ $pid =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null; then echo "$pid"; return 0; fi
+  done
+  return 1
+}
+# tmux pane whose pane_pid is the claude pid or one of its ancestors.
+find_pane() {
+  local pid=$1 panes hit
+  panes=$("$TMUX" list-panes -a -F '#{pane_id} #{pane_pid}' 2>/dev/null) || return 1
+  while [[ $pid =~ ^[0-9]+$ ]] && [ "$pid" -gt 1 ]; do
+    hit=$(awk -v p="$pid" '$2 == p {print $1; exit}' <<<"$panes")
+    if [ -n "$hit" ]; then echo "$hit"; return 0; fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+  done
+  return 1
+}
+send() { "$TMUX" send-keys -t "$1" -l "$2" >/dev/null 2>&1 && "$TMUX" send-keys -t "$1" Enter >/dev/null 2>&1; }
+
+pane=""
+if [ "$n" != infra-manager ]; then
+  if pid=$(find_pid "RUNNER $n"); then pane=$(find_pane "$pid") || pane=""; fi
+  if [ -n "$pane" ] && send "$pane" "$text"; then echo "delivered to RUNNER $n"; exit 0; fi
+  pane=""; prefix="No live Runner $n: "
+fi
+if pid=$(find_pid "INFRA MANAGER"); then pane=$(find_pane "$pid") || pane=""; fi
+if [ -n "$pane" ] && send "$pane" "${prefix:-}$text"; then echo "delivered to INFRA MANAGER"; exit 0; fi
+mkdir -p "$STATE" && jq -nc --arg t "$text" --argjson ts "$(date +%s)" '{ts:$ts, text:$t}' >> "$STATE/runner-$n.pending.jsonl"
+echo "queued for $n"; exit 3

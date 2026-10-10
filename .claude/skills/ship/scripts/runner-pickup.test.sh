@@ -6,6 +6,7 @@ fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (want '$3' got '$2')"; }
 T=$(mktemp -d); trap 'rm -rf "$T"' EXIT
+export RUNNER_PICKUP_TMUX=/nonexistent-tmux RUNNER_PICKUP_SESSIONS_DIR=$T/nosessions
 export RUNNER_INBOX_DIR=$T/inbox HOME=$T/home RUNNER_PICKUP_RATE_MARKER=$T/none
 mkdir -p "$HOME"
 export FAKE_TASKS=$T/tasks.json FAKE_LOG=$T/vcc.log RUNNER_PICKUP_VCC=$T/vcc
@@ -14,6 +15,7 @@ cat > "$T/vcc" <<'EOF'
 echo "$SHIP_SESSION_NAME|$*" >> "$FAKE_LOG"
 case "$1 $2" in
   "task list") [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
+  "inbox list") [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
   "activity add") exit 0 ;;
   *) exit 9 ;;
 esac
