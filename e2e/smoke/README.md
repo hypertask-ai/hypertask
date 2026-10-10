@@ -75,6 +75,49 @@ hosted realtime even if it adds `?realtime=on`.
 `browser-smoke` is required by the production ruleset, the live-ruleset
 assertion, and automerge. A failed or missing result blocks merging.
 
+## CI container images
+
+CI pulls the exact official images from `ghcr.io/hypertask-ai/ci-<image>`:
+PostgreSQL `16-bookworm` and `16-alpine`, Redis `7-alpine`, Node
+`22-bookworm`, and Soketi `1.6-16-alpine`. Tags and immutable digests are
+recorded in `.github/ci-images.json`; the copy preserves the full manifest
+and all architectures without rebuilding or changing labels.
+
+`ci-images.yml` copies the pinned official Docker Hub and Quay sources on
+manual dispatch and every Monday. It publishes with this repo's
+`GITHUB_TOKEN` (`packages: write`), which automatically links new packages
+to the repository and grants its workflows access. Do not replace it with
+a personal token or remove the repository's Actions access in package
+settings. A separate `packages: read` job proves every pinned image can be
+pulled. CI uses that read-only permission with `docker/login-action` for
+command-line pulls and `services.credentials` for services, which start
+before workflow steps. Registry credentials stay on the host and are never
+mounted or passed into the isolated candidate containers.
+
+Bootstrap order: a push trigger restricted to `yper4-231-ghcr-ci-images`
+seeds and verifies the packages before the consumer switch is pushed.
+GitHub cannot dispatch a new workflow until it exists on the default branch;
+after this single PR is merged into `production`, manual dispatch and the
+weekly schedule work normally. Require a successful mirror run, including
+all five read-only pulls, before merging. There is no automatic fallback
+that silently reintroduces anonymous pulls.
+
+Fallback for a GHCR outage: open an explicit recovery PR that restores the CI
+image references to `public.ecr.aws/docker/library/<image>:<tag>@<same digest>`
+(Soketi uses `quay.io/soketi/soketi:<tag>@<same digest>`). In that same PR,
+remove GHCR login steps and service credentials from the fallback consumers
+so a GHCR login outage cannot block recovery. Update the registry-specific
+assertions in `tests/ci-images.test.cjs` and `tests/browser-smoke-workflow.test.cjs`
+to expect those fallback references;
+otherwise the recovery PR will fail the GHCR-only assertions. Retain exact
+digest checks, required check names, and the mirror workflow, then rerun the
+checks. Do not change production deployment configuration. Both
+Docker Hub and anonymous ECR Public pulls can be throttled, so this is a
+temporary, visible recovery choice, not the normal path. For a missing copy,
+rerun `Mirror CI images` instead of weakening the digest pin. Keep
+`app-smoke`, `browser-smoke`, and `ci-tests` required; production deploy
+configuration is not changed by this image mirror.
+
 ## Selectors
 
 Each view in `prod.spec.ts` asserts one route-specific DOM element (a

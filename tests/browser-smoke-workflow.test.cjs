@@ -24,7 +24,7 @@ test("browser smoke exposes no repository or production credentials to PR code",
   assert.doesNotMatch(job, /SMOKE_PLAIN_SESSION_STATE/);
   assert.match(job, /postgres:16-bookworm@sha256:[a-f0-9]{64}/);
   assert.match(job, /redis:7-alpine@sha256:[a-f0-9]{64}/);
-  assert.match(job, /quay\.io\/soketi\/soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
+  assert.match(job, /ghcr\.io\/hypertask-ai\/ci-soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
   assert.match(job, /health-cmd "wget [^"]+http:\/\/127\.0\.0\.1:6001"/);
   assert.match(job, /session_secret=\$\(openssl rand -hex 32\)/);
   assert.match(job, /printf '::add-mask::%s\\n' "\$session_secret"/);

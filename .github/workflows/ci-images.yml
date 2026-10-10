@@ -1,0 +1,93 @@
+name: Mirror CI images
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '23 4 * * 1'
+  # A new workflow cannot be dispatched until it exists on the default branch.
+  # Seed the packages on this one branch before any CI consumers switch to GHCR.
+  push:
+    branches: [yper4-231-ghcr-ci-images]
+    paths: [.github/workflows/ci-images.yml, .github/ci-images.json]
+
+permissions: {}
+
+concurrency:
+  group: mirror-ci-images
+  cancel-in-progress: false
+
+jobs:
+  inventory:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      images: ${{ steps.inventory.outputs.images }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - id: inventory
+        run: echo "images=$(jq -c . .github/ci-images.json)" >> "$GITHUB_OUTPUT"
+
+  mirror:
+    needs: inventory
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        include: ${{ fromJSON(needs.inventory.outputs.images) }}
+    steps:
+      # Publishing with this repository's GITHUB_TOKEN links new packages to
+      # the repository and grants its workflows access, unlike a personal token.
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        with:
+          driver: docker
+          install: false
+          use: false
+      - name: Copy the pinned official manifest without rebuilding
+        env:
+          SOURCE: ${{ matrix.source }}:${{ matrix.tag }}@${{ matrix.digest }}
+          DESTINATION: ghcr.io/hypertask-ai/ci-${{ matrix.image }}:${{ matrix.tag }}
+          DIGEST: ${{ matrix.digest }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if docker buildx imagetools create --prefer-index=false --tag "$DESTINATION" "$SOURCE"; then break; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            sleep "$((attempt * 30))"
+          done
+          actual="sha256:$(docker buildx imagetools inspect --raw "$DESTINATION" | sha256sum | cut -d' ' -f1)"
+          [ "$actual" = "$DIGEST" ] || { echo "::error::Mirror digest changed: $actual != $DIGEST"; exit 1; }
+          printf '%s -> %s@%s\n' "$SOURCE" "$DESTINATION" "$actual" >> "$GITHUB_STEP_SUMMARY"
+
+  verify-read:
+    needs: [inventory, mirror]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      packages: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.inventory.outputs.images) }}
+    steps:
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Prove a read-only repository token can pull the pinned image
+        env:
+          IMAGE: ghcr.io/hypertask-ai/ci-${{ matrix.image }}:${{ matrix.tag }}@${{ matrix.digest }}
+        run: docker pull "$IMAGE"

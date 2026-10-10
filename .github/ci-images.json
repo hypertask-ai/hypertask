@@ -1,0 +1,32 @@
+[
+  {
+    "image": "postgres",
+    "tag": "16-bookworm",
+    "source": "docker.io/library/postgres",
+    "digest": "sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825"
+  },
+  {
+    "image": "postgres",
+    "tag": "16-alpine",
+    "source": "docker.io/library/postgres",
+    "digest": "sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea"
+  },
+  {
+    "image": "redis",
+    "tag": "7-alpine",
+    "source": "docker.io/library/redis",
+    "digest": "sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf"
+  },
+  {
+    "image": "node",
+    "tag": "22-bookworm",
+    "source": "docker.io/library/node",
+    "digest": "sha256:8a34c4ab3ea2c5cd194f07e317b2a8f09461d3c8b05c4e34c8ccd56d56024c4d"
+  },
+  {
+    "image": "soketi",
+    "tag": "1.6-16-alpine",
+    "source": "quay.io/soketi/soketi",
+    "digest": "sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c"
+  }
+]
