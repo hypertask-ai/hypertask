@@ -13,6 +13,10 @@ export const RELEASE_RISK_LABELS: Record<FeatureFlagReleaseRisk["risk"], string>
 export const RELEASE_RISK_ORDER: FeatureFlagReleaseRisk["risk"][] = ["none", "small", "new"];
 
 export const FEATURE_FLAG_RELEASE_RISKS: Partial<Record<string, FeatureFlagReleaseRisk>> = {
+  "htpr-7020-tag-full-name": {
+    risk: "small",
+    reason: "Hovering a tag in ticket details shows its full name in the existing tooltip.",
+  },
   "htpr-7050-ctrl-o-links": {
     risk: "small",
     reason: "The existing Ctrl+O menu lists saved ticket links and attachments that were previously missing.",

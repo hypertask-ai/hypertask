@@ -1,4 +1,7 @@
 import LabelWrapper from "@/components/Labels/LabelWrapper";
+import Tooltip from "@/components/Common/Tooltip";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7020_TAG_FULL_NAME_FLAG } from "@/lib/flags/keys";
 import React, { useEffect, useRef, useState } from "react";
 
 const TaskLabelComponent = ({
@@ -26,6 +29,7 @@ const TaskLabelComponent = ({
   className?: string;
   nowrap?: boolean;
 }) => {
+  const fullNameEnabled = useFlag(HTPR_7020_TAG_FULL_NAME_FLAG);
   const labelRef = useRef<HTMLDivElement>(null);
   const [overFlowing, setIsOverFlowing] = useState<boolean>(false);
   const handleOnClick = (e: any) => {
@@ -72,6 +76,9 @@ const TaskLabelComponent = ({
           <span className="absolute inset-y-0 right-[-2px] w-20 bg-gradient-to-l from-comment-description-border to-transparent pointer-events-none" />
         )}
       </span>
+      {fullNameEnabled && taskDetail && (
+        <Tooltip portal left={0} bottom={-40} text={labelValue} keyCombination={[]} />
+      )}
     </LabelWrapper>
   );
 };
