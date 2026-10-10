@@ -28,7 +28,6 @@ const KeyboardShortcuts = () => {
   const keysClassName = shortcutsHelpPhone
     ? "flex gap-1 w-[40%] max-sm:w-auto max-sm:max-w-full max-sm:shrink-0 max-sm:flex-wrap"
     : "flex gap-1 w-[40%]";
-  const badgeClassName = shortcutsHelpPhone ? " max-sm:shrink-0 max-sm:whitespace-nowrap" : "";
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -181,7 +180,7 @@ const KeyboardShortcuts = () => {
                         ) : (
                           <kbd
                             className={`px-[6px] py-[4px] mx-[1.5px] rounded-[2px]
-                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white${badgeClassName}`}
+                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white${shortcutsHelpPhone ? " max-sm:shrink-0 max-sm:whitespace-nowrap" : ""}`}
                           >
                             {key}
                           </kbd>
