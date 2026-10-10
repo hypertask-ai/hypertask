@@ -30,8 +30,9 @@ const config = (() => {
 })();
 
 // Renders the hook like React would: refs persist, effects re-run when deps change.
-function createHarness(flagOn) {
+function createHarness(flagOn, element = null) {
   const refs = [];
+  const frames = [];
   let effectCalls = [];
   const timers = [];
   let refIndex = 0;
@@ -50,11 +51,18 @@ function createHarness(flagOn) {
   };
   const fakeSetTimeout = (callback, delay) => timers.push({ callback, delay, cleared: false }) - 1;
   const fakeClearTimeout = (id) => { timers[id].cleared = true; };
-  new Function("require", "exports", "setTimeout", "clearTimeout", js)((name) => mocks[name], exports, fakeSetTimeout, fakeClearTimeout);
+  const fakeRequestAnimationFrame = (callback) => frames.push({ callback, cancelled: false }) - 1;
+  const fakeCancelAnimationFrame = (id) => { frames[id].cancelled = true; };
+  const fakeDocument = { getElementById: (id) => (element && id === element.id ? element : null) };
+  const fakeWindow = { innerHeight: 900 };
+  new Function("require", "exports", "setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame", "document", "window", js)(
+    (name) => mocks[name], exports, fakeSetTimeout, fakeClearTimeout, fakeRequestAnimationFrame, fakeCancelAnimationFrame, fakeDocument, fakeWindow
+  );
   let lastDeps = null;
   let cleanup = null;
   return {
     timers,
+    frames,
     render(context) {
       refIndex = 0;
       effectCalls = [];
@@ -91,6 +99,29 @@ test("a direct load scrolls to the linked comment once the comments arrive", () 
   for (const timer of harness.timers) timer.callback();
   assert.equal(calls.length, 3);
   for (const call of calls) assert.deepEqual(call, ["comment", 270430, undefined, true]);
+});
+
+test("a rendered comment the virtualizer left off screen is centred", () => {
+  const calls = [];
+  const scrolled = [];
+  const makeElement = (top) => ({
+    id: "comment-270430-input",
+    getBoundingClientRect: () => ({ top, bottom: top + 80 }),
+    scrollIntoView: (options) => scrolled.push(options),
+  });
+  const offScreen = createHarness(true, makeElement(947));
+  offScreen.render(makeContext([{ id: "270430" }], calls));
+  for (const timer of offScreen.timers) timer.callback();
+  for (const frame of offScreen.frames) frame.callback();
+  assert.equal(scrolled.length, 3);
+  assert.deepEqual(scrolled[0], { behavior: "auto", block: "center" });
+
+  scrolled.length = 0;
+  const inView = createHarness(true, makeElement(400));
+  inView.render(makeContext([{ id: "270430" }], calls));
+  for (const timer of inView.timers) timer.callback();
+  for (const frame of inView.frames) frame.callback();
+  assert.equal(scrolled.length, 0, "a comment already in view is left alone");
 });
 
 test("with the flag off nothing is scheduled", () => {
