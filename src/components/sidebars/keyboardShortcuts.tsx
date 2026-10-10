@@ -1,5 +1,6 @@
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { appShellRailAtom, showShortcutsAtom } from "@/store";
 import BackDropContainer from "./BackDropContainer";
@@ -15,6 +16,17 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
+  const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
+  const panelClassName = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
+  const rowClassName = shortcutsHelpPhone
+    ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
+    : "flex flex-row items-center mb-2 gap-2";
+  const labelClassName = shortcutsHelpPhone
+    ? "w-[60%] font-normal text-content leading-[16.94px] max-sm:w-auto max-sm:flex-[1_0_60%]"
+    : "w-[60%] font-normal text-content leading-[16.94px]";
+  const keysClassName = shortcutsHelpPhone
+    ? "flex gap-1 w-[40%] max-sm:w-auto max-sm:max-w-full max-sm:shrink-0 max-sm:flex-wrap"
+    : "flex gap-1 w-[40%]";
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -131,18 +143,32 @@ const KeyboardShortcuts = () => {
       <div
         id={DIV_ID_CONSTANTS.keyboardShortcuts}
         style={{ fontSize: 14 }}
-        className="fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]"
+        className={shortcutsHelpPhone
+          ? `${panelClassName} max-sm:w-full max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-sm:pb-[env(safe-area-inset-bottom)]`
+          : panelClassName}
       >
-        <input
-          className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "
-          id={INPUT_ID_CONSTANTS.KeyboardShortcuts}
-          autoFocus
-          placeholder="Search"
-          autoComplete="off"
-          style={{ backgroundColor: "transparent", outline: "none" }}
-          onChange={onKeyChange}
-          value={keyword}
-        />
+        <div className={shortcutsHelpPhone ? "max-sm:flex max-sm:items-start" : undefined}>
+          <input
+            className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "
+            id={INPUT_ID_CONSTANTS.KeyboardShortcuts}
+            autoFocus
+            placeholder="Search"
+            autoComplete="off"
+            style={{ backgroundColor: "transparent", outline: "none" }}
+            onChange={onKeyChange}
+            value={keyword}
+          />
+          {shortcutsHelpPhone && (
+            <button
+              type="button"
+              aria-label="Close keyboard shortcuts"
+              className="hidden max-sm:flex h-11 w-11 shrink-0 items-center justify-center mr-4 mt-2 cursor-pointer rounded-sm text-text-light-gray hover:text-white-black outline-none focus-visible:bg-hover-active focus-visible:text-white-black"
+              onClick={() => setShowShortcuts(false)}
+            >
+              <X size={18} strokeWidth={1.75} aria-hidden />
+            </button>
+          )}
+        </div>
         <div className="px-4">
           {filteredShortcuts?.map((section: any, sectionIndex: number) => (
             <div key={sectionIndex}>
@@ -151,13 +177,13 @@ const KeyboardShortcuts = () => {
               </h3>
               {section?.sub?.map((subItem: any, subIndex: number) => (
                 <div
-                  className="flex flex-row items-center mb-2 gap-2"
+                  className={rowClassName}
                   key={subIndex}
                 >
-                  <p className="w-[60%] font-normal text-content leading-[16.94px]">
+                  <p className={labelClassName}>
                     {subItem.shortTitle}
                   </p>
-                  <div className="flex gap-1 w-[40%]">
+                  <div className={keysClassName}>
                     {subItem.pressKey.map((key: any, keyIndex: number) => (
                       <>
                         {!key ? (
@@ -167,7 +193,7 @@ const KeyboardShortcuts = () => {
                         ) : (
                           <kbd
                             className={`px-[6px] py-[4px] mx-[1.5px] rounded-[2px]
-                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white`}
+                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white${shortcutsHelpPhone ? " max-sm:shrink-0 max-sm:whitespace-nowrap" : ""}`}
                           >
                             {key}
                           </kbd>

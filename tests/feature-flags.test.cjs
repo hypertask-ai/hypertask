@@ -112,6 +112,19 @@ test("image chat task refresh is an Everyone bugfix and respects OFF", async () 
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
+test("phone shortcuts help is an Everyone-default bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG;
+  assert.equal(key, "htpr-7045-shortcuts-help-phone");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7045");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 2343, 7].map((id) => flags.isFeatureEnabled(key, id))), [true, true, true, true]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 2343, 7].map((id) => flags.isFeatureEnabled(key, id))), [false, false, false, false]);
+});
+
 test("activation analytics defaults Owner + QA and respects OFF", async () => {
   const key = flags.HTPR_7034_ACTIVATION_ANALYTICS_FLAG;
   assert.equal(key, "htpr-7034-activation-analytics");
@@ -458,6 +471,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7050_CTRL_O_LINKS_FLAG,
         flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
+        flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
         flags.HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
         flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
@@ -1010,6 +1024,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7043-no-empty-board-flash", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7044-double-click-to-edit", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7045-shortcuts-help-phone", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
