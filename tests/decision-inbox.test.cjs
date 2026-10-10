@@ -55,9 +55,10 @@ const makeDb = ({ reviewTasks = [], mentions = [], viewerComments = [] }) => {
   };
 };
 
-const mention = (t, id, text, hoursAgo) => ({
+// commentText is the stored plain text; the controller only reads it (or strips text when absent).
+const mention = (t, id, text, hoursAgo, commentText = text) => ({
   task: t,
-  comment: { id, taskId: t.id, text, commentText: text.replace(/<[^>]*>/g, ""), createdAt: at(hoursAgo) },
+  comment: { id, taskId: t.id, text, commentText, createdAt: at(hoursAgo) },
 });
 
 test("review column matches the first name as well as the full name", async () => {
@@ -87,6 +88,14 @@ test("unanswered Question comment is kept and deep links to the comment", async 
   assert.equal(rows[0].kind, "question");
   assert.equal(rows[0].question, "Ship it?");
   assert.equal(rows[0].href, "/detail/project-15/2#comment-90");
+});
+
+test("question text is decoded once: nested tags go, escaped entities stay literal", async () => {
+  const t = task(4);
+  const html = "<p>Question: Keep &amp;lt;b&amp;gt; and <<b>i>x</i> &lt;tag&gt;?</p>";
+  const db = makeDb({ mentions: [mention(t, 92, html, 1, "")] });
+  const rows = await load({ db })(6, false);
+  assert.equal(rows[0].question, "Keep &lt;b&gt; and x <tag>?");
 });
 
 test("a later comment by the viewer clears the question", async () => {

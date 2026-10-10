@@ -15,15 +15,23 @@ export type DecisionRow = {
   href: string;
 };
 
-const stripHtml = (html: string) =>
-  html
-    .replace(/<[^>]*>/g, " ")
+// Plain text for display only (React escapes it). Tags are removed until none are left,
+// and &amp; is decoded last so "&amp;lt;" stays the literal text "&lt;".
+const stripHtml = (html: string) => {
+  let text = html;
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<[^<>]*>/g, " ");
+  } while (text !== previous);
+  return text
     .replace(/&nbsp;/g, " ")
-    .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
     .replace(/\s+/g, " ")
     .trim();
+};
 
 const QUESTION_PREFIX = /^question:\s*/i;
 
