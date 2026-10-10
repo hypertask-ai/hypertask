@@ -11,6 +11,7 @@ import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, ret
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 
 export function composeTaskBoardId(
   url: string,
@@ -28,7 +29,7 @@ export function composeTaskBoardId(
     .map(([id]) => Number(id)).find((id) => Number.isInteger(id) && id > 0);
 }
 
-export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }): string {
+export function composeTaskAssistantMessage(ticket: string, writerFailed = false, filledExistingTask = false, batch?: { tasks: ITask[]; failedTitles: string[] }, writerFailureReason?: string): string {
   if (batch && (batch.tasks.length > 1 || batch.failedTitles.length)) {
     const links = batch.tasks.map((task) => `<li><a href="/detail/project-${task.projectId}/${task.uniqueIndex}">${escapeHtml(task.ticketNumber ?? `TASK-${task.uniqueIndex}`)}: ${escapeHtml(task.title ?? "")}</a></li>`).join("");
     const failures = batch.failedTitles.length
@@ -37,20 +38,23 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
   }
   const greeting = `I ${filledExistingTask ? "filled in" : "created"} ${ticket} from your note. Want me to refine it? I can tighten the title, add acceptance criteria or split it into sub-tasks.`;
   return writerFailed
-    ? `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
+    ? writerFailureReason
+      ? `${greeting}\n\nThe task writer was unavailable: ${writerFailureReason.trim().replace(/[.!?]*$/, ".")} I kept your original text as the title and description.`
+      : `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
     : greeting;
 }
 
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
-  text, files, project, userId, existingTaskId, onProgress, viewProject, fields,
+  text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
+  explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
-}): Promise<{ task: ITask; writerFailed: boolean; tasks: ITask[]; failedTitles: string[] }> {
+}): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; tasks: ITask[]; failedTitles: string[] }> {
   // Resolve the destination before spending AI credits; omitting sectionId uses
   // the same first active column as the regular create-task form.
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
@@ -73,6 +77,7 @@ export async function createComposedTask({
   let title = text;
   let description = rawDescription;
   let writerFailed = false;
+  let writerFailureReason: string | undefined;
   let drafts: { title: string; description: string; writerDueDate?: string }[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
@@ -96,7 +101,11 @@ export async function createComposedTask({
         taskDescription: media.html,
       }),
     });
-    if (!response.ok) throw new Error("Task writer unavailable");
+    if (!response.ok) {
+      // Same extraction as the AI Task Writer panel (HTPR-7077).
+      if (explainWriterFailure) writerFailureReason = await describeTaskWriterFailure(response);
+      throw new Error("Task writer unavailable");
+    }
     let html = "";
     if (onProgress && response.body) {
       // Headers arrive after server retrieval and prompt preparation. The model
@@ -125,7 +134,10 @@ export async function createComposedTask({
     }
     // This endpoint streams raw HTML on success, but SSE error frames can arrive
     // after a 200. A partial answer must not be mistaken for a completed ticket.
-    if (/^event:\s*(?:error|done)\b/m.test(html)) throw new Error("Task writer interrupted");
+    if (/^event:\s*(?:error|done)\b/m.test(html)) {
+      if (explainWriterFailure) writerFailureReason = describeTaskWriterStreamFailure(html) ?? undefined;
+      throw new Error("Task writer interrupted");
+    }
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
@@ -201,5 +213,5 @@ export async function createComposedTask({
     }
   }
   if (!tasks.length) throw new Error("Couldn’t create the tasks. Your note is still here. Try again.");
-  return { task: tasks[0], writerFailed, tasks, failedTitles };
+  return { task: tasks[0], writerFailed, ...(writerFailureReason ? { writerFailureReason } : {}), tasks, failedTitles };
 }

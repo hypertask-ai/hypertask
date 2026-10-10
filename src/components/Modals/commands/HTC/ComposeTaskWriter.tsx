@@ -27,7 +27,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 import { mergeRealtimeTaskDetail, preserveTaskAssigneesChangedDuringFetch, refreshTaskDetailQueryCache, shouldPreserveTaskEditorContent } from "@/lib/realtime/taskDetailRefresh";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_6951_TASK_WRITING_PROGRESS_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG, HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7085_CTRLJ_WRITER_REASON_FLAG } from "@/lib/flags/keys";
 import { discardUnboundCreateTaskUploads } from "@/lib/createTaskAttachmentUploads";
 import type { IProject, ITask } from "@/models/model";
 
@@ -43,6 +43,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const progressFlag = useFlag(HTPR_6951_TASK_WRITING_PROGRESS_FLAG);
   const viewContextEnabled = useFlag(HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG);
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
+  const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   let showProgress = false;
   if (progressFlag && newTaskWindow) showProgress = true;
   const taskContext = useContext(TaskContext);
@@ -178,8 +179,8 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       }
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
-      const { task: savedTask, writerFailed, tasks: splitResult, failedTitles } = await createComposedTask({
-        text, files, project, userId: user.id, ...(existingTaskId ? { existingTaskId } : {}),
+      const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles } = await createComposedTask({
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, ...(existingTaskId ? { existingTaskId } : {}),
         ...(viewContextEnabled && currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),
@@ -224,7 +225,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
       // The phone form's history cleanup must finish before opening the task and chat.
       if (mobile && newTaskWindow) await onCreated();
-      setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined) });
+      setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason) });
       updateActiveItemAndItemInView(task);
       setScope(projectId);
       setSidebar(true);
