@@ -32,6 +32,7 @@ export const HTPR_7010_HAIKU_5_5_FLAG = "htpr-7010-haiku-5-5";
 export const HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG = "htpr-7038-reset-saved-model-choices";
 export const HTPR_7038_HAIKU_DEFAULT_FLAG = "htpr-7038-haiku-default";
 export const HTPR_7038_TASK_WRITER_SONNET_FLAG = "htpr-7038-task-writer-sonnet";
+export const HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG = "htpr-7060-task-writer-empty-and-research";
 /**
  * Feature flag keys, and nothing else.
  *

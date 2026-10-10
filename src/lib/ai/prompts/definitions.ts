@@ -347,6 +347,12 @@ Then verify: if the reader reads only the first line and the last line, do they 
 
 If yes, send.`],
   },
+  "task-writer-research-request-rule": {
+    id: "task-writer-research-request-rule",
+    version: "1",
+    parts: [`<h3>RESEARCH REQUESTS</h3>
+- For research, analysis, or investigation requests, write a ticket describing the work to do: goal, questions, sources, deliverable, and acceptance criteria. Never perform the research or state findings, rankings, or facts the user did not provide.`],
+  },
   "task-writer-board-research-rules": {
     id: "task-writer-board-research-rules",
     version: "1",

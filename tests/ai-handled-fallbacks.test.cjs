@@ -265,6 +265,7 @@ function routeStubs(error, reports) {
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/app/api/ai/_lib/taskWriterProperties": {},
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (value) => value instanceof Error ? value.message : "Sorry, an error occurred while processing your request.",
       getCurrentUserFromCookies: async () => ({ id: 7 }),
