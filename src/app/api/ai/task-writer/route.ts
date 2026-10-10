@@ -3,6 +3,7 @@ import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
 import { generateText, Output, streamText } from "ai";
+import { HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 import {
   createSseErrorResponse,
@@ -79,6 +80,8 @@ export async function POST(request: NextRequest) {
         let buffer = "";
         let draft = "";
         let streamCompleted = false;
+        let streamError: unknown;
+        let producedText = false;
 
         const enqueueText = (text: string) => {
           if (validateDraft || dueDateContext) draft += text;
@@ -111,10 +114,15 @@ export async function POST(request: NextRequest) {
             maxRetries: 2,
             providerOptions: selected.providerOptions,
             ...selected.settings,
+            // Without this, provider and allowance errors vanish from textStream and the draft ends empty.
+            onError: ({ error }: { error: unknown }) => {
+              streamError ??= error;
+            },
           });
 
           for await (const chunk of result.textStream) {
             if (!chunk) continue;
+            producedText = true;
             if (allowedImgSrcs) {
               buffer += chunk;
               const filtered = filterOneImagePass(buffer, allowedImgSrcs);
@@ -128,6 +136,18 @@ export async function POST(request: NextRequest) {
           if (allowedImgSrcs && buffer) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
+          }
+          if (!producedText && streamError !== undefined && await isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId)) {
+            await reportError({
+              message: streamError instanceof Error ? streamError.message : "AI request failed",
+              stack: streamError instanceof Error ? streamError.stack : undefined,
+              url: "/api/ai/task-writer",
+              source: "handled",
+              extra: { stage: "stream-empty" },
+            });
+            console.error("[ai/task-writer] stream ended empty after error", streamError);
+            enqueueError("error", errorMessage(streamError), "task-writer-stream-error");
+            return;
           }
           const description = validateDraft && body.aiMode === "AiTaskWriter"
             ? extractTaskWriterProperties(draft).description
