@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7072_DECISION_INBOX_FLAG } from "@/lib/flags/keys";
+import { DECISION_INBOX_COLLAPSED_ROWS, visibleDecisionRows } from "./visibleDecisionRows";
 
 type DecisionRow = {
   kind: "question" | "review" | "flag";
@@ -29,6 +31,7 @@ const waitedFor = (iso: string) => {
  * from ticket state on the server, so answering on the ticket clears the row.
  */
 const DecisionInboxPanel = ({ userId }: { userId: number }) => {
+  const [expanded, setExpanded] = useState(false);
   const enabled = useFlag(HTPR_7072_DECISION_INBOX_FLAG);
   const { data } = useQuery({
     queryKey: ["inbox", "decisions", userId],
@@ -53,7 +56,7 @@ const DecisionInboxPanel = ({ userId }: { userId: number }) => {
         Decisions ({data.length})
       </h2>
       <ul className="flex flex-col">
-        {data.map((row) => (
+        {visibleDecisionRows(data, expanded).map((row) => (
           <li key={`${row.kind}-${row.taskId ?? row.title}`} className="py-1">
             <Link href={row.href} className="block min-w-0">
               <span className="block truncate text-content">
@@ -67,6 +70,16 @@ const DecisionInboxPanel = ({ userId }: { userId: number }) => {
           </li>
         ))}
       </ul>
+      {data.length > DECISION_INBOX_COLLAPSED_ROWS && (
+        <button
+          type="button"
+          data-testid="decision-inbox-toggle"
+          onClick={() => setExpanded(!expanded)}
+          className="mt-1 py-1 text-micro font-medium text-white-black hover:text-text-light-gray transition-colors"
+        >
+          {expanded ? "Show fewer" : `Show all (${data.length})`}
+        </button>
+      )}
     </section>
   );
 };
