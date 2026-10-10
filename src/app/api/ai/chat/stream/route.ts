@@ -6,7 +6,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -209,9 +209,15 @@ export async function POST(request: NextRequest) {
   // network attempt gets its own cancellation identity. The server generates
   // one for older clients, which can stream safely but cannot issue exact Stop.
   const streamId = body.stream_id ?? randomUUID();
+  // Always guard the agent across flag toggles; flag Off also guards its owner.
+  // The agent identity is resolved from the owned session, never request input.
+  const isolateAgentLease = !!actingAgent && await isFeatureEnabled(HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, dbUser.id);
   const streamLease = await acquireAiChatStreamLease(
     dbUser.id,
     body.session_id ? { sessionId: body.session_id, streamId } : undefined,
+    undefined,
+    actingAgent?.id,
+    isolateAgentLease,
   );
   if (streamLease === "busy") {
     return createSseErrorResponse(

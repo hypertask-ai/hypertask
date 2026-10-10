@@ -402,6 +402,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
         flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
         flags.HTPR_7050_CTRL_O_LINKS_FLAG,
+        flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
@@ -948,6 +949,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
@@ -1471,4 +1473,16 @@ test("inbox-next-cached bugfix defaults to Everyone for plain QA and respects OF
   assert.equal(await flags.isFeatureEnabled(key, 2343), true);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+});
+
+test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG;
+  assert.equal(key, "htpr-7048-ctrlj-chat-lease");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
 });

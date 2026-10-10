@@ -7,6 +7,7 @@ import {
   HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
   HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
   HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
+  HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
   HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
   HTPR_7026_AGENT_CONNECT_CHECK_FLAG,
   HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
@@ -181,6 +182,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Explains why a board's last column cannot be deleted while it still has cards, from Ctrl+K or the column header.",
+  },
+  {
+    key: HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Keeps background native-agent replies from blocking the human AI chat opened after Ctrl+J task creation, while retaining concurrent-reply protection for each agent and the human.",
   },
   {
     key: HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,

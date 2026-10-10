@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
+import { loadActingAgent } from "@/lib/ai/tools/helpers";
 import { requestAiChatCancellation } from "../stream/streamLease";
 
 export const maxDuration = 60;
@@ -23,11 +24,15 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // Recognize both lease namespaces so Stop still works after a flag toggle.
+    const actingAgent = await loadActingAgent(parsed.data.session_id, user.id);
     const cancellationResult = await requestAiChatCancellation(
       user.id,
       parsed.data.session_id,
       parsed.data.assistant_message_id,
       parsed.data.stream_id,
+      undefined,
+      actingAgent?.id,
     );
     if (cancellationResult === "limited") {
       return NextResponse.json(
