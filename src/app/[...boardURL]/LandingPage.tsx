@@ -1272,11 +1272,11 @@ return (
 export default LandingPage
 
 const SectionComp = (props: SectionCompProps) => {
-  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness));
+  const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
+  return renderLandingSection(useLandingSection(props, useLandingSectionReadiness), connectBlockRemoved);
 };
 
-function renderLandingSection(context: ReturnType<typeof useLandingSection>) {
-  const connectBlockRemoved = useFlag(HTPR_7078_REMOVE_CONNECT_BLOCK_FLAG)
+function renderLandingSection(context: ReturnType<typeof useLandingSection>, connectBlockRemoved: boolean) {
   const {
   boardLayout, isMbl, appShellRailOn, showQuickTips, _currentProject,
   sections, setShowTrial, showTrial, activeBuiltinViews, filteredSectionsForActiveView,
