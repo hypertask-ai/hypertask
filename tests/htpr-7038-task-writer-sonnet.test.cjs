@@ -152,6 +152,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     "@/app/api/ai/_lib/modelProvider": modelApi,
     "@/app/api/ai/_lib/planGate": gate, "@/app/api/ai/_lib/byokKeys": byok,
     "@/app/api/ai/_lib/providerGate": providerGate,
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
     "@/app/api/ai/chat/stream/modelFallback": fallback,
     "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
   });
@@ -166,6 +167,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
       createTaskWriterUserContent: () => "Fixture",
     },
     "@/app/api/ai/_lib/providerGate": providerGate,
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, skills: [] }) },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "" },

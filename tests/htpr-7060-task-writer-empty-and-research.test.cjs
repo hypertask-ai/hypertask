@@ -55,6 +55,7 @@ function harness({ enabled = true, output = "", boardResearch = false, finishRea
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
     "@/lib/ai/composeTaskTarget": {}, "@/lib/doneColumns": { doneColumnTitles: () => new Set() },
     "@/utils/controllers/turbopuffer/turbopufferHelper": { searchTasks: async () => [] },
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/taskWriterPrompt": prompt,
     "@/app/api/ai/_lib/providerGate": { getProjectTeamProviderContext: async () => ({ settings: {} }) },

@@ -84,13 +84,36 @@ type ModelPricing = {
   };
 };
 
-export function modelCostUsd(pricing: ModelPricing, inputTokens: number, outputTokens: number): number {
+/** HTPR-7076: Anthropic prices cache reads at 0.1x and 5-minute cache writes at 1.25x the input rate. */
+export const CACHE_READ_INPUT_MULTIPLIER = 0.1;
+export const CACHE_WRITE_INPUT_MULTIPLIER = 1.25;
+
+/**
+ * `inputTokens` is the total prompt size and already includes cached tokens
+ * (the AI SDK reports total = noCache + cacheRead + cacheWrite).
+ */
+export function modelCostUsd(
+  pricing: ModelPricing,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+): number {
   const input = Math.max(inputTokens, 0);
   const output = Math.max(outputTokens, 0);
+  const cacheRead = Math.min(Math.max(cacheReadTokens || 0, 0), input);
+  const cacheWrite = Math.min(Math.max(cacheWriteTokens || 0, 0), input - cacheRead);
   const rates = pricing.longRequest && input + output > pricing.longRequest.tokenThreshold
     ? pricing.longRequest
     : pricing;
-  return input * rates.inputUsdPerToken + output * rates.outputUsdPerToken;
+  const plainInput = input - cacheRead - cacheWrite;
+  return (
+    (plainInput +
+      cacheRead * CACHE_READ_INPUT_MULTIPLIER +
+      cacheWrite * CACHE_WRITE_INPUT_MULTIPLIER) *
+      rates.inputUsdPerToken +
+    output * rates.outputUsdPerToken
+  );
 }
 
 type AllowanceReservation = {
@@ -109,7 +132,7 @@ type AllowanceReservation = {
 };
 
 type GatewayUsage = {
-  inputTokens: { total?: number };
+  inputTokens: { total?: number; cacheRead?: number; cacheWrite?: number };
   outputTokens: { total?: number };
 };
 
@@ -322,7 +345,13 @@ function settledUsageMicroUsd(
       ? reservedMicroUsd
       : Math.min(inputOnlyBeforeOutputMicroUsd, reservedMicroUsd);
   }
-  const actualUsd = modelCostUsd(pricing, inputTokens, outputTokens);
+  const actualUsd = modelCostUsd(
+    pricing,
+    inputTokens,
+    outputTokens,
+    usage?.inputTokens.cacheRead,
+    usage?.inputTokens.cacheWrite,
+  );
   return usdToMicroUsd(actualUsd);
 }
 

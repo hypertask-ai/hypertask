@@ -149,6 +149,7 @@ function writerHarness(enabled, output = html, fail = false) {
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },
     "@/app/api/ai/_lib/boardTemplateContext": { BOARD_TEMPLATE_LIMIT: 10 },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const calls = [];
   const route = moduleWithStubs("src/app/api/ai/task-writer/route.ts", {

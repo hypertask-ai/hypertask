@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -131,6 +131,16 @@ export async function backgroundClaudeModelEnabled(userId: number | null | undef
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
     return await isFeatureEnabled(HTPR_7075_BACKGROUND_CLAUDE_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+/** HTPR-7076: cache fixed AI instructions. Failed read counts as Off; no user evaluates as user 0. */
+export async function promptCacheEnabled(userId: number | null | undefined): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7076_PROMPT_CACHE_FLAG, userId ?? 0);
   } catch {
     return false;
   }
