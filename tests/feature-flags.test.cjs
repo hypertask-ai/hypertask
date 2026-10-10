@@ -62,6 +62,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("ticket reminders without Inbox items default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG;
+  assert.equal(key, "htpr-7061-remind-without-inbox");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
 test("activation analytics defaults Owner + QA and respects OFF", async () => {
   const key = flags.HTPR_7034_ACTIVATION_ANALYTICS_FLAG;
   assert.equal(key, "htpr-7034-activation-analytics");
@@ -363,6 +374,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
         flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
+        flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -906,6 +918,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

@@ -6,6 +6,7 @@ import {
   withTaskInboxWriteLock,
 } from "@/lib/taskCardActions/writeLocks";
 import { syncMyTasksSnoozeFromReminder } from "@/utils/controllers/tasks/myTasksSnooze";
+import { isFeatureEnabled, HTPR_7061_REMIND_WITHOUT_INBOX_FLAG } from "@/lib/flags";
 
 
 type ClaimedReminderRow = {
@@ -107,30 +108,23 @@ const restoreReminderNotifications = async (
   reminder: IReminder,
   client: Prisma.TransactionClient | typeof prisma = prisma
 ) => {
-  // ----------- get the notification we'll archive
+  const projectWhere: Prisma.ProjectWhereInput = {
+    AND: [
+      {
+        OR: [
+          { members: { some: { userId: reminder.userId, agentId: null } } },
+          { ownerId: reminder.userId },
+        ],
+      },
+      { projectMutes: { none: { userId: reminder.userId } } },
+    ],
+  };
   const notifications = await client.notification.findMany({
-      where:{
-        userId:reminder.userId,
-        taskId:reminder.taskId,
-        projectId:reminder.projectId,
-        // just for safety check if the user is even a part of the project or not anymore by now
-        project:{
-          AND: [
-            {
-              OR:[
-                {
-                  members:{some:{userId:reminder.userId,agentId:null}}
-                },
-                {
-                  ownerId:reminder.userId
-                },
-              ]
-            },
-            {
-              projectMutes:{none:{userId:reminder.userId}}
-            }
-          ]
-        }
+      where: {
+        userId: reminder.userId,
+        taskId: reminder.taskId,
+        projectId: reminder.projectId,
+        project: projectWhere,
       },
       orderBy:{
         createdAt:"desc"
@@ -152,6 +146,34 @@ const restoreReminderNotifications = async (
         seen:false
       }
     })
+  }
+
+  if (notifications.length === 0 && await isFeatureEnabled(HTPR_7061_REMIND_WITHOUT_INBOX_FLAG, reminder.userId)) {
+    // Reuse delivery's access/mute filter and check absence under the task lock.
+    const task = await client.task.findFirst({
+      where: {
+        id: reminder.taskId,
+        projectId: reminder.projectId,
+        status: { not: "Deleted" },
+        project: projectWhere,
+        notifications: { none: { userId: reminder.userId } },
+      },
+      select: { id: true },
+    });
+    if (task) {
+      await client.notification.create({
+        data: {
+          userId: reminder.userId,
+          taskId: reminder.taskId,
+          projectId: reminder.projectId,
+          type: "TaskReminder",
+          status: "Normal",
+          fromUserId: reminder.userId,
+          returnedFromReminders: true,
+          seen: false,
+        },
+      });
+    }
   }
 
   await syncMyTasksSnoozeFromReminder({

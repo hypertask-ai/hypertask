@@ -1,3 +1,4 @@
+export const HTPR_7061_REMIND_WITHOUT_INBOX_FLAG = "htpr-7061-remind-without-inbox";
 export const HTPR_7042_NEON_WORK_AVOIDANCE_FLAG = "htpr-7042-neon-work-avoidance";
 export const HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG = "htpr-7037-shared-email-layout";
 export const HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG = "htpr-7040-last-column-delete-message";
