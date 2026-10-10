@@ -41,6 +41,15 @@ function loadHook({ flagOn, calls }) {
         updateProjectView: () => { calls.push(["patch"]); },
       }),
     },
+    "@/lib/boardSync/reconcileActiveBoardQuery": {
+      // Same order as the real helper: expire boardTasks for this project, then refetch projectsAll.
+      reconcileActiveBoardQuery: async (client, projectId) => {
+        await client.invalidateQueries({
+          predicate: (query) => query.queryKey[0] === "boardTasks" && query.queryKey[2] === projectId,
+        });
+        await client.refetchQueries({ queryKey: ["projectsAll"] });
+      },
+    },
     "@/lib/constants/APIRouteConstants": { deleteRenameViewAPIRoute: "/api/del" },
     "@/utils/helperFunctions/Views/ProjectViewState": {
       isProjectViewResponseForBoard: () => true,
@@ -65,6 +74,7 @@ async function deleteAfterBuiltinVisit(flagOn) {
   const project = { id: 15, project_view: { user_project_views: [{ appliedView: { id: "other" } }] } };
   const { deleteView } = useKanbanViews(project);
   await deleteView("saved", 15);
+  await new Promise((resolve) => setImmediate(resolve));
   return calls;
 }
 

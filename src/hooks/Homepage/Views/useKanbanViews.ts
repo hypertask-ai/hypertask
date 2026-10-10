@@ -64,6 +64,7 @@ import {
 import { useRouter } from "next/navigation";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG } from "@/lib/flags/keys";
+import { reconcileActiveBoardQuery } from "@/lib/boardSync/reconcileActiveBoardQuery";
 
 let emptySectionMutationId = 0
 // Keep rapid toggles layered so one request settling cannot remove a newer choice.
@@ -549,13 +550,12 @@ const useKanbanViews = (project: IProject | null) => {
     // HTPR-7097: projectsAll re-hydrates the open board's saved views from the
     // five-minute boardTasks side cache, which still lists the deleted view.
     // Expire it first so the refetch cannot put the deleted view back.
-    if (deletedViewLeavesTabs) {
-      void queryClient.invalidateQueries({
-        predicate: (query) => query.queryKey[0] === "boardTasks" && query.queryKey[2] === projectId,
-      });
-    }
     // The cache patch no-ops when projectsAll is not loaded on this page.
-    void queryClient.refetchQueries({ queryKey: ["projectsAll"] });
+    if (deletedViewLeavesTabs) {
+      void reconcileActiveBoardQuery(queryClient, projectId);
+    } else {
+      void queryClient.refetchQueries({ queryKey: ["projectsAll"] });
+    }
     return updatedProjectView;
   };
   const saveAsDefaultHandler = async (body: TCreate_view_body) => {

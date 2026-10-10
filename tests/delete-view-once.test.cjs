@@ -51,6 +51,7 @@ async function clickDelete(enabled, status = 200, repeated = false, baseline = f
       "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
       "@/lib/flags/keys": { HTPR_6985_DELETE_VIEW_ONCE_FLAG: flag },
       "@tanstack/react-query": { useQueryClient: () => queryClient },
+      "@/lib/boardSync/reconcileActiveBoardQuery": { reconcileActiveBoardQuery: async (client) => { await client.invalidateQueries(); await client.refetchQueries({ queryKey: ["projectsAll"] }); } },
       "next/navigation": { useRouter: () => ({ refresh() {}, replace() {} }) },
       "@/components/Common/CommonModalComponents": {
         ModalContainerCustom: ({ children, show, ...props }) => React.createElement(Modal, props, children),
