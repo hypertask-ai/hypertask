@@ -27,7 +27,8 @@ for (const state of [false, true, "failure"]) {
     const flagCalls = [];
     let flagRead = Promise.withResolvers();
     let firstRead = Promise.withResolvers();
-    const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, isFeatureEnabled: (flag, userId) => {
+    const flagMock = { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: key, HTPR_7071_AGENT_STATUS_CHIP_FLAG: "htpr-7071-agent-status-chip", isFeatureEnabled: (flag, userId) => {
+      if (flag === "htpr-7071-agent-status-chip") return Promise.resolve(false);
       flagCalls.push([flag, userId]);
       return flagRead.promise;
     } };

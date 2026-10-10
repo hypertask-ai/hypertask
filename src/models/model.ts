@@ -548,6 +548,7 @@ export interface ITask {
     displayName: string | null;
     photoURL: string | null;
   } | null;
+  agentStatus?: { agentName: string; at: string } | null;
   waitingOnSetById?: number | null;
   waitingOnSetAt?: string | null;
   blockingTasks?: IBlockingTask[];
