@@ -12,6 +12,8 @@ Valentin types `/setup-runner` or `/setup-runner 5` in a fresh session in `~/pro
 3. Tell Valentin in one line: `I am RUNNER <n>, logged in and ready to follow /ship.`
 4. Read `.claude/skills/ship/SKILL.md` fully and follow it from **Before anything else**, with no ticket given. Run its board check, respect claims and stale-ticket decisions, then pick the top free ticket of any type. Keep the runner name. `/ship` owns the ledger, claim, fix, review, deploy, live QA and cleanup. Do not replace it with your own workflow.
 
+5. Once per runner, after the number is settled, run `.claude/skills/ship/scripts/runner-pickup install <n>`. It enables `runner-pickup@<n>.timer` and registers the inbox hooks in this checkout's local Claude settings file, so tickets assigned to this runner's agent on the board reach it like chat messages do. Details: the "Tickets assigned to a runner on the board" section of `.claude/skills/ship/SKILL.md`.
+
 ## Codex execution only
 
 Valentin, 2026-10-03: all delegated execution goes to Codex so we use the Codex account's tokens. Coding, tests, research and big-file reading run in background helpers with `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. Never use the Agent tool or Claude subagents for delegated work. The runner's Claude session only plans, judges, reviews and talks to Valentin, apart from the setup and /ship coordination commands above. Give each helper an unlazy ledger and reverify its gates as /ship requires.
