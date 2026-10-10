@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
   HTPR_7050_CTRL_O_LINKS_FLAG,
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
@@ -154,6 +155,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-10",
+    description: "Clears the Inbox archive timestamp when a reminder returns an existing notification so the ticket is visible again.",
+  },
   {
     key: HTPR_7050_CTRL_O_LINKS_FLAG,
     kind: "bugfix",
