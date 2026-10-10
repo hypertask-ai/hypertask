@@ -27,6 +27,9 @@ LOCK = threading.Lock()
 EVENTS = {"comment.created", "comment.mention", "task.assigned", "chat.message"}
 SLUGS = {"infra-manager": "INFRA MANAGER", "speed-runner": "SPEED RUNNER"}
 ROUTE = re.compile(r"^/webhook/(runner-[1-9][0-9]*|" + "|".join(SLUGS) + ")$")
+# Every receivable target, built from constants: path segment -> (runner number or slug, file name stem).
+TARGETS = {f"runner-{i}": (str(i), f"runner-{i}") for i in range(1, 51)}
+TARGETS.update({s: (s, s) for s in SLUGS})
 
 
 def label(t):
@@ -229,9 +232,9 @@ class Handler(BaseHTTPRequestHandler):
             resp = conn.getresponse()
             payload = resp.read()
             self.send_response(resp.status)
-            ctype = resp.getheader("Content-Type")
-            if ctype:
-                self.send_header("Content-Type", re.sub(r"[\r\n\x00]", "", ctype)[:200])
+            # Relay only a fixed Content-Type value, never the upstream string itself.
+            ctype = (resp.getheader("Content-Type") or "").lower()
+            self.send_header("Content-Type", "application/json" if ctype.startswith("application/json") else "text/plain; charset=utf-8")
             self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
             if self.command != "HEAD":
@@ -250,12 +253,12 @@ class Handler(BaseHTTPRequestHandler):
 
     do_GET = do_PUT = do_PATCH = do_DELETE = do_HEAD = do_OPTIONS = do_POST = _dispatch
 
-    def _runner_post(self, target):
-        if target in SLUGS:
-            n = target
-        else:  # runner-<number>: rebuild the name from the parsed number only
-            n = str(int(target[len("runner-"):]))
-            target = f"runner-{n}"
+    def _runner_post(self, segment):
+        # Look the path segment up in a fixed table so every file name below comes from our own constants.
+        known = TARGETS.get(segment)
+        if not known:
+            return self._reply(404)
+        n, target = known
         try:
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:

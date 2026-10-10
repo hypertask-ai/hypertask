@@ -83,7 +83,7 @@ python3 "$T/upstream.py" "$UP" & PIDS="$PIDS $!"; sleep 0.5
 resp=$(curl -s -D "$T/h" -X POST "http://127.0.0.1:$PORT/webhook/hypertask?a=1" -H 'X-Legacy-Sig: s1' -d '{"k":1}')
 eq "legacy POST proxied verbatim (method, path, query, header, body)" "$resp" 'POST /webhook/hypertask?a=1 body={"k":1} x=s1'
 eq "upstream status relayed" "$(head -1 "$T/h" | tr -d '\r' | cut -d' ' -f2)" "418"
-grep -qi '^content-type: text/x-legacy' "$T/h" && ok "upstream Content-Type relayed" || bad "content-type"
+grep -qi '^content-type: text/plain' "$T/h" && ! grep -qi 'x-legacy' "$T/h" && ok "unknown upstream Content-Type replaced by a fixed value" || bad "content-type"
 eq "other methods proxied" "$(curl -s -X PUT "http://127.0.0.1:$PORT/anything" -d z)" 'PUT /anything body=z x=None'
 eq "GET on a runner route is not handled locally" "$(curl -s "http://127.0.0.1:$PORT/webhook/runner-3")" 'GET /webhook/runner-3 body= x=None'
 eq "signed runner request is not proxied" "$(post 3 task.updated d-p1 "$(comment x 800 | jq -c '.event="task.updated"')")" "200"
