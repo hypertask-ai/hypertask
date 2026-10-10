@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const test = require('node:test');
 const { run, contract } = require('./rest-route-entry-compat.test.cjs');
+const preferenceOperations = new Set(['preferences', 'patchPreferences']);
 const operations = ['preferences', 'patchPreferences', 'bindAgent', 'createSession', 'updateSession', 'addMessage', 'revoke', 'createField', 'patchField', 'reorder', 'fieldValue'];
 const inputs = ['', '{', 'null', 'true', 'false', '1', '"text"', '[]', '[{}]', '{}'];
 // Frozen pre-PR-2 handler results, including legacy errors and create-session fallback.
@@ -1656,7 +1657,9 @@ for (const operation of operations) {
   test(`${operation}: unauthorized body is not parsed and reader cannot run`, async () => {
     for (const mode of ['ON', 'OFF']) {
       // create-session is signed-session-only, unlike the profile-required routes.
-      const result = await run(operation, operation === 'createSession' ? 'NO_SESSION' : mode, { raw: '{', noProfile: true });
+      // HTPR-7068: preferences accept the signed session alone when the flag is on.
+      const signedSessionOnly = operation === 'createSession' || (mode === 'ON' && preferenceOperations.has(operation));
+      const result = await run(operation, signedSessionOnly ? 'NO_SESSION' : mode, { raw: '{', noProfile: true });
       assert.equal(result.status, 401);
       assert.equal(result.jsonReads, 0);
       assert.deepEqual(result.readers, []);
@@ -1664,6 +1667,13 @@ for (const operation of operations) {
     }
   });
 }
+test('HTPR-7068: malformed preferences from a signed session without the legacy profile are parsed when the flag is on', async () => {
+  for (const operation of preferenceOperations) {
+    const result = await run(operation, 'ON', { raw: '{', noProfile: true });
+    assert.equal(result.status, 400);
+    assert.equal(result.jsonReads, 1);
+  }
+});
 test('Malformed create-session retains blank-session creation in both modes (no new JSON 400 in PR 2)', async () => {
   for (const mode of ['ON', 'OFF']) {
     const result = await run('createSession', mode, { raw: '{' });
