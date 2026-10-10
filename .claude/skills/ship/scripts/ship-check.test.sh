@@ -1033,5 +1033,54 @@ except ValueError:
     pass
 PY
 
+# Dropped path (YPER4-257): Valentin decided against a ticket, its PR is closed unmerged. Fakes: PR state and comments.
+mkdir -p "$E/drop-bin"
+cat > "$E/drop-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+# pr view <n> ... : state comes from $DROP_DIR/state-<n>; the title names YPER4-777.
+[[ $1 == pr && $2 == view ]] || exit 1
+st=$(cat "$DROP_DIR/state-$3") || exit 1
+case "$*" in
+  *'--json title,state,baseRefName'*) echo "$st production YPER4-777 [INFRA] Dropped fixture" ;;
+  *'--json number,title,state,mergeCommit,baseRefName'*)
+    sha=null; [ "$st" = MERGED ] && sha='{"oid":"abc123"}'
+    echo "{\"number\":$3,\"title\":\"YPER4-777 [INFRA] Dropped fixture\",\"state\":\"$st\",\"mergeCommit\":$sha,\"baseRefName\":\"production\"}" ;;
+  *'--json title'*) echo "YPER4-777 [INFRA] Dropped fixture" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/drop-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == comment && $2 == list ]]; then cat "$DROP_DIR/comments"
+elif [[ $1 == tasks && $2 == get ]]; then echo '{"success":true,"tasks":[{"section":"Done"}]}'
+else exit 1; fi
+MOCK
+chmod +x "$E/drop-bin/gh" "$E/drop-bin/hypertask"
+export DROP_DIR="$E/drop"; mkdir -p "$DROP_DIR"
+D() { PATH="$E/drop-bin:$PATH" ./ship-check "$@"; }
+echo '{"success":true,"comments":[{"text":"<p>Agent note, no decision here.</p>"}]}' > "$DROP_DIR/comments"
+echo CLOSED > "$DROP_DIR/state-901"; echo OPEN > "$DROP_DIR/state-902"; echo MERGED > "$DROP_DIR/state-903"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted without a decision comment" || ok "dropped refuses a ticket without a quoted dated decision"
+echo '{"success":true,"comments":[{"text":"<p>Valentin decided on 2026-10-10 not to ship this.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unquoted decision" || ok "dropped refuses a decision without a quote"
+echo '{"success":true,"comments":[{"text":"<p>Valentin, 2026-10-10: &quot;drop it, not needed&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 902 >/dev/null && bad "dropped accepted an open PR" || ok "dropped refuses an open PR"
+D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "dropped refuses a merged PR"
+[ ! -e "$E/YPER4-777/dropped" ] && ok "refused dropped writes no record" || bad "refused dropped wrote a record"
+out=$(D dropped YPER4-777 901); [ "$out" = 'recorded YPER4-777 as dropped (PR 901 closed unmerged)' ] && ok "dropped records a closed unmerged PR" || bad "dropped: $out"
+[ "$(cat "$E/YPER4-777/pr")" = 901 ] && [ "$(cat "$E/YPER4-777/dropped")" = 901 ] && ok "dropped binds the PR" || bad "dropped record"
+for x in merged deployed proof; do
+  D $x YPER4-777 | grep -q "$x ok (dropped: PR 901 closed unmerged)" && ok "dropped passes $x" || bad "dropped $x"
+done
+D pr YPER4-777 | grep -q 'title ok' && ok "dropped passes pr" || bad "dropped pr"
+echo '{"tool_input":{"command":"vcc task move YPER4-777 --section \"Done\""}}' | PATH="$E/drop-bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done for a dropped ticket" || bad "guard blocks Done for a dropped ticket"
+echo MERGED > "$DROP_DIR/state-901"
+D merged YPER4-777 >/dev/null && bad "dropped passed merged after the PR merged" || ok "dropped merged gate fails once the PR is merged"
+echo OPEN > "$DROP_DIR/state-901"
+D deployed YPER4-777 >/dev/null && bad "dropped passed deployed after the PR reopened" || ok "dropped deployed gate fails once the PR reopens"
+echo CLOSED > "$DROP_DIR/state-901"
+D bind YPER4-777 901 >/dev/null && [ ! -e "$E/YPER4-777/dropped" ] && ok "bind clears dropped" || bad "bind did not clear dropped"
+
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
