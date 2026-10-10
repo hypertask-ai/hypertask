@@ -1,4 +1,4 @@
-import { useFlag } from "@/hooks/useFlag";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
@@ -103,6 +103,10 @@ const AIModelDropDownList = ({
   haiku55Enabled: boolean;
   haikuDefaultEnabled: boolean;
 }) => {
+  const haiku55Loaded = useFlagLoaded(HTPR_7010_HAIKU_5_5_FLAG);
+  const haikuDefaultLoaded = useFlagLoaded(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const lunaFreeLoaded = useFlagLoaded(LUNA_FREE_PLAN_FLAG);
+  const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded && lunaFreeLoaded;
   const quickModelIds = haiku55Enabled
     ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
     : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
@@ -241,6 +245,7 @@ const AIModelDropDownList = ({
 
   useEffect(() => {
     if (
+      !modelFlagsLoaded ||
       (respectTeamAvailability && providerSettingsLoading) ||
       customEndpoint.isLoading ||
       requestedOption.id === selectedOption.id ||
@@ -252,6 +257,7 @@ const AIModelDropDownList = ({
   }, [
     availableOptions.length,
     optionCallback,
+    modelFlagsLoaded,
     providerSettingsLoading,
     customEndpoint.isLoading,
     respectTeamAvailability,
