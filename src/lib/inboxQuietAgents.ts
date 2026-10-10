@@ -1,22 +1,11 @@
+import { isQuestionComment } from "@/lib/inboxDecisions";
+
 /**
  * HTPR-7096: pure rules for a quiet owner inbox. Client safe, no flag reads.
- *
- * HTPR-7092 shares this: isQuestionComment mirrors the semantics of
- * isQuestionComment in src/lib/inboxDecisions.ts (Question: at the start of any
- * paragraph or line, bold or plain). Switch to importing it once that file is on
- * production.
+ * Question detection is shared with HTPR-7092 (src/lib/inboxDecisions.ts), so the
+ * Important split and the Decisions split agree.
  */
-
-/** True when any paragraph or line of the comment HTML starts with "Question:". */
-export function isQuestionComment(text: string | null | undefined): boolean {
-  if (!text) return false;
-  return text
-    .split(
-      /<\/(?:p|li|h[1-6]|blockquote|div)\s*>|<br\b[^>]*>|<(?:p|li|div|h[1-6]|blockquote)\b[^>]*>|\r?\n/i,
-    )
-    // Match past leading inline tags and spaces; no tag stripping, the text is never rendered.
-    .some((part) => /^(?:\s|&nbsp;|<[^>]*>)*Question:/.test(part));
-}
+export { isQuestionComment };
 
 type MentionRow = {
   type: string;
