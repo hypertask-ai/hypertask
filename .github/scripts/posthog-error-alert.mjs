@@ -1,5 +1,6 @@
 import { emergencyRollback } from "./emergency-rollback.mjs";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { plainSummary, plainTitle } from "../../src/lib/errors/plainIncident.mjs";
 
 function requiredConfig(name) {
   const value = process.env[name]?.trim();
@@ -161,8 +162,8 @@ function mcpHeaders(token, idempotencyKey) {
 }
 
 function incidentTitle(alert) {
-  const prefix = alert.alert_kind === "server_error_spike" ? "[incident] Server error spike" : "[incident] New server error";
-  return `${prefix}: ${alert.name}`.slice(0, 120);
+  const kind = alert.alert_kind === "server_error_spike" ? "spike" : "error";
+  return plainTitle({ kind, url: alert.url, message: alert.message });
 }
 
 function rollbackMessage(alert, rollback) {
@@ -190,11 +191,19 @@ function rollbackMessage(alert, rollback) {
 function incidentDescription(alert, rollback) {
   const action = rollbackMessage(alert, rollback);
   return (
-    `<p><strong>${escapeHtml(alert.message)}</strong></p>` +
+    `<p><strong>${escapeHtml(plainSummary({ url: alert.url, message: alert.message }))}</strong></p>` +
     `<ul>` +
+    `<li>How often: ${alert.count} in five minutes, first seen ${escapeHtml(alert.timestamp)}.</li>` +
+    `<li>How bad: users affected unknown, check PostHog.</li>` +
+    `<li>What to do next: a runner finds the cause, fixes it and rewrites this ticket with specifics.</li>` +
+    `<li>${escapeHtml(action)}</li>` +
+    `</ul>` +
+    `<h3>Technical details</h3>` +
+    `<ul>` +
+    `<li>Error: <code>${escapeHtml(alert.name)}</code></li>` +
+    `<li>Message: ${escapeHtml(alert.message)}</li>` +
     `<li>Release: <code>${escapeHtml(alert.release)}</code></li>` +
     `<li>Errors in five minutes: ${alert.count}</li>` +
-    `<li>${escapeHtml(action)}</li>` +
     `<li><a href="${escapeHtml(alert.issue_url)}">Open the errors in PostHog</a></li>` +
     `</ul>`
   );

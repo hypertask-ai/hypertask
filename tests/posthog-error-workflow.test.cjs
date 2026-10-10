@@ -209,7 +209,7 @@ test("fresh spike succeeds with one incident and only its rollback comment", asy
   assert.equal(create.options.headers["Idempotency-Key"], `posthog-incident-${payload().event_id}`);
   assert.match(create.options.body, /"project_id":15/);
   assert.match(create.options.body, /"section_id":4389/);
-  assert.match(create.options.body, /\[incident\] Server error spike/);
+  assert.match(create.options.body, /"title":"Server error spike: a request took too long"/);
   assert.equal(incidentComment.options.headers["Idempotency-Key"], `posthog-rollback-result-${payload().event_id}`);
   assert.match(create.options.body, /Database &lt;timeout&gt;/);
   assert.match(incidentComment.options.body, /previous ready release/);
@@ -234,7 +234,7 @@ test("first server error succeeds with an incident and no thread note", async ()
   assert.equal(result.incident.number, 7001);
   const creates = calls.filter((call) => call.url.endsWith("/api/mcp/tasks/create"));
   assert.equal(creates.length, 1);
-  assert.match(creates[0].options.body, /\[incident\] New server error/);
+  assert.match(creates[0].options.body, /"title":"Server error: a request took too long"/);
   assert.match(creates[0].options.body, /"project_id":15/);
   assert.match(creates[0].options.body, /first occurrence/);
   assert.equal(calls.filter((call) => call.url.endsWith("/api/mcp/comments")).length, 0);

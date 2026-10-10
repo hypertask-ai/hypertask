@@ -11,6 +11,7 @@ import {
 import { claimThresholdErrorTicket } from "./errorTicketThreshold";
 import { selectErrorBoardSection } from "./errorBoardTarget";
 import { symbolicateStack } from "./symbolicateStack";
+import { plainSummary, plainTitle } from "./plainIncident.mjs";
 import { capturePostHogException } from "@/lib/telemetry/posthogErrorTracking";
 
 export type ErrorReport = {
@@ -44,9 +45,12 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#x27;");
 }
 
-function ticketTitle(message: string) {
-  const normalized = message.replace(/\s+/g, " ").trim();
-  return `[auto] ${normalized.slice(0, 90)}`;
+function ticketTitle(report: ErrorReport) {
+  return plainTitle({
+    url: report.url,
+    source: report.source,
+    message: report.message.replace(/\s+/g, " ").trim(),
+  });
 }
 
 function ticketDescription(report: ErrorReport, firstSeen: string) {
@@ -55,8 +59,15 @@ function ticketDescription(report: ErrorReport, firstSeen: string) {
     : "";
   const stack = `${report.stack || "Not provided"}${extra}`;
   return sanitizeRichHtml(
-    `<p><strong>An automated production error needs investigation.</strong></p>` +
+    `<p><strong>${escapeHtml(plainSummary({ url: report.url, source: report.source, message: report.message }))}</strong></p>` +
       `<ul>` +
+      `<li>How often: first seen ${escapeHtml(firstSeen)}.</li>` +
+      `<li>How bad: users affected unknown, check PostHog.</li>` +
+      `<li>What to do next: a runner finds the cause, fixes it and rewrites this ticket with specifics.</li>` +
+      `</ul>` +
+      `<h3>Technical details</h3>` +
+      `<ul>` +
+      `<li><strong>Message:</strong> ${escapeHtml(report.message)}</li>` +
       `<li><strong>URL:</strong> ${escapeHtml(report.url || "Unknown")}</li>` +
       `<li><strong>Source:</strong> ${escapeHtml(report.source)}</li>` +
       `<li><strong>First seen:</strong> ${escapeHtml(firstSeen)}</li>` +
@@ -201,14 +212,14 @@ async function reportErrorTicket(report: ErrorReport) {
     const { labelIds, ...boardTarget } = target;
     await createTask({
       ...boardTarget,
-      title: ticketTitle(report.message),
+      title: ticketTitle(report),
       description: ticketDescription(report, firstSeen),
       userId,
       priorityIndex: 0,
       estimateIndex: 0,
       labels: labelIds,
     });
-    trace("created", { title: ticketTitle(report.message) });
+    trace("created", { title: ticketTitle(report) });
   } catch (error) {
     console.error("[error-reporter] failed", error);
   }
