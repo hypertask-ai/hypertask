@@ -24,6 +24,7 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
+    if (key === "htpr-7069-flags-dropdown-filters") return false;
     if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     assert.equal(key, "htpr-6964-flags-page-type-search");
     return discoveryEnabled;

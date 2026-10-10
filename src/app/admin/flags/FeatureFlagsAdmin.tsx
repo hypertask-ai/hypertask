@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,18 +8,20 @@ import {
   FEATURE_FLAGS_QUERY_PREFIX,
   useFlag,
 } from "@/hooks/useFlag";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
   clusterFeatureFlagsByReleaseDate,
   countFeatureFlagsByAudience,
+  isUnreleasedFeatureFlag,
   type FeatureFlagAudienceFilter,
 } from "@/lib/flags/cluster";
 import { featureFlagRemovalState } from "@/lib/flags/removal";
-import { FLAG_FILTER_KINDS, flagDaysWaiting, matchesFlagKind, matchesFlagRisk, useFlagsPageFilters } from "./useFlagsPageFilters";
+import { FLAG_FILTER_KINDS, flagDaysWaiting, matchesFlagKind, matchesFlagRisk, useFlagsPageFilters, type FlagsPageFilters } from "./useFlagsPageFilters";
 
 import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_LABELS, RELEASE_RISK_ORDER } from "@/lib/flags/releaseRisk";
 
@@ -40,6 +42,65 @@ const AUDIENCE_FILTERS: { mode: FeatureFlagAudienceFilter; label: string }[] = [
   { mode: "UNRELEASED", label: "Unreleased" },
   ...OPTIONS,
 ];
+
+type FlagFilterDropdown = {
+  label: string;
+  multiple: boolean;
+  selected: string[];
+  allCount?: number;
+  options: { value: string; label: string; count: number }[];
+  onChange: (selected: string[]) => void;
+};
+
+// Trigger button plus the shared OptionPickerModal. Single selects close on pick; multi selects stay open.
+function FlagFilterPicker({ label, multiple, selected, allCount, options, onChange }: FlagFilterDropdown) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const summary = selected.length === 0
+    ? "All"
+    : options.filter((option) => selected.includes(option.value)).map((option) => option.label).join(", ");
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  const pickerOptions = [
+    ...(multiple ? [{ id: "", label: `All (${allCount ?? 0})`, checked: selected.length === 0 }] : []),
+    ...options.map((option) => ({ id: option.value, label: `${option.label} (${option.count})`, checked: selected.includes(option.value) })),
+  ];
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        aria-label={`Filter ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        className="max-w-full flex-1 basis-40 truncate rounded-sm px-3 py-1.5 text-left text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
+      >
+        {label}: {summary}
+      </button>
+      {open && (
+        <OptionPickerModal
+          header={label}
+          options={pickerOptions}
+          onSelect={(option) => {
+            const value = String(option.id ?? "");
+            if (!multiple) {
+              onChange([value]);
+              close();
+            } else if (value === "") {
+              onChange([]);
+            } else {
+              onChange(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+            }
+          }}
+          onClose={close}
+        />
+      )}
+    </>
+  );
+}
 
 type AdminFeatureFlags = {
   flags: FeatureFlagRow[];
@@ -77,8 +138,10 @@ export default function FeatureFlagsAdmin({
 }) {
   const queryClient = useQueryClient();
   const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  const urlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
-  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey);
+  const dropdownFiltersEnabled = useFlag(HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG);
+  const existingUrlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
+  const urlFiltersEnabled = existingUrlFiltersEnabled || dropdownFiltersEnabled;
+  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, dropdownFiltersEnabled);
   const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
   const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
@@ -144,6 +207,52 @@ export default function FeatureFlagsAdmin({
     [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
   );
 
+  const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
+  const allRows = flags.data?.flags ?? [];
+  const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
+  // Each dropdown counts what its options would show with every other filter and the search applied.
+  const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
+  const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
+    : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
+      : flag.mode === audienceFilter;
+  const statusCounts = countFeatureFlagsByAudience(
+    searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), urlFiltersEnabled,
+  );
+  const dropdowns = [
+    {
+      label: "Status", multiple: false, selected: [audienceFilter],
+      options: AUDIENCE_FILTERS.map(({ mode, label }) => ({ value: mode, label, count: statusCounts[mode] })),
+      onChange: ([audience]: string[]) => setAudienceFilter(audience as FeatureFlagAudienceFilter),
+    },
+    {
+      label: "Type", multiple: true, selected: kinds,
+      allCount: searchedRows.filter((flag) => inAudience(flag) && matchesFlagRisk(flag, risk)).length,
+      options: FLAG_FILTER_KINDS.map((kind) => ({
+        value: kind, label: KIND_LABELS[kind],
+        count: searchedRows.filter((flag) => inAudience(flag) && matchesFlagRisk(flag, risk) && matchesFlagKind(flag, [kind])).length,
+      })),
+      onChange: (selected: string[]) => change({ ...filters, kinds: selected as FeatureFlagKind[] }),
+    },
+    {
+      label: "Release risk", multiple: true, selected: selectedRisks,
+      allCount: searchedRows.filter((flag) => inAudience(flag) && matchesFlagKind(flag, kinds)).length,
+      options: RELEASE_RISK_ORDER.map((value) => ({
+        value, label: RELEASE_RISK_LABELS[value],
+        count: searchedRows.filter((flag) => inAudience(flag) && matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, value)).length,
+      })),
+      onChange: (selected: string[]) => change({ ...filters, risk: (selected.length > 1 ? selected : selected[0] ?? null) as FlagsPageFilters["risk"] }),
+    },
+    {
+      label: "Sort", multiple: false, selected: [sortDirection],
+      options: [
+        { value: "risk", label: "Release risk first", count: shownCount },
+        { value: "desc", label: "Newest first", count: shownCount },
+        { value: "asc", label: "Oldest first", count: shownCount },
+      ],
+      onChange: ([sort]: string[]) => change({ ...filters, sort: sort as FlagsPageFilters["sort"] }),
+    },
+  ];
+
   useEffect(() => {
     if (!discoveryEnabled || flagKey) return;
     const hash = window.location.hash;
@@ -156,6 +265,31 @@ export default function FeatureFlagsAdmin({
     card?.scrollIntoView({ behavior: "smooth", block: "start" });
     card?.focus({ preventScroll: true });
   }, [discoveryEnabled, highlightedKey, flags.isLoading]);
+
+  const searchInput = (
+    <>
+      <label htmlFor="flag-search" className="sr-only">Search flags</label>
+      <ModalInput
+        id="flag-search"
+        autofocus={false}
+        onBlur={urlFiltersEnabled ? commitSearch : undefined}
+        className="rounded-sm bg-comment-description px-3"
+        placeholder="Search by ticket ID or words…"
+        value={search}
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setHighlightedKey(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setSearch("");
+            setHighlightedKey(null);
+          }
+        }}
+      />
+    </>
+  );
 
   return (
     <main className="min-h-screen bg-pageBackground px-4 py-8 text-white-black sm:px-8">
@@ -178,30 +312,22 @@ export default function FeatureFlagsAdmin({
 
         {(discoveryEnabled || urlFiltersEnabled) && !flagKey && (
           <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
-            <label htmlFor="flag-search" className="sr-only">Search flags</label>
-            <ModalInput
-              id="flag-search"
-              autofocus={false}
-              onBlur={urlFiltersEnabled ? commitSearch : undefined}
-              className="rounded-sm bg-comment-description px-3"
-              placeholder="Search by ticket ID or words…"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setHighlightedKey(null);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setSearch("");
-                  setHighlightedKey(null);
-                }
-              }}
-            />
+            {dropdownFiltersEnabled ? (
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="min-w-0 flex-1">{searchInput}</div>
+                <p role="status" className="text-content text-text-light-gray">Showing {shownCount} of {allRows.length} flags</p>
+              </div>
+            ) : searchInput}
           </div>
         )}
 
-        {!flagKey && (
+        {dropdownFiltersEnabled && !flagKey && (
+          <div className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters">
+            {dropdowns.map((dropdown) => <FlagFilterPicker key={dropdown.label} {...dropdown} />)}
+          </div>
+        )}
+
+        {!dropdownFiltersEnabled && !flagKey && (
           <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
             <div
               className="flex flex-wrap gap-1 rounded-sm bg-comment-description p-1"
@@ -234,7 +360,7 @@ export default function FeatureFlagsAdmin({
           </div>
         )}
 
-        {urlFiltersEnabled && !flagKey && (
+        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
           <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by type">
             {FLAG_FILTER_KINDS.map((kind) => (
               <button
@@ -257,7 +383,7 @@ export default function FeatureFlagsAdmin({
           </div>
         )}
 
-        {urlFiltersEnabled && !flagKey && (
+        {urlFiltersEnabled && !dropdownFiltersEnabled && !flagKey && (
           <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by release risk">
             {[null, ...RELEASE_RISK_ORDER].map((value) => (
               <button

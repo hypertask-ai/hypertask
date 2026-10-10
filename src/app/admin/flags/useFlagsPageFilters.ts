@@ -19,18 +19,19 @@ export type FlagsPageFilters = {
   audience: FeatureFlagAudienceFilter;
   kinds: FeatureFlagKind[];
   search: string;
-  risk: FeatureFlagReleaseRisk["risk"] | null;
+  risk: FeatureFlagReleaseRisk["risk"] | FeatureFlagReleaseRisk["risk"][] | null;
   sort: "risk" | "desc" | "asc";
 };
 
-export function parseFlagsPageFilters(query: string): FlagsPageFilters {
+export function parseFlagsPageFilters(query: string, multipleRisks = false): FlagsPageFilters {
   const params = new URLSearchParams(query);
   const types = params.get("type")?.split(",") ?? [];
+  const risks = RELEASE_RISK_ORDER.filter((risk) => params.get("risk")?.split(",").includes(risk));
   return {
     audience: Object.hasOwn(TABS, params.get("tab") ?? "all") ? TABS[params.get("tab") ?? "all"] : "ALL",
     kinds: FLAG_FILTER_KINDS.filter((kind) => types.includes(kind === "bugfix" ? "bug" : kind)),
     search: params.get("q") ?? "",
-    risk: RELEASE_RISK_ORDER.find((risk) => risk === params.get("risk")) ?? null,
+    risk: multipleRisks ? (risks.length > 1 ? risks : risks[0] ?? null) : RELEASE_RISK_ORDER.find((risk) => risk === params.get("risk")) ?? null,
     sort: params.get("sort") === "oldest" ? "asc" : params.get("sort") === "newest" ? "desc" : "risk",
   };
 }
@@ -45,7 +46,10 @@ export function serializeFlagsPageFilters(filters: FlagsPageFilters, query = "")
   if (kinds.length) {
     params.set("type", kinds.map((kind) => kind === "bugfix" ? "bug" : kind).join(","));
   }
-  if (filters.risk) params.set("risk", filters.risk);
+  if (filters.risk) {
+    const risks = Array.isArray(filters.risk) ? RELEASE_RISK_ORDER.filter((risk) => filters.risk?.includes(risk)) : [filters.risk];
+    if (risks.length) params.set("risk", risks.join(","));
+  }
   if (filters.search) params.set("q", filters.search);
   if (filters.sort !== "risk") params.set("sort", filters.sort === "asc" ? "oldest" : "newest");
   return params.toString();
@@ -56,7 +60,8 @@ export function matchesFlagKind(flag: Pick<FeatureFlagRow, "kind">, kinds: Featu
 }
 
 export function matchesFlagRisk(flag: Pick<FeatureFlagRow, "key">, risk: FlagsPageFilters["risk"]): boolean {
-  return risk === null || FEATURE_FLAG_RELEASE_RISKS[flag.key]?.risk === risk;
+  const selected = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
+  return selected.length === 0 || selected.some((value) => FEATURE_FLAG_RELEASE_RISKS[flag.key]?.risk === value);
 }
 
 export function flagDaysWaiting(
@@ -71,7 +76,7 @@ export function flagDaysWaiting(
   return Math.max(0, Math.floor((today - shipped.getTime()) / 86_400_000));
 }
 
-export function useFlagsPageFilters(enabled: boolean) {
+export function useFlagsPageFilters(enabled: boolean, multipleRisks = false) {
   const [filters, setFilters] = useState<FlagsPageFilters>(() => ({ ...parseFlagsPageFilters(""), sort: "desc" }));
   const current = useRef(filters);
   const pending = useRef<{ url: string; state: unknown } | null>(null);
@@ -135,7 +140,7 @@ export function useFlagsPageFilters(enabled: boolean) {
     const restore = () => {
       cancelTimer();
       pending.current = null;
-      const next = parseFlagsPageFilters(window.location.search);
+      const next = parseFlagsPageFilters(window.location.search, multipleRisks);
       current.current = next;
       setFilters(next);
     };
@@ -146,7 +151,7 @@ export function useFlagsPageFilters(enabled: boolean) {
       pending.current = null;
       window.removeEventListener("popstate", restore);
     };
-  }, [enabled]);
+  }, [enabled, multipleRisks]);
 
   return { filters, change, changeSearch, commitSearch };
 }
