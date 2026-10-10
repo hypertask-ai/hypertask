@@ -8,6 +8,7 @@ import {
   CommentReactionTarget,
   createCommentReactionHandler,
 } from '@/lib/mcp/comments/reactionHandler';
+import { emitCommentReactionWebhook } from '@/lib/agentWebhooks/commentReaction';
 import { broadcastTaskComment } from '@/lib/realtime/server';
 import checkReminderAndCreateNotification from '@/utils/controllers/notifications/creation-service/check-reminder_create-notification';
 import { sendDataNewCommentFCM } from '@/utils/controllers/FCM';
@@ -91,11 +92,15 @@ async function notifyReaction(
   userId: number,
   emoji: string,
   active: boolean,
-  result: CommentReactionResult
+  result: CommentReactionResult,
+  reactorIsAgent: boolean
 ) {
   const sideEffects: Promise<unknown>[] = [
     broadcastTaskComment(target.taskId, { originUserId: userId }),
   ];
+  if (result.changed && active) {
+    sideEffects.push(emitCommentReactionWebhook({ commentId: target.commentId, reactorUserId: userId, reactorIsAgent, emoji, added: true }));
+  }
   if (result.changed && active && target.creatorId && target.creatorId !== userId) {
     sideEffects.push((async () => {
       await checkReminderAndCreateNotification(
@@ -168,5 +173,6 @@ export const POST = createCommentReactionHandler({
     };
   },
   setReaction,
-  afterChange: notifyReaction,
+  afterChange: (target, userId, emoji, active, result, ctx) =>
+    notifyReaction(target, userId, emoji, active, result, Boolean(ctx.agentId)),
 });

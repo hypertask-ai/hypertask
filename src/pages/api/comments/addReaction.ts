@@ -4,6 +4,7 @@ import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
+import { emitCommentReactionWebhook } from "@/lib/agentWebhooks/commentReaction";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
@@ -78,6 +79,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
                      )
                 }
+                await emitCommentReactionWebhook({ commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true });
                 void broadcastTaskComment(taskId, { originUserId: userId });
                 return res.status(200).json({
                     ...reaction,
@@ -128,6 +130,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
 
                 }
+                 if (reaction) await emitCommentReactionWebhook({ commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true });
                  void broadcastTaskComment(taskId, { originUserId: userId });
                  return res.status(200).json(reaction ? {
                     ...reaction,

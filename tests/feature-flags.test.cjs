@@ -112,6 +112,19 @@ test("task-writer empty draft and research fix defaults to Everyone and respects
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
 
+test("agent reaction webhook fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7095_REACTION_WEBHOOK_FLAG;
+  assert.equal(key, "htpr-7095-reaction-webhook");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7095");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
 test("task-writer real error fix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG;
   assert.equal(key, "htpr-7077-task-writer-real-error");
