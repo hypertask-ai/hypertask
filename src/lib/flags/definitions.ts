@@ -3,6 +3,7 @@ import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model"
 import {
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
+  HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
   HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
   HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
   HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
@@ -161,6 +162,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-09",
     description: "Avoids repeated database reads in daily cycle scans, server flag checks and quiet native agent heartbeats without changing deadlines or output.",
+  },
+  {
+    key: HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Refreshes the open task after an AI chat turn completes, including requests with image attachments, without relying on websocket delivery.",
   },
   {
     key: HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,

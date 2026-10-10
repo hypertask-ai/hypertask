@@ -1,10 +1,11 @@
 import { IChatMessage, IChatSession } from "@/models/model";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
+import { TASK_EVENT } from "@/lib/realtime/shared";
 import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "turnFailureState"> & {
+type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "turnFailureState" | "reloadTaskAfterChat"> & {
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -14,7 +15,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 export async function consumeAiChatStream(context: Context) {
   const {
   response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, turnFailureState,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, turnFailureState, reloadTaskAfterChat,
   } = context;
 
 
@@ -217,6 +218,10 @@ export async function consumeAiChatStream(context: Context) {
                         true
                       );
                       if (streamTaskId != null) {
+                        // Reuse the open task's draft-safe refresh even if its websocket event was missed.
+                        if (reloadTaskAfterChat) {
+                          window.dispatchEvent(new CustomEvent(TASK_EVENT, { detail: { taskId: streamTaskId } }));
+                        }
                         void refreshTaskComments(queryClient, streamTaskId).catch(
                           (error) =>
                             console.warn(
