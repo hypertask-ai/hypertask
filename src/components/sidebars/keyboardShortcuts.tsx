@@ -1,4 +1,4 @@
-import { HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { appShellRailAtom, showShortcutsAtom } from "@/store";
@@ -15,6 +15,20 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
+  const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
+  const panelClassName = shortcutsHelpPhone
+    ? "fixed bg-sidebar text-white-black top-0 right-0 w-full sm:w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)] max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-sm:pb-[env(safe-area-inset-bottom)]"
+    : "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
+  const rowClassName = shortcutsHelpPhone
+    ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
+    : "flex flex-row items-center mb-2 gap-2";
+  const labelClassName = shortcutsHelpPhone
+    ? "w-[60%] font-normal text-content leading-[16.94px] max-sm:w-auto max-sm:flex-[1_0_60%]"
+    : "w-[60%] font-normal text-content leading-[16.94px]";
+  const keysClassName = shortcutsHelpPhone
+    ? "flex gap-1 w-[40%] max-sm:w-auto max-sm:max-w-full max-sm:shrink-0 max-sm:flex-wrap"
+    : "flex gap-1 w-[40%]";
+  const badgeClassName = shortcutsHelpPhone ? " max-sm:shrink-0 max-sm:whitespace-nowrap" : "";
   const isApple = useDeviceContext();
   const isMbl = useContext(MobileViewContext);
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
@@ -131,7 +145,7 @@ const KeyboardShortcuts = () => {
       <div
         id={DIV_ID_CONSTANTS.keyboardShortcuts}
         style={{ fontSize: 14 }}
-        className="fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]"
+        className={panelClassName}
       >
         <input
           className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "
@@ -151,13 +165,13 @@ const KeyboardShortcuts = () => {
               </h3>
               {section?.sub?.map((subItem: any, subIndex: number) => (
                 <div
-                  className="flex flex-row items-center mb-2 gap-2"
+                  className={rowClassName}
                   key={subIndex}
                 >
-                  <p className="w-[60%] font-normal text-content leading-[16.94px]">
+                  <p className={labelClassName}>
                     {subItem.shortTitle}
                   </p>
-                  <div className="flex gap-1 w-[40%]">
+                  <div className={keysClassName}>
                     {subItem.pressKey.map((key: any, keyIndex: number) => (
                       <>
                         {!key ? (
@@ -167,7 +181,7 @@ const KeyboardShortcuts = () => {
                         ) : (
                           <kbd
                             className={`px-[6px] py-[4px] mx-[1.5px] rounded-[2px]
-                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white`}
+                            bg-[#4F5765] min-h-[25px] font-normal text-meta leading-[18px] text-white${badgeClassName}`}
                           >
                             {key}
                           </kbd>

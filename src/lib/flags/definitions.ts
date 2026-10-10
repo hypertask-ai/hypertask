@@ -4,6 +4,7 @@ import {
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
   HTPR_7050_CTRL_O_LINKS_FLAG,
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
+  HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
   HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG,
   HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
   HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
@@ -176,6 +177,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "bugfix",
     shippedOn: "2026-10-10",
     description: "Creates a ticket reminder in the Inbox at delivery time when the user has no notification to restore.",
+  },
+  {
+    key: HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-10",
+    description: "Uses the full phone width for keyboard shortcuts help, with readable labels and key badges that wrap without shrinking or overflowing.",
   },
   {
     key: HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG,
