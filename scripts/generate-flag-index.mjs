@@ -6,8 +6,14 @@ import { FLAG_DEFINITIONS_DIRECTORY, parseFlagFiles } from "../.github/scripts/f
 export function generateFlagIndex(root = process.cwd()) {
   const directory = path.join(root, FLAG_DEFINITIONS_DIRECTORY);
   const output = path.join(directory, "index.generated.ts");
-  const names = readdirSync(directory).filter((name) => name !== "index.generated.ts").sort();
   // Trusted CI runs this on a pull request checkout: read regular files only, never follow links.
+  const ancestors = FLAG_DEFINITIONS_DIRECTORY.split("/").filter(Boolean)
+    .map((_, index, parts) => path.join(root, ...parts.slice(0, index + 1)));
+  for (const ancestor of ancestors) {
+    const stat = lstatSync(ancestor);
+    if (stat.isSymbolicLink() || !stat.isDirectory()) throw new Error(`${path.relative(root, ancestor)} must be a regular directory`);
+  }
+  const names = readdirSync(directory).filter((name) => name !== "index.generated.ts").sort();
   for (const target of [directory, output, ...names.map((name) => path.join(directory, name))]) {
     let stat;
     try { stat = lstatSync(target); } catch (error) { if (error.code === "ENOENT" && target === output) continue; throw error; }
