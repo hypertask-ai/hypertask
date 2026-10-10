@@ -62,6 +62,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("Full task tag names default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7020_TAG_FULL_NAME_FLAG;
+  assert.equal(key, "htpr-7020-tag-full-name");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
 test("Inbox reminder returns default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG;
   assert.equal(key, "htpr-7064-inbox-remind-returns");
@@ -478,6 +489,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
         flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
+        flags.HTPR_7020_TAG_FULL_NAME_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -1004,6 +1016,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7009-dedupe-task-detail-reads", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7020-tag-full-name", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7025-welcome-email", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7026-agent-connect-check", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7027-agent-nudge-email", mode: "OWNER_AND_QA", updatedAt: null },

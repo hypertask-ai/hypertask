@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7020_TAG_FULL_NAME_FLAG,
   HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
   HTPR_7050_CTRL_O_LINKS_FLAG,
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
@@ -161,6 +162,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7020_TAG_FULL_NAME_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-10",
+    description: "Shows the full tag name on hover in task details when a long tag is truncated.",
+  },
   {
     key: HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
     kind: "bugfix",
