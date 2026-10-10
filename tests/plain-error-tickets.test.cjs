@@ -25,7 +25,7 @@ test("maps raw messages to plain words", async () => {
   assert.equal(plainProblem("request timed out"), "a request took too long");
   assert.equal(plainProblem("TypeError: fetch failed"), "the server could not reach another service");
   assert.equal(plainProblem("Unauthorized"), "a request was refused as not signed in");
-  assert.equal(plainProblem("boom"), "an unexpected server error");
+  assert.equal(plainProblem("boom"), "an unexpected error");
 });
 
 test("titles are short, plain and never start with a bracket prefix or bare Error", async () => {
@@ -34,7 +34,7 @@ test("titles are short, plain and never start with a bracket prefix or bare Erro
   assert.equal(title, "Server error on onboarding: looking up a team failed");
   assert.ok(title.length < 100);
   assert.doesNotMatch(title, /^\[|^Error$/);
-  assert.equal(plainTitle({ kind: "spike", message: "x" }), "Server error spike: an unexpected server error");
+  assert.equal(plainTitle({ kind: "spike", message: "x" }), "Server error spike: an unexpected error");
   assert.ok(plainTitle({ url: "/x", message: "a".repeat(500) }).length <= 99);
   assert.match(
     plainSummary({ url: "/onboarding", message: PRISMA }),
@@ -44,12 +44,24 @@ test("titles are short, plain and never start with a bracket prefix or bare Erro
   assert.ok(!title.includes(dash) && !plainSummary({ message: PRISMA }).includes(dash));
 });
 
+test("browser errors say browser, not server", async () => {
+  const { plainTitle, plainSummary } = await import(helperUrl);
+  assert.equal(
+    plainTitle({ url: "/inbox", source: "client", message: "boom" }),
+    "Browser error on the inbox: an unexpected error",
+  );
+  assert.match(plainSummary({ source: "client", message: "boom" }), /^Something failed in the browser/);
+  assert.match(plainSummary({ source: "server", message: "boom" }), /^Something failed on the server/);
+});
+
 test("reportError filer uses the plain title and keeps its fingerprint dedupe", () => {
   const source = fs.readFileSync(path.join(__dirname, "../src/lib/errors/reportError.ts"), "utf8");
   assert.match(source, /plainTitle\(/);
   assert.doesNotMatch(source, /\[auto\]/);
   // Dedupe is by Redis fingerprint, never by ticket title.
   assert.match(source, /errors:dedupe:\$\{fingerprint\}/);
+  assert.match(source, /<strong>Message:<\/strong> \$\{escapeHtml\(report\.message\)\}/);
+  assert.match(source, /source: report\.source/);
   assert.match(source, /<h3>Technical details<\/h3>/);
 });
 

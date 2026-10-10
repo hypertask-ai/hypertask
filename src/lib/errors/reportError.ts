@@ -48,6 +48,7 @@ function escapeHtml(value: string) {
 function ticketTitle(report: ErrorReport) {
   return plainTitle({
     url: report.url,
+    source: report.source,
     message: report.message.replace(/\s+/g, " ").trim(),
   });
 }
@@ -58,7 +59,7 @@ function ticketDescription(report: ErrorReport, firstSeen: string) {
     : "";
   const stack = `${report.stack || "Not provided"}${extra}`;
   return sanitizeRichHtml(
-    `<p><strong>${escapeHtml(plainSummary({ url: report.url, message: report.message }))}</strong></p>` +
+    `<p><strong>${escapeHtml(plainSummary({ url: report.url, source: report.source, message: report.message }))}</strong></p>` +
       `<ul>` +
       `<li>How often: first seen ${escapeHtml(firstSeen)}.</li>` +
       `<li>How bad: users affected unknown, check PostHog.</li>` +
@@ -66,6 +67,7 @@ function ticketDescription(report: ErrorReport, firstSeen: string) {
       `</ul>` +
       `<h3>Technical details</h3>` +
       `<ul>` +
+      `<li><strong>Message:</strong> ${escapeHtml(report.message)}</li>` +
       `<li><strong>URL:</strong> ${escapeHtml(report.url || "Unknown")}</li>` +
       `<li><strong>Source:</strong> ${escapeHtml(report.source)}</li>` +
       `<li><strong>First seen:</strong> ${escapeHtml(firstSeen)}</li>` +

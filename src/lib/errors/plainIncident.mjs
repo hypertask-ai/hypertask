@@ -52,21 +52,27 @@ export function plainProblem(message) {
   }
   if (/unauthori[sz]ed|\b401\b/i.test(text)) return "a request was refused as not signed in";
   if (/forbidden|\b403\b/i.test(text)) return "a request was refused for missing access";
-  return "an unexpected server error";
+  return "an unexpected error";
+}
+
+function isBrowserSource(source) {
+  return source === "client" || source === "browser";
 }
 
 /** Title under 100 characters, no bracket prefix, never a bare "Error". */
-export function plainTitle({ kind = "error", url, message }) {
+export function plainTitle({ kind = "error", url, message, source }) {
   const page = plainPageName(url);
-  const lead = kind === "spike" ? "Server error spike" : "Server error";
+  const noun = isBrowserSource(source) ? "Browser error" : "Server error";
+  const lead = kind === "spike" ? `${noun} spike` : noun;
   const where = page === "the app" ? "" : ` on ${page}`;
   return `${lead}${where}: ${plainProblem(message)}`.slice(0, 99);
 }
 
 /** The bold one-sentence summary that opens the ticket. */
-export function plainSummary({ url, message }) {
+export function plainSummary({ url, message, source }) {
+  const where = isBrowserSource(source) ? "in the browser" : "on the server";
   return (
-    `Something failed on the server while someone was using ${plainPageName(url)} ` +
+    `Something failed ${where} while someone was using ${plainPageName(url)} ` +
     `(${plainProblem(message)}); they may have seen an error or a part of the page that did not load.`
   );
 }
