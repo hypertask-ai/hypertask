@@ -1,14 +1,28 @@
 [
   {
-    "flag": "htpr-7026-agent-connect-check",
-    "ticket": "https://app.hypertask.ai/detail/project-15/7026",
-    "page": "board",
+    "flag": "htpr-7055-ai-sidebar-detail-fit",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7055",
+    "page": "ticket-short-thread",
     "anchors": [
-      "todo-column",
-      "done-column",
-      "column-title"
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel"
     ],
-    "reason": "The requested compact 'Connect your agent' card appears above the board columns for a never-connected, non-dismissed user at every width and sidebar state. Toolbar and sidebars stay in place.",
-    "approvedIn": "https://app.hypertask.ai/detail/project-15/7026"
+    "reason": "Waiting for Valentin's decision on switching HTPR-7055 on: properties stay beside the thread; the thread narrows up to 180px at narrow widths. NOT yet approved.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
+  },
+  {
+    "flag": "htpr-7055-ai-sidebar-detail-fit",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7055",
+    "page": "ticket-long-thread",
+    "anchors": [
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel"
+    ],
+    "reason": "Waiting for Valentin's decision on switching HTPR-7055 on: properties stay beside the thread; the thread narrows up to 180px at narrow widths. NOT yet approved.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
   }
 ]
