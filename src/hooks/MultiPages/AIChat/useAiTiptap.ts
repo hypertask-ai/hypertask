@@ -16,7 +16,7 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { writingAssistanceEditorProps } from "@/components/RTE/writingAssistance";
 import { LocalWritingAssistance } from "@/components/RTE/writingAssistance";
 import { useFlag } from "@/hooks/useFlag";
-import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6906_AUTOCAP_UNDO_FLAG, LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import { SafeSplitBlock } from "@/components/RTE/Extensions/SafeSplitBlock";
 
 const DisableEnter = Extension.create({
@@ -40,6 +40,10 @@ const useTiptapForAI = ({
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
+  const autocapUndo = useFlag(HTPR_6906_AUTOCAP_UNDO_FLAG);
+  const autocapUndoRef = useRef(autocapUndo);
+  if (autocapUndo) autocapUndoRef.current = true;
+  else autocapUndoRef.current = false;
   // There is no Ctrl key on a phone, so the desktop hint is noise there.
   // Read through a ref: the editor config is built once on mount, and the
   // placeholder is a function so it picks up the current value instead.
@@ -108,6 +112,7 @@ const useTiptapForAI = ({
       SafeSplitBlock,
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+        undoCapitalizationEnabled: () => autocapUndoRef.current,
       }),
     ],
     // content: defaultContent,

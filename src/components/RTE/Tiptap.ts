@@ -28,7 +28,7 @@ import SlashCommands from "./Extensions/SlashCommands/SlashCommands";
 import Snippets from "./Extensions/Snippets/Snippets";
 import Link from "@tiptap/extension-link";
 import LazyEmoji from "./Extensions/LazyEmoji";
-import { LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6906_AUTOCAP_UNDO_FLAG, LOCAL_WRITING_ASSISTANCE_FLAG } from "@/lib/flags/keys";
 import suggestion from "./suggestion";
 import { createMentionData } from "./MentionData";
 import { Figma } from "./Extensions/FigmaTiptap";
@@ -101,6 +101,10 @@ const useTiptap = ({
   const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
   const localWritingAssistanceRef = useRef(localWritingAssistance);
   localWritingAssistanceRef.current = localWritingAssistance;
+  const autocapUndo = useFlag(HTPR_6906_AUTOCAP_UNDO_FLAG);
+  const autocapUndoRef = useRef(autocapUndo);
+  if (autocapUndo) autocapUndoRef.current = true;
+  else autocapUndoRef.current = false;
   // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
   // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
   const isMobileView = useContext(MobileViewContext);
@@ -267,6 +271,7 @@ const useTiptap = ({
       HypertaskPasteRule,
       LocalWritingAssistance.configure({
         localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+        undoCapitalizationEnabled: () => autocapUndoRef.current,
       }),
     ],
     // Build the extensions exactly once for this editor instance. They must be
