@@ -48,7 +48,7 @@ import type { CommandIdentity } from "./commandSelection";
 import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMinimal";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
-import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
@@ -129,6 +129,7 @@ const Commands = (props: Props) => {
   // Applying these off the calendar is a no-op: the calendar hydrates its
   // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
+  const agentChatOwner = useAgentChatAllowed();
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
   const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
@@ -236,6 +237,7 @@ const Commands = (props: Props) => {
       context: "Others",
       ...contextOptions,
       appShellRailOn,
+      agentChatOwner,
       agentChatOn: onAgentChat,
       projectOptions: {
         stalenessEnabled: !!currentProject?.stalenessEnabled,
@@ -387,6 +389,7 @@ const Commands = (props: Props) => {
     currentProject,
     frequentlyUsed,
     isMobile,
+    agentChatOwner,
     onAgentChat,
     onCalendar,
     onMyTasks,

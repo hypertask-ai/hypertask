@@ -1,6 +1,6 @@
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { canUseAgentChat, HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -75,10 +75,12 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
+    const owner = await canUseAgentChat(req.headers);
+    const sessionScope = { userId: user.id, ...(owner ? {} : { OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" as const } } }] }) };
     if (toDelete === "ALL") {
       const sessions = await prisma.chatSession.findMany({
         where: {
-          userId: user.id,
+          ...sessionScope,
         },
         select: {
           id: true,
@@ -89,7 +91,7 @@ export async function DELETE(req: NextRequest) {
 
       const deleted = await prisma.chatSession.deleteMany({
         where: {
-          userId: user.id,
+          ...sessionScope,
         },
       });
 
@@ -100,18 +102,22 @@ export async function DELETE(req: NextRequest) {
         },
       });
     } else {
+      if (!owner) {
+        const session = await prisma.chatSession.findFirst({ where: { id: toDelete, ...sessionScope }, select: { id: true } });
+        if (!session) return NextResponse.json({ error: "Session not found" }, { status: 404 });
+      }
       await removeChatAttachmentsForSessions([toDelete]);
 
       await prisma.chatSession.delete({
         where: {
           id: toDelete,
-          userId: user.id,
+          ...sessionScope,
         },
       });
 
       const numSessions = await prisma.chatSession.count({
         where: {
-          userId: user.id,
+          ...sessionScope,
         },
       });
 

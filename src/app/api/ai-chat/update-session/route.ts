@@ -1,7 +1,7 @@
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { canUseAgentChat, HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -65,6 +65,7 @@ export async function POST(request: NextRequest) {
       where: {
         id: sessionId,
         userId: user.id,
+        ...((await canUseAgentChat(request.headers)) ? {} : { OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" as const } } }] }),
       },
       select: {
         id: true,

@@ -1134,6 +1134,7 @@ export interface IAllCommands {
   };
   appShellRailOn?: boolean;
   agentChatOn?: boolean;
+  agentChatOwner?: boolean;
   showArchivedOnBoard?: boolean;
   boardZoomedOut?: boolean;
   searchOptions?: {

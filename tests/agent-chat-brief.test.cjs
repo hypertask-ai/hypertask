@@ -90,6 +90,10 @@ function loadMessageRoute({
   });
   stubModule("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
   stubModule("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6155-chat-agent-brief") return flagEnabled;

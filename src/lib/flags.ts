@@ -8,6 +8,7 @@ import type { RawFlagMode } from "@/lib/flags/modeCache";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
+import { PARKED_FLAGS } from "@/lib/flags/parked";
 import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definitions";
 
 import {
@@ -25,6 +26,7 @@ import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
   HTPR_6512_SEED_TEAM_AGENT_FLAG,
   HTPR_6553_AGENT_CHAT_POLLING_FLAG,
+  HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -153,7 +155,7 @@ async function matchesFeatureFlagIdentity(
   return user?.email.trim().toLowerCase() === identity.email;
 }
 
-const isFeatureFlagOwnerUser = (
+export const isFeatureFlagOwnerUser = (
   userId: number,
   db: FeatureFlagDatabase = prisma,
 ) => matchesFeatureFlagIdentity(userId, FEATURE_FLAG_OWNER, db);
@@ -166,6 +168,23 @@ const isFeatureFlagQaUser = (
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const session = await getSessionUser(headers);
   return session ? isFeatureFlagOwnerUser(session.userId) : false;
+}
+
+/**
+ * HTPR-7070: the one server check behind the Agent Chat owner-only boundary.
+ * With htpr-7070-agent-chat-owner-only off this allows everyone, which is the
+ * access production had before the flag. A request without a session is treated
+ * like any other non-owner while the flag is on.
+ */
+export async function canUseAgentChatUser(userId: number): Promise<boolean> {
+  if (!(await isFeatureEnabled(HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG, userId))) return true;
+  return isFeatureFlagOwnerUser(userId);
+}
+
+export async function canUseAgentChat(headers: Headers): Promise<boolean> {
+  const session = await getSessionUser(headers);
+  // User 0 never exists, so this reads the flag's audience for a signed-out caller.
+  return canUseAgentChatUser(session ? session.userId : 0);
 }
 
 // Historical bug flags predate kind-based defaults. Classify them for display only:
@@ -194,6 +213,7 @@ export type FeatureFlagRow = {
   key: string;
   kind?: FeatureFlagKind;
   related?: readonly string[];
+  parked?: { reason: string };
   mode: FeatureFlagMode;
   updatedAt: Date | null;
   releasedAt: Date | null;
@@ -234,6 +254,7 @@ function withFeatureFlagMetadata(
   return {
     ...row,
     kind: definition?.kind ?? LEGACY_BUGFIX_DISPLAY_KINDS[row.key] ?? "feature",
+    ...(PARKED_FLAGS[row.key] ? { parked: { reason: PARKED_FLAGS[row.key].reason } } : {}),
     related: definition?.related ? [...(definition.related ?? [])] : undefined,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,

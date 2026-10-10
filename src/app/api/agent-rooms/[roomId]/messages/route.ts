@@ -1,3 +1,4 @@
+import { canUseAgentChat } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { loadUserAgentRoom } from "@/lib/agents/roomAccess";
@@ -13,6 +14,9 @@ export async function POST(
   { params }: { params: Promise<{ roomId: string }> },
 ) {
   try {
+    if (!(await canUseAgentChat(request.headers))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });

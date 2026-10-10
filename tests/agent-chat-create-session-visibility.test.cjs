@@ -293,6 +293,10 @@ stub("src/lib/auth/getSessionUser.ts", {
   getSessionUser: async () => ({ userId: sessionUserId }),
 });
 stub("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
   SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   // Visibility tests need the shared mode on so a teammate can open a TEAM
   // agent; the private-agent denials still come from accessibleAgentWhere.

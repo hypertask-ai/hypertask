@@ -14,6 +14,7 @@ function stub(filename, exports) {
 let owner = true;
 let discoveryEnabled = false;
 let urlFiltersEnabled = false;
+let parkedEnabled = false;
 let reads = 0;
 let rows = [];
 stub(path.join(root, "src/lib/flags.ts"), {
@@ -24,6 +25,7 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
+    if (key === "htpr-7070-parked-flags") return parkedEnabled;
     if (key === "htpr-7069-flags-dropdown-filters") return false;
     if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     assert.equal(key, "htpr-6964-flags-page-type-search");
@@ -45,7 +47,7 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
-  owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false;
+  owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false; parkedEnabled = false;
   rows = [fixture("htpr-6752-instant-ticket-open"), fixture("yper4-123-board-check")];
 });
 
@@ -370,4 +372,40 @@ test("flag Off leaves URL, legacy waiting count, sort and cards unchanged", asyn
     assert.equal(sort.textContent, "Oldest first");
     assert.equal(window.location.href, before);
   }, "?tab=unreleased&type=bug&risk=none&sort=oldest&q=missing");
+});
+
+
+test("parked badge and filter appear only with the page flag, preserving mode controls", async () => {
+  urlFiltersEnabled = true;
+  const reason = "Waiting on the Paperclip decision (HTPR-7059)";
+  const data = { flags: [fixture("parked", { parked: { reason } }), fixture("active")], detailsEnabled: true };
+  for (const enabled of [false, true]) {
+    parkedEnabled = enabled;
+    await withAdmin({}, data, async ({ document, click, calls }) => {
+      const audience = document.querySelector('[aria-label="Filter by audience"]');
+      const parkedButton = [...audience.querySelectorAll("button")].find((button) => button.textContent === "Parked 1");
+      assert.equal(Boolean(parkedButton), enabled);
+      assert.equal(document.body.textContent.includes(reason), enabled);
+      // Flag off: the parked row keeps its production classification and waiting days.
+      assert.match(document.body.textContent, enabled ? /1 unreleased flag waiting for release/ : /2 unreleased flags waiting for release/);
+      assert.equal((document.body.textContent.match(/7 days waiting/g) ?? []).length, enabled ? 1 : 2);
+      if (enabled) {
+        await click(parkedButton);
+        assert.equal(new URL(document.defaultView.location.href).searchParams.get("tab"), "parked");
+        assert.deepEqual([...document.querySelectorAll("code")].map((node) => node.textContent), ["parked"]);
+        assert.equal(document.querySelector('button[aria-pressed="true"][title]'), null);
+        assert.ok([...document.querySelectorAll('button[aria-pressed="true"]')].some((button) => button.textContent === "Owner + QA"));
+      }
+      assert.equal(calls.filter((call) => call.method === "PATCH").length, 0);
+    });
+  }
+});
+
+test("a parked URL cannot activate the hidden filter when its flag is off", async () => {
+  urlFiltersEnabled = true;
+  await withAdmin({}, { flags: [fixture("parked", { parked: { reason: "Paused" } }), fixture("active")] }, async ({ document }) => {
+    assert.equal(document.querySelectorAll("code").length, 2);
+    assert.doesNotMatch(document.body.textContent, /Parked|Paused/);
+    assert.equal(document.querySelector('[aria-label="Filter by audience"] button[aria-pressed="true"]').textContent, "All 2");
+  }, "?tab=parked");
 });

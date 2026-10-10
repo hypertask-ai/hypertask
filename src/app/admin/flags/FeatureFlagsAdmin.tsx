@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -11,7 +11,7 @@ import {
 import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
+import { HTPR_7070_PARKED_FLAGS_FLAG, HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -141,8 +141,10 @@ export default function FeatureFlagsAdmin({
   const dropdownFiltersEnabled = useFlag(HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG);
   const existingUrlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
   const urlFiltersEnabled = existingUrlFiltersEnabled || dropdownFiltersEnabled;
+  const parkedEnabled = useFlag(HTPR_7070_PARKED_FLAGS_FLAG);
   const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey, dropdownFiltersEnabled);
-  const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
+  const { search, sort: sortDirection, audience: requestedAudienceFilter, kinds, risk } = filters;
+  const audienceFilter = requestedAudienceFilter === "PARKED" && !parkedEnabled ? "ALL" : requestedAudienceFilter;
   const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const flags = useQuery({
@@ -184,16 +186,21 @@ export default function FeatureFlagsAdmin({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
+  // With the parked-flags flag off, rows carry no parked marker, so classification and waiting days match production.
+  const allFlags = useMemo(
+    () => (flags.data?.flags ?? []).map((flag) => (parkedEnabled || !flag.parked ? flag : { ...flag, parked: undefined })),
+    [flags.data?.flags, parkedEnabled],
+  );
   const counts = useMemo(
-    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], urlFiltersEnabled),
-    [flags.data?.flags, urlFiltersEnabled],
+    () => countFeatureFlagsByAudience(allFlags, urlFiltersEnabled),
+    [allFlags, urlFiltersEnabled],
   );
   const clusters = useMemo(
     () => {
       if (flagKey) {
-        return [["", (flags.data?.flags ?? []).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
+        return [["", (allFlags).filter((flag) => flag.key === flagKey)] as [string, FeatureFlagRow[]]];
       }
-      const rows = flags.data?.flags ?? [];
+      const rows = allFlags;
       return clusterFeatureFlagsByReleaseDate(
         rows.filter((flag) => (
           (!(discoveryEnabled || urlFiltersEnabled) || matchesFeatureFlagSearch(flag, search))
@@ -204,24 +211,40 @@ export default function FeatureFlagsAdmin({
         { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
+    [flagKey, allFlags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, parkedEnabled, search, kinds, risk],
   );
 
+  let audienceFilters = AUDIENCE_FILTERS;
+  const parkedBadges = new Map<string, ReactNode>();
+  if (parkedEnabled) {
+    audienceFilters = [...AUDIENCE_FILTERS, { mode: "PARKED", label: "Parked" }];
+    for (const flag of allFlags) {
+      if (flag.parked) {
+        parkedBadges.set(flag.key, (
+          <LabelWrapper className="mb-2" title={flag.parked.reason}>
+            Parked: {flag.parked.reason}
+          </LabelWrapper>
+        ));
+      }
+    }
+  }
+
   const shownCount = clusters.reduce((total, [, rows]) => total + rows.length, 0);
-  const allRows = flags.data?.flags ?? [];
+  const allRows = allFlags;
   const selectedRisks = risk === null ? [] : Array.isArray(risk) ? risk : [risk];
   // Each dropdown counts what its options would show with every other filter and the search applied.
   const searchedRows = allRows.filter((flag) => matchesFeatureFlagSearch(flag, search));
   const inAudience = (flag: FeatureFlagRow) => audienceFilter === "ALL" ? true
-    : audienceFilter === "UNRELEASED" ? (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
-      : flag.mode === audienceFilter;
+    : audienceFilter === "PARKED" ? !!flag.parked
+      : audienceFilter === "UNRELEASED" ? (!flag.parked && (urlFiltersEnabled ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE"))
+        : flag.mode === audienceFilter;
   const statusCounts = countFeatureFlagsByAudience(
     searchedRows.filter((flag) => matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)), urlFiltersEnabled,
   );
   const dropdowns = [
     {
       label: "Status", multiple: false, selected: [audienceFilter],
-      options: AUDIENCE_FILTERS.map(({ mode, label }) => ({ value: mode, label, count: statusCounts[mode] })),
+      options: audienceFilters.map(({ mode, label }) => ({ value: mode, label, count: statusCounts[mode] })),
       onChange: ([audience]: string[]) => setAudienceFilter(audience as FeatureFlagAudienceFilter),
     },
     {
@@ -291,6 +314,7 @@ export default function FeatureFlagsAdmin({
     </>
   );
 
+
   return (
     <main className="min-h-screen bg-pageBackground px-4 py-8 text-white-black sm:px-8">
       <div className="mx-auto max-w-4xl">
@@ -334,7 +358,7 @@ export default function FeatureFlagsAdmin({
               role="group"
               aria-label="Filter by audience"
             >
-              {AUDIENCE_FILTERS.map((filter) => (
+              {audienceFilters.map((filter) => (
                 <button
                   key={filter.mode}
                   type="button"
@@ -424,7 +448,7 @@ export default function FeatureFlagsAdmin({
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
             const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
             const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
-            const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
+            const related = discoveryEnabled ? relatedFeatureFlags(flag, allFlags) : [];
             let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
             if (discoveryEnabled) cardClassName += " scroll-mt-24";
             if (discoveryEnabled && highlightedKey === flag.key) cardClassName += " bg-hover-active";
@@ -436,6 +460,7 @@ export default function FeatureFlagsAdmin({
               className={cardClassName}
             >
               <div className="min-w-0 sm:max-w-lg">
+                {parkedBadges.get(flag.key)}
                 {(discoveryEnabled || urlFiltersEnabled) && (
                   <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
                 )}

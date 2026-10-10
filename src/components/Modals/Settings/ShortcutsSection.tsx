@@ -11,7 +11,7 @@ import { Search } from "lucide-react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue } from "@/lib/state";
 import { appShellRailAtom } from "@/store";
-import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
 import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const ShortcutsSection = () => {
@@ -36,6 +36,7 @@ const ShortcutsSection = () => {
     historyToggleLabel,
     includeComposeTaskShortcut,
     newTaskWindow,
+    useAgentChatAllowed(),
   );
   const [searchTerm, setSearchTerm] = useState("");
 

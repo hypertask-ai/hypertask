@@ -1,3 +1,4 @@
+import { canUseAgentChat } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateAgentRunRequest, browserMutationIsSameOrigin, stopAgentChatTurn } from "@/lib/agentRuns/service";
 import { checkMcpRateLimit } from "@/lib/mcp/auth";
@@ -8,6 +9,9 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> },
 ) {
   try {
+    if (!(await canUseAgentChat(request.headers))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
     const principal = await authenticateAgentRunRequest(request);

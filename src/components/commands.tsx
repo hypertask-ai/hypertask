@@ -13,7 +13,7 @@ import { createGeneralCommandActions } from "./generalCommandActions";
 import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
-import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
 import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
@@ -155,6 +155,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   const {
   handleAction,
   } = createCommandDispatcher({
+    agentChatOwner: useAgentChatAllowed(),
     newTaskWindow,
     copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,

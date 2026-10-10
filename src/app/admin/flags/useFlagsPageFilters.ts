@@ -8,6 +8,7 @@ import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_ORDER, type FeatureFlagRelease
 const TABS: Record<string, FeatureFlagAudienceFilter> = {
   all: "ALL",
   unreleased: "UNRELEASED",
+  parked: "PARKED",
   "only-me": "OWNER_ONLY",
   "owner-and-qa": "OWNER_AND_QA",
   everyone: "EVERYONE",
@@ -65,7 +66,7 @@ export function matchesFlagRisk(flag: Pick<FeatureFlagRow, "key">, risk: FlagsPa
 }
 
 export function flagDaysWaiting(
-  flag: Pick<FeatureFlagRow, "mode" | "shippedOn">,
+  flag: Pick<FeatureFlagRow, "mode" | "shippedOn" | "parked">,
   now = new Date(),
 ): number | null {
   if (!isUnreleasedFeatureFlag(flag) || !flag.shippedOn || !/^\d{4}-\d{2}-\d{2}$/.test(flag.shippedOn)) return null;

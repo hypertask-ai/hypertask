@@ -1,3 +1,4 @@
+import { canUseAgentChat } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import {
@@ -33,6 +34,9 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
+    if (!(await canUseAgentChat(request.headers))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

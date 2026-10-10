@@ -1,11 +1,11 @@
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { cookies, headers } from "next/headers";
+import { notFound, redirect } from "next/navigation";
 import type { Metadata } from "next";
 import type { IUser } from "@/models/model";
 import AgentChatClient from "./AgentChatClient";
 import AgentRoomClient from "./AgentRoomClient";
 // eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component must expose its gate directly to CI.
-import { isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled, canUseAgentChat } from "@/lib/flags";
 import { HTPR_6557_AGENT_ROOMS_FLAG } from "@/lib/flags/keys";
 
 export const metadata: Metadata = {
@@ -17,6 +17,7 @@ export default async function AgentChatPage({
 }: {
   searchParams: Promise<{ view?: string }>;
 }) {
+  if (!(await canUseAgentChat(await headers()))) notFound();
   const cookieStore = await cookies();
   const userCookie = cookieStore.get("nookies_user");
   if (!userCookie) return redirect("/login");

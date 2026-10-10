@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { featureFlagsForUser } from "@/lib/flags";
+import { featureFlagsForUser, isFeatureFlagOwnerUser } from "@/lib/flags";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -15,7 +15,10 @@ export async function GET(request: NextRequest) {
   try {
     const session = await getSessionUser(request.headers);
     if (!session) return noStore({ error: "Unauthorized" }, 401);
-    return noStore({ flags: await featureFlagsForUser(session.userId) });
+    return noStore({
+      flags: await featureFlagsForUser(session.userId),
+      isOwner: await isFeatureFlagOwnerUser(session.userId),
+    });
   } catch (error) {
     console.error("[feature-flags] read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);

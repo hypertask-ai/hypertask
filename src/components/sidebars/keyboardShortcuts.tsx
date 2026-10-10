@@ -12,7 +12,7 @@ import {
 } from "@/lib/configs/general.config";
 import { getKeyboardShortcuts } from "@/lib/constants/shortcuts";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
-import { useFlag } from "@/hooks/useFlag";
+import { useAgentChatAllowed, useFlag } from "@/hooks/useFlag";
 import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 const KeyboardShortcuts = () => {
@@ -50,6 +50,7 @@ const KeyboardShortcuts = () => {
     historyToggleLabel,
     includeComposeTaskShortcut,
     newTaskWindow,
+    useAgentChatAllowed(),
   );
 
   // ====================== ON INPUT KEY CHANGE

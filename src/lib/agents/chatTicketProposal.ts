@@ -151,13 +151,15 @@ export function proposalCardHeading(proposal: {
 
 /**
  * Description for the confirmed ticket. `outcome` is agent text, so it is escaped
- * and only ever wrapped in paragraphs; the link closes the conversation-to-ticket
- * half of the two-way link.
+ * and only ever wrapped in paragraphs. The link closes the conversation-to-ticket
+ * half of the two-way link; with `plainProvenance` (the HTPR-7070 owner-only flag
+ * is on for the user) it is plain text because only the owner can open Agent Chat.
  */
 export function chatProposalDescriptionHtml(options: {
   outcome: string;
   agentName: string;
   agentRef: string;
+  plainProvenance?: boolean;
 }): string {
   const paragraphs = options.outcome
     .split(/\n{1,}/)
@@ -165,6 +167,11 @@ export function chatProposalDescriptionHtml(options: {
     .filter(Boolean)
     .map((line) => `<p>${escapeHtml(line)}</p>`)
     .join("");
+  if (options.plainProvenance) {
+    return `${paragraphs}<p>Confirmed by the user in Agent Chat with ${escapeHtml(
+      options.agentName,
+    )}.</p>`;
+  }
   const href = `/agents/chat?agent=${encodeURIComponent(options.agentRef)}`;
   return `${paragraphs}<p>Confirmed by the user in Agent Chat with <a href="${href}">${escapeHtml(
     options.agentName,

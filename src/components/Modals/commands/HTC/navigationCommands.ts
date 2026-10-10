@@ -97,12 +97,14 @@ export const getNavigateCommands = (commandOptions: IAllCommands): CommandGroup 
       keywords:
         "agents agent bots dashboard manage automation coordinator instructions model",
     },
-    {
-      key: "GoToAgentChat",
-      name: "Agent Chat",
-      commandMode: CommandMode.GoToAgentChat,
-      keywords: "agents chat talk message",
-    },
+    ...(commandOptions.agentChatOwner ? [
+      {
+        key: "GoToAgentChat",
+        name: "Agent Chat",
+        commandMode: CommandMode.GoToAgentChat,
+        keywords: "agents chat talk message",
+      }
+    ] : []),
     {
       key: "GotoReminders",
       name: "Go to reminders",

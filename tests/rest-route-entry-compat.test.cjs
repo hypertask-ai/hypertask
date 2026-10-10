@@ -81,7 +81,7 @@ async function run(operation, mode = 'OFF', options = {}) {
       if (mode === 'USER_FAILURE') throw new Error('user lookup failed');
       return mode === 'NO_SESSION' ? null : { userId };
     } },
-    '@/lib/flags': { HTPR_6924_REST_COMPAT_FLAG: key, SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
+    '@/lib/flags': { canUseAgentChat: async () => true, HTPR_6924_REST_COMPAT_FLAG: key, SHARED_AGENT_CHAT_FLAG: 'shared-agent-chat', isFeatureEnabled: async (...args) => {
       if (args[0] === 'htpr-7038-reset-saved-model-choices') return false;
       probes.push(['flag', ...args]);
       if (mode === 'FLAG_FAILURE') throw new Error('flag lookup failed');
@@ -2080,7 +2080,7 @@ if (require.main === module) {
         '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6154-chat-stop-and-timeout' },
       });
       for (const operation of profileOperations) {
-        const result = await run(operation, 'ON', { userId: id, profileId: id, mocks: { '@/lib/flags': flags } });
+        const result = await run(operation, 'ON', { userId: id, profileId: id, mocks: { '@/lib/flags': { ...flags, canUseAgentChat: async () => true } } });
         assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { userId: id, profileId: id })));
         const enabled = mode === 'EVERYONE' || (mode === null && id !== 7);
         if (['taskSessions', 'updateSession', 'addMessage', 'deleteSession'].includes(operation)) assert.equal(result.limits.length, enabled ? 1 : 0);

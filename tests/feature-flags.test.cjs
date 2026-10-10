@@ -112,6 +112,28 @@ test("task-writer empty draft and research fix defaults to Everyone and respects
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
 
+test("Agent Chat owner-only gate defaults to Owner + QA as a feature and respects OFF", async () => {
+  const ownerOnlyFlag = flags.HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG;
+  assert.equal(ownerOnlyFlag, "htpr-7070-agent-chat-owner-only");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === ownerOnlyFlag);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(ownerOnlyFlag, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(ownerOnlyFlag, 7), false);
+});
+
+test("Parked flags UI defaults to Owner + QA as a feature and respects OFF", async () => {
+  const parkedFlag = flags.HTPR_7070_PARKED_FLAGS_FLAG;
+  assert.equal(parkedFlag, "htpr-7070-parked-flags");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === parkedFlag);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(parkedFlag, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(parkedFlag, 6), false);
+});
+
 test("Full task tag names default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7020_TAG_FULL_NAME_FLAG;
   assert.equal(key, "htpr-7020-tag-full-name");

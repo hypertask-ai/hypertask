@@ -11,7 +11,7 @@ import {
   loadUserAgentChatSession,
   userTeamIds,
 } from "@/lib/agents/chatAccess";
-import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
+import { canUseAgentChat, isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
 
 export const runtime = "nodejs";
 
@@ -69,6 +69,9 @@ export async function POST(request: NextRequest) {
     }
 
     if (parsed.data.agentId) {
+      if (!(await canUseAgentChat(request.headers))) {
+        return NextResponse.json({ error: "Not found" }, { status: 404 });
+      }
       const agent = await prisma.agent.findFirst({
         where: {
           id: parsed.data.agentId,

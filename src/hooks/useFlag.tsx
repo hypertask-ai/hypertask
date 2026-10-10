@@ -18,6 +18,7 @@ import {
   featureFlagsChannel,
 } from "@/lib/realtime/shared";
 import { useHydrated } from "@/hooks/General/useHydrated";
+import { HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG } from "@/lib/flags/keys";
 
 import type { FirstScreenFlags } from "@/lib/firstScreen/contract";
 
@@ -31,8 +32,9 @@ export const featureFlagsQueryKey = (userId: number) => [...FEATURE_FLAGS_QUERY_
 async function fetchFeatureFlags(): Promise<Record<string, boolean>> {
   const response = await fetch(FLAGS_ROUTE, { cache: "no-store" });
   if (!response.ok) throw new Error("Unable to load feature flags");
-  const body = (await response.json()) as { flags?: Record<string, boolean> };
-  return body.flags ?? {};
+  const body = (await response.json()) as { flags?: Record<string, boolean>; isOwner?: boolean };
+  // This server-verified capability is not a rollout flag and has no stored mode.
+  return { ...body.flags, __featureFlagOwner: body.isOwner === true };
 }
 
 export function FeatureFlagProvider({
@@ -136,6 +138,19 @@ export function useFlag(key: string): boolean {
   const { values, seeded } = useContext(FeatureFlagsContext);
   const hydrated = useHydrated();
   return (seeded || hydrated) && values[key] === true;
+}
+
+/**
+ * HTPR-7070: the one client check for Agent Chat entry points. Hidden until the
+ * flag values have loaded. After that it is allowed when the owner-only flag is
+ * off, or when it is on and the server-verified owner capability is true. The
+ * server routes enforce the same rule.
+ */
+export function useAgentChatAllowed(): boolean {
+  const { values } = useContext(FeatureFlagsContext);
+  const loaded = useFlagLoaded(HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG);
+  if (!loaded) return false;
+  return values[HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG] !== true || values.__featureFlagOwner === true;
 }
 
 export function useFlagLoaded(key: string): boolean {

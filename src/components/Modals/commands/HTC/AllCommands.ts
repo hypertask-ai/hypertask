@@ -1324,7 +1324,7 @@ export const getAllCommands = (
     time,
     ...(bulk ? [bulk] : []),
     ...(commandOptions.appShellRailOn ? [appShell] : []),
-    ...(commandOptions.agentChatOn ? [agentChat] : []),
+    ...(commandOptions.agentChatOwner && commandOptions.agentChatOn ? [agentChat] : []),
     task,
     board,
     teamAndBilling,

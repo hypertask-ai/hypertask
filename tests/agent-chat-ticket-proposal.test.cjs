@@ -23,6 +23,7 @@ function load(relativePath) {
 
 // --- mutable test state -----------------------------------------------------
 let flagEnabled = true;
+let ownerOnlyEnabled = true;
 let agentRole = "write";
 let projectAccess = {
   project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },
@@ -145,8 +146,13 @@ stub("src/lib/auth/getSessionUser.ts", {
 });
 stub("src/lib/agents/visibility.ts", { accessibleAgentWhere: () => ({}) });
 stub("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
-  isFeatureEnabled: async () => flagEnabled,
+  HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG: "htpr-7070-agent-chat-owner-only",
+  isFeatureEnabled: async (flag) => (flag === "htpr-7070-agent-chat-owner-only" ? ownerOnlyEnabled : flagEnabled),
 });
 stub("src/lib/realtime/server.ts", {
   AGENT_CHAT_EVENT: "agent-chat:changed",
@@ -210,6 +216,7 @@ function confirmPost(action = "confirm") {
 
 test.beforeEach(() => {
   flagEnabled = true;
+  ownerOnlyEnabled = true;
   agentRole = "write";
   projectAccess = {
     project: { id: 15, title: "Product", uniqueIdentifier: "HTPR", teamId: "t1" },
@@ -300,16 +307,23 @@ test("confirming after board access is revoked fails recoverably", async () => {
   assert.equal(createTaskCalls.length, 1);
 });
 
-test("the confirmed ticket links back to the conversation", async () => {
+test("the confirmed ticket keeps provenance without an owner-only conversation link", async () => {
   const res = await confirmPost();
   assert.equal(res.status, 200);
   const created = createTaskCalls[0];
   assert.equal(created.title, "Rename the login button");
   assert.match(created.description, /Rename the login button/);
-  // The other half of the two-way link; the card carries the ticket number.
-  assert.match(created.description, /\/agents\/chat\?agent=agent-1/);
+  assert.match(created.description, /Confirmed by the user in Agent Chat with Dev 5/);
+  assert.doesNotMatch(created.description, /href=|\/agents\/chat/);
   const body = await res.json();
   assert.equal(body.proposal.task.ticketNumber, "HTPR-9001");
+});
+
+test("with the owner-only flag off the confirmed ticket keeps the original conversation link", async () => {
+  ownerOnlyEnabled = false;
+  const res = await confirmPost();
+  assert.equal(res.status, 200);
+  assert.match(createTaskCalls[0].description, /Confirmed by the user in Agent Chat with <a href="\/agents\/chat\?agent=agent-1">Dev 5<\/a>\./);
 });
 
 test("a proposal in another user's conversation is not found", async () => {

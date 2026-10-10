@@ -1,3 +1,4 @@
+import { canUseAgentChat } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -8,6 +9,7 @@ import { AGENT_ROOM_DAILY_TURN_BUDGET } from "@/lib/agents/roomPolicy";
 export const runtime = "nodejs";
 
 async function roomUser(request: NextRequest) {
+  if (!(await canUseAgentChat(request.headers))) return null;
   const userId = (await getSessionUser(request.headers))?.userId;
   if (
     !userId ||

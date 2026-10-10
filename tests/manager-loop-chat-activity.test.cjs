@@ -76,10 +76,15 @@ async function loadRoute() {
   stub("src/lib/mcp/auth.ts", {
     checkMcpRateLimit: async () => null,
     validateMcpAuth: async () => ({
+      user: { id: 6 },
       agentId: agentTokenIsAgent ? "agent-1" : null,
     }),
   });
   stub("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
     MANAGER_LOOP_ACTIVITY_FLAG: "htpr-6243-manager-loop-activity",
     isFeatureEnabled: async (key, userId) => {
       assert.equal(key, "htpr-6243-manager-loop-activity");

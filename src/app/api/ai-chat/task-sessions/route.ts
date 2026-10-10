@@ -1,6 +1,6 @@
 import { checkRestRateLimit } from "@/lib/api/rateLimit";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
-import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { canUseAgentChat, HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { isValidUser } from "@/utils/edgeHelpers";
 import { cookies } from "next/headers";
@@ -52,6 +52,7 @@ export async function GET(request: NextRequest) {
     const sessions = await prisma.chatSession.findMany({
       where: {
         userId: user.id,
+        ...((await canUseAgentChat(request.headers)) ? {} : { OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" as const } } }] }),
         taskId: parsedTaskId.data,
         messages: { some: {} },
       },

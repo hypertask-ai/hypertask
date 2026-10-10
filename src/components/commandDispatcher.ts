@@ -16,7 +16,7 @@ import type { createBoardCommandActions } from "./boardCommandActions";
 import type { createGeneralCommandActions } from "./generalCommandActions";
 import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
-type Context = { newTaskWindow?: boolean } & Pick<IHTCProps, "callbackHandler"> &
+type Context = { newTaskWindow?: boolean; agentChatOwner?: boolean } & Pick<IHTCProps, "callbackHandler"> &
   Pick<ReturnType<typeof useCommandsState>, "copyCurrentUrlEnabled" | "boardCloseHandler" | "setShowCommands" | "setCommandMode" | "undoLatest" | "_currentProject" | "setBoardZoomedOutByProject" | "currentUser" | "openSettings" | "setShowShortcuts" | "switchToTheme" | "followTaskHandler" | "unFollowTaskHandler" | "hasBulkSelection" | "bulkSelection" | "archiveHandler" | "removeNotificationHandler" | "setShowQuickTips" | "openAnnouncements" | "setShowTaskHistory" | "setToggleAllCommentsSignal" | "saveEmptySectionsAPI" | "toggleShowArchivedOnBoard" | "paletteContextOptions" | "setArchiveBoardScope" | "toggleBoardLayout" | "onMyTasks" | "myTasksViewsEnabled" | "myTasksTableColumnsEnabled" | "setMyTasksColumnsPickerRequest" | "changeBoardLayout" | "pathname" | "goToProjectShortcut" | "router" | "setRailExpanded" | "setAppShellRail" | "inViewObject" | "toggleCreateTaskGlobally" | "duplicateTaskHandler" | "openAiWriterHandler" | "summarizeTicketHandler" | "viewSubTasksHandler" | "commentFunctionHandler" | "isMbl" | "setShowAiChatInterface" | "showAiChatInterface" | "setAiChatAutoOpenSuppressed" | "setAiChatExplicitOpenAt" | "setAiChatPinned" | "aiChatPinned" | "setIsSidebarMode" | "copyURLFunctionHandler" | "moveTaskToInboxHandler" | "starTaskHandler" | "setReminderHandler" | "myTasksSnoozeEnabled" | "removeParentHandler" | "removeSubtaskHandler" | "commentAudioSpeechToText" | "toggleTimeTrackingHandler" | "setCalendarSettings" | "endTour" | "setSelectedTourId" | "startTour"> &
   Pick<ReturnType<typeof createBoardCommandActions>, "acceptTaskHandler" | "saveTaskTemplateHandler" | "generateStatusUpdateHandler" | "toggleStalenessHandler" | "toggleStalenessViewHandler" | "toggleAutoArchiveHandler" | "sortByStalenessHandler"> &
   Pick<ReturnType<typeof createGeneralCommandActions>, "hideActiveColumn" | "markUnread" | "GoToHandler" | "toggleBoardTimeTrackingHandler" | "redirectToTrash" | "GoToOnboarding" | "copyCurrentPageURL" | "subscribeGoogleCalendar" | "copyBranchNameHandler" | "assignToMeHandler" | "deleteAllChats"> &
@@ -835,6 +835,7 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         router.push("/agents");
         return;
       case CommandMode.GoToAgentChat:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         router.push("/agents/chat");
         return;
@@ -843,30 +844,37 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
       // composer, and mention state these actually need, so this just hands
       // the request off via CustomEvent instead of duplicating that state.
       case CommandMode.AgentChatNextAgent:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("next-agent");
         return;
       case CommandMode.AgentChatPreviousAgent:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("previous-agent");
         return;
       case CommandMode.AgentChatSendMessage:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("send-message");
         return;
       case CommandMode.AgentChatOpenLinks:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("open-links");
         return;
       case CommandMode.AgentChatAddAgent:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("add-agent");
         return;
       case CommandMode.AgentChatNextTeam:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("next-team");
         return;
       case CommandMode.AgentChatPreviousTeam:
+        if (!context.agentChatOwner) return;
         boardCloseHandler();
         dispatchAgentChatCommand("previous-team");
         return;

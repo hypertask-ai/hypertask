@@ -1,3 +1,4 @@
+import { canUseAgentChatUser } from "@/lib/flags";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -29,6 +30,9 @@ async function roomAgent(
       ),
       agentId: null,
     };
+  }
+  if (!(await canUseAgentChatUser(ctx.user.id))) {
+    return { response: NextResponse.json({ error: "Not found" }, { status: 404 }), agentId: null };
   }
   if (!ctx.agentId) {
     return {

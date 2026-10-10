@@ -282,6 +282,10 @@ stub("src/lib/agents/visibility.ts", {
   accessibleAgentWhere: (userId) => ({ __visibleTo: userId }),
 });
 stub("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
   AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
   SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
   isFeatureEnabled: async (key, userId) =>
@@ -306,6 +310,8 @@ stub("src/utils/controllers/agents/boardMembers.ts", {
 });
 let agentTeams = new Map([[OPENABLE_AGENT, "team-a"]]);
 let createdSessions = [];
+
+stub("src/lib/agentRuns/service.ts", { readAgentChatTurn: async () => null });
 
 const historyRoute = load("src/app/api/agent-chat/[sessionId]/route.ts");
 const createSessionRoute = load("src/app/api/ai-chat/create-session/route.ts");

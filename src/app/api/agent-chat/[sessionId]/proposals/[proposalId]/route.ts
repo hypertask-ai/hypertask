@@ -1,8 +1,9 @@
+import { canUseAgentChat } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
 import { loadUserAgentChatSession } from "@/lib/agents/chatAccess";
-import { AGENT_CHAT_TICKET_CONFIRM_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { AGENT_CHAT_TICKET_CONFIRM_FLAG, HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { AGENT_CHAT_EVENT, broadcast, userChannel } from "@/lib/realtime/server";
 import { getAgentRole } from "@/lib/mcp/agents/scopes";
 import { getSectionForTask, validateProjectAccess } from "@/lib/mcp/tasks/services";
@@ -34,6 +35,9 @@ export async function POST(
   { params }: { params: Promise<{ sessionId: string; proposalId: string }> }
 ) {
   try {
+    if (!(await canUseAgentChat(request.headers))) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const userId = (await getSessionUser(request.headers))?.userId;
     if (!userId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -210,6 +214,7 @@ export async function POST(
           outcome: proposal.outcome,
           agentName: session.agent.displayName,
           agentRef: session.agent.id,
+          plainProvenance: await isFeatureEnabled(HTPR_7070_AGENT_CHAT_OWNER_ONLY_FLAG, userId),
         }),
         userId,
         projectId: projectCheck.project.id,

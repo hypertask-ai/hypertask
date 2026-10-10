@@ -2,10 +2,10 @@ import type { FeatureFlagMode, FeatureFlagRow } from "@/lib/flags";
 import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_LABELS, RELEASE_RISK_ORDER } from "./releaseRisk";
 
 export const NOT_YET_RELEASED_LABEL = "Not yet released";
-export type FeatureFlagAudienceFilter = FeatureFlagMode | "ALL" | "UNRELEASED";
+export type FeatureFlagAudienceFilter = FeatureFlagMode | "ALL" | "UNRELEASED" | "PARKED";
 
-export function isUnreleasedFeatureFlag(flag: Pick<FeatureFlagRow, "mode">): boolean {
-  return flag.mode === "OWNER_ONLY" || flag.mode === "OWNER_AND_QA";
+export function isUnreleasedFeatureFlag(flag: Pick<FeatureFlagRow, "mode" | "parked">): boolean {
+  return !flag.parked && (flag.mode === "OWNER_ONLY" || flag.mode === "OWNER_AND_QA");
 }
 
 export function countFeatureFlagsByAudience(
@@ -15,6 +15,7 @@ export function countFeatureFlagsByAudience(
   const counts = {
     ALL: flags.length,
     UNRELEASED: 0,
+    PARKED: 0,
     OWNER_ONLY: 0,
     OWNER_AND_QA: 0,
     EVERYONE: 0,
@@ -22,7 +23,8 @@ export function countFeatureFlagsByAudience(
   };
   for (const flag of flags) {
     counts[flag.mode]++;
-    if (unreleasedOnly ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE") counts.UNRELEASED++;
+    if (flag.parked) counts.PARKED++;
+    else if (unreleasedOnly ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE") counts.UNRELEASED++;
   }
   return counts;
 }
@@ -72,8 +74,8 @@ export function clusterFeatureFlagsByReleaseDate(
   const { shippedOnly = false, unreleasedOnly = false } = options;
   const filtered = flags.filter(
     (flag) => audienceFilter === "ALL" || (
-      audienceFilter === "UNRELEASED"
-        ? (unreleasedOnly ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE")
+      audienceFilter === "PARKED" ? !!flag.parked : audienceFilter === "UNRELEASED"
+        ? (!flag.parked && (unreleasedOnly ? isUnreleasedFeatureFlag(flag) : flag.mode !== "EVERYONE"))
         : flag.mode === audienceFilter
     ),
   );

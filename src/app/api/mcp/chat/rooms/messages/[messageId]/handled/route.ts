@@ -1,3 +1,4 @@
+import { canUseAgentChatUser } from "@/lib/flags";
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
@@ -20,6 +21,9 @@ export async function POST(
       { success: false, error: "Unauthorized. Invalid or missing authentication token." },
       { status: 401 },
     );
+  }
+  if (!(await canUseAgentChatUser(ctx.user.id))) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
   if (!ctx.agentId) {
     return NextResponse.json(

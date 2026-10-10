@@ -27,6 +27,7 @@ export const getKeyboardShortcuts = (
   historyToggleLabel = "Toggle history events",
   composeTaskWriter = false,
   newTaskWindow = false,
+  agentChatOwner = true,
 ): IShortcut[] => {
   const cmdControl = isApple ? "CMD" : "CTRL";
   const altOptions = isApple ? "OPT" : "ALT";
@@ -209,22 +210,24 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Send message", pressKey: ["Enter"] },
       ],
     },
-    {
-      title: "Agent Chat",
-      sub: [
-        // Ctrl+Tab also cycles agents but browsers (and, on Mac, the OS)
-        // reserve it for switching tabs/apps before it ever reaches the
-        // page, so Option/Alt+Arrow is the one advertised here as reliable
-        // on every platform.
-        { shortTitle: "Next agent", pressKey: [altOptions, "⭣"] },
-        { shortTitle: "Previous agent", pressKey: [altOptions, "⭡"] },
-        { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },
-        { shortTitle: "Open all links in latest reply", pressKey: ["CTRL", "O"] },
-        { shortTitle: "Search tasks to reference", pressKey: ["@"] },
-        { shortTitle: "Next team (any page)", pressKey: [altOptions, "SHIFT", "⭣"] },
-        { shortTitle: "Previous team (any page)", pressKey: [altOptions, "SHIFT", "⭡"] },
-      ],
-    },
+    ...(agentChatOwner ? [
+      {
+        title: "Agent Chat",
+        sub: [
+          // Ctrl+Tab also cycles agents but browsers (and, on Mac, the OS)
+          // reserve it for switching tabs/apps before it ever reaches the
+          // page, so Option/Alt+Arrow is the one advertised here as reliable
+          // on every platform.
+          { shortTitle: "Next agent", pressKey: [altOptions, "⭣"] },
+          { shortTitle: "Previous agent", pressKey: [altOptions, "⭡"] },
+          { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },
+          { shortTitle: "Open all links in latest reply", pressKey: ["CTRL", "O"] },
+          { shortTitle: "Search tasks to reference", pressKey: ["@"] },
+          { shortTitle: "Next team (any page)", pressKey: [altOptions, "SHIFT", "⭣"] },
+          { shortTitle: "Previous team (any page)", pressKey: [altOptions, "SHIFT", "⭡"] },
+        ],
+      }
+    ] : []),
     {
       title: "Format",
       sub: [

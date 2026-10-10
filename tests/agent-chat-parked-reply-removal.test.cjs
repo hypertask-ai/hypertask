@@ -105,6 +105,10 @@ function loadMessageRoute({
     userChannel: (userId) => `user-${userId}`,
   });
   stubModule("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
     AGENT_CHAT_BRIEF_FLAG: "htpr-6155-chat-agent-brief",
     isFeatureEnabled: async (key) => {
       if (key === "htpr-6553-agent-chat-polling") return pollingEnabled;
@@ -242,6 +246,10 @@ function loadTranscriptRoute() {
     checkMcpRateLimit: async () => null,
   });
   stubModule("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
     AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
     isFeatureEnabled: async () => false,
   });
@@ -361,6 +369,10 @@ function loadHistoryRoute({
     getSessionUser: async () => ({ userId: 6 }),
   });
   stubModule("src/lib/flags.ts", {
+    isFeatureFlagOwner: async () => true,
+    isFeatureFlagOwnerUser: async () => true,
+    canUseAgentChat: async () => true,
+    canUseAgentChatUser: async () => true,
     AGENT_CHAT_TICKET_CONFIRM_FLAG: "htpr-6006-chat-confirm-ticket",
     SHARED_AGENT_CHAT_FLAG: "htpr-6002-shared-agent-chat",
     isFeatureEnabled: async (key) => {
