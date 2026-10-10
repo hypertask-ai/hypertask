@@ -188,6 +188,55 @@ printf '{"ts":1,"text":"retry me"}\n' > "$T/inbox/runner-3.pending.jsonl"; inbox
 RUNNER_PICKUP_NOW=$(( $(date +%s) + 5 )) ./runner-pickup run 3 2>/dev/null
 eq "pending queue retried on the next tick" "$(lastline)" '%1|literal|retry me'
 [ ! -s "$T/inbox/runner-3.pending.jsonl" ] && ok "pending queue drained" || bad "pending not drained"
+
+# ---- review fixes ----
+# Signed comment replayed with a different unsigned event header is rejected, not reinterpreted.
+ts=$(date +%s); b=$(comment 'mismatch' 990)
+sig=$(python3 -c 'import hmac,hashlib,sys;k=open(sys.argv[1],"rb").read().strip();print("sha256="+hmac.new(k,sys.argv[2].encode()+b"."+sys.argv[3].encode(),hashlib.sha256).hexdigest())' "$T/keys/runner-3" "$ts" "$b")
+: > "$TMUX_LOG"
+eq "event header that disagrees with the signed body is rejected" "$(curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/webhook/runner-3" -H 'X-Hypertask-Event: task.assigned' -H "X-Hypertask-Timestamp: $ts" -H 'X-Hypertask-Delivery: d-m1' -H "X-Hypertask-Signature: $sig" --data "$b")" "400"
+sleep 0.3; eq "nothing typed for the mismatched event" "$(sent)" "0"
+eq "oversized proxied body is refused" "$(head -c 5000000 /dev/zero | curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/legacy" --data-binary @-)" "413"
+# A failed delivery is not acknowledged and not marked seen, so Hypertask retries it.
+cp ./runner-deliver "$T/deliver-ok"; printf '#!/bin/sh\nexit 1\n' > "$T/deliver-fail"; chmod +x "$T/deliver-fail"
+FP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s.getsockname()[1])')
+RUNNER_DELIVER=$T/deliver-fail RUNNER_WEBHOOK_PORT=$FP RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
+for _ in $(seq 50); do curl -fs "http://127.0.0.1:$FP/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
+PORT_SAVE=$PORT; PORT=$FP
+eq "failed delivery answers 503 so it is retried" "$(post 3 comment.created d-f1 "$(comment retry 991)")" "503"
+eq "and is still not marked seen" "$(grep -c 'comment:991' "$T/inbox/runner-3.seen" 2>/dev/null || true)" "0"
+PORT=$PORT_SAVE
+# Two writers to one pane never interleave: text+Enter pairs stay together.
+cat > "$T/slowtmux" <<'EOF'
+#!/usr/bin/env bash
+case "$1" in
+  list-panes) cat "$FAKE_PANES" ;;
+  send-keys) pane=$3; shift 3; [ "$1" != Enter ] || { echo "$pane|enter|" >> "$TMUX_LOG"; exit 0; }; sleep 0.3; echo "$pane|literal|$2" >> "$TMUX_LOG" ;;
+esac
+EOF
+chmod +x "$T/slowtmux"; session runner "RUNNER 3" "$RUNPID"; : > "$TMUX_LOG"
+( RUNNER_PICKUP_TMUX=$T/slowtmux ./runner-deliver 3 <<<"one" >/dev/null & RUNNER_PICKUP_TMUX=$T/slowtmux ./runner-deliver 3 <<<"two" >/dev/null & wait )
+eq "concurrent deliveries to one pane do not interleave" "$(cut -d'|' -f2 "$TMUX_LOG" | tr '\n' ' ')" "literal enter literal enter "
+# Queue write failure is an error, not a fake success.
+eq "unwritable queue exits 1, not 3" "$(printf x | RUNNER_PICKUP_TMUX=/nonexistent RUNNER_INBOX_DIR=/proc/nope ./runner-deliver 3 >/dev/null 2>&1; echo $?)" "1"
+# Bundles stay inside the delivery budget and only included events are marked seen.
+rm -f "$T/inbox/runner-3.seen" "$T/inbox/runner-3.pending.jsonl"; : > "$TMUX_LOG"
+long=$(head -c 400 /dev/zero | tr '\0' 'x')
+rows=(); for i in $(seq 40 49); do rows+=("$(row "$i" Comment "<p>$long$i</p>")"); done; inbox "${rows[@]}"
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 10 )) ./runner-pickup run 3 2>/dev/null
+included=$(grep -c '^notif:' "$T/inbox/runner-3.seen")
+[ "$included" -lt 10 ] && [ "$included" -gt 0 ] && ok "only the events that fit are marked seen ($included of 10)" || bad "bundle budget: $included marked"
+case "$(lastline)" in *" and $((10 - included)) more Reply"*) ok "message says how many are left";; *) bad "more marker: $(lastline | tail -c 80)";; esac
+# A pending record survives a hard delivery failure.
+printf '{"ts":1,"text":"keep me"}\n' > "$T/inbox/runner-3.pending.jsonl"; inbox
+RUNNER_DELIVER=$T/deliver-fail RUNNER_PICKUP_NOW=$(( $(date +%s) + 11 )) ./runner-pickup run 3 2>/dev/null
+eq "failed retry keeps the pending record" "$(jq -r .text "$T/inbox/runner-3.pending.jsonl")" "keep me"
+# Reassignment of the same task is a new occurrence, not suppressed.
+: > "$TMUX_LOG"
+a1=$(jq -nc '{event:"task.assigned", occurredAt:"2026-10-10T10:00:00Z", agentId:"a", projectId:15, taskId:11, ticketNumber:"HTPR-7000", taskTitle:"A task", actor:{userId:6, displayName:"V"}}')
+a2=$(jq -nc '{event:"task.assigned", occurredAt:"2026-10-10T11:00:00Z", agentId:"a", projectId:15, taskId:11, ticketNumber:"HTPR-7000", taskTitle:"A task", actor:{userId:6, displayName:"V"}}')
+post 3 task.assigned d-r1 "$a1" >/dev/null; post 3 task.assigned d-r2 "$a2" >/dev/null; sleep 0.5
+eq "second assignment of the same task is delivered" "$(sent)" "2"
 bash -n runner-webhook.test.sh 2>/dev/null; python3 -m py_compile runner-webhook && ok "runner-webhook compiles" || bad "py_compile"
 
 echo "$passes passed, $fails failed"

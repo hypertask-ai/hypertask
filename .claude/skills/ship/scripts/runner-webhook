@@ -7,7 +7,7 @@ agent-events receiver), 502 when it is down. POST /webhook/runner-<n> is handled
 file $RUNNER_WEBHOOK_SECRETS/runner-<n> (mode 600); it is never logged. Delivery goes through runner-deliver.
 Handled events: comment.created, comment.mention, task.assigned, chat.message. Events caused by an agent are ignored.
 """
-import hashlib, hmac, html, http.client, json, os, re, subprocess, sys, threading, time
+import fcntl, hashlib, hmac, html, http.client, json, os, re, subprocess, sys, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 HOME = os.path.expanduser("~")
@@ -18,6 +18,7 @@ DELIVER = os.environ.get("RUNNER_DELIVER", os.path.join(HERE, "runner-deliver"))
 CHAT_REPLY = os.environ.get("RUNNER_CHAT_REPLY_CMD", f"{HOME}/.local/lib/hypertask/runner-pickup/runner-chat-reply")
 MAX_AGE = int(os.environ.get("RUNNER_WEBHOOK_MAX_AGE", "300"))
 MAX_BODY = 1024 * 1024
+MAX_PROXY_BODY = 4 * 1024 * 1024
 FALLBACK_PORT = int(os.environ.get("RUNNER_WEBHOOK_FALLBACK_PORT", "8795"))
 HOP = {"connection", "keep-alive", "proxy-connection", "transfer-encoding", "te", "trailer", "upgrade"}
 SEEN_CAP = 4000
@@ -68,30 +69,42 @@ def timestamp_fresh(ts):
     return abs(time.time() - value) <= MAX_AGE
 
 
-def remember(name, key):
-    """True when key is new (and now recorded). Plain line file, trimmed when it grows past SEEN_CAP."""
-    path = os.path.join(STATE, name)
-    with LOCK:
+class Seen:
+    """Plain line file of handled keys under a cross-process lock shared with runner-pickup (flock on <name>.lock)."""
+
+    def __init__(self, name):
         os.makedirs(STATE, exist_ok=True)
+        self.path = os.path.join(STATE, name)
+        self.lockfd = os.open(self.path + ".lock", os.O_CREAT | os.O_RDWR, 0o600)
+
+    def __enter__(self):
+        fcntl.flock(self.lockfd, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self.lockfd, fcntl.LOCK_UN)
+        os.close(self.lockfd)
+
+    def has(self, key):
         try:
-            with open(path) as fh:
-                lines = fh.read().split("\n")
+            with open(self.path) as fh:
+                return key in fh.read().split("\n")
         except OSError:
-            lines = []
-        if key in lines:
             return False
-        lines = [x for x in lines if x]
-        lines.append(key)
-        if len(lines) > SEEN_CAP:
-            lines = lines[-(SEEN_CAP // 2):]
-            tmp = path + ".tmp"
-            with open(tmp, "w") as fh:
-                fh.write("\n".join(lines) + "\n")
-            os.replace(tmp, path)
-        else:
-            with open(path, "a") as fh:
-                fh.write(key + "\n")
-        return True
+
+    def add(self, key):
+        with open(self.path, "a") as fh:
+            fh.write(key + "\n")
+        try:
+            with open(self.path) as fh:
+                lines = [x for x in fh.read().split("\n") if x]
+            if len(lines) > SEEN_CAP:
+                tmp = self.path + ".tmp"
+                with open(tmp, "w") as fh:
+                    fh.write("\n".join(lines[-(SEEN_CAP // 2):]) + "\n")
+                os.replace(tmp, self.path)
+        except OSError:
+            pass
 
 
 def ticket_url(p):
@@ -132,32 +145,46 @@ def dedupe_key(p):
     if p.get("event") == "chat.message":
         return f"chat:{(p.get('chat') or {}).get('messageId')}"
     if p.get("event") == "task.assigned":
-        return f"assign:{p.get('taskId')}"
+        return f"assign:{p.get('taskId')}:{p.get('occurredAt') or p.get('deliveryId')}"
     return None
 
 
 def deliver(n, message):
+    """True when runner-deliver typed or durably queued the message."""
     try:
-        subprocess.run([DELIVER, str(n)], input=message.encode(), timeout=30, check=False,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        r = subprocess.run([DELIVER, str(n)], input=message.encode(), timeout=20, check=False,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return r.returncode in (0, 3)
     except Exception as exc:  # delivery must never crash the receiver
         log(f"runner {n}: deliver failed: {type(exc).__name__}")
+        return False
 
 
-def handle(n, p):
-    if (p.get("actor") or {}).get("agentId"):
-        return
-    key = dedupe_key(p)
-    if key and not remember(f"runner-{n}.seen", key):
-        return
-    message = build_message(n, p)
-    if message:
-        log(f"runner {n}: {p.get('event')} delivered to queue")
-        deliver(n, message)
+def handle(n, p, delivery_id):
+    """True when the event is settled (delivered, queued, or deliberately ignored); False asks Hypertask to retry."""
+    with LOCK:
+        with Seen("webhook-seen") as seen_d:
+            if delivery_id and seen_d.has(f"delivery:{delivery_id}"):
+                return True
+            ok = True
+            if p.get("event") in EVENTS and not (p.get("actor") or {}).get("agentId"):
+                key = dedupe_key(p)
+                with Seen(f"runner-{n}.seen") as seen_k:
+                    if not (key and seen_k.has(key)):
+                        message = build_message(n, p)
+                        ok = deliver(n, message) if message else True
+                        if ok and message:
+                            log(f"runner {n}: {p.get('event')} delivered")
+                        if ok and key:
+                            seen_k.add(key)
+            if ok and delivery_id:
+                seen_d.add(f"delivery:{delivery_id}")
+            return ok
 
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "RunnerWebhook/1"
+    timeout = 10  # socket read timeout for every request, so a stalled client cannot hold a thread
 
     def log_message(self, *a):
         return
@@ -173,6 +200,8 @@ class Handler(BaseHTTPRequestHandler):
             length = int(self.headers.get("Content-Length", "0"))
         except ValueError:
             length = 0
+        if length > MAX_PROXY_BODY:
+            return self._reply(413)
         body = self.rfile.read(length) if length > 0 else None
         headers = {k: v for k, v in self.headers.items() if k.lower() not in HOP}
         conn = http.client.HTTPConnection("127.0.0.1", FALLBACK_PORT, timeout=10)
@@ -220,13 +249,14 @@ class Handler(BaseHTTPRequestHandler):
         except Exception:
             return self._reply(400)
         delivery_id = self.headers.get("X-Hypertask-Delivery") or payload.get("deliveryId") or ""
-        event = self.headers.get("X-Hypertask-Event") or payload.get("event")
-        payload["event"] = event
-        if delivery_id and not remember("webhook-seen", f"delivery:{delivery_id}"):
-            return self._reply(200, b"duplicate")
-        self._reply(200)
-        if event in EVENTS:
-            threading.Thread(target=handle, args=(n, payload), daemon=True).start()
+        # The event comes from the signed body; the unsigned header may only agree with it.
+        event = payload.get("event")
+        header_event = self.headers.get("X-Hypertask-Event")
+        if not isinstance(event, str) or (header_event and header_event != event):
+            return self._reply(400, b"event mismatch")
+        if handle(n, payload, delivery_id):
+            return self._reply(200)
+        self._reply(503, b"delivery failed, retry")
 
 
 def main():
