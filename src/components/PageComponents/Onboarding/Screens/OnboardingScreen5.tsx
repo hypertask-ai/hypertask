@@ -30,12 +30,13 @@ export const OnboardingScreen5: React.FC<IOnboardingScreen5> = ({
   const { inviteNewMembersToBoard } = useInviteCallbackHandlers();
 
   const api = useCallback(async () => {
-    if (!currentUser) return;
-    const response = await getTeamInviteUrl(currentUser?.id, teamToInviteTo.id);
+    // HTPR-7094: a normal signup reaches this step with no team, so there is no invite link to fetch.
+    if (!currentUser || !teamToInviteTo?.id) return;
+    const response = await getTeamInviteUrl(currentUser.id, teamToInviteTo.id);
     if (response && response !== "Error") {
       setProject(response.projectFirst);
     }
-  }, [currentUser]);
+  }, [currentUser, teamToInviteTo?.id]);
 
   const onChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
