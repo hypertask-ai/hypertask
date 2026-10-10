@@ -164,6 +164,7 @@ set -a
 source "$state/credentials.env"
 set +a
 export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
+export HT_PREMERGE_AI_STUB=1 HT_PREMERGE_QUEUE_STUB=1
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
 setsid node "$root/scripts/premerge-local-search.mjs" "$state/card-fixture.json" "$search_port" >"$state/search.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
