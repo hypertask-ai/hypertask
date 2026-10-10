@@ -139,7 +139,7 @@ test("2 flag on: agent mention that is not a Question leaves Important; Question
     row({ comment: q("<p><strong>Question:</strong> ok?</p>"), taskId: 2 }),
     row({ fromAgentId: null, comment: q("<p>hey</p>"), taskId: 3 }),
   ];
-  const db = { comment: { groupBy: async () => [] } };
+  const db = { comment: { groupBy: async () => [] }, notification: { findMany: async () => [] } };
   const marked = await quiet.markQuietAgentMentions(db, OWNER, rows);
   assert.deepEqual(marked.map((r) => r.quietImportant === true), [true, false, false]);
   assert.deepEqual(importantOf(marked), [1, 2]);
@@ -163,6 +163,7 @@ test("3 flag on: a Question answered by the owner leaves Important, stays in the
   ];
   let seenWhere;
   const db = {
+    notification: { findMany: async () => [] },
     comment: {
       groupBy: async ({ where }) => {
         seenWhere = where;
@@ -187,4 +188,82 @@ test("3 answered time uses earnedAt when the row is display-swapped", () => {
   const answered = new Map([[1, new Date("2026-10-10T10:30:00Z").getTime()]]);
   assert.equal(pure.isQuietAgentMention({ ...base, createdAt: "2026-10-10T12:00:00Z", earnedAt: "2026-10-10T10:00:00Z" }, answered), true);
   assert.equal(pure.isQuietAgentMention({ ...base, createdAt: "2026-10-10T12:00:00Z", earnedAt: "2026-10-10T11:00:00Z" }, answered), false);
+});
+
+test("4 question detection: attributed p and li, bold variants, mid-sentence", () => {
+  const { pure } = load(true);
+  assert.equal(pure.isQuestionComment('<p class="x">Question: proceed?</p>'), true);
+  assert.equal(pure.isQuestionComment('<ul><li data-id="1">Question: proceed?</li></ul>'), true);
+  assert.equal(pure.isQuestionComment('<p>Done.</p><p style="a:b"><strong>Question:</strong> ok?</p>'), true);
+  assert.equal(pure.isQuestionComment('<div class="c"><b>Question:</b> ok?</div>'), true);
+  assert.equal(pure.isQuestionComment('<p class="x">I have a Question: here</p>'), false);
+  assert.equal(pure.isQuestionComment('<p class="x">FYI</p>'), false);
+});
+
+function mixedDb(events) {
+  return { comment: { groupBy: async () => [] }, notification: { findMany: async () => events } };
+}
+const ev = (over) => ({
+  taskId: 9,
+  fromAgentId: null,
+  createdAt: new Date("2026-10-10T09:00:00.000Z"),
+  comment: q("<p>hey</p>"),
+  ...over,
+});
+
+test("5 flag on: a human mention still active on the task keeps Important despite a newer agent FYI", async () => {
+  const { quiet } = load(true);
+  const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
+  const marked = await quiet.markQuietAgentMentions(
+    mixedDb([ev({}), ev({ fromAgentId: "agent-a", comment: q("<p>FYI done</p>") })]), OWNER, rows,
+  );
+  assert.equal(marked[0].quietImportant, undefined);
+  assert.deepEqual(importantOf(marked), [0]);
+});
+
+test("5 flag on: an unanswered agent Question on the task keeps Important despite a newer FYI", async () => {
+  const { quiet } = load(true);
+  const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
+  const marked = await quiet.markQuietAgentMentions(
+    mixedDb([
+      ev({ fromAgentId: "agent-a", comment: q('<p class="x">Question: ok?</p>') }),
+      ev({ fromAgentId: "agent-a", comment: q("<p>FYI done</p>") }),
+    ]), OWNER, rows,
+  );
+  assert.equal(marked[0].quietImportant, undefined);
+});
+
+test("5 flag on: only agent FYI mentions on the task quiet it", async () => {
+  const { quiet } = load(true);
+  const rows = [row({ taskId: 9, comment: q("<p>FYI done</p>") })];
+  const marked = await quiet.markQuietAgentMentions(
+    mixedDb([
+      ev({ fromAgentId: "agent-a", comment: q("<p>FYI one</p>") }),
+      ev({ fromAgentId: "agent-b", comment: q("<p>FYI two</p>") }),
+    ]), OWNER, rows,
+  );
+  assert.equal(marked[0].quietImportant, true);
+  assert.deepEqual(importantOf(marked), []);
+});
+
+test("6 flag on: assignee or follower owner is filtered from own agent chatter, mention path stays", async () => {
+  const { notifications } = load(true);
+  const deps = recipientDeps({ assignees: [{ userId: OWNER }, { userId: 11 }], followers: [{ userId: OWNER }] });
+  const quiet = await notifications.resolveCommentRecipientUserIds(
+    deps, task, OWNER, OWNER, "agent-a", "<p>done</p>",
+  );
+  assert.deepEqual(quiet, [11]);
+  const mentioned = await notifications.resolveCommentRecipientUserIds(
+    deps, task, OWNER, OWNER, "agent-a", mentionOf(OWNER),
+  );
+  assert.deepEqual([...mentioned].sort((a, b) => a - b), [8, 11]);
+});
+
+test("6 flag off: assignee owner still gets own agent chatter", async () => {
+  const { notifications } = load(false);
+  const deps = recipientDeps({ assignees: [{ userId: OWNER }] });
+  const ids = await notifications.resolveCommentRecipientUserIds(
+    deps, task, OWNER, OWNER, "agent-a", "<p>done</p>",
+  );
+  assert.deepEqual(ids, [OWNER]);
 });

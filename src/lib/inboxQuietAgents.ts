@@ -11,7 +11,9 @@
 export function isQuestionComment(text: string | null | undefined): boolean {
   if (!text) return false;
   return text
-    .split(/<\/(?:p|li|h[1-6]|blockquote|div)>|<br\s*\/?>|<(?:p|li|div)[\s>]|\r?\n/i)
+    .split(
+      /<\/(?:p|li|h[1-6]|blockquote|div)\s*>|<br\b[^>]*>|<(?:p|li|div|h[1-6]|blockquote)\b[^>]*>|\r?\n/i,
+    )
     .some((part) =>
       part
         .replace(/<[^>]*>/g, "")

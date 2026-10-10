@@ -42,16 +42,21 @@ export async function resolveCommentRecipientUserIds(
   ]);
 
   if (shouldNotifyTaskOwnerForComment(creatorId, task.userId, fromAgentId)) {
-    // HTPR-7096: the owner's own agent (its comments carry the owner as creator)
-    // reaches the owner only by @mentioning them; the mention path notifies then.
-    const quiet =
-      Boolean(fromAgentId) &&
-      creatorId === task.userId &&
-      (await isQuietOwnerInboxOn(task.userId)) &&
-      !dependencies
-        .getMentionedUserIdsFromCommentText(commentText ?? "")
-        .includes(task.userId);
-    if (!quiet) recipientUserIds.add(task.userId);
+    recipientUserIds.add(task.userId);
+  }
+
+  // HTPR-7096: an agent comment carries its owner as creatorId. With the flag on,
+  // the owner hears from their own agent only through an @mention (the mention
+  // path notifies then) or an explicit direct reply (added by the caller after
+  // this). Applied after every recipient source, so assignee and follower rows
+  // cannot bring the chatter back.
+  if (
+    fromAgentId &&
+    recipientUserIds.has(creatorId) &&
+    !dependencies.getMentionedUserIdsFromCommentText(commentText ?? "").includes(creatorId) &&
+    (await isQuietOwnerInboxOn(creatorId))
+  ) {
+    recipientUserIds.delete(creatorId);
   }
 
   return [...recipientUserIds];

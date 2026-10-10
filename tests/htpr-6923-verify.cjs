@@ -875,7 +875,8 @@ const notificationSettingsProtectedHashes = {
   "src/utils/controllers/notifications/projectMute.ts": "16c4dd2964146fccbc160654ee537356ab037524bbb2549ed0a07fa7e26ccd3b",
   "src/app/api/notifications/project-mute/route.ts": "b1debce26eeb1aeb76f4e0beab91c30749b6c33cc0a8dcabf25b7fe726583ee0",
   "src/lib/inboxSplitSettings.ts": "06f78aab98f08989a71c86bc821c8a3f42edc9f35249d9ec64d002b9d617adad",
-  "src/utils/controllers/notifications/getAll.ts": "7e7f1ed5f1ad400d045d561722feac57f1373e33b2a553bd82a067da2a9c658c",
+  // HTPR-7096: getAll only gains the flag-gated quiet-owner-inbox marking call.
+  "src/utils/controllers/notifications/getAll.ts": "1f8630633478fc97729e188d88b47af04e821c87571f136918da4245e57e46e6",
   "src/utils/controllers/notifications/getCount.ts": "5b342c092bf198dbe6b9b74ce3fff915a14282cc1c1fc2601278939063802c30",
   "src/utils/controllers/notifications/getAccessibleProjectIds.ts": "5efc0573e9c9fee87d651442e4bf9c32c4a3adb0536ee4d8a5f53972fdf88636" // gitleaks:allow sha256 file pin, not a secret
 };

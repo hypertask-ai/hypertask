@@ -1,4 +1,5 @@
 import { Prisma } from "@prisma/client";
+import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
 import { isQuietAgentMention } from "@/lib/inboxQuietAgents";
 import { HTPR_7096_QUIET_OWNER_INBOX_FLAG } from "@/lib/flags/definitions/htpr-7096-quiet-owner-inbox";
 
@@ -24,7 +25,10 @@ type QuietCandidate = {
  * untouched.
  */
 export async function markQuietAgentMentions<T extends QuietCandidate>(
-  db: { comment: { groupBy: (args: any) => Promise<any[]> } },
+  db: {
+    comment: { groupBy: (args: any) => Promise<any[]> };
+    notification: { findMany: (args: any) => Promise<any[]> };
+  },
   viewerId: number,
   rows: T[],
 ): Promise<T[]> {
@@ -49,7 +53,46 @@ export async function markQuietAgentMentions<T extends QuietCandidate>(
   for (const group of own) {
     if (group._max.createdAt) answeredAt.set(group.taskId, group._max.createdAt.getTime());
   }
+  const candidates = rows.filter((row) => isQuietAgentMention(row, answeredAt));
+  if (candidates.length === 0) return rows;
+  // getAll keeps one representative row per task. Quiet the task only when EVERY
+  // active mention on it is quiet; one human mention or unanswered agent
+  // Question keeps the task Important.
+  const candidateTaskIds = Array.from(
+    new Set(candidates.flatMap((row) => (row.taskId == null ? [] : [row.taskId]))),
+  );
+  const events: {
+    taskId: number | null;
+    fromAgentId: string | null;
+    createdAt: Date;
+    comment: { text: string | null } | null;
+  }[] = candidateTaskIds.length
+    ? await db.notification.findMany({
+        where: {
+          ...visibleUserInboxWhere(viewerId),
+          type: "Mentioned",
+          taskId: { in: candidateTaskIds },
+        },
+        select: {
+          taskId: true,
+          fromAgentId: true,
+          createdAt: true,
+          comment: { select: { text: true } },
+        },
+      })
+    : [];
+  const loudTaskIds = new Set(
+    events
+      .filter(
+        (event) =>
+          event.taskId != null &&
+          !isQuietAgentMention({ ...event, type: "Mentioned" }, answeredAt),
+      )
+      .map((event) => event.taskId as number),
+  );
   return rows.map((row) =>
-    isQuietAgentMention(row, answeredAt) ? { ...row, quietImportant: true } : row,
+    isQuietAgentMention(row, answeredAt) && !(row.taskId != null && loudTaskIds.has(row.taskId))
+      ? { ...row, quietImportant: true }
+      : row,
   );
 }
