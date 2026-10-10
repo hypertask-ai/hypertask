@@ -26,6 +26,7 @@ const ShortcutsSection = () => {
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag) newTaskWindow = true;
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
+  const agentChatAllowed = useAgentChatAllowed();
   let historyToggleLabel = "Toggle history events";
   if (agentLogNameEnabled) {
     historyToggleLabel = "Toggle agent log";
@@ -36,7 +37,7 @@ const ShortcutsSection = () => {
     historyToggleLabel,
     includeComposeTaskShortcut,
     newTaskWindow,
-    useAgentChatAllowed(),
+    agentChatAllowed,
   );
   const [searchTerm, setSearchTerm] = useState("");
 

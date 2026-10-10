@@ -115,6 +115,7 @@ test("both shortcut-help surfaces advertise only the active Ctrl/Cmd+J action", 
         const shortcuts = evaluate(initializer(file, dataName).text, {
           getKeyboardShortcuts, isApple, appShellRailOn: false,
           historyToggleLabel: "Toggle history events", includeComposeTaskShortcut, newTaskWindow: false,
+          agentChatAllowed: false,
         });
         const titles = shortcuts.flatMap((group) => group.sub)
           .filter((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} J`)
@@ -139,6 +140,7 @@ test("both shortcut-help surfaces follow the flag and preserve Windows and Apple
           getKeyboardShortcuts, isApple, appShellRailOn: false,
           historyToggleLabel,
           includeComposeTaskShortcut: false, newTaskWindow: false,
+          agentChatAllowed: false,
         });
         const shortcut = shortcuts.flatMap((group) => group.sub).find((item) => item.pressKey.join(" ") === `${isApple ? "CMD" : "CTRL"} SHIFT H`);
         assert.equal(shortcut.shortTitle, historyToggleLabel);
