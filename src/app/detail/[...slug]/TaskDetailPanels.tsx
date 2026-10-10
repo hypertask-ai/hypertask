@@ -4,6 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
+import { useAiChatMainContentLayout } from "@/hooks/MultiPages/AIChat/useAiChatMainContentLayout";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
@@ -75,6 +76,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const detailFit = useFlag(HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG);
+  const { aiSidebarOpen } = useAiChatMainContentLayout();
   const { secondaryPanelsReady, cachedLayout } = useTaskContext();
   if (!currentTask) return <></>;
 
@@ -149,6 +151,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   display: "flex",
                   flex: 1,
                   width: "100%",
+                  ...(detailFit && !_mbl && aiSidebarOpen ? { flexWrap: "wrap" } : {}),
                 }}
               >
                 {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
