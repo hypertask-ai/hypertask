@@ -10,6 +10,8 @@ import dynamic from 'next/dynamic';
 import { ModalContainerCustom, ModalHintBar, ModalInput, ModalListContainer, ModalRowElementContainer } from "@/components/Common/CommonModalComponents";
 import useHandleMouseGlobal from "@/hooks/General/useHandleMouse";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7050_CTRL_O_LINKS_FLAG } from "@/lib/flags/keys";
 const AttachmentCarousel = dynamic(() => import("@/components/Common/AttachmentsView/AttachmentsCarousel"), { ssr: false })
 interface IProps {
   display: boolean;
@@ -21,6 +23,7 @@ interface IProps {
   parentTask?: ITask;
 }
 const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, parentTask, relatedTasks = [] }: IProps) => {
+  const savedLinksEnabled = useFlag(HTPR_7050_CTRL_O_LINKS_FLAG);
   // --------------- Refs
   const linksInputRef = useRef<HTMLInputElement>(null)
 
@@ -113,19 +116,17 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       }
       // console.log("🚀 ~ file: index.tsx:65 ~ onOpenHandler ~ responseArray:", responseArray)
 
-      const filteredGalleryAttachment = res
-        .filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app"))
-        .map(({ urlString, title }) => {
+      const legacyGalleryLinks = res.filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app"));
+      const galleryLinks = savedLinksEnabled ? res.filter(item => item.Attachment || legacyGalleryLinks.includes(item)) : legacyGalleryLinks;
+      const filteredGalleryAttachment = galleryLinks
+        .map(({ urlString, title, attachmentType }) => {
           const extension = urlString.toLowerCase().match(/\.\w+$/) || ['']; // Extract file extension
-          return {
-            fileSource: urlString,
-            fileType: /\.(png|webp|jpg|jpeg)$/i.test(extension[0]) ?
-              `image/${extension[0].split(".")[1]}` :
-              `${extension[0].split(".")[1] === "mp4" || extension[0].split(".")[1] === "mov" || extension[0].split(".")[1] === "webm" ? "video/quicktime" : ""}${extension[0].split(".")[1]}`,
-            fileName: title,
-          };
+          const legacyFileType = /\.(png|webp|jpg|jpeg)$/i.test(extension[0]) ?
+            `image/${extension[0].split(".")[1]}` :
+            `${extension[0].split(".")[1] === "mp4" || extension[0].split(".")[1] === "mov" || extension[0].split(".")[1] === "webm" ? "video/quicktime" : ""}${extension[0].split(".")[1]}`;
+          const fileType = savedLinksEnabled ? attachmentType || legacyFileType : legacyFileType;
+          return { fileSource: urlString, fileType, fileName: title };
         });
-      console.log("🚀 ~ file: index.tsx:83 ~ onOpenHandler ~ filteredGalleryAttachment:", filteredGalleryAttachment)
       
       setGalleryAttachments(filteredGalleryAttachment)
       setLinks(responseArray)
@@ -149,7 +150,8 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
 
   // ---------------------- LINK CLICK HANDLER ------------------
   const handleLinkClick = (link: IUrl) => {
-    if (link.urlString.startsWith("https://files.hypertask.app")) {
+    const isAttachment = savedLinksEnabled ? galleryAttachments.some((attachment: { fileSource: string }) => attachment.fileSource === link.urlString) : link.urlString.startsWith("https://files.hypertask.app");
+    if (isAttachment) {
       const index = galleryAttachments.findIndex((attachment: { fileSource: string; }) => attachment.fileSource === link.urlString)
       setCurrentIndex(index)
       toggleModal()

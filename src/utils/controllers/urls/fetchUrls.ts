@@ -3,10 +3,12 @@
 
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import prisma from "@/lib/prisma";
+import { IUrl } from "@/models/model";
+import { extractUrlsFromContent, mergeUrls } from "@/utils/controllers/urls/extractUrlsFromContent";
 
 
 // Example usage
-const fetchUrls = async (taskId:string | string[], commentId?:string) => {
+const fetchUrls = async (taskId:string | string[], commentId?:string, includeSavedSources = false) => {
   
         try {
             if (!taskId) {
@@ -15,6 +17,46 @@ const fetchUrls = async (taskId:string | string[], commentId?:string) => {
                     json:{ message: "User id is required" }
                 })
                 // return res.status(400).json({ message: "User id is required" });
+            }
+            if (includeSavedSources) {
+                const id = parseInt(taskId as string);
+                const [storedUrls, task] = await Promise.all([
+                    prisma.url.findMany({ where: { TaskId: id }, orderBy: { id: "desc" } }),
+                    prisma.task.findUnique({
+                        where: { id },
+                        select: {
+                            description_: { select: { content: true, attachments: true } },
+                            attachments: true,
+                            comments: { select: { id: true, text: true, attachments: true }, orderBy: { id: "desc" } },
+                        },
+                    }),
+                ]);
+                const contentUrls: IUrl[] = [
+                    ...extractUrlsFromContent(task?.description_?.content ?? "", id),
+                    ...(task?.comments.flatMap(comment =>
+                        extractUrlsFromContent(comment.text, id).map(url => ({ ...url, commentId: comment.id }))
+                    ) ?? []),
+                ];
+                // Attachments can exist without a legacy Url row, including uploads from MCP.
+                const attachments = [
+                    ...(task?.attachments ?? []),
+                    ...(task?.description_?.attachments ?? []),
+                    ...(task?.comments.flatMap(comment => comment.attachments) ?? []),
+                ].map(attachment => ({
+                    TaskId: id,
+                    urlString: attachment.fileSource,
+                    title: attachment.fileName,
+                    commentId: attachment.commentId ?? undefined,
+                    Attachment: true,
+                    attachmentType: attachment.fileType,
+                }));
+                const focusedComment = commentId && /^\d+$/.test(commentId) ? Number(commentId) : null;
+                const urls = mergeUrls(attachments, contentUrls, storedUrls);
+                urls.sort((a, b) => {
+                    const rank = (url: IUrl) => (url.commentId ?? null) === focusedComment ? 0 : 1;
+                    return rank(a) - rank(b);
+                });
+                return { status: 200, json: urls };
             }
             if (!commentId){
                 const urls = await prisma.url.findMany({

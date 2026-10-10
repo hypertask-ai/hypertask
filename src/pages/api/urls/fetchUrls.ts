@@ -2,6 +2,7 @@
 import fetchUrls from '@/utils/controllers/urls/fetchUrls';
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { HTPR_7050_CTRL_O_LINKS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
@@ -21,7 +22,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 select: { id: true },
             });
             if (!task) return res.status(404).json({ message: "Task not found" });
-            const response = await  fetchUrls(taskId,commentId as string)
+            const includeSavedSources = await isFeatureEnabled(HTPR_7050_CTRL_O_LINKS_FLAG, session.userId);
+            const response = await fetchUrls(taskId, commentId as string, includeSavedSources);
          
             return res.status(response.status).json(response.json);
             // console.log(comments);

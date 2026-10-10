@@ -86,6 +86,7 @@
     "htpr-6993-quick-add-view-context": "EVERYONE",
     "htpr-6997-new-task-window-view-context": "EVERYONE",
     "htpr-6999-ctrl-j-view-context": "EVERYONE",
-    "htpr-7002-inbox-e-first-press": "EVERYONE"
+    "htpr-7002-inbox-e-first-press": "EVERYONE",
+    "htpr-7050-ctrl-o-links": "EVERYONE"
   }
 }
