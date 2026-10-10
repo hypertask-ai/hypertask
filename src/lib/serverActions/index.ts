@@ -18,7 +18,9 @@ export const getTeamById = async (teamId: string) => {
   },)
   return team
 }
-export const getTeamInviteUrl = async (userId: number, teamId: string) => {
+export const getTeamInviteUrl = async (userId: number, teamId: string | undefined) => {
+  // HTPR-7094: onboarding without ?id= has no team; Prisma throws on an undefined id instead of returning null.
+  if (!teamId) return "Error"
 
   const team = await prisma.team.findUnique({ where: { id: teamId } })
   if (!team) return "Error"
