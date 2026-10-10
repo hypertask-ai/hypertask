@@ -3,10 +3,13 @@ import type {
   PrismaClient,
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { cache } from "react";
+import type { RawFlagMode } from "@/lib/flags/modeCache";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 
 import {
+  HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
   HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
   HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
   HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
@@ -146,6 +149,16 @@ import {
 // import "@/lib/flags/keys" directly: this module reaches ioredis through the auth
 // stack and cannot enter a browser bundle.
 export * from "@/lib/flags/keys";
+export function withFeatureFlagSnapshot<T>(run: () => T): T {
+  const { withFeatureFlagSnapshot } = require("@/lib/flags/modeCache") as typeof import("@/lib/flags/modeCache");
+  return withFeatureFlagSnapshot(run);
+}
+
+async function withFlagModeInvalidation<T>(write: () => Promise<T>): Promise<T> {
+  if (!process.env.REDIS_URL) return write();
+  const { withFlagModeInvalidation } = await import("@/lib/flags/modeCache");
+  return withFlagModeInvalidation(write);
+}
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
 // Board writes are never attributed to the owner alone.
@@ -239,6 +252,12 @@ type FeatureFlagDefinition = {
 };
 
 const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Avoids repeated database reads in daily cycle scans, server flag checks and quiet native agent heartbeats without changing deadlines or output.",
+  },
   {
     key: HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
     kind: "bugfix",
@@ -1261,6 +1280,55 @@ export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
     : DEFAULT_FEATURE_FLAG_MODE);
 }
 
+async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
+  if (!process.env.REDIS_URL) return null;
+  try {
+    const {
+      FLAG_MODE_CACHE_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_WRITERS_KEY, flagCacheCommand,
+    } = await import("@/lib/flags/modeCache");
+    const redis = await flagCacheCommand(import("@/lib/redis").then(({ getRedis }) => getRedis()));
+    const [writers, generation, cached] = await flagCacheCommand(redis.mget(
+      FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
+    ));
+    if (writers && writers !== "0") return null;
+    let rows: RawFlagMode[];
+    if (cached) {
+      rows = JSON.parse(cached);
+      if (!Array.isArray(rows) || !rows.every((row) =>
+        typeof row?.key === "string" && FEATURE_FLAG_MODES.includes(row.mode),
+      )) return null;
+    } else {
+      rows = await prisma.featureFlag.findMany({ select: { key: true, mode: true } });
+    }
+    const mode = rows.find(({ key }) => key === HTPR_7042_NEON_WORK_AVOIDANCE_FLAG)?.mode
+      ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
+    if (mode !== "EVERYONE") return null;
+    if (!cached) {
+      // A reader started before an admin write must not refill its invalidated snapshot.
+      await flagCacheCommand(redis.eval(`
+        if (redis.call('GET', KEYS[1]) or '0') == '0'
+          and (redis.call('GET', KEYS[2]) or '0') == ARGV[1] then
+          return redis.call('SET', KEYS[3], ARGV[2], 'EX', 30)
+        end
+        return 0
+      `, 3, FLAG_MODE_WRITERS_KEY, FLAG_MODE_GENERATION_KEY, FLAG_MODE_CACHE_KEY,
+      generation ?? "0", JSON.stringify(rows))).catch(() => undefined);
+    }
+    return rows;
+  } catch {
+    return null;
+  }
+}
+
+const requestFlagModes = cache(loadRawFlagModes);
+async function rawFlagModes(): Promise<RawFlagMode[] | null> {
+  if (!process.env.REDIS_URL) return null;
+  const { flagModeScope } = await import("@/lib/flags/modeCache");
+  const scope = flagModeScope.getStore();
+  return scope ? (scope.modes ??= loadRawFlagModes()) : requestFlagModes();
+}
+
+
 /**
  * The user ids a flag can possibly be on for, or null when it is on for
  * everyone. A coarse prefilter only: isFeatureEnabled still decides per user.
@@ -1270,7 +1338,10 @@ export async function featureFlagCandidateUserIds(
   db: FeatureFlagDatabase = prisma,
 ): Promise<number[] | null> {
   if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return [];
-  const row = await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
+  const modes = db === prisma ? await rawFlagModes() : null;
+  const row = modes
+    ? modes.find((row) => row.key === key)
+    : await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
   const mode = row?.mode ?? defaultFeatureFlagMode(key);
   if (mode === "EVERYONE") return null;
   if (mode === "OFF") return [];
@@ -1285,10 +1356,10 @@ export async function isFeatureEnabled(
   db: FeatureFlagDatabase = prisma,
 ): Promise<boolean> {
   if (RETIRED_FEATURE_FLAG_KEYS.has(key)) return false;
-  const row = await db.featureFlag.findUnique({
-    where: { key },
-    select: { mode: true },
-  });
+  const modes = db === prisma ? await rawFlagModes() : null;
+  const row = modes
+    ? modes.find((row) => row.key === key)
+    : await db.featureFlag.findUnique({ where: { key }, select: { mode: true } });
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
   if (!row && !declared) return false;
   const mode = row?.mode ?? defaultFeatureFlagMode(key);
@@ -1330,7 +1401,13 @@ export async function listFeatureFlagModes(
 export async function featureFlagsForUser(
   userId: number,
 ): Promise<Record<string, boolean>> {
-  const rows = await listFeatureFlagModes();
+  const modes = await rawFlagModes();
+  const rows = modes
+    ? [...new Map([
+        ...FEATURE_FLAG_KEYS.map((key) => [key, { key, mode: defaultFeatureFlagMode(key) }] as const),
+        ...modes.filter(({ key }) => !RETIRED_FEATURE_FLAG_KEYS.has(key)).map((row) => [row.key, row] as const),
+      ]).values()].sort((a, b) => a.key.localeCompare(b.key))
+    : await listFeatureFlagModes();
   const isOwner = rows.some(
     (row) => row.mode === "OWNER_ONLY" || row.mode === "OWNER_AND_QA",
   )
@@ -1366,7 +1443,7 @@ export async function setFeatureFlagMode(
   }
   const declared = (FEATURE_FLAG_KEYS as readonly string[]).includes(key);
 
-  const row = await prisma.$transaction(async (tx) => {
+  const row = await withFlagModeInvalidation(() => prisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(
         CAST(${FEATURE_FLAG_MODE_LOCK_NAMESPACE} AS integer),
@@ -1392,7 +1469,7 @@ export async function setFeatureFlagMode(
       update: { mode, ...release },
       select: FEATURE_FLAG_ROW_SELECT,
     });
-  });
+  }));
   return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key]));
 }
 
@@ -1408,12 +1485,12 @@ export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<Fe
   if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");
 
   const [row, ticketTitleByNumber] = await Promise.all([
-    prisma.featureFlag.upsert({
+    withFlagModeInvalidation(() => prisma.featureFlag.upsert({
       where: { key },
       create: { key, mode: defaultFeatureFlagMode(key), keep },
       update: { keep },
       select: FEATURE_FLAG_ROW_SELECT,
-    }),
+    })),
     loadFeatureFlagTicketTitles([key]),
   ]);
   return withFeatureFlagMetadata(row, ticketTitleByNumber);

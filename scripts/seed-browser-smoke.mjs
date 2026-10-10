@@ -11,6 +11,9 @@ if (!process.env.GITHUB_OUTPUT) throw new Error("GITHUB_OUTPUT is required");
 if (!process.env.DATABASE_URL || !["127.0.0.1", "localhost"].includes(new URL(process.env.DATABASE_URL).hostname)) {
   throw new Error("Browser smoke seeding requires an isolated loopback database");
 }
+if (process.env.REDIS_URL && !["127.0.0.1", "localhost"].includes(new URL(process.env.REDIS_URL).hostname)) {
+  throw new Error("Browser smoke seeding requires an isolated loopback Redis");
+}
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const fixtureFile = path.join(path.dirname(stateFile), "card-fixture.json");
@@ -35,6 +38,7 @@ const jiti = createRequire(path.join(root, "package.json"))("jiti")(
   },
 );
 const prisma = jiti(path.join(root, "src/lib/prisma.ts"));
+const { withFlagModeInvalidation } = jiti(path.join(root, "src/lib/flags/modeCache.ts"));
 const { SESSION_TTL_SECONDS, signSession } = jiti(
   path.join(root, "src/lib/auth/session.ts"),
 );
@@ -293,9 +297,12 @@ try {
     modes = localFlagModes(defaults, await readPlainQaFlags(), overrides.filter((_, index) => index % 2));
     await writeFile(path.join(path.dirname(stateFile), "flag-modes.json"), JSON.stringify({ modes }));
   }
-  for (const [key, mode] of Object.entries(modes)) {
-    await prisma.featureFlag.upsert({ where: { key }, create: { key, mode }, update: { mode } });
-  }
+  // Controls reseed a running app, so invalidate its previous raw-mode snapshot.
+  await withFlagModeInvalidation(async () => {
+    for (const [key, mode] of Object.entries(modes)) {
+      await prisma.featureFlag.upsert({ where: { key }, create: { key, mode }, update: { mode } });
+    }
+  });
   const flags = Object.fromEntries(Object.entries(modes).map(([key, mode]) => [key, mode === "EVERYONE" || (localPremerge && mode === "OWNER_AND_QA")]));
   if (instantOpenControl || allFlagsOn || liveLikeControl) {
     // Controls reuse the logged-in user and fixtures, changing only local flag rows.
@@ -307,4 +314,8 @@ try {
   console.log("Seeded isolated browser smoke fixtures.");
 } finally {
   await prisma.$disconnect();
+  if (process.env.REDIS_URL) {
+    const { getRedis } = jiti(path.join(root, "src/lib/redis.ts"));
+    (await getRedis()).disconnect();
+  }
 }

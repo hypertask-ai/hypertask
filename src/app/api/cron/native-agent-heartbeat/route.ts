@@ -4,7 +4,8 @@ import prisma from "@/lib/prisma";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { after } from "next/server";
 import { sweepAiChatAlerts } from "@/lib/ai/chatAlerts/service";
-import { getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
+import { agentInboxVisibilityWhere, getStructuredInboxForAgent } from "@/utils/controllers/notifications/getStructuredInboxForAgent";
+import { HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, isFeatureEnabled, withFeatureFlagSnapshot } from "@/lib/flags";
 import { broadcastInboxChange } from "@/lib/realtime/server";
 import {
   completeHeartbeatExecution,
@@ -424,6 +425,10 @@ const recoverPriorExecution = async (
 };
 
 export async function GET(request: NextRequest) {
+  return withFeatureFlagSnapshot(() => runHeartbeat(request));
+}
+
+async function runHeartbeat(request: NextRequest) {
   if (
     !hasValidCronAuthorization(
       request.headers.get("authorization"),
@@ -446,6 +451,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const avoidRepeatedWork = await isFeatureEnabled(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, 0).catch(() => false);
   const agents: AgentCandidate[] = await prisma.agent.findMany({
     where: { runtimeType: "NATIVE", revokedAt: null },
     select: { id: true, userId: true, displayName: true, heartbeatAt: true },
@@ -482,14 +488,30 @@ export async function GET(request: NextRequest) {
       const claimedAt = await getScanWatermark();
       if (agent.heartbeatAt && claimedAt <= agent.heartbeatAt) continue;
       const previousHeartbeatAt = agent.heartbeatAt?.toISOString() ?? null;
-      const inbox = await getStructuredInboxForAgent({
-        userId: agent.userId,
-        agentId: agent.id,
-        window: {
-          after: agent.heartbeatAt,
-          through: claimedAt,
-        },
-      });
+      const probe = avoidRepeatedWork
+        ? await prisma.agent.findFirst({
+            where: { id: agent.id, userId: agent.userId, revokedAt: null },
+            select: {
+              notificationsToAgent: {
+                where: agentInboxVisibilityWhere(agent.userId, { after: agent.heartbeatAt, through: claimedAt }),
+                select: { id: true },
+                take: 1,
+              },
+            },
+          }).catch(() => undefined)
+        : undefined;
+      const inbox = probe === null
+        ? { ok: false as const, kind: "not_found" as const }
+        : probe?.notificationsToAgent.length === 0
+          ? { ok: true as const, notifications: [] }
+          : await getStructuredInboxForAgent({
+              userId: agent.userId,
+              agentId: agent.id,
+              window: {
+                after: agent.heartbeatAt,
+                through: claimedAt,
+              },
+            });
       if (!inbox.ok) {
         failures.push(`${agent.id}: inbox lookup ${inbox.kind}`);
         continue;

@@ -47,7 +47,7 @@ require.cache[authPath] = {
   loaded: true,
   exports: { getSessionUser: async () => ({ userId: sessionUserId }) },
 };
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src"), react: require.resolve("react") } });
 const flags = jiti(path.join(root, "src/lib/flags.ts"));
 
 test.beforeEach(() => {
@@ -362,6 +362,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
         flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
         flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
+        flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
       ].includes(key)],
       `${key} should use its declared rollout default`,
     );
@@ -904,6 +905,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7038-haiku-default", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
     ],
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {

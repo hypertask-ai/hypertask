@@ -1,5 +1,6 @@
 import { Status, type Cycle, type Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { getRedis } from "@/lib/redis";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import {
@@ -223,7 +224,20 @@ const rolloverOneProjectCycle = async (
 export const sweepCycleRollovers = async (
   now: Date = new Date(),
   limit: number = CYCLE_SWEEP_BATCH,
+  avoidRepeatedWork = false,
 ): Promise<number> => {
+  // Date-only deadlines must still run on the first tick of a new UTC day.
+  const gateKey = `sweep:cycles:${dateOnly(utcDate(now))}`;
+  let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
+  if (avoidRepeatedWork) {
+    try {
+      redis = await getRedis();
+      if ((await redis.set(gateKey, "checking", "EX", 600, "NX")) !== "OK"
+        && (await redis.get(gateKey)) === "empty") return 0;
+    } catch {
+      redis = undefined;
+    }
+  }
   const batch = Math.max(1, Math.min(limit, CYCLE_SWEEP_BATCH));
   const candidates = await prisma.$queryRaw<RolloverCandidate[]>`
     SELECT c."projectId"
@@ -235,6 +249,8 @@ export const sweepCycleRollovers = async (
     ORDER BY c."endDate" ASC
     LIMIT ${batch}
   `;
+  // Only a confirmed empty scan can skip work; backlogs and failures keep their cadence.
+  if (candidates.length === 0) await redis?.set(gateKey, "empty", "EX", 600).catch(() => undefined);
 
   let moved = 0;
   const touchedProjects = new Set<number>();
