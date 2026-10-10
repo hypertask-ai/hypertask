@@ -103,3 +103,9 @@ test("board activity broadcast is throttled to once per board per window", () =>
   assert.equal(fn(2, 5000, seen), true);
   assert.equal(fn(1, 16_001, seen), true);
 });
+
+test("the status chip shrinks and truncates long agent names inside the card", () => {
+  const source = fs.readFileSync(path.join(root, "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"), "utf8");
+  assert.match(source, /<LabelWrapper title=\{agentStatusLine\} className="[^"]*min-w-0[^"]*max-w-full[^"]*overflow-hidden/);
+  assert.match(source, /<span className="min-w-0 truncate">\{agentStatusLine\}<\/span>/);
+});

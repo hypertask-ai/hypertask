@@ -88,9 +88,9 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
     agentStatusLine||agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
     <div className={`basis-full flex gap-1 flex-wrap`}>
     {agentStatusLine && (
-      <LabelWrapper title={agentStatusLine}>
+      <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
         <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
-        <span className="truncate">{agentStatusLine}</span>
+        <span className="min-w-0 truncate">{agentStatusLine}</span>
       </LabelWrapper>
     )}
     {agents.map((agent) => (
