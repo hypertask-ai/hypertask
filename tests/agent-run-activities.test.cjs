@@ -916,14 +916,6 @@ test("chat responses store the activity and assistant message together", async (
   // idempotency key is the only thing left that can reject this call.
   run.chatPromptMessageId = "human-2";
   await assert.rejects(harness.service.createAgentRunActivity(agentPrincipal, run.id, { ...response, replyToMessageId: "human-2" }, "chat-response-1"), model.AgentRunActivityConflictError);
-  const legacyRun = runRow({ id: "legacy-run", taskId: null, task: null, chatSessionId: "legacy-chat", chatSession: { id: "legacy-chat", userId: 6 }, trigger: "CHAT" });
-  const legacy = loadService({ runs: [legacyRun], featureEnabled: () => false }); legacy.db.messages.push({ id: "legacy-human", sessionId: "legacy-chat", role: "human", createdAt: new Date() });
-  // With the flag off nothing here is new: a reply stores whether or not it
-  // names the newest turn, exactly as it did before this ticket.
-  await assert.doesNotReject(legacy.service.createAgentRunActivity(agentPrincipal, legacyRun.id, activityInput({ type: "RESPONSE", text: "Stale answer", replyToMessageId: "other-human" }), null));
-  await assert.doesNotReject(legacy.service.createAgentRunActivity(agentPrincipal, legacyRun.id, activityInput({ type: "RESPONSE", text: "Legacy answer" }), null));
-  assert.equal(legacy.db.messages.filter(({ role }) => role === "assistant").length, 2);
-  assert.ok(legacy.db.messages.filter(({ role }) => role === "assistant").every(({ replyToMessageId }) => !replyToMessageId));
 });
 
 test("one browser selection wins and its retry does not post twice", async () => {

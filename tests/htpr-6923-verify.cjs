@@ -1000,7 +1000,7 @@ async function flag() {
       user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? "valentin.yeo@gmail.com" : "valentin@hypertask.ai" }) },
     } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "test" },
+    "@/lib/agentRuns/model": {},
   });
   const key = flags.HTPR_6923_APP_ROUTER_WRITES_FLAG;
   assert.equal(key, "htpr-6923-app-router-writes");

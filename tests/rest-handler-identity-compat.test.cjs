@@ -48,7 +48,7 @@ function fixture(options = {}) {
   const mocks = {
     "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/prisma": { default: database },
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6154-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
     "@/lib/auth/betterAuth": { auth: { api: { getSession: async ({ headers }) => {
       calls.sessions.push(headers.get("cookie"));
       return betterAuthId === undefined ? null : { user: { id: String(betterAuthId) } };

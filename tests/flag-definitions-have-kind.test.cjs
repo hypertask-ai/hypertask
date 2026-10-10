@@ -10,7 +10,7 @@ const files = fs.readdirSync(folder).filter((name) => name.endsWith(".ts") && !n
 // default must stay Owner and QA when no saved row exists.
 const FORMERLY_LEGACY = [
   "5906", "5908", "6112", "6177", "6951", "6421", "6407", "6512",
-  "6516", "6553", "6278", "6372", "6363", "6154", "6141", "6911",
+  "6516", "6553", "6278", "6372", "6363", "6141", "6911",
 ];
 
 test("every flag definition declares its kind", () => {

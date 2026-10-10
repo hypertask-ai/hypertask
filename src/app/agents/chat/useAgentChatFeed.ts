@@ -14,7 +14,6 @@ type Props = Pick<
   | "messageListRef"
   | "setShowScrollToBottom"
   | "queuedMessages"
-  | "chatStopAndTimeoutEnabled"
   | "awaiting"
   | "deliveryNotice"
   | "replyTimedOut"
@@ -28,7 +27,7 @@ type Props = Pick<
 
 export function useAgentChatFeed({
   messages, activityRowsEnabled, activity, feedFilter, messageListRef, setShowScrollToBottom,
-  queuedMessages, chatStopAndTimeoutEnabled, awaiting, deliveryNotice, replyTimedOut,
+  queuedMessages, awaiting, deliveryNotice, replyTimedOut,
   showScrollToBottom, sessionName, awaitingRef,
 }: Props) {
   const feed = useMemo(
@@ -81,7 +80,7 @@ export function useAgentChatFeed({
   // a feed change too or the list silently stops following (HTPR-6291).
   const extraRowsRevision = agentChatExtraRowsRevision({
     queuedMessageIds: queuedMessages.map((item) => item.id),
-    queuedRowsVisible: chatStopAndTimeoutEnabled && activeFeedFilter !== "activity",
+    queuedRowsVisible: activeFeedFilter !== "activity",
     typingRowVisible:
       awaiting &&
       activeFeedFilter !== "activity" &&

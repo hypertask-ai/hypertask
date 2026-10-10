@@ -2077,7 +2077,7 @@ if (require.main === module) {
       const flags = load('src/lib/flags.ts', {
         '@/lib/prisma': { default: { user: { findUnique: async () => ({ email: id === 6 ? 'valentin.yeo@gmail.com' : id === 985 ? 'valentin@hypertask.ai' : 'ordinary@fixture.invalid' }) }, featureFlag: { findUnique: async () => mode === null ? null : { mode } } } },
         '@/lib/auth/getSessionUser': {},
-        '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6154-chat-stop-and-timeout' },
+        '@/lib/agentRuns/model': {},
       });
       for (const operation of profileOperations) {
         const result = await run(operation, 'ON', { userId: id, profileId: id, mocks: { '@/lib/flags': flags } });

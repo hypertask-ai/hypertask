@@ -400,7 +400,7 @@ test("welcome flag is a feature with Owner + QA default and respects OFF", async
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7025_WELCOME_EMAIL_FLAG, key);
   assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
