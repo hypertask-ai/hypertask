@@ -162,7 +162,7 @@ const KeyboardShortcuts = () => {
             <button
               type="button"
               aria-label="Close keyboard shortcuts"
-              className="hidden max-sm:flex h-11 w-11 shrink-0 items-center justify-center mr-4 mt-2 cursor-pointer rounded-sm text-text-light-gray hover:text-white-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white-black"
+              className="hidden max-sm:flex h-11 w-11 shrink-0 items-center justify-center mr-4 mt-2 cursor-pointer rounded-sm text-text-light-gray hover:text-white-black outline-none focus-visible:bg-hover-active focus-visible:text-white-black"
               onClick={() => setShowShortcuts(false)}
             >
               <X size={18} strokeWidth={1.75} aria-hidden />

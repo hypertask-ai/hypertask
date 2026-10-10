@@ -154,9 +154,10 @@ test("phone close control is flag-gated and closes once without triggering outsi
     const close = document.querySelector('[aria-label="Close keyboard shortcuts"]');
     assert.ok(close);
     assert.equal(close.type, "button");
-    for (const className of ["hidden", "max-sm:flex", "h-11", "w-11", "shrink-0"]) {
+    for (const className of ["hidden", "max-sm:flex", "h-11", "w-11", "shrink-0", "outline-none", "focus-visible:bg-hover-active", "focus-visible:text-white-black"]) {
       assert.ok(close.classList.contains(className), className);
     }
+    assert.ok(!close.className.includes("focus-visible:outline"), "ghost focus must not use a bright outline");
     assert.equal(close.previousElementSibling.id, "shortcuts-search");
     assert.ok(document.getElementById("shortcuts-help").contains(close));
     assert.ok(close.querySelector('svg.lucide-x[aria-hidden="true"]'));
@@ -173,7 +174,10 @@ test("phone close control is flag-gated and closes once without triggering outsi
   }
 });
 
-test("real component and Tailwind CSS fit phone in all themes and preserve desktop geometry", async (t) => {
+// The unit CI job has no browser; DOM assertions above still run there.
+const browserInstalled = fs.existsSync(chromium.executablePath());
+
+test("real component and Tailwind CSS fit phone in all themes and preserve desktop geometry", { skip: !browserInstalled && "Playwright browser not installed" }, async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
   const page = await browser.newPage();
@@ -199,6 +203,18 @@ test("real component and Tailwind CSS fit phone in all themes and preserve deskt
             assert.equal(await close.count(), 0, "flag Off has no close control");
           } else if (width === 390) {
             assert.equal(await close.isVisible(), true, "phone close control is visible");
+            await close.focus();
+            const focus = await close.evaluate((button) => {
+              const style = getComputedStyle(button);
+              const probe = document.createElement("span");
+              probe.style.cssText = "background:var(--bg-hover-active);color:var(--color-white-black)";
+              button.append(probe);
+              const expected = getComputedStyle(probe);
+              const result = [style.backgroundColor === expected.backgroundColor, style.color === expected.color, style.outlineStyle];
+              probe.remove();
+              return result;
+            });
+            assert.deepEqual(focus, [true, true, "none"], `${theme} ghost keyboard focus matches theme tokens`);
             const bounds = await close.boundingBox();
             assert.equal(bounds.width, 44, "phone close target is 44px wide");
             assert.equal(bounds.height, 44, "phone close target is 44px high");
