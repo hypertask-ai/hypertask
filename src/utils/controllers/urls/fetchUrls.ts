@@ -51,7 +51,7 @@ const fetchUrls = async (taskId:string | string[], commentId?:string, includeSav
                     attachmentType: attachment.fileType,
                 }));
                 const focusedComment = commentId && /^\d+$/.test(commentId) ? Number(commentId) : null;
-                const urls = mergeUrls(attachments, contentUrls, storedUrls);
+                const urls = mergeUrls(attachments, contentUrls, storedUrls.map(url => ({ ...url, commentId: url.commentId ?? undefined })) as IUrl[]);
                 urls.sort((a, b) => {
                     const rank = (url: IUrl) => (url.commentId ?? null) === focusedComment ? 0 : 1;
                     return rank(a) - rank(b);

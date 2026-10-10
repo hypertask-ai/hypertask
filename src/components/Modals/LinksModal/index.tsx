@@ -116,7 +116,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
       }
       // console.log("🚀 ~ file: index.tsx:65 ~ onOpenHandler ~ responseArray:", responseArray)
 
-      const legacyGalleryLinks = res.filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app"));
+      const legacyGalleryLinks = res.filter(item => /\.(pdf|png|webp|jpg|jpeg|txt|code|mp4|docx|mov|xlsx|pptx|webm|)$/i.test(item.urlString) && item.urlString.startsWith("https://files.hypertask.app/"));
       const galleryLinks = savedLinksEnabled ? res.filter(item => item.Attachment || legacyGalleryLinks.includes(item)) : legacyGalleryLinks;
       const filteredGalleryAttachment = galleryLinks
         .map(({ urlString, title, attachmentType }) => {
@@ -150,7 +150,7 @@ const LinksModal = ({ display, onClose, currentTaskId, commentId, subTasks, pare
 
   // ---------------------- LINK CLICK HANDLER ------------------
   const handleLinkClick = (link: IUrl) => {
-    const isAttachment = savedLinksEnabled ? galleryAttachments.some((attachment: { fileSource: string }) => attachment.fileSource === link.urlString) : link.urlString.startsWith("https://files.hypertask.app");
+    const isAttachment = savedLinksEnabled ? galleryAttachments.some((attachment: { fileSource: string }) => attachment.fileSource === link.urlString) : link.urlString.startsWith("https://files.hypertask.app/");
     if (isAttachment) {
       const index = galleryAttachments.findIndex((attachment: { fileSource: string; }) => attachment.fileSource === link.urlString)
       setCurrentIndex(index)
