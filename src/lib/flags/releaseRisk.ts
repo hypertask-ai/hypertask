@@ -17,6 +17,10 @@ export const FEATURE_FLAG_RELEASE_RISKS: Partial<Record<string, FeatureFlagRelea
     risk: "new",
     reason: "A Ctrl+J message that asks for several separate tasks creates one ticket per task and lists them all.",
   },
+  "htpr-7060-task-writer-empty-and-research": {
+    risk: "small",
+    reason: "Empty task drafts show a retry error, and research requests describe the investigation instead of presenting findings.",
+  },
   "htpr-7020-tag-full-name": {
     risk: "small",
     reason: "Hovering a tag in ticket details shows its full name in the existing tooltip.",

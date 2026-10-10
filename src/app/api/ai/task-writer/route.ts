@@ -11,6 +11,7 @@ import {
   SSE_HEADERS,
 } from "@/app/api/ai/_lib/editorAi";
 import { getAiRequestUser } from "@/app/api/ai/_lib/requestUser";
+import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import {
   AiFeatureDisabledError,
   AutoDescriptionSuggestionsDisabledError,
@@ -50,7 +51,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft } =
       await prepareTaskWriterRun(body, userId);
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
@@ -73,15 +74,17 @@ export async function POST(request: NextRequest) {
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let buffer = "";
+        let draft = "";
         let streamCompleted = false;
 
         const enqueueText = (text: string) => {
+          if (validateDraft) draft += text;
           if (text) controller.enqueue(encoder.encode(text));
         };
-        const enqueueError = (status: "error" | "interrupted", content: string) => {
+        const enqueueError = (status: "error" | "interrupted", content: string, code?: string) => {
           controller.enqueue(
             encoder.encode(
-              sseFrame("error", { type: "error", content }) +
+              sseFrame("error", { type: "error", content, ...(code ? { code } : {}) }) +
                 sseFrame("done", { status })
             )
           );
@@ -121,6 +124,13 @@ export async function POST(request: NextRequest) {
           if (allowedImgSrcs && buffer) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
+          }
+          const description = validateDraft && body.aiMode === "AiTaskWriter"
+            ? extractTaskWriterProperties(draft).description
+            : draft;
+          if (validateDraft && !hasUsableTaskWriterDraft(description)) {
+            enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
+            return;
           }
           streamCompleted = true;
         } catch (error) {

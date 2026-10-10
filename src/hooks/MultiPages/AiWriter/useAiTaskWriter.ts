@@ -12,7 +12,7 @@ import {
 } from "@/utils/helperFunctions/getFileTypeFromUrl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants";
-import { describeTaskWriterFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
+import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 import {
   createTaskWriterMediaTokenFactory,
   extractTaskWriterPromptMedia,
@@ -257,6 +257,7 @@ const useAITaskWriter = (
 
         const decoder = new TextDecoder();
         const reader = response?.body?.getReader();
+        let streamedResponse = "";
 
         while (reader) {
           const { done, value } = await reader.read();
@@ -265,9 +266,14 @@ const useAITaskWriter = (
             await reader.cancel();
             return;
           }
-          setAIResponse(
-            (prev) => prev + decoder.decode(value, { stream: true })
-          );
+          const chunk = decoder.decode(value, { stream: true });
+          streamedResponse += chunk;
+          const streamFailure = describeTaskWriterStreamFailure(streamedResponse);
+          if (streamFailure) {
+            await reader.cancel();
+            throw new Error(streamFailure);
+          }
+          setAIResponse((prev) => prev + chunk);
         }
       } catch (error) {
         if (

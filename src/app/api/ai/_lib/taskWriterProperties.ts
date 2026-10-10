@@ -26,6 +26,13 @@ export type TaskWriterProperties = {
   estimate?: number;
 };
 
+export const TASK_WRITER_EMPTY_DRAFT_MESSAGE = "Could not write this task, try again";
+
+export function hasUsableTaskWriterDraft(html: string) {
+  const root = parse(html);
+  return Boolean(root.textContent.trim() || root.querySelector("img, video, audio, iframe, embed"));
+}
+
 const PROPERTY_LINE_RE =
   /^(Priority|Size|Status|Tags|Assignee|Assignees|Task size|Proposed properties):\s*.+$/i;
 

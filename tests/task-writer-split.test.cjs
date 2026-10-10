@@ -21,6 +21,7 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
   const flags = {
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-window",
     HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG: flag,
+    HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG: "empty-research",
     isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? enabled : key === "compose" || key === "new-window"; },
   };
   const editor = {
@@ -40,7 +41,7 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
     "@/lib/ai/composeTaskTarget": { isEmptyComposeTarget: () => true },
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
-    "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "" },
+    "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", TASK_WRITER_RESEARCH_REQUEST_RULE: "" },
     "@/app/api/ai/_lib/taskWriterBoardResearch": { HTPR_6363_TASK_WRITER_RESEARCH_FLAG: "research" },
     "@/app/api/ai/_lib/skills": { resolveSkills: async text => ({ cleanedText: text, skills: [] }) },
     "@/app/api/ai/_lib/providerGate": { getProjectTeamProviderContext: async () => ({ teamId: "team", settings: {} }) },
@@ -66,6 +67,7 @@ function harness({ enabled = true, tasks = drafts, failAt = [], sonnet = true, m
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 985 }) },
     "@/app/api/ai/_lib/taskWriterRun": run,
+    "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: html => ({ description: html }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },
   });
   const escapeHtml = value => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
   const composer = load("src/lib/ai/composeTask.ts", {

@@ -84,6 +84,13 @@
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   },
   {
+    "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
+    "id": "task-writer-research-request-rule",
+    "version": "1",
+    "partsHash": "5f801a338df7446bf4f47639413d95f619b1236ccf424197e917dd27676f118e",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
     "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
     "id": "task-writer-board-research-rules",
     "version": "1",

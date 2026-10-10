@@ -73,6 +73,19 @@ test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", as
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
 
+test("task-writer empty draft and research fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG;
+  assert.equal(key, "htpr-7060-task-writer-empty-and-research");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7060");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
 test("Full task tag names default to Everyone as a bugfix and respect OFF", async () => {
   const key = flags.HTPR_7020_TAG_FULL_NAME_FLAG;
   assert.equal(key, "htpr-7020-tag-full-name");
@@ -499,6 +512,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
         flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
+        flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG,
         flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG,
         flags.HTPR_7020_TAG_FULL_NAME_FLAG,
       ].includes(key)],
@@ -1056,6 +1070,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7056-ctrlj-split-tasks", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
+      { key: "htpr-7060-task-writer-empty-and-research", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7064-inbox-remind-returns", mode: "EVERYONE", updatedAt: null },
     ],

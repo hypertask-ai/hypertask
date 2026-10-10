@@ -33,6 +33,7 @@ import {
   HTPR_7010_HAIKU_5_5_FLAG,
   HTPR_7038_HAIKU_DEFAULT_FLAG,
   HTPR_7038_TASK_WRITER_SONNET_FLAG,
+  HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG,
   HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG,
   HTPR_6993_QUICK_ADD_VIEW_CONTEXT_FLAG,
   HTPR_6997_NEW_TASK_WINDOW_VIEW_CONTEXT_FLAG,
@@ -168,6 +169,12 @@ export const FEATURE_FLAG_DEFINITIONS = [
     kind: "feature",
     shippedOn: "2026-10-10",
     description: "Creates up to ten separate tickets from a Ctrl+J prompt that clearly asks for independent tasks and lists every saved ticket in the result.",
+  },
+  {
+    key: HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-10",
+    description: "Rejects empty task-writer drafts and writes research requests as tickets describing the investigation, not findings.",
   },
   {
     key: HTPR_7020_TAG_FULL_NAME_FLAG,
