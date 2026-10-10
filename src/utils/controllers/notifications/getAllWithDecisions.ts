@@ -38,5 +38,5 @@ export default async function notificationGetAllWithDecisions(
       notifications,
       structuredData: getInboxTabs(notifications, json.splitsNoImportant, json.showImportantSplit),
     },
-  } as InboxResponse;
+  } as unknown as InboxResponse;
 }
