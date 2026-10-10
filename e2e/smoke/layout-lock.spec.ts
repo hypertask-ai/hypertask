@@ -126,6 +126,8 @@ for (const name of [...screens, 'ticket from board card']) {
     if (screen === 'ticket') {
       await expect(page.locator('#title-input')).toHaveValue('Browser smoke board fixture')
       await expect(page.getByTestId('ticket-comment')).toHaveCount(2)
+      // HTPR-7074: the comment box appears once the thread has settled; measure after it is there.
+      await expect(page.getByTestId('comment-composer')).toBeVisible()
       // Seen-state can collapse old comments between visits; compare the expanded thread.
       if (!phone) {
         await page.getByTestId('ticket-comment').first().click()
@@ -301,4 +303,63 @@ test('layout lock: desktop New Task window stays narrow and inside the viewport'
   expect(box!.y).toBeGreaterThanOrEqual(0)
   expect(box!.x + box!.width).toBeLessThanOrEqual(1440)
   expect(box!.y + box!.height).toBeLessThanOrEqual(900)
+})
+
+// HTPR-7074: a cold ticket open must not shove the comment box (or anything else) down the page.
+const CLS_BUDGET = 0.05
+type ShiftSource = { node: string; previous: number[]; current: number[] }
+type ShiftEntry = { value: number; startTime: number; sources: ShiftSource[] }
+
+// Largest session window: shifts less than 1s apart, a window at most 5s long.
+function largestSessionWindow(shifts: ShiftEntry[]) {
+  let best = { value: 0, shifts: [] as ShiftEntry[] }
+  let current = { value: 0, shifts: [] as ShiftEntry[] }
+  for (const shift of shifts) {
+    const last = current.shifts[current.shifts.length - 1]
+    if (last && (shift.startTime - last.startTime >= 1000 || shift.startTime - current.shifts[0].startTime >= 5000)) {
+      current = { value: 0, shifts: [] }
+    }
+    current.value += shift.value
+    current.shifts.push(shift)
+    if (current.value > best.value) best = { value: current.value, shifts: [...current.shifts] }
+  }
+  return best
+}
+
+test('layout lock: ticket page first load stays under the CLS budget', async ({ page }, testInfo) => {
+  test.setTimeout(90_000)
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { longThreadDetailPath: string }
+  const phone = testInfo.project.name === 'Mobile'
+  if (phone) await (await page.context().newCDPSession(page)).send('Emulation.setCPUThrottlingRate', { rate: 4 })
+  await page.addInitScript(() => {
+    const describe = (node: Node | null) => {
+      const element = node instanceof Element ? node : node?.parentElement
+      if (!element) return 'removed node'
+      const testId = element.closest('[data-testid]')?.getAttribute('data-testid')
+      return `${element.tagName.toLowerCase()}${element.id ? `#${element.id}` : ''}${testId ? `[data-testid=${testId}]` : ''} "${(element.textContent ?? '').trim().slice(0, 40)}"`
+    }
+    const rect = (r: DOMRectReadOnly) => [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height)]
+    const shifts: unknown[] = []
+    ;(window as unknown as { __shifts: unknown[] }).__shifts = shifts
+    new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as unknown as Array<{ hadRecentInput: boolean; value: number; startTime: number; sources: Array<{ node: Node | null; previousRect: DOMRectReadOnly; currentRect: DOMRectReadOnly }> }>) {
+        if (entry.hadRecentInput) continue
+        shifts.push({ value: entry.value, startTime: entry.startTime, sources: entry.sources.map((s) => ({ node: describe(s.node), previous: rect(s.previousRect), current: rect(s.currentRect) })) })
+      }
+    }).observe({ type: 'layout-shift', buffered: true })
+  })
+  await page.goto(withRealtime(fixture.longThreadDetailPath), { waitUntil: 'load' })
+  await expect(page.getByTestId('ticket-comment').first()).toBeVisible({ timeout: 30_000 })
+  await expect(page.getByTestId('comment-composer')).toBeVisible({ timeout: 30_000 })
+  await expect.poll(() => page.getByTestId('ticket-comment').count(), { message: 'the long thread must render its comments', timeout: 30_000 }).toBeGreaterThanOrEqual(6)
+  await page.waitForTimeout(1500)
+  const shifts = await page.evaluate(() => (window as unknown as { __shifts: ShiftEntry[] }).__shifts)
+  const worst = largestSessionWindow(shifts)
+  const detail = worst.shifts.map((shift) => `  ${shift.value.toFixed(4)} at ${Math.round(shift.startTime)}ms\n${shift.sources.map((s) => `    ${s.node} [x,y,w,h] ${s.previous.join(',')} -> ${s.current.join(',')}`).join('\n')}`).join('\n')
+  await testInfo.attach('cls-shifts', { body: JSON.stringify(shifts, null, 2), contentType: 'application/json' })
+  // The score alone is small for a short comment box in a tall window, so also pin the box itself:
+  // once visible it may not move more than the 24px layout lock tolerance.
+  const composerJumps = shifts.flatMap((shift) => shift.sources.filter((s) => s.node.includes('[data-testid=comment-composer]') && Math.abs(s.current[1] - s.previous[1]) > 24).map((s) => `top ${s.previous[1]} -> ${s.current[1]}`))
+  expect(composerJumps, `layout lock: the comment box moved after it was visible (${testInfo.project.name}). Shifts:\n${detail}`).toEqual([])
+  expect(worst.value, `layout lock: ticket first load CLS ${worst.value.toFixed(4)} exceeds ${CLS_BUDGET} (${testInfo.project.name}). Shifts:\n${detail}`).toBeLessThanOrEqual(CLS_BUDGET)
 })

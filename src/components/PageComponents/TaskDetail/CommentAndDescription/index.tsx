@@ -2,6 +2,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import React, { Suspense } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
@@ -22,6 +23,7 @@ import { IUploadingDescription } from "@/models/model";
 import { CommentsProvider } from "@/lib/contexts/CommentsContext";
 import CommentsContainer from "./CommentContainer/CommentsContainer";
 import UploadingCommentsContainer from "./UploadingComment/UploadingCommentContainer";
+import { SettledComposerSlot } from "./SettledComposerSlot";
 import NewCommentComponent from "./CommentContainer/NewCommentComponent";
 import DescriptonBody from "./DescriptionContainer/DescriptonBody";
 import TaskInfo, { ITaskInfoContainer, TaskInfoLateDetails } from "../TaskInfoColumn/TaskInfo";
@@ -92,6 +94,8 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   const virtualItems = hydrated && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
     ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
     : measuredItems;
+  // HTPR-7074: on the uncached path the composer waits for the thread height to stop growing.
+  const threadSettled = useThreadSettled(virtualizer.getTotalSize(), measuredItems.length, !cachedLayout && !_mbl);
 
   // ------------------------------------------------------------------
 
@@ -233,7 +237,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
           );
         })}
       </div>
-      {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+      {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (
+        // Mounted at once but hidden until the thread settles: it holds its space and cannot shift the thread (HTPR-7074).
+        <SettledComposerSlot settled={threadSettled}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>
+      )}
       {cachedLayout && !_mbl && (stableLayout ? (
         <div data-task-composer-slot className="flow-root min-h-[168px]">
           {secondaryPanelsReady !== false && <Suspense fallback={null}><NewCommentComponent /></Suspense>}

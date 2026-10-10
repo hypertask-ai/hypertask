@@ -1238,6 +1238,17 @@ test("AI sidebar detail fit is an Everyone-default bugfix and respects OFF", asy
   assert.equal((await flags.listFeatureFlagModes()).find((entry) => entry.key === key).mode, "OFF");
 });
 
+test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7074_TICKET_PAGE_CLS_FLAG;
+  assert.equal(key, "htpr-7074-ticket-page-cls");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+});
+
 test("narrow sidebar width is an Everyone-default bugfix and respects OFF", async () => {
   const key = flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG;
   assert.equal(key, "htpr-6990-narrow-sidebar-width");
