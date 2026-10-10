@@ -22,6 +22,9 @@ const viewHelpers = load("src/utils/helperFunctions/Views/ViewsHelperFunctions.t
 const viewDefaults = load("src/utils/helperFunctions/Views/NewTaskViewDefaults.ts", {
   "@/lib/constants/constants": constants,
 });
+const writerMedia = load("src/lib/ai/taskWriterMedia.ts", {
+  "@/lib/media/isImageUrl": load("src/lib/media/isImageUrl.ts", {}),
+});
 const labels = [{ id: "11111111-1111-4111-8111-111111111111", value: "Urgent" }];
 const assignees = [
   { id: 42, uid: "human-42", displayName: "Member" },
@@ -61,7 +64,7 @@ function composer() {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": { extractTitleAndDescription: () => ({ title: "AI title", description: "<p>AI body</p>" }) },
     "@/utils/htmlEscape": { escapeHtml: value => value },
-    "./taskWriterMedia": { extractTaskWriterMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, restoreTaskWriterMedia: html => html },
+    "./taskWriterMedia": writerMedia,
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": viewHelpers,
     "@/utils/helperFunctions/Views/NewTaskViewDefaults": {
@@ -96,7 +99,7 @@ async function send(api, { flag = true, currentProject = project(), destinationP
     axios: { get: async () => ({ data: { id: existingTaskId, projectId: 15, uniqueIndex: 1 } }) },
     isEmptyComposeTarget: () => true, composeTaskBoardId: api.composeTaskBoardId,
     parseCookies: () => ({ previousBoard: "project-15|&|todo" }), lastUsedBoards: {},
-    user: { id: 985 }, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
+    user: { id: 985 }, unfurlImageUrls: false, currentProject, globalAPIHandlers: { getAllProjectsMinimal: async () => [project()] }, mounted,
     createComposedTask: async body => {
       calls.push(body);
       const result = await api.createComposedTask(body);
