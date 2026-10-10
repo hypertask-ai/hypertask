@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7050_CTRL_O_LINKS_FLAG,
   HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
   HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
@@ -151,6 +152,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7050_CTRL_O_LINKS_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-09",
+    description: "Lists saved description and comment links, related URLs and attachments in the ticket Ctrl+O menu even when legacy URL copies are missing.",
+  },
   {
     key: HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
     kind: "bugfix",
