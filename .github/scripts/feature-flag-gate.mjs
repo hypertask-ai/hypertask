@@ -1197,7 +1197,7 @@ function readLabelsFromEnv() {
 export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const changedFiles = git(["diff", "--name-only", `${baseSha}...${headSha}`])
     .split("\n").filter(Boolean);
-  if (changedFiles.some((path) => ["src/lib/flags/keys.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path))) {
+  if (changedFiles.some((path) => ["src/lib/flags/keys.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/releaseRisk.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
     try {
       const mergeBase = git(["merge-base", baseSha, headSha]).trim();
       const baseRegistry = parseFlagRegistry(mergeBase);
@@ -1223,7 +1223,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   }
 
   // Title exemptions never permit widening a feature default to Everyone.
-  if (changedFiles.some((path) => ["src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path))) {
+  if (changedFiles.some((path) => ["src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
     try {
       parseDefinitions(headSha);
     } catch (error) {

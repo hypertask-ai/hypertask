@@ -8,6 +8,12 @@ trusted_root=${2:?trusted checkout is required}
 candidate_root=$(cd "$candidate_root" && pwd -P)
 trusted_root=$(cd "$trusted_root" && pwd -P)
 
+# The candidate is mounted read-only, so build its flag index here with the trusted generator.
+# It only parses the flag files as data and never runs candidate code.
+if [ -d "$candidate_root/src/lib/flags/definitions" ]; then
+  node "$trusted_root/scripts/generate-flag-index.mjs" "$candidate_root"
+fi
+
 # Docker cannot create nested mount targets beneath the read-only /app bind.
 for candidate_mount in node_modules .next; do
   mount_target="$candidate_root/$candidate_mount"
