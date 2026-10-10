@@ -606,6 +606,25 @@ model UserSetting {
   calendarViews            Json?
 }
 
+// Retain the one-time reset backup even after undo or user deletion.
+model Htpr7038ModelChoiceBackup {
+  userId        Int      @map("user_id")
+  location      String
+  previousValue String   @map("previous_value")
+  backedUpAt    DateTime @default(now()) @map("backed_up_at") @db.Timestamptz(6)
+
+  @@id([userId, location], map: "htpr_7038_model_choice_backup_pkey")
+  @@map("htpr_7038_model_choice_backup")
+}
+
+// Keep completion markers after undo so later user choices are never reset again.
+model Htpr7038ModelChoiceResetDone {
+  userId  Int      @id(map: "htpr_7038_model_choice_reset_done_pkey") @map("user_id")
+  resetAt DateTime @default(now()) @map("reset_at") @db.Timestamptz(6)
+
+  @@map("htpr_7038_model_choice_reset_done")
+}
+
 model Favorites {
   id            String      @id @default(uuid())
   userSettingId String

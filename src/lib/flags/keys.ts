@@ -26,6 +26,7 @@ export const HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG = "htpr-7035-demo-login-own-boa
 export const HTPR_7031_INVITE_EMAIL_FLAG = "htpr-7031-invite-email";
 export const HTPR_7016_PHONE_BOARD_COLD_START_FLAG = "htpr-7016-phone-board-cold-start";
 export const HTPR_7010_HAIKU_5_5_FLAG = "htpr-7010-haiku-5-5";
+export const HTPR_7038_RESET_SAVED_MODEL_CHOICES_FLAG = "htpr-7038-reset-saved-model-choices";
 export const HTPR_7038_HAIKU_DEFAULT_FLAG = "htpr-7038-haiku-default";
 export const HTPR_7038_TASK_WRITER_SONNET_FLAG = "htpr-7038-task-writer-sonnet";
 /**

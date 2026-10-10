@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -133,6 +134,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const modelReset = await ensureHtpr7038ModelReset(user.id);
     let body: Record<string, unknown>;
     if (restCompat) {
       const result = await readJsonBody<Record<string, unknown>>(request, {
@@ -294,6 +296,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: "Invalid AI model preference team" },
           { status: 400 },
+        );
+      }
+
+      if (preferenceUpdates.length > 0 && modelReset === "failed") {
+        return NextResponse.json(
+          { success: false, error: "Model preferences are temporarily unavailable. Please retry." },
+          { status: 503 },
         );
       }
 

@@ -22,7 +22,7 @@ function moduleWithStubs(file, stubs, extra = "") {
   const loadedModule = { exports: {} };
   vm.runInNewContext(code + extra, {
     module: loadedModule, exports: loadedModule.exports,
-    require: (id) => stubs[id] ?? (id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
+    require: (id) => stubs[id] ?? (id === "@/lib/ai/htpr7038ModelReset" ? { ensureHtpr7038ModelReset: async () => "disabled" } : id.startsWith("@/") || id.startsWith("./") ? {} : require(id)),
     process: { env: { AI_GATEWAY_API_KEY: "vck_fixture" } },
     performance, setTimeout, clearTimeout, ReadableStream, Response, console,
   }, { filename });

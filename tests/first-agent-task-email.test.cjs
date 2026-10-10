@@ -269,9 +269,17 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId\)/);
 });
 
-test("schema stays unchanged and flag defaults to Owner + QA", () => {
+test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
-  assert.equal(execFileSync("git", ["diff", "origin/production", "--", "src/prisma"], { cwd: root, encoding: "utf8" }), "");
+  const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
+  const schema = read("src/prisma/schema.prisma");
+  // The email reuses existing models; unrelated tickets may add models and migrations.
+  for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
+    const pattern = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, "m");
+    assert.match(baseline, pattern, name);
+    assert.match(schema, pattern, name);
+    assert.equal(schema.match(pattern)[0], baseline.match(pattern)[0], `${name} email model stays unchanged`);
+  }
   assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
   assert.match(read("src/lib/flags/keys.ts"), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
 });
