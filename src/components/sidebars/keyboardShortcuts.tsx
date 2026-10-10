@@ -16,9 +16,7 @@ import { HTPR_6662_AGENT_LOG_NAME_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG } fro
 
 const KeyboardShortcuts = () => {
   const shortcutsHelpPhone = useFlag(HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG);
-  const panelClassName = shortcutsHelpPhone
-    ? "fixed bg-sidebar text-white-black top-0 right-0 w-full sm:w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)] max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-sm:pb-[env(safe-area-inset-bottom)]"
-    : "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
+  const panelClassName = "fixed bg-sidebar text-white-black top-0  right-0 w-[26vw] lg:w-min-[30vw] md:w-min-[32vw] overflow-y-auto h-SVH-full z-[100] pt-[env(safe-area-inset-top)]";
   const rowClassName = shortcutsHelpPhone
     ? "flex flex-row items-center mb-2 gap-2 max-sm:flex-wrap"
     : "flex flex-row items-center mb-2 gap-2";
@@ -144,7 +142,9 @@ const KeyboardShortcuts = () => {
       <div
         id={DIV_ID_CONSTANTS.keyboardShortcuts}
         style={{ fontSize: 14 }}
-        className={panelClassName}
+        className={shortcutsHelpPhone
+          ? `${panelClassName} max-sm:w-full max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-sm:pb-[env(safe-area-inset-bottom)]`
+          : panelClassName}
       >
         <input
           className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "

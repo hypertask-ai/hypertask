@@ -119,8 +119,8 @@ test("flag-on phone layout uses responsive width, wrapping rows and non-shrinkin
       assert.equal(label.nextElementSibling.className, "flex gap-1 w-[40%]");
       assert.ok(!panel.querySelector("kbd").className.includes("max-sm:"));
     } else {
-      assert.ok(panel.classList.contains("w-full"));
-      assert.ok(panel.classList.contains("sm:w-[26vw]"));
+      assert.ok(panel.classList.contains("max-sm:w-full"));
+      assert.ok(panel.classList.contains("w-[26vw]"));
       for (const side of ["left", "right", "bottom"]) {
         assert.ok(panel.className.includes(`env(safe-area-inset-${side})`));
       }
