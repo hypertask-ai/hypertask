@@ -52,3 +52,9 @@ test('the older baseline is guarded per screen and device', async () => {
   assert.match(checkApproval([{ file, base: json(1), head: json(2) }], '').failures[0], /"ticket\/Desktop" changed/)
   assert.deepEqual(checkApproval([{ file, base: json(1), head: json(2, { 'ticket/Desktop': URL_A }) }], `Layout change approved: ${URL_A}`).failures, [])
 })
+
+test('creating a lock file needs no approval, deleting it does', async () => {
+  const { checkApproval } = await load()
+  assert.deepEqual(checkApproval([{ file: FILE, base: null, head: matrix({ board: { a: 1 } }) }], ''), { failures: [], approvals: [] })
+  assert.match(checkApproval([{ file: FILE, base: matrix({ board: { a: 1 } }), head: null }], '').failures[0], /board/)
+})

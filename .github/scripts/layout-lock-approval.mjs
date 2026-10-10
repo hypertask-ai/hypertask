@@ -41,6 +41,8 @@ export function checkApproval(files, prBody) {
   for (const { file, base, head } of files) {
     const watch = WATCHED[file]
     if (!watch) continue
+    // Creating a lock file records production as it is; only later edits to it need approval.
+    if (base === null) continue
     const baseJson = base ? JSON.parse(base) : null
     const headJson = head ? JSON.parse(head) : null
     const baseUnits = watch.units(baseJson)
