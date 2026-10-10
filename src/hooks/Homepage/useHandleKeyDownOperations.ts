@@ -573,7 +573,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       newSections,
       _currentProject,
       isBuiltinViewId(activeBuiltinViewId) ? activeBuiltinViewId : undefined,
-      buildBuiltinViewContext(_currentProject, currentUser?.id),
+      buildBuiltinViewContext(_currentProject, currentUser?.id, undefined, currentUser?.displayName),
       filterRuntimeContext,
     )
     const filteredEmptySections = getFilteredEmptySections(filteredAppliedSections, _currentProject)
