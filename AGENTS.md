@@ -9,7 +9,7 @@ Valentin's own Claude Code and Codex sessions follow the same workflow:
 - Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
 - The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
 - Read [the CI reference](https://hypertask.app/wiki/deployment) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
-- Helpers are Codex sub-sessions: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. The owning session remains responsible through live verification and close. A hax helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
+- Helpers follow the token ladder (Valentin, 2026-10-10): CODEX mode `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`, CLAUDE mode the Agent tool (`sonnet` builds, `haiku` lookups) inside the session. The owning session remains responsible through live verification and close. A helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
 
 ## CLI and MCP repositories
 
