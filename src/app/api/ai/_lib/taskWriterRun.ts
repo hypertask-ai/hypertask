@@ -53,6 +53,7 @@ import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 
 const byokProviderFlagSchema = z
   .object({
@@ -348,27 +349,32 @@ export async function prepareTaskWriterRun(
   const validateDraft = await isFeatureEnabled(HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, userId);
   const splitTasks = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
-  let instructions = skillResolution.systemPromptAddition
-    ? `${researchInstructions ?? baseInstructions}\n\n${skillResolution.systemPromptAddition}`
-    : researchInstructions ?? baseInstructions;
+  const fixedInstructions = researchInstructions ?? baseInstructions;
+  // HTPR-7076: everything below varies per call or flag, so it follows the cached fixed part.
+  let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
   if (splitTasks) {
-    instructions += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
+    suffix += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
   }
   if (validateDraft && body.aiMode === "AiTaskWriter") {
-    instructions += `\n\n${TASK_WRITER_RESEARCH_REQUEST_RULE}`;
+    suffix += `\n\n${TASK_WRITER_RESEARCH_REQUEST_RULE}`;
   }
   const dueDateEnabled = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
   const dueDateContext = dueDateEnabled ? taskWriterDateContext(body.timeZone) : null;
   if (dueDateContext) {
-    instructions += `\n\n${taskWriterDueDateInstructions(dueDateContext)}`;
-    if (splitTasks) instructions += "\nFor structured tasks, put each task's own date in that task's dueDate field instead of a marker, and leave it null when that task has no deadline.";
+    suffix += `\n\n${taskWriterDueDateInstructions(dueDateContext)}`;
+    if (splitTasks) suffix += "\nFor structured tasks, put each task's own date in that task's dueDate field instead of a marker, and leave it null when that task has no deadline.";
   }
   const headingLanguageEnabled = body.aiMode === "AiTaskWriter" &&
     (await isFeatureEnabled(HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, userId));
   if (headingLanguageEnabled) {
-    instructions += `\n\n${renderPrompt("task-writer-output-language")}`;
+    suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
+  const instructions = await cachedInstructionsForUser(userId, {
+    modelId: selected.modelId,
+    fixed: fixedInstructions,
+    suffix,
+  });
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
     {

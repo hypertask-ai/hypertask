@@ -395,7 +395,7 @@ test("both price tiers apply to total request tokens, including the exact bounda
     assert.equal(pricing.estimateReservationMicroUsd({ pricing: rates, prompt, maxOutputTokens: 1 }), expected);
   }
   const source = fs.readFileSync(path.join(root, "src/app/api/ai/_lib/sharedAllowance.ts"), "utf8");
-  assert.match(source, /const actualUsd = modelCostUsd\(pricing, inputTokens, outputTokens\)/);
+  assert.match(source, /const actualUsd = modelCostUsd\(\s*pricing,\s*inputTokens,\s*outputTokens/);
   const h = harness({ input: 90_000, output: 10_001 });
   await h.makeModel().doGenerate(params);
   await h.flush();

@@ -12,6 +12,10 @@ export type AiUsageRecord = {
   feature: string;
   inputTokens?: number;
   outputTokens?: number;
+  /** HTPR-7076: prompt tokens served from the provider cache (part of inputTokens). */
+  cachedInputTokens?: number | null;
+  /** HTPR-7076: prompt tokens written to the provider cache (part of inputTokens). */
+  cacheWriteInputTokens?: number | null;
   totalTokens?: number;
   costUsd?: number | null;
   latencyMs?: number;

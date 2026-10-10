@@ -294,7 +294,7 @@ export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel)
   else modelUsageContexts.set(model, context);
 }
 
-async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number) {
+async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
   if (!inputTokens && !outputTokens) return 0;
   if (provider === "byok:custom") return null;
   const slug = modelId.includes("/") ? modelId : `${modelId.startsWith("claude-") ? "anthropic" : "openai"}/${modelId}`;
@@ -304,7 +304,7 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
       modelPricing(slug),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
     ]);
-    return pricing ? modelCostUsd(pricing, inputTokens, outputTokens) : null;
+    return pricing ? modelCostUsd(pricing, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens) : null;
   } catch {
     return null;
   } finally {
@@ -319,11 +319,14 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
     const identity = identifyPrompt(prompt);
     const traceId = randomUUID();
     let recorded = false;
-    return (outcome: "ok" | "failed" | "cancelled", usage?: { inputTokens: { total?: number }; outputTokens: { total?: number } }, error?: unknown) => {
+    return (outcome: "ok" | "failed" | "cancelled", usage?: { inputTokens: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens: { total?: number } }, error?: unknown) => {
       if (recorded) return;
       recorded = true;
       const inputTokens = usage?.inputTokens.total ?? 0;
       const outputTokens = usage?.outputTokens.total ?? 0;
+      // HTPR-7076: null when the provider reports no cache breakdown, a number (maybe 0) when it does.
+      const cachedInputTokens = usage?.inputTokens.cacheRead ?? null;
+      const cacheWriteInputTokens = usage?.inputTokens.cacheWrite ?? null;
       const row: AiUsageRecord = {
         userId: attribution.userId ?? null,
         teamId: attribution.teamId,
@@ -339,6 +342,8 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         outcome,
         inputTokens,
         outputTokens,
+        cachedInputTokens,
+        cacheWriteInputTokens,
         totalTokens: inputTokens + outputTokens,
         latencyMs: Math.min(2147483647, Math.max(0, Math.round(performance.now() - startedAt))),
       };
@@ -350,7 +355,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       const statusCode = typeof failure?.statusCode === "number" && Number.isInteger(failure.statusCode) && failure.statusCode >= 100 && failure.statusCode <= 599
         ? failure.statusCode : null;
       const observation = (async () => {
-        row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens);
+        row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
         await Promise.allSettled([
           logAiUsage(row),
           recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),

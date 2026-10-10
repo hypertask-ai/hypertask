@@ -58,6 +58,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/lib/prisma": { default: { project: { findFirst: async () => board }, task: { findFirst: async () => ({ id: 91 }) }, taskTemplate: { findMany: async () => [] } } },
     "@/app/api/ai/_lib/boardTemplateContext": { BOARD_TEMPLATE_LIMIT: 10 },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
     zod: { z },
