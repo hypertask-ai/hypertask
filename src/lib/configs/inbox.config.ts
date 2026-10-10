@@ -1,6 +1,12 @@
 import { NotificationType } from "@prisma/client";
 
-export const systemDefinedSplits = ["Important", "Updates", "Reactions", "@Mentions", "Agents", "Stale"]
+export const systemDefinedSplits = ["Important", "Decisions", "Updates", "Reactions", "@Mentions", "Agents", "Stale"]
+
+/**
+ * HTPR-7092: Question comments that @mention you and still wait for your answer.
+ * Rows also stay in their normal split; the flag-gated server marks them isDecision.
+ */
+export const decisionsSplitName = "Decisions"
 
 /** Split holding agent housekeeping and routine output. */
 export const agentSplitName = "Agents"

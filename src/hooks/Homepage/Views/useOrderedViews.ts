@@ -4,13 +4,16 @@ import { IProject } from '@/models/model'
 import { optimisticViewTabsOrderAtom, viewTabsOrderAtom } from '@/store'
 import { saveViewOrder } from '@/utils/api/viewOrder'
 import { asViewOrder, sortViewsByOrder } from '@/utils/helperFunctions/Views/ViewOrderHelperFunctions'
-import { BUILTIN_VIEWS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
+import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7092_DECISIONS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
 // Saved views AND built-ins in one ordered list: built-ins are draggable and
 // manageable like any other view, they just default to the end of the order.
 const useOrderedViews = (project: IProject | null): BoardView[] => {
+  const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
   const viewOrder = useRecoilValue(viewTabsOrderAtom)
   const optimisticViewOrder = useRecoilValue(optimisticViewTabsOrderAtom)
   const defaultViewId = project?.project_view?.default_view_id
@@ -48,10 +51,15 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
       ...all.filter((view) => view.id !== unsavedViewId),
-      ...BUILTIN_VIEWS.filter((view) => !view.available || view.available(context)),
+      ...BUILTIN_VIEWS.filter(
+        (view) =>
+          (!view.available || view.available(context)) &&
+          // HTPR-7092: the Decisions view exists only while its flag is on.
+          (view.id !== BUILTIN_VIEW_IDS.decisions || decisionsEnabled),
+      ),
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
-  }, [project, defaultViewId, unsavedViewId, effectiveOrder])
+  }, [project, defaultViewId, unsavedViewId, effectiveOrder, decisionsEnabled])
 }
 
 export default useOrderedViews

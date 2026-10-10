@@ -1,6 +1,6 @@
 import { INotification } from "@/models/model";
 import { NotificationType } from "@prisma/client";
-import { agentSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
+import { agentSplitName, decisionsSplitName, inboxConfig, staleSplitName } from "@/lib/configs/inbox.config";
 import { isDoneColumn } from "@/lib/doneColumns";
 import { getInboxSplitKey, type InboxSplitKey } from "@/lib/inboxSplitSettings";
 
@@ -364,6 +364,14 @@ export const getInboxTabs = (
           notificationsByStatus["Important"].push(i);
         }
       }
+      // HTPR-7092: the server marks rows with an unanswered Question that @mentions
+      // you (only while the flag is on). They keep their normal split too.
+      if (notification.isDecision === true) {
+        if (!notificationsByStatus[decisionsSplitName]) {
+          notificationsByStatus[decisionsSplitName] = [];
+        }
+        notificationsByStatus[decisionsSplitName].push(i);
+      }
       tasksByProject[projectId].push(i);
     }
   }
@@ -411,6 +419,7 @@ export const getInboxTabs = (
     .sort((a, b) => {
       const priority = (name: string): number => {
         if (name === "Important") return 0;
+        if (name === decisionsSplitName) return 0.5;
         if (name === "@Mentions") return 1;
         // Agent housekeeping sits after everything a person did; stale last, it is
         // a shelf for review, not a queue.
