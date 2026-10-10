@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
-import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection, isAgentConnectCheckEnabledFor } from "@/lib/onboarding/agentConnection";
+import { dismissAgentConnectCard, getAgentConnectCardState, getFirstAgentConnection, isAgentConnectCheckEnabledFor, isAgentConnectStateEnabledFor } from "@/lib/onboarding/agentConnection";
 
 export const runtime = "nodejs";
 
@@ -44,7 +44,7 @@ export async function POST() {
     if (typeof user?.id !== "number") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (!(await isAgentConnectCheckEnabledFor(user.id))) {
+    if (!(await isAgentConnectStateEnabledFor(user.id))) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
     await dismissAgentConnectCard(user.id);

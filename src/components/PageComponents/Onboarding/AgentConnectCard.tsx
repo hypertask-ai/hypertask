@@ -3,11 +3,18 @@
 import React, { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG } from "@/lib/flags/keys";
+import { HTPR_7026_AGENT_CONNECT_CHECK_FLAG, HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG } from "@/lib/flags/keys";
+import { AgentConnectOverlay } from "./AgentConnectOverlay";
 
 const ConnectAIOnboardingScreen = dynamic(() => import("./Screens/ConnectAIOnboardingScreen").then((module) => module.ConnectAIOnboardingScreen), { ssr: false });
 
-export function AgentConnectCard({ projectId, userId }: { projectId: number; userId: number }) {
+/** HTPR-7041: with the overlay flag on, the block above the board never renders; the MCP dialog opens instead. */
+export function AgentConnectCard(props: { projectId: number; userId: number }) {
+  const overlayOn = useFlag(HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG);
+  return overlayOn ? <AgentConnectOverlay {...props} /> : <AgentConnectCardBlock {...props} />;
+}
+
+function AgentConnectCardBlock({ projectId, userId }: { projectId: number; userId: number }) {
   const flagEnabled = useFlag(HTPR_7026_AGENT_CONNECT_CHECK_FLAG);
   const identity = `${userId}:${projectId}`;
   const [state, setState] = useState<{ identity: string; eligible: boolean; show: boolean } | null>(null);

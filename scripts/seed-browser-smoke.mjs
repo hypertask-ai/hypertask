@@ -142,6 +142,12 @@ async function seedSessionFixtures(flags) {
     }),
   ]);
 
+  // The smoke user is a never-connected owner. Mark the connect dialog (HTPR-7041) as already dismissed,
+  // like a returning user, so it does not cover the board that the layout and click tests drive.
+  await prisma.logs.create({
+    data: { LoggedById: user.id, log: "agent_connect_dismissed", type: "Signup", status: "Normal" },
+  });
+
   const googleAccount = await prisma.googleAccount.create({
     data: {
       userId: user.id,
