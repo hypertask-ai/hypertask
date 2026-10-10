@@ -187,3 +187,48 @@ test("server: getAll marks rows only through the gated helper", () => {
   assert.match(source, /getDecisionTaskIds\(parsedUserId, inboxWhere\)/);
   assert.match(source, /isDecision: true/);
 });
+
+test("Question in a later paragraph matches (summary sentence first)", () => {
+  const html =
+    "<p><strong>The clickable wireframe is ready for you.</strong></p><p>Details here.</p>" +
+    '<p><strong>Question:</strong> <span data-type="mention">@Valentin Yeo</span>, should we build it?</p>';
+  assert.equal(isQuestionComment(html), true);
+  assert.equal(isQuestionComment("Summary line\nQuestion: yes or no?"), true);
+  assert.equal(isQuestionComment("<p>First</p><p><strong>Question:</strong> ok?</p>"), true);
+});
+
+test("Question: in the middle of a sentence or paragraph does not match", () => {
+  assert.equal(isQuestionComment("<p>I have one Question: should we?</p>"), false);
+  assert.equal(isQuestionComment("<p>Summary</p><p>Open point, Question: later</p>"), false);
+  assert.equal(isQuestionComment("<p>The question: is open</p>"), false);
+});
+
+test("a first-paragraph question still matches", () => {
+  assert.equal(isQuestionComment("<p><strong>Question:</strong> go?</p><p>More</p>"), true);
+});
+
+test("later-paragraph Question counts through pickDecisionTaskIds", () => {
+  const html = "<p><strong>Summary.</strong></p><p><strong>Question:</strong> @V ok?</p>";
+  const ids = pickDecisionTaskIds([{ taskId: 9, text: html, commentText: "Summary. Question: @V ok?", createdAt: at(3) }], []);
+  assert.deepEqual([...ids], [9]);
+});
+
+test("Decisions board view sits right after the home tab for viewers who never reordered", () => {
+  const { sortViewsByOrder } = loadTsModule("src/utils/helperFunctions/Views/ViewOrderHelperFunctions.ts");
+  const saved = (id, created) => ({ id, title: id, createdAt: created });
+  const views = [
+    ...builtin.BUILTIN_VIEWS,
+    saved("bugs", "2024-02-01"),
+    saved("home", "2024-01-01"),
+    saved("stale", "2024-03-01"),
+  ];
+  const ids = (list) => list.map((v) => v.id);
+  const none = ids(sortViewsByOrder(views, undefined, "home"));
+  assert.deepEqual(none.slice(0, 4), ["home", "builtin:decisions", "bugs", "stale"]);
+  // A saved order that predates the view (does not list it) still puts it after home.
+  const older = ids(sortViewsByOrder(views, ["home", "stale", "bugs"], "home"));
+  assert.deepEqual(older.slice(0, 4), ["home", "builtin:decisions", "stale", "bugs"]);
+  // A user who placed it explicitly keeps their placement.
+  const placed = ids(sortViewsByOrder(views, ["home", "bugs", "builtin:decisions"], "home"));
+  assert.deepEqual(placed.slice(0, 3), ["home", "bugs", "builtin:decisions"]);
+});

@@ -46,9 +46,11 @@ test("built-in views default to the end of the bar, in declaration order", () =>
 
   assert.deepEqual(ids(sortViewsByOrder(views, undefined, "default")), [
     "default",
+    // HTPR-7092: Decisions sits right after the home tab.
+    BUILTIN_VIEW_IDS.decisions,
     "saved-a",
     "saved-b",
-    ...BUILTIN_VIEWS.map((view) => view.id),
+    ...BUILTIN_VIEWS.map((view) => view.id).filter((id) => id !== BUILTIN_VIEW_IDS.decisions),
   ]);
 });
 

@@ -1,22 +1,27 @@
 // HTPR-7092: which inbox tasks wait on the viewer's yes or no. Pure, so the server
 // query and the tests share one rule.
 
-// Plain text only, to test the "Question:" prefix. Tags are removed until none are left.
-const stripHtml = (html: string) => {
-  let text = html;
+// Plain text per paragraph or line. Block ends become newlines; remaining tags are
+// removed until none are left.
+const toLines = (html: string) => {
+  let text = html.replace(/<\/(p|div|li|h[1-6]|blockquote)>|<br\s*\/?>/gi, "\n");
   let previous;
   do {
     previous = text;
     text = text.replace(/<[^<>]*>/g, " ");
   } while (text !== previous);
-  return text.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/&nbsp;/g, " ")
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
 };
 
 const QUESTION_PREFIX = /^question:/i;
 
-/** True when a comment (HTML or plain text) opens with a bold or plain "Question:". */
+/** True when any paragraph or line opens with a bold or plain "Question:". */
 export const isQuestionComment = (text: string | null | undefined) =>
-  QUESTION_PREFIX.test(stripHtml(text ?? ""));
+  toLines(text ?? "").some((line) => QUESTION_PREFIX.test(line));
 
 export type DecisionMentionComment = {
   taskId: number;
@@ -39,7 +44,7 @@ export const pickDecisionTaskIds = (
   }
   const ids = new Set<number>();
   for (const comment of mentionComments) {
-    if (!isQuestionComment(comment.commentText || comment.text)) continue;
+    if (!isQuestionComment(comment.text) && !isQuestionComment(comment.commentText)) continue;
     if ((lastReply.get(comment.taskId) ?? 0) > comment.createdAt.getTime()) continue;
     ids.add(comment.taskId);
   }
