@@ -201,6 +201,7 @@ export async function prepareTaskWriterRun(
     feature: "task-writer",
     aiFeature,
     teamContext,
+    taskWriterAgentId: agentId,
   });
   // Bring AI-chat's /skill invocation to the task writer: a prompt like
   // "/minimalist-review draft this" strips the token and appends the board

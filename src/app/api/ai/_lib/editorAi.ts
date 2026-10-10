@@ -24,6 +24,7 @@ import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
+import { HTPR_7038_TASK_WRITER_SONNET_FLAG } from "@/lib/flags/keys";
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -617,7 +618,19 @@ export async function selectTaskWriterModel(args: {
    * (HTPR-5389). Server-derived only, never request input.
    */
   agentId?: string | null;
+  /** Preserve legacy task-writer credential routing when the Sonnet flag is off. */
+  taskWriterAgentId?: string | null;
 }) {
+  let taskWriterSonnet = false;
+  if (args.aiFeature === "taskWriter" && args.userId) {
+    try {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      taskWriterSonnet = await isFeatureEnabled(HTPR_7038_TASK_WRITER_SONNET_FLAG, args.userId);
+    } catch {
+      // A flag read failure must keep the existing task-writer selection.
+    }
+  }
+  const agentId = args.agentId ?? (taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
     (await getProjectTeamProviderContext(args.projectId, args.userId));
@@ -625,13 +638,13 @@ export async function selectTaskWriterModel(args: {
     ? {
         trustedTeamId: teamContext.teamId,
         userId: args.userId,
-        agentId: args.agentId ?? null,
+        agentId: agentId ?? null,
       }
     : {
         teamId: args.teamId,
         projectId: args.projectId,
         userId: args.userId,
-        agentId: args.agentId ?? null,
+        agentId: agentId ?? null,
       };
   const storePlanId = await storePlanIdForProject(
     teamContext.teamId ? undefined : args.projectId,
@@ -663,14 +676,16 @@ export async function selectTaskWriterModel(args: {
     haiku55Enabled,
     defaultContext.haikuDefaultEnabled,
   );
-  const personalModelOptionId = args.aiFeature
+  const personalModelOptionId = args.aiFeature && !taskWriterSonnet
     ? await getPersonalModelOptionId(
         args.userId,
         teamContext.teamId,
         args.aiFeature
       )
     : null;
-  let selection = args.aiFeature
+  let selection = taskWriterSonnet
+    ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
+    : args.aiFeature
     ? defaultModelSelection(
         teamContext.settings,
         args.aiFeature,
@@ -766,13 +781,27 @@ export async function selectTaskWriterModel(args: {
     selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
   }
 
-  await assertModelAllowedForPlan(
-    args.projectId,
-    selection.modelOption,
-    teamContext.teamId,
-    byokApiKey,
-    lunaFree,
-  );
+  const pinnedSonnet = taskWriterSonnet && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  if (pinnedSonnet && selection.modelOption) {
+    // Apply after provider filtering, which restores the catalog option by id.
+    selection.modelOption = {
+      ...selection.modelOption,
+      effort: "standard",
+      providerOptions: {
+        anthropic: { thinking: { type: "adaptive" }, effort: "medium" },
+      },
+    };
+  }
+  // Free and keyless BYOK keep their existing capped shared allowance for this pin.
+  if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
+    await assertModelAllowedForPlan(
+      args.projectId,
+      selection.modelOption,
+      teamContext.teamId,
+      byokApiKey,
+      lunaFree,
+    );
+  }
 
   const tags = gatewayTagsForLookup({
     teamId: teamContext.teamId ?? args.teamId,

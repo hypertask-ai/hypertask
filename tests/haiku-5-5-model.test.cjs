@@ -15,6 +15,7 @@ const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 const option = catalog.getAiModelOptionById("claude-haiku-5-5");
 
 function moduleWithStubs(relativePath, stubs, extra = "") {
+  stubs = { "@/lib/flags/keys": keys, "@/lib/flags": { isFeatureEnabled: async () => false }, ...stubs };
   const filename = path.join(root, relativePath);
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
