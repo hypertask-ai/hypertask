@@ -28,7 +28,7 @@ function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
 
 test("audience counts are zero for an empty list", () => {
   assert.deepEqual(countFeatureFlagsByAudience([]), {
-    ALL: 0, UNRELEASED: 0, OWNER_ONLY: 0, OWNER_AND_QA: 0, EVERYONE: 0, OFF: 0,
+    ALL: 0, UNRELEASED: 0, PARKED: 0, OWNER_ONLY: 0, OWNER_AND_QA: 0, EVERYONE: 0, OFF: 0,
   });
 });
 
@@ -41,7 +41,7 @@ test("audience counts match every filter in both sort directions", () => {
     row({ key: "hidden", mode: "OFF" }),
   ];
   const counts = countFeatureFlagsByAudience(flags);
-  assert.deepEqual(counts, { ALL: 5, UNRELEASED: 4, OWNER_ONLY: 1, OWNER_AND_QA: 2, EVERYONE: 1, OFF: 1 });
+  assert.deepEqual(counts, { ALL: 5, UNRELEASED: 4, PARKED: 0, OWNER_ONLY: 1, OWNER_AND_QA: 2, EVERYONE: 1, OFF: 1 });
   for (const filter of Object.keys(counts) as FeatureFlagAudienceFilter[]) {
     for (const direction of ["asc", "desc"] as const) {
       const visible = clusterFeatureFlagsByReleaseDate(flags, direction, filter).flatMap(([, rows]) => rows);

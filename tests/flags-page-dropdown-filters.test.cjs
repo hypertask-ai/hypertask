@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const queryKey = ["admin-feature-flags"];
 let enabled = true;
 let oldEnabled = true;
+let parkedOn = false;
 const stub = (relative, exports) => {
   const filename = path.join(root, relative);
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
@@ -17,7 +18,7 @@ const stub = (relative, exports) => {
 stub("src/hooks/useFlag.tsx", {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: queryKey,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
-  useFlag: key => key === "htpr-7069-flags-dropdown-filters" ? enabled : oldEnabled,
+  useFlag: key => key === "htpr-7069-flags-dropdown-filters" ? enabled : key === "htpr-7070-parked-flags" ? parkedOn : oldEnabled,
 });
 stub("src/styles/linksModal.module.scss", { __esModule: true, default: {} });
 // reactstrap portals do not mount in this jsdom setup, so the modal shell is stubbed with plain elements (same approach as my-tasks-scope-picker.test.cjs).
@@ -94,7 +95,7 @@ async function withAdmin(query, run, props = {}) {
   }
 }
 
-test.beforeEach(() => { enabled = true; oldEnabled = true; });
+test.beforeEach(() => { enabled = true; oldEnabled = true; parkedOn = false; });
 
 test("all dropdowns show current choices and per-option counts; count matches actual cards", async () => {
   await withAdmin("", async ({ document, open }) => {
@@ -272,4 +273,30 @@ test("All resets multi-selects without changing unrelated params or search", asy
     assert.equal(params.get("other"), "keep");
     assert.equal(document.querySelector('[role="status"]').textContent, "Showing 4 of 4 flags");
   });
+});
+
+test("Parked status option, count and filter exist only with the parked-flags flag", async () => {
+  const parkedRow = { ...rows[0], key: "parked-fixture", mode: "OWNER_ONLY", parked: { reason: "Waiting on a decision" } };
+  rows.push(parkedRow);
+  parkedOn = true;
+  try {
+    await withAdmin("", async ({ open }) => {
+      assert.deepEqual(await open("Status"),
+        ["All (5)", "Unreleased (2)", "Only me (2)", "Owner + QA (1)", "Everyone (1)", "Off (1)", "Parked (1)"]);
+    });
+    await withAdmin("?tab=parked", async ({ document }) => {
+      assert.equal(document.querySelector('[role="status"]').textContent, "Showing 1 of 5 flags");
+      assert.match(document.body.textContent, /Parked: Waiting on a decision/);
+      assert.ok(document.querySelector('[aria-label="Filter Status"]').textContent.includes("Status: Parked"));
+    });
+    parkedOn = false;
+    await withAdmin("?tab=parked", async ({ document, open }) => {
+      assert.equal(document.querySelector('[role="status"]').textContent, "Showing 5 of 5 flags");
+      assert.doesNotMatch(document.body.textContent, /Waiting on a decision/);
+      assert.deepEqual(await open("Status"),
+        ["All (5)", "Unreleased (3)", "Only me (2)", "Owner + QA (1)", "Everyone (1)", "Off (1)"]);
+    });
+  } finally {
+    rows.splice(rows.indexOf(parkedRow), 1);
+  }
 });
