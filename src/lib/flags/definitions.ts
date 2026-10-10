@@ -1,6 +1,7 @@
 import type { FeatureFlagMode } from "@prisma/client";
 import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import {
+  HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
   HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG,
   HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG,
@@ -149,6 +150,12 @@ export type FeatureFlagDefinition = {
 };
 
 export const FEATURE_FLAG_DEFINITIONS = [
+  {
+    key: HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
+    kind: "bugfix",
+    shippedOn: "2026-10-10",
+    description: "Creates a ticket reminder in the Inbox at delivery time when the user has no notification to restore.",
+  },
   {
     key: HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
     kind: "bugfix",
