@@ -7,7 +7,7 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { createRoot } = require("react-dom/client");
 const ts = require("typescript");
-const { QueryClient, QueryClientProvider, useQuery } = require("@tanstack/react-query");
+const { QueryClient, QueryClientProvider, useQuery, notifyManager, defaultScheduler } = require("@tanstack/react-query");
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true });
 const reads = jiti(path.join(root, "src/lib/taskDetailReads.ts"));
@@ -32,6 +32,8 @@ async function mount(t, { enabled = true, ready = true, userId = 985, serverTask
   const dom = new JSDOM("<div id='root'></div>");
   const previous = { window: global.window, document: global.document, IS_REACT_ACT_ENVIRONMENT: global.IS_REACT_ACT_ENVIRONMENT, fetch: global.fetch };
   Object.assign(global, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  // Let act drain query notifications before teardown restores the DOM globals.
+  notifyManager.setScheduler(queueMicrotask);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const flags = { enabled, ready }, auth = { userId };
   const reactRoot = createRoot(dom.window.document.getElementById("root"));
@@ -68,7 +70,7 @@ async function mount(t, { enabled = true, ready = true, userId = 985, serverTask
       for (let i = 0; i < 12; i++) await new Promise(resolve => setImmediate(resolve));
     });
   }
-  t.after(async () => { await React.act(async () => reactRoot.unmount()); client.clear(); dom.window.close(); Object.assign(global, previous); });
+  t.after(async () => { await React.act(async () => reactRoot.unmount()); client.clear(); notifyManager.setScheduler(defaultScheduler); dom.window.close(); Object.assign(global, previous); });
   await render();
   return { client, flags, auth, render, remount: async () => { readerKey++; await render(); }, query: () => query, requests: () => requests };
 }
