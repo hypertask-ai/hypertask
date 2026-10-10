@@ -10,7 +10,7 @@ import {
 } from "@/hooks/useFlag";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
-import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG } from "@/lib/flags/keys";
+import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG } from "@/lib/flags/keys";
 import { matchesFeatureFlagSearch, relatedFeatureFlags } from "@/lib/flags/discovery";
 import type { FeatureFlagMode, FeatureFlagRow, FeatureFlagKind } from "@/lib/flags";
 import {
@@ -19,6 +19,9 @@ import {
   type FeatureFlagAudienceFilter,
 } from "@/lib/flags/cluster";
 import { featureFlagRemovalState } from "@/lib/flags/removal";
+import { FLAG_FILTER_KINDS, flagDaysWaiting, matchesFlagKind, matchesFlagRisk, useFlagsPageFilters } from "./useFlagsPageFilters";
+
+import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_LABELS, RELEASE_RISK_ORDER } from "@/lib/flags/releaseRisk";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const KIND_LABELS: Record<FeatureFlagKind, string> = {
@@ -74,10 +77,11 @@ export default function FeatureFlagsAdmin({
 }) {
   const queryClient = useQueryClient();
   const discoveryEnabled = useFlag(HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
-  const [search, setSearch] = useState("");
+  const urlFiltersEnabled = useFlag(HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG);
+  const { filters, change, changeSearch: setSearch, commitSearch } = useFlagsPageFilters(urlFiltersEnabled && !flagKey);
+  const { search, sort: sortDirection, audience: audienceFilter, kinds, risk } = filters;
+  const setAudienceFilter = (audience: FeatureFlagAudienceFilter) => change({ ...filters, audience });
   const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
-  const [sortDirection, setSortDirection] = useState<"desc" | "asc">("desc");
-  const [audienceFilter, setAudienceFilter] = useState<FeatureFlagAudienceFilter>("ALL");
   const flags = useQuery({
     queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY,
     queryFn: loadFlags,
@@ -118,8 +122,8 @@ export default function FeatureFlagsAdmin({
   });
 
   const counts = useMemo(
-    () => countFeatureFlagsByAudience(flags.data?.flags ?? []),
-    [flags.data?.flags],
+    () => countFeatureFlagsByAudience(flags.data?.flags ?? [], urlFiltersEnabled),
+    [flags.data?.flags, urlFiltersEnabled],
   );
   const clusters = useMemo(
     () => {
@@ -128,12 +132,16 @@ export default function FeatureFlagsAdmin({
       }
       const rows = flags.data?.flags ?? [];
       return clusterFeatureFlagsByReleaseDate(
-        discoveryEnabled ? rows.filter((flag) => matchesFeatureFlagSearch(flag, search)) : rows,
+        rows.filter((flag) => (
+          (!(discoveryEnabled || urlFiltersEnabled) || matchesFeatureFlagSearch(flag, search))
+          && (!urlFiltersEnabled || (matchesFlagKind(flag, kinds) && matchesFlagRisk(flag, risk)))
+        )),
         sortDirection,
         audienceFilter,
+        { shippedOnly: urlFiltersEnabled && sortDirection !== "desc", unreleasedOnly: urlFiltersEnabled },
       );
     },
-    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, search],
+    [flagKey, flags.data?.flags, sortDirection, audienceFilter, discoveryEnabled, urlFiltersEnabled, search, kinds, risk],
   );
 
   useEffect(() => {
@@ -168,13 +176,13 @@ export default function FeatureFlagsAdmin({
           </p>
         )}
 
-        {discoveryEnabled && !flagKey && (
+        {(discoveryEnabled || urlFiltersEnabled) && !flagKey && (
           <div className="sticky top-0 z-10 mt-6 bg-pageBackground py-3">
             <label htmlFor="flag-search" className="sr-only">Search flags</label>
             <ModalInput
               id="flag-search"
               autofocus={false}
-              onBlur={undefined}
+              onBlur={urlFiltersEnabled ? commitSearch : undefined}
               className="rounded-sm bg-comment-description px-3"
               placeholder="Search by ticket ID or words…"
               value={search}
@@ -218,11 +226,54 @@ export default function FeatureFlagsAdmin({
             </div>
             <button
               type="button"
-              onClick={() => setSortDirection((current) => (current === "desc" ? "asc" : "desc"))}
+              onClick={() => change({ ...filters, sort: sortDirection === "risk" ? "desc" : sortDirection === "desc" ? "asc" : urlFiltersEnabled ? "risk" : "desc" })}
               className="rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
             >
-              {sortDirection === "desc" ? "Newest first" : "Oldest first"}
+              {sortDirection === "risk" ? "Release risk first" : sortDirection === "desc" ? "Newest first" : "Oldest first"}
             </button>
+          </div>
+        )}
+
+        {urlFiltersEnabled && !flagKey && (
+          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by type">
+            {FLAG_FILTER_KINDS.map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                aria-pressed={kinds.includes(kind)}
+                onClick={() => change({
+                  ...filters,
+                  kinds: kinds.includes(kind) ? kinds.filter((selected) => selected !== kind) : [...kinds, kind],
+                })}
+                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
+                  kinds.includes(kind)
+                    ? "bg-hover-active text-white-black"
+                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
+                }`}
+              >
+                {KIND_LABELS[kind]}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {urlFiltersEnabled && !flagKey && (
+          <div className="mt-3 flex flex-wrap gap-1 rounded-sm bg-comment-description p-1" role="group" aria-label="Filter by release risk">
+            {[null, ...RELEASE_RISK_ORDER].map((value) => (
+              <button
+                key={value ?? "all"}
+                type="button"
+                aria-pressed={risk === value}
+                onClick={() => change({ ...filters, risk: value })}
+                className={`rounded-sm px-3 py-1.5 text-dense font-medium transition-colors ${
+                  risk === value
+                    ? "bg-shadcn-primary text-primary-foreground"
+                    : "text-text-light-gray hover:bg-hover-active hover:text-white-black"
+                }`}
+              >
+                {value ? RELEASE_RISK_LABELS[value] : "All risks"}
+              </button>
+            ))}
           </div>
         )}
 
@@ -245,6 +296,8 @@ export default function FeatureFlagsAdmin({
             <div className="overflow-hidden rounded-[5px] border border-border-light-gray-thin bg-cardBackground">
           {rows.map((flag) => {
             const ticket = /^(htpr|yper4)-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(flag.key);
+            const releaseRisk = urlFiltersEnabled ? FEATURE_FLAG_RELEASE_RISKS[flag.key] : undefined;
+            const daysWaiting = urlFiltersEnabled ? flagDaysWaiting(flag) : null;
             const related = discoveryEnabled ? relatedFeatureFlags(flag, flags.data?.flags ?? []) : [];
             let cardClassName = "flex flex-col gap-3 border-b border-border-light-gray-thin p-4 last:border-b-0 sm:flex-row sm:items-center sm:justify-between";
             if (discoveryEnabled) cardClassName += " scroll-mt-24";
@@ -257,7 +310,7 @@ export default function FeatureFlagsAdmin({
               className={cardClassName}
             >
               <div className="min-w-0 sm:max-w-lg">
-                {discoveryEnabled && (
+                {(discoveryEnabled || urlFiltersEnabled) && (
                   <LabelWrapper className="mb-2">{KIND_LABELS[flag.kind ?? "feature"]}</LabelWrapper>
                 )}
                 {flagKey ? (
@@ -301,6 +354,15 @@ export default function FeatureFlagsAdmin({
                 {!flagKey && (
                   <p className="mt-1 text-content text-text-light-gray">{flag.description}</p>
                 )}
+                {daysWaiting !== null && (
+                  <p className="mt-1 text-meta text-text-light-gray">{daysWaiting} {daysWaiting === 1 ? "day" : "days"} waiting</p>
+                )}
+                {releaseRisk && (
+                  <div className="mt-2">
+                    <LabelWrapper>{RELEASE_RISK_LABELS[releaseRisk.risk]}</LabelWrapper>
+                    <p className="mt-1 text-meta text-text-light-gray">{releaseRisk.reason}</p>
+                  </div>
+                )}
                 {related.length > 0 && (
                   <p className="mt-2 text-meta text-text-light-gray">
                     Related: {related.map((other, index) => (
@@ -312,8 +374,7 @@ export default function FeatureFlagsAdmin({
                           className="break-all underline underline-offset-2 hover:text-white-black focus-visible:text-white-black"
                           onClick={flagKey ? undefined : (event) => {
                             event.preventDefault();
-                            setSearch("");
-                            setAudienceFilter("ALL");
+                            change({ ...filters, search: "", audience: "ALL", kinds: [], risk: null });
                             setHighlightedKey(other.key);
                           }}
                         >

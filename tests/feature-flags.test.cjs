@@ -1000,6 +1000,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7055-ai-sidebar-detail-fit", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7058-flags-page-url-filters", mode: "OWNER_AND_QA", updatedAt: null },
       { key: "htpr-7061-remind-without-inbox", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7064-inbox-remind-returns", mode: "EVERYONE", updatedAt: null },
     ],
@@ -1548,4 +1549,19 @@ test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", 
   assert.equal(await flags.isFeatureEnabled(key, 7), true);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("flags page URL filters are an Owner + QA feature and respect Off", async () => {
+  const key = flags.HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG;
+  assert.equal(key, "htpr-7058-flags-page-url-filters");
+  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });

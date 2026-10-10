@@ -8,10 +8,14 @@ const { pathToFileURL } = require("node:url");
 
 const root = path.resolve(__dirname, "..");
 const scriptUrl = pathToFileURL(path.join(root, ".github/scripts/feature-flag-gate.mjs")).href;
+const { RELEASE_RISK_REQUIRED_FROM } = require("jiti").createJiti(__filename)(path.join(root, "src/lib/flags/releaseRisk.ts"));
 
 function writeFile(dir, relative, content) {
   const full = path.join(dir, relative);
   fs.mkdirSync(path.dirname(full), { recursive: true });
+  if (relative === "src/lib/flags/releaseRisk.ts") {
+    content = `export const RELEASE_RISK_REQUIRED_FROM = "${RELEASE_RISK_REQUIRED_FROM}";\n${content}`;
+  }
   fs.writeFileSync(full, content);
 }
 
@@ -29,6 +33,14 @@ function makeRepo(t) {
   git(["config", "user.name", "Test"]);
   writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\n');
   writeFile(dir, "src/lib/flags.ts", flagsSource());
+  writeFile(dir, "src/lib/flags/releaseRisk.ts", `export const FEATURE_FLAG_RELEASE_RISKS = {
+    "htpr-5-widget": { risk: "new", reason: "Adds a widget." },
+    "htpr-7038-test-cost": { risk: "small", reason: "Changes an existing screen." },
+    "hyfa-5-widget": { risk: "new", reason: "Adds a widget." },
+    "htpr-9-new": { risk: "small", reason: "Changes an existing screen." },
+    "htpr-9-wrong": { risk: "small", reason: "Changes an existing screen." },
+    "htpr-5-decoy": { risk: "small", reason: "Changes an existing screen." },
+  };`);
   return { dir, git };
 }
 
@@ -1440,5 +1452,122 @@ test("extracted definition policy rejects mutations and unsafe defaults before t
     const result = await evaluate("YPER4-234 [INFRA] change widget", base, head, dir);
     assert.equal(result.pass, false, mutation);
     assert.match(result.reason, /parsed safely/);
+  }
+});
+
+for (const { date, entry, pass } of [
+  { date: "2026-10-09", entry: false, pass: true },
+  { date: "2026-10-10", entry: false, pass: true },
+  { date: "2026-10-11", entry: false, pass: false },
+  { date: "2026-10-11", entry: true, pass: true },
+]) {
+  test(`added flag shipped ${date} ${entry ? "with" : "without"} risk metadata ${pass ? "passes" : "fails"}`, async (t) => {
+    for (const extracted of [false, true]) {
+      const { dir, git } = makeRepo(t);
+      const base = commit(git, "base");
+      const definitions = flagsSource(["OTHER_FLAG", '"htpr-2-new"'])
+        .replace('key: "htpr-2-new",', `key: "htpr-2-new", shippedOn: "${date}",`);
+      writeFile(dir, extracted ? "src/lib/flags/definitions.ts" : "src/lib/flags.ts", extracted
+        ? definitions.replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, "") : definitions);
+      if (extracted) {
+        writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+      }
+      writeFile(dir, "src/lib/flags/releaseRisk.ts", `export const FEATURE_FLAG_RELEASE_RISKS = {${entry
+        ? '"htpr-2-new": { risk: "small", reason: "Changes an existing screen." }' : ""}};`);
+      const head = commit(git, "dated flag");
+      for (const title of ["HTPR-2 [FEATURE] backend", "HTPR-2 [BUGFIX] fix", "YPER4-2 [INFRA] backend"]) {
+        const result = await evaluate(title, base, head, dir);
+        assert.equal(result.pass, pass, result.reason);
+        if (!pass) assert.match(result.reason, /Add htpr-2-new to FEATURE_FLAG_RELEASE_RISKS/);
+      }
+    }
+  });
+}
+
+test("added flags with unparseable shippedOn require risk metadata", async (t) => {
+  for (const field of ["", 'shippedOn: "not-a-date",', 'shippedOn: "2026-02-30",',
+    "shippedOn: getDate(),", 'shippedOn: "2026-10-09", shippedOn: "2026-10-10",']) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", '"htpr-2-new"'])
+      .replace('key: "htpr-2-new",', `key: "htpr-2-new", ${field}`));
+    const head = commit(git, "flag without parsable date");
+    const result = await evaluate("HTPR-2 [FEATURE] backend", base, head, dir);
+    assert.equal(result.pass, false, field);
+    assert.match(result.reason, /Add htpr-2-new to FEATURE_FLAG_RELEASE_RISKS/);
+  }
+});
+
+test("new flag keys require a release-risk entry, including API-only and exempt PRs", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const NEW_FLAG = "htpr-2-new";\n');
+  writeFile(dir, "src/lib/flags/releaseRisk.ts", 'export const FEATURE_FLAG_RELEASE_RISKS = {};\n');
+  const missing = commit(git, "new flag without risk");
+  for (const title of ["HTPR-2 [FEATURE] backend", "HTPR-2 [BUGFIX] fix", "YPER4-2 [INFRA] backend"]) {
+    const result = await evaluate(title, base, missing, dir);
+    assert.equal(result.pass, false);
+    assert.match(result.reason, /Add htpr-2-new to FEATURE_FLAG_RELEASE_RISKS/);
+  }
+  for (const risk of ["none", "small", "new"]) {
+    writeFile(dir, "src/lib/flags/releaseRisk.ts", `export const FEATURE_FLAG_RELEASE_RISKS = { "htpr-2-new": { risk: "${risk}", reason: "Explains the change." } };`);
+    const valid = commit(git, `valid ${risk}`);
+    assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, valid, dir)).pass, true);
+  }
+});
+
+test("risk metadata must be exported and cannot be mutated after its declaration", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const NEW_FLAG = "htpr-2-new";\n');
+  const metadata = 'export const FEATURE_FLAG_RELEASE_RISKS = { "htpr-2-new": { risk: "none", reason: "Records an event." } };';
+  for (const source of [metadata.replace("export ", ""), metadata.replace("const ", "let "), `${metadata}\ndelete FEATURE_FLAG_RELEASE_RISKS["htpr-2-new"];`]) {
+    writeFile(dir, "src/lib/flags/releaseRisk.ts", source);
+    const head = commit(git, "invalid risk binding");
+    assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false);
+  }
+});
+
+test("literal definition additions also require risk entries without keys.ts changes", async (t) => {
+  for (const extracted of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    const definitionsPath = extracted ? "src/lib/flags/definitions.ts" : "src/lib/flags.ts";
+    const definitions = (keys) => extracted
+      ? flagsSource(keys).replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, "")
+      : flagsSource(keys);
+    if (extracted) {
+      writeFile(dir, definitionsPath, definitions());
+      writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n');
+    }
+    const base = commit(git, "base");
+    writeFile(dir, definitionsPath, definitions(["OTHER_FLAG", '"htpr-2-new"']));
+    const missing = commit(git, "new literal flag without risk");
+    for (const title of ["HTPR-2 [FEATURE] backend", "HTPR-2 [BUGFIX] fix", "YPER4-2 [INFRA] backend"]) {
+      const result = await evaluate(title, base, missing, dir);
+      assert.equal(result.pass, false);
+      assert.match(result.reason, /Add htpr-2-new to FEATURE_FLAG_RELEASE_RISKS/);
+    }
+    writeFile(dir, "src/lib/flags/releaseRisk.ts", 'export const FEATURE_FLAG_RELEASE_RISKS = { "htpr-2-new": { risk: "none", reason: "Records events without changing screens." } };');
+    const valid = commit(git, "literal flag with risk");
+    assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, valid, dir)).pass, true);
+  }
+});
+
+test("new flag risk entries reject invalid labels, blank reasons and unsafe objects", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const NEW_FLAG = "htpr-2-new";\n');
+  for (const entry of [
+    '{ risk: "safe", reason: "A change." }',
+    '{ risk: "none", reason: " " }',
+    '{ risk: "none", reason: getReason() }',
+    '{ ...metadata }',
+    '{ risk: "none", reason: "A change.", extra: true }',
+    '{ risk: "none", reason: "Two\\nlines." }',
+    '{ risk: "none", reason: "Bad\\u2014punctuation." }',
+  ]) {
+    writeFile(dir, "src/lib/flags/releaseRisk.ts", `export const FEATURE_FLAG_RELEASE_RISKS = { "htpr-2-new": ${entry} };`);
+    const head = commit(git, "invalid risk");
+    assert.equal((await evaluate("HTPR-2 [FEATURE] backend", base, head, dir)).pass, false, entry);
   }
 });
