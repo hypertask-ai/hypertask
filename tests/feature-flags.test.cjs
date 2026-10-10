@@ -64,6 +64,17 @@ test.beforeEach(() => {
   ]);
 });
 
+test("Flags dropdown filters default to Owner + QA as a feature and respect OFF", async () => {
+  const key = flags.HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG;
+  assert.equal(key, "htpr-7069-flags-dropdown-filters");
+  const entry = (await flags.listFeatureFlagModes()).find(flag => flag.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
 test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", async () => {
   const key = flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG;
   assert.equal(key, "htpr-7056-ctrlj-split-tasks");
