@@ -12,7 +12,7 @@
     "ticket": "https://app.hypertask.ai/detail/project-15/7055",
     "page": "ticket-short-thread",
     "anchors": ["description", "comment-list", "comment-box", "properties-panel"],
-    "reason": "Tracked debt, the HTPR-7055 mistake: the ticket asked only to keep details readable beside the AI sidebar, but the flag lets the body wrap so the properties panel drops below the comments from 768px up to 1440px with the AI sidebar open and at 768px and 950px with it closed. Remove this entry when that is fixed.",
+    "reason": "NOT a layout approval: known bug, flag Off live, ticket reopened 2026-10-10. The HTPR-7055 fix PR must delete this entry so the lock proves the fix. the ticket asked only to keep details readable beside the AI sidebar, but the flag lets the body wrap so the properties panel drops below the comments from 768px up to 1440px with the AI sidebar open and at 768px and 950px with it closed. Remove this entry when that is fixed.",
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
   },
   {
@@ -20,7 +20,7 @@
     "ticket": "https://app.hypertask.ai/detail/project-15/7055",
     "page": "ticket-long-thread",
     "anchors": ["description", "comment-list", "comment-box", "properties-panel"],
-    "reason": "Tracked debt, the HTPR-7055 mistake: same wrap as the short thread, the properties panel drops below a long comment thread. Remove this entry when that is fixed.",
+    "reason": "NOT a layout approval: known bug, flag Off live, ticket reopened 2026-10-10. The HTPR-7055 fix PR must delete this entry so the lock proves the fix. same wrap as the short thread, the properties panel drops below a long comment thread. Remove this entry when that is fixed.",
     "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
   }
 ]
