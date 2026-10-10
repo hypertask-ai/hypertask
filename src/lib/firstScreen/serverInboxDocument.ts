@@ -4,7 +4,7 @@ import { randomUUID } from "node:crypto";
 import { cookies, headers } from "next/headers";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import { featureFlagsForUser } from "@/lib/flags";
-import notificationGetAll from "@/utils/controllers/notifications/getAll";
+import notificationGetAll from "@/utils/controllers/notifications/getAllWithDecisions";
 import { getInboxAccessibleProjectIds } from "@/utils/controllers/notifications/getAccessibleProjectIds";
 import getUserDrafts from "@/utils/controllers/drafts/getUserDrafts";
 import { fetchUserPreferenceController } from "@/utils/controllers/users/fetch_preferences";

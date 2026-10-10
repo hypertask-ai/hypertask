@@ -4,13 +4,17 @@ import { IProject } from '@/models/model'
 import { optimisticViewTabsOrderAtom, viewTabsOrderAtom } from '@/store'
 import { saveViewOrder } from '@/utils/api/viewOrder'
 import { asViewOrder, sortViewsByOrder } from '@/utils/helperFunctions/Views/ViewOrderHelperFunctions'
-import { BUILTIN_VIEWS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
+import { BUILTIN_VIEWS, BUILTIN_VIEW_IDS, buildBuiltinViewContext, type BoardView } from '@/lib/constants/builtinViews'
+import { useFlag } from '@/hooks/useFlag'
+import { HTPR_7092_DECISIONS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
 // Saved views AND built-ins in one ordered list: built-ins are draggable and
 // manageable like any other view, they just default to the end of the order.
 const useOrderedViews = (project: IProject | null): BoardView[] => {
+  // HTPR-7092: the Decisions view exists only while its flag is on.
+  const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
   const viewOrder = useRecoilValue(viewTabsOrderAtom)
   const optimisticViewOrder = useRecoilValue(optimisticViewTabsOrderAtom)
   const defaultViewId = project?.project_view?.default_view_id
@@ -42,7 +46,7 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     })
   }, [hasLocalOrder, localOrder, projectDefaultOrder, projectId, userServerOrder])
 
-  return useMemo(() => {
+  const allViews = useMemo(() => {
     const all = project?.project_view?.allViews ?? []
     // Drop the live "unsaved" pseudo-view; keep the default view first.
     const context = buildBuiltinViewContext(project)
@@ -52,6 +56,11 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     ]
     return sortViewsByOrder(views, effectiveOrder, defaultViewId)
   }, [project, defaultViewId, unsavedViewId, effectiveOrder])
+  const viewsWithoutDecisions = useMemo(
+    () => allViews.filter((view) => view.id !== BUILTIN_VIEW_IDS.decisions),
+    [allViews],
+  )
+  return decisionsEnabled ? allViews : viewsWithoutDecisions
 }
 
 export default useOrderedViews

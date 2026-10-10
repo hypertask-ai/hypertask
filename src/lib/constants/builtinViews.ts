@@ -9,6 +9,7 @@ export const BUILTIN_VIEW_IDS = {
   agents: "builtin:agents",
   currentCycle: "builtin:current-cycle",
   nextCycle: "builtin:next-cycle",
+  decisions: "builtin:decisions",
 } as const;
 
 export type BuiltinViewId =
@@ -21,6 +22,8 @@ export interface BuiltinViewContext {
   currentCycleId?: number | null;
   nextCycleId?: number | null;
   cyclesEnabled?: boolean;
+  /** Names the current user's "<name> Review" column can carry (HTPR-7092). */
+  currentUserNames?: string[];
 }
 
 export interface BuiltinView {
@@ -28,6 +31,10 @@ export interface BuiltinView {
   title: string;
   builtin: true;
   predicate: (task: ITask, context: BuiltinViewContext) => boolean;
+  /** When set, columns failing it are dropped from the board while this view is active. */
+  sectionPredicate?: (sectionTitle: string, context: BuiltinViewContext) => boolean;
+  /** Drop columns left with no tickets by the predicate. */
+  hideEmptySections?: boolean;
   available?: (context: BuiltinViewContext) => boolean;
 }
 
@@ -64,6 +71,24 @@ export const currentCyclePredicate: BuiltinView["predicate"] = (task, context) =
 
 export const nextCyclePredicate: BuiltinView["predicate"] = (task, context) =>
   context.nextCycleId != null && task.cycleId === context.nextCycleId;
+
+export const UX_SIGN_OFF_COLUMN = "UX Sign-off";
+
+// HTPR-7092: the columns where a ticket waits on this person's yes or no: their own
+// "<name> Review" column (full or first name, as the review lanes are named) and UX Sign-off.
+export const decisionsSectionPredicate: NonNullable<BuiltinView["sectionPredicate"]> = (
+  sectionTitle,
+  context,
+) => {
+  const title = sectionTitle.trim().toLowerCase();
+  if (title === UX_SIGN_OFF_COLUMN.toLowerCase()) return true;
+  return (context.currentUserNames ?? []).some(
+    (name) => name.trim() !== "" && title === `${name.trim().toLowerCase()} review`,
+  );
+};
+
+export const decisionsPredicate: BuiltinView["predicate"] = (task, context) =>
+  decisionsSectionPredicate(task.section ?? "", context);
 
 export const BUILTIN_VIEWS: readonly BuiltinView[] = [
   {
@@ -104,6 +129,14 @@ export const BUILTIN_VIEWS: readonly BuiltinView[] = [
     predicate: nextCyclePredicate,
     available: (context) => Boolean(context.cyclesEnabled && context.nextCycleId),
   },
+  {
+    id: BUILTIN_VIEW_IDS.decisions,
+    title: "Decisions",
+    builtin: true,
+    predicate: decisionsPredicate,
+    sectionPredicate: decisionsSectionPredicate,
+    hideEmptySections: true,
+  },
 ];
 
 const builtinViewsById = new Map(
@@ -132,8 +165,16 @@ export const buildBuiltinViewContext = (
   now?: Date | number,
 ): BuiltinViewContext => {
   const cycleWindow = resolveCycleWindow(project?.cycles ?? [], now);
+  const displayName = currentUserId == null
+    ? undefined
+    : (project?.members ?? []).find(
+        (member) => member.userId === currentUserId && !member.agentId,
+      )?.user?.displayName?.trim();
   return {
     currentUserId,
+    currentUserNames: displayName
+      ? [...new Set([displayName, displayName.split(/\s+/)[0]])]
+      : [],
     now,
     doneSectionTitles: doneColumnTitles(project?.section ?? []),
     cyclesEnabled: project?.cyclesEnabled,
