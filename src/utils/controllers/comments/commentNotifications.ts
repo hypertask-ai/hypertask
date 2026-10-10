@@ -1,5 +1,6 @@
 import type { CommentDependencies } from './commentCreationTypes';
 import type { CreateCommentParams } from './commentCreationTypes';
+import { isAgentCommentFanoutFixOn } from './agentCommentFanout';
 
 export async function resolveCommentRecipientUserIds(
   dependencies: CommentDependencies,
@@ -101,12 +102,20 @@ export async function createNotificationForComment(
     prisma.follower.findMany({ where: agentWhere, include: agentInclude }),
   ]);
 
+  // HTPR-7088: an agent never gets an inbox row for its own comment, and
+  // follower agents get the same live inbox update as assigned agents.
+  if (agentAssignees.length + agentFollowers.length === 0) return;
+  const fanoutFixOn = await isAgentCommentFanoutFixOn(creatorId);
+  const isOwnComment = (agentId: string | null) =>
+    fanoutFixOn && Boolean(fromAgentId) && agentId === fromAgentId;
   const notifiedAgentIds = new Set(agentAssignees.map((a) => a.agentId));
   const assigneeAgents = agentAssignees.flatMap((a) =>
-    a.agentId && a.agent ? [{ agentId: a.agentId, userId: a.agent.userId }] : [],
+    a.agentId && a.agent && !isOwnComment(a.agentId)
+      ? [{ agentId: a.agentId, userId: a.agent.userId }]
+      : [],
   );
   const followerAgents = agentFollowers.flatMap((f) =>
-    f.agentId && f.agent && !notifiedAgentIds.has(f.agentId)
+    f.agentId && f.agent && !notifiedAgentIds.has(f.agentId) && !isOwnComment(f.agentId)
       ? [{ agentId: f.agentId, userId: f.agent.userId }]
       : [],
   );
@@ -147,7 +156,7 @@ export async function createNotificationForComment(
       ...(fromAgentId ? { fromAgentId } : {}),
     })),
   });
-  for (const a of newAssigneeAgents) {
+  for (const a of fanoutFixOn ? newAgents : newAssigneeAgents) {
     void broadcastInboxChange(a.userId, { originUserId: creatorId });
   }
 }

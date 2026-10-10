@@ -1,6 +1,7 @@
 import type { CommentDependencies } from './commentCreationTypes';
 import type { WebhookDelivery } from "@/lib/mcp/webhooks/events";
 import type { CreateCommentParams } from './commentCreationTypes';
+import { findCommentWebhookAgentIds, isAgentCommentFanoutFixOn } from './agentCommentFanout';
 
 const INBOUND_PROCESSING_LEASE_MS = 5 * 60_000;
 
@@ -295,16 +296,11 @@ export async function persistComment(
       currentTask.projectId,
       boardEvents,
     );
-    const assignedAgentIds = (
-      await tx.assignees.findMany({
-        where: { taskId, agentId: { not: null } },
-        select: { agentId: true },
-      })
-    )
-      .map(({ agentId: assignedAgentId }) => assignedAgentId)
-      .filter((assignedAgentId): assignedAgentId is string =>
-        Boolean(assignedAgentId),
-      );
+    const assignedAgentIds = await findCommentWebhookAgentIds(tx, {
+      taskId,
+      authorAgentId: agentId,
+      fixOn: await isAgentCommentFanoutFixOn(creatorIdNum),
+    });
     // Target assigned agents directly. This is not a board broadcast, so an
     // assigned agent receives one comment.created delivery per comment.
     webhookDeliveryIds.push(
