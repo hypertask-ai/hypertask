@@ -150,7 +150,7 @@ test("Free plan gate admits Haiku and server flag evaluation uses the user and f
   });
   await api.assertModelAllowedForPlan(null, haiku, null, undefined, false);
   assert.equal(await api.haiku55ModelEnabled(985), true);
-  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
+  assert.deepEqual(checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
   enabled = false;
   assert.equal(await api.haiku55ModelEnabled(985), false);
   fail = true;

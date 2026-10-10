@@ -1,5 +1,6 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 /* eslint-disable react-hooks/exhaustive-deps */
 import {
   processHtmlForTaskId,
@@ -157,7 +158,7 @@ const useCreateTaskModalGlobalStates = () => {
   const [tempMentionProjectId, setTempMentionProjectId] = useState<string>("");
   const { postHyperMention } = useHyperMention();
   const { data: userPreferences } = useGetUserPreferences();
-  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);

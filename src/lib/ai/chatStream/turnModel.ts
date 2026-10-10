@@ -139,7 +139,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
       ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
-      : { hasByok: false, byok: undefined, haikuDefaultEnabled: false };
+      : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,

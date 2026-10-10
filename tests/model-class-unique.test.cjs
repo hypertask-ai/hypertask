@@ -101,3 +101,26 @@ test("the same checker rejects Haiku 4.5 and 5.5 when both are visible", () => {
     },
   );
 });
+
+// HTPR-7075: a saved pick of a removed older Claude model reads as the 5.5
+// model of the same class, so each class keeps exactly one visible model.
+test("saved picks of older Claude models resolve to the 5.5 model of the same class", () => {
+  const saved = {
+    "claude-haiku-4.5": "claude-haiku",
+    "claude-sonnet-5-instant": "claude-sonnet",
+    "claude-sonnet-4-5-thinking": "claude-sonnet",
+    "claude-opus-5-thinking": "claude-opus",
+    "claude-opus-4-8-instant": "claude-opus",
+  };
+  const resolved = [];
+  for (const [id, modelClass] of Object.entries(saved)) {
+    const option = catalog.getAiModelOptionById(id, true);
+    assert.ok(option, id);
+    assert.match(option.modelKey, /^claude-(haiku|sonnet|opus)-5-5$/, id);
+    assert.equal(catalog.getAiModelDefinition(option.modelKey).modelClass, modelClass, id);
+    resolved.push(option);
+  }
+  assertUniqueModelClasses(resolved);
+  const visible = catalog.aiModelOptions.filter((option) => catalog.isAiModelOptionVisible(option, true));
+  assert.equal(visible.some((option) => option.modelKey === "claude-haiku-4.5"), false);
+});

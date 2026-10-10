@@ -167,7 +167,7 @@ test("server rejects both inference methods, gateway and direct/raw ids when fla
       const h = harness({ enabled: false });
       await assert.rejects(h.makeModel(provider, id, credential)[method](params), /model is unavailable/);
       assert.equal(h.calls.length, 0);
-      assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
+      assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
     }
   }
 });
@@ -181,7 +181,7 @@ test("missing user or failed flag evaluation fails closed, without altering olde
   const h = harness({ enabled: false });
   await h.makeModel("claude", "claude-haiku-4.5").doGenerate(params);
   assert.equal(h.calls[0].temperature, 0.2);
-  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7010-haiku-5-5", 985]]);
+  assert.deepEqual(h.checks, [["htpr-7038-haiku-default", 985], ["htpr-7075-background-claude", 985], ["htpr-7010-haiku-5-5", 985]]);
   await h.flush();
 });
 

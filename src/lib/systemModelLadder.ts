@@ -134,7 +134,7 @@ export function getSystemModelsForFeature(
   context: AiDefaultModelContext = {},
 ): readonly SystemModel[] {
   const ladder = SYSTEM_MODEL_LADDERS[SYSTEM_FEATURES[feature].role];
-  haiku55Enabled ||= Boolean(context.haikuDefaultEnabled);
+  haiku55Enabled ||= Boolean(context.haikuDefaultEnabled || context.backgroundClaudeEnabled);
   if (!haiku55Enabled) return ladder;
   const ordered = defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5"
     ? [...ladder.filter((entry) => entry.provider === "anthropic"), ...ladder.filter((entry) => entry.provider !== "anthropic")]
@@ -326,6 +326,15 @@ export function resolveSystemModel(
   );
 
   if (selectedOverride) return selectedOverride;
+
+  // HTPR-7075: with no explicit pick, background work runs on Haiku 5.5 only.
+  // A team that turned Anthropic off gets no AI result, never another provider.
+  if (context.backgroundClaudeEnabled) {
+    const haiku = ladder.find(({ provider }) => provider === "anthropic");
+    return haiku && resolveTeamProviderEnabled(aiProviderSettings, "anthropic")
+      ? haiku
+      : null;
+  }
 
   return (
     ladder.find(({ provider }) =>

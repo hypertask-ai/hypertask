@@ -1,7 +1,10 @@
 import { createGateway, generateObject } from "ai";
 import { z } from "zod";
 
+import { backgroundClaudeModelEnabled } from "@/app/api/ai/_lib/planGate";
+
 const DEMO_MODEL = "openai/gpt-6-luna";
+const DEMO_CLAUDE_MODEL = "anthropic/claude-haiku-5.5";
 
 const BoardSchema = z.object({
   name: z.string().min(1).max(40),
@@ -90,14 +93,18 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
     throw new DemoBoardGenerationUnavailableError();
   }
 
-  const model = createGateway({ apiKey })(DEMO_MODEL);
+  // HTPR-7075: no user exists here, so the flag is read as user 0 (Everyone only).
+  const claude = await backgroundClaudeModelEnabled(null);
+  // The demo key routes Claude through the Gateway on purpose, to keep anonymous spend isolated; this predates HTPR-7075.
+  const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
   const { object } = await generateObject({
     model,
     schema: BoardSchema,
     // Luna's completion budget includes reasoning as well as the board JSON.
     maxOutputTokens: 4096,
+    maxRetries: 2,
     providerOptions: {
-      openai: { reasoningEffort: "low" },
+      ...(claude ? {} : { openai: { reasoningEffort: "low" } }),
       gateway: { tags: ["demo-board"] },
     },
     system: SYSTEM,

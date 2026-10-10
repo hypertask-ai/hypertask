@@ -545,12 +545,14 @@ export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 export type AiDefaultModelContext = {
   haiku55Enabled?: boolean;
   haikuDefaultEnabled?: boolean;
+  // HTPR-7075: background jobs run on Claude 5.5 only (Haiku 5.5 by default).
+  backgroundClaudeEnabled?: boolean;
   plan?: StorePlanKind | null;
   hasByok?: boolean;
 };
 
-export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
-  return haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
+export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  return backgroundClaudeEnabled || haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
     ? "claude-haiku-5-5"
     : productionDefault;
 }
@@ -640,6 +642,22 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "grok-4.5": "gpt-6-luna",
 };
 
+// HTPR-7075: a saved pick of any Claude version older than 5.5 resolves to the
+// 5.5 model of the same class when Claude 5.5 mode is on. Read-time only; the
+// saved value is never rewritten. Thinking variants keep their reasoning mode.
+const LEGACY_CLAUDE_OPTION_ID = /^claude-(haiku|sonnet|opus)-(?!5[.-]5(?:$|-))/;
+
+export function upgradeLegacyClaudeOptionId(id: string): string {
+  const match = LEGACY_CLAUDE_OPTION_ID.exec(id);
+  if (!match) return id;
+  if (match[1] === "haiku") return "claude-haiku-5-5";
+  return `claude-${match[1]}-5-5-${id.includes("thinking") ? "thinking" : "instant"}`;
+}
+
+export function isClaude55Model(modelId: string): boolean {
+  return /(?:^|\/)claude-(?:haiku|sonnet|opus)-5[.-]5(?:-\d{8})?$/.test(modelId);
+}
+
 export function getAiModelOptionById(
   id: string | null | undefined,
   haiku55Enabled = false,
@@ -648,7 +666,8 @@ export function getAiModelOptionById(
   const normalized = trimmed && haiku55Enabled && (isHaiku45Model(trimmed) || isHaiku55Model(trimmed))
     ? "claude-haiku-5-5" : trimmed;
   if (!normalized) return undefined;
-  const resolved = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
+  const aliased = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
+  const resolved = haiku55Enabled ? upgradeLegacyClaudeOptionId(aliased) : aliased;
   return aiModelOptions.find((option) => option.id === resolved);
 }
 
