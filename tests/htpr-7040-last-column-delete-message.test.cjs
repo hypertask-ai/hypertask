@@ -96,7 +96,7 @@ function clientFixture({ enabled = true, instant = false, typed = false, respons
   const bindings = {
     sections: [section], currentProject: project, currentUser: { id: 985 },
     updating: false, title: "Todo", ticketsFinished: false, editSection: section,
-    instantColumnDelete: instant, lastColumnDeleteMessage: enabled,
+    noEmptyBoardFlash: false, instantColumnDelete: instant, lastColumnDeleteMessage: enabled,
     typedWrite: typed ? post : undefined,
     axios: { isAxiosError: axios.isAxiosError, post: (url, body) => {
       assert.equal(url, "/api/section/update"); return post(body);
