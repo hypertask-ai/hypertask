@@ -59,7 +59,18 @@ function loadHandler({
     "src/utils/controllers/notifications/creation-service/check-reminder_create-notification.ts",
     "src/lib/auth/getSessionUser.ts",
     "src/utils/controllers/tasks/assertTaskAccess.ts",
+    "src/lib/agentWebhooks/commentReaction.ts",
+    "src/lib/agentWebhooks/outbox.ts",
   ]);
+
+  // HTPR-7095: the agent webhook has its own tests; here no agent wrote the comment.
+  stubModule("src/lib/agentWebhooks/commentReaction.ts", {
+    prepareCommentReactionWebhook: async () => null,
+    persistCommentReactionWebhook: async () => [],
+  });
+  stubModule("src/lib/agentWebhooks/outbox.ts", {
+    publishAgentWebhookDeliveries: async () => {},
+  });
 
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => session,
@@ -71,8 +82,7 @@ function loadHandler({
     },
   });
 
-  stubModule("src/lib/prisma.ts", {
-    default: {
+  const db = {
       comment: { findFirst: async () => comment },
       subscribedDevices: { findMany: async () => [] },
       reaction: {
@@ -97,8 +107,9 @@ function loadHandler({
           return { count: existing.length };
         },
       },
-    },
-  });
+      $transaction: async (fn) => fn(db),
+  };
+  stubModule("src/lib/prisma.ts", { default: db });
   stubModule("src/lib/realtime/server.ts", {
     broadcastTaskComment: async (...args) => {
       calls.broadcast.push(args);
