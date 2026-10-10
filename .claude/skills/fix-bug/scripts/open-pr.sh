@@ -49,7 +49,7 @@ sections before anything is pushed, in dry runs too.
 Lanes:
   ai-review          default. Auto-merge OFF. Normal bug fix or flagged
                      feature, and additive DB migrations behind a flag.
-                     Moves the ticket to AI Review.
+                     Keeps the ticket In Progress (Valentin, 2026-10-10: runners stay In Progress while they work).
   valentin-review    auto-merge OFF. Money, auth, security, irreversible
                      data, product direction, or a destructive migration.
                      Moves the ticket and posts nothing else; never assigns
@@ -112,7 +112,7 @@ case "$TYPE" in
 esac
 
 case "$LANE" in
-  ai-review)         SECTION="AI Review" ;;
+  ai-review)         SECTION="In Progress" ;;
   valentin-review)   SECTION="Valentin Review" ;;
   *) die "--lane must be ai-review or valentin-review, got '$LANE'." "Use ai-review unless the change touches money, auth, security, irreversible data, or a destructive migration." ;;
 esac

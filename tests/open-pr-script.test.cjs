@@ -36,15 +36,15 @@ esac
   const result = spawnSync('bash', [script, 'HTPR-6706', 'BUGFIX', 'Keep PR handoffs in review', '--body-file', body, ...args], {
     encoding: 'utf8',
     timeout: 10_000,
-    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, COMMAND_LOG: log, BOARD_SECTION: 'AI Review', ...env },
+    env: { ...process.env, PATH: `${root}:${process.env.PATH}`, COMMAND_LOG: log, BOARD_SECTION: 'In Progress', ...env },
   });
   assert.ifError(result.error);
   return { ...result, commands: fs.readFileSync(log, 'utf8').trim().split('\n') };
 }
 
 for (const [lane, section] of [
-  [null, 'AI Review'],
-  ['ai-review', 'AI Review'],
+  [null, 'In Progress'],
+  ['ai-review', 'In Progress'],
   ['valentin-review', 'Valentin Review'],
 ]) {
   test(`PR handoff succeeds with auto-merge disabled for ${lane || 'the default lane'}`, (t) => {
@@ -84,9 +84,9 @@ test('dry run leaves auto-merge off without executing external commands', (t) =>
 for (const [name, env, error, commandCount] of [
   ['push failure', { PUSH_EXIT: '1' }, /git push to origin failed/, 2],
   ['PR creation failure', { CREATE_EXIT: '1' }, /gh pr create failed/, 3],
-  ['board move failure', { MOVE_EXIT: '1' }, /Moving HTPR-6706 to 'AI Review' failed/, 4],
+  ['board move failure', { MOVE_EXIT: '1' }, /Moving HTPR-6706 to 'In Progress' failed/, 4],
   ['board read failure', { READ_EXIT: '1' }, /Could not read HTPR-6706 back/, 5],
-  ['wrong review section', { BOARD_SECTION: 'Agent Blocked (Infra)' }, /not 'AI Review'.*wrong review queue/, 5],
+  ['wrong review section', { BOARD_SECTION: 'Agent Blocked (Infra)' }, /not 'In Progress'.*wrong review queue/, 5],
 ]) {
   test(`${name} remains a failed handoff`, (t) => {
     const result = runScript(t, [], env);
