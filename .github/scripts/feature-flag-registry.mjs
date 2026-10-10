@@ -183,6 +183,91 @@ function exportedStringConstants(source, path) {
   return constants;
 }
 
+export const FLAG_DEFINITIONS_DIRECTORY = "src/lib/flags/definitions/";
+
+export function flagDefinitionPaths(ref) {
+  return git(["ls-tree", "-r", "--name-only", ref, FLAG_DEFINITIONS_DIRECTORY])
+    .split("\n").filter(Boolean).sort();
+}
+
+// Parse data, never execute PR modules in trusted checks or during generation.
+export function parseFlagFile(source, path) {
+  const file = typescript.createSourceFile(path, source, typescript.ScriptTarget.Latest, true);
+  const fail = (message) => { throw new Error(`invalid ${path}: ${message}`); };
+  if (file.parseDiagnostics.length) fail("TypeScript syntax error");
+  const statements = file.statements.filter((statement) =>
+    !(typescript.isImportDeclaration(statement) && statement.importClause?.isTypeOnly));
+  if (statements.length !== 2) fail("use one exported key const and one default definition, with type-only imports at most");
+  const [binding, exported] = statements;
+  if (!typescript.isVariableStatement(binding) ||
+      !(binding.declarationList.flags & typescript.NodeFlags.Const) ||
+      !binding.modifiers?.some((modifier) => modifier.kind === typescript.SyntaxKind.ExportKeyword) ||
+      binding.modifiers.length !== 1 || binding.declarationList.declarations.length !== 1) fail("expected one exported key const");
+  const declaration = binding.declarationList.declarations[0];
+  const key = unwrapExpr(declaration.initializer);
+  if (!typescript.isIdentifier(declaration.name) || !key || !typescript.isStringLiteral(key) ||
+      !/^(?:htpr|hyfa|yper4)-\d+-[a-z0-9-]+$/.test(key.text)) fail("key must be a literal ticket-specific flag key");
+  if (path.split("/").at(-1) !== `${key.text}.ts`) fail("filename must match the flag key");
+  if (!typescript.isExportAssignment(exported) || exported.isExportEquals) fail("expected a default definition object");
+  const object = unwrapExpr(exported.expression);
+  if (!object || !typescript.isObjectLiteralExpression(object)) fail("definition must be an object literal");
+  const allowed = new Set(["key", "kind", "defaultMode", "shippedOn", "description", "related", "releaseRisk"]);
+  const fields = new Map();
+  for (const property of object.properties) {
+    if (!typescript.isPropertyAssignment(property) ||
+        !(typescript.isIdentifier(property.name) || typescript.isStringLiteral(property.name))) fail("literal properties only, without spreads");
+    const name = property.name.text;
+    if (!allowed.has(name) || fields.has(name)) fail(`unknown or duplicate field ${name}`);
+    fields.set(name, unwrapExpr(property.initializer));
+  }
+  const keyField = fields.get("key");
+  if (!keyField || !typescript.isIdentifier(keyField) || keyField.text !== declaration.name.text) fail("definition key must use its exported constant");
+  const definition = { key: key.text };
+  for (const name of ["kind", "defaultMode", "shippedOn", "description"]) {
+    const value = fields.get(name);
+    if (!value) {
+      if (["shippedOn", "description"].includes(name)) fail(`missing ${name}`);
+      continue;
+    }
+    if (!typescript.isStringLiteral(value)) fail(`${name} must be a string literal`);
+    definition[name] = value.text;
+  }
+  if (definition.kind && !["feature", "bugfix", "improvement"].includes(definition.kind)) fail("kind must be feature, bugfix or improvement");
+  if (definition.defaultMode && !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(definition.defaultMode)) fail("invalid defaultMode");
+  if (definition.defaultMode === "EVERYONE" && definition.kind !== "bugfix") fail("only bugfix flags may default to Everyone");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(definition.shippedOn) || !Number.isFinite(Date.parse(definition.shippedOn)) ||
+      new Date(definition.shippedOn).toISOString().slice(0, 10) !== definition.shippedOn) fail("shippedOn must be a calendar date");
+  if (!definition.description.trim()) fail("description must not be empty");
+  if (fields.has("related")) {
+    const related = fields.get("related");
+    if (!typescript.isArrayLiteralExpression(related) || related.elements.some((entry) => !typescript.isStringLiteral(entry))) fail("related must be literal flag keys");
+    definition.related = related.elements.map((entry) => entry.text);
+  }
+  if (fields.has("releaseRisk")) {
+    const risk = fields.get("releaseRisk");
+    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length !== 2 || risk.properties.some((entry) =>
+      !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk needs literal risk and reason fields");
+    const values = new Map(risk.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
+    const level = values.get("risk"), reason = values.get("reason");
+    if (!level || !typescript.isStringLiteral(level) || !["none", "small", "new"].includes(level.text) ||
+        !reason || !typescript.isStringLiteral(reason) || !reason.text.trim() || /[\r\n\u2014]/.test(reason.text)) fail("releaseRisk needs risk none, small or new and a nonempty one-line reason");
+    definition.releaseRisk = { risk: level.text, reason: reason.text };
+  }
+  return { identifier: declaration.name.text, definition, path };
+}
+
+export function parseFlagFiles(paths, read) {
+  if (!paths.length) throw new Error("feature flag definitions folder is empty or missing");
+  const rows = paths.map((path) => parseFlagFile(read(path), path));
+  if (new Set(rows.map((row) => row.identifier)).size !== rows.length ||
+      new Set(rows.map((row) => row.definition.key)).size !== rows.length) throw new Error("duplicate feature flag key or export");
+  return rows;
+}
+
+function flagFilesAt(ref) {
+  return parseFlagFiles(flagDefinitionPaths(ref), (path) => git(["show", `${ref}:${path}`]));
+}
+
 export function assertAddedFlagReleaseRisks(ref, keys) {
   const path = "src/lib/flags/releaseRisk.ts";
   let source;
@@ -199,6 +284,15 @@ export function assertAddedFlagReleaseRisks(ref, keys) {
   const { shippedOn } = parseDefinitions(ref);
   keys = keys.filter((key) => !shippedOn.get(key) || shippedOn.get(key) >= cutoff);
   if (!keys.length) return;
+  if (flagDefinitionPaths(ref).length) {
+    const rows = flagFilesAt(ref);
+    for (const key of keys) {
+      if (!rows.find((row) => row.definition.key === key)?.definition.releaseRisk) {
+        throw new Error(`Add releaseRisk with risk and reason to ${FLAG_DEFINITIONS_DIRECTORY}${key}.ts.`);
+      }
+    }
+    return;
+  }
   const file = typescript.createSourceFile(path, source, typescript.ScriptTarget.Latest, true);
   if (file.parseDiagnostics.length) throw new Error(`invalid ${path}`);
   const bindings = file.statements.filter(typescript.isVariableStatement)
@@ -237,6 +331,13 @@ export function assertAddedFlagReleaseRisks(ref, keys) {
 }
 
 export function parseFlagRegistry(ref) {
+  if (flagDefinitionPaths(ref).length) {
+    const rows = flagFilesAt(ref);
+    return {
+      byIdentifier: new Map(rows.map(({ identifier, definition }) => [identifier, definition.key])),
+      byValue: new Map(rows.map(({ identifier, definition }) => [definition.key, identifier])),
+    };
+  }
   const path = "src/lib/flags/keys.ts";
   const source = git(["show", `${ref}:${path}`]);
   const byIdentifier = new Map();
@@ -616,6 +717,8 @@ export function parseDefinitions(ref) {
   const modeBinding = declarations.get("DEFAULT_FEATURE_FLAG_MODE");
   if (!definitionsBinding?.isConst) throw new Error("FEATURE_FLAG_DEFINITIONS must be declared const");
   if (!modeBinding?.isConst) throw new Error("DEFAULT_FEATURE_FLAG_MODE must be declared const");
+  const perFlagPaths = flagDefinitionPaths(ref);
+  const perFlagRows = perFlagPaths.length ? flagFilesAt(ref) : null;
   const imports = parseImports(definitionsBinding.sourceFile.text);
   for (const sourceFile of sourceFiles) {
     assertPolicyBindingImmutable(sourceFile, "FEATURE_FLAG_DEFINITIONS", definitionsBinding.declaration);
@@ -626,13 +729,39 @@ export function parseDefinitions(ref) {
   while (definitions && (typescript.isParenthesizedExpression(definitions) ||
          typescript.isAsExpression(definitions) || typescript.isTypeAssertionExpression(definitions) ||
          typescript.isSatisfiesExpression(definitions))) definitions = definitions.expression;
-  if (!definitions || !typescript.isArrayLiteralExpression(definitions)) {
+  if (perFlagRows) {
+    if (!typescript.isIdentifier(definitions) || definitions.text !== "FLAG_DEFINITIONS" ||
+        !definitionsBinding.sourceFile.statements.some((statement) => typescript.isImportDeclaration(statement) &&
+          statement.moduleSpecifier.text === "./definitions/index.generated" &&
+          statement.importClause?.namedBindings?.elements?.some((entry) => entry.name.text === "FLAG_DEFINITIONS" && !entry.propertyName))) {
+      throw new Error("FEATURE_FLAG_DEFINITIONS must use FLAG_DEFINITIONS from the generated index");
+    }
+    const wrapper = definitionsBinding.sourceFile;
+    if (wrapper.fileName !== definitionsPath || wrapper.statements.some((statement) => {
+      if (typescript.isTypeAliasDeclaration(statement) || typescript.isInterfaceDeclaration(statement)) return false;
+      if (typescript.isImportDeclaration(statement)) {
+        if (statement.importClause?.isTypeOnly) return false;
+        const bindings = statement.importClause?.namedBindings;
+        return statement.moduleSpecifier.text !== "./definitions/index.generated" || statement.importClause?.name ||
+          !bindings || !typescript.isNamedImports(bindings) || bindings.elements.length !== 1 ||
+          bindings.elements[0].name.text !== "FLAG_DEFINITIONS" || bindings.elements[0].propertyName;
+      }
+      return !typescript.isVariableStatement(statement) || statement.declarationList.declarations.length !== 1 ||
+        statement.declarationList.declarations[0] !== definitionsBinding.declaration;
+    })) {
+      throw new Error("FEATURE_FLAG_DEFINITIONS must use the data-only generated registry wrapper, without runtime mutations or aliases");
+    }
+  } else if (!definitions || !typescript.isArrayLiteralExpression(definitions)) {
     throw new Error("FEATURE_FLAG_DEFINITIONS must be an array literal");
   }
 
   const kinds = [];
   const shippedOn = [];
-  const keys = definitions.elements.map((element) => {
+  const keys = perFlagRows ? perFlagRows.map(({ definition }) => {
+    kinds.push(definition.kind ?? "feature");
+    shippedOn.push(definition.shippedOn);
+    return definition.key;
+  }) : definitions.elements.map((element) => {
     if (!typescript.isObjectLiteralExpression(element)) {
       throw new Error("feature flag definitions must be direct object literals");
     }
