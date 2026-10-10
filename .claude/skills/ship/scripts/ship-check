@@ -94,9 +94,11 @@ check_dropped() {
   local s; s=$(gh pr view "$2" -R "$REPO" --json title,state,baseRefName --jq '"\(.state) \(.baseRefName) \(.title)"' 2>/dev/null) \
     || fail "PR $2 not found in $REPO"
   [[ $s == "CLOSED $BASE $1 "* ]] || fail "PR $2 must be a CLOSED (not merged, not open) PR of $1 into $BASE, got: $s"
-  hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[]; (.text // "") as $x
-      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Decided against:"; "i")) and ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
-        and ($x | test("\"|&quot;|&#x22;|“")))' >/dev/null \
+  # Every test reads the visible text: tags (and their attribute quotes) removed, quote entities decoded.
+  hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[];
+      ((.text // "") | gsub("<[^>]*>"; "") | gsub("&quot;|&#x22;|&#34;"; "\"")) as $x
+      | ($x | test("^\\s*Decided against:"; "i")) and ($x | contains("Valentin")) and ($x | test("20[0-9]{2}-[0-9]{2}-[0-9]{2}"))
+        and ($x | test("[\"“][^\"“”]+[\"”]")))' >/dev/null \
     || fail "$1 has no \"Decided against:\" comment quoting Valentin's dated decision (needs \"Decided against:\", \"Valentin\", a date like 2026-10-10 and a quote mark)"
   mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
     && echo "recorded $1 as dropped (PR $2 closed unmerged)"

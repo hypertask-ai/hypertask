@@ -1069,6 +1069,8 @@ echo '{"success":true,"comments":[{"text":"<p>Valentin, 2026-10-10: &quot;ship i
 D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unrelated quoted decision" || ok "dropped refuses a quoted decision without Decided against:"
 echo '{"success":true,"comments":[{"text":"<p>No &quot;Decided against:&quot; record exists. Valentin, 2026-10-10: &quot;ship it&quot;.</p>"}]}' > "$DROP_DIR/comments"
 D dropped YPER4-777 901 >/dev/null && bad "dropped accepted Decided against: mid-comment" || ok "dropped needs the comment to start with Decided against:"
+echo '{"success":true,"comments":[{"text":"<p>Decided against: awaiting Valentin, 2026-10-10, see <a href=\"https://example.com\">link</a>.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted attribute quotes as a quote" || ok "dropped ignores quotes inside HTML attributes"
 echo '{"success":true,"comments":[{"text":"<p>Decided against: Valentin, 2026-10-10: &quot;drop it, not needed&quot;.</p>"}]}' > "$DROP_DIR/comments"
 D dropped YPER4-777 902 >/dev/null && bad "dropped accepted an open PR" || ok "dropped refuses an open PR"
 D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "dropped refuses a merged PR"
