@@ -4,6 +4,7 @@
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
+#   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
@@ -74,7 +75,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -84,8 +85,34 @@ check_duplicate() {
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
+}
+
+# Valentin decided against the ticket: the PR is closed unmerged and a "Decided against:" comment quotes his dated decision.
+check_dropped() {
+  local s; s=$(gh pr view "$2" -R "$REPO" --json title,state,baseRefName --jq '"\(.state) \(.baseRefName) \(.title)"' 2>/dev/null) \
+    || fail "PR $2 not found in $REPO"
+  [[ $s == "CLOSED $BASE $1 "* ]] || fail "PR $2 must be a CLOSED (not merged, not open) PR of $1 into $BASE, got: $s"
+  # The visible text (tags and their attribute quotes removed, quote entities decoded) must open with the record
+  # Decided against: Valentin, 2026-10-10: "his words"   (an optional short note such as ", in chat" may follow the date).
+  hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[];
+      (.text // "") | gsub("<[^>]*>"; "") | gsub("&quot;|&#x22;|&#34;"; "\"")
+      | test("^\\s*Decided against:\\s*Valentin,\\s*20[0-9]{2}-[0-9]{2}-[0-9]{2}(,[^:\"“”]{0,40})?:\\s*[\"“][^\"“”]+[\"”]"))' >/dev/null \
+    || fail "$1 has no comment opening with: Decided against: Valentin, <YYYY-MM-DD>: \"<his words>\""
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
+    && echo "recorded $1 as dropped (PR $2 closed unmerged)"
+}
+
+# Dropped ticket: passes only while the bound PR is still closed and unmerged.
+dropped_ok() {
+  [ -s "$EVID/$2/dropped" ] || return 1
+  local n row state sha; n=$(tr -dc '0-9' < "$EVID/$2/dropped")
+  [ "$n" = "$(bound_pr "$2")" ] || fail "dropped PR $n is no longer the bound PR for $2"
+  row=$(pr_row "$2") || fail "${row#FAIL: }"
+  read -r n state sha <<<"$row"
+  [ "$state" = CLOSED ] && [ "$sha" = - ] || fail "dropped PR $n for $2 is $state, not closed unmerged"
+  echo "$1 ok (dropped: PR $n closed unmerged)"
 }
 
 merge_sha() {
@@ -112,9 +139,10 @@ check_pr() {
   fi
 }
 
-check_merged() { local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
+check_merged() { dropped_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
 check_deployed() {
+  dropped_ok deployed "$1" && return 0
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
@@ -240,6 +268,7 @@ newest_successful_production_sha() {
 
 check_proof() {
   local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
+  dropped_ok proof "$1" && return 0
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" \
@@ -669,6 +698,7 @@ case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
   branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
+  dropped) check_dropped "$2" "$3" ;;
   premerge) check_title "$2"; check_premerge "$2" ;;
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
@@ -680,5 +710,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,18p' "$0"; exit 1 ;;
+  *) sed -n '2,19p' "$0"; exit 1 ;;
 esac
