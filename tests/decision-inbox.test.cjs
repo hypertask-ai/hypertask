@@ -60,6 +60,16 @@ const mention = (t, id, text, hoursAgo) => ({
   comment: { id, taskId: t.id, text, commentText: text.replace(/<[^>]*>/g, ""), createdAt: at(hoursAgo) },
 });
 
+test("review column matches the first name as well as the full name", async () => {
+  const db = makeDb({});
+  let where;
+  db.user.findUnique = async () => ({ displayName: "Valentin Yeo" });
+  db.task.findMany = async (args) => { where = args.where; return []; };
+  await load({ db })(6, false);
+  const names = where.OR.map((clause) => clause.section.equals);
+  assert.deepEqual(names, ["Valentin Yeo Review", "Valentin Review"]);
+});
+
 test("review column ticket shows as Waiting in the column", async () => {
   const db = makeDb({ reviewTasks: [task(1)] });
   const rows = await load({ db })(6, false);

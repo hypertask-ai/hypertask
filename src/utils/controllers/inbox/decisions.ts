@@ -84,7 +84,10 @@ export async function getDecisionInbox(
             status: "Normal",
             archivedAt: null,
             deletedAt: null,
-            section: { equals: `${displayName} Review`, mode: "insensitive" },
+            // Review columns use the full or the first name ("Valentin Review").
+            OR: [...new Set([displayName, displayName.split(/\s+/)[0]])].map((name) => ({
+              section: { equals: `${name} Review`, mode: "insensitive" as const },
+            })),
             project: access,
           },
           select: taskSelect,
