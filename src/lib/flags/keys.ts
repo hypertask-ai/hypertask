@@ -4,6 +4,7 @@ export const HTPR_7042_NEON_WORK_AVOIDANCE_FLAG = "htpr-7042-neon-work-avoidance
 export const HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG = "htpr-7049-reload-after-image-chat";
 export const HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG = "htpr-7037-shared-email-layout";
 export const HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG = "htpr-7040-last-column-delete-message";
+export const HTPR_7048_CTRLJ_CHAT_LEASE_FLAG = "htpr-7048-ctrlj-chat-lease";
 export const HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG = "htpr-7036-ctrlk-column-delete-keeps-cards";
 export const HTPR_7026_AGENT_CONNECT_CHECK_FLAG = "htpr-7026-agent-connect-check";
 
