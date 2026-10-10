@@ -137,7 +137,8 @@ test("Decisions is a built-in view available on every board", () => {
 test("flag off hides the board view: the view list drops it unless the flag is on", () => {
   const source = fs.readFileSync(path.join(root, "src/hooks/Homepage/Views/useOrderedViews.ts"), "utf8");
   assert.match(source, /useFlag\(HTPR_7092_DECISIONS_FLAG\)/);
-  assert.match(source, /view\.id !== BUILTIN_VIEW_IDS\.decisions \|\| decisionsEnabled/);
+  assert.match(source, /view\.id !== BUILTIN_VIEW_IDS\.decisions/);
+  assert.match(source, /return decisionsEnabled \? allViews : viewsWithoutDecisions/);
 });
 
 const loadServer = (enabled, db) =>
