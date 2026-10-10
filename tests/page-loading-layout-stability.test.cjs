@@ -119,7 +119,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
-    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
@@ -302,7 +302,7 @@ test("an unset priority stays null while its background query loads, keeping the
   const metaHook = load("src/lib/useTaskDetailMetaField.ts", {
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
-    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
   });

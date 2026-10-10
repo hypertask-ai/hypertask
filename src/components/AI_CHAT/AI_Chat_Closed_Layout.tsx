@@ -1,6 +1,6 @@
 import React, { useContext, useLayoutEffect, useState } from "react";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
@@ -40,6 +40,10 @@ export default function AIChatClosedLayout({
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
   const narrowSidebarWidth = useFlag(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
+  // Until flags arrive the fix is on (its default), so first paint never squeezes the page; a loaded Off restores the old class.
+  const phoneFlagOn = useFlag(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
+  const phoneFlagKnown = useFlagLoaded(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
+  const phoneWorkspaceWidth = phoneFlagOn || !phoneFlagKnown;
   const [sidebarOverlays, setSidebarOverlays] = useState(false);
 
   useLayoutEffect(() => {
@@ -100,7 +104,10 @@ export default function AIChatClosedLayout({
             ? sidebarOverlays
               ? "fixed right-0 top-0 z-[51]"
               : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
-            : "shrink-0"
+            : phoneWorkspaceWidth
+              // Below md the reserved space never takes in-flow width, even before the app knows it is on a phone (HTPR-7074).
+              ? "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
+              : "shrink-0"
           : "contents"}
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >

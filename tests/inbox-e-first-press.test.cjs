@@ -75,7 +75,7 @@ function makeFlow(t, {
   });
   const useFocus = load("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
     "@/lib/api/typedClient": {},
-    "@/hooks/useFlag": { useFlag },
+    "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
     "@/store": atoms,
     "@/lib/state": state,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
@@ -91,7 +91,7 @@ function makeFlow(t, {
   }).default;
   const useNavigate = load("src/hooks/MultiPages/Route/useHypertasksNavigate.ts", {
     "@/lib/constants": { default: {} },
-    "@/hooks/useFlag": { useFlag },
+    "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
     "next/navigation": nextNavigation,
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": state,
@@ -129,7 +129,7 @@ function makeFlow(t, {
     "../MultiPages/Route/useHypertasksNavigate": { default: useNavigate },
     "next/navigation": nextNavigation,
     "@/components/undoToast": { undoToastSettings: { single: false } },
-    "@/hooks/useFlag": { useFlag },
+    "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
     "../Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
   }).default;
   const { createTaskDetailKeyboard } = load("src/app/detail/[...slug]/taskDetailKeyboard.ts", {
@@ -427,7 +427,7 @@ for (const enabled of [false, true]) {
     const frameMocks = {
       "next/navigation": { usePathname: () => pathname },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
-      "@/hooks/useFlag": { useFlag: () => false },
+      "@/hooks/useFlag": { useFlag: () => false, useFlagLoaded: () => true },
       "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
       "@/components/Common/Tooltip": { __esModule: true, default: () => null },
       "@/lib/flags/keys": {},

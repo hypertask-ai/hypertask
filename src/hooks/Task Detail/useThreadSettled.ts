@@ -5,7 +5,7 @@ import { HTPR_7074_TICKET_PAGE_CLS_FLAG } from "@/lib/flags/keys";
 
 // Frames the thread height must stay unchanged before the comment box may appear.
 const STEADY_FRAMES = 24;
-// The box shows after this long whatever the thread does, once the flag is known.
+// The box shows after this long whatever the thread or the flags request does.
 const MAX_HOLD_MS = 2000;
 
 // HTPR-7074: the comment box follows a virtualized list whose height grows as rows are
@@ -33,7 +33,8 @@ export function useThreadSettled(totalSize: number, rowCount: number, applies: b
     return () => cancelAnimationFrame(frame);
     // A new height restarts the count.
   }, [measuring, totalSize, rowCount]);
-  const holding = waiting && flagLoaded;
+  // Not gated on the flag loading: a flags request that never answers must not hide the box.
+  const holding = waiting;
   const hasRows = rowCount > 0 && hydrated;
   useEffect(() => {
     if (!holding) return;

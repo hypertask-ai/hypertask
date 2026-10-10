@@ -128,7 +128,7 @@ const moduleMocks = {
   "@/lib/firstScreen/BoardDocumentBoundary": { __esModule: true, default: ({ children }) => children },
   "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
-    "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
+    "@/hooks/useFlag": { useFlag: () => instantTicketOpen, useFlagLoaded: () => true },
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant-ticket-open" },
   "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailLocation: () => undefined },
   "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },

@@ -11,9 +11,10 @@ const { chromium } = require("@playwright/test");
 const { compile } = require("@tailwindcss/node");
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-6990-narrow-sidebar-width";
+const phoneFlagKey = "htpr-7074-phone-workspace-width";
 const noop = () => null;
 
-function frame(enabled, mobile = false, pathname = "/detail/project-15/6990") {
+function frame(enabled, mobile = false, pathname = "/detail/project-15/6990", phoneEnabled = false) {
   const dependencies = {
     react: React,
     "next/navigation": { usePathname: () => pathname },
@@ -21,8 +22,8 @@ function frame(enabled, mobile = false, pathname = "/detail/project-15/6990") {
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, flagKey); return enabled; } },
-    "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: flagKey },
+    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([flagKey, phoneFlagKey].includes(key)); return key === flagKey ? enabled : phoneEnabled; }, useFlagLoaded: () => true },
+    "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: flagKey, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: phoneFlagKey },
   };
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");
   const js = ts.transpileModule(source, {
