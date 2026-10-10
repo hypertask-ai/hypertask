@@ -88,20 +88,91 @@ test("relative time reads just now, minutes, then hours", () => {
   assert.equal(agentStatusAgo(minutesAgo(125).toISOString(), NOW), "2 h ago");
 });
 
+const loadRefresh = () => {
+  const { refreshBoardForAgentRun, shouldBroadcastBoardActivity } = load("src/lib/agentStatus/boardRefresh.ts", {
+    "@/lib/flags": { featureFlagCandidateUserIds: async () => null },
+    "@/lib/flags/keys": { HTPR_7071_AGENT_STATUS_CHIP_FLAG: "HTPR-7071" },
+    "@/lib/realtime/server": { broadcastBoardChange: async () => {} },
+  });
+  return { refreshBoardForAgentRun, shouldBroadcastBoardActivity };
+};
+
+const makeDeps = (candidates, throttle = () => true) => {
+  const sent = [];
+  return {
+    sent,
+    deps: {
+      candidateUserIds: async () => candidates,
+      broadcast: async (projectId, options) => void sent.push([projectId, options.originUserId]),
+      shouldBroadcast: throttle,
+    },
+  };
+};
+
 test("board activity broadcast is throttled to once per board per window", () => {
-  const source = fs.readFileSync(path.join(root, "src/lib/agentRuns/service.ts"), "utf8");
-  const match = source.match(/export function shouldBroadcastBoardActivity[\s\S]*?\n}\n/);
-  assert.ok(match);
-  const fn = new Function(
-    "BOARD_ACTIVITY_BROADCAST_WINDOW_MS",
-    "lastBoardActivityBroadcast",
-    `${ts.transpileModule(match[0].replace("export ", ""), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText}; return shouldBroadcastBoardActivity;`,
-  )(15_000, new Map());
+  const { shouldBroadcastBoardActivity: fn } = loadRefresh();
   const seen = new Map();
   assert.equal(fn(1, 1000, seen), true);
   assert.equal(fn(1, 5000, seen), false);
   assert.equal(fn(2, 5000, seen), true);
   assert.equal(fn(1, 16_001, seen), true);
+});
+
+test("board refresh fires for OWNER_AND_QA candidates regardless of the task creator", async () => {
+  const { refreshBoardForAgentRun } = loadRefresh();
+  const { sent, deps } = makeDeps([6, 985]);
+  assert.equal(await refreshBoardForAgentRun(9, 42, { lifecycle: false }, deps), true);
+  assert.deepEqual(sent, [[9, 42]]);
+  const everyone = makeDeps(null);
+  assert.equal(await refreshBoardForAgentRun(9, 42, { lifecycle: false }, everyone.deps), true);
+});
+
+test("no board refresh when the flag is OFF", async () => {
+  const { refreshBoardForAgentRun } = loadRefresh();
+  const { sent, deps } = makeDeps([]);
+  assert.equal(await refreshBoardForAgentRun(9, 42, { lifecycle: true }, deps), false);
+  assert.deepEqual(sent, []);
+});
+
+test("run start and stop bypass the throttle, activity inside the window does not", async () => {
+  const { refreshBoardForAgentRun } = loadRefresh();
+  const { sent, deps } = makeDeps(null, () => false);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: false }, deps), false);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
+  assert.equal(await refreshBoardForAgentRun(9, 1, { lifecycle: true }, deps), true);
+  assert.equal(sent.length, 2);
+  const source = fs.readFileSync(path.join(root, "src/lib/agentRuns/service.ts"), "utf8");
+  assert.equal((source.match(/lifecycle: true/g) ?? []).length, 2);
+  assert.match(source, /refreshBoardForAgentRun\(run\.task\.projectId, originUserId, \{ lifecycle: false \}\)/);
+  assert.doesNotMatch(source, /setTimeout/);
+});
+
+test("the minute clock uses one interval for many subscribers and clears it at zero", () => {
+  const realSet = global.setInterval;
+  const realClear = global.clearInterval;
+  let started = 0;
+  let cleared = 0;
+  global.setInterval = () => (started++, { id: started });
+  global.clearInterval = () => void cleared++;
+  try {
+    const { subscribeMinuteClock } = load("src/lib/agentStatus/minuteClock.ts", { react: { useSyncExternalStore: () => 0 } });
+    const unsubscribe = Array.from({ length: 50 }, () => subscribeMinuteClock(() => {}));
+    assert.equal(started, 1);
+    unsubscribe.slice(0, 49).forEach((off) => off());
+    assert.equal(cleared, 0);
+    unsubscribe[49]();
+    assert.equal(cleared, 1);
+    subscribeMinuteClock(() => {})();
+    assert.equal(started, 2);
+  } finally {
+    global.setInterval = realSet;
+    global.clearInterval = realClear;
+  }
+});
+
+test("the chip only subscribes to the clock when the flag is on and the card has a status", () => {
+  const source = fs.readFileSync(path.join(root, "src/components/PageComponents/Kanban/KanbanTaskComponents/TaskTagsRow.tsx"), "utf8");
+  assert.match(source, /useMinuteClock\(Boolean\(agentStatusEnabled && task\.agentStatus\)\)/);
 });
 
 test("the status chip shrinks and truncates long agent names inside the card", () => {
