@@ -125,13 +125,13 @@ printf 'POSTGRES_DB=hypertask_smoke\nPOSTGRES_USER=browser_smoke\nPOSTGRES_PASSW
 printf 'SOKETI_DEFAULT_APP_ID=app-id\nSOKETI_DEFAULT_APP_KEY=app-key\nSOKETI_DEFAULT_APP_SECRET=%s\n' "$pusher_secret" >"$state/soketi.env"
 docker run -d --name "$prefix-postgres" -p 127.0.0.1::5432 --env-file "$state/postgres.env" \
   --health-cmd 'pg_isready -U browser_smoke -d hypertask_smoke' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  public.ecr.aws/docker/library/postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+  ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
 docker run -d --name "$prefix-redis" -p 127.0.0.1::6379 \
   --health-cmd 'redis-cli ping' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  public.ecr.aws/docker/library/redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+  ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
 docker run -d --name "$prefix-soketi" -p 127.0.0.1::6001 --env-file "$state/soketi.env" \
   --health-cmd 'wget --no-verbose --tries=1 --spider http://127.0.0.1:6001' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  quay.io/soketi/soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+  ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
 for service in postgres redis soketi; do
   for ((attempt=0; attempt<90; attempt++)); do
     health=$(docker inspect --format '{{.State.Health.Status}}' "$prefix-$service")

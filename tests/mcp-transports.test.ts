@@ -156,7 +156,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
   const redis = nativeRedis
     ? spawn('redis-server', redisArgs, { signal: t.signal })
     : spawn('docker', ['run', '--rm', '--network', 'host',
-      'public.ecr.aws/docker/library/redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf',
+      'ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf',
       'redis-server', ...redisArgs], { signal: t.signal })
   t.diagnostic(`Redis fixture: ${nativeRedis ? 'local binary' : 'disposable Docker container'}`)
   const previousUrl = process.env.REDIS_URL

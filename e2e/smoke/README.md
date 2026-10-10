@@ -103,11 +103,12 @@ all five read-only pulls, before merging. There is no automatic fallback
 that silently reintroduces anonymous pulls.
 
 Fallback for a GHCR outage: open an explicit recovery PR that restores the CI
-image references to `public.ecr.aws/docker/library/<image>:<tag>@<same digest>`
-(Soketi uses `quay.io/soketi/soketi:<tag>@<same digest>`). In that same PR,
+image references to an explicitly approved upstream registry at the same digest.
+In that same PR,
 remove GHCR login steps and service credentials from the fallback consumers
 so a GHCR login outage cannot block recovery. Update the registry-specific
-assertions in `tests/ci-images.test.cjs` and `tests/browser-smoke-workflow.test.cjs`
+assertions in `tests/ci-image-sources.test.cjs`, `tests/ci-images.test.cjs`,
+and `tests/browser-smoke-workflow.test.cjs`
 to expect those fallback references;
 otherwise the recovery PR will fail the GHCR-only assertions. Retain exact
 digest checks, required check names, and the mirror workflow, then rerun the
@@ -117,6 +118,26 @@ temporary, visible recovery choice, not the normal path. For a missing copy,
 rerun `Mirror CI images` instead of weakening the digest pin. Keep
 `app-smoke`, `browser-smoke`, and `ci-tests` required; production deploy
 configuration is not changed by this image mirror.
+
+### Local Docker fixtures
+
+The transport test, PostgreSQL tests, agent-token backfill verifiers and
+`scripts/premerge-local.sh up` use the same pinned GHCR images. The transport
+test still prefers an installed `redis-server`, which needs no registry login.
+For Docker-backed runs, authenticate once with your own GitHub token with
+`read:packages` access to the `hypertask-ai` CI packages:
+
+```bash
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_USER" --password-stdin
+```
+
+If GHCR login is unavailable locally, use an already cached pinned image
+(`docker image ls --digests`) or install `redis-server` for the transport test.
+For PostgreSQL tests and backfill verifiers, `HTPR_PG_IMAGE` can point to an
+explicit local image from the same PostgreSQL 16 variant. Premerge smoke needs
+all three pinned images cached or registry access; it cannot run offline without
+them. There is no automatic fallback to an anonymous registry in CI. See
+`tests/README.md` for targeted test commands.
 
 ## Selectors
 

@@ -15,7 +15,7 @@ export function ensurePostgres() {
     .toString().trim();
   if (running !== CONTAINER) {
     try { execFileSync("docker", ["rm", "-f", CONTAINER], { stdio: "ignore" }); } catch {}
-    execFileSync("docker", ["run", "-d", "--name", CONTAINER, "-e", `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`, "postgres:16"], { stdio: "ignore" });
+    execFileSync("docker", ["run", "-d", "--name", CONTAINER, "-e", `POSTGRES_PASSWORD=${POSTGRES_PASSWORD}`, process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825"], { stdio: "ignore" });
   }
   for (let i = 0; i < 60; i++) {
     try { execFileSync("docker", ["exec", CONTAINER, "pg_isready", "-U", "postgres"], { stdio: "ignore" }); return; } catch {}

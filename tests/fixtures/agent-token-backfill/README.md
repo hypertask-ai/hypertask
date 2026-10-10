@@ -6,8 +6,11 @@ plaintext column. That drop is irreversible: a wrong `jti` extraction would
 silently invalidate every live agent credential with nothing left to recompute
 from. These scripts are the proof the SQL was right before the drop shipped.
 
-Both need Docker (they start a throwaway `postgres:16`) and both carry a
-positive control, so a broken oracle fails loudly instead of passing vacuously.
+Both need Docker (they start a throwaway PostgreSQL 16 Bookworm container
+from `ghcr.io/hypertask-ai/ci-postgres:16-bookworm`, pinned to the seeded digest)
+and both carry a positive control, so a broken oracle fails loudly instead of
+passing vacuously. See [local fixture authentication](../../README.md) if GHCR
+login is unavailable; `HTPR_PG_IMAGE` can select an explicit local image.
 
 ```bash
 node tests/fixtures/agent-token-backfill/verify-backfill-sql.mjs

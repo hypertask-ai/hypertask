@@ -47,7 +47,7 @@ test("recursive subtree SQL executes on disposable PostgreSQL with live access/d
     ${resultSql(queries[2], 5)}
   `;
   const output = execFileSync("docker", [
-    "run", "--rm", "-i", "--user", "postgres", process.env.HTPR_PG_IMAGE || "postgres:16-alpine", "sh", "-c",
+    "run", "--rm", "-i", "--user", "postgres", process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea", "sh", "-c",
     "initdb -D /tmp/slice3-db -A trust >/dev/null 2>&1 && pg_ctl -D /tmp/slice3-db -l /tmp/slice3-pg.log -o '-k /tmp' -w start >/dev/null && psql -h /tmp -U postgres -v ON_ERROR_STOP=1 -tA; result=$?; pg_ctl -D /tmp/slice3-db -m fast -w stop >/dev/null; exit $result",
   ], { input: script, encoding: "utf8", timeout: 60000 });
   const results = output.split(/\r?\n/).filter((line) => /^\d:/.test(line)).map((line) => JSON.parse(line.slice(2)));
