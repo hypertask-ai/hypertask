@@ -115,6 +115,15 @@ test("the guest component path requests editing synchronously without changing e
   );
   assert.match(doubleClickHandler, /if \(isGuest\) return;/);
 
+  const singleClickHandler = component.slice(
+    component.indexOf("const handleDesktopClick"),
+    component.indexOf("  return ("),
+  );
+  assert.match(singleClickHandler, /doubleClickToEdit && !isTaskDetailEditTarget\(event\.target, event\.currentTarget\)/);
+  assert.doesNotMatch(singleClickHandler, /if \(doubleClickToEdit\) return;/);
+  assert.match(singleClickHandler, /shouldEnterGuestDescriptionEdit/);
+  assert.match(singleClickHandler, /editGuestDescriptionHandler\(\);/);
+
   const tiptap = readRefactoredSource(
     path.join(__dirname, "../src/components/RTE/TipTapTaskDetail.tsx"),
     "utf8",

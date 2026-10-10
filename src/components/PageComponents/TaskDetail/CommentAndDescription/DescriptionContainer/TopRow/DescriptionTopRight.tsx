@@ -34,7 +34,7 @@ const DescriptionTopRight = () => {
     toggleEmojiPicker={toggleEmojiPickerDescription}
   />;
   return (
-    <div className='flex gap-1 items-center'>
+    <div data-task-detail-actions className='flex gap-1 items-center'>
       {/* A cold reaction control must not suspend the cached title and body. */}
       {!isMbl && (instantTicketOpen ? (
         <span className="inline-flex h-[14px] w-[14px]">

@@ -333,6 +333,18 @@ test("Ctrl+K column-delete bugfix defaults to Everyone and respects OFF", async 
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
 });
 
+test("double-click editing bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG;
+  assert.equal(key, "htpr-7044-double-click-to-edit");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
 test("last-column delete message bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG;
   assert.equal(key, "htpr-7040-last-column-delete-message");
@@ -447,6 +459,7 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
         flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG,
         flags.HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
         flags.HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG,
+        flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG,
         flags.HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG,
         flags.HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG,
         flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG,
@@ -996,6 +1009,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
       { key: "htpr-7040-last-column-delete-message", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7042-neon-work-avoidance", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7043-no-empty-board-flash", mode: "EVERYONE", updatedAt: null },
+      { key: "htpr-7044-double-click-to-edit", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7048-ctrlj-chat-lease", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7049-reload-after-image-chat", mode: "EVERYONE", updatedAt: null },
       { key: "htpr-7050-ctrl-o-links", mode: "EVERYONE", updatedAt: null },

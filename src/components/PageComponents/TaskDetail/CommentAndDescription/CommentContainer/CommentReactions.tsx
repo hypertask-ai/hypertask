@@ -114,6 +114,7 @@ const CommentReactions = () => {
     if (editState === i) return <></>;
     return (
       <div
+        data-task-detail-actions
         className={`flex items-center gap-1 flex-wrap ${styles.unstacked_grid_row3}`}
       >
         {comment?.reactions?.map(
@@ -172,6 +173,7 @@ const CommentReactions = () => {
   else if (comment?.reactions && comment?.reactions?.length > 0)
     return (
       <div
+        data-task-detail-actions
         className={`flex items-baseline gap-1 mr-1 ${styles.unstacked_grid_row3}`}
       >
         {comment?.reactions?.map(

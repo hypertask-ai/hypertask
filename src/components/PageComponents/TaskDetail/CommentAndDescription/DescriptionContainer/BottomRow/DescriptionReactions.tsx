@@ -36,6 +36,7 @@ const DescriptionReactions = ()=>{
     if (_mbl && editMode!=="description"){
         return (
             <div
+            data-task-detail-actions
             className={cn("flex asd items-center gap-1 flex-wrap", styles.unstacked_grid_row3, taskDetailSpacing.mobile.descriptionContainer)}>
             {
             currentTask?.description_?.reactions?.map((reaction,index)=>
@@ -69,6 +70,7 @@ const DescriptionReactions = ()=>{
 // ============================ DESKTOP 
     else return (
         <div
+            data-task-detail-actions
             className={`flex items-baseline gap-1 mr-1 mt-3`}>
              {
             currentTask?.description_?.reactions?.map((reaction,index)=>
