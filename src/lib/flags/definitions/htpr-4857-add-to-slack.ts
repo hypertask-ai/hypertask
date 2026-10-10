@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds a public Add to Slack page and resumes installation after sign-in."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

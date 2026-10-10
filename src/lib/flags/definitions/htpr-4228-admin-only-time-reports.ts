@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-09-09",
   description:
     "In time reports, plain board members see only their own logged time; board owners and admins still see everyone's entries and keep the user filter.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

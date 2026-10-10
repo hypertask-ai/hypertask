@@ -10,4 +10,5 @@ export default {
     "risk": "none",
     "reason": "Adds stored ticket-confirmation safeguards for agent work without a new interface."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

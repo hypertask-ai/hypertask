@@ -11,4 +11,5 @@ export default {
     "risk": "none",
     "reason": "Monitors AI chat reliability and alerts the Manager without changing the app interface."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

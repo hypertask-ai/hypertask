@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds personal saved views with filters and sorting."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

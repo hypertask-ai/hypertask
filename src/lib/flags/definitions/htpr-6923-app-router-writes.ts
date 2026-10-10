@@ -6,4 +6,5 @@ export default {
   key: HTPR_6923_APP_ROUTER_WRITES_FLAG,
   shippedOn: "2026-10-06",
   description: "Uses shared App-style handlers for legacy task writes while keeping the original URLs and responses.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

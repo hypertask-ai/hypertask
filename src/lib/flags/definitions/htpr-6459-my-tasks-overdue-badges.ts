@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks view and board tabs add a red count of overdue tasks."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

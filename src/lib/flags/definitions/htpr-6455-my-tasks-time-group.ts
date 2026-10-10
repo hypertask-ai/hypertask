@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "My Tasks groups tasks by due time by default instead of by board."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

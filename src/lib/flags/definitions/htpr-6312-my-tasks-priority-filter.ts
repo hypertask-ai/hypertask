@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds a filter for one or more priority levels."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

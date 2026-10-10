@@ -10,4 +10,5 @@ export default {
     "risk": "new",
     "reason": "Agent Chat adds progress rows between normal conversation messages."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

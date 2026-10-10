@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-10-01",
   description: "Completes search operators and values with keyboard suggestions, coloured filters, an active filter frame, search tips and highlighted result titles.",
   related: ["htpr-6369-search-operators", "htpr-6370-search-chips"],
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

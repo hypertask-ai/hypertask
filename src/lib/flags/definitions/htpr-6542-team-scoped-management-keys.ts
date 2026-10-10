@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Management key settings add a choice to limit a key to one team."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

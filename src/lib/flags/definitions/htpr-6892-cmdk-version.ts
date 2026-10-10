@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-10-03",
   description:
     "Shows the build loaded by this tab at the bottom of the desktop Ctrl+K command center, with its commit and local build time.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

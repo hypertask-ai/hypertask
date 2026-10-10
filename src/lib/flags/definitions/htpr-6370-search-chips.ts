@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-09-28",
   description: "Shows search operators as removable chips with people, board and label suggestions.",
   related: ["htpr-6369-search-operators"],
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

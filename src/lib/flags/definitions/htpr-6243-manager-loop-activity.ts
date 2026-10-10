@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "The existing Agent Chat activity feed records each scheduled Manager cycle."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

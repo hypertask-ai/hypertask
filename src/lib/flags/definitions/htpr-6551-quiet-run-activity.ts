@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Routine agent progress stays in task history while important questions remain visible."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

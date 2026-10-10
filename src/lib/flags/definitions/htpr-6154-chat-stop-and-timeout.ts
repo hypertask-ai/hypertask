@@ -7,4 +7,6 @@ export default {
   shippedOn: "2026-09-06",
   description:
     "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

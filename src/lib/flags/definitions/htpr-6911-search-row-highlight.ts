@@ -7,4 +7,6 @@ export default {
   shippedOn: "2026-10-03",
   description: "Gives selected search results and suggestions the inbox highlight: background edge to edge and the accent bar on the far left. Requires the search layout flag.",
   related: ["htpr-6865-search-layout"],
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

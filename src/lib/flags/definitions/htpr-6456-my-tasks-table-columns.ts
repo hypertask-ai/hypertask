@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds a column picker whose choices are saved with the view."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

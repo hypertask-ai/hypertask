@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds choices for tasks created, mentioned or watched as well as assigned."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

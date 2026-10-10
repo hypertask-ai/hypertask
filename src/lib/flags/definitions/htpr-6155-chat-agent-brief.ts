@@ -11,4 +11,5 @@ export default {
     "risk": "none",
     "reason": "Gives agents context about their current and recent work without adding interface controls."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "The existing Agent Chat roster reorders by the most recent message."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

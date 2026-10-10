@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-10-03",
   description: "Finds tasks commented on by a person and shows their newest matching comment; combines typed text with that person’s comments. The picker requires the search layout flag.",
   related: ["htpr-6865-search-layout"],
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

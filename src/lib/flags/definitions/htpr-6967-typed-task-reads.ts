@@ -6,4 +6,5 @@ export default {
   key: HTPR_6967_TYPED_TASK_READS_FLAG,
   shippedOn: "2026-10-06",
   description: "Validates board, description history and cycle reads with shared typed API contracts.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

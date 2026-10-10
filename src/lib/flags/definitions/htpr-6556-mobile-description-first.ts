@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Mobile task creation adds a description-first flow with Task Writer and direct save choices."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

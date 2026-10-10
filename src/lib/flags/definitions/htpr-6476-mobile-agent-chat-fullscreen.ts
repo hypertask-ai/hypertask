@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Mobile Agent Chat uses the existing AI composer in a full-screen layout."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

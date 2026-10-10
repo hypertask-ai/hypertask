@@ -11,4 +11,6 @@ export default {
     "risk": "small",
     "reason": "Comments and task history show the acting agent name instead of Private agent."
   },
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

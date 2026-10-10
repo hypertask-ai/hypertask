@@ -7,4 +7,6 @@ export default {
   shippedOn: "2026-09-14",
   description:
     "Hides search results that do not contain every word you typed, and when you open search from a board, shows that board's matches first.",
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

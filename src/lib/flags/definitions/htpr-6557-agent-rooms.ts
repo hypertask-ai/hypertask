@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds a shared chat room on each board where people and agents can work together."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

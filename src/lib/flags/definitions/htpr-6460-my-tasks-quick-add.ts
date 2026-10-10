@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds a quick-add row that creates tasks on the view default board."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

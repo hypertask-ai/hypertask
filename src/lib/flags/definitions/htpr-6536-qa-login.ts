@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds a dedicated QA sign-in page for automated testing."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "The existing editor capitalizes sentence starts when the browser does not."
   },
+  kind: "improvement",
 } as const satisfies FeatureFlagDefinition;

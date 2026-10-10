@@ -10,4 +10,5 @@ export default {
     "risk": "none",
     "reason": "Adds a shared agent run model and developer endpoints without changing app screens."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

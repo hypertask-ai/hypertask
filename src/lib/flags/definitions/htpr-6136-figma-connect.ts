@@ -6,4 +6,5 @@ export default {
   key: FIGMA_CONNECT_FLAG,
   shippedOn: "2026-09-06",
   description: "Lets each user connect a Figma account so linked frames render as previews.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

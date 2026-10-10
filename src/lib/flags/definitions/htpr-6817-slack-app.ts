@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds conversational task creation and account connection flows to the official Slack app."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -10,4 +10,5 @@ export default {
     "risk": "small",
     "reason": "Ask AI from search opens the existing full-screen chat and preserves the query for Back."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

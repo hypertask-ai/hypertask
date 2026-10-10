@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Mobile Agent Chat keeps the composer pinned and uses one message scroller."
   },
+  kind: "improvement",
 } as const satisfies FeatureFlagDefinition;

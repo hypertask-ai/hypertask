@@ -12,4 +12,5 @@ export default {
     "risk": "small",
     "reason": "Ticket content keeps its position while comments and properties finish loading."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

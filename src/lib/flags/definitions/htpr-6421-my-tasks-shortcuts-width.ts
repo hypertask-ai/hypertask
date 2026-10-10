@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "My Tasks supports global shortcuts, remembers the board tab and uses the available width."
   },
+  kind: "improvement",
 } as const satisfies FeatureFlagDefinition;

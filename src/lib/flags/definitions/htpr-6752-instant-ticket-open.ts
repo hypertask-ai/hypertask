@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-10-02",
   description:
     "Shows a ticket immediately from authorized cached board, My Tasks, or Inbox data while its full detail refreshes in the background.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

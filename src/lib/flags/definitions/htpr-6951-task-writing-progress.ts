@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "The New Task window shows the current writing step instead of only a spinner."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

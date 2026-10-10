@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds snoozing through the existing Remind Me date picker."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

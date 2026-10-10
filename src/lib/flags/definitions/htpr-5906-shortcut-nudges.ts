@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds a keyboard shortcut tip after repeated mouse-based inbox actions."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

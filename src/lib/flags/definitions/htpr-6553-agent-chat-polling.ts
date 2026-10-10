@@ -7,4 +7,6 @@ export default {
   shippedOn: "2026-09-17",
   description:
     "Lets a recently heartbeating agent runtime receive Agent Chat through polling when it has no webhook, and labels that chat as polling.",
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

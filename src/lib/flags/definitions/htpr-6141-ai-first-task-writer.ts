@@ -10,4 +10,6 @@ export default {
     "risk": "small",
     "reason": "The column add button opens the AI task writer instead of the classic task form."
   },
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
 } as const satisfies FeatureFlagDefinition;

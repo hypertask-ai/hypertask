@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-10-03",
   description: "Shift+C opens the quick add box like N",
   related: ["htpr-6175-quick-entry-cards"],
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

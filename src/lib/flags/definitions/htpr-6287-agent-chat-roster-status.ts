@@ -10,4 +10,5 @@ export default {
     "risk": "small",
     "reason": "The existing Agent Chat roster shows each agent's actual activity and token status."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

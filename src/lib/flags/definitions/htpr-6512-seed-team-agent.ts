@@ -11,4 +11,5 @@ export default {
     "risk": "none",
     "reason": "Creates a default agent for teams that have none without adding an interface control."
   },
+  kind: "improvement",
 } as const satisfies FeatureFlagDefinition;

@@ -10,4 +10,5 @@ export default {
     "risk": "small",
     "reason": "Existing hover tips stay visible above other parts of the interface."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

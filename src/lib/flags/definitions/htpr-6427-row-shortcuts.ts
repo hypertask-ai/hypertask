@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Existing table and My Tasks rows respond to task-property keyboard shortcuts."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

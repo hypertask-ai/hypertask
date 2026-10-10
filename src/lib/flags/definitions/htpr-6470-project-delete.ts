@@ -11,4 +11,5 @@ export default {
     "risk": "none",
     "reason": "Adds confirmed board deletion to the command-line tool without changing the app interface."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

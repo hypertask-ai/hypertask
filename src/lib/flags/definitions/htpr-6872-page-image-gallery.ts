@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Page images open in a full-size gallery with browsing and download controls."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

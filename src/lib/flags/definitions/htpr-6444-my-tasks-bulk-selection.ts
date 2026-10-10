@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds multi-selection and bulk archive, assignment, label and move actions."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

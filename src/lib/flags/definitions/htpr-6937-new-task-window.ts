@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "The New Task window adds dictation and a revised keyboard-driven task creation flow."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

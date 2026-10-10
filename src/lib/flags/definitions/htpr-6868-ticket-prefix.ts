@@ -10,4 +10,5 @@ export default {
     "risk": "new",
     "reason": "Board settings and board creation add ticket-prefix choices."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

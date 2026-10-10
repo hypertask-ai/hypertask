@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds draft task descriptions below the title while a task is being written."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

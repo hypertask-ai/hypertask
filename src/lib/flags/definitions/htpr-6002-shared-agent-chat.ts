@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds shared agent conversations that authorized teammates can use together."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

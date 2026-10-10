@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-09-28",
   description:
     "Searches tasks by author, assignee, board, label, status, date and attachments using query operators, with suggestions for values.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

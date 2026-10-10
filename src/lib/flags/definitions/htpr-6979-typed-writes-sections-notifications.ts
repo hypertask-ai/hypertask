@@ -6,4 +6,5 @@ export default {
   key: HTPR_6979_TYPED_WRITES_FLAG,
   shippedOn: "2026-10-06",
   description: "Validates section and notification writes with shared typed API contracts.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

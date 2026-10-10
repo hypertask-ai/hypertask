@@ -11,4 +11,5 @@ export default {
     "risk": "none",
     "reason": "Routes server error alerts to the Manager and guards rollbacks without changing app screens."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

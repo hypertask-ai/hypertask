@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "My Tasks priority sorting interleaves tasks from all boards by priority."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

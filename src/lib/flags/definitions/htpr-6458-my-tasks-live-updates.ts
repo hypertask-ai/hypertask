@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Existing My Tasks rows update when a task changes elsewhere without a reload."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds a microphone to the closed comment bar so dictation can start with one tap."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

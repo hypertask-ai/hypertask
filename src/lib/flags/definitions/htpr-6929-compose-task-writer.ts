@@ -10,4 +10,5 @@ export default {
     "risk": "new",
     "reason": "Adds a Compose flow that writes a ticket from notes and images, then opens AI refinement."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

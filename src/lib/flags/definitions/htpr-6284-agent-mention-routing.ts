@@ -11,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Mentioning an agent in the existing AI chat sends the message to that agent."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

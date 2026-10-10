@@ -10,4 +10,5 @@ export default {
     "risk": "none",
     "reason": "Adds structured agent run updates for integrations without a new app control."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds Google Calendar connection settings and task synchronization."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

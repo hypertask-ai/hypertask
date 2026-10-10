@@ -11,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "My Tasks adds the board filter menu and its full set of filter choices."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

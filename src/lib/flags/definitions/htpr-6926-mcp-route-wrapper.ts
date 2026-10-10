@@ -10,4 +10,5 @@ export default {
   // Off until switched on: every agent token resolves to its human owner, so Owner + QA would
   // move all of Valentin's agents onto the new path at deploy (Infra Manager, 2026-10-06).
   defaultMode: "OFF",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

@@ -7,4 +7,5 @@ export default {
   shippedOn: "2026-09-07",
   description:
     "Adds Show in all views and Hide in all views to the column editor, so one column's visibility changes across every saved view at once.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;
