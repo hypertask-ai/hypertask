@@ -1,7 +1,7 @@
 [Unit]
-Description=Reconcile premerge evidence every two minutes
+Description=Reconcile premerge evidence every ten minutes
 [Timer]
-OnCalendar=*-*-* *:0/2:00
+OnCalendar=*-*-* *:0/10:00
 Persistent=true
 [Install]
 WantedBy=timers.target

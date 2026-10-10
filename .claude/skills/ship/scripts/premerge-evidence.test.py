@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +26,8 @@ class PosterTests(unittest.TestCase):
         self.state = self.root / 'state'
         self.production = self.root / 'production-check'
         self.log = self.root / 'calls'
+        for leaked in ('SHIP_GIT', 'SHIP_GIT_CACHE', 'SHIP_GIT_REMOTE', 'GH_PAUSE_FILE'):
+            os.environ.pop(leaked, None)
         self.env = dict(os.environ, HOME=str(self.root),
                         PATH=f'{self.bin}:{os.environ["PATH"]}',
                         PREMERGE_STATUS_STATE=str(self.state),
@@ -46,12 +49,7 @@ if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
     with (root / 'statuses').open('a') as log:
         log.write('failure\\n')
 elif args[:1] == ['api']:
-    assert args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']
-    if (root / 'fetch-error').exists():
-        sys.exit(1)
-    import base64
-    content = base64.encodebytes((root / 'production-check').read_bytes()).decode()
-    print(json.dumps({'name': 'ship-check', 'encoding': 'base64', 'content': content}))
+    raise AssertionError('the contents API must not be called: ' + repr(args))
 elif args[:2] == ['pr', 'list']:
     assert args[args.index('--base') + 1] == 'production'
     print(json.dumps([{'number': n, 'title': f'YPER4-{n} [INFRA] Fixture',
@@ -62,6 +60,25 @@ else:
     raise AssertionError(args)
 ''')
         (self.bin / 'gh').chmod(0o755)
+        (self.bin / 'git').write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ['POSTER_TEST_ROOT'])
+args = sys.argv[1:]
+with (root / 'gitcalls').open('a') as log:
+    log.write(json.dumps(args) + '\\n')
+if args[:2] == ['init', '--bare']:
+    os.makedirs(args[-1], exist_ok=True)
+    open(args[-1] + '/HEAD', 'w').close()
+elif args[2:3] == ['fetch']:
+    if (root / 'fetch-error').exists():
+        sys.exit(1)
+elif args[2:3] == ['show']:
+    assert args[3] == 'refs/premerge/production:.claude/skills/ship/scripts/ship-check', args
+    sys.stdout.buffer.write((root / 'production-check').read_bytes())
+else:
+    sys.exit(1)
+''')
+        (self.bin / 'git').chmod(0o755)
         (self.bin / 'systemctl').write_text('''#!/usr/bin/env python3
 import json, os, pathlib, sys
 with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'systemctl-calls').open('a') as log:
@@ -104,8 +121,39 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual((self.state / 'ship-check').read_bytes(), self.production.read_bytes())
         self.assertEqual((self.state / 'ship-check').stat().st_mode & 0o777, 0o755)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertEqual(sum(c[0] == 'api' for c in calls), 3)
+        self.assertEqual(sum(c[0] == 'api' for c in calls), 0)
         self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 3)
+        git_calls = [json.loads(line) for line in (self.root / 'gitcalls').read_text().splitlines()]
+        self.assertEqual(sum(c[2:3] == ['fetch'] for c in git_calls), 3)
+
+    def test_paused_sweep_makes_no_calls(self):
+        pause = self.root / 'pause-until'
+        pause.write_text(str(int(time.time()) + 3600))
+        self.env['GH_PAUSE_FILE'] = str(pause)
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout + result.stderr, '')
+        for name in ('calls', 'gitcalls', 'published', 'statuses'):
+            self.assertFalse((self.root / name).exists(), name)
+        pause.write_text(str(int(time.time()) - 5))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+
+    def test_unchanged_head_is_skipped_and_hourly_refresh_rechecks(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        cache = json.loads((self.state / 'cache.json').read_text())
+        for entry in cache.values():
+            entry['checked'] = time.time() - 1800  # inside the hourly window
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        for entry in cache.values():
+            entry['checked'] = time.time() - 3700  # past the hourly window
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 4)
 
     def test_fetch_failure_after_deleted_evidence_revokes_passing_statuses(self):
         folder = self.root / 'evidence/YPER4-999'

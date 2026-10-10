@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """Reconcile current-head evidence statuses without polling each completed PR."""
-import base64
 import fcntl
 import hashlib
 import json
@@ -14,6 +13,8 @@ import time
 
 HERE = Path(__file__).resolve().parent
 REPO = 'hypertask-ai/hypertask'
+CHECKER_PATH = '.claude/skills/ship/scripts/ship-check'
+REFRESH_SECONDS = 3600  # slow refresh for live flag changes; a new head or changed evidence re-checks at once
 
 
 def install():
@@ -48,17 +49,37 @@ def fingerprint(row, evidence, checker_sha):
     return digest.hexdigest()
 
 
-def fetch_checker():
-    # gh 2.45 ignores a raw Accept header here, so decode the contents API's base64 body.
-    result = subprocess.run(['gh', 'api', f'repos/{REPO}/contents/.claude/skills/ship/scripts/ship-check?ref=production'],
-                            capture_output=True, timeout=60, check=True)
-    body = json.loads(result.stdout)
-    if body.get('encoding') != 'base64':
-        raise ValueError('production ship-check is not base64 encoded; refusing the sweep')
-    checker = base64.b64decode(body['content'])
+def cache_dir(state):
+    return Path(os.environ.get('SHIP_GIT_CACHE') or state / 'git')
+
+
+def fetch_checker(state):
+    # One git fetch of production, then read the rules from it. No contents API call.
+    git = os.environ.get('SHIP_GIT', 'git')
+    cache = cache_dir(state)
+    remote = os.environ.get('SHIP_GIT_REMOTE', f'https://github.com/{REPO}.git')
+    env = dict(os.environ, GIT_TERMINAL_PROMPT='0')
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(cache) + '.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not (cache / 'HEAD').exists():
+            subprocess.run([git, 'init', '--bare', '-q', str(cache)], capture_output=True, timeout=60, check=True, env=env)
+        subprocess.run([git, '-C', str(cache), 'fetch', '--no-tags', '-q', remote, '+production:refs/premerge/production'],
+                       capture_output=True, timeout=600, check=True, env=env)
+        checker = subprocess.run([git, '-C', str(cache), 'show', f'refs/premerge/production:{CHECKER_PATH}'],
+                                 capture_output=True, timeout=60, check=True, env=env).stdout
     if not checker.startswith(b'#!'):
         raise ValueError('production ship-check is empty or not a script; refusing the sweep')
     return checker
+
+
+def paused():
+    # Another job saw a GitHub rate limit: do nothing and post nothing until the shared epoch passes.
+    pause = Path(os.environ.get('GH_PAUSE_FILE', Path.home() / '.local/state/gh-shared-cache/pause-until'))
+    try:
+        return float(pause.read_text().strip()) > time.time()
+    except (OSError, ValueError):
+        return False
 
 
 def open_prs():
@@ -93,6 +114,8 @@ def revoke_passing(state):
 
 
 def sweep():
+    if paused():
+        return
     state = Path(os.environ.get('PREMERGE_STATUS_STATE', Path.home() / '.local/state/premerge-evidence'))
     evidence = Path(os.environ.get('VCC_EVIDENCE_DIR', Path.home() / '.local/state/vcc-evidence'))
     state.mkdir(parents=True, exist_ok=True)
@@ -103,7 +126,7 @@ def sweep():
             return
         # Never execute a stale checker. Without current rules, passing statuses turn red so merges fail closed.
         try:
-            checker_bytes = fetch_checker()
+            checker_bytes = fetch_checker(state)
         except Exception:
             revoke_passing(state)
             raise
@@ -132,10 +155,10 @@ def sweep():
                 # Refresh periodically too: live flags and transient read errors can change without a push.
                 if (signature is not None and statuses and previous.get('fingerprint') == signature
                         and previous.get('state') == statuses[0].get('state')
-                        and time.time() - previous.get('checked', 0) < 600):
+                        and time.time() - previous.get('checked', 0) < REFRESH_SECONDS):
                     updated[key] = previous
                     continue
-                env = dict(os.environ, SHIP_REPO=REPO, SHIP_BASE='production')
+                env = dict(os.environ, SHIP_REPO=REPO, SHIP_BASE='production', SHIP_GIT_CACHE=str(cache_dir(state)))
                 result = subprocess.run([str(checker), 'premerge-status', key],
                                         capture_output=True, text=True, timeout=600, env=env)
                 print(f'PR #{key}: {result.stdout.strip()}', flush=True)

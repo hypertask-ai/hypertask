@@ -541,10 +541,9 @@ if args[:2] == ['pr', 'view']:
     else:
         print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
-if args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']:
-    with open('ship-check', 'rb') as checker:
-        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(checker.read()).decode()}))
-    sys.exit(0)
+if any('/contents/' in a for a in args):
+    # YPER4-251: the contents API is never called; files come from local git. The call is logged above and fails the run.
+    sys.exit(99)
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
@@ -568,25 +567,7 @@ if '/statuses/' in url:
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
-if '/contents/' in url:
-    if os.environ.get('FLAG_SOURCE_ERROR'):
-        sys.exit(1)
-    path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
-    ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
-    if path == 'src/lib/flags/definitions':
-        folder = os.environ['FLAG_SOURCE'] + '/flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
-        print(json.dumps([{'name': name, 'path': path + '/' + name, 'type': 'file'} for name in os.listdir(folder)]))
-        sys.exit(0)
-    if path.startswith('src/lib/flags/definitions/'):
-        folder = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
-        name = folder + '/' + path.rsplit('/', 1)[1]
-    else:
-        name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
-    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
-        name = 'keys-head'
-    with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
-        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(f.read().encode()).decode()}))
-elif '/files?' in url:
+if '/files?' in url:
     file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
         file['previous_filename'] = 'src/old-card.tsx'
@@ -595,6 +576,54 @@ elif '/files?' in url:
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
 else:
     print(json.dumps({'head': {'sha': os.environ.get('FLAG_HEAD', 'a' * 40)}, 'base': {'sha': os.environ.get('FLAG_BASE_SHA', 'b' * 40)}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
+MOCK
+# Fake git for the local PR source cache: `fetch` marks the cache filled, `show <sha>:<path>` serves FLAG_SOURCE files.
+cat > "$E/flag-bin/fakegit" <<'MOCK'
+#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+if os.environ.get('FLAG_LOG'):
+    with open(os.environ['FLAG_LOG'], 'a') as log:
+        log.write(json.dumps(['git'] + args) + '\n')
+if args[:2] == ['init', '--bare']:
+    os.makedirs(args[-1], exist_ok=True)
+    open(args[-1] + '/HEAD', 'w').close()
+    sys.exit(0)
+cache, cmd, rest = args[1], args[2], args[3:]
+marker = cache + '/filled'
+if cmd == 'fetch':
+    if os.environ.get('FLAG_FETCH_ERROR'):
+        sys.exit(1)
+    open(marker, 'w').close()
+    sys.exit(0)
+if cmd == 'cat-file':
+    sys.exit(0 if os.path.exists(marker) else 1)
+if cmd == 'ls-tree':
+    if os.environ.get('FLAG_SOURCE_ERROR'):
+        sys.exit(1)
+    ref, path = rest[-2], rest[-1]
+    if path.rstrip('/') != 'src/lib/flags/definitions':
+        sys.exit(1)
+    folder = os.environ['FLAG_SOURCE'] + '/flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
+    sys.stdout.write(''.join('100644 blob %s\t%s/%s\0' % ('0' * 40, path.rstrip('/'), n) for n in sorted(os.listdir(folder))))
+    sys.exit(0)
+if cmd == 'show':
+    if os.environ.get('FLAG_SOURCE_ERROR'):
+        sys.exit(1)
+    ref, path = rest[0].split(':', 1)
+    if ref.startswith('refs/premerge/production'):
+        sys.stdout.write(open('ship-check').read())
+        sys.exit(0)
+    if path.startswith('src/lib/flags/definitions/'):
+        name = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head') + '/' + path.rsplit('/', 1)[1]
+        sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
+        sys.exit(0)
+    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
+        name = 'keys-head'
+    sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
+    sys.exit(0)
+sys.exit(1)
 MOCK
 cat > "$E/flag-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
@@ -615,7 +644,8 @@ def live(request, timeout):
     return io.BytesIO(os.environ.get('FLAG_HTTP', '{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"}]}').encode())
 urllib.request.urlopen = live
 MOCK
-chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask"
+chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask" "$E/flag-bin/fakegit"
+export SHIP_GIT="$E/flag-bin/fakegit" SHIP_GIT_CACHE="$E/git-cache" GH_PAUSE_FILE="$E/no-pause"
 printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
 printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
@@ -738,6 +768,18 @@ printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_
 F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
 sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
 F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+# YPER4-251: a registry of several per-flag files is listed and read through local git, with 0 contents API calls.
+for d in base head; do printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"; done
+: > "$E/status-log"
+F 0 '' FLAG_LOG="$E/status-log"
+python3 - "$E/status-log" <<'PY' && ok 'per-flag directory: 0 contents calls, listed through git' || bad 'per-flag directory used the contents API or skipped git'
+import json, sys
+calls = [json.loads(l) for l in open(sys.argv[1])]
+assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
+assert any(c[0] == 'git' and 'ls-tree' in c for c in calls), 'directory not listed through git'
+assert sum(c[0] == 'git' and 'show' in c and any('definitions/htpr-' in a for a in c) for c in calls) >= 2, 'per-flag files not read through git'
+PY
+rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts"
 cp "$E/record" "$premerge"; rm "$E/flag-source/flags-head/htpr-9-newfix.ts"
 cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
 rm "$E/flag-source/definitions"
@@ -852,6 +894,20 @@ PY
 }
 printf 'const plain = 1;\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 S 0 success 'no released flag touched'
+# YPER4-251: one premerge-status run never touches the contents API and stays within a small fixed API budget.
+API_BUDGET() {
+  python3 - "$E/status-log" "$1" <<'PY' && ok "$2" || bad "$2"
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+api = [c for c in calls if c[0] in ('api', 'pr')]
+assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
+assert len(api) <= int(sys.argv[2]), (len(api), api)
+assert any(c[0] == 'git' and 'show' in c for c in calls), 'source was not read through local git'
+assert sum(c[0] == 'git' and 'fetch' in c for c in calls) <= 1, 'more than one git fetch per run'
+PY
+}
+API_BUDGET 6 'premerge-status: no contents API call, at most 6 API calls per PR'
+S 1 failure 'cannot read the PR diff' FLAG_FETCH_ERROR=1 SHIP_GIT_CACHE="$E/git-cache-cold"
 S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
 S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 S 1 failure 'complete PR diff' FLAG_COUNT=2
@@ -868,6 +924,7 @@ printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp 
 S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 S 0 success 'click record ok'
+API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
 sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
 S 1 failure 'missing passing click'
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
@@ -913,6 +970,68 @@ W 0 1 FLAG_ROLLUP=FAILURE
 W 1 0 FLAG_LIST_ERROR=1
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
+
+# YPER4-251: a sweep makes no GitHub call at all while the shared pause epoch is in the future.
+SWEEP_LOG() {
+  : > "$E/status-log"
+  env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" PREMERGE_STATUS_STATE="$E/sweep-state" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" python3 ./premerge-evidence.py >/dev/null 2>&1
+}
+echo $(( $(date +%s) + 3600 )) > "$E/pause-until"
+SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
+[ "$got" = 0 ] && [ ! -s "$E/status-log" ] && ok 'sweep exits with no calls while paused' || bad "sweep ran while paused: $got $(cat "$E/status-log")"
+echo $(( $(date +%s) - 10 )) > "$E/pause-until"
+SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
+[ "$got" = 0 ] && grep -q '"pr", "list"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
+# An unchanged head is skipped: only the one list call and the rules fetch, no per-PR reads and no contents API.
+SWEEP_LOG FLAG_ROLLUP=FAILURE # warm the cache with the status the record really has
+SWEEP_LOG FLAG_ROLLUP=FAILURE; got=$?
+python3 - "$E/status-log" <<'PY' && [ "$got" = 0 ] && ok 'sweep skips an unchanged head: one list call, no per-PR calls' || bad 'sweep re-checked an unchanged head'
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+api = [c for c in calls if c[0] in ('api', 'pr')]
+assert [c[:2] for c in api] == [['pr', 'list']], api
+assert not any('/contents/' in a for c in calls for a in c)
+PY
+
+# YPER4-251: the real local-git source layer (no fakes): one fetch, git show, missing path, directory listing, offline re-read.
+python3 - ./ship-check <<'PY' && ok 'local git source layer: fetch once, show, ls-tree, missing path' || bad 'local git source layer'
+import json, os, re, subprocess, sys, tempfile
+from pathlib import Path
+text = open(sys.argv[1]).read()
+layer = text[text.index('# PR files come from a local bare cache'):text.index('def constants(text):')]
+root = Path(tempfile.mkdtemp())
+origin = root / 'origin'
+env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t', GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t')
+def run(*args, cwd=origin):
+    return subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout.strip()
+origin.mkdir()
+run('git', 'init', '-q')
+(origin / 'src/lib/flags/definitions').mkdir(parents=True)
+(origin / 'src/lib/flags/keys.ts').write_text('base\n')
+run('git', 'add', '-A'); run('git', 'commit', '-qm', 'base'); base = run('git', 'rev-parse', 'HEAD')
+(origin / 'src/lib/flags/definitions/htpr-1-x.ts').write_text('export const X = "htpr-1-x";\n')
+(origin / 'src/lib/flags/keys.ts').write_text('head\n')
+run('git', 'add', '-A'); run('git', 'commit', '-qm', 'head'); head = run('git', 'rev-parse', 'HEAD')
+run('git', 'update-ref', 'refs/pull/7/head', head)
+os.environ.update(SHIP_GIT='git', SHIP_GIT_CACHE=str(root / 'cache'), SHIP_GIT_REMOTE=str(origin))
+ns = dict(json=json, os=os, re=re, subprocess=subprocess, Path=Path, repo='hypertask-ai/hypertask')
+exec(layer, ns)
+ns['prepare']('7', head, base)
+assert ns['source']('src/lib/flags/keys.ts', head) == 'head\n'
+assert ns['source']('src/lib/flags/keys.ts', base) == 'base\n'
+assert ns['listdir']('src/lib/flags/definitions', head) == [{'name': 'htpr-1-x.ts', 'path': 'src/lib/flags/definitions/htpr-1-x.ts', 'type': 'file'}]
+assert ns['listdir']('src/lib/flags/definitions', base) == []
+try:
+    ns['source']('src/nope.ts', head); raise SystemExit('missing path was served')
+except ValueError:
+    pass
+subprocess.run(['rm', '-rf', str(origin)], check=True)  # cached: a second prepare must not need the network
+ns['prepare']('7', head, base)
+try:
+    ns['prepare']('8', 'c' * 40); raise SystemExit('unknown sha accepted')
+except ValueError:
+    pass
+PY
 
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
