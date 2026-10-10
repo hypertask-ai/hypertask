@@ -1,5 +1,6 @@
 import { HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG } from "@/lib/flags/keys";
 import { useContext, useEffect, useState } from "react";
+import { X } from "lucide-react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { appShellRailAtom, showShortcutsAtom } from "@/store";
 import BackDropContainer from "./BackDropContainer";
@@ -146,16 +147,28 @@ const KeyboardShortcuts = () => {
           ? `${panelClassName} max-sm:w-full max-sm:pl-[env(safe-area-inset-left)] max-sm:pr-[env(safe-area-inset-right)] max-sm:pb-[env(safe-area-inset-bottom)]`
           : panelClassName}
       >
-        <input
-          className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "
-          id={INPUT_ID_CONSTANTS.KeyboardShortcuts}
-          autoFocus
-          placeholder="Search"
-          autoComplete="off"
-          style={{ backgroundColor: "transparent", outline: "none" }}
-          onChange={onKeyChange}
-          value={keyword}
-        />
+        <div className={shortcutsHelpPhone ? "max-sm:flex max-sm:items-start" : undefined}>
+          <input
+            className="text-subheading w-full  sm:text-heading leading-[21.74px] bg-transparent outline-none font-medium px-4 pt-4 placeholder:text-[#8E9093]  "
+            id={INPUT_ID_CONSTANTS.KeyboardShortcuts}
+            autoFocus
+            placeholder="Search"
+            autoComplete="off"
+            style={{ backgroundColor: "transparent", outline: "none" }}
+            onChange={onKeyChange}
+            value={keyword}
+          />
+          {shortcutsHelpPhone && (
+            <button
+              type="button"
+              aria-label="Close keyboard shortcuts"
+              className="hidden max-sm:flex h-11 w-11 shrink-0 items-center justify-center mr-4 mt-2 cursor-pointer rounded-sm text-text-light-gray hover:text-white-black focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white-black"
+              onClick={() => setShowShortcuts(false)}
+            >
+              <X size={18} strokeWidth={1.75} aria-hidden />
+            </button>
+          )}
+        </div>
         <div className="px-4">
           {filteredShortcuts?.map((section: any, sectionIndex: number) => (
             <div key={sectionIndex}>

@@ -32,16 +32,17 @@ function loadComponent(file, dependencies) {
   return exports.default;
 }
 
-function render(enabled, apple = true) {
+function createComponent(enabled, apple = true, setShowShortcuts = () => {}) {
   const BackDrop = loadComponent("src/components/sidebars/BackDropContainer.tsx", {
     react: React,
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   });
   const Component = loadComponent("src/components/sidebars/keyboardShortcuts.tsx", {
     react: React,
+    "lucide-react": require("lucide-react"),
     "@/lib/flags/keys": keys,
     "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
-    "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, () => {}] },
+    "@/lib/state": { useRecoilValue: () => false, useRecoilState: () => [true, setShowShortcuts] },
     "@/store": { appShellRailAtom: {}, showShortcutsAtom: {} },
     "./BackDropContainer": { __esModule: true, default: BackDrop },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => apple },
@@ -53,7 +54,11 @@ function render(enabled, apple = true) {
     },
     "@/lib/constants/shortcuts": shortcuts,
   });
-  return renderToStaticMarkup(React.createElement(Component));
+  return Component;
+}
+
+function render(enabled, apple = true) {
+  return renderToStaticMarkup(React.createElement(createComponent(enabled, apple)));
 }
 
 async function styles(html) {
@@ -131,6 +136,43 @@ test("flag-on phone layout uses responsive width, wrapping rows and non-shrinkin
   }
 });
 
+test("phone close control is flag-gated and closes once without triggering outside-click handling", async () => {
+  const offDoc = new JSDOM(render(false)).window.document;
+  assert.equal(offDoc.querySelector('[aria-label="Close keyboard shortcuts"]'), null);
+
+  const dom = new JSDOM('<div id="root"></div>');
+  const previous = { window: global.window, document: global.document, act: global.IS_REACT_ACT_ENVIRONMENT };
+  global.window = dom.window;
+  global.document = dom.window.document;
+  global.IS_REACT_ACT_ENVIRONMENT = true;
+  const { createRoot } = require("react-dom/client");
+  const mounted = createRoot(document.getElementById("root"));
+  const calls = [];
+  try {
+    const Component = createComponent(true, true, (value) => calls.push(value));
+    await React.act(() => mounted.render(React.createElement(Component)));
+    const close = document.querySelector('[aria-label="Close keyboard shortcuts"]');
+    assert.ok(close);
+    assert.equal(close.type, "button");
+    for (const className of ["hidden", "max-sm:flex", "h-11", "w-11", "shrink-0"]) {
+      assert.ok(close.classList.contains(className), className);
+    }
+    assert.equal(close.previousElementSibling.id, "shortcuts-search");
+    assert.ok(document.getElementById("shortcuts-help").contains(close));
+    assert.ok(close.querySelector('svg.lucide-x[aria-hidden="true"]'));
+    await React.act(() => close.click());
+    assert.deepEqual(calls, [false], "close calls the setter once, not the outside-click handler too");
+    await React.act(() => document.body.click());
+    assert.deepEqual(calls, [false, false], "positive control: outside clicks still close the panel");
+  } finally {
+    await React.act(() => mounted.unmount());
+    global.window = previous.window;
+    global.document = previous.document;
+    global.IS_REACT_ACT_ENVIRONMENT = previous.act;
+    dom.window.close();
+  }
+});
+
 test("real component and Tailwind CSS fit phone in all themes and preserve desktop geometry", async (t) => {
   const browser = await chromium.launch({ headless: true });
   t.after(() => browser.close());
@@ -152,6 +194,17 @@ test("real component and Tailwind CSS fit phone in all themes and preserve deskt
           await page.setContent(`<style>${css}</style>${html}`);
           await page.evaluate((theme) => { document.documentElement.className = theme; }, theme);
           await page.evaluate(() => document.fonts.ready);
+          const close = page.getByRole("button", { name: "Close keyboard shortcuts", includeHidden: true });
+          if (!enabled) {
+            assert.equal(await close.count(), 0, "flag Off has no close control");
+          } else if (width === 390) {
+            assert.equal(await close.isVisible(), true, "phone close control is visible");
+            const bounds = await close.boundingBox();
+            assert.equal(bounds.width, 44, "phone close target is 44px wide");
+            assert.equal(bounds.height, 44, "phone close target is 44px high");
+          } else {
+            assert.equal(await close.isVisible(), false, "desktop close control stays hidden");
+          }
           await page.evaluate(() => {
             const heading = [...document.querySelectorAll("h3")].find((node) => node.textContent === "Task View");
             document.getElementById("shortcuts-help").scrollTop = heading.offsetTop - 24;
