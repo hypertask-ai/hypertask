@@ -133,6 +133,7 @@ const SearchComp = ({
   const content = (
     <>
       <div
+        data-testid="search-panel"
         suppressHydrationWarning
         onClick={(e) => setSelectedIndex(null)}
         autoFocus={false}

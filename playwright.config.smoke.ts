@@ -38,8 +38,10 @@ export default defineConfig({
     // browserName pinned: the iPhone 13 device descriptor defaults to WebKit,
     // but the workflow only installs the Chromium binary (HTPR-6199 review).
     { name: 'Mobile', testMatch: /(?:prod|layout-lock)\.spec\.ts/, use: { ...devices['iPhone 13'], browserName: 'chromium' } },
+    // YPER4-252: the layout lock matrix sets its own window width, so it runs once, on a desktop browser.
+    { name: 'Matrix', testMatch: /layout-lock-matrix\.spec\.ts/, use: { ...devices['Desktop Chrome'] } },
 
-    // HTPR-6636 phase 2 , customer journeys, opt-in via HT_QA_JOURNEYS=1
+    // HTPR-6636 phase 2, customer journeys, opt-in via HT_QA_JOURNEYS=1
     // (every test here self-skips otherwise, so this is harmless in
     // prod-health.yml, which sets neither env var and doesn't pass
     // --project). "journeys-setup" resolves/creates "QA runner board" once

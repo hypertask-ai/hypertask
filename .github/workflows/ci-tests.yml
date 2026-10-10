@@ -421,6 +421,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
+      # approved it, named in approvedIn and in a "Layout change approved: <URL>" PR body line.
+      - name: Layout change needs a recorded approval
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          node .github/scripts/layout-lock-approval.mjs
       - name: Install dependencies and Chromium
         run: |
           npm ci --prefer-offline --no-audit --no-fund
@@ -484,13 +493,22 @@ jobs:
             sleep 2
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
-          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
           # Layout lock must also cover unreleased and newly registered flags.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
-          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
+      # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
+      - name: Upload layout lock screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: layout-lock-matrix
+          path: test-results/layout-lock-matrix/
+          if-no-files-found: ignore
+          retention-days: 7
 
   production-test-warning:
     name: production-test-warning
