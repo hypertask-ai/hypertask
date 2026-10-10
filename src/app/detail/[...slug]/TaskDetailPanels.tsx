@@ -5,6 +5,8 @@ import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG } from "@/lib/flags/keys";
+import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
+import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 import { Suspense } from "react";
@@ -75,7 +77,9 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const detailFit = useFlag(HTPR_7055_AI_SIDEBAR_DETAIL_FIT_FLAG);
-  const { secondaryPanelsReady, cachedLayout } = useTaskContext();
+  const { secondaryPanelsReady, cachedLayout, virtualizer } = useTaskContext();
+  // HTPR-7074: the phone composer waits for the thread height to stop growing.
+  const threadSettled = useThreadSettled(virtualizer?.getTotalSize() ?? 0, virtualizer?.getVirtualItems().length ?? 0, !cachedLayout && Boolean(_mbl) && !embedded);
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -204,7 +208,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   />
                 )}
               </div>
-                {_mbl && !embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+                {_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled={threadSettled}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>}
               </TaskDetailMainContainer>
             </MobileTaskDetailSwipe>
           </div>

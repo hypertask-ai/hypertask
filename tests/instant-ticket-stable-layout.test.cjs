@@ -57,6 +57,9 @@ const lateInfo = marker("late-info");
 const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", {
   ...common,
   "@/hooks/General/useHydrated": { useHydrated: () => true },
+  "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => true },
+  "./SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
+  "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
   "next/dynamic": { default: () => marker("reactions") },
   "./DescriptionContainer": { default: ({ children }) => React.createElement("article", { "data-part": "description" }, children) },
   "./DescriptionContainer/TopRow/DescriptionTopRow": { default: marker("author") },

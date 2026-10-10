@@ -195,7 +195,7 @@ test("pending cached details paint property geometry immediately but defer edito
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
   assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
   assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
-  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled=\{threadSettled\}><Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
-  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*\/\/[^\n]*\n\s*<SettledComposerSlot settled=\{threadSettled\}><Suspense fallback=\{null\}><NewCommentComponent/);
 });

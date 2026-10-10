@@ -45,7 +45,7 @@ const { SESSION_TTL_SECONDS, signSession } = jiti(
 
 const runKey = `${process.env.GITHUB_RUN_ID ?? process.pid}-${process.env.GITHUB_RUN_ATTEMPT ?? "1"}-${randomUUID()}`;
 
-async function createBoard({ ownerId, teamId, googleAccountId, title, suffix }) {
+async function createBoard({ ownerId, teamId, googleAccountId, title, suffix, longThread = false }) {
   const sectionTitles = ["To do", "Done"];
   const project = await prisma.project.create({
     data: {
@@ -99,6 +99,18 @@ async function createBoard({ ownerId, teamId, googleAccountId, title, suffix }) 
       createdAt: new Date(Date.now() - (2 - index) * 60_000),
     })),
   });
+  // HTPR-7074: the CLS test gets its own board, so the layout-lock fixture ticket stays exactly as it was.
+  if (longThread) {
+    await prisma.comment.createMany({
+      data: Array.from({ length: 6 }, (_, index) => ({
+        taskId: task.id,
+        creatorId: ownerId,
+        text: [1, 2].map((paragraph) => `<p>Long thread comment ${index + 1}, paragraph ${paragraph}. The quick brown fox jumps over the lazy dog, then keeps going so this paragraph wraps onto several lines in the thread.</p>`).join(""),
+        commentText: `Long thread comment ${index + 1}`,
+        createdAt: new Date(Date.now() - (9 - index) * 60_000),
+      })),
+    });
+  }
   return { ...project, task };
 }
 
@@ -194,6 +206,14 @@ async function seedSessionFixtures(flags) {
     title: "Browser smoke demo board",
     suffix: "demo",
   });
+  const threadBoard = await createBoard({
+    ownerId: user.id,
+    teamId: team.id,
+    googleAccountId: googleAccount.id,
+    title: "Browser smoke long thread board",
+    suffix: "thread",
+    longThread: true,
+  });
 
   const sessionUser = await prisma.user.findUnique({
     where: { id: user.id },
@@ -258,6 +278,7 @@ async function seedSessionFixtures(flags) {
     title: board.task.title,
     description: "This seeded ticket must open from its board card.",
     detailPath: `/detail/project-${board.id}/${board.task.uniqueIndex}`,
+    longThreadDetailPath: `/detail/project-${threadBoard.id}/${threadBoard.task.uniqueIndex}`,
     flags,
     ...(localPremerge ? { searchRows: [board, demoBoard].map(project => ({
       id: String(project.task.id),
