@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, "..");
 const flag = "htpr-6950-tooltip-top-layer";
 
 test("the tooltip feature is registered with its ship date and Owner + QA default", () => {
-  const definitions = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  const definitions = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
   const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
   assert.match(keys, /export const HTPR_6950_TOOLTIP_TOP_LAYER_FLAG = "htpr-6950-tooltip-top-layer"/);
   assert.match(definitions, /key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,\s+shippedOn: "2026-10-05",\s+description: "Keeps hover tooltips above other interface layers without being clipped or covered\."/);

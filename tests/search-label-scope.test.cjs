@@ -113,7 +113,7 @@ async function withSearch(t, config, check) {
 test('registry registers the label flag with Owner + QA defaults and documents it', () => {
   const jiti = createJiti(__filename, { interopDefault: true })
   assert.equal(jiti(path.join(root, 'src/lib/flags/keys.ts')).HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, labelFlag)
-  const registry = fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8')
+  const registry = (fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + fs.readFileSync(path.join(root, 'src/lib/flags/definitions.ts'), 'utf8'))
   assert.match(registry, /key: HTPR_6878_SEARCH_LABEL_SCOPE_FLAG/)
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
   assert.ok(fs.readFileSync(path.join(root, '.claude/skills/verify-qa/reference/feature-map/search.md'), 'utf8').includes(labelFlag))

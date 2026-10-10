@@ -414,7 +414,10 @@ try:
     registry = source('src/lib/flags.ts', base)
     keys = constants(source('src/lib/flags/keys.ts', base))
     default = re.search(r'\bDEFAULT_FEATURE_FLAG_MODE[^=]*=\s*[\'\"](\w+)[\'\"]', registry)
-    definitions = re.search(r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const', registry)
+    definitions_pattern = r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const'
+    definitions = re.search(definitions_pattern, registry)
+    if not definitions:
+        definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
     if not default or not definitions:
         raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
     defaults = {}

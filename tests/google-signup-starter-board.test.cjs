@@ -117,6 +117,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
+  aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)

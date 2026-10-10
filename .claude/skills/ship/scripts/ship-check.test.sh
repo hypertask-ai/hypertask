@@ -573,7 +573,7 @@ if '/contents/' in url:
         sys.exit(1)
     path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
     ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
-    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
     if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
         name = 'keys-head'
     with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
@@ -625,6 +625,17 @@ F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
 F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
 F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
 F 2 'registry defaults cannot prove' AGENT_TOKEN=
+# The base registry may keep runtime defaults while definitions live in their own module.
+cp "$E/flag-source/registry" "$E/flag-source/definitions"
+printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+F 2 'record a browser click-through'
+F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
+printf 'export type FeatureFlagKind = "feature";\n' > "$E/flag-source/definitions"
+F 2 'cannot resolve flag registry defaults'
+printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+rm "$E/flag-source/definitions"
 # Without the owner-only endpoint, the plain QA account's view decides: on for it means on for Everyone.
 F 2 'record a browser click-through' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
 F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'

@@ -167,7 +167,7 @@ These are planning ranges, assuming roughly forty changed files per slice and ex
 
 ## HTPR-6923: remaining Pages Router migration
 
-Ticket: https://app.hypertask.ai/detail/project-15/6923. Baseline: `fdb5e4e4c84d906dc061b51811b5a80179aa5192`. This section supersedes the historical no-flag assumption **for this migration only**: Valentin requires server flag `htpr-6923-app-router-writes`, registered in `src/lib/flags.ts`, using the existing `DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"`. No flag mode is changed by this work.
+Ticket: https://app.hypertask.ai/detail/project-15/6923. Baseline: `fdb5e4e4c84d906dc061b51811b5a80179aa5192`. This section supersedes the historical no-flag assumption **for this migration only**: Valentin requires server flag `htpr-6923-app-router-writes`, registered in `src/lib/flags/definitions.ts`, using the existing `DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"`. No flag mode is changed by this work.
 
 ### URL ownership and compatibility design
 

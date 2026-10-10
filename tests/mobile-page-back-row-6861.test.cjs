@@ -39,8 +39,8 @@ const checkNoUtilityActions = (markup) => assert.doesNotMatch(markup, /Version|D
 
 test("the new flag is registered with the requested ship date and Owner + QA default", () => {
   assert.match(read("src/lib/flags/keys.ts"), /HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG\s*=\s*"htpr-6861-mobile-page-back-row"/);
-  assert.match(read("src/lib/flags.ts"), /key: HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,\s*shippedOn: "2026-10-03",\s*description:/);
-  assert.match(read("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE[^=]*=\s*"OWNER_AND_QA"/);
+  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,\s*shippedOn: "2026-10-03",\s*description:/);
+  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /DEFAULT_FEATURE_FLAG_MODE[^=]*=\s*"OWNER_AND_QA"/);
   assert.match(editor, /useFlag\(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG\)/);
 });
 

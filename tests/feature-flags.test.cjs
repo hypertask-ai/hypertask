@@ -194,7 +194,7 @@ test("new-task window view context defaults to Everyone as a bugfix and respects
 test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG;
   assert.equal(key, "htpr-6999-ctrl-j-view-context");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
     .match(/key: HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,[\s\S]*?\n  \},/)?.[0];
   assert.match(definition, /kind: "bugfix",\n  \},$/);
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
@@ -212,7 +212,7 @@ test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", as
 test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
   assert.equal(key, "htpr-7002-inbox-e-first-press");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
     .match(/key: HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,[\s\S]*?\n  \},/)?.[0];
   assert.match(definition, /kind: "bugfix",\n  \},$/);
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
@@ -1243,8 +1243,10 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
   // Classify one real definition only in this module fixture, not in the production registry.
-  fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+  fs.writeFileSync(path.join(dir, "definitions.ts"), fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
     .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", 'key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix",'));
+  fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+    .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
   const key = "htpr-6950-tooltip-top-layer";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
@@ -1276,8 +1278,10 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const key = "htpr-6950-tooltip-top-layer";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
-    fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+    fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8")
       .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", `key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix", defaultMode: "${mode}",`));
+    fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+      .replaceAll("@/lib/flags/definitions", `./definitions-${mode}.ts`));
     const fixtureFlags = jiti(fixture);
     assert.equal(fixtureFlags.defaultFeatureFlagMode(key), mode);
     assert.equal((await fixtureFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);

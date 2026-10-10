@@ -471,7 +471,8 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
     if (mutation) return;
     if (!(typescript.isIdentifier(node) && node.text === name && node !== declaration.name) ||
         (typescript.isPropertyAccessExpression(node.parent) && node.parent.name === node) ||
-        (typescript.isPropertyAssignment(node.parent) && node.parent.name === node)) {
+        (typescript.isPropertyAssignment(node.parent) && node.parent.name === node) ||
+        (typescript.isImportSpecifier(node.parent) && node.parent.name === node && !node.parent.propertyName)) {
       return;
     }
 
@@ -615,31 +616,38 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
 }
 
 function parseDefinitions(ref) {
-  const source = git(["show", `${ref}:src/lib/flags.ts`]);
-  const imports = parseImports(source);
-  const sourceFile = typescript.createSourceFile(
-    "src/lib/flags.ts",
-    source,
-    typescript.ScriptTarget.Latest,
-    true,
-    typescript.ScriptKind.TS,
-  );
-  if (sourceFile.parseDiagnostics.length > 0) {
-    throw new Error(`invalid src/lib/flags.ts: ${sourceFile.parseDiagnostics[0].messageText}`);
-  }
+  const paths = ["src/lib/flags.ts"];
+  const definitionsPath = "src/lib/flags/definitions.ts";
+  if (git(["ls-tree", "--name-only", ref, definitionsPath]).trim()) paths.push(definitionsPath);
+  const sourceFiles = paths.map((path) => {
+    const sourceFile = typescript.createSourceFile(
+      path,
+      git(["show", `${ref}:${path}`]),
+      typescript.ScriptTarget.Latest,
+      true,
+      typescript.ScriptKind.TS,
+    );
+    if (sourceFile.parseDiagnostics.length > 0) {
+      throw new Error(`invalid ${path}: ${sourceFile.parseDiagnostics[0].messageText}`);
+    }
+    return sourceFile;
+  });
 
   const declarations = new Map();
-  for (const statement of sourceFile.statements) {
-    if (!typescript.isVariableStatement(statement)) continue;
-    for (const declaration of statement.declarationList.declarations) {
-      if (!typescript.isIdentifier(declaration.name)) continue;
-      if (declarations.has(declaration.name.text)) {
-        throw new Error(`duplicate ${declaration.name.text} declaration`);
+  for (const sourceFile of sourceFiles) {
+    for (const statement of sourceFile.statements) {
+      if (!typescript.isVariableStatement(statement)) continue;
+      for (const declaration of statement.declarationList.declarations) {
+        if (!typescript.isIdentifier(declaration.name)) continue;
+        if (declarations.has(declaration.name.text)) {
+          throw new Error(`duplicate ${declaration.name.text} declaration`);
+        }
+        declarations.set(declaration.name.text, {
+          declaration,
+          sourceFile,
+          isConst: Boolean(statement.declarationList.flags & typescript.NodeFlags.Const),
+        });
       }
-      declarations.set(declaration.name.text, {
-        declaration,
-        isConst: Boolean(statement.declarationList.flags & typescript.NodeFlags.Const),
-      });
     }
   }
 
@@ -647,8 +655,11 @@ function parseDefinitions(ref) {
   const modeBinding = declarations.get("DEFAULT_FEATURE_FLAG_MODE");
   if (!definitionsBinding?.isConst) throw new Error("FEATURE_FLAG_DEFINITIONS must be declared const");
   if (!modeBinding?.isConst) throw new Error("DEFAULT_FEATURE_FLAG_MODE must be declared const");
-  assertPolicyBindingImmutable(sourceFile, "FEATURE_FLAG_DEFINITIONS", definitionsBinding.declaration);
-  assertPolicyBindingImmutable(sourceFile, "DEFAULT_FEATURE_FLAG_MODE", modeBinding.declaration);
+  const imports = parseImports(definitionsBinding.sourceFile.text);
+  for (const sourceFile of sourceFiles) {
+    assertPolicyBindingImmutable(sourceFile, "FEATURE_FLAG_DEFINITIONS", definitionsBinding.declaration);
+    assertPolicyBindingImmutable(sourceFile, "DEFAULT_FEATURE_FLAG_MODE", modeBinding.declaration);
+  }
 
   let definitions = definitionsBinding.declaration.initializer;
   while (definitions && (typescript.isParenthesizedExpression(definitions) ||
@@ -721,7 +732,9 @@ function parseDefinitions(ref) {
   const bugfixModeBinding = declarations.get("DEFAULT_BUGFIX_FLAG_MODE");
   if (bugfixModeBinding || kinds.includes("bugfix")) {
     if (!bugfixModeBinding?.isConst) throw new Error("DEFAULT_BUGFIX_FLAG_MODE must be declared const");
-    assertPolicyBindingImmutable(sourceFile, "DEFAULT_BUGFIX_FLAG_MODE", bugfixModeBinding.declaration);
+    for (const sourceFile of sourceFiles) {
+      assertPolicyBindingImmutable(sourceFile, "DEFAULT_BUGFIX_FLAG_MODE", bugfixModeBinding.declaration);
+    }
     const bugfixMode = unwrapExpr(bugfixModeBinding.declaration.initializer);
     if (!bugfixMode || !typescript.isStringLiteral(bugfixMode) || bugfixMode.text !== "EVERYONE") {
       throw new Error("Bugfix flags must default to Everyone.");
@@ -1882,7 +1895,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   }
 
   // Title exemptions never permit widening a feature default to Everyone.
-  if (changedFiles.includes("src/lib/flags.ts")) {
+  if (changedFiles.some((path) => ["src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path))) {
     try {
       parseDefinitions(headSha);
     } catch (error) {

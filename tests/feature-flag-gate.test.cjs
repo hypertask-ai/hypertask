@@ -1382,7 +1382,7 @@ test("bugfix kind and default must be immutable literal declarations", async (t)
 
 test("welcome email registers its ticket-specific feature with the restricted default", () => {
   const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
-  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8");
   assert.match(keys, /export const HTPR_7025_WELCOME_EMAIL_FLAG = "htpr-7025-welcome-email";/);
   const definition = flags.match(/\{\s*key: HTPR_7025_WELCOME_EMAIL_FLAG,([\s\S]*?)\n  \}/)?.[1];
   assert.ok(definition);
@@ -1391,4 +1391,54 @@ test("welcome email registers its ticket-specific feature with the restricted de
   assert.match(flags, /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   const welcome = fs.readFileSync(path.join(root, "src/lib/onboarding/emails/welcome.ts"), "utf8");
   assert.match(welcome, /isFeatureEnabled\(HTPR_7025_WELCOME_EMAIL_FLAG,/);
+});
+
+test("extracted definitions accept new flags for COST UI PRs and legacy rebases", async (t) => {
+  for (const legacyBase of [false, true]) {
+    const { dir, git } = makeRepo(t);
+    const move = (source) => {
+      writeFile(dir, "src/lib/flags/definitions.ts", source.replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, ""));
+      writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nexport const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);\n');
+    };
+    if (!legacyBase) move(flagsSource());
+    const base = commit(git, "base registry");
+    writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport const COST_FLAG = "htpr-7038-test-cost";\n');
+    move(flagsSource(["OTHER_FLAG", "COST_FLAG"]).replace("{ OTHER_FLAG }", "{ OTHER_FLAG, COST_FLAG }"));
+    writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { COST_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(COST_FLAG) ? <div /> : null;\n');
+    const head = commit(git, "flagged cost UI");
+    const result = await evaluate("HTPR-7038 [COST] change widget", base, head, dir);
+    assert.equal(result.pass, true, result.reason);
+    // Resolve a rebase by keeping the definitions in the legacy location instead.
+    writeFile(dir, "src/lib/flags/definitions.ts", 'export type FeatureFlagKind = "feature";\n');
+    writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG", "COST_FLAG"]).replace("{ OTHER_FLAG }", "{ OTHER_FLAG, COST_FLAG }"));
+    const rebased = commit(git, "legacy conflict resolution");
+    const legacyResult = await evaluate("HTPR-7038 [COST] change widget", base, rebased, dir);
+    assert.equal(legacyResult.pass, true, legacyResult.reason);
+  }
+});
+
+test("extracted definition policy rejects mutations and unsafe defaults before title exemptions", async (t) => {
+  for (const mutation of ["definition", "imported", "imported-alias", "feature-default", "bugfix-default"]) {
+    const { dir, git } = makeRepo(t);
+    const definitions = flagsSource().replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, "");
+    const runtime = 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nconst DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n';
+    writeFile(dir, "src/lib/flags/definitions.ts", definitions);
+    writeFile(dir, "src/lib/flags.ts", runtime);
+    const base = commit(git, "split registry");
+    if (mutation === "definition") {
+      writeFile(dir, "src/lib/flags/definitions.ts", definitions + 'FEATURE_FLAG_DEFINITIONS.push({ key: OTHER_FLAG });\n');
+    } else if (mutation === "imported") {
+      writeFile(dir, "src/lib/flags.ts", runtime + 'FEATURE_FLAG_DEFINITIONS.push({ key: OTHER_FLAG });\n');
+    } else if (mutation === "imported-alias") {
+      writeFile(dir, "src/lib/flags.ts", runtime.replace("{ FEATURE_FLAG_DEFINITIONS }", "{ FEATURE_FLAG_DEFINITIONS as escaped }") + 'escaped.push({ key: "htpr-1-other" });\n');
+    } else {
+      writeFile(dir, "src/lib/flags/definitions.ts", definitions.replace('description: "fixture"', 'description: "fixture", kind: "bugfix"'));
+      writeFile(dir, "src/lib/flags.ts", mutation === "feature-default" ? runtime.replace('"OWNER_AND_QA"', '"EVERYONE"') : runtime.replace('"EVERYONE"', '"OFF"'));
+    }
+    writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+    const head = commit(git, "invalid split policy");
+    const result = await evaluate("YPER4-234 [INFRA] change widget", base, head, dir);
+    assert.equal(result.pass, false, mutation);
+    assert.match(result.reason, /parsed safely/);
+  }
 });

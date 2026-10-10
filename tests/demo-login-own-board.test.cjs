@@ -121,6 +121,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/routing/detailWithoutTicket': { detailWithoutTicketRedirect: () => null },
     '@/lib/tutorial/keyboardShortcutTutorial': { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
   }
+  aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   aliases['@/utils/controllers/users/completeOnboardingStep'] = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)

@@ -272,7 +272,7 @@ test("integration uses committed fenced task state and excludes trusted backgrou
 test("schema stays unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
   assert.equal(execFileSync("git", ["diff", "origin/production", "--", "src/prisma"], { cwd: root, encoding: "utf8" }), "");
-  assert.match(read("src/lib/flags.ts"), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
+  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
   assert.match(read("src/lib/flags/keys.ts"), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
 });
 
@@ -282,7 +282,7 @@ test("changed-file typecheck has no diagnostics in feature code", { skip: !proce
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   assert.equal(parsed.errors.length, 0);
   const program = ts.createProgram(parsed.fileNames, { ...parsed.options, incremental: false, noEmit: true });
-  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "src/utils/controllers/section/sectionService.ts", "src/lib/ai/tools/section.ts"];
+  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "src/utils/controllers/section/sectionService.ts", "src/lib/ai/tools/section.ts"];
   const diagnostics = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
   for (const file of files) {
     const source = program.getSourceFile(path.join(root, file));

@@ -120,7 +120,7 @@ test('spec validates the registry in both modes and applies allowances only to a
   const screens = Object.fromEntries(Object.entries(committed.viewports).flatMap(([device, viewport]) =>
     Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value])));
   const keys = require('jiti')(__filename)('../src/lib/flags/keys.ts');
-  const definitions = fs.readFileSync(path.join(__dirname, '../src/lib/flags.ts'), 'utf8').split('const FEATURE_FLAG_DEFINITIONS = [')[1].split('export const FEATURE_FLAG_KEYS')[0];
+  const definitions = fs.readFileSync(path.join(__dirname, '../src/lib/flags/definitions.ts'), 'utf8').split('const FEATURE_FLAG_DEFINITIONS = [')[1].split('] as const')[0];
   const registry = [...definitions.matchAll(/key: ([A-Z_0-9]+),/g)].map(match => keys[match[1]]).filter(Boolean);
   assert.deepEqual(validateFlagChanges(entries, registry, screens), []);
 });
