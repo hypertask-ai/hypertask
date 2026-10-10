@@ -35,6 +35,8 @@ const warmTaskDetail = () => Promise.all([
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions"),
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions"),
   import("@/components/PageComponents/TaskDetail/TaskMovement"),
+  // The description and comment editors load this chunk on first mount.
+  import("@/components/RTE/TipTapTaskDetail"),
   // These nested imports otherwise start when the first comments/provider mount.
   import("@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp"),
   import("@/lib/constants/emojiData"),
@@ -42,6 +44,20 @@ const warmTaskDetail = () => Promise.all([
   import("firebase/messaging"),
   import("@/components/RTE/Extensions/lazyEmojiData").then(({ ensureEmojiData }) => ensureEmojiData()),
 ]);
+
+// HTPR-6853: build one throwaway headless editor at idle, once per page load,
+// so the first ticket open does not pay the one-time ProseMirror setup cost.
+let editorWarmScheduled = false;
+const warmEditorAtIdle = () => {
+  if (editorWarmScheduled) return;
+  editorWarmScheduled = true;
+  const run = () => {
+    if (window.location.pathname.startsWith("/detail/")) return;
+    void import("@/components/RTE/warmEditor").then(({ warmTiptapEditor }) => warmTiptapEditor()).catch(() => {});
+  };
+  if (window.requestIdleCallback) window.requestIdleCallback(run, { timeout: 3000 });
+  else window.setTimeout(run, 1000);
+};
 
 export default function CachedTaskDetailNavigation({ children, accountId }: {
   children: ReactNode;
@@ -149,7 +165,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (warming) return;
       warming = true;
       // Import only: no ticket requests, editor mounts or permission prompts.
-      void warmTaskDetail().catch(() => { warming = false; });
+      void warmTaskDetail().then(warmEditorAtIdle).catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
     // A paint or idle callback can precede real content on a throttled phone.

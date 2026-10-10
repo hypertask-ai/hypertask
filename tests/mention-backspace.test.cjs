@@ -26,15 +26,12 @@ function sharedEditorRegistersMentionDeletion(source) {
     if (
       ts.isVariableDeclaration(node) &&
       ts.isIdentifier(node.name) &&
-      node.name.text === "extensions" &&
-      node.initializer &&
-      ts.isCallExpression(node.initializer) &&
-      ts.isIdentifier(node.initializer.expression) &&
-      node.initializer.expression.text === "useMemo"
+      node.name.text === "createTiptapExtensions" &&
+      node.initializer
     ) {
-      const factory = node.initializer.arguments[0];
+      const factory = node.initializer;
       const extensionArray =
-        factory && ts.isArrowFunction(factory) && ts.isArrayLiteralExpression(factory.body)
+        ts.isArrowFunction(factory) && ts.isArrayLiteralExpression(factory.body)
           ? factory.body
           : undefined;
       extensionsIncludeDeletion = Boolean(

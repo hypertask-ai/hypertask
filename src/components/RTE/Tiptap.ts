@@ -75,80 +75,19 @@ const DisableEnter = Extension.create({
     };
   },
 });
-interface IProps {
-  defaultContent?: string;
-  mode: any;
-  createNewComment?: boolean;
-  trackFocus?: boolean;
-  mentionProjectId?: number | null;
-  // Overrides the mode-derived random tip, for callers (e.g. the feedback
-  // form) that need a fixed, specific placeholder instead.
-  placeholder?: string;
-}
-const useTiptap = ({
+// Shared by the live editor and the idle warm-up (HTPR-6853) so both build the
+// exact same extension set.
+export const createTiptapExtensions = ({
   mode,
-  defaultContent = "",
-  createNewComment = false,
-  trackFocus = true,
+  placeholderText,
   mentionProjectId,
-  placeholder,
-}: IProps) => {
-  const isApple = useDeviceContext();
-  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
-  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  let newTaskWindow = false;
-  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
-  const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
-  const localWritingAssistanceRef = useRef(localWritingAssistance);
-  localWritingAssistanceRef.current = localWritingAssistance;
-  // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
-  // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
-  const isMobileView = useContext(MobileViewContext);
-  // Tiptap's onDestroy hands back no editor, so keep the instance from onCreate
-  // to unregister the exact editor that died, not whoever holds `mode` now.
-  const editorRef = useRef<Editor | null>(null);
-  // Capture the initial content once. Passing a changing `content` to useEditor
-  // makes it call setOptions on re-render, which reconfigures the ProseMirror
-  // plugins and destroys any open suggestion popup. The content prop changes
-  // while editing (draft autosave updates the draft query that feeds it), so we
-  // freeze the value the editor was created with. Callers only render this editor
-  // once real content is available, and content updates flow through the editor
-  // itself after mount, so freezing the initial value is safe.
-  const [initialContent] = useState(defaultContent);
-  const editorProps = useMemo(() => {
-    if (mode !== "read-edit-description") return writingAssistanceEditorProps;
-
-    const stickyHeaderOffset = getTaskDetailStickyHeaderOffset();
-
-    return {
-      ...writingAssistanceEditorProps,
-      scrollThreshold: {
-        top: stickyHeaderOffset,
-        right: 0,
-        bottom: 0,
-        left: 0,
-      },
-      scrollMargin: {
-        top: stickyHeaderOffset,
-        right: defaultScrollMargin,
-        bottom: defaultScrollMargin,
-        left: defaultScrollMargin,
-      },
-    };
-    // mode is fixed for each editor instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-  // Memoize the extensions so their instances are stable across renders.
-  // Tiptap v3's useEditor compares extensions by reference and, when any
-  // instance differs, calls setOptions which reconfigures every ProseMirror
-  // plugin (destroying and recreating their plugin views). Building this array
-  // inline on each render created fresh instances every time (StarterKit.configure,
-  // SlashCommands(mode), Link.configure, ... all return new objects), so any
-  // re-render tore down an open suggestion popup. That is why the slash "/" and
-  // @ mention menus flashed then vanished the first time (opening them triggers a
-  // re-render). A stable array keeps the plugins mounted and the menus open.
-  const extensions = useMemo(
-    () => [
+  localWritingAssistanceEnabled,
+}: {
+  mode: any;
+  placeholderText: string;
+  mentionProjectId?: number | null;
+  localWritingAssistanceEnabled: () => boolean;
+}) => [
       Gapcursor,
       // v3 StarterKit now bundles link/underline/blockquote/orderedList/gapcursor.
       // Disable them here so our separately-configured versions (custom Link
@@ -183,15 +122,7 @@ const useTiptap = ({
       Placeholder.configure({
         // Use a placeholder:
 
-        placeholder:
-          placeholder ??
-          (allowedCommentModes.includes(mode)
-            ? getRandomElement(
-                globalConstants.CommentTips(isApple, createNewComment)
-              )
-            : isMobileView || newTaskWindow
-              ? "Add a description…"
-              : getRandomElement(globalConstants.DescriptionTips(isApple))),
+        placeholder: placeholderText,
         emptyEditorClass: `${styles.is_editor_empty}`,
         emptyNodeClass: "New Comment",
       }),
@@ -266,9 +197,98 @@ const useTiptap = ({
       SafeSplitBlock,
       HypertaskPasteRule,
       LocalWritingAssistance.configure({
-        localCapitalizationEnabled: () => localWritingAssistanceRef.current,
+        localCapitalizationEnabled: localWritingAssistanceEnabled,
       }),
-    ],
+    ];
+
+interface IProps {
+  defaultContent?: string;
+  mode: any;
+  createNewComment?: boolean;
+  trackFocus?: boolean;
+  mentionProjectId?: number | null;
+  // Overrides the mode-derived random tip, for callers (e.g. the feedback
+  // form) that need a fixed, specific placeholder instead.
+  placeholder?: string;
+}
+const useTiptap = ({
+  mode,
+  defaultContent = "",
+  createNewComment = false,
+  trackFocus = true,
+  mentionProjectId,
+  placeholder,
+}: IProps) => {
+  const isApple = useDeviceContext();
+  const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
+  let newTaskWindow = false;
+  if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
+  const localWritingAssistance = useFlag(LOCAL_WRITING_ASSISTANCE_FLAG);
+  const localWritingAssistanceRef = useRef(localWritingAssistance);
+  localWritingAssistanceRef.current = localWritingAssistance;
+  // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
+  // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
+  const isMobileView = useContext(MobileViewContext);
+  // Tiptap's onDestroy hands back no editor, so keep the instance from onCreate
+  // to unregister the exact editor that died, not whoever holds `mode` now.
+  const editorRef = useRef<Editor | null>(null);
+  // Capture the initial content once. Passing a changing `content` to useEditor
+  // makes it call setOptions on re-render, which reconfigures the ProseMirror
+  // plugins and destroys any open suggestion popup. The content prop changes
+  // while editing (draft autosave updates the draft query that feeds it), so we
+  // freeze the value the editor was created with. Callers only render this editor
+  // once real content is available, and content updates flow through the editor
+  // itself after mount, so freezing the initial value is safe.
+  const [initialContent] = useState(defaultContent);
+  const editorProps = useMemo(() => {
+    if (mode !== "read-edit-description") return writingAssistanceEditorProps;
+
+    const stickyHeaderOffset = getTaskDetailStickyHeaderOffset();
+
+    return {
+      ...writingAssistanceEditorProps,
+      scrollThreshold: {
+        top: stickyHeaderOffset,
+        right: 0,
+        bottom: 0,
+        left: 0,
+      },
+      scrollMargin: {
+        top: stickyHeaderOffset,
+        right: defaultScrollMargin,
+        bottom: defaultScrollMargin,
+        left: defaultScrollMargin,
+      },
+    };
+    // mode is fixed for each editor instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // Memoize the extensions so their instances are stable across renders.
+  // Tiptap v3's useEditor compares extensions by reference and, when any
+  // instance differs, calls setOptions which reconfigures every ProseMirror
+  // plugin (destroying and recreating their plugin views). Building this array
+  // inline on each render created fresh instances every time (StarterKit.configure,
+  // SlashCommands(mode), Link.configure, ... all return new objects), so any
+  // re-render tore down an open suggestion popup. That is why the slash "/" and
+  // @ mention menus flashed then vanished the first time (opening them triggers a
+  // re-render). A stable array keeps the plugins mounted and the menus open.
+  const extensions = useMemo(
+    () =>
+      createTiptapExtensions({
+        mode,
+        placeholderText:
+          placeholder ??
+          (allowedCommentModes.includes(mode)
+            ? getRandomElement(
+                globalConstants.CommentTips(isApple, createNewComment)
+              )
+            : isMobileView || newTaskWindow
+              ? "Add a description…"
+              : getRandomElement(globalConstants.DescriptionTips(isApple))),
+        mentionProjectId,
+        localWritingAssistanceEnabled: () => localWritingAssistanceRef.current,
+      }),
     // Build the extensions exactly once for this editor instance. They must be
     // referentially stable: Tiptap v3's useEditor reconfigures the whole plugin
     // set (destroying open suggestion popups) whenever any extension instance

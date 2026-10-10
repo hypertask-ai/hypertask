@@ -217,13 +217,15 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   const press = () => document.getElementById("root").dispatchEvent(new Event("pointerdown", { bubbles: false }));
   window.requestAnimationFrame = (callback) => { frames.set(++id, callback); return id; };
   window.cancelAnimationFrame = (key) => frames.delete(key);
+  const editorIdles = [];
   window.requestIdleCallback = (callback, options) => {
+    if (options.timeout === 3000) { editorIdles.push(callback); return ++id; }
     assert.equal(options.timeout, 5000);
     idles.set(++id, callback);
     return id;
   };
   window.cancelIdleCallback = (key) => idles.delete(key);
-  window.setTimeout = (callback, delay) => { assert.equal(delay, 2000); timers.set(++id, callback); return id; };
+  window.setTimeout = (callback, delay) => { if (delay === 1000) return ++id; assert.equal(delay, 2000); timers.set(++id, callback); return id; };
   window.clearTimeout = (key) => timers.delete(key);
   const flush = (queue) => { const callbacks = [...queue.values()]; queue.clear(); callbacks.forEach((callback) => callback()); };
   const mocks = navigationMocks(client, () => enabled, () => pathname, {
@@ -235,12 +237,15 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
     "@/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/BottomRow/DescriptionReactions",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/CommentReactions",
     "@/components/PageComponents/TaskDetail/TaskMovement",
+    "@/components/RTE/TipTapTaskDetail",
     "@/components/PageComponents/TaskDetail/CommentAndDescription/CommentContainer/EmojiOptionsComp",
     "@/lib/constants/emojiData",
     "@/firebase",
     "firebase/messaging",
   ];
   for (const chunk of chunks) Object.defineProperty(mocks, chunk, { get: () => { loaded.push(chunk); return {}; } });
+  let editorWarms = 0;
+  mocks["@/components/RTE/warmEditor"] = { warmTiptapEditor: () => { editorWarms++; } };
   mocks["@/components/RTE/Extensions/lazyEmojiData"] = { ensureEmojiData: () => { emojiLoads++; return failWarm ? Promise.reject(new Error("chunk load failed")) : Promise.resolve(); } };
   const Navigation = compile(read(navigationPath), mocks).default;
   const mount = (accountId = 985) => {
@@ -298,6 +303,11 @@ test("warm: press and idle share a retryable warmup; only idle skips slow connec
   cleanup = mount();
   flush(frames); flush(frames); cleanup();
   assert.equal(idles.size, 0, "navigation cancels the pending idle callback");
+  // HTPR-6853: one idle editor warm-up is queued per page load, not per route or press.
+  assert.equal(editorIdles.length, 1, "editor warm-up is scheduled once");
+  editorIdles[0]();
+  await new Promise(setImmediate);
+  assert.equal(editorWarms, 1, "idle callback builds the throwaway editor");
   delete window.requestIdleCallback;
   loaded.length = 0;
   cleanup = mount();
