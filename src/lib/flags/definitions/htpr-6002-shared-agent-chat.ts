@@ -4,7 +4,6 @@ export const SHARED_AGENT_CHAT_FLAG = "htpr-6002-shared-agent-chat";
 
 export default {
   key: SHARED_AGENT_CHAT_FLAG,
-  kind: "feature",
   shippedOn: "2026-09-08",
   description:
     "Shares one agent conversation across authorized teammates, with private unread position and drafts for each person.",
@@ -12,4 +11,5 @@ export default {
     "risk": "new",
     "reason": "Adds shared agent conversations that authorized teammates can use together."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

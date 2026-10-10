@@ -4,7 +4,7 @@ export const HTPR_6979_TYPED_WRITES_FLAG = "htpr-6979-typed-writes-sections-noti
 
 export default {
   key: HTPR_6979_TYPED_WRITES_FLAG,
-  kind: "feature",
   shippedOn: "2026-10-06",
   description: "Validates section and notification writes with shared typed API contracts.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

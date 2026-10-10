@@ -4,7 +4,7 @@ export const HTPR_6130_MOBILE_REMINDER_SAFE_AREA_FLAG = "htpr-6130-mobile-remind
 
 export default {
   key: HTPR_6130_MOBILE_REMINDER_SAFE_AREA_FLAG,
-  kind: "feature",
   shippedOn: "2026-09-04",
   description: "Keeps the mobile reminder time selector aligned and clear of bottom controls.",
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;

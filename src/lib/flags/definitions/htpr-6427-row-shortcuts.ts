@@ -4,7 +4,6 @@ export const HTPR_6427_ROW_SHORTCUTS_FLAG = "htpr-6427-row-shortcuts";
 
 export default {
   key: HTPR_6427_ROW_SHORTCUTS_FLAG,
-  kind: "feature",
   shippedOn: "2026-09-14",
   description:
     "Lets the selected table or My Tasks row use the same task property shortcuts as a Kanban card without opening the task.",
@@ -12,4 +11,5 @@ export default {
     "risk": "small",
     "reason": "Existing table and My Tasks rows respond to task-property keyboard shortcuts."
   },
+  kind: "feature",
 } as const satisfies FeatureFlagDefinition;
