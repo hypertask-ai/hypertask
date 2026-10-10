@@ -27,6 +27,11 @@ import {
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+async function isRealErrorEnabled(userId: number) {
+  const { HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, isFeatureEnabled } = await import("@/lib/flags");
+  return isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId);
+}
+
 export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
@@ -79,6 +84,8 @@ export async function POST(request: NextRequest) {
         let buffer = "";
         let draft = "";
         let streamCompleted = false;
+        let streamError: unknown;
+        let producedText = false;
 
         const enqueueText = (text: string) => {
           if (validateDraft || dueDateContext) draft += text;
@@ -111,10 +118,15 @@ export async function POST(request: NextRequest) {
             maxRetries: 2,
             providerOptions: selected.providerOptions,
             ...selected.settings,
+            // Without this, provider and allowance errors vanish from textStream and the draft ends empty.
+            onError: ({ error }: { error: unknown }) => {
+              streamError ??= error;
+            },
           });
 
           for await (const chunk of result.textStream) {
             if (!chunk) continue;
+            producedText = true;
             if (allowedImgSrcs) {
               buffer += chunk;
               const filtered = filterOneImagePass(buffer, allowedImgSrcs);
@@ -128,6 +140,20 @@ export async function POST(request: NextRequest) {
           if (allowedImgSrcs && buffer) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
+          }
+          // Loaded only on the empty-stream path, so ordinary streams never touch the flags module.
+          if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
+            const error = streamError;
+            await reportError({
+              message: error instanceof Error ? error.message : "AI request failed",
+              stack: error instanceof Error ? error.stack : undefined,
+              url: "/api/ai/task-writer",
+              source: "handled",
+              extra: { stage: "stream-empty" },
+            });
+            console.error("[ai/task-writer] stream ended empty after error", error);
+            enqueueError("error", errorMessage(error), "task-writer-stream-error");
+            return;
           }
           const description = validateDraft && body.aiMode === "AiTaskWriter"
             ? extractTaskWriterProperties(draft).description

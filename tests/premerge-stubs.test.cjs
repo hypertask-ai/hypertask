@@ -147,6 +147,22 @@ test("structured output goes through real SDK schema validation", async () => {
   assert.equal(result.object.mode, "review");
 });
 
+test("array types and the stream error marker behave deterministically", async () => {
+  const h = harness();
+  const model = h.model.resolveAiModel("openai", "fixture");
+  const schema = z.object({ tasks: z.array(z.object({ title: z.string(), dueDate: z.string().nullish() })).min(1) });
+  const result = await ai.generateObject({ model: h.model.resolveGatewayModel("fixture"), schema, prompt: "Write a fixture" });
+  assert.equal(result.object.tasks[0].dueDate, "Local premerge fixture");
+  const errors = [];
+  const failing = ai.streamText({ model, prompt: "Add a dark mode toggle premerge-stream-error", onError: ({ error }) => errors.push(error) });
+  let text = "";
+  for await (const chunk of failing.textStream) text += chunk;
+  assert.equal(text, "");
+  assert.equal(errors.length, 1);
+  const generated = await model.doGenerate({ prompt: [{ role: "user", content: [{ type: "text", text: "premerge-stream-error" }] }] });
+  assert.match(generated.content[0].text, /Review onboarding/);
+});
+
 test("queue records replaceable path-scoped jobs and cancellation without QStash credentials or delivery", async () => {
   const h = harness();
   const job = { path: "/api/queues/duedateQueue", jobId: "task-1", notBefore: 1792108800, body: { private: "secret-fixture" } };
