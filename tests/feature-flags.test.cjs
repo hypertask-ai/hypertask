@@ -1109,7 +1109,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
 });
 
 test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
-  const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
+  const key = flags.HTPR_6516_AGENT_ATTRIBUTION_FLAG;
   assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).kind, "bugfix");
   assert.deepEqual(await flags.featureFlagCandidateUserIds(key), [6, 985]);
   for (const mode of [null, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {

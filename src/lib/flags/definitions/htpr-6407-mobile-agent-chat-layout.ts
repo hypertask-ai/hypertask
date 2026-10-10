@@ -4,6 +4,7 @@ export const HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG = "htpr-6407-mobile-agent-c
 
 export default {
   key: HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
+  kind: "improvement",
   shippedOn: "2026-09-11",
   description:
     "Pins the Agent Chat composer on mobile, keeps one message scroller, shows the agent name in the top bar, and makes mic dictation use the agent's board.",

@@ -4,6 +4,7 @@ export const HTPR_6287_AGENT_CHAT_ROSTER_STATUS_FLAG = "htpr-6287-agent-chat-ros
 
 export default {
   key: HTPR_6287_AGENT_CHAT_ROSTER_STATUS_FLAG,
+  kind: "feature",
   shippedOn: "2026-09-08",
   description: "Shows real per-agent status (active, idle, out of tokens, inactive) in the Agent Chat sidebar.",
   releaseRisk: {

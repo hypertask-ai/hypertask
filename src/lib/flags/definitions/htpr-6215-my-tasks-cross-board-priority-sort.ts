@@ -4,6 +4,7 @@ export const MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG = "htpr-6215-my-tasks-cross
 
 export default {
   key: MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG,
+  kind: "feature",
   shippedOn: "2026-09-10",
   description:
     "Sorting My Tasks by priority interleaves tasks from every board by priority level, instead of only reordering the tasks within each board's group.",

@@ -4,6 +4,8 @@ export const AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG = "htpr-6154-chat-stop-and
 
 export default {
   key: AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG,
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-09-06",
   description:
     "Lets people stop stuck Agent Chat turns and ends unanswered turns after five minutes.",

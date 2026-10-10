@@ -6,25 +6,11 @@ import prisma from "@/lib/prisma";
 import { cache } from "react";
 import type { RawFlagMode } from "@/lib/flags/modeCache";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG } from "@/lib/agentRuns/model";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definitions";
 
 import {
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
-  HTPR_6951_TASK_WRITING_PROGRESS_FLAG,
-  AUTO_TASK_DESCRIPTIONS_FLAG,
-  HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-  CONFIRMED_PROPOSAL_HEADING_FLAG,
-  LOCAL_WRITING_ASSISTANCE_FLAG,
-  SHORTCUT_NUDGES_FLAG,
-  HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
-  MY_TASKS_SHORTCUTS_WIDTH_FLAG,
-  HTPR_6372_SEARCH_RANKING_FLAG,
-  HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG,
-  HTPR_6516_AGENT_ATTRIBUTION_FLAG,
-  HTPR_6512_SEED_TEAM_AGENT_FLAG,
-  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
@@ -168,27 +154,6 @@ export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   return session ? isFeatureFlagOwnerUser(session.userId) : false;
 }
 
-// Historical bug flags predate kind-based defaults. Classify them for display only:
-// adding kind: "bugfix" to their definitions would release missing rows to Everyone.
-const LEGACY_BUGFIX_DISPLAY_KINDS: Partial<Record<string, FeatureFlagKind>> = {
-  [HTPR_6951_TASK_WRITING_PROGRESS_FLAG]: "bugfix",
-  [HTPR_6553_AGENT_CHAT_POLLING_FLAG]: "bugfix",
-  [HTPR_6516_AGENT_ATTRIBUTION_FLAG]: "bugfix",
-  [HTPR_6512_SEED_TEAM_AGENT_FLAG]: "bugfix",
-  [LOCAL_WRITING_ASSISTANCE_FLAG]: "bugfix",
-  [HTPR_6278_CHAT_TURN_FAILURE_FLAG]: "bugfix",
-  ["htpr-6112-copy-current-url"]: "bugfix",
-  [HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG]: "bugfix",
-  ["htpr-6363-task-writer-research"]: "bugfix",
-  [AUTO_TASK_DESCRIPTIONS_FLAG]: "bugfix",
-  [SHORTCUT_NUDGES_FLAG]: "bugfix",
-  [CONFIRMED_PROPOSAL_HEADING_FLAG]: "bugfix",
-  [MY_TASKS_SHORTCUTS_WIDTH_FLAG]: "bugfix",
-  [HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG]: "bugfix",
-  [HTPR_6372_SEARCH_RANKING_FLAG]: "bugfix",
-  ["htpr-6141-ai-first-task-writer"]: "bugfix",
-  [AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG]: "bugfix",
-};
 
 export type FeatureFlagRow = {
   key: string;
@@ -233,7 +198,7 @@ function withFeatureFlagMetadata(
   const ticketNumber = FEATURE_FLAG_KEY_TICKET_NUMBER.exec(row.key)?.[1];
   return {
     ...row,
-    kind: definition?.kind ?? LEGACY_BUGFIX_DISPLAY_KINDS[row.key] ?? "feature",
+    kind: definition?.kind ?? "feature",
     related: definition?.related ? [...(definition.related ?? [])] : undefined,
     description: definition?.description ?? LEGACY_FEATURE_FLAG_DESCRIPTION,
     shippedOn: definition?.shippedOn ?? null,

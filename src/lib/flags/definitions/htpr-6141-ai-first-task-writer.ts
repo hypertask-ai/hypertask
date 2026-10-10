@@ -4,6 +4,8 @@ export const HTPR_6141_AI_FIRST_TASK_WRITER_FLAG = "htpr-6141-ai-first-task-writ
 
 export default {
   key: HTPR_6141_AI_FIRST_TASK_WRITER_FLAG,
+  kind: "bugfix",
+  defaultMode: "OWNER_AND_QA",
   shippedOn: "2026-09-04",
   description: "Opens the AI task writer from a column plus instead of the classic new-task form.",
   releaseRisk: {

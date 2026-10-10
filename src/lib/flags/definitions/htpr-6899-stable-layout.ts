@@ -4,6 +4,7 @@ export const HTPR_6899_STABLE_LAYOUT_FLAG = "htpr-6899-stable-layout";
 
 export default {
   key: HTPR_6899_STABLE_LAYOUT_FLAG,
+  kind: "feature",
   shippedOn: "2026-10-03",
   description:
     "Keeps cached tickets steady while comments, summaries, pages and properties load.",

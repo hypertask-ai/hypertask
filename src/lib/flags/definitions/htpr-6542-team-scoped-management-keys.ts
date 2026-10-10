@@ -4,6 +4,7 @@ export const HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG = "htpr-6542-team-scoped
 
 export default {
   key: HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG,
+  kind: "feature",
   shippedOn: "2026-09-18",
   description:
     "Lets management keys be limited to one team while existing account-wide keys keep their current access.",

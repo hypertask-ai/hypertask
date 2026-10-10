@@ -4,6 +4,7 @@ export const HTPR_6937_NEW_TASK_WINDOW_FLAG = "htpr-6937-new-task-window";
 
 export default {
   key: HTPR_6937_NEW_TASK_WINDOW_FLAG,
+  kind: "feature",
   shippedOn: "2026-10-04",
   description: "Turns Compose into a larger New Task window with dictation and one Ctrl+J, filling an empty task when opened there. Requires the Compose task writer flag.",
   related: ["htpr-6929-compose-task-writer"],

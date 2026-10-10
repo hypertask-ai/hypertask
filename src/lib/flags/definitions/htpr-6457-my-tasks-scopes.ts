@@ -4,6 +4,7 @@ export const MY_TASKS_SCOPES_FLAG = "htpr-6457-my-tasks-scopes";
 
 export default {
   key: MY_TASKS_SCOPES_FLAG,
+  kind: "feature",
   shippedOn: "2026-09-15",
   description:
     "Lets My Tasks show tasks you created, were mentioned in, or watch, not only tasks assigned to you. Multi-select, saved per view.",
