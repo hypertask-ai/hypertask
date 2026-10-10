@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { HTPR_7095_REACTION_WEBHOOK_FLAG } from "@/lib/flags/definitions/htpr-7095-reaction-webhook";
 import type { AgentWebhookEventInput } from "./events";
@@ -59,8 +60,74 @@ export function buildCommentReactionEvent(input: {
   };
 }
 
+type CommentReactionWebhookInput = {
+  commentId: number;
+  reactorUserId: number;
+  /** From the request auth: true only when an agent made the call. An agent's owner reacting as a person is false. */
+  reactorIsAgent: boolean;
+  emoji: string;
+  added: boolean;
+};
+
+type PreparedCommentReactionWebhook = {
+  agentId: string;
+  comment: { id: number; text: string | null; task: { id: number; projectId: number; ticketNumber: string | null; title: string } };
+};
+
 /**
- * Tell the agent that wrote a comment when a person reacts to it (HTPR-7095).
+ * Read-only part, run before the reaction is written: flag, comment author agent and target.
+ * Returns null when no agent should hear about this reaction.
+ */
+export async function prepareCommentReactionWebhook(
+  input: CommentReactionWebhookInput,
+): Promise<PreparedCommentReactionWebhook | null> {
+  if (!input.added) return null;
+  const { isFeatureEnabled } = await import("@/lib/flags");
+  if (!(await isFeatureEnabled(HTPR_7095_REACTION_WEBHOOK_FLAG, input.reactorUserId))) return null;
+  const comment = await prisma.comment.findUnique({
+    where: { id: input.commentId },
+    select: {
+      id: true,
+      text: true,
+      agentId: true,
+      task: { select: { id: true, projectId: true, ticketNumber: true, title: true } },
+    },
+  });
+  if (!comment?.agentId) return null;
+  const agentId = reactionWebhookTarget({
+    added: input.added,
+    reactorIsAgent: input.reactorIsAgent,
+    commentAgentId: comment.agentId,
+  });
+  return agentId ? { agentId, comment } : null;
+}
+
+/**
+ * Write the outbox row inside the caller's reaction transaction, so a stored reaction always has its event.
+ * Publish the returned delivery ids after the transaction commits.
+ */
+export async function persistCommentReactionWebhook(
+  tx: Prisma.TransactionClient,
+  prepared: PreparedCommentReactionWebhook,
+  input: CommentReactionWebhookInput,
+): Promise<string[]> {
+  const actor = await resolveAgentWebhookActor(tx, { userId: input.reactorUserId });
+  return persistAgentWebhookEvents(tx, {
+    ...buildCommentReactionEvent({
+      task: prepared.comment.task,
+      actor,
+      commentId: prepared.comment.id,
+      commentText: prepared.comment.text,
+      emoji: input.emoji,
+    }),
+    broadcast: false,
+    agentIds: [prepared.agentId],
+  });
+}
+
+/**
+ * Tell the agent that wrote a comment when a person reacts to it (HTPR-7095), after the reaction is stored.
+ * Used by the MCP reactions route, whose shared handler commits the reaction before its side effects run.
  * Never throws: the reaction is already stored. Gated on the reacting user.
  */
 export async function emitCommentReactionWebhook(input: {

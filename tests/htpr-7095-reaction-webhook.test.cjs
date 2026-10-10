@@ -152,7 +152,11 @@ test("both reaction routes call the emitter only for additions", () => {
   const fs = require("node:fs");
   const page = fs.readFileSync(path.join(root, "src/pages/api/comments/addReaction.ts"), "utf8");
   const mcp = fs.readFileSync(path.join(root, "src/app/api/mcp/comments/[comment_id]/reactions/route.ts"), "utf8");
-  assert.equal((page.match(/emitCommentReactionWebhook\(/g) || []).length, 2);
+  // Web route: the reaction and its outbox row are written in one transaction, published after commit.
+  assert.equal((page.match(/persistCommentReactionWebhook\(tx,/g) || []).length, 1);
+  assert.match(page, /prisma\.\$transaction\(async \(tx\) => \{\s*const reaction = await tx\.reaction\.create/);
+  assert.match(page, /publishAgentWebhookDeliveries\(deliveryIds\)/);
+  assert.ok(!/emitCommentReactionWebhook\(/.test(page));
   assert.ok(!/added: false/.test(page));
   assert.match(mcp, /Boolean\(ctx\.agentId\)/);
   assert.match(page, /reactorIsAgent: false/);
