@@ -133,6 +133,7 @@ function writerHarness(enabled, output = html, fail = false) {
     sseFrame: (event, payload) => `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`,
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},
     "@/lib/doneColumns": {},
@@ -211,6 +212,7 @@ function saveHarness(kind, enabled) {
   const queue = { cancelDueDateJob: async (...args) => jobs.push({ cancel: args }), scheduleDueDateJob: async (...args) => jobs.push({ schedule: args }) };
   const effects = { schedulePostCreateWork() {} };
   const stubs = {
+    "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/flags/keys": keys,
     "@/lib/api/task-writes/route": {
       withTaskWriteFlag: (handler) => handler,

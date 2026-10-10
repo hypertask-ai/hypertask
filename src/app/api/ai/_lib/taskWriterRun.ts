@@ -46,7 +46,8 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG } from "@/lib/flags";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -362,6 +363,11 @@ export async function prepareTaskWriterRun(
   if (dueDateContext) {
     instructions += `\n\n${taskWriterDueDateInstructions(dueDateContext)}`;
     if (splitTasks) instructions += "\nFor structured tasks, put each task's own date in that task's dueDate field instead of a marker, and leave it null when that task has no deadline.";
+  }
+  const headingLanguageEnabled = body.aiMode === "AiTaskWriter" &&
+    (await isFeatureEnabled(HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, userId));
+  if (headingLanguageEnabled) {
+    instructions += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
