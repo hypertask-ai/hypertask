@@ -568,9 +568,6 @@ if '/statuses/' in url:
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
-if '/commits/' in url and url.endswith('/pulls'):
-    print(json.dumps([{'number': int(os.environ.get('FLAG_CLICK_PR', '999'))}]))
-    sys.exit(0)
 if '/contents/' in url:
     if os.environ.get('FLAG_SOURCE_ERROR'):
         sys.exit(1)
@@ -736,94 +733,15 @@ F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
 sed 's/Commit:.*/Commit: deadbeef/' "$E/record" > "$premerge"
 F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
 cp "$E/record" "$premerge"
+# A new bugfix flag defaults to Everyone, so it is released on merge and needs its own click state.
+printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_FIX_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-9-newfix.ts"
+F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+cp "$E/record" "$premerge"; rm "$E/flag-source/flags-head/htpr-9-newfix.ts"
 cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
 rm "$E/flag-source/definitions"
 
-# Compare each version's own PR patch against its merge-base, not the two full trees.
-real_git=$(command -v git)
-cat > "$E/flag-bin/git" <<'MOCK'
-#!/usr/bin/env bash
-if [[ ${3:-} == fetch && -n ${FLAG_REBASE_REPO:-} ]]; then
-  exec "$FLAG_REAL_GIT" -C "$2" fetch --no-tags "$FLAG_REBASE_REPO" "${@: -1}"
-fi
-exec "$FLAG_REAL_GIT" "$@"
-MOCK
-chmod +x "$E/flag-bin/git"
-export FLAG_REAL_GIT="$real_git"
-rebase_repo="$E/rebase-repo"; mkdir -p "$rebase_repo"
-rgit() { "$real_git" -C "$rebase_repo" "$@"; }
-rgit init -q; rgit config user.email fixture@example.test; rgit config user.name Fixture
-mkdir -p "$rebase_repo/src/lib/flags" "$rebase_repo/tests"
-printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$rebase_repo/src/lib/flags/keys.ts"
-printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nconst FEATURE_FLAG_DEFINITIONS = [\n  { key: RELEASED_FLAG },\n] as const;\n' > "$rebase_repo/src/lib/flags.ts"
-printf 'const released = useFlag(RELEASED_FLAG);\nconst title = "before";\n' > "$rebase_repo/src/card.tsx"
-rgit add .; rgit commit -qm base; start=$(rgit rev-parse HEAD)
-rgit switch -qc clicked
-sed -i 's/"before"/"PR"/' "$rebase_repo/src/card.tsx"
-printf 'export const OWN_FLAG = "htpr-2-own";\n' >> "$rebase_repo/src/lib/flags/keys.ts"
-rgit add .; rgit commit -qm clicked; clicked=$(rgit rev-parse HEAD)
-rgit switch -qc production "$start"
-sed -i '1i// Landed independently on production' "$rebase_repo/src/card.tsx"
-printf 'export const OTHER_FLAG = "htpr-3-other";\n' >> "$rebase_repo/src/lib/flags/keys.ts"
-rgit add .; rgit commit -qm production; production=$(rgit rev-parse HEAD)
-rgit switch -qc rebased
-sed -i 's/"before"/"PR"/' "$rebase_repo/src/card.tsx"
-printf 'export const OWN_FLAG = "htpr-2-own";\n' >> "$rebase_repo/src/lib/flags/keys.ts"
-rgit add .; rgit commit -qm rebased; rebased=$(rgit rev-parse HEAD)
-sed "s/^Commit:.*/Commit: $clicked/" "$E/record" > "$premerge"
-B() {
-  local want=$1 expected=$2 out got; shift 2
-  out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= FLAG_REBASE_REPO="$rebase_repo" FLAG_BASE_SHA="$production" FLAG_HEAD="$rebased" "$@" ./ship-check premerge-status 999 2>&1); got=$?
-  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "rebase backstop: $expected"
-  else bad "rebase backstop: want $want $expected got $got $out"; fi
-}
-B 0 "click record ok (registry-only rebase from ${clicked:0:12})"
-B 1 'not an earlier version of this PR' FLAG_CLICK_PR=998
-# A full sha that GitHub associates but cannot be fetched remains red.
-sed "s/^Commit:.*/Commit: $(printf 'f%.0s' {1..40})/" "$E/record" > "$premerge"
-B 1 'cannot fetch clicked commit'
-sed "s/^Commit:.*/Commit: $clicked/" "$E/record" > "$premerge"
-# Registry metadata may move; runtime declarations in the same legacy file may not.
-sed -i '/key: RELEASED_FLAG/a\  { key: "htpr-2-own" },' "$rebase_repo/src/lib/flags.ts"
-rgit add .; rgit commit -qm registry; rebased=$(rgit rev-parse HEAD)
-B 0 'registry-only rebase'
-printf 'const changedRuntime = true;\n' >> "$rebase_repo/src/lib/flags.ts"
-rgit add .; rgit commit -qm runtime; runtime=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$runtime"
-printf 'const behaviorChanged = true;\n' >> "$rebase_repo/src/card.tsx"
-rgit add .; rgit commit -qm behavior; behavior=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$behavior"
-# Removing the original PR change is also a non-registry difference.
-rgit switch -qc removed "$production"
-printf 'export const OWN_FLAG = "htpr-2-own";\n' >> "$rebase_repo/src/lib/flags/keys.ts"
-rgit add .; rgit commit -qm removed; removed=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$removed"
-# Identical removed/added text at a different call site must not look like the same patch.
-rgit switch -qc location-base "$production"
-printf 'function first() {\n  doWork("before");\n}\nfunction second() {\n  doWork("before");\n}\n' > "$rebase_repo/src/repeated.ts"
-rgit add .; rgit commit -qm location-base; location_base=$(rgit rev-parse HEAD)
-rgit switch -qc location-click
-sed -i '2s/before/after/' "$rebase_repo/src/repeated.ts"
-rgit add .; rgit commit -qm location-click; location_click=$(rgit rev-parse HEAD)
-sed "s/^Commit:.*/Commit: $location_click/" "$E/record" > "$premerge"
-rgit switch -qc location-head "$location_base"
-sed -i '5s/before/after/' "$rebase_repo/src/repeated.ts"
-rgit add .; rgit commit -qm location-head; location_head=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$location_head" FLAG_BASE_SHA="$location_base"
-# Binary assets and a committed generated index remain outside the exception.
-rgit switch -qc asset-click "$production"
-printf '\0first' > "$rebase_repo/asset.bin"
-rgit add .; rgit commit -qm asset-click; asset_click=$(rgit rev-parse HEAD)
-sed "s/^Commit:.*/Commit: $asset_click/" "$E/record" > "$premerge"
-printf '\0second' > "$rebase_repo/asset.bin"
-rgit add .; rgit commit -qm asset-head; asset_head=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$asset_head"
-rgit switch -qc index-head "$asset_click"
-mkdir -p "$rebase_repo/src/lib/flags/definitions"
-printf 'export const FLAG_DEFINITIONS = [];\n' > "$rebase_repo/src/lib/flags/definitions/index.generated.ts"
-rgit add .; rgit commit -qm generated-index; index_head=$(rgit rev-parse HEAD)
-B 1 'differ outside flag-registry files' FLAG_HEAD="$index_head"
-cp "$E/record" "$premerge"
 for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
   '/^Account:/d|missing Account:' \

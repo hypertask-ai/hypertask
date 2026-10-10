@@ -299,7 +299,7 @@ check_cleaned() {
 check_premerge() {
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import base64, difflib, json, os, re, subprocess, sys, tempfile, time, urllib.parse, urllib.request
+import base64, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
@@ -360,113 +360,6 @@ def flag_registry(ref):
     if ref not in registry_cache:
         registry_cache[ref] = read_registry(ref)
     return registry_cache[ref]
-
-def registry_only_rebase(clicked, head, production):
-    if not re.fullmatch(r'[0-9a-f]{40}', clicked or ''):
-        raise ValueError('clicked commit must be a full fetchable sha from an earlier version of this PR')
-    linked = gh('api', f'repos/{repo}/commits/{clicked}/pulls')
-    if not isinstance(linked, list) or not any(str(item.get('number')) == pr for item in linked):
-        raise ValueError('clicked commit is not an earlier version of this PR')
-    # An isolated object database also works for the timer, whose cwd need not be a checkout.
-    with tempfile.TemporaryDirectory(prefix='ship-premerge-') as directory:
-        def git(*args):
-            result = subprocess.run(['git', '-C', directory, *args], capture_output=True, text=True, timeout=120)
-            if result.returncode:
-                raise ValueError('cannot fetch clicked commit or compare PR patches; repeat the click-through')
-            return result.stdout
-        git('init', '--bare', '-q')
-        local = subprocess.run(['git', 'rev-parse', '--git-common-dir'], capture_output=True, text=True)
-        if local.returncode == 0:
-            objects = Path(local.stdout.strip()).resolve() / 'objects'
-            (Path(directory) / 'objects/info/alternates').write_text(str(objects) + '\n')
-        for commit in (production, clicked, head):
-            result = subprocess.run(['git', '-C', directory, 'cat-file', '-e', commit + '^{commit}'], capture_output=True)
-            if result.returncode:
-                git('fetch', '--no-tags', '--filter=blob:none', f'https://github.com/{repo}.git', commit)
-        def own_patch(commit):
-            merge_base = git('merge-base', production, commit).strip()
-            if merge_base == commit:
-                raise ValueError('clicked commit is production history, not an earlier PR build')
-            diff = git('diff', '--no-ext-diff', '--no-textconv', '--no-renames', '--binary', '--unified=0', merge_base, commit)
-            patches = {}
-            paths = iter(git('diff', '--name-only', '--no-renames', '-z', merge_base, commit).rstrip('\0').split('\0'))
-            path, rows, hunk = None, [], False
-            old_line = new_line = 0
-            spans, line_maps = {}, {}
-            binary = False
-            allowed = {'src/lib/flags/keys.ts', 'src/lib/flags/definitions.ts', 'src/lib/flags/releaseRisk.ts', 'tests/feature-flags.test.cjs'}
-            def allowed_path(path):
-                return path in allowed or (path.startswith('src/lib/flags/definitions/') and path != 'src/lib/flags/definitions/index.generated.ts')
-            # Keep edit locations, mapped through production-only changes, so identical edits at a different call site cannot pass.
-            def mapped_line(number):
-                if number == 0: return 0
-                if path not in line_maps:
-                    def lines(ref):
-                        result = subprocess.run(['git', '-C', directory, 'show', ref + ':' + path], capture_output=True, timeout=120)
-                        if result.returncode:
-                            if git('ls-tree', '--name-only', ref, '--', path).strip():
-                                raise ValueError('cannot read PR patch baseline')
-                            return []
-                        return result.stdout.splitlines()
-                    old, current = lines(merge_base), lines(production)
-                    mapping = {}
-                    for block in difflib.SequenceMatcher(None, old, current, autojunk=False).get_matching_blocks():
-                        for offset in range(block.size):
-                            mapping[block.a + offset + 1] = block.b + offset + 1
-                    line_maps[path] = mapping
-                if number not in line_maps[path]:
-                    raise ValueError('non-registry PR changes overlap production changes; repeat the click-through')
-                return line_maps[path][number]
-            def registry_span(ref):
-                text = git('show', ref + ':src/lib/flags.ts')
-                block = re.search(r'(?m)^(?:export\s+)?const\s+FEATURE_FLAG_DEFINITIONS\s*=\s*\[[\s\S]*?^\]\s*(?:as const)?(?:\s+satisfies[^;\n]+)?;', text)
-                if not block:
-                    return range(0)
-                # Only complete registry lines may be ignored, never code after the declaration.
-                if text[block.end():].split('\n', 1)[0].strip():
-                    return range(0)
-                first = text[:block.start()].count('\n') + 1
-                return range(first, first + block[0].count('\n') + 1)
-            def finish():
-                if path and rows:
-                    patches[path] = rows.copy()
-            for line in diff.splitlines():
-                if line.startswith('diff --git '):
-                    finish()
-                    path, rows, hunk, binary = next(paths), [], False, False
-                elif binary:
-                    rows.append(line)
-                elif line.startswith('+++ '):
-                    raw = line[4:]
-                    raw = json.loads(raw) if raw.startswith('"') else raw
-                    if raw != '/dev/null': path = raw[2:]
-                elif line.startswith('--- '):
-                    raw = line[4:]
-                    raw = json.loads(raw) if raw.startswith('"') else raw
-                    if raw != '/dev/null': path = raw[2:]
-                elif line.startswith('@@ '):
-                    match = re.match(r'@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@', line)
-                    if not match: raise ValueError('cannot parse PR patch safely')
-                    old_line, new_line = map(int, match.groups())
-                    hunk = True
-                elif hunk and line[:1] in ('+', '-', ' '):
-                    ignored = False
-                    if path == 'src/lib/flags.ts' and line[:1] in ('+', '-'):
-                        if not spans: spans = {'-': registry_span(merge_base), '+': registry_span(commit)}
-                        ignored = (old_line if line[0] == '-' else new_line) in spans[line[0]]
-                    if not ignored and not allowed_path(path):
-                        number = old_line if line[0] == '-' else max(0, old_line - 1)
-                        rows.append((mapped_line(number), line))
-                    if line[0] != '+': old_line += 1
-                    if line[0] != '-': new_line += 1
-                elif line.startswith(('old mode ', 'new mode ', 'new file mode ', 'deleted file mode ', 'Binary files ', 'GIT binary patch', '\\ No newline')):
-                    rows.append(line)
-                    binary = line == 'GIT binary patch'
-            finish()
-            return {path: rows for path, rows in patches.items() if not allowed_path(path)}
-        if own_patch(clicked) != own_patch(head):
-            raise ValueError('PR changes differ outside flag-registry files; repeat the click-through')
-    return 'click record ok (registry-only rebase from ' + clicked[:12] + ')'
 
 try:
     # Mutable PR endpoints can briefly serve an earlier head after a push.
@@ -572,7 +465,6 @@ try:
     if not live:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
-    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
     base_values = set(keys.values()) | set(defaults)
     head_keys, head_rows = flag_registry(sha)
@@ -582,8 +474,12 @@ try:
         key = re.search(r'\bkey:\s*(\w+)', block)
         explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
         bugfix = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
-        if key and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
-            added.discard(resolve(key[1], head_keys))
+        key = key and resolve(key[1], head_keys)
+        # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
+        if key in added and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
+            added.discard(key)
+            modes[key] = 'EVERYONE'
+    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
     if not released and not unknown:
         print('no released flag touched')
@@ -600,12 +496,8 @@ try:
     if not record.is_file():
         raise ValueError(message)
     fields = {key: value.strip() for key, value in re.findall(r'^(\w+):([^\n]*)', record.read_text(), re.M)}
-    click_rule = 'click record ok'
     if fields.get('Commit') != sha:
-        try:
-            click_rule = registry_only_rebase(fields.get('Commit'), sha, base)
-        except ValueError as error:
-            raise ValueError(f'{record} must name PR head sha {sha} or a verified registry-only rebase ({error})')
+        raise ValueError(f'{record} must name PR head sha {sha}; repeat the click-through after each push')
     for field in ('Account', 'Flags', 'Board', 'Build'):
         if not fields.get(field):
             expected = ', '.join(f'{key}=EVERYONE' for key in sorted(released))
@@ -636,7 +528,6 @@ try:
     video = (folder / fields['Recording']).resolve()
     if not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size:
         raise ValueError(message + ' (recording must be non-empty and inside the ticket evidence folder)')
-    print(click_rule)
     print('premerge ok')
 except Exception as error:
     print('FAIL: ' + (str(error) if isinstance(error, ValueError) else 'cannot verify released-flag premerge evidence; retry before merging'))
@@ -657,7 +548,7 @@ check_premerge_status() (
   if out=$(check_premerge "$1" "$sha"); then
     case "$out" in
       'no released flag touched') state=success; description=$out; rc=0 ;;
-      'premerge ok'|*$'\npremerge ok') state=success; description=$(printf '%s\n' "$out" | sed -n '/^click record ok/p'); rc=0 ;;
+      'premerge ok'|*$'\npremerge ok') state=success; description='click record ok'; rc=0 ;;
       *) description='cannot verify premerge result; retry' ;;
     esac
   else
