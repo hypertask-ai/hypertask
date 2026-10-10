@@ -19,7 +19,7 @@ const messagesRoute = fs.readFileSync(
   path.join(root, "src/app/api/agent-chat/[sessionId]/messages/route.ts"),
   "utf8",
 );
-const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
 const events = fs.readFileSync(
   path.join(root, "src/lib/agentWebhooks/events.ts"),

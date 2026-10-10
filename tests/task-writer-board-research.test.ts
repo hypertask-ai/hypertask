@@ -28,7 +28,7 @@ test("shared source fidelity stays free of board-research exceptions", () => {
 });
 
 test("flag key is registered for Owner+QA rollout", () => {
-  const flagsSource = readFileSync(resolve("src/lib/flags.ts"), "utf8");
+  const flagsSource = (readFileSync(resolve("src/lib/flags.ts"), "utf8") + readFileSync(resolve("src/lib/flags/definitions.ts"), "utf8"));
   assert.match(
     flagsSource,
     new RegExp(`key:\\s*"${HTPR_6363_TASK_WRITER_RESEARCH_FLAG}"`)

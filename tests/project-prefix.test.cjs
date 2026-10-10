@@ -891,7 +891,7 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {
   const keys = load("src/lib/flags/keys.ts");
   assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, flagKey);
-  const registry = read("src/lib/flags.ts");
+  const registry = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
   assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });

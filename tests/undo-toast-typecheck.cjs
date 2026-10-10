@@ -7,6 +7,7 @@ const files = [
   "src/components/undoToast/useMobileToastAutoDismiss.ts",
   "src/components/ProviderGlobal/GloablProviders.tsx",
   "src/lib/flags.ts",
+  "src/lib/flags/definitions.ts",
   "src/lib/flags/keys.ts",
 ];
 const touchedErrors = (output) => output.split("\n").filter((line) =>

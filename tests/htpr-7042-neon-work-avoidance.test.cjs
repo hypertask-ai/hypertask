@@ -190,6 +190,7 @@ test("registry and uncached flag reads and writes do not load optional cache plu
       "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
       react: require("react"),
     };
+    mocks["@/lib/flags/definitions"] = load("src/lib/flags/definitions.ts", mocks);
     const imported = [];
     const module_ = { exports: {} };
     const javascript = ts.transpileModule(read("src/lib/flags.ts"), {

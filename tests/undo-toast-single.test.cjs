@@ -217,8 +217,8 @@ for (const mobile of [false, true]) {
 test("flag is registered with Owner + QA default and the global toaster publishes it to imperative callers", async (t) => {
   assert.equal(undo.undoToastSettings.single, false);
   assert.match(read("src/lib/flags/keys.ts"), /HTPR_6885_SINGLE_UNDO_TOAST_FLAG = "htpr-6885-single-undo-toast"/);
-  assert.match(read("src/lib/flags.ts"), /key: HTPR_6885_SINGLE_UNDO_TOAST_FLAG/);
-  assert.match(read("src/lib/flags.ts"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /key: HTPR_6885_SINGLE_UNDO_TOAST_FLAG/);
+  assert.match((read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts")), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
   assert.match(globalSource, /useFlag\(HTPR_6885_SINGLE_UNDO_TOAST_FLAG\)/);
   const f = await fixture(t, { enabled: false });
   assert.equal(undo.undoToastSettings.single, false);

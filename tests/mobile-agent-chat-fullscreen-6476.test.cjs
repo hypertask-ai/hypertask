@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "..");
 
 const chat = readAgentChatSource();
 const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
-const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
 const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");
 const shell = fs.readFileSync(
   path.join(root, "src/components/Global/mobileShellVisibility.ts"),

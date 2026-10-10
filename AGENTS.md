@@ -133,6 +133,7 @@ One AI model per class: a new model version replaces the old one in the same cha
 ## Feature flags for new user-facing behavior
 
 - Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.
+- Register definitions in `src/lib/flags/definitions.ts` and constants in `src/lib/flags/keys.ts`. `src/lib/flags.ts` keeps the server API and re-exports keys and public types. See [the registry reference](openwiki/feature-flags.md).
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
 - New feature and improvement flags default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a feature flag to Everyone; Valentin changes the mode at `/admin/flags`.
 - When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the INFRA MANAGER session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)

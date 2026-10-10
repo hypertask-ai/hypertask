@@ -216,6 +216,6 @@ test("page wiring reuses ticket carousel, its navigation, download, Escape and b
   assert.match(gallery, /plugins=\{\[Zoom, Download, Fullscreen/);
   assert.match(gallery, /close=\{handleClose\}/);
   assert.match(gallery, /closeOnBackdropClick: true/);
-  const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+  const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + fs.readFileSync(path.join(root, "src/lib/flags/definitions.ts"), "utf8"));
   assert.match(flags, /key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,\s*shippedOn: "2026-10-03"/);
 });

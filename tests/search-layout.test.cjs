@@ -121,7 +121,7 @@ test('layout flag registry uses Owner + QA defaults', () => {
   const jiti = createJiti(__filename, { interopDefault: true })
   const keys = jiti(path.join(root, 'src/lib/flags/keys.ts'))
   assert.equal(keys.HTPR_6865_SEARCH_LAYOUT_FLAG, layoutFlag)
-  const registry = fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8')
+  const registry = (fs.readFileSync(path.join(root, 'src/lib/flags.ts'), 'utf8') + fs.readFileSync(path.join(root, 'src/lib/flags/definitions.ts'), 'utf8'))
   assert.match(registry, /key: HTPR_6865_SEARCH_LAYOUT_FLAG/)
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/)
 })

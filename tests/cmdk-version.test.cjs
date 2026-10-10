@@ -197,7 +197,7 @@ if (require.main === module) {
 
   test("ticket-specific registry entry inherits Owner+QA and reuses muted micro footer styles", () => {
     const keys = read("src/lib/flags/keys.ts");
-    const flags = read("src/lib/flags.ts");
+    const flags = (read("src/lib/flags.ts") + read("src/lib/flags/definitions.ts"));
     assert.match(keys, /HTPR_6892_CMDK_VERSION_FLAG = "htpr-6892-cmdk-version"/);
     assert.match(flags, /key: HTPR_6892_CMDK_VERSION_FLAG,\s*shippedOn: "2026-10-03",\s*description:/);
     assert.match(flags, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);

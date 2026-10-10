@@ -7,7 +7,7 @@ const BASE_SHA = "db9dc34c03378f6bb3d67e6bcaf696fbe0467f7f";
 const changedTs = [
   "src/lib/ai/chatAlerts/policy.ts", "src/lib/ai/chatAlerts/store.ts",
   "src/lib/ai/chatAlerts/manager.ts", "src/lib/ai/chatAlerts/service.ts",
-  "src/lib/ai/chatStream/runStream.ts", "src/lib/agentWebhooks/delivery.ts", "src/lib/flags.ts", "src/lib/flags/keys.ts",
+  "src/lib/ai/chatStream/runStream.ts", "src/lib/agentWebhooks/delivery.ts", "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/keys.ts",
   "src/app/api/cron/native-agent-heartbeat/route.ts",
 ];
 const git = (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8" });
