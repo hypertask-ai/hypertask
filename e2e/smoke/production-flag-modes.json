@@ -25,7 +25,6 @@
     "htpr-6160-inbox-archive-cluster": "OFF",
     "htpr-6175-quick-entry-cards": "EVERYONE",
     "htpr-6177-auto-task-descriptions": "OFF",
-    "htpr-6197-confirmed-proposal-heading": "EVERYONE",
     "htpr-6215-my-tasks-cross-board-priority-sort": "OWNER_AND_QA",
     "htpr-6238-posthog-error-alert": "OWNER_AND_QA",
     "htpr-6243-manager-loop-activity": "OWNER_AND_QA",
