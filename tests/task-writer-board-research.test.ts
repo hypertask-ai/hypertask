@@ -30,8 +30,8 @@ test("shared source fidelity stays free of board-research exceptions", () => {
 
 test("flag key is registered for Owner+QA rollout", () => {
   assert.equal(researchFlag.key, HTPR_6363_TASK_WRITER_RESEARCH_FLAG);
-  assert.equal("kind" in researchFlag ? researchFlag.kind : "feature", "feature");
-  assert.equal("defaultMode" in researchFlag ? researchFlag.defaultMode : "OWNER_AND_QA", "OWNER_AND_QA");
+  assert.equal(researchFlag.kind, "bugfix");
+  assert.equal(researchFlag.defaultMode, "OWNER_AND_QA");
 });
 
 test("retrieval query prefers cumulative user briefs over the conversation blob", () => {
