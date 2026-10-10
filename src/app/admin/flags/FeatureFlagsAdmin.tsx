@@ -76,7 +76,7 @@ function FlagFilterPicker({ label, multiple, selected, allCount, options, onChan
         aria-haspopup="dialog"
         aria-expanded={open}
         onClick={() => setOpen(true)}
-        className="max-w-full flex-1 basis-40 truncate rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-left text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
+        className="max-w-full flex-1 basis-40 truncate rounded-sm px-3 py-1.5 text-left text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
       >
         {label}: {summary}
       </button>
