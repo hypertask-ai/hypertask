@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from "react";
 export interface MultiSelectOption {
   value: string;
   label: string;
-  count?: number;
 }
 
 const MultiSelectDropdown = ({
@@ -16,10 +15,6 @@ const MultiSelectDropdown = ({
   onChange,
   allLabel = "All",
   disabled = false,
-  multiple = true,
-  label,
-  allCount,
-  className = "",
 }: {
   ariaLabel: string;
   options: MultiSelectOption[];
@@ -27,10 +22,6 @@ const MultiSelectDropdown = ({
   onChange: (values: string[]) => void;
   allLabel?: string;
   disabled?: boolean;
-  multiple?: boolean;
-  label?: string;
-  allCount?: number;
-  className?: string;
 }) => {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -50,16 +41,9 @@ const MultiSelectDropdown = ({
       ? allLabel
       : selected.length === 1
         ? options.find((option) => option.value === selected[0])?.label ?? "1 selected"
-        : label
-          ? options.filter((option) => selectedSet.has(option.value)).map((option) => option.label).join(", ")
-          : `${selected.length} selected`;
+        : `${selected.length} selected`;
 
   const toggleValue = (value: string) => {
-    if (!multiple) {
-      onChange([value]);
-      setOpen(false);
-      return;
-    }
     onChange(
       selectedSet.has(value)
         ? selected.filter((candidate) => candidate !== value)
@@ -68,7 +52,7 @@ const MultiSelectDropdown = ({
   };
 
   return (
-    <div ref={containerRef} className={`relative min-w-0 ${className}`}>
+    <div ref={containerRef} className="relative min-w-0">
       <button
         type="button"
         aria-label={ariaLabel}
@@ -76,47 +60,36 @@ const MultiSelectDropdown = ({
         aria-expanded={open}
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
-        onKeyDown={label ? (event) => {
-          if (event.key === "Escape") setOpen(false);
-        } : undefined}
-        className={`flex ${label ? "min-h-9 py-2" : "h-9"} w-full min-w-0 items-center justify-between gap-2 border-x-0 border-t-0 border-b border-border bg-containerBackground px-3 text-left text-[14px] text-white-black outline-none disabled:cursor-not-allowed disabled:opacity-50`}
+        className="flex h-9 w-full min-w-0 items-center justify-between gap-2 border-x-0 border-t-0 border-b border-border bg-containerBackground px-3 text-left text-[14px] text-white-black outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
-        <span className={label ? "min-w-0 break-words" : "truncate"}>{label ? `${label}: ` : ""}{summary}</span>
+        <span className="truncate">{summary}</span>
         <ChevronDown size={14} strokeWidth={1.75} className="shrink-0 text-text-light-gray" />
       </button>
       {open && (
         <div
-          onKeyDown={label ? (event) => {
-            if (event.key === "Escape") {
-              setOpen(false);
-              containerRef.current?.querySelector("button")?.focus();
-            }
-          } : undefined}
           role="listbox"
-          aria-multiselectable={multiple}
-          className={`absolute left-0 top-full z-30 mt-1 max-h-64 ${label ? "w-full" : "min-w-full"} overflow-y-auto rounded-[5px] bg-modalBackground py-1 shadow-md`}
+          aria-multiselectable="true"
+          className="absolute left-0 top-full z-30 mt-1 max-h-64 min-w-full overflow-y-auto rounded-[5px] bg-modalBackground py-1 shadow-md"
         >
-          {multiple && (
-            <label className={`flex ${label ? "min-h-9 py-2" : "h-9"} cursor-pointer items-center gap-2 px-3 text-[14px] hover:bg-hover-active`}>
-              <input
-                type="checkbox"
-                checked={selected.length === 0}
-                onChange={() => onChange([])}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
-                    event.preventDefault();
-                    onChange([]);
-                  }
-                }}
-                className="h-4 w-4 accent-hypertasks-purple"
-              />
-              <span>{allLabel}{allCount === undefined ? "" : ` (${allCount})`}</span>
-            </label>
-          )}
+          <label className="flex h-9 cursor-pointer items-center gap-2 px-3 text-[14px] hover:bg-hover-active">
+            <input
+              type="checkbox"
+              checked={selected.length === 0}
+              onChange={() => onChange([])}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
+                  event.preventDefault();
+                  onChange([]);
+                }
+              }}
+              className="h-4 w-4 accent-hypertasks-purple"
+            />
+            <span>{allLabel}</span>
+          </label>
           {options.map((option) => (
             <label
               key={option.value}
-              className={`flex ${label ? "min-h-9 py-2" : "h-9"} cursor-pointer items-center gap-2 px-3 text-[14px] hover:bg-hover-active`}
+              className="flex h-9 cursor-pointer items-center gap-2 px-3 text-[14px] hover:bg-hover-active"
             >
               <input
                 type="checkbox"
@@ -130,7 +103,7 @@ const MultiSelectDropdown = ({
                 }}
                 className="h-4 w-4 accent-hypertasks-purple"
               />
-              <span className={label ? "min-w-0 break-words" : "truncate"}>{option.label}{option.count === undefined ? "" : ` (${option.count})`}</span>
+              <span className="truncate">{option.label}</span>
             </label>
           ))}
         </div>

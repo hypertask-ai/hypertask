@@ -20,6 +20,17 @@ stub("src/hooks/useFlag.tsx", {
   useFlag: key => key === "htpr-7069-flags-dropdown-filters" ? enabled : oldEnabled,
 });
 stub("src/styles/linksModal.module.scss", { __esModule: true, default: {} });
+// reactstrap portals do not mount in this jsdom setup, so the modal shell is stubbed with plain elements (same approach as my-tasks-scope-picker.test.cjs).
+const box = ({ children }) => React.createElement("div", null, children);
+const reactstrapPath = require.resolve("reactstrap");
+require.cache[reactstrapPath] = { id: reactstrapPath, filename: reactstrapPath, loaded: true, exports: { ModalBody: box } };
+stub("src/components/Common/CommonModalComponents/index.tsx", {
+  ModalContainerCustom: ({ id, children }) => React.createElement("div", { id, role: "dialog" }, children),
+  ModalListContainer: box,
+  ModalHeaderComp: ({ header }) => React.createElement("h2", null, header),
+  ModalInput: ({ autofocus, ...props }) => React.createElement("input", props),
+  ModalRowElementContainer: ({ children, onClick, id }) => React.createElement("button", { type: "button", onClick, id }, children),
+});
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false, jsx: { runtime: "automatic" } });
 const Admin = jiti(path.join(root, "src/app/admin/flags/FeatureFlagsAdmin.tsx")).default;
 const { parseFlagsPageFilters: parse, serializeFlagsPageFilters: serialize, matchesFlagRisk } = jiti(path.join(root, "src/app/admin/flags/useFlagsPageFilters.ts"));
@@ -44,25 +55,35 @@ async function withAdmin(query, run, props = {}) {
     reactRoot = require("react-dom/client").createRoot(document.getElementById("root"));
     await React.act(async () => reactRoot.render(React.createElement(QueryClientProvider, { client }, React.createElement(Admin, props))));
     const click = async element => { assert.ok(element); await React.act(async () => element.click()); };
+    const pause = () => React.act(async () => { await new Promise(resolve => setTimeout(resolve, 20)); });
+    const pickerRows = () => [...document.querySelectorAll("[id^='option-picker-']")].filter(el => /^option-picker-\d+$/.test(el.id));
+    const labels = () => pickerRows().map(row => row.querySelector("span").textContent);
+    const closePicker = async () => {
+      if (!pickerRows().length) return;
+      await React.act(async () => { document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })); });
+      await pause();
+    };
     const open = async label => {
-      const current = document.querySelector('[aria-expanded="true"]');
-      if (current) await click(current);
+      await closePicker();
       const trigger = document.querySelector(`[aria-label="Filter ${label}"]`);
       await click(trigger);
-      return trigger.parentElement.querySelector('[role="listbox"]');
+      assert.ok(document.getElementById("option-picker")?.textContent.includes(label), `${label} picker header`);
+      return labels();
     };
     const select = async (label, option) => {
-      const menu = document.querySelector(`[aria-label="Filter ${label}"]`).getAttribute("aria-expanded") === "true" ? document.querySelector('[role="listbox"]') : await open(label);
-      const row = [...menu.querySelectorAll("label")].find(row => row.textContent.startsWith(option));
+      const trigger = document.querySelector(`[aria-label="Filter ${label}"]`);
+      if (!pickerRows().length || trigger.getAttribute("aria-expanded") !== "true") await open(label);
+      const row = pickerRows().find(row => row.querySelector("span").textContent.startsWith(option));
       assert.ok(row, `${label}: ${option}`);
-      await click(row.querySelector("input"));
+      await click(row);
+      await pause();
     };
     const travel = async direction => React.act(async () => {
       const arrived = new Promise(resolve => window.addEventListener("popstate", resolve, { once: true }));
       window.history[direction]();
       await arrived;
     });
-    await run({ document, window: dom.window, click, open, select, travel });
+    await run({ document, window: dom.window, click, open, select, travel, labels, pickerRows, pause, closePicker });
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     client.clear(); dom.window.close();
@@ -86,28 +107,26 @@ test("all dropdowns show current choices and per-option counts; count matches ac
       ["Sort", "Release risk first", ["Release risk first (4)", "Newest first (4)", "Oldest first (4)"]],
     ]) {
       assert.ok(document.querySelector(`[aria-label="Filter ${label}"]`).textContent.includes(`${label}: ${summary}`));
-      const menu = await open(label);
-      assert.deepEqual([...menu.querySelectorAll("label")].map(row => row.textContent), expected);
+      assert.deepEqual(await open(label), expected);
     }
-    assert.equal(document.querySelector('[aria-label="Flag filters"]').children.length, 4);
+    assert.equal(document.querySelectorAll('[aria-label="Flag filters"] button[aria-label^="Filter "]').length, 4);
   });
 });
 
 test("option counts reflect the other active filters and the search", async () => {
   await withAdmin("?type=bug", async ({ open }) => {
-    const menu = await open("Status");
-    assert.deepEqual([...menu.querySelectorAll("label")].map(row => row.textContent),
+    assert.deepEqual(await open("Status"),
       ["All (1)", "Unreleased (0)", "Only me (0)", "Owner + QA (0)", "Everyone (1)", "Off (0)"]);
   });
   await withAdmin("?tab=unreleased", async ({ open }) => {
-    assert.deepEqual([...(await open("Type")).querySelectorAll("label")].map(row => row.textContent),
+    assert.deepEqual(await open("Type"),
       ["All (2)", "Feature (1)", "Improvement (1)", "Bug (0)"]);
-    assert.deepEqual([...(await open("Release risk")).querySelectorAll("label")].map(row => row.textContent),
+    assert.deepEqual(await open("Release risk"),
       ["All (2)", "No visible change (1)", "Small change (1)", "New feature (0)"]);
   });
   await withAdmin("?q=Fixture%201", async ({ document, open }) => {
     assert.equal(document.querySelector('[role="status"]').textContent, "Showing 1 of 4 flags");
-    assert.deepEqual([...(await open("Type")).querySelectorAll("label")].map(row => row.textContent),
+    assert.deepEqual(await open("Type"),
       ["All (1)", "Feature (0)", "Improvement (1)", "Bug (0)"]);
   });
 });
@@ -180,27 +199,39 @@ test("new flag works independently of older flags and does not change detail con
   }, { flagKey: rows[0].key });
 });
 
-test("wrapping filter row and constrained menus use the existing shared dropdown", () => {
+test("filters use the shared option picker, a wrapping row of trigger buttons and no waiver", () => {
   const admin = fs.readFileSync(path.join(root, "src/app/admin/flags/FeatureFlagsAdmin.tsx"), "utf8");
-  const shared = fs.readFileSync(path.join(root, "src/components/TimeTracking/MultiSelectDropdown.tsx"), "utf8");
-  assert.match(admin, /import MultiSelectDropdown from "@\/components\/TimeTracking\/MultiSelectDropdown"/);
+  assert.match(admin, /import OptionPickerModal from "@\/components\/Modals\/OptionPicker"/);
   assert.match(admin, /className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters"/);
-  assert.match(admin, /className="max-w-full flex-1 basis-40"/);
-  assert.match(shared, /label \? "w-full" : "min-w-full"/);
+  assert.doesNotMatch(admin, /MultiSelectDropdown|eslint-disable/);
+});
+
+test("single selects close the picker and return focus to the trigger; multi selects stay open", async () => {
+  await withAdmin("", async ({ document, select, pickerRows, labels, pause }) => {
+    await select("Sort", "Newest first");
+    assert.equal(pickerRows().length, 0);
+    const sort = document.querySelector('[aria-label="Filter Sort"]');
+    assert.ok(sort.textContent.includes("Sort: Newest first"));
+    assert.equal(document.activeElement, sort);
+    await select("Type", "Feature");
+    assert.ok(pickerRows().length > 0, "multi select stays open");
+    assert.ok(labels()[0].startsWith("All"));
+    await select("Type", "Bug");
+    assert.ok(document.querySelector('[aria-label="Filter Type"]').textContent.includes("Feature, Bug"));
+    await select("Type", "Feature");
+    assert.ok(document.querySelector('[aria-label="Filter Type"]').textContent.includes("Type: Bug"));
+    await pause();
+  });
 });
 
 const browserInstalled = fs.existsSync(require("@playwright/test").chromium.executablePath());
 
-test("real browser at 390px wraps the row and bounds every opened menu without sideways scroll", { skip: !browserInstalled && "Playwright browser not installed" }, async () => {
+test("real browser at 390px wraps the row and without sideways scroll", { skip: !browserInstalled && "Playwright browser not installed" }, async () => {
   const { compile } = require("@tailwindcss/node");
   const { chromium } = require("@playwright/test");
   const snapshots = [];
-  await withAdmin("", async ({ document, open }) => {
+  await withAdmin("", async ({ document }) => {
     snapshots.push(document.getElementById("root").innerHTML);
-    for (const label of ["Status", "Type", "Release risk", "Sort"]) {
-      await open(label);
-      snapshots.push(document.getElementById("root").innerHTML);
-    }
   });
   const compiler = await compile('@import "tailwindcss";', { base: root, onDependency: () => {} });
   const candidates = [...new Set(snapshots.flatMap(html => [...html.matchAll(/class="([^"]*)"/g)].flatMap(match => match[1].split(/\s+/))))];
@@ -216,11 +247,9 @@ test("real browser at 390px wraps the row and bounds every opened menu without s
         const layout = await page.evaluate(() => ({
           scrollWidth: document.documentElement.scrollWidth,
           tops: [...document.querySelector('[aria-label="Flag filters"]').children].map(el => el.getBoundingClientRect().top),
-          menus: [...document.querySelectorAll('[role="listbox"]')].map(el => ({ left: el.getBoundingClientRect().left, right: el.getBoundingClientRect().right })),
         }));
         assert.ok(layout.scrollWidth <= width, JSON.stringify({ width, layout }));
         assert.equal(new Set(layout.tops).size, width === 390 ? 2 : 1);
-        for (const menu of layout.menus) assert.ok(menu.left >= 0 && menu.right <= width, JSON.stringify(menu));
       }
       if (process.env.HTPR_7069_SCREENSHOT_DIR) {
         fs.mkdirSync(process.env.HTPR_7069_SCREENSHOT_DIR, { recursive: true });

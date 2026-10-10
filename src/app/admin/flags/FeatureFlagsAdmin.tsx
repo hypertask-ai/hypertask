@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -8,7 +8,7 @@ import {
   FEATURE_FLAGS_QUERY_PREFIX,
   useFlag,
 } from "@/hooks/useFlag";
-import MultiSelectDropdown from "@/components/TimeTracking/MultiSelectDropdown";
+import OptionPickerModal from "@/components/Modals/OptionPicker";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
 import { ModalInput } from "@/components/Common/CommonModalComponents";
 import { HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG, HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG, HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG } from "@/lib/flags/keys";
@@ -42,6 +42,65 @@ const AUDIENCE_FILTERS: { mode: FeatureFlagAudienceFilter; label: string }[] = [
   { mode: "UNRELEASED", label: "Unreleased" },
   ...OPTIONS,
 ];
+
+type FlagFilterDropdown = {
+  label: string;
+  multiple: boolean;
+  selected: string[];
+  allCount?: number;
+  options: { value: string; label: string; count: number }[];
+  onChange: (selected: string[]) => void;
+};
+
+// Trigger button plus the shared OptionPickerModal. Single selects close on pick; multi selects stay open.
+function FlagFilterPicker({ label, multiple, selected, allCount, options, onChange }: FlagFilterDropdown) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const summary = selected.length === 0
+    ? "All"
+    : options.filter((option) => selected.includes(option.value)).map((option) => option.label).join(", ");
+  const close = () => {
+    setOpen(false);
+    trigger.current?.focus();
+  };
+  const pickerOptions = [
+    ...(multiple ? [{ id: "", label: `All (${allCount ?? 0})`, checked: selected.length === 0 }] : []),
+    ...options.map((option) => ({ id: option.value, label: `${option.label} (${option.count})`, checked: selected.includes(option.value) })),
+  ];
+  return (
+    <>
+      <button
+        ref={trigger}
+        type="button"
+        aria-label={`Filter ${label}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        className="max-w-full flex-1 basis-40 truncate rounded-sm border border-border-light-gray-thin px-3 py-1.5 text-left text-dense font-medium text-text-light-gray hover:bg-hover-active hover:text-white-black"
+      >
+        {label}: {summary}
+      </button>
+      {open && (
+        <OptionPickerModal
+          header={label}
+          options={pickerOptions}
+          onSelect={(option) => {
+            const value = String(option.id ?? "");
+            if (!multiple) {
+              onChange([value]);
+              close();
+            } else if (value === "") {
+              onChange([]);
+            } else {
+              onChange(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value]);
+            }
+          }}
+          onClose={close}
+        />
+      )}
+    </>
+  );
+}
 
 type AdminFeatureFlags = {
   flags: FeatureFlagRow[];
@@ -264,15 +323,7 @@ export default function FeatureFlagsAdmin({
 
         {dropdownFiltersEnabled && !flagKey && (
           <div className="mt-6 flex flex-wrap gap-3" aria-label="Flag filters">
-            {dropdowns.map((dropdown) => (
-              // eslint-disable-next-line hypertask-ui/no-new-choice-menus -- Valentin requested existing dropdowns in HTPR-7069 on 2026-10-10; expires 2026-10-24.
-              <MultiSelectDropdown
-                key={dropdown.label}
-                {...dropdown}
-                ariaLabel={`Filter ${dropdown.label}`}
-                className="max-w-full flex-1 basis-40"
-              />
-            ))}
+            {dropdowns.map((dropdown) => <FlagFilterPicker key={dropdown.label} {...dropdown} />)}
           </div>
         )}
 
