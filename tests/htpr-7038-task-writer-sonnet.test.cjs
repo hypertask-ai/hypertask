@@ -37,7 +37,7 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = false, plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, flagError = false, haiku = false } = {}) {
+function harness({ enabled = false, plan = "Free", saved = null, teamByok = false, agentByok = false, agentId = null, unavailable = false, settings = {}, flagError = false, haiku = false, background = false, failFirst = false } = {}) {
   const checks = [], calls = [], reservations = [], agentLookups = [], usage = [], observations = [];
   let preferenceReads = 0;
   const flags = { isFeatureEnabled: async (key, id) => {
@@ -46,6 +46,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
       if (flagError) throw new Error("Fixture flag read failed");
       return enabled;
     }
+    if (key === keys.HTPR_7075_BACKGROUND_CLAUDE_FLAG) return background;
     return haiku && key === keys.HTPR_7038_HAIKU_DEFAULT_FLAG;
   } };
   const prisma = { __esModule: true, default: {
@@ -83,6 +84,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     const modelFactory = (modelId) => {
       const observe = (params) => {
         calls.push({ provider, credential, modelId, params });
+        if (failFirst && calls.length === 1) throw Object.assign(new Error("Fixture first call unavailable"), { status: 404 });
         if (unavailable && /sonnet-5[.-]5/.test(modelId)) throw Object.assign(new Error("Fixture model unavailable"), { status: 404 });
       };
       return {
@@ -301,6 +303,20 @@ async function main() {
   assert.equal(agentFallback.calls[1].credential, agentKey);
   assert.ok(agentFallback.usage.length > 0);
   assert.ok(agentFallback.usage.every((row) => row.userId === userId && row.agentId === "fixture-agent"));
+  // HTPR-7075: with background Claude on, an unavailable Sonnet 5.5 retries on the
+  // same 5.5 model (never Sonnet 5, Luna or another provider) and then fails visibly.
+  for (const teamByok of [false, true]) {
+    const retried = harness({ enabled: true, background: true, plan: "Pro", teamByok, failFirst: true });
+    assert.equal((await retried.post("app")).status, 200);
+    assert.equal(retried.calls.length, 2);
+    assert.equal(retried.calls[1].modelId, retried.calls[0].modelId);
+    assert.equal(retried.calls[1].credential, retried.calls[0].credential);
+    assert.match(retried.calls[1].modelId, /claude-sonnet-5[.-]5$/);
+    const failing = harness({ enabled: true, background: true, plan: "Pro", teamByok, unavailable: true });
+    await failing.post("app").catch(() => null);
+    assert.ok(failing.calls.length >= 1);
+    assert.ok(failing.calls.every((call) => /claude-sonnet-5[.-]5$/.test(call.modelId)), failing.calls.map((call) => call.modelId).join());
+  }
   for (const feature of ["improveWriting", "boardGeneration", "askAi", "aiChat"]) {
     const h = harness({ enabled: true, plan: "Pro" });
     await h.editor.selectTaskWriterModel({ userId, projectId, aiFeature: feature, teamContext: { teamId, settings: {} } });

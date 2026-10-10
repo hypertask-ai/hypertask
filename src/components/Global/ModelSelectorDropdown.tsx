@@ -1,5 +1,6 @@
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
 import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
@@ -104,7 +105,7 @@ const AIModelDropDownList = ({
   haikuDefaultEnabled: boolean;
 }) => {
   const haiku55Loaded = useFlagLoaded(HTPR_7010_HAIKU_5_5_FLAG);
-  const haikuDefaultLoaded = useFlagLoaded(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
   const lunaFreeLoaded = useFlagLoaded(LUNA_FREE_PLAN_FLAG);
   const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded && lunaFreeLoaded;
   const quickModelIds = haiku55Enabled
@@ -824,7 +825,7 @@ type AIModelDropDownButtonProps = Omit<
 >;
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
-  const haikuDefaultEnabled = useFlag(HTPR_7038_HAIKU_DEFAULT_FLAG);
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
   const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,

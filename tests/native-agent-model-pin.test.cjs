@@ -29,10 +29,10 @@ test("a model named in the request beats the pin", () => {
   // Switching model inside the agent's chat must keep working.
   assert.equal(
     resolveAgentModelPin({
-      requestedModelOptionId: "claude-opus-5",
+      requestedModelOptionId: "claude-opus-5-5-thinking",
       agentModelOptionId: PIN,
     }),
-    "claude-opus-5",
+    "claude-opus-5-5-thinking",
   );
   // Naming a raw model is just as explicit as naming an option.
   assert.equal(

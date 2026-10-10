@@ -670,7 +670,7 @@ export async function selectTaskWriterModel(args: {
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
-    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false };
+    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
@@ -827,13 +827,24 @@ export async function selectTaskWriterModel(args: {
     modelId: resolveHaikuModelId(selectedModel.modelId, haiku55Enabled),
     teamId: teamContext.teamId ?? normalizeGatewayTeamId(args.teamId),
   };
+  const sameModelRetry = Boolean(defaultContext.backgroundClaudeEnabled);
   let hasOutput = false;
   let fellBack = false;
   const fallbackModel = async (error: unknown) => {
     if (fellBack) return null;
     const previous = previousModelForFailedStream(
-      selected.modelId, error, hasOutput, false, haiku55Enabled,
+      selected.modelId, error, hasOutput, false, haiku55Enabled, sameModelRetry,
     );
+    if (previous && previous.model === selected.modelId) {
+      // HTPR-7075: retry the same Claude 5.5 model once, then fail visibly.
+      fellBack = true;
+      console.warn(`[ai-model-fallback] ${selected.modelId} retry on the same model: ${previous.status}`);
+      return {
+        model: selectedModel.model as LanguageModelV4,
+        providerOptions: selected.providerOptions,
+        crossProvider: false,
+      };
+    }
     if (!previous || (previous.model === "gpt-6-luna" && !resolveTeamProviderEnabled(teamContext.settings, "openai"))) return null;
     fellBack = true;
     console.warn(
@@ -871,7 +882,7 @@ export async function selectTaskWriterModel(args: {
       crossProvider: fallback.provider !== selection.provider,
     };
   };
-  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled)) {
+  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled, sameModelRetry)) {
     return selected;
   }
   selected.model = wrapLanguageModel({

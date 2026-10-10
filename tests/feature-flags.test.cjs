@@ -75,6 +75,19 @@ test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", as
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
 
+test("Background Claude 5.5 fix defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7075_BACKGROUND_CLAUDE_FLAG;
+  assert.equal(key, "htpr-7075-background-claude");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7075");
+  assert.deepEqual(await Promise.all([0, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+});
+
 test("task-writer empty draft and research fix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG;
   assert.equal(key, "htpr-7060-task-writer-empty-and-research");
