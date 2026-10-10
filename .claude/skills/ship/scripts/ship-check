@@ -299,7 +299,7 @@ check_cleaned() {
 check_premerge() {
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import base64, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
+import json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
@@ -316,14 +316,53 @@ def gh(*args):
         text = text[end:].strip()
     return pages
 
+# PR files come from a local bare cache repo: one git fetch per head, then `git show`. No contents API call, ever.
+GIT = os.environ.get('SHIP_GIT', 'git')
+CACHE = Path(os.environ.get('SHIP_GIT_CACHE') or Path.home() / '.cache/premerge-evidence/git')
+REMOTE = os.environ.get('SHIP_GIT_REMOTE', f'https://github.com/{repo}.git')
+GIT_ENV = dict(os.environ, GIT_TERMINAL_PROMPT='0')
+def git(*args, timeout=30, cwd=True):
+    command = [GIT, '-C', str(CACHE), *args] if cwd else [GIT, *args]
+    return subprocess.run(command, capture_output=True, timeout=timeout, env=GIT_ENV)
+
+def have(sha):
+    return git('cat-file', '-e', sha + '^{commit}').returncode == 0
+
+def prepare(pr, *shas):
+    import fcntl
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(CACHE) + '.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not (CACHE / 'HEAD').exists() and git('init', '--bare', '-q', str(CACHE), cwd=False).returncode:
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+        if all(have(s) for s in shas):
+            return
+        git('fetch', '--no-tags', '-q', REMOTE, f'+refs/pull/{pr}/head:refs/premerge/pr-{pr}', timeout=600)
+        for s in shas:
+            if not have(s):
+                git('fetch', '--no-tags', '-q', REMOTE, s, timeout=600)
+        if not all(have(s) for s in shas):
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+
 cache = {}
 def source(path, sha):
     if (path, sha) not in cache:
-        row = gh('api', f'repos/{repo}/contents/{urllib.parse.quote(path, safe="/")}?ref={sha}')
-        if row.get('encoding') != 'base64':
-            raise ValueError('cannot read complete PR source; retry before merging')
-        cache[path, sha] = base64.b64decode(row['content']).decode()
+        result = git('show', f'{sha}:{path}')
+        if result.returncode:
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+        cache[path, sha] = result.stdout.decode()
     return cache[path, sha]
+
+def listdir(path, sha):
+    # One git ls-tree, shaped like the contents API listing (name, path, type), so a directory read costs no API call.
+    result = git('ls-tree', '-z', sha, path.rstrip('/') + '/')
+    if result.returncode:
+        raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+    rows = []
+    for entry in filter(None, result.stdout.decode().split('\0')):
+        meta, full = entry.split('\t', 1)
+        rows.append({'name': full.rsplit('/', 1)[-1], 'path': full, 'type': 'file' if meta.split()[1] == 'blob' else 'dir'})
+    return rows
 
 def constants(text):
     return {m[0]: m[2] for m in re.findall(r'\bconst\s+(\w+)(?:\s*:\s*[^=;\n]+)?\s*=\s*([\'\"])(.*?)\2', text)}
@@ -339,7 +378,7 @@ def read_registry(ref):
     keys = constants(text)
     rows = []
     if 'definitions/index.generated' in text:
-        listing = gh('api', f'repos/{repo}/contents/src/lib/flags/definitions?ref={ref}')
+        listing = listdir('src/lib/flags/definitions', ref)
         if not isinstance(listing, list) or not listing:
             raise ValueError('cannot resolve per-flag registry; retry before merging')
         for item in sorted(listing, key=lambda item: item['name']):
@@ -370,6 +409,7 @@ try:
         raise ValueError('cannot read the full PR head sha')
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
+    prepare(pr, sha, base)
     ticket = row['title'].split()[0]
     pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
     files = [f for page in pages for f in page]
