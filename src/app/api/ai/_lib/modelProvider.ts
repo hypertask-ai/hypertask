@@ -201,6 +201,12 @@ function resolveUntracedAiModel(
     throw new Error("AI model id is required");
   }
 
+  if (process.env.HT_PREMERGE_AI_STUB === "1" || process.env.HT_PREMERGE_QUEUE_STUB === "1") {
+    const { createPremergeLanguageModel } = require("./premergeModel") as typeof import("./premergeModel");
+    const stub = createPremergeLanguageModel(model);
+    if (stub) return stub;
+  }
+
   const byokApiKey =
     typeof byokCredential === "string" ? byokCredential : undefined;
 
@@ -555,6 +561,12 @@ function resolveUntracedGatewayModel(
   modelSlug: string,
   gatewayApiKey?: string,
 ): LanguageModel {
+  if (process.env.HT_PREMERGE_AI_STUB === "1" || process.env.HT_PREMERGE_QUEUE_STUB === "1") {
+    const { createPremergeLanguageModel } = require("./premergeModel") as typeof import("./premergeModel");
+    const stub = createPremergeLanguageModel(modelSlug);
+    if (stub) return stub;
+  }
+
   const teamKey = isVercelAiGatewayKey(gatewayApiKey)
     ? gatewayApiKey?.trim()
     : undefined;
