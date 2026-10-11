@@ -14,7 +14,6 @@ import {
   type SlackSummaryBatchItem,
 } from "@/lib/ai/batch/batchJobs";
 import { submitBatch } from "@/lib/ai/batch/submitBatch";
-import prisma from "@/lib/prisma";
 import {
   loadSlackThreadSource,
   resolveSlackSummaryModelInputs,
@@ -84,8 +83,9 @@ export async function submitSlackSummaryBatches(entries: SlackBatchEntry[]) {
   for (const group of groups.values()) {
     for (const chunk of chunkForBatch(group)) {
       const first = chunk[0];
+      let claimedIds: string[] = [];
       try {
-        const batchId = await submitBatch({
+        await submitBatch({
           kind: "slack-summary",
           teamId: first.teamId,
           userId: first.userId,
@@ -104,12 +104,22 @@ export async function submitSlackSummaryBatches(entries: SlackBatchEntry[]) {
             }),
           ),
           items: Object.fromEntries(chunk.map((entry) => [entry.threadId, entry.item])),
+          // Only threads nobody else holds go into the batch, claimed in the same transaction that
+          // creates the row, so the collector never sees the row before its threads are marked.
+          claim: async (tx, batchId) => {
+            await tx.slackWatchedThread.updateMany({
+              where: { id: { in: chunk.map((entry) => entry.threadId) }, summaryBatchId: null },
+              data: { summaryBatchId: batchId },
+            });
+            const held = await tx.slackWatchedThread.findMany({
+              where: { summaryBatchId: batchId },
+              select: { id: true },
+            });
+            claimedIds = held.map(({ id }) => id);
+            return claimedIds;
+          },
         });
-        await prisma.slackWatchedThread.updateMany({
-          where: { id: { in: chunk.map((entry) => entry.threadId) } },
-          data: { summaryBatchId: batchId },
-        });
-        queued.push(...chunk.map((entry) => entry.threadId));
+        queued.push(...claimedIds);
       } catch (error) {
         failed.push(...chunk.map((entry) => entry.threadId));
         console.error("Slack summary batch submit failed", error);

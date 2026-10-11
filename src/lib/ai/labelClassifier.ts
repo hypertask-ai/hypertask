@@ -206,6 +206,23 @@ export async function applyAiLabelVerdict({
     if (lockedTasks.length === 0) {
       return { changed: false, deliveryIds: [] as string[] };
     }
+    if (contentHash) {
+      // HTPR-7098: the check before the transaction can be overtaken by an edit, so repeat it on the
+      // locked row. The edit that comes after the lock waits for us and the next classification covers it.
+      const locked = await tx.task.findUnique({
+        where: { id: taskId },
+        select: { title: true, description: true, description_: { select: { content: true } } },
+      });
+      if (
+        !locked ||
+        labelTaskContentHash({
+          title: locked.title,
+          description: convertHtmlToText(locked.description_?.content || locked.description || ""),
+        }) !== contentHash
+      ) {
+        return { changed: false, deliveryIds: [] as string[] };
+      }
+    }
 
     const existing = await tx.taskLabel.findMany({
       where: { taskId, labelId: { in: aiLabelIds } },
@@ -285,6 +302,38 @@ export async function applyAiLabelVerdict({
     }
     void broadcastBoardChange(projectId, { originUserId: actor.id });
   }
+}
+
+/**
+ * HTPR-7098: one instant classification for a batch item that came back failed, expired or
+ * unparsable. Same prompt and the same freshness check as the normal instant path.
+ */
+export async function classifyLabelItemInstantly(
+  taskId: number,
+  projectId: number,
+  definitions: AiLabelDefinition[],
+) {
+  const task = await prisma.task.findFirst({
+    where: { id: taskId, projectId, status: "Normal" },
+    select: {
+      id: true,
+      title: true,
+      description: true,
+      userId: true,
+      agentId: true,
+      projectId: true,
+      updatedAt: true,
+      description_: { select: { content: true } },
+      project: { select: { teamId: true } },
+    },
+  });
+  if (!task?.updatedAt) return;
+  await classifyTaskWithDefinitions({
+    task,
+    definitions,
+    actor: await getAiActor(),
+    snapshotAt: task.updatedAt,
+  });
 }
 
 async function classifyTaskWithDefinitions({

@@ -17,7 +17,7 @@ import {
   type SmartLabelBatchItem,
 } from "@/lib/ai/batch/batchJobs";
 import { cancelGatewayBatch, gatewayBatchOutcomes, gatewayBatchState } from "@/lib/ai/batch/gatewayBatch";
-import { applyAiLabelVerdict, getAiActor } from "@/lib/ai/labelClassifier";
+import { applyAiLabelVerdict, classifyLabelItemInstantly, getAiActor } from "@/lib/ai/labelClassifier";
 import { generalConfig } from "@/lib/configs/general.config";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 import { buildSlackThreadSummaryComment } from "@/lib/slack/threadSummary";
@@ -223,7 +223,10 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
         continue;
       }
       if (result.type === "comment") {
+        const delivered = new Set(item.deliveredTaskIds ?? []);
         for (const task of tasks) {
+          // A re-applied batch (crash or timeout) must not comment twice on a task it already reached.
+          if (delivered.has(task.id)) continue;
           await createCommentService({
             text: result.html,
             creatorId: botUser.id,
@@ -234,6 +237,9 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
             processTaskReferences: false,
             trustedCaller: true,
           });
+          delivered.add(task.id);
+          item.deliveredTaskIds = [...delivered];
+          await prisma.aiBatch.update({ where: { id: batch.id }, data: { items: items as object } });
         }
       }
       await prisma.slackWatchedThread.update({
@@ -259,7 +265,10 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
     try {
       await logUsage(batch, outcome, { projectId: item.projectId, taskId: item.taskId });
       const action = labelActionForOutcome(outcome, item);
-      if (action.type === "skip") continue;
+      if (action.type === "instant") {
+        await classifyLabelItemInstantly(item.taskId, item.projectId, action.definitions);
+        continue;
+      }
       await applyAiLabelVerdict({
         taskId: item.taskId,
         projectId: item.projectId,

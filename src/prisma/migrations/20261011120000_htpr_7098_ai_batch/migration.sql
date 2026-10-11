@@ -27,9 +27,7 @@ BEGIN
   LOOP
     BEGIN
       PERFORM set_config('lock_timeout', '2s', true);
-      ALTER TABLE "SlackWatchedThread" ADD COLUMN IF NOT EXISTS "summaryBatchId" TEXT;
-      CREATE INDEX IF NOT EXISTS "SlackWatchedThread_summaryBatchId_idx" ON "SlackWatchedThread"("summaryBatchId");
-      EXIT;
+      ALTER TABLE "SlackWatchedThread" ADD COLUMN IF NOT EXISTS "summaryBatchId" TEXT;      EXIT;
     EXCEPTION WHEN lock_not_available THEN
       attempt := attempt + 1;
       IF attempt >= 20 THEN

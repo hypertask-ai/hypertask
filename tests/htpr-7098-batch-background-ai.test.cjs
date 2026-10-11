@@ -118,9 +118,9 @@ test("label apply mapping: verdict keeps the stored prompt, failures and unparsa
   assert.deepEqual(verdict, { type: "verdict", matchingLabelIds: ["L1"], definitions: [{ labelId: "L1", prompt: "Billing" }] });
   const none = jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "[]", usage: {} }, item);
   assert.deepEqual(none.matchingLabelIds, []);
-  assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "nope", usage: {} }, item), { type: "skip" });
+  assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "nope", usage: {} }, item), { type: "instant", definitions: [{ labelId: "L1", prompt: "Billing" }] });
   for (const status of ["failed", "expired", "cancelled"]) {
-    assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status }, item), { type: "skip" });
+    assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status }, item), { type: "instant", definitions: [{ labelId: "L1", prompt: "Billing" }] });
   }
   // The collector hands the stored snapshot time to the same verdict function, so its stale check stays intact.
   const collector = read("src/lib/ai/batch/collectBatches.ts");
@@ -204,7 +204,66 @@ test("stuck batches rotate and stale errors are final (review 1)", () => {
   const sql = read("src/prisma/migrations/20261011120000_htpr_7098_ai_batch/migration.sql");
   assert.match(sql, /"lastCheckedAt" TIMESTAMP\(3\)/);
   assert.match(sql, /"claimedAt" TIMESTAMP\(3\)/);
-  assert.match(sql, /SlackWatchedThread_summaryBatchId_idx/);
+  // The index is its own migration, built CONCURRENTLY like the other big-table indexes (review 5).
+  assert.doesNotMatch(sql, /SlackWatchedThread_summaryBatchId_idx/);
+  const indexDirs = fs.readdirSync(path.join(root, "src/prisma/migrations")).filter((name) => name.includes("htpr_7098_slack_summary_batch_index"));
+  assert.equal(indexDirs.length, 1);
+  assert.ok(indexDirs[0] > fs.readdirSync(path.join(root, "src/prisma/migrations")).find((name) => name.endsWith("htpr_7098_ai_batch")));
+  assert.match(read(`src/prisma/migrations/${indexDirs[0]}/migration.sql`), /CREATE INDEX CONCURRENTLY IF NOT EXISTS "SlackWatchedThread_summaryBatchId_idx"/);
+});
+
+test("failed or unparsable label items are classified once, instantly (review 1)", () => {
+  const item = { labelId: "L1", promptAtSubmit: "Billing" };
+  const instant = { type: "instant", definitions: [{ labelId: "L1", prompt: "Billing" }] };
+  for (const status of ["failed", "expired", "cancelled"]) {
+    assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status }, item), instant);
+  }
+  assert.deepEqual(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "{}", usage: {} }, item), instant);
+  assert.equal(jobs.labelActionForOutcome({ id: "t1", status: "succeeded", text: "[]", usage: {} }, item).type, "verdict");
+  // A missing result is a failed one, so it reaches the same fallback.
+  const [missing] = jobs.outcomesForItems(["t1"], []);
+  assert.equal(jobs.labelActionForOutcome(missing, item).type, "instant");
+  const collector = read("src/lib/ai/batch/collectBatches.ts");
+  assert.match(collector, /action\.type === "instant"\) \{\s*await classifyLabelItemInstantly\(item\.taskId, item\.projectId, action\.definitions\)/);
+  const classifier = read("src/lib/ai/labelClassifier.ts");
+  const fn = classifier.slice(classifier.indexOf("export async function classifyLabelItemInstantly"), classifier.indexOf("async function classifyTaskWithDefinitions"));
+  assert.match(fn, /classifyTaskWithDefinitions\(\{[\s\S]*snapshotAt: task\.updatedAt/); // same prompt and freshness check as the instant path
+});
+
+test("content hash is verified again on the locked row (review 2)", () => {
+  const classifier = read("src/lib/ai/labelClassifier.ts");
+  const lock = classifier.indexOf("FOR UPDATE");
+  const recheck = classifier.indexOf("tx.task.findUnique", lock);
+  const firstChange = classifier.indexOf("tx.taskLabel.upsert");
+  assert.ok(lock > 0 && recheck > lock && recheck < firstChange);
+  assert.match(classifier.slice(recheck, firstChange), /labelTaskContentHash\(\{[\s\S]*?\}\) !== contentHash/);
+});
+
+test("threads are claimed in the same transaction that creates the batch row (review 3)", () => {
+  const submit = read("src/lib/ai/batch/submitBatch.ts");
+  const startAt = submit.indexOf("await startGatewayBatch");
+  const tx = submit.indexOf("prisma.$transaction");
+  const claim = submit.indexOf("args.claim(tx, id)");
+  const create = submit.indexOf("tx.aiBatch.create");
+  assert.ok(startAt > 0 && startAt < tx && tx < claim && claim < create);
+  assert.equal(submit.includes("prisma.aiBatch.create"), false); // no row outside the transaction
+  // Only items that were actually claimed go into the row.
+  assert.match(submit, /filter\(\(\[key\]\) => !claimed \|\| claimed\.has\(key\)\)/);
+  const slack = read("src/lib/slack/threadSummaryBatch.ts");
+  assert.match(slack, /tx\.slackWatchedThread\.updateMany\(\{\s*where: \{ id: \{ in: [^}]*\}, summaryBatchId: null \}/);
+  assert.equal(slack.includes("prisma.slackWatchedThread.updateMany"), false);
+  assert.match(slack, /queued\.push\(\.\.\.claimedIds\)/);
+});
+
+test("delivered tasks are recorded per item and skipped on re-apply (review 4)", () => {
+  const collector = read("src/lib/ai/batch/collectBatches.ts");
+  const slack = collector.slice(collector.indexOf("async function applySlackBatch"), collector.indexOf("async function applyLabelBatch"));
+  assert.match(slack, /if \(delivered\.has\(task\.id\)\) continue;/);
+  const post = slack.indexOf("await createCommentService");
+  const record = slack.indexOf("await prisma.aiBatch.update", post);
+  assert.ok(post > 0 && record > post);
+  assert.ok(slack.indexOf("delivered.add(task.id)", post) < record); // recorded right after each comment
+  assert.match(slack, /data: \{ items: items as object \}/);
 });
 
 test("label batch verdicts are judged by content, not updatedAt (review 2)", () => {
@@ -239,7 +298,7 @@ test("submit is idempotent per chunk (review 5)", () => {
   assert.notEqual(key, jobs.batchIdempotencyKey("slack-summary", "team-1", [{ id: "a", prompt: "one grew" }, requests[0]]));
   assert.match(read("src/lib/ai/batch/gatewayBatch.ts"), /providerOptions: \{ gateway: \{ idempotencyKey \} \}/);
   assert.match(read("src/lib/ai/batch/submitBatch.ts"), /batchIdempotencyKey\(args\.kind, args\.teamId, args\.requests\)/);
-  assert.match(read("src/lib/ai/batch/submitBatch.ts"), /prisma\.aiBatch\.upsert/); // a replayed start reuses the recorded row
+  assert.match(read("src/lib/ai/batch/submitBatch.ts"), /tx\.aiBatch\.findUnique/); // a replayed start reuses the recorded row
 });
 
 test("applying claim, time budget and partial results of a failed batch (review 3, 6)", () => {
@@ -274,7 +333,7 @@ test("schema, migration and cron are wired", () => {
   const schema = read("src/prisma/schema.prisma");
   assert.match(schema, /model AiBatch \{[\s\S]*gatewayBatchId String\s+@unique/);
   assert.match(schema, /summaryBatchId\s+String\?/);
-  const dirs = fs.readdirSync(path.join(root, "src/prisma/migrations")).filter((name) => name.includes("htpr_7098"));
+  const dirs = fs.readdirSync(path.join(root, "src/prisma/migrations")).filter((name) => name.endsWith("htpr_7098_ai_batch"));
   assert.equal(dirs.length, 1);
   const sql = read(`src/prisma/migrations/${dirs[0]}/migration.sql`);
   assert.match(sql, /CREATE TABLE IF NOT EXISTS "AiBatch"/);

@@ -45,6 +45,8 @@ export type SlackSummaryBatchItem = {
   lastMessageTsAtSubmit: string;
   participants: string[];
   permalink: string;
+  /** Tasks already commented on, written right after each comment so a re-applied batch skips them. */
+  deliveredTaskIds?: number[];
 };
 
 export type SmartLabelBatchItem = {
@@ -264,17 +266,18 @@ export function batchEligibleModel(model: string): boolean {
 
 export type LabelBatchAction =
   | { type: "verdict"; matchingLabelIds: string[]; definitions: AiLabelDefinition[] }
-  | { type: "skip" };
+  /** Failed, expired, cancelled, missing or unparsable: classify that task once through the instant path. */
+  | { type: "instant"; definitions: AiLabelDefinition[] };
 
 export function labelActionForOutcome(
   outcome: BatchItemOutcome,
   item: Pick<SmartLabelBatchItem, "labelId" | "promptAtSubmit">,
 ): LabelBatchAction {
-  if (outcome.status !== "succeeded") return { type: "skip" };
   const definitions = [{ labelId: item.labelId, prompt: item.promptAtSubmit }];
+  if (outcome.status !== "succeeded") return { type: "instant", definitions };
   const matchingLabelIds = parseMatchingLabelIds(outcome.text.trim(), definitions);
-  // Unparsable output is "no verdict", never "remove the label".
-  return matchingLabelIds === null ? { type: "skip" } : { type: "verdict", matchingLabelIds, definitions };
+  // Unparsable output is "no verdict", never "remove the label": ask again, instantly.
+  return matchingLabelIds === null ? { type: "instant", definitions } : { type: "verdict", matchingLabelIds, definitions };
 }
 
 /**
