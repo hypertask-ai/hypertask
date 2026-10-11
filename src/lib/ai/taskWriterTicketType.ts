@@ -11,7 +11,9 @@ const SPAN_TAG_RE = /<(\/?)span\b[^>]*>/gi;
 
 export function parseTicketType(value: unknown): TaskWriterTicketType | null {
   if (typeof value !== "string") return null;
-  const text = value.replace(/<[^>]*>/g, "").trim().toLowerCase();
+  let text = value;
+  for (let prev = ""; prev !== text; ) { prev = text; text = text.replace(/<[^>]*>/g, ""); }
+  text = text.trim().toLowerCase();
   return text === "bug" || text === "improvement" || text === "feature" ? text : null;
 }
 
