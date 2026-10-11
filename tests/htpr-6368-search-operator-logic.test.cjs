@@ -2,17 +2,17 @@ const assert = require('node:assert/strict')
 const path = require('node:path')
 const { test } = require('node:test')
 const root = path.resolve(__dirname, '..')
-const calls = { tasks: 0, comments: 0, taskWhere: [] }
+const calls = { tasks: 0, comments: 0, taskWhere: [], groupBy: [], commentRows: null }
 const mocks = new Map([
   ['src/lib/prisma.ts', { default: {
     section: { findMany: async () => [] },
-    comment: { groupBy: async () => [{ taskId: 2 }], findFirst: async () => ({ id: 'c', taskId: 2, commentText: 'hi', text: null, createdAt: new Date(), creator: { displayName: 'A', email: 'a@x' } }) },
+    comment: { groupBy: async (args) => { calls.groupBy.push(args); return [{ taskId: 2 }] }, findFirst: async () => ({ id: 'c', taskId: 2, commentText: 'hi', text: null, createdAt: new Date(), creator: { displayName: 'A', email: 'a@x' } }) },
     task: { findMany: async (args) => { calls.taskWhere.push(args.where); return [{ id: 1 }, { id: 2 }] } },
   } }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
     searchPreviewText: (text) => text,
     searchTasks: async () => { calls.tasks++; return [{ id: '1', descriptionText: '' }] },
-    searchComments: async () => { calls.comments++; return [{ id: 'c', taskId: '2', commentText: 'hi', creatorName: 'A' }] },
+    searchComments: async () => { calls.comments++; return calls.commentRows ?? [{ id: 'c', taskId: '2', commentText: 'hi', creatorName: 'A' }] },
   }],
 ])
 for (const [file, exports] of mocks) {
@@ -67,7 +67,7 @@ test('malformed input falls back to plain text', () => {
 })
 
 test('filters turn into server-side conditions', async () => {
-  const where = await searchFilterWhere(parse('"login page" -oauth priority:High type:comment'), [7], 'Normal')
+  const where = await searchFilterWhere(parse('"login page" -oauth priority:High'), [7], 'Normal')
   const groups = where.AND
   const text = JSON.stringify(groups)
   assert.ok(text.includes('"Priority_Value":{"equals":"high","mode":"insensitive"}'))
@@ -125,4 +125,36 @@ test('type:comment without text still takes the comment payload path', async () 
   const text = await rankedSearchWhere(parse('login type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
   assert.equal(text.commentById.get(2).createdAt === undefined, true)
   assert.equal(text.commentById.get(2).commentText, 'hi')
+})
+
+test('comment-only enumeration requires a matching comment in the task where, page and count', async () => {
+  calls.groupBy = []
+  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  const needs = (where) => where.AND.some((part) => part.comments?.some?.activity)
+  assert.ok(needs(result.where), 'returned where (used for MCP total and paging) requires a comment')
+  assert.ok(needs(calls.groupBy[0].where.task.AND[0]), 'page query requires a comment')
+  const sorted = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false, [{ updatedAt: 'desc' }])
+  assert.ok(needs(sorted.where))
+  const ticketOnly = await rankedSearchWhere(parse('type:ticket'), [7], 'Normal', 50, {}, undefined, true, false)
+  assert.ok(!needs(ticketOnly.where))
+})
+
+test('phrases apply to the returned item: the comment for comments, title and description for tickets', async () => {
+  const commentWhere = await searchFilterWhere(parse('type:comment "login page"'), [7], 'Normal')
+  assert.deepEqual(commentWhere.AND, [])
+  const ticketWhere = JSON.stringify((await searchFilterWhere(parse('type:ticket "login page"'), [7], 'Normal')).AND)
+  assert.ok(ticketWhere.includes('"title"') && !ticketWhere.includes('"comments"'))
+  const anyWhere = JSON.stringify((await searchFilterWhere(parse('"login page"'), [7], 'Normal')).AND)
+  assert.ok(anyWhere.includes('"comments"'))
+  calls.groupBy = []
+  await rankedSearchWhere(parseSearchQuery('commenter:6 "login page"', {}, true, true), [7], 'Normal', 50, {}, undefined, true, true)
+  assert.ok(JSON.stringify(calls.groupBy[0].where).includes('login page'), 'comment predicate carries the phrase')
+  calls.commentRows = [
+    { id: 'a', taskId: '2', commentText: 'page login broken', creatorName: 'A' },
+    { id: 'b', taskId: '3', commentText: 'the Login Page is broken', creatorName: 'A' },
+  ]
+  try {
+    const result = await rankedSearchWhere(parse('login page type:comment "login page"'), [7], 'Normal', 50, {}, undefined, true, false)
+    assert.deepEqual([...result.commentById.keys()], [3])
+  } finally { calls.commentRows = null }
 })
