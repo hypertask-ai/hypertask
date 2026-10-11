@@ -130,14 +130,25 @@ test("UI rename calls the same controller and permission behavior as the API", a
     [true, "x".repeat(200), 200],
   ]) {
     const h = harness({ members: allowed ? [humanMember()] : [] });
-    const ui = loadTs("src/pages/api/projects/update.ts", {
-      "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    const getSessionUser = { getSessionUser: async () => ({ userId: 6 }) };
+    const nextServer = { NextResponse: Response };
+    const sharedRoute = loadTs("src/lib/api/task-writes/route.ts", {
+      "next/server": nextServer,
+      "zod": {},
+      "@/lib/auth/getSessionUser": getSessionUser,
+    });
+    const ui = loadTs("src/lib/api/project-writes/update.ts", {
+      "next/server": nextServer,
+      "zod": require("zod"),
+      "@/lib/api/task-writes/route": sharedRoute,
       "@/utils/controllers/projects/update": h.controller,
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
       "@/lib/auth/sessionUserRecord": h.userRecord,
-    }).default;
-    const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
-    await ui({ method: "POST", headers: {}, body: { projectId: 15, title } }, response);
+    }).POST;
+    const result = await ui({
+      headers: new Headers(),
+      json: async () => ({ projectId: 15, title }),
+    });
+    const response = { code: result.status, body: await result.json() };
     assert.equal(response.code, expectedStatus);
     assert.equal(h.updates.length, expectedStatus === 200 ? 1 : 0);
     if (expectedStatus === 200) assert.equal(h.board.title, title.trim());

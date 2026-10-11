@@ -63,7 +63,7 @@ test("follower links use the created task board snapshot", () => {
 });
 
 test("the create route persists the request description atomically", () => {
-  const source = read("src/pages/api/tasks/createGlobally.ts");
+  const source = read("src/lib/api/task-writes/create-global.ts");
 
   assert.match(
     source,

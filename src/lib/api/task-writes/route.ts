@@ -2,8 +2,6 @@ import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 
 // Pages has already parsed JSON. This narrow Web-request interface avoids a
 // second parse/serialization and also accepts a real App Router Request.
@@ -71,29 +69,24 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   };
 }
 
-export function withTaskWriteFlag(
-  legacy: NextApiHandler,
-  method: string,
-  loadRoute: () => Promise<TaskWriteRoute>,
+type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;
+
+// Pages stays the URL owner; each listed method always answers with its shared
+// route ("*" answers every method). Other methods go to `fallback`, or get 405.
+export function taskWriteHandler(
+  routes: Partial<Record<string, TaskWriteRouteLoader>>,
+  options: { fallback?: NextApiHandler; methodNotAllowed?: unknown } = {},
 ): NextApiHandler {
   return async (req, res) => {
-    if (req.method !== method) return legacy(req, res);
-    let session: SessionUser | null = null;
-    let enabled = false;
-    let headers: Headers | undefined;
-    try {
-      headers = new Headers(req.headers as Record<string, string>);
-      session = await getSessionUser(headers);
-      enabled = !!session && await isFeatureEnabled(
-        HTPR_6923_APP_ROUTER_WRITES_FLAG,
-        session.userId,
-      );
-    } catch {
-      // A flag/auth lookup outage must not enable the new write path.
+    const loadRoute = routes[req.method ?? ""] ?? routes["*"];
+    if (!loadRoute) {
+      if (options.fallback) return options.fallback(req, res);
+      return res.status(405).json(options.methodNotAllowed ?? { message: "Method not allowed" });
     }
-    if (!enabled || !session || !headers) return legacy(req, res);
+    const headers = new Headers(req.headers as Record<string, string>);
+    // A failed lookup leaves auth to the route, which answers its own 401.
+    const session = (await getSessionUser(headers).catch(() => null)) ?? undefined;
     const route = await loadRoute();
-    // Never retry legacy after dispatch: the operation may already have written.
     const response = await route({ headers, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
     // Creation historically leaves unresolved sections/ranks without a response.
     if (!response) return;

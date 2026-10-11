@@ -5,6 +5,7 @@ const test = require("node:test");
 const ts = require("typescript");
 const { QueryClient } = require("@tanstack/react-query");
 const { createJiti } = require("jiti");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, {
@@ -106,8 +107,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "./revision": { isInboxReadModelRevision: () => false },
     "./mutation": mutation,
   });
-  const route = loadSource("src/pages/api/notifications/markAsDone.ts", {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
+  const route = load("src/pages/api/notifications/markAsDone.ts", {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/realtime/server": {
       socketIdFromHeader: () => null,
@@ -135,7 +135,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
   global.document = { querySelector: () => null, getElementById: () => null };
   global.fetch = async (url, options) => {
     requests.push(url);
-    const res = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json() { return this; } };
+    const res = { statusCode: 200, setHeader() {}, status(code) { this.statusCode = code; return this; }, json() { return this; } };
     await route({ method: options.method, headers: {}, query: Object.fromEntries(new URL(url, "https://app.hypertask.ai").searchParams) }, res);
     return { ok: res.statusCode === 200 };
   };

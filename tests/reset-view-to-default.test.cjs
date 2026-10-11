@@ -31,6 +31,7 @@ function response() {
       result.statusCode = code;
       return this;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return this;
@@ -108,8 +109,6 @@ function loadRoute({
     { default: async () => ({ id: "project-view-1" }) },
   );
 
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
-
   const jiti = require("jiti")(
     path.join(root, `tests/reset-view-jiti-${++entryId}.cjs`),
     {
@@ -118,11 +117,15 @@ function loadRoute({
       cache: false,
     },
   );
-  const loaded = jiti(
+  // The Pages file is a thin adapter over the shared handler, which owns the helpers.
+  const adapter = jiti(
     path.join(root, "src/pages/api/projects/views/reset-to-default.ts"),
   );
+  const loaded = jiti(
+    path.join(root, "src/lib/api/project-writes/views/reset-to-default.ts"),
+  );
   return {
-    handler: loaded.default ?? loaded,
+    handler: adapter.default ?? adapter,
     resetUserProjectViewState: loaded.resetUserProjectViewState,
     runSerializableViewReset: loaded.runSerializableViewReset,
     operations,

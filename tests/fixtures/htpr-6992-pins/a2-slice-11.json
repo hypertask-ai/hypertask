@@ -1,0 +1,15 @@
+{
+ "access/GET": "d9adabf9416a0a10",
+ "changePushNotificationStatus/POST": "3075250bf0fe535e",
+ "getAll/GET": "31e833f72545625b",
+ "getAllInbox/GET": "2cfe194df5775099",
+ "getCount/GET": "a98584b7248d11d4",
+ "getPushNotificationStatus/GET": "544e10716f534e42",
+ "matrix/GET": "7858d315e12e67fa",
+ "matrix/POST": "fe59c2b0b8ddfe7e",
+ "mute/GET": "a5d87baafaf9d571",
+ "mute/POST": "fff3ac1a83991eda",
+ "preference/POST": "9eb78f18bc8ff631",
+ "splits/GET": "f011ef4e26626ebe",
+ "splits/POST": "418c0f3061243b21"
+}

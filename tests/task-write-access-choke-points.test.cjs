@@ -25,10 +25,10 @@ test("creating a task on a foreign board is refused at the shared controller", (
   assert.match(controller, /status:\s*404[\s\S]*Project not found or access denied/);
 });
 
-test("the legacy create route cannot drift around taskWriteAccessWhere", () => {
-  const route = read("src/pages/api/tasks/create.ts");
-  const fullScreenHelper = route.slice(route.indexOf("export const createFullScreenTaskAndReturn"));
-  assert.ok(route.includes("currentUser:userObj,agentId"));
+test("the shared create route cannot drift around taskWriteAccessWhere", () => {
+  const route = read("src/lib/api/task-writes/create.ts");
+  const fullScreenHelper = read("src/lib/api/task-writes/create-fullscreen.ts");
+  assert.ok(route.includes("currentUser: userObj, agentId"));
   assert.ok(fullScreenHelper.includes("const response = await create({"));
   assert.ok(
     !fullScreenHelper.includes("prisma.task.create("),
@@ -49,37 +49,38 @@ test("task creation still permits a human board member", () => {
 test("task creation still permits an owned live board agent", () => {
   const access = read("src/utils/controllers/projects/getAllIncludes.ts");
   assert.ok(access.includes("agent: { userId, revokedAt: null }"));
-  const globalCreate = read("src/pages/api/tasks/createGlobally.ts");
+  const globalCreate = read("src/lib/api/task-writes/create-global.ts");
   assert.ok(globalCreate.includes("taskWriteAccessWhere(userId, agentId)"));
 });
 
 test("global task creation refuses a foreign project before its transaction", () => {
-  const source = read("src/pages/api/tasks/createGlobally.ts");
+  const source = read("src/lib/api/task-writes/create-global.ts");
   assertBefore(
     source,
     "const authorizedProject",
     "const created = await createTaskWithBoardWebhookOutbox",
     "global creation must be gated before the transaction writes",
   );
-  assert.match(source, /if \(!authorizedProject\)[\s\S]*status\(403\)/);
+  assert.match(source, /if \(!authorizedProject\)[\s\S]*status: 403/);
 });
 
 test("task recovery refuses a foreign task before cancelling or writing", () => {
-  const source = read("src/pages/api/tasks/recoverTask.ts");
-  assert.ok(source.includes("getSessionUser("));
+  const source = read("src/lib/api/task-writes/recover.ts");
+  // The shared route resolves the caller's identity before this operation runs.
+  assert.ok(read("src/lib/api/task-writes/route.ts").includes("getSessionUser("));
   assert.ok(!source.includes("JSON.parse(req.cookies.nookies_user"));
   assert.ok(source.includes("project: taskWriteAccessWhere(session.userId, actingAgentId)"));
   assert.match(source, /id: actingAgentId,[\s\S]*userId: session\.userId,[\s\S]*revokedAt: null/);
   assertBefore(source, "const [allowedTask, ownedAgent]", "const updatedTask = await updateTaskAndSubtasks", "recovery must gate before restoring the task");
-  assert.match(source, /status\(404\)[\s\S]*Task not found or access denied/);
+  assert.match(source, /Task not found or access denied[\s\S]*status: 404/);
 });
 
 test("rank reset refuses the whole batch when any task is foreign", () => {
-  const source = read("src/pages/api/section/resetRanks.ts");
+  const source = read("src/lib/api/section-writes/reset-ranks.ts");
   assert.ok(source.includes("project: taskWriteAccessWhere(currentUser.id, agentId)"));
   assert.ok(source.includes("projectIds.length !== uniqueTaskIds.length"));
   assertBefore(source, "projectIds.length !== uniqueTaskIds.length", "for (const task of taskIds)", "rank writes must follow the batch gate");
-  assert.match(source, /status\(404\)[\s\S]*Task not found or access denied/);
+  assert.match(source, /Task not found or access denied[\s\S]*status: 404/);
 });
 
 test("the delete scheduler refuses a foreign task before mutating it", () => {

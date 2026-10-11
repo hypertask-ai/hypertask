@@ -102,7 +102,7 @@ test("real signed-session resolver rejects forged/expired opt-in and ignores bod
     const { signSession } = load("src/lib/auth/session.ts", {});
     for (const [token, authorized] of [[undefined, false], ["forged", false], [signSession({ id: 7 }, -1), false], [signSession({ id: 7 }), true]]) {
       const f = fixture({ enabled: true });
-      const { ["@/lib/auth/currentUser"]: ignoredAuth, ...mocks } = f.mocks;
+      const { ["@/lib/auth/currentUser"]: ignoredAuth, ["@/lib/auth/getSessionUser"]: ignoredSession, ...mocks } = f.mocks;
       const handler = load("src/pages/api/tasks/getAll.ts", {
         ...mocks,
         "@/lib/auth/betterAuth": { auth: { api: { getSession: async () => null } } },

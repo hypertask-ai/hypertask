@@ -4,6 +4,7 @@ const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
 const { load } = require("./helpers/create-view-context.cjs");
+const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
 
 const root = path.resolve(__dirname, "..");
 const flagKey = "htpr-6999-ctrl-j-view-context";
@@ -201,9 +202,10 @@ test("exclude-match filters and placeholders do not become task fields", async (
 
 test("existing create validation rejects foreign labels, users and agents before writes", async () => {
   for (const invalid of ["label", "user", "agent", null]) {
-    const handler = load("src/pages/api/tasks/createGlobally.ts", {
-      "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
-      "@/lib/api/task-writes/create-global-effects": {
+    const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
+    const created = load("src/lib/api/task-writes/create-global.ts", {
+      "./route": sharedRoute,
+      "./create-global-effects": {
         isAgentAssignee: person => typeof person.id === "string", getActiveAgentOwnerId: async () => 42,
       },
       "@/lib/ai/composeTaskTarget": {}, "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" }, "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => undefined }, "@prisma/client": {},
@@ -219,7 +221,6 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/utils/controllers/tasks/getNextUniqueTaskIndex": {},
       "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: () => assert.fail("validation must finish before writes") },
       "@/lib/mcp/webhooks/outbox": {}, "@/lib/agentWebhooks/outbox": {},
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
       "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
       "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
       "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
@@ -233,8 +234,9 @@ test("existing create validation rejects foreign labels, users and agents before
         assert.equal(agentId, assignees[1].id);
         return invalid !== "agent";
       } },
-    }).default;
-    const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+    });
+    const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
+    const response = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
     await handler({ method: "POST", headers: {}, cookies: {}, body: {
       ...legacyBody(), tags: labels, assignees, priority, estimate, sectionId: 0,
     } }, response);

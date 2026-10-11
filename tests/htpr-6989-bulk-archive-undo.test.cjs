@@ -7,7 +7,6 @@ const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 const bugfixKey = "htpr-6989-bulk-archive-undo";
-const routerKey = "htpr-6923-app-router-writes";
 const originalRevision = "008e6325caf9a521a2f8d1dd9fb642a0b74b6f3d";
 const bulkPage = "src/pages/api/notifications/(un)archiveBulk.ts";
 const bulkWeb = "src/lib/api/notification-writes/archive-bulk.ts";
@@ -69,8 +68,8 @@ function fixture(api, flagOn, original = false) {
       isFeatureEnabled: async (key, userId) => {
         flags.push([key, userId]);
         assert.equal(userId, 985, "flag must use the signed user");
-        assert.ok([bugfixKey, routerKey].includes(key), `unexpected flag ${key}`);
-        return key === bugfixKey ? flagOn : api === "compat";
+        assert.equal(key, bugfixKey, `unexpected flag ${key}`);
+        return flagOn;
       },
     },
     "@/lib/realtime/server": {
@@ -80,7 +79,8 @@ function fixture(api, flagOn, original = false) {
   };
   const web = original ? compileOriginal(bulkWeb, mocks).POST : load(bulkWeb, mocks).POST;
   mocks["@/lib/api/notification-writes/archive-bulk"] = { POST: web };
-  const page = original ? compileOriginal(bulkPage, mocks).default : load(bulkPage, mocks).default;
+  // The unfixed variant swaps only the shared Web handler, which holds the bug; the Pages adapter is always current.
+  const page = load(bulkPage, mocks).default;
   const markPage = load("src/pages/api/notifications/markAsDone.ts", mocks).default;
   const markWeb = load("src/lib/api/notification-writes/mark-done.ts", mocks).GET;
   const undo = load("src/utils/undoActions/helperFuncs.ts", {
@@ -152,7 +152,7 @@ test("bulk undo restores all three persisted inbox items with the bugfix on, pre
   const savedLog = console.log;
   console.log = () => {};
   try {
-    for (const api of ["pages", "compat", "web"]) {
+    for (const api of ["pages", "web"]) {
       if (proveUnfixed) {
         await assert.rejects(() => bulkRoundTrip(api, true, true), error =>
           error.code === "ERR_ASSERTION" && error.message.includes("bulk undo must restore the persisted inbox") &&

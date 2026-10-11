@@ -11,7 +11,7 @@ const includesSource = read(
   "src/utils/controllers/projects/getAllIncludes.ts"
 );
 const getAllSource = read("src/utils/controllers/projects/getAll.ts");
-const getAllRouteSource = read("src/pages/api/projects/getAll.ts");
+const getAllRouteSource = read("src/lib/api/project-writes/all-read.ts");
 const boardTasksSource = read(
   "src/utils/controllers/projects/getBoardTasks.ts"
 );

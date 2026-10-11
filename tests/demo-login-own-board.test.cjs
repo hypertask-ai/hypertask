@@ -111,7 +111,6 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
       createAuthEndpoint: (route, options, handler) => handler,
       getSessionFromCtx: async () => ({ user: { id: String(userId) } }),
     },
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
     '@/utils/controllers/projects/getAll': async (id) => ({ status: 200, json: projects.filter((project) => project.ownerId === id) }),
     './utils/edgeHelpers': { isValidUser: (raw) => ({ isValid: !!raw, user: raw ? JSON.parse(raw) : null }) },
     './utils/serverActions': {},
@@ -122,6 +121,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/routing/detailWithoutTicket': { detailWithoutTicketRedirect: () => null },
     '@/lib/tutorial/keyboardShortcutTutorial': { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
   }
+  aliases['@/lib/api/task-writes/route'] = loadTs('src/lib/api/task-writes/route.ts', aliases)
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
@@ -141,14 +141,13 @@ async function login(method, options = {}) {
   process.env.JWT_SECRET = 'test-only-not-a-real-credential'
   try {
     if (method.startsWith('verify-')) {
-      const getAll = loadTs('src/pages/api/projects/getAll.ts', h.aliases).default
+      const { POST: getAll } = loadTs('src/lib/api/project-writes/all-read.ts', h.aliases)
       global.fetch = async (url, init) => {
         assert.equal(new URL(url).pathname, '/api/projects/getAll')
-        const response = { status(value) { this.statusCode = value; return this }, json(value) { this.body = value } }
         const cookie = new Headers(init.headers).get('Cookie')
         if (!cookie) h.calls.unauthenticatedBoardRequests++
-        await getAll({ method: 'POST', cookies: cookie ? { ht_session: cookie.split('=')[1] } : {}, body: JSON.parse(init.body) }, response)
-        return new Response(JSON.stringify(response.body), { status: response.statusCode })
+        const result = await getAll({ headers: new Headers(), cookies: cookie ? { ht_session: cookie.split("=")[1] } : {}, json: async () => JSON.parse(init.body) })
+        return new Response(await result.text(), { status: result.status })
       }
       const { POST } = loadTs(`src/app/api/auth/${method}/route.ts`, h.aliases)
       const response = await POST(new NextRequest(`https://app.hypertask.ai/api/auth/${method}`, {

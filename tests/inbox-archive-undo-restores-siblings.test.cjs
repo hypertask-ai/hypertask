@@ -37,6 +37,7 @@ function loadTs(relativePath) {
 
 function makeRes() {
   const res = {
+    setHeader() {},
     statusCode: null,
     payload: null,
     status(code) {
@@ -83,12 +84,12 @@ async function loadMarkAsDone({ row }) {
   const broadcasts = [];
   resetModules([
     "src/pages/api/notifications/markAsDone.ts",
+    "src/lib/api/notification-writes/mark-done.ts",
     "src/lib/auth/getSessionUser.ts",
     "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
   ]);
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: handler => handler });
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });
@@ -119,13 +120,13 @@ async function loadArchiveBulk() {
   };
   resetModules([
     "src/pages/api/notifications/(un)archiveBulk.ts",
+    "src/lib/api/notification-writes/archive-bulk.ts",
     "src/lib/flags.ts",
     "src/lib/auth/getSessionUser.ts",
     "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
   ]);
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: handler => handler });
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });

@@ -24,11 +24,16 @@ const stubModule = (relativePath, exports) => {
 
 const load = (relativePath, stubs) => {
   delete require.cache[path.join(root, relativePath)];
+  // The Pages file lazily imports the shared handler, which must see fresh stubs.
+  for (const filename of Object.keys(require.cache)) {
+    if (filename.startsWith(path.join(root, "src/lib/api/"))) {
+      delete require.cache[filename];
+    }
+  }
   for (const [stubPath, exports] of Object.entries(stubs)) {
     delete require.cache[path.join(root, stubPath)];
     stubModule(stubPath, exports);
   }
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
 
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-view-mutation-${++loadId}.cjs`),
@@ -49,6 +54,7 @@ const response = () => {
       result.statusCode = code;
       return this;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return this;

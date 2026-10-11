@@ -12,6 +12,7 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 // 2. so that means the applied view in user_project_view is now null.
 // 3. LITERALLY THATS IT
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
+    console.warn("legacy route hit: /api/projects/views/sync-view");
     if (req.method === "POST") {
         const session = await getSessionUser(
           new Headers(req.headers as Record<string, string>)

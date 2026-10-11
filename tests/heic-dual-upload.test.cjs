@@ -15,7 +15,6 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: {
-    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
     "@": path.join(root, "src"),
   },
 });
@@ -24,7 +23,7 @@ const { uploadFilesViaApi } = jiti(
   path.join(root, "src/lib/storage/uploadViaApi.ts")
 );
 const { parseRequestedFiles } = jiti(
-  path.join(root, "src/pages/api/tasks/uploadUrl.ts")
+  path.join(root, "src/lib/api/task-writes/upload-url.ts")
 );
 const { HEIC_PREVIEW_SUFFIX } = jiti(
   path.join(root, "src/lib/media/heicPreview.ts")

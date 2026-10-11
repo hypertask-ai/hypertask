@@ -153,7 +153,7 @@ test("server bootstrap derives every private slice from the verified account", (
   const favoritesController = read(
     "src/utils/controllers/favorites/getAll.ts",
   );
-  const projectsRoute = read("src/pages/api/projects/getAllMinimal.ts");
+  const projectsRoute = read("src/lib/api/project-writes/minimal-read.ts");
   const userRoute = read("src/pages/api/users/getById.ts");
 
   assert.match(route, /verifySession\([\s\S]*getAppShellBootstrap\(session\.id\)/);
@@ -165,10 +165,14 @@ test("server bootstrap derives every private slice from the verified account", (
   assert.match(favoritesController, /owner: \{ select: favoriteUserSelect \}/);
   assert.match(favoritesController, /user: \{ select: favoriteUserSelect \}/);
   assert.doesNotMatch(favoritesController, /\b(owner|user): true\b/);
-  for (const source of [favoritesRoute, projectsRoute, userRoute]) {
+  for (const source of [favoritesRoute, userRoute]) {
     assert.match(source, /verifySession\(req\.cookies\[SESSION_COOKIE\]\)/);
     assert.match(source, /session\.id/);
   }
+  // The minimal projects read moved into the shared handler.
+  assert.match(projectsRoute, /verifySession\(/);
+  assert.match(projectsRoute, /SESSION_COOKIE/);
+  assert.match(projectsRoute, /session\.id/);
 });
 
 test("all app-shell readers consume the shared response before their fallback", () => {
