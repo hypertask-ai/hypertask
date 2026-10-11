@@ -18,6 +18,8 @@ import { showCommandsAtom } from "@/store";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { getInclusiveRange, toggleId } from "@/lib/kanbanBulkSelection";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG } from "@/lib/flags/keys";
 
 type Assignee = IUser | IAgent;
 type AssigneeIntent = "assign" | "unassign" | "toggle";
@@ -53,7 +55,8 @@ interface KanbanBulkSelectionContextValue {
 interface KanbanBulkSelectionProviderProps {
   children: ReactNode;
   items: ITask[];
-  onArchiveTask: TaskOperation;
+  onArchiveTask: (task: ITask, suppressUndo?: boolean) => Promise<void | boolean>;
+  onArchiveUndo: (tasks: ITask[]) => void;
   onMoveTask: (task: ITask, section: ISection) => Promise<void>;
   onAssignTask: (
     task: ITask,
@@ -70,10 +73,12 @@ export const KanbanBulkSelectionProvider = ({
   children,
   items,
   onArchiveTask,
+  onArchiveUndo,
   onMoveTask,
   onAssignTask,
   onLabelTask,
 }: KanbanBulkSelectionProviderProps) => {
+  const bulkArchiveUndoAll = useFlag(HTPR_7137_BULK_ARCHIVE_UNDO_ALL_FLAG);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [failedIds, setFailedIds] = useState<Set<number>>(new Set());
   const [isProcessing, setIsProcessing] = useState(false);
@@ -160,11 +165,12 @@ export const KanbanBulkSelectionProvider = ({
   );
 
   const runTaskOperation = useCallback(
-    async (operation: TaskOperation, successText: string) => {
+    async (operation: TaskOperation, successText: string, onComplete?: (tasks: ITask[]) => void) => {
       if (isProcessing || selectedTasks.length === 0) return;
 
       const snapshot = selectedTasks;
       const failures: ITask[] = [];
+      const successes: ITask[] = [];
       let hasUndo = false;
       setIsProcessing(true);
 
@@ -174,10 +180,16 @@ export const KanbanBulkSelectionProvider = ({
         for (const task of snapshot) {
           try {
             hasUndo = (await operation(task)) === true || hasUndo;
+            successes.push(task);
           } catch (error) {
             console.error("Kanban bulk action failed", task.id, error);
             failures.push(task);
           }
+        }
+
+        if (onComplete && successes.length > 0) {
+          onComplete(successes);
+          hasUndo = true;
         }
 
         const nextFailedIds = new Set(failures.map((task) => task.id));
@@ -199,8 +211,14 @@ export const KanbanBulkSelectionProvider = ({
   );
 
   const archiveSelected = useCallback(
-    () => runTaskOperation(onArchiveTask, `${selectedTasks.length} tasks archived`),
-    [onArchiveTask, runTaskOperation, selectedTasks.length],
+    () => bulkArchiveUndoAll
+      ? runTaskOperation(
+          (task) => onArchiveTask(task, true),
+          `${selectedTasks.length} tasks archived`,
+          onArchiveUndo,
+        )
+      : runTaskOperation(onArchiveTask, `${selectedTasks.length} tasks archived`),
+    [bulkArchiveUndoAll, onArchiveTask, onArchiveUndo, runTaskOperation, selectedTasks.length],
   );
 
   const moveSelected = useCallback(

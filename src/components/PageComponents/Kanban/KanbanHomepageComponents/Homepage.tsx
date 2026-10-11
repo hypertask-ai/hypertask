@@ -211,7 +211,7 @@ const HomePage = ({
     [displaySections],
   );
   const { performActionAndStoreUndoData, undoAction } = useUndoContext();
-  const { updateTaskInCache, removeFromListWithStatus, mutationHandler, getProjectIdxAndAllData, updateActiveItemAndItemInView } = UpdateKanban();
+  const { updateTaskInCache, removeFromListWithStatus, mutationHandler, getProjectIdxAndAllData, updateActiveItemAndItemInView, deleteTodo: registerArchiveUndo } = UpdateKanban();
   const moveTaskToSection = useMoveTaskToSection();
   const assignTaskUser = useAssignTaskUser();
   const {
@@ -599,6 +599,7 @@ const HomePage = ({
 
   // ============== task archive/ delete undo handler
   const undoHandler = async (data: any, toastId: string) => {
+    if (Array.isArray(data.taskIds)) return data.undoHandler(data, data.toastId);
     //  first you need to bring the item back in its place.
     // then you need to run the api call so there is no render blocking. 
     await undoAction("UNDO_REMOVE", data)
@@ -719,7 +720,7 @@ const HomePage = ({
   );
 
   const archiveTaskForBulk = useCallback(
-    async (task: ITask) => {
+    async (task: ITask, suppressUndo = false) => {
       const sourceSectionId = getBulkSourceSectionId(task);
       if (sourceSectionId == null) throw new Error("Task column is unavailable");
       return await removeFromListWithStatus(
@@ -727,6 +728,8 @@ const HomePage = ({
         _currentProject.id,
         task.id,
         "Archive",
+        undefined,
+        { suppressUndo },
       );
     },
     [
@@ -906,6 +909,10 @@ const HomePage = ({
     <KanbanBulkSelectionProvider
       items={bulkSelectionItems}
       onArchiveTask={archiveTaskForBulk}
+      onArchiveUndo={(tasks) => registerArchiveUndo(
+        `Undo archive of ${tasks.length} tasks`,
+        { taskIds: tasks.map((task) => task.id), projectId: _currentProject.id },
+      )}
       onMoveTask={moveTaskForBulk}
       onAssignTask={assignTaskForBulk}
       onLabelTask={labelTaskForBulk}
