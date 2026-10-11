@@ -228,6 +228,59 @@ test("failed or unparsable label items are classified once, instantly (review 1)
   assert.match(fn, /classifyTaskWithDefinitions\(\{[\s\S]*snapshotAt: task\.updatedAt/); // same prompt and freshness check as the instant path
 });
 
+test("stale label batch verdicts reclassify current content once (live QA run 2)", () => {
+  const collector = read("src/lib/ai/batch/collectBatches.ts");
+  const apply = collector.slice(collector.indexOf("async function applyLabelBatch"), collector.indexOf("async function releaseOrphanedSlackThreads"));
+  assert.match(apply, /const result = await applyAiLabelVerdict\(\{[\s\S]*?contentHash: item\.contentHash,[\s\S]*?\}\);\s*if \(result === "stale"\) \{\s*await classifyLabelItemInstantly\(item\.taskId, item\.projectId, action\.definitions\);\s*\}/);
+  assert.doesNotMatch(apply, /submitSmartLabelBatch|trySmartLabelBatch/);
+});
+
+test("label verdict reports only content mismatches as stale, including edits before the lock", async () => {
+  const classifier = read("src/lib/ai/labelClassifier.ts");
+  const source = classifier.slice(classifier.indexOf("export async function applyAiLabelVerdict"), classifier.indexOf("export async function classifyLabelItemInstantly"));
+  const { transpileModule, ModuleKind } = require("typescript");
+  const { runInNewContext } = require("node:vm");
+  const compiled = transpileModule(source, { compilerOptions: { module: ModuleKind.CommonJS } }).outputText;
+  const snapshotAt = new Date("2026-10-11T12:00:00Z");
+  const task = { title: "Fix invoice", description: "Customer asks", updatedAt: snapshotAt };
+  const changedTitle = { ...task, title: "Fix invoice!" };
+  const changedDescription = { ...task, description_: { content: "AI auto-description" } };
+  const args = { taskId: 7, projectId: 15, definitions: [{ labelId: "L1", prompt: "Billing" }], matchingLabelIds: [], actor: { id: 1 }, snapshotAt, contentHash: jobs.labelTaskContentHash(task) };
+  for (const scenario of [
+    { current: changedTitle, expected: "stale" },
+    { current: changedDescription, expected: "stale" },
+    { locked: changedTitle, expected: "stale" },
+    { locked: changedDescription, expected: "stale" },
+    { current: null },
+    { locked: null },
+    { lockIds: [] },
+    { labels: [] },
+    {},
+    { current: { ...task, updatedAt: new Date(snapshotAt.getTime() + 1) }, contentHash: undefined },
+    { current: changedTitle, contentHash: undefined },
+  ]) {
+    let labelReads = 0;
+    const context = {
+      exports: {},
+      labelTaskContentHash: jobs.labelTaskContentHash,
+      convertHtmlToText: (text) => text,
+      prisma: {
+        task: { findFirst: async () => "current" in scenario ? scenario.current : task },
+        label: { findMany: async () => scenario.labels ?? [{ id: "L1", ai_prompt: "Billing" }] },
+        $transaction: async (fn) => fn({
+          $queryRaw: async () => scenario.lockIds ?? [{ id: 7 }],
+          task: { findUnique: async () => "locked" in scenario ? scenario.locked : task },
+          taskLabel: { findMany: async () => { labelReads += 1; return []; } },
+        }),
+      },
+    };
+    runInNewContext(compiled, context);
+    const result = await context.exports.applyAiLabelVerdict({ ...args, ...("contentHash" in scenario ? { contentHash: scenario.contentHash } : {}) });
+    assert.equal(result, scenario.expected);
+    if (scenario.expected === "stale") assert.equal(labelReads, 0);
+  }
+});
+
 test("content hash is verified again on the locked row (review 2)", () => {
   const classifier = read("src/lib/ai/labelClassifier.ts");
   const lock = classifier.indexOf("FOR UPDATE");
@@ -271,7 +324,7 @@ test("label batch verdicts are judged by content, not updatedAt (review 2)", () 
   assert.notEqual(same, jobs.labelTaskContentHash({ title: "Fix invoice", description: "Customer asks more" }));
   const classifier = read("src/lib/ai/labelClassifier.ts");
   // Hash mode skips the updatedAt comparison and the updatedAt lock clause; instant mode keeps both.
-  assert.match(classifier, /if \(currentHash !== contentHash\) return;\s*\} else if \(currentTask\.updatedAt\.getTime\(\) > snapshotAt\.getTime\(\)\) return;/);
+  assert.match(classifier, /if \(currentHash !== contentHash\) return "stale";\s*\} else if \(currentTask\.updatedAt\.getTime\(\) > snapshotAt\.getTime\(\)\) return;/);
   assert.match(classifier, /const lockedTasks = contentHash\s*\?[\s\S]*?:[\s\S]*?"updatedAt" <= \$\{snapshotAt\}/);
   assert.match(read("src/lib/ai/labelClassifierBatch.ts"), /contentHash: labelTaskContentHash\(task\)/);
 });

@@ -269,7 +269,7 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
         await classifyLabelItemInstantly(item.taskId, item.projectId, action.definitions);
         continue;
       }
-      await applyAiLabelVerdict({
+      const result = await applyAiLabelVerdict({
         taskId: item.taskId,
         projectId: item.projectId,
         definitions: action.definitions,
@@ -278,6 +278,9 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
         snapshotAt: new Date(item.snapshotAt),
         contentHash: item.contentHash,
       });
+      if (result === "stale") {
+        await classifyLabelItemInstantly(item.taskId, item.projectId, action.definitions);
+      }
     } catch (error) {
       console.error(`Smart label batch result failed for task ${item.taskId}`, error);
     }

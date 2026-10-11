@@ -162,7 +162,7 @@ export async function applyAiLabelVerdict({
       title: currentTask.title,
       description: convertHtmlToText(currentTask.description_?.content || currentTask.description || ""),
     });
-    if (currentHash !== contentHash) return;
+    if (currentHash !== contentHash) return "stale";
   } else if (currentTask.updatedAt.getTime() > snapshotAt.getTime()) return;
 
   const currentLabels = await prisma.label.findMany({
@@ -182,7 +182,7 @@ export async function applyAiLabelVerdict({
 
   const aiLabelIds = activeDefinitions.map(({ labelId }) => labelId);
   const matchingIds = new Set(matchingLabelIds);
-  const { changed, deliveryIds } = await prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     // The task can move after the optimistic check above. Lock it and repeat
     // the board, status, and freshness checks before attaching board labels.
     const lockedTasks = contentHash
@@ -213,14 +213,14 @@ export async function applyAiLabelVerdict({
         where: { id: taskId },
         select: { title: true, description: true, description_: { select: { content: true } } },
       });
+      if (!locked) return { changed: false, deliveryIds: [] as string[] };
       if (
-        !locked ||
         labelTaskContentHash({
           title: locked.title,
           description: convertHtmlToText(locked.description_?.content || locked.description || ""),
         }) !== contentHash
       ) {
-        return { changed: false, deliveryIds: [] as string[] };
+        return "stale" as const;
       }
     }
 
@@ -292,6 +292,8 @@ export async function applyAiLabelVerdict({
     return { changed: true, deliveryIds };
   });
 
+  if (result === "stale") return result;
+  const { changed, deliveryIds } = result;
   if (changed) {
     try {
       await publishAgentWebhookDeliveries(deliveryIds);
