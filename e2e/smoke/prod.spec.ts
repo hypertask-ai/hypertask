@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { errorPageHeading } from './lib/errorPage'
 import { withRealtime } from './lib/realtime'
 import { tieredId } from './lib/tier'
 
@@ -257,9 +258,25 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   expect(documentRequests, 'card click must not reload the document').toBe(0)
 })
 
-// Matched against whole headings only: task titles and descriptions on the page can quote
-// these words (YPER4-304), but the app's and Next's error screens put them in an h1/h2.
-const ERROR_MARKERS = [/^something went wrong$/i, /^application error\b/i, /^internal server error\.?$/i]
+// Positive and negative controls for the error-screen check every view below relies on (YPER4-304).
+test('error-screen check catches real error pages and ignores quoted error text', { tag: ['@id:error-page-detector'] }, async ({ page }) => {
+  const screens = [
+    // Next's built-in 500 page.
+    '<h1>500</h1><h2>Internal Server Error.</h2>',
+    // Next's client-side crash screen.
+    '<h2>Application error: a client-side exception has occurred (see the browser console for more information).</h2>',
+    // src/app/error.tsx and src/app/global-error.tsx.
+    '<h1>Something went wrong</h1><p>Try again</p>',
+  ]
+  for (const html of screens) {
+    await page.setContent(html)
+    expect(await errorPageHeading(page), html).toBeDefined()
+  }
+
+  // A ticket on All Tasks quoting an error (the 2026-10-11 false alarm).
+  await page.setContent('<h1>All Tasks</h1><h2>Fix the Get announcements 500</h2><p>Last error came back as an HTML page titled "500: Internal Server Error" instead of data.</p>')
+  expect(await errorPageHeading(page)).toBeUndefined()
+})
 
 // A Vercel bot challenge on the runner's IP is not a broken view — the health
 // job in prod-health.yml treats the same signal as unrunnable, never a
@@ -383,10 +400,7 @@ for (const view of VIEWS) {
       await expect(page, `${view.path} has no fallback title`).not.toHaveTitle(view.notTitle, { timeout: 15_000 })
     }
 
-    const headings = (await page.locator('h1, h2').allInnerTexts()).map((text) => text.trim())
-    for (const marker of ERROR_MARKERS) {
-      expect(headings.find((heading) => marker.test(heading)), `${view.path} rendered an error page`).toBeUndefined()
-    }
+    expect(await errorPageHeading(page), `${view.path} rendered an error page`).toBeUndefined()
 
     if (process.env.BROWSER_SMOKE_PR) {
       if (view.name === 'kanban board' || view.name === 'demo board') {
