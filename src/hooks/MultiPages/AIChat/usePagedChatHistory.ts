@@ -59,7 +59,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     staleTime,
   });
 
-  const historySessions = enabled ? mergeSessionHistory<Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">>(
+  const historySessions = enabled ? mergeSessionHistory<ChatSessionSummary>(
     summaryQuery.data?.pages.flatMap((page) => page.sessions) ?? [], []
   ) : [];
   const activeSummary = historySessions.find((session) => session.id === activeSession);

@@ -9,6 +9,7 @@ import { aiChatPendingPromptAtom } from "@/store";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { TAiModal } from "@/models/AI_Task_writer_model";
 import { IChatMessage, IChatSession, MentionItem } from "@/models/model";
+import type { ChatSessionSummary } from "@/utils/api/ai_chat";
 // Type-only: a value import here would pull tiptap back into every page's
 // initial chunk and defeat the dynamic mount below (HTPR-4508).
 import type { Editor } from "@tiptap/react";
@@ -73,7 +74,7 @@ export interface ChatContextType {
   };
   sessions: IChatSession[];
   sessionPagingEnabled: boolean;
-  historySessions: Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">[];
+  historySessions: (IChatSession | ChatSessionSummary)[];
   hasMoreSessions: boolean;
   isLoadingMoreSessions: boolean;
   pagingError: boolean;
