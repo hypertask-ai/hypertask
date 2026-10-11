@@ -15,7 +15,7 @@ cat > "$T/vcc" <<'EOF'
 echo "$SHIP_SESSION_NAME|$*" >> "$FAKE_LOG"
 case "$1 $2" in
   "task list") [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
-  "inbox list") [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
+  "inbox list") [ -z "${FAKE_INBOX_FAIL:-}" ] || exit 1; [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
   "activity add") exit 0 ;;
   *) exit 9 ;;
 esac
@@ -67,6 +67,24 @@ unset FAKE_FAIL
 RUNNER_PICKUP_MAX_AGE_DAYS=100000 RUNNER_PICKUP_NOW=$(( $(date +%s) + 2000000 )) "$SCRIPT" run 3 2>/dev/null
 [ ! -e "$RUNNER_INBOX_DIR/runner-3.backoff.json" ] && ok "success clears backoff" || bad "backoff not cleared"
 grep -rqE 'api\.github|\bgh +(api|pr)|git +(fetch|pull|push)' "$SCRIPT" "$HOOK" && bad "script touches GitHub" || ok "no GitHub calls in script or hook"
+
+# Inbox read failure: tickets still queued, pending messages still retried, no backoff; board failure unchanged.
+rm -f "$inbox" "$RUNNER_INBOX_DIR"/runner-3.backoff.json; : > "$FAKE_LOG"
+cat > "$T/deliver" <<'EOS'
+#!/usr/bin/env bash
+cat >> "$FAKE_DELIVERED"; exit 0
+EOS
+chmod +x "$T/deliver"; export FAKE_DELIVERED=$T/delivered RUNNER_DELIVER=$T/deliver
+printf '%s\n' '{"text":"pending hello"}' > "$RUNNER_INBOX_DIR/runner-3.pending.jsonl"
+FAKE_INBOX_FAIL=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
+eq "inbox read failure: tick succeeds" "$rc" "0"
+eq "inbox read failure: tickets file still updated" "$(jq -r '[.items[].ticket]|sort|join(",")' "$inbox")" "YPER4-302"
+eq "inbox read failure: pending message retried" "$(cat "$FAKE_DELIVERED" 2>/dev/null)" "pending hello"
+[ ! -e "$RUNNER_INBOX_DIR/runner-3.backoff.json" ] && ok "inbox read failure: no backoff" || bad "inbox failure wrote backoff"
+FAKE_FAIL=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
+eq "board read failure still fails the tick" "$rc" "1"
+eq "board read failure still backs off" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "1"
+rm -f "$RUNNER_INBOX_DIR"/runner-3.backoff.json
 
 # Hook.
 hook() { echo "$2" | SHIP_SESSION_NAME="$1" "$HOOK" "${3:-stop}"; }

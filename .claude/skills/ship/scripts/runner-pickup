@@ -155,7 +155,7 @@ backstop() {
   # One cross-process lock with runner-webhook around choosing, delivering and recording, so no event is sent twice.
   (
     flock -w 30 8 || exit 0
-    if events=$(inbox_events "$n" "$resp") && [ -n "$events" ]; then
+    if [ -n "$resp" ] && events=$(inbox_events "$n" "$resp") && [ -n "$events" ]; then
       bundle_message "$n" "$events" 400
       if [ "$BUNDLE_N" -gt 0 ]; then
         "$DELIVER" "$n" <<<"$BUNDLE_MSG" >/dev/null 2>&1; rc=$?
@@ -202,8 +202,10 @@ run_tick() {
   resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --json 2>/dev/null) \
     || fail_tick 'board read failed'
   jq -e '.success == true and (.tasks | type == "array")' <<<"$resp" >/dev/null 2>&1 || fail_tick 'board read returned no task list'
-  inbox_resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" inbox list --json 2>/dev/null) || fail_tick 'agent inbox read failed'
-  jq -e '.success == true and (.agent_notifications | type == "array")' <<<"$inbox_resp" >/dev/null 2>&1 || fail_tick 'agent inbox read returned no inbox'
+  # The inbox is only a backstop: when its read fails, still update tickets and retry pending messages (no backoff).
+  inbox_resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" inbox list --json 2>/dev/null) || inbox_resp=''
+  jq -e '.success == true and (.agent_notifications | type == "array")' <<<"$inbox_resp" >/dev/null 2>&1 \
+    || { log "agent inbox read failed, skipping the inbox backstop this tick"; inbox_resp=''; }
   rm -f "$bfile"
   cutoff=$(date -u -d "@$((NOW - MAX_AGE_DAYS * 86400))" +%Y-%m-%dT%H:%M:%S)
   cand=$(jq -c --arg name "Runner $n" --arg skip "$SKIP" --arg cutoff "$cutoff" '
