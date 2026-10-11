@@ -125,6 +125,9 @@ printf '%s %s\n' "$$" "$(sed 's/.*) //' "/proc/$$/stat" | awk '{print $20}')" >"
 exec 3>&1
 exec >"$state/setup.log" 2>&1
 if [ ! -d node_modules ]; then npm ci --prefer-offline --no-audit --no-fund; fi
+# A hardlinked worktree install skips postinstall, so the gitignored flag index may be missing
+# or stale for this checkout; the seed and the build both import it (YPER4-303).
+npm run -s flags:generate
 npx --no-install prisma generate
 secret() { node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"; }
 pg_secret=$(secret)

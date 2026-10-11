@@ -19,3 +19,10 @@ test("the heap default is set after the clean-environment re-exec, before any bu
   const build = script.indexOf("npx --no-install next build");
   assert.ok(exec > 0 && heap > exec && build > heap);
 });
+
+test("premerge-local regenerates the flag index before the seed and the build (YPER4-303)", () => {
+  const generate = script.indexOf("npm run -s flags:generate");
+  assert.ok(generate > 0);
+  assert.ok(generate < script.indexOf("node scripts/seed-browser-smoke.mjs"));
+  assert.ok(generate < script.indexOf("npx --no-install next build"));
+});
