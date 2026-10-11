@@ -148,18 +148,15 @@ test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhausti
   h.release()
   await allow(lease.result)
   assert.deepEqual(state(h), { count: 11, reserved: 9, leasing: false })
-  const connect = h.holdConnection()
   for (let i = 0; i < 9; i++) {
     const prepaid = await observe(h.call())
-    assert.equal(prepaid.settled, true, 'prepaid calls do not even wait for a Redis connection')
+    assert.equal(prepaid.settled, true, 'prepaid calls make no Redis call')
     await allow(prepaid.result)
     assert.equal(h.increments.length, 2)
     assert.equal(state(h).reserved, 8 - i)
   }
   const exhausted = await observe(h.call())
   assert.equal(exhausted.settled, false)
-  connect()
-  await tick()
   assert.equal(h.increments.length, 3)
   assert.equal(h.increments[2].method, 'incrby')
   h.release()
@@ -206,7 +203,7 @@ for (const leaseFirst of [true, false]) {
   })
 }
 
-test('a delayed connection adds its lease reservations to slots already prepaid', async () => {
+test('a call delayed on the Redis connection uses an existing prepaid slot instead of leasing again', async () => {
   const h = harness()
   assert.equal(await h.call(), null)
   const entry = state(h)
@@ -218,11 +215,12 @@ test('a delayed connection adds its lease reservations to slots already prepaid'
   connect()
   assert.equal(await delayed.result, null)
   assert.equal(state(h), entry)
-  assert.deepEqual(entry, { count: 21, reserved: 18, leasing: false })
-  for (let admitted = 4; admitted <= 21; admitted++) {
+  assert.deepEqual(entry, { count: 11, reserved: 8, leasing: false })
+  assert.equal(h.increments.length, 2, 'the delayed call made no second lease')
+  for (let admitted = 4; admitted <= 11; admitted++) {
     assert.equal(await h.call(), null)
     assert.ok(h.count() >= admitted)
-    assert.equal(h.increments.length, 3)
+    assert.equal(h.increments.length, 2)
   }
 })
 

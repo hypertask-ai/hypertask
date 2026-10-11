@@ -73,6 +73,9 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = await shouldUseFastRateLimit()
     if (!fastEnabled) localCounts.clear()
+    // Await the connection first: from the prepaid check to the INCR there is no await,
+    // so a delayed call can never skip a reservation and lease again.
+    const redis = await getRedis()
     const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
     // The shared count includes every admitted call, prepaid, so no limit is exceeded.
     // Unused slots can only block up to LEASE - 1 calls early per instance, and are reserved
@@ -82,7 +85,6 @@ export async function checkMcpRateLimit(
       return null
     }
 
-    const redis = await getRedis()
     const trackCount = fastEnabled && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds
     const state = trackCount ? localCounts.get(key) : undefined
     // One lease in flight per key: concurrent calls count singly, so leases never overwrite each other.
