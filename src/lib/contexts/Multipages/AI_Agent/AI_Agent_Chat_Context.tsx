@@ -72,6 +72,13 @@ export interface ChatContextType {
     onEditor: (editor: Editor | null) => void;
   };
   sessions: IChatSession[];
+  sessionPagingEnabled: boolean;
+  historySessions: Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">[];
+  hasMoreSessions: boolean;
+  isLoadingMoreSessions: boolean;
+  pagingError: boolean;
+  loadMoreSessions: () => Promise<void>;
+  refreshHistorySessions: () => Promise<void>;
   currentSession: IChatSession | undefined;
   showWelcomeScreen: boolean;
   isSessionPending: boolean;
@@ -204,7 +211,8 @@ export const ChatRuntime = memo(function ChatRuntime({
       !pendingAiChatPrompt ||
       contextProps.isByokBlocked ||
       contextProps.isTyping ||
-      !contextProps.sessions.length
+      !contextProps.sessions.length ||
+      (contextProps.sessionPagingEnabled && !contextProps.chatHistoryReady)
     ) {
       return;
     }
@@ -272,7 +280,7 @@ export const ChatRuntime = memo(function ChatRuntime({
       editor.commands.focus("end");
     }
   }, [
-    pendingAiChatPrompt,
+    pendingAiChatPrompt, contextProps.sessionPagingEnabled,
     askAiFullscreenEnabled,
     contextProps.isByokBlocked,
     contextProps.isTyping,

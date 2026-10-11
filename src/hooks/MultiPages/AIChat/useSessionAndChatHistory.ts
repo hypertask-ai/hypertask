@@ -1,16 +1,18 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
   type TAllChatSessionsResponse,
+  type ChatSessionScope,
 } from "@/utils/api/ai_chat";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
 import { IChatMessage, IChatSession, IUser } from "@/models/model";
 import { usePathname } from "next/navigation";
+import { usePagedChatHistory } from "./usePagedChatHistory";
 
 const createDemoSession = (user: IUser): IChatSession => {
   const now = new Date();
@@ -36,6 +38,7 @@ export const useSessionAndChatHistory = (
   // active on a different ticket (HTPR-6100).
   isTaskScoped = false
 ) => {
+  const pagingRequested = useFlag(HTPR_6971_CHAT_HISTORY_PAGING_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
@@ -73,6 +76,8 @@ export const useSessionAndChatHistory = (
   currentTaskIdRef.current = taskId;
 
   const hasRequiredData = !!currentUser?.uid;
+  const pagedHistory = usePagedChatHistory(pagingRequested && !isDemo, currentUser, taskId, historyEnabled, isTaskScoped, nameBoardRef);
+  const paged = pagingRequested && !isDemo && !pagedHistory.pagingUnavailable;
 
   // ChatProvider stays mounted so global shortcuts keep working, but the
   // session payload is secondary startup data. Do not request it until the
@@ -91,7 +96,7 @@ export const useSessionAndChatHistory = (
       }
       return AI_Chat_API.getAllSessions();
     },
-    enabled: historyEnabled && hasRequiredData && !isDemo,
+    enabled: historyEnabled && hasRequiredData && !isDemo && !paged,
     staleTime: 1000 * 60 * 3,
   });
 
@@ -497,6 +502,7 @@ export const useSessionAndChatHistory = (
       }
 
       try {
+        if (paged) return;
         // Wait for the latestSessionQuery to complete
         if (!isSuccessSessions) return;
 
@@ -551,7 +557,7 @@ export const useSessionAndChatHistory = (
     isTaskScoped,
     sessionsData,
     taskId,
-    startNewSession,
+    startNewSession, paged,
   ]);
 
   const sessions = isDemo ? demoSessions : sessionsData?.data.sessions || [];
@@ -563,7 +569,7 @@ export const useSessionAndChatHistory = (
   // active at all; if `activeSession` is set but genuinely missing from
   // `sessions` (deleted, or a transient refetch gap), report no session
   // rather than keep showing a possibly-deleted one indefinitely.
-  const currentSession = activeSession
+  const currentSession = paged ? pagedHistory.currentSession : activeSession
     ? sessions.find((session) => session.id === activeSession)
     : sessions[0];
   useEffect(() => {
@@ -574,14 +580,14 @@ export const useSessionAndChatHistory = (
         consumedComposeIntro.current = id;
         // An ordinary stored assistant message, not an AI turn: opening a composed
         // ticket must not spend credits or let the model rewrite it a second time.
-        addMessageToSessionQuery(currentSession.id, {
+        (paged ? pagedHistory.addMessageToSessionQuery : addMessageToSessionQuery)(currentSession.id, {
           id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
           createdAt: new Date(), content: composeIntro.content,
         });
       }
       setComposeIntro(null);
     }
-  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro]);
+  }, [composeEnabled, composeIntro, isTaskScoped, taskId, currentSession, addMessageToSessionQuery, setComposeIntro, paged, pagedHistory.addMessageToSessionQuery]);
 
   // `currentSession` is `undefined` both when there is genuinely nothing to
   // show yet (no session selected, no sessions exist) and, transiently,
@@ -606,7 +612,17 @@ export const useSessionAndChatHistory = (
     (isLoadingSessions || (isFetchingSessions && Boolean(activeSession)));
   const showWelcomeScreen = !isSessionPending && (currentSession?.messages?.length ?? 0) === 0;
 
+  const getDisplayedSession = useCallback(() => currentSession, [currentSession]);
+  const resolveHistorySession = useCallback(async (sessionId?: string, scope?: ChatSessionScope) => sessions.find((session) =>
+    sessionId ? session.id === sessionId :
+      (!scope?.taskId || session.taskId === scope.taskId) &&
+      (!scope?.projectId || (session.projectId === scope.projectId && session.taskId === null))), [sessions]);
+  if (paged) return { ...pagedHistory, sessionPagingEnabled: true };
+
   return {
+    sessionPagingEnabled: false,
+    historySessions: sessions, hasMoreSessions: false, isLoadingMoreSessions: false, pagingError: false,
+    loadMoreSessions: async () => {}, refreshHistorySessions: async () => {}, resolveHistorySession, getDisplayedSession,
     isLoading: isDemo ? false : isLoadingSessions,
     isError: isDemo ? false : isErrorSessions,
     // Demo initialization is local and effect-driven. Report readiness only
