@@ -22,8 +22,8 @@ test("the description body no longer imports the editor statically", () => {
   const body = read("DescriptonBody.tsx");
   assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
   assert.match(body, /DescriptionEditorSlot/);
-  assert.match(body, /HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\) && instantTicketOpen/);
-  assert.match(body, /staticFirst && !isEditing && isPlainDescriptionHtml\(linkedContent\)/);
+  assert.match(body, /const staticFirstFlag = useFlag\(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\);/);
+  assert.match(body, /lazy=\{staticFirstFlag \? instantTicketOpen && !isEditing && isPlainDescriptionHtml\(linkedContent\) : false\}/);
 });
 
 test("the slot loads the editor with import() in both flag states", () => {
@@ -175,5 +175,5 @@ test("the static copy sets the rules the editor adds for its root", () => {
 
 test("the editor panels show the static placeholder only when one is provided", () => {
   const panels = fs.readFileSync(path.join(root, "src/components/RTE/TaskDetailEditorPanels.tsx"), "utf8");
-  assert.match(panels, /staticPlaceholder \?\? <InnerHTMLDescription/);
+  assert.match(panels, /staticFirst && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
 });

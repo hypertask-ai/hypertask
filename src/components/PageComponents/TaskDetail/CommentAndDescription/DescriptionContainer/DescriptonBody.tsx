@@ -36,7 +36,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const task = useMemo(() => JSON.parse(parsedTask), [parsedTask]);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   // HTPR-7091: keep the editor code out of the first load; show the static description meanwhile.
-  const staticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG) && instantTicketOpen;
+  const staticFirstFlag = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const creator = instantTicketOpen ? currentTask?.user : task.user;
   const {
     description,
@@ -78,7 +78,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
       {/* A passive editor swap reflows already-painted cached HTML. Mount it only for editing. */}
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
-        lazy={staticFirst && !isEditing && isPlainDescriptionHtml(linkedContent)}
+        lazy={staticFirstFlag ? instantTicketOpen && !isEditing && isPlainDescriptionHtml(linkedContent) : false}
         allowPerks={allowPerks}
         attachments={descriptionAttachments}
         mode="read-edit-description"

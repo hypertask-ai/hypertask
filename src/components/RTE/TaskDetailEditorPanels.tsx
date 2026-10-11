@@ -4,7 +4,7 @@ import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { createPortal } from "react-dom";
 import { useContext } from "react";
 import { StaticDescriptionPlaceholderContext } from "../PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/StaticDescriptionPlaceholder";
@@ -39,9 +39,10 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) newTaskWindow = true;
   const setCommands = useSetRecoilState(showCommandsAtom);
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const staticFirst = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
   const staticPlaceholder = useContext(StaticDescriptionPlaceholderContext);
   const mainContainer = instantTicketOpen && !editor && mode === "read-edit-description" ? (
-    staticPlaceholder ?? <InnerHTMLDescription
+    staticFirst && staticPlaceholder ? staticPlaceholder : <InnerHTMLDescription
       id={`${id}-input`}
       descriptionText={context.defaultContent}
       attachmentsFromProps={context.attachments ?? []}
