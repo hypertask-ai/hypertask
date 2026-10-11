@@ -274,12 +274,13 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
   const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
   const schema = read("src/prisma/schema.prisma");
-  // The email reuses existing models; unrelated tickets may add models and migrations.
+  // The email reuses existing models; unrelated tickets may add models, migrations and indexes.
+  const fields = (model) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\))?\s*$/.test(line)).join("\n");
   for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
     const pattern = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, "m");
     assert.match(baseline, pattern, name);
     assert.match(schema, pattern, name);
-    assert.equal(schema.match(pattern)[0], baseline.match(pattern)[0], `${name} email model stays unchanged`);
+    assert.equal(fields(schema.match(pattern)[0]), fields(baseline.match(pattern)[0]), `${name} email model stays unchanged`);
   }
   assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
   assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
