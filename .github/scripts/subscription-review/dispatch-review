@@ -55,6 +55,7 @@ review_state=${review_state%%	*}
 # fall through so the bounded retry below re-dispatches it (max 2 attempts).
 if [ "$review_state" = success ]; then
   # Marker lets the scan skip this finished head with zero API calls.
+  mkdir -p "$state_root/completed"
   completed_tmp=$(mktemp "$state_root/completed/.${actual_sha}.XXXXXX")
   trap 'rm -f -- "$completed_tmp"' EXIT
   printf '%s\n' "$review_state" >"$completed_tmp"
