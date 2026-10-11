@@ -774,9 +774,9 @@ test('a completed delete after task navigation removes its old transcript withou
 test('active newer summary automatically refreshes its transcript while preserving pending local writes', async () => {
   const writing = deferred();
   await withHistory({ message: () => writing.promise }, async ({ history, rows, client, flush }) => {
-    const pending = { id: 'pending-active', content: 'local question', role: 'human', createdAt: new Date() };
+    const pending = { id: 'pending-active', content: 'local question', role: 'human', createdAt: new Date('2026-12-31T00:00:00Z') };
     await React.act(async () => history().addMessageToSessionQuery(id(9), pending));
-    rows[0] = { ...rows[0], updatedAt: new Date('2027-01-01'), messages: [...rows[0].messages, { id: 'remote-active', content: 'new in another tab', createdAt: new Date() }] };
+    rows[0] = { ...rows[0], updatedAt: new Date('2027-01-01'), messages: [...rows[0].messages, { id: 'remote-active', content: 'new in another tab', createdAt: new Date('2026-12-31T00:00:01Z') }] };
     await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
     assert.equal(history().activeSession, id(9));
     assert.deepEqual(history().currentSession.messages.slice(-2).map(({ id }) => id), ['pending-active', 'remote-active']);
