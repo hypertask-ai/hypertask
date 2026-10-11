@@ -103,26 +103,22 @@ test("production builds deploy through the direct database URL", async () => {
   assert.equal(deploy[2].env.DIRECT_URL, "postgresql://direct.example/db");
 });
 
-test("HTPR-7076: a failed retryable migration is marked rolled back before deploy", async () => {
-  const { runProductionMigrations, RETRY_FAILED_MIGRATIONS } = await runnerModule;
+test("YPER4-261: deploy is the only Prisma command, with no one-off migration rescue", async () => {
+  const runner = await runnerModule;
   const calls = [];
 
-  const result = runProductionMigrations({
+  const result = runner.runProductionMigrations({
     env: { ...productionEnv, DIRECT_URL: "postgresql://direct.example/db" },
     cwd: "/repo",
     spawnSyncImpl: (...args) => {
       calls.push(args[1].slice(1));
-      // Prisma refuses resolve when the migration is not failed; deploy must still run.
-      return { status: args[1][2] === "resolve" ? 1 : 0 };
+      return { status: 0 };
     },
   });
 
   assert.deepEqual(result, { status: "deployed" });
-  assert.deepEqual(RETRY_FAILED_MIGRATIONS, ["20261011010000_htpr_7076_ai_usage_cache_tokens"]);
-  assert.deepEqual(calls, [
-    ["migrate", "resolve", "--rolled-back", "20261011010000_htpr_7076_ai_usage_cache_tokens"],
-    ["migrate", "deploy"],
-  ]);
+  assert.equal(runner.RETRY_FAILED_MIGRATIONS, undefined);
+  assert.deepEqual(calls, [["migrate", "deploy"]]);
 });
 
 test("HTPR-7076: the cache columns migration is safe to re-run and does not queue on the table lock", () => {
