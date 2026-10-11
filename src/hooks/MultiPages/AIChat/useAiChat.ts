@@ -53,7 +53,7 @@ export function useAiChat() {
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
   const connectionRetry = useFlag(HTPR_7099_CHAT_CONNECTION_LOST_FLAG);
   const {
-  lastWorkspaceFocusRef, turnFailureState, queryClient, currentUser, currentProject,
+  lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
   aiChatBoardSessionMap, setAiChatBoardSessionMap, setRecentChatBoardIds, setAiChatPinned, isSidebarMode,
   setIsSidebarMode, showMentionList, inViewObject, dockedChatScope, setDockedChatScope,
@@ -102,7 +102,7 @@ export function useAiChat() {
     modelTeamId, contextList, currentAiOption, spansAllBoards, boardScopeIsExplicit,
     pathname, currentUser, billing, isDemo, streamingSessionRef,
     streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
-    turnFailureState, setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
+    setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
     appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
   }, askAiFullscreenEnabled ? {
     preserveComposer: true,

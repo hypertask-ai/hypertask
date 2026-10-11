@@ -31,7 +31,7 @@ async function runTurn({ enabled, responses, stopAfterFirstFailure = false }) {
     scopedProjectId: 1, isFullScreenChat: false, taskId: undefined, modelTeamId: 1, contextList: [],
     currentAiOption: { id: "model", model: "model", source: "openai" }, pathname: "/chat/session", currentUser: { id: 7 },
     streamingSessionRef: { ...refs }, streamingAssistantMessageRef: { ...refs }, streamingRequestRef: { ...refs },
-    setCurrentStreamingSession() {}, chatRoute: "/api/ai/chat/stream", turnFailureState: true,
+    setCurrentStreamingSession() {}, chatRoute: "/api/ai/chat/stream",
     setAgentStatus() {}, updateSessionTitle() {}, queryClient: { refetchQueries: async () => {} },
     drainQueuedMessage() {}, handleSendMessageRef: { current: null }, reloadTaskAfterChat: false,
     updateLastMessageInSessionCache: (_id, message) => updated.push(message),
