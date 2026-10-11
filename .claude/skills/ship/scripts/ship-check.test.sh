@@ -1313,6 +1313,15 @@ done
 rerun=$(jq '.check_runs[0] |= (.id += 1 | .conclusion = "success")' <<<"$CI_PR_RUNS")
 CI 0 '' CI_PR_RUNS="$rerun
 $CI_PR_RUNS"
+# The real PR 1392 head: green at 19:22, then production went red at 20:19 before the merge.
+CI 2 "passed before that on an older production; rerun ci-tests on head c587e4b" \
+  CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
+  CI_PR_RUNS="$(cat "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
+  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
+# A rerun after production went red is current: the PR's own result decides.
+CI 0 '' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 \
+  CI_PR_RUNS="$(jq '.check_runs[0].started_at = "2026-10-11T21:00:00Z"' "$CI_FIXTURE_DIR/pr-1392-head.check-runs.json")" \
+  CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
 for status in queued in_progress; do
   CI 2 "ci-tests has not finished on head ${CI_HEAD:0:7}" CI_PR_RUNS="$(jq --arg s "$status" '.check_runs[0] |= (.status = $s | .conclusion = null)' <<<"$CI_PR_RUNS")"
 done

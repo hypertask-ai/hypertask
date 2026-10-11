@@ -10,3 +10,4 @@ GitHub does not record a failed ci-tests on PR 1392's head:
 - `production.check-runs.json` and `production.log` come from PR 1398's production merge `b1ce7aaecceade982b005aa6cf0dcabe8e9d5c03`, job 114565456089. This job was cancelled after emitting Compose test failures, so it is also nonpassing.
 
 For each SHA, read `repos/hypertask-ai/hypertask/commits/<sha>/check-runs?per_page=100&filter=all` with `--paginate`. Logs come from `repos/hypertask-ai/hypertask/actions/jobs/<id>/logs`. Original job links and statuses remain in the JSON; no conclusions or SHAs were rewritten.
+- `pr-1392-head.check-runs.json` with `production.check-runs.json` replays the real merge: PR 1392's head passed at 19:22, production went red at 20:19, so the guard asks for a rerun before merging.
