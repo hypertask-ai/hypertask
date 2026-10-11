@@ -9,10 +9,20 @@ export type CommentReactionTarget = {
   taskUniqueIndex: number;
 };
 
+// HTPR-7122: isAgent is set when an agent made the reaction; userId is then its owner.
+// agent carries an id and name only when the caller may see that agent.
+type CommentReactionRow = {
+  id: string;
+  emoji: string;
+  userId: number;
+  isAgent?: true;
+  agent?: { id?: string; displayName: string };
+};
+
 export type CommentReactionResult = {
   changed: boolean;
-  reaction: { id: string; emoji: string; userId: number } | null;
-  reactions: Array<{ id: string; emoji: string; userId: number }>;
+  reaction: CommentReactionRow | null;
+  reactions: CommentReactionRow[];
 };
 
 export type CommentReactionDependencies<TContext> = {

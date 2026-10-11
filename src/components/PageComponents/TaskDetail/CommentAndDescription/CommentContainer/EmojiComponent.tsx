@@ -4,6 +4,7 @@ import { memo, useContext, useEffect, useMemo, useRef, useState } from "react";
 import EmojiTooltip from "../Common/EmojiTooltip";
 import NativeEmoji from "../Common/NativeEmoji";
 import MobileReactorsSheet from "../Common/MobileReactorsSheet";
+import { reactorsLabel } from "./reactorsLabel";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { createPortal } from "react-dom";
 import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
@@ -37,49 +38,10 @@ const EmojiComponent = memo(
     const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
     const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
     const emojiData = useMemo(() => emojiFinder(reaction.unified), []);
-    const reactors = useMemo(() => {
-      if (!reaction?.users?.length) return "";
-
-      const otherUsers: any[] = [];
-      let includesCurrentUser = false;
-
-      reaction.users.forEach((user) => {
-        if (user.id === currentUser.id) {
-          includesCurrentUser = true;
-        } else {
-          otherUsers.push(user.displayName);
-        }
-      });
-
-      let temp = "";
-
-      if (otherUsers.length === 0) {
-        temp = "You (click to remove)";
-      } else if (otherUsers.length === 1) {
-        temp = includesCurrentUser ? `${otherUsers[0]} and you` : otherUsers[0];
-      } else {
-        // Handle cases with more than 5 total users
-        if (reaction.users.length > 5) {
-          const displayUsers = otherUsers.slice(0, includesCurrentUser ? 4 : 5);
-          const remainingCount =
-            reaction.users.length -
-            displayUsers.length -
-            (includesCurrentUser ? 1 : 0);
-
-          temp = includesCurrentUser
-            ? `${displayUsers.join(", ")}, you and +${remainingCount}`
-            : `${displayUsers.join(", ")} and +${remainingCount}`;
-        } else {
-          // Original logic for 5 or fewer users
-          const lastUser = otherUsers.pop();
-          temp = includesCurrentUser
-            ? `${otherUsers.join(", ")}, ${lastUser} and you`
-            : `${otherUsers.join(", ")} and ${lastUser}`;
-        }
-      }
-
-      return `${temp}`;
-    }, [reaction, currentUser.id]);
+    const reactors = useMemo(
+      () => reactorsLabel(reaction?.users, currentUser.id),
+      [reaction, currentUser.id]
+    );
 
     const calculateTooltipPosition = () => {
       if (tooltipTrigger.current) {

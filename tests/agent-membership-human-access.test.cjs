@@ -253,7 +253,7 @@ for (const agentId of [null, agent.id]) {
       "@/lib/mcp/agents/scopes": {},
       "@/lib/mcp/idempotency/idempotencyStore": {},
       "@/lib/mcp/boards/links": {},
-      "@/lib/mcp/comments/reactionResponse": { mapMcpCommentReaction: value => value },
+      "@/lib/mcp/comments/reactionResponse": { mapMcpCommentReaction: value => value, reactionAgentIds: () => [] },
       "@/lib/mcp/readListQuery": { readListQuery: () => ({}) },
       "@/lib/mcp/listQuery": {},
     });

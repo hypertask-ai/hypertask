@@ -61,6 +61,8 @@ export type CommentReactionWebhookInput = {
   reactorUserId: number;
   /** From the request auth: true only when an agent made the call. An agent's owner reacting as a person is false. */
   reactorIsAgent: boolean;
+  /** HTPR-7122: the agent that reacted, so an event actor is never mistaken for its owner. */
+  reactorAgentId?: string | null;
   emoji: string;
   added: boolean;
 };
@@ -107,7 +109,10 @@ export async function persistCommentReactionWebhook(
   prepared: PreparedCommentReactionWebhook,
   input: CommentReactionWebhookInput,
 ): Promise<string[]> {
-  const actor = await resolveAgentWebhookActor(tx, { userId: input.reactorUserId });
+  const actor = await resolveAgentWebhookActor(tx, {
+    userId: input.reactorUserId,
+    agentId: input.reactorAgentId ?? null,
+  });
   return persistAgentWebhookEvents(tx, {
     ...buildCommentReactionEvent({
       task: prepared.comment.task,

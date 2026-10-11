@@ -121,6 +121,7 @@ function loadRoute(comments) {
     "@/lib/mcp/comments/reactionResponse": {
       commentReactionInclude: {},
       mapMcpCommentReaction: (r) => r,
+      reactionAgentIds: () => [],
     },
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",
@@ -143,6 +144,8 @@ function loadRoute(comments) {
   loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request);
+  stubs["@/lib/mcp/comments/visibleReactionAgents"] =
+    require("./helpers/visible-reaction-agents.cjs").loadVisibleReactionAgentsModule(loaded.require);
   loaded._compile(javascript, routePath);
   return { GET: loaded.exports.GET, getQuery: () => commentFindManyQuery };
 }

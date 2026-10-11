@@ -41,6 +41,8 @@ export const commentInclude = (userId: number, projectId: number) => ({
       id: true,
       emoji: true,
       userId: true,
+      // HTPR-7122: set when an agent reacted; userId is then its owner, not the reactor.
+      agentId: true,
     },
   },
 }) satisfies Prisma.CommentInclude;
@@ -396,6 +398,8 @@ export function mapCommentToResponse(comment: any, userId: number, projectId: nu
       id: reaction.id,
       emoji: reaction.emoji,
       userId: reaction.userId,
+      // HTPR-7122: an agent made it, never the owner in userId; it is not their approval.
+      ...(reaction.agentId ? { isAgent: true } : {}),
     })),
   };
 }

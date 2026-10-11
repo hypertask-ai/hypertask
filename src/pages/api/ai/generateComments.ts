@@ -194,6 +194,7 @@ async function getComments(taskId: number, commentIdsToGet: number[]) {
             emoji: true,
             names: true,
             userId: true,
+            agentId: true,
             isDeleted: true,
             createdAt: true,
             taskId: true
@@ -220,6 +221,7 @@ async function getComments(taskId: number, commentIdsToGet: number[]) {
             emoji: true,
             names: true,
             userId: true,
+            agentId: true,
             isDeleted: true,
             createdAt: true,
             taskId: true
