@@ -29,7 +29,11 @@ function loadTypeScript(relativePath, stubs = {}) {
   )(
     loadedModule,
     loadedModule.exports,
-    (request) => stubs[request] ?? require(request),
+    (request) => {
+      // An Error stub simulates a module that throws while loading.
+      if (stubs[request] instanceof Error) throw stubs[request];
+      return stubs[request] ?? require(request);
+    },
     filename,
     path.dirname(filename),
   );
@@ -507,4 +511,34 @@ test("announcement update permits CORS preflight without authorization or writes
   })), [{ methods: ["POST", "DELETE"], preflightContinue: true }]);
   assert.equal(authCalls, 0);
   assert.deepEqual(writes, []);
+});
+
+test("HTPR-7126: announcement admin auth works when Firebase Admin cannot load", async () => {
+  const previousSecret = process.env.ANNOUNCEMENTS_SECRET_KEY;
+  process.env.ANNOUNCEMENTS_SECRET_KEY = "test-only-owner-secret";
+  const brokenFirebase = new Error("firebase-admin failed to load");
+
+  try {
+    const { requireAnnouncementAdmin } = loadTypeScript(
+      "src/lib/admin/requireAnnouncementAdmin.ts",
+      { "@/lib/firebase-admin": brokenFirebase },
+    );
+
+    const missing = await authorize(requireAnnouncementAdmin);
+    assert.equal(missing.allowed, false);
+    assert.equal(missing.result.status, 401);
+
+    const owner = await authorize(requireAnnouncementAdmin, "Bearer test-only-owner-secret");
+    assert.equal(owner.allowed, true);
+
+    const firebaseToken = await authorize(requireAnnouncementAdmin, "Bearer some-firebase-token");
+    assert.equal(firebaseToken.allowed, false);
+    assert.equal(firebaseToken.result.status, 401);
+  } finally {
+    if (previousSecret === undefined) {
+      delete process.env.ANNOUNCEMENTS_SECRET_KEY;
+    } else {
+      process.env.ANNOUNCEMENTS_SECRET_KEY = previousSecret;
+    }
+  }
 });
