@@ -51,6 +51,14 @@ if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
 elif args[:2] == ['api', '-i'] and args[2].startswith('repos/hypertask-ai/hypertask/pulls?'):
     sha = (root / 'head').read_text() if (root / 'head').exists() else 'a' * 40
     etag = '"' + sha[:8] + '"'
+    if (root / 'two-pages').exists():
+        page = int(args[2].rsplit('page=', 1)[1])
+        link = 'Link: <https://api.github.com/next>; rel="next"\\r\\n' if page == 1 else ''
+        if page == 2 and (root / 'page2-error').exists():
+            sys.exit(1)
+        print('HTTP/2.0 200 OK\\r\\nEtag: ' + etag + '\\r\\n' + link + '\\r\\n'
+              + json.dumps([{'number': 997 + page, 'title': f'YPER4-{997 + page} [INFRA] Fixture', 'head': {'sha': sha}}]))
+        sys.exit(0)
     if args[3:] == ['-H', 'If-None-Match: ' + etag]:
         print('HTTP/2.0 304 Not Modified\\r\\nEtag: ' + etag + '\\r\\nX-Ratelimit-Remaining: 4000\\r\\n\\r\\n')
         sys.exit(1)  # gh exits non-zero on a 304
@@ -141,7 +149,7 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual(len(calls), 2)  # one list call per sweep, nothing else
         self.assertEqual(calls[1][3:], ['-H', 'If-None-Match: "aaaaaaaa"'])  # 304 path
         self.assertEqual(len(self.publications()), 2)
-        self.assertIn('gh-api: calls=1 list=304 rechecks=0 ratelimit_remaining=4000', result.stdout)
+        self.assertIn('gh-api: list_calls=1 list=304 rechecks=0 ratelimit_remaining=4000', result.stdout)
         hours = json.loads((self.state / 'api-calls.json').read_text())
         self.assertEqual(sum(h['calls'] for h in hours.values()), 2)
         self.assertEqual(sum(h['rechecks'] for h in hours.values()), 2)
@@ -169,9 +177,11 @@ print('premerge-evidence: success (fixture)')
             f'108 {old} python3 /x/premerge-evidence.py --kill-stale-gh-loops',
             f"109 {old} bash -c for i in 1 2; do echo hi; done",
             f'110 {old} gh pr checks 12 --watch',
+            f"111 {old} bash -c while read f; do cp $f /bak; sleep 1; done; gh pr view 12",
+            f"112 {old} bash -c until s=$(gh pr checks 1); do sleep 60; done",
         ])
         found = poster.stale_gh_loops(ps, {110})
-        self.assertEqual([f[0] for f in found], [101, 102, 103])
+        self.assertEqual([f[0] for f in found], [101, 102, 103, 112])
 
     def test_kill_mode_signals_only_matches(self):
         (self.bin / 'ps').write_text('#!/bin/sh\necho "4242 99999 gh run watch 1"\necho "4243 99999 sleep 9"\n')
@@ -179,6 +189,31 @@ print('premerge-evidence: success (fixture)')
         with patch.dict(os.environ, self.env, clear=True), patch.object(os, 'kill') as kill:
             poster.kill_stale_gh_loops()
         kill.assert_called_once_with(4242, poster.signal.SIGTERM)
+
+    def test_revocation_covers_a_head_missing_from_the_cache(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        cache = json.loads((self.state / 'cache.json').read_text())
+        del cache['999']
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        (self.root / 'fetch-error').touch()
+        self.assertNotEqual(self.sweep().returncode, 0)
+        self.assertEqual(len((self.root / 'statuses').read_text().splitlines()), 2)
+
+    def test_two_page_list_is_followed_and_stores_no_etag(self):
+        (self.root / 'two-pages').touch()
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(p[1] for p in self.publications()), ['998', '999'])
+        self.assertIsNone(json.loads((self.state / 'list.json').read_text())['etag'])
+        self.assertEqual(self.sweep().returncode, 0)  # refetches both pages, nothing rechecked
+        self.assertEqual(len(self.publications()), 2)
+        self.assertEqual(sum(c[:2] == ['api', '-i'] for c in self.gh_calls()), 4)
+
+    def test_failed_second_page_refuses_the_sweep(self):
+        (self.root / 'two-pages').touch()
+        (self.root / 'page2-error').touch()
+        self.assertNotEqual(self.sweep().returncode, 0)
+        self.assertEqual(self.publications(), [])
 
     def test_paused_sweep_makes_no_calls(self):
         pause = self.root / 'pause-until'

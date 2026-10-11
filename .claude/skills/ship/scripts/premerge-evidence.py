@@ -91,16 +91,10 @@ STATS = {'calls': 0, 'remaining': '?', 'list': '-'}
 STALE_LOOP_SECONDS = 2 * 3600
 
 
-def open_prs(state):
-    # One REST list per sweep. The ETag makes an unchanged list a 304, which does not count against the rate limit.
-    saved = state / 'list.json'
-    try:
-        cached = json.loads(saved.read_text())
-    except (OSError, ValueError):
-        cached = {}
-    cmd = ['gh', 'api', '-i', f'repos/{REPO}/pulls?state=open&base=production&per_page=100']
-    if cached.get('etag') and cached.get('rows') is not None:
-        cmd += ['-H', f'If-None-Match: {cached["etag"]}']
+def gh_page(page, etag=None):
+    cmd = ['gh', 'api', '-i', f'repos/{REPO}/pulls?state=open&base=production&per_page=100&page={page}']
+    if etag:
+        cmd += ['-H', f'If-None-Match: {etag}']
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     STATS['calls'] += 1
     head, _, body = result.stdout.replace('\r\n', '\n').partition('\n\n')
@@ -108,23 +102,43 @@ def open_prs(state):
     status = lines[0].split()[1] if len(lines[0].split()) > 1 else ''
     headers = {k.strip().lower(): v.strip() for k, _, v in (l.partition(':') for l in lines[1:])}
     STATS['remaining'] = headers.get('x-ratelimit-remaining', '?')
+    return status, headers, body
+
+
+def open_prs(state):
+    # Page 1 is conditional: an unchanged list is a 304, which does not count against the rate limit.
+    saved = state / 'list.json'
+    try:
+        cached = json.loads(saved.read_text())
+    except (OSError, ValueError):
+        cached = {}
+    usable = cached.get('etag') and cached.get('rows') is not None
+    status, headers, body = gh_page(1, cached['etag'] if usable else None)
     STATS['list'] = status
-    if status == '304' and cached.get('rows') is not None:
+    if status == '304' and usable:
         return cached['rows']
     if status != '200':
         raise ValueError('open PR list failed')
-    if 'rel="next"' in headers.get('link', ''):
-        raise ValueError('open PR list may be truncated; refusing an incomplete sweep')
-    rows = [{'number': r['number'], 'title': r['title'], 'headRefOid': r['head']['sha']} for r in json.loads(body)]
+    raw, page, more = json.loads(body), 1, 'rel="next"' in headers.get('link', '')
+    while more:
+        page += 1
+        status, next_headers, body = gh_page(page)
+        if status != '200':
+            raise ValueError('open PR list page failed; refusing an incomplete sweep')
+        raw += json.loads(body)
+        more = 'rel="next"' in next_headers.get('link', '')
+    rows = [{'number': r['number'], 'title': r['title'], 'headRefOid': r['head']['sha']} for r in raw]
     temporary = state / 'list.tmp'
-    temporary.write_text(json.dumps({'etag': headers.get('etag'), 'rows': rows}))
+    # With several pages no ETag is stored, so the next sweep refetches every page.
+    temporary.write_text(json.dumps({'etag': None if page > 1 else headers.get('etag'), 'rows': rows}))
     temporary.replace(saved)
     return rows
 
 
 def record_calls(state, rechecks):
     # One journal line per sweep plus an hourly total in the state folder.
-    print(f'gh-api: calls={STATS["calls"]} list={STATS["list"]} rechecks={rechecks} ratelimit_remaining={STATS["remaining"]}', flush=True)
+    # list_calls counts only this script's own list/status calls, not the ship-check subprocesses: ratelimit_remaining is the real measure.
+    print(f'gh-api: list_calls={STATS["calls"]} list={STATS["list"]} rechecks={rechecks} ratelimit_remaining={STATS["remaining"]}', flush=True)
     try:
         file = state / 'api-calls.json'
         try:
@@ -159,8 +173,10 @@ def stale_gh_loops(ps_output, own_pids, min_age=STALE_LOOP_SECONDS):
         exe = os.path.basename(tokens[0])
         watch = exe == 'gh' and (('pr' in tokens and 'checks' in tokens and '--watch' in tokens)
                                  or tokens[1:3] == ['run', 'watch'])
+        # One while/until ... done segment must hold both a gh call and a sleep (a poll loop).
         loop = (exe in ('sh', 'bash', 'zsh', 'dash') and '-c' in tokens
-                and re.search(r'\b(while|until|for)\b.*\bgh\s+(pr|run|api|issue)\b', ' '.join(tokens[tokens.index('-c') + 1:])))
+                and any(re.search(r'\bgh\s+(pr|run|api)\b', seg) and re.search(r'\bsleep\b', seg)
+                        for seg in re.findall(r'\b(?:while|until)\b.*?\bdone\b', ' '.join(tokens[tokens.index('-c') + 1:]), re.S)))
         if watch or loop:
             found.append((pid, age, args))
     return found
@@ -181,16 +197,10 @@ def revoke_passing(state):
     # Hold the publisher lock so an in-flight ship-check cannot re-post success after the revocation.
     with (state / 'publish.lock').open('w') as publisher:
         fcntl.flock(publisher, fcntl.LOCK_EX)
-        try:
-            cache = json.loads((state / 'cache.json').read_text())
-        except (OSError, ValueError):
-            cache = {}
         (state / 'cache.json').unlink(missing_ok=True)
         failed = []
         for row in open_prs(state):
-            # Without a record of what was posted, revoke every open PR (fail closed).
-            if cache and cache.get(str(row['number']), {}).get('state') != 'SUCCESS':
-                continue
+            # Every open head: a direct ship-check may have published success outside the sweep.
             try:
                 STATS['calls'] += 1
                 subprocess.run(['gh', 'api', f'repos/{REPO}/statuses/{row["headRefOid"]}', '--method', 'POST',
