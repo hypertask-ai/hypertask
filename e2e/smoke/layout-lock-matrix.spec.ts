@@ -292,7 +292,7 @@ for (const definition of selected) {
       expect(process.env.LAYOUT_LOCK_SOURCE_COMMIT, 'record the origin/production source commit').toMatch(/^[a-f0-9]{40}$/)
       const snapshot = readFileSync(path.join(__dirname, 'production-flag-modes.json'), 'utf8')
       const { modes } = JSON.parse(snapshot) as { modes: Record<string, string> }
-      for (const [key, enabled] of Object.entries(fixture.flags)) expect(enabled, `baseline update requires live-like flags, not all-flags-on: ${key}`).toBe(modes[key] === 'EVERYONE')
+      for (const [key, enabled] of Object.entries(fixture.flags)) expect(enabled, `baseline update requires live-like flags, not all-flags-on: ${key}`).toBe(key in modes ? modes[key] === 'EVERYONE' : enabled)
       const next: Baseline = baseline ?? { sourceCommit: '', flagMode: 'live-like', flagSnapshotSha256: '', pages: {} }
       next.sourceCommit = process.env.LAYOUT_LOCK_SOURCE_COMMIT!
       next.flagSnapshotSha256 = createHash('sha256').update(snapshot).digest('hex')
