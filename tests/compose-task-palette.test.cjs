@@ -17,7 +17,9 @@ const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
-const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: true, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
+// Own disk cache: other tests write classic-JSX builds of the same files to the shared jiti cache,
+// which fail here with "React is not defined" (YPER4-279).
+const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: path.join(require('node:os').tmpdir(), 'jiti-compose-task-palette'), extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
