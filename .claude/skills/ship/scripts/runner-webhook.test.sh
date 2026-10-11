@@ -328,6 +328,16 @@ eq "and the no-waiter case is logged once" "$(grep -c 'queued in the RUNNER 3 in
 ( exec 7>>"$T/inbox/runner-3.waiter.$RUNPID.lock"; flock 7; sleep 3 ) & WL=$!; sleep 0.3; : > "$TMUX_LOG"
 eq "a waiter holds its lock: inbox, nothing typed, nothing logged" "$(idel 3 ev-s2 'waiter reads')|$(sent)|$(evs runner-3)|$(grep -c 'no live waiter' "$T/inbox/typing-fallback.log")" "0|0|$((n0 + 2))|$((l0 + 1))"
 kill "$WL" 2>/dev/null; wait "$WL" 2>/dev/null
+# No live waiter: one notice to the hooked INFRA MANAGER per waiter gap, still nothing typed.
+sleep 120 & IMP=$!; session infra "INFRA MANAGER" "$IMP"; printf 'runner-3\ninfra-manager\n' > "$T/inbox/events-hook.enabled"; alive infra-manager "$IMP"
+rm -f "$T/inbox/runner-3.waiter.$RUNPID.lock" "$T/inbox/infra-manager.events.jsonl" "$T/tmux-called"; : > "$TMUX_LOG"
+idel 3 ev-nw1 'first' >/dev/null; idel 3 ev-nw2 'second' >/dev/null
+eq "no waiter, two events: both in the runner inbox, nothing typed" "$(jq -s 'map(select(.id|startswith("ev-nw")))|length' "$T/inbox/runner-3.events.jsonl")|$(sent)|$(cat "$T/tmux-called" 2>/dev/null)" "2|0|"
+eq "exactly one notice to the INFRA MANAGER inbox" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")|$(jq -r '.id' "$T/inbox/infra-manager.events.jsonl")" "1|nowaiter-runner-3-$RUNPID"
+case "$(jq -r '.text' "$T/inbox/infra-manager.events.jsonl")" in 'runner-3 has undelivered board events and no live waiter; its session is idle; next activity delivers them') ok "notice text";; *) bad "notice text";; esac
+rm -f "$T/inbox/infra-manager.events.jsonl"; printf 'x' | RUNNER_DELIVER_ID=ev-im RUNNER_PICKUP_TMUX=$T/notmux ./runner-deliver infra-manager >/dev/null 2>&1
+eq "an event for INFRA MANAGER itself without a waiter adds no notice" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")" "1"
+kill "$IMP" 2>/dev/null; rm -f "$T/sessions/infra.json" "$T/inbox/infra-manager.hook-alive" "$T/inbox/infra-manager.events.jsonl"; printf 'runner-3\n' > "$T/inbox/events-hook.enabled"
 take 'RUNNER 3' "$RUNPID" >/dev/null; alive runner-3 "$RUNPID"
 # Fallback typing only without the hook, and every use is logged.
 alive runner-3 1; : > "$TMUX_LOG"

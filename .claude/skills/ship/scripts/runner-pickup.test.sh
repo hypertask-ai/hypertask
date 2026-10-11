@@ -161,6 +161,17 @@ pkill -P "$W1" 2>/dev/null; kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null  # th
 start=$(date +%s); wait_hook 'RUNNER 3' 999999999 30 >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && [ $(( $(date +%s) - start )) -lt 3 ] && ok "waiter of a dead session leaves without a wake" || bad "dead-session waiter rc=$rc"
 [ ! -e "$RUNNER_INBOX_DIR/runner-3.waiter.999999999.lock" ] && ok "a dead session's waiter removes its lock file" || bad "dead-session waiter lock left behind"
+# Slot ownership: a waiter whose slot another live session has taken consumes nothing and leaves without a wake.
+sleep 300 & OTHER=$!
+( sleep 0.6; printf '{"pid":%s,"ts":%s}\n' "$OTHER" "$(date +%s)" > "$RUNNER_INBOX_DIR/runner-3.hook-alive"; ev runner-3 own1 'not yours' ) &
+out=$(wait_hook 'RUNNER 3' "$LIVE" 4 2>&1; echo "rc=$?")
+eq "waiter whose slot was taken by another pid: exit 0, nothing printed" "$out" "rc=0"
+eq "and it consumed nothing" "$(undelivered runner-3)" "1"
+hookp() { echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$LIVE" "$HOOK" "$1"; }
+eq "prompt/post/stop of the displaced session emit nothing" "$(hookp post)$(hookp prompt)$(hookp stop)" ""
+eq "and consumed nothing either" "$(undelivered runner-3)" "1"
+kill "$OTHER" 2>/dev/null; sleep 0.2; hookp post >/dev/null  # owner gone: this session takes the slot back and gets the event
+eq "when the owner is gone the session takes the slot over" "$(undelivered runner-3)" "0"
 # A backlog over 9,000 characters goes out in several calls, whole events, each exactly once.
 pad=$(printf 'x%.0s' $(seq 500)); for i in $(seq 1 30); do ev runner-3 "big-$i" "event-$i $pad"; done
 c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx); c3=$(hook 'RUNNER 3' "$pl" post | ctx)
@@ -182,7 +193,13 @@ mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > 
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
 eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,2,1,1"
-eq "the waiters run with asyncRewake and a 7-day timeout (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,604800],[true,604800],[true,604800]]'
+eq "the waiters run with asyncRewake and the longest safe timeout (2000000 s) (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,2000000],[true,2000000],[true,2000000]]'
+wt() { jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | .timeout]' "$T/settings.json"; }
+for old in 604800 86400; do
+  jq --argjson o "$old" '.hooks |= with_entries(.value |= map(.hooks |= map(if (.command|endswith(" wait")) then .timeout = $o else . end)))' "$T/settings.json" > "$T/s.x" && mv "$T/s.x" "$T/settings.json"
+  PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1
+  eq "install upgrades existing $old s waiter entries to 2000000" "$(wt)" '[2000000,2000000,2000000]'
+done
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 
