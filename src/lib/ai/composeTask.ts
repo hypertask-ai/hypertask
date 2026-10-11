@@ -6,7 +6,7 @@ import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
 import { extractTitleAndDescription } from "@/utils/aiWriterUtils";
 import { escapeHtml } from "@/utils/htmlEscape";
-import { extractTaskWriterMedia, extractTaskWriterPromptMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia } from "./taskWriterMedia";
+import { extractTaskWriterMedia, extractTaskWriterPromptMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia, stripTaskWriterMediaTokens } from "./taskWriterMedia";
 import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, retryCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -171,7 +171,7 @@ export async function createComposedTask({
           body += `<p><a href="${escapeHtml(file.url)}">${escapeHtml(file.fileName)}</a></p>`;
         }
       }
-      return { ...draft, description: body };
+      return { ...draft, title: stripTaskWriterMediaTokens(draft.title) || text.trim(), description: body };
     });
     title = drafts[0].title;
     description = drafts[0].description;

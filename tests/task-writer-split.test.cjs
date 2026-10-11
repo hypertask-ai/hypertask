@@ -91,7 +91,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": { extractTitleAndDescription: html => ({ title: html.match(/<h1[^>]*>(.*?)<\/h1>/)?.[1], description: html.replace(/<h1[^>]*>.*?<\/h1>/, "") }) },
     "@/utils/htmlEscape": { escapeHtml },
-    "./taskWriterMedia": { extractTaskWriterMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, restoreTaskWriterMedia: html => html },
+    "./taskWriterMedia": { extractTaskWriterMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, restoreTaskWriterMedia: html => html, stripTaskWriterMediaTokens: text => text },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads: id => bindings.push(id) },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => ({ addedFilters: ["view"] }) },
     "@/utils/helperFunctions/describeTaskWriterFailure": {},
