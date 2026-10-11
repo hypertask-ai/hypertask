@@ -370,7 +370,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
   } = useAiChatContext();
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const paged = pagingRequested && sessionPagingEnabled;
-  const railSessions = paged ? historySessions : sessions;
+  const railSessions = pagingRequested && sessionPagingEnabled ? historySessions : sessions;
 
   useEffect(() => {
     if (paged) void refreshHistorySessions();
