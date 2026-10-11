@@ -165,6 +165,11 @@ def shell_words(text):
     return words
 
 
+def starts_command(previous):
+    # True when the word after `previous` is in command position, so echo gh pr view is an argument, not a gh call.
+    return previous in ('while', 'until', 'do', 'then', 'else', '!', '{') or previous.endswith((';', '(', '|', '&'))
+
+
 def is_gh_poll_loop(args):
     # A poll loop: one while/until ... done span that runs gh pr/run/api as a command and also sleeps.
     try:
@@ -177,8 +182,9 @@ def is_gh_poll_loop(args):
         if word not in ('while', 'until') or end is None:
             continue
         span = words[start:end + 1]
-        gh = any(span[i] == 'gh' and span[i + 1] in ('pr', 'run', 'api') for i in range(len(span) - 1))
-        if gh and 'sleep' in span:
+        commands = [i for i in range(1, len(span)) if starts_command(span[i - 1])]
+        gh = any(span[i] == 'gh' and i + 1 < len(span) and span[i + 1] in ('pr', 'run', 'api') for i in commands)
+        if gh and any(span[i] == 'sleep' for i in commands):
             return True
     return False
 
