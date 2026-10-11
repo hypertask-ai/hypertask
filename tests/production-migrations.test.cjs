@@ -92,15 +92,50 @@ test("production builds deploy through the direct database URL", async () => {
   });
 
   assert.deepEqual(result, { status: "deployed" });
-  assert.equal(calls.length, 1);
-  assert.equal(calls[0][0], process.execPath);
-  assert.deepEqual(calls[0][1], [
+  const deploy = calls.at(-1);
+  assert.equal(deploy[0], process.execPath);
+  assert.deepEqual(deploy[1], [
     "/repo/node_modules/prisma/build/index.js",
     "migrate",
     "deploy",
   ]);
-  assert.equal(calls[0][2].env.DATABASE_URL, "postgresql://direct.example/db");
-  assert.equal(calls[0][2].env.DIRECT_URL, "postgresql://direct.example/db");
+  assert.equal(deploy[2].env.DATABASE_URL, "postgresql://direct.example/db");
+  assert.equal(deploy[2].env.DIRECT_URL, "postgresql://direct.example/db");
+});
+
+test("HTPR-7076: a failed retryable migration is marked rolled back before deploy", async () => {
+  const { runProductionMigrations, RETRY_FAILED_MIGRATIONS } = await runnerModule;
+  const calls = [];
+
+  const result = runProductionMigrations({
+    env: { ...productionEnv, DIRECT_URL: "postgresql://direct.example/db" },
+    cwd: "/repo",
+    spawnSyncImpl: (...args) => {
+      calls.push(args[1].slice(1));
+      // Prisma refuses resolve when the migration is not failed; deploy must still run.
+      return { status: args[1][2] === "resolve" ? 1 : 0 };
+    },
+  });
+
+  assert.deepEqual(result, { status: "deployed" });
+  assert.deepEqual(RETRY_FAILED_MIGRATIONS, ["20261011010000_htpr_7076_ai_usage_cache_tokens"]);
+  assert.deepEqual(calls, [
+    ["migrate", "resolve", "--rolled-back", "20261011010000_htpr_7076_ai_usage_cache_tokens"],
+    ["migrate", "deploy"],
+  ]);
+});
+
+test("HTPR-7076: the cache columns migration is safe to re-run and does not queue on the table lock", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const sql = fs.readFileSync(
+    path.join(__dirname, "../src/prisma/migrations/20261011010000_htpr_7076_ai_usage_cache_tokens/migration.sql"),
+    "utf8",
+  );
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "cachedInputTokens" INTEGER/);
+  assert.match(sql, /ADD COLUMN IF NOT EXISTS "cacheWriteInputTokens" INTEGER/);
+  assert.match(sql, /set_config\('lock_timeout', '2s', true\)/);
+  assert.match(sql, /WHEN lock_not_available/);
 });
 
 test("production builds propagate Prisma failures", async () => {
