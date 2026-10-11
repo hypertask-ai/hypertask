@@ -447,6 +447,10 @@ test('real task chat hook persists the Compose greeting once, scoped to the crea
       } };
       stub(require.resolve('@tanstack/react-query'), {
         useQueryClient: () => queryClient,
+        useInfiniteQuery: (options) => {
+          assert.equal(options.enabled, false, "legacy Compose does not request paged history");
+          return {};
+        },
         useQuery: () => ({
           data: React.useSyncExternalStore((fn) => { subscribers.add(fn); return () => subscribers.delete(fn); }, () => data),
           isSuccess: true, isLoading: false, isFetching: false, isError: false,

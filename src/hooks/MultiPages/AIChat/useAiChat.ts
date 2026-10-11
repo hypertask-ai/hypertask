@@ -67,7 +67,7 @@ export function useAiChat() {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
@@ -82,7 +82,7 @@ export function useAiChat() {
     deleteSessionInHistory, messageQueueRef, setQueuedMessages, sendInFlightRef, modelBilling,
     currentAiOption, pathname, currentUser, taskId, sessionsRef,
     dockedChatScope, sessionContextKey, chatHistoryReadyRef, aiChatBoardSessionMap, setAiChatBoardSessionMap,
-    setRecentChatBoardIds, shouldLoadChatHistory,
+    setRecentChatBoardIds, shouldLoadChatHistory, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
   });
   const {
   handleCancelStream, audioTiptapCallback, toggleRecording, processAttachments, buildGuestBoard,
@@ -95,6 +95,7 @@ export function useAiChat() {
   const {
   handleSendMessage,
   } = createAiChatSend({
+    sessionPagingEnabled, getDisplayedSession,
     isByokBlocked, isTyping, editor, fileUpload, messageQueueRef,
     setQueuedMessages, sendInFlightRef, surface, inViewObject, waitForChatSession,
     currentProject, buildGuestBoard, processAttachments, setIsTyping, addMessageToSessionQuery,
@@ -138,7 +139,7 @@ export function useAiChat() {
     queuedMessages,
     removeQueuedMessage,
     isByokBlocked,
-    sessions,
+    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, sessionPagingEnabled,
     activeSession,
     currentSession,
     showWelcomeScreen,
