@@ -195,7 +195,9 @@ test("pending cached details paint property geometry immediately but defer edito
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
   assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
-  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
+  // HTPR-7116: `reveal` sets the panels ready (in a transition when its flag is on).
+  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
+  assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
   assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
   assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
