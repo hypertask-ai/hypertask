@@ -155,6 +155,42 @@ test("only platform-managed keys batch; shared (capped) and customer keys keep t
   assert.match(read("src/lib/ai/labelClassifier.ts"), /batchEligibleFunding\(gatewayFundingSourceForApiKey/);
 });
 
+test("only Anthropic models batch; other models stay on the instant path", () => {
+  assert.equal(jobs.batchEligibleModel("anthropic/claude-haiku-5.5"), true);
+  assert.equal(jobs.batchEligibleModel("google/gemini-3.1-flash-lite"), false);
+  assert.equal(jobs.batchEligibleModel("openai/gpt-6-luna"), false);
+  assert.match(read("src/lib/slack/threadSummaryBatch.ts"), /!batchEligibleModel\(model\)/);
+  assert.match(read("src/lib/ai/labelClassifier.ts"), /if \(!batchEligibleModel\(model\)\) return false;/);
+});
+
+test("a bad Slack item runs the instant path once and is not batched again", async () => {
+  const item = { participants: ["Ann"], permalink: "https://example.slack.com/archives/C1/p1" };
+  const bad = [
+    { id: "a", status: "failed" },
+    { id: "a", status: "expired" },
+    { id: "a", status: "cancelled" },
+    { id: "a", status: "succeeded", text: "not json", usage: {} },
+  ];
+  for (const outcome of bad) {
+    let calls = 0;
+    const result = await jobs.slackHtmlWithInstantFallback(outcome, item, async () => { calls += 1; return "<p>instant</p>"; });
+    assert.deepEqual(result, { type: "comment", html: "<p>instant</p>", via: "instant" });
+    assert.equal(calls, 1);
+  }
+  // A good item never touches the instant path.
+  let goodCalls = 0;
+  const good = await jobs.slackHtmlWithInstantFallback({ id: "a", status: "succeeded", text: SUMMARY_JSON, usage: {} }, item, async () => { goodCalls += 1; return "x"; });
+  assert.equal(good.via, "batch");
+  assert.equal(goodCalls, 0);
+  // Instant failure: reported as failed (the cron's behavior), nothing thrown, nothing posted.
+  assert.deepEqual(await jobs.slackHtmlWithInstantFallback(bad[0], item, async () => { throw new Error("boom"); }), { type: "failed" });
+  assert.deepEqual(await jobs.slackHtmlWithInstantFallback(bad[0], item, async () => null), { type: "empty" });
+  // The collector uses the normal instant builder and never re-queues a batch.
+  const collector = read("src/lib/ai/batch/collectBatches.ts");
+  assert.match(collector, /buildSlackThreadSummaryComment\(/);
+  assert.doesNotMatch(collector, /threadSummaryBatch|submitBatch|prepareSlackSummaryForBatch/);
+});
+
 test("stale batches: older than 25 hours are cancelled and released", () => {
   const now = Date.parse("2026-10-12T12:00:00Z");
   assert.equal(jobs.isBatchStale(new Date(now - 24 * 3600e3), now), false);

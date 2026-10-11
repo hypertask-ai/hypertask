@@ -195,7 +195,7 @@ export function outcomesForItems(itemIds: string[], results: SdkItemResult[]): B
 
 export type SlackBatchAction =
   | { type: "comment"; html: string }
-  /** Failed, expired, cancelled or unparsable: clear the pending mark and let the next cron try again. */
+  /** Failed, expired, cancelled or unparsable: the collector summarizes the thread once, instantly. */
   | { type: "retry" };
 
 export function slackActionForOutcome(
@@ -206,6 +206,35 @@ export function slackActionForOutcome(
   const summary = parseSlackSummaryOutput(outcome.text);
   if (!summary) return { type: "retry" };
   return { type: "comment", html: renderSlackSummaryComment(summary, item.participants, item.permalink) };
+}
+
+/**
+ * The comment HTML for one Slack batch result. A failed, expired, cancelled or unparsable item runs
+ * `instant` (the normal single-call path) once instead of being batched again. If that also throws,
+ * the thread is left unsummarized, which is what the cron does on a failure today.
+ */
+export async function slackHtmlWithInstantFallback(
+  outcome: BatchItemOutcome,
+  item: Pick<SlackSummaryBatchItem, "participants" | "permalink">,
+  instant: () => Promise<string | null>,
+): Promise<
+  | { type: "comment"; html: string; via: "batch" | "instant" }
+  | { type: "empty" }
+  | { type: "failed" }
+> {
+  const action = slackActionForOutcome(outcome, item);
+  if (action.type === "comment") return { type: "comment", html: action.html, via: "batch" };
+  try {
+    const html = await instant();
+    return html ? { type: "comment", html, via: "instant" } : { type: "empty" };
+  } catch {
+    return { type: "failed" };
+  }
+}
+
+/** Batches are Anthropic only; other models (for example the Gemini label model) stay instant. */
+export function batchEligibleModel(model: string): boolean {
+  return model.startsWith("anthropic/");
 }
 
 export type LabelBatchAction =

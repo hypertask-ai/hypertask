@@ -6,6 +6,7 @@ import { gatewayFundingSourceForApiKey } from "@/app/api/ai/_lib/modelProvider";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   batchEligibleFunding,
+  batchEligibleModel,
   batchProviderOptions,
   buildSlackSummaryBatchRequest,
   chunkForBatch,
@@ -49,7 +50,8 @@ export async function prepareSlackSummaryForBatch(
   const inputs = await resolveSlackSummaryModelInputs(context);
   if (!inputs) return { type: "empty" };
   const { systemModel, gatewayApiKey, haikuByok } = inputs;
-  if (haikuByok || !gatewayApiKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayApiKey))) {
+  const model = gatewayCatalogModelSlug(systemModel.model);
+  if (haikuByok || !gatewayApiKey || !batchEligibleModel(model) || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayApiKey))) {
     return { type: "instant", source };
   }
 
@@ -66,7 +68,7 @@ export async function prepareSlackSummaryForBatch(
         permalink: source.permalink,
       },
       transcript: source.transcript,
-      model: gatewayCatalogModelSlug(systemModel.model),
+      model,
       gatewayKey: gatewayApiKey,
       teamId: context.teamId,
       userId: context.installedByUserId,

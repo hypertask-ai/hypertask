@@ -5,7 +5,7 @@ import { generateText } from "ai";
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { batchBackgroundAiEnabled, haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
-import { batchEligibleFunding } from "@/lib/ai/batch/batchJobs";
+import { batchEligibleFunding, batchEligibleModel } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
 import {
   gatewayFundingSourceForApiKey,
@@ -385,9 +385,11 @@ async function trySmartLabelBatch(
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
     if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey))) return false;
     const haikuDefaultEnabled = await haikuDefaultModelEnabled(userId);
+    const model = gatewayCatalogModelSlug(haikuDefaultEnabled ? "anthropic/claude-haiku-5.5" : MODEL);
+    if (!batchEligibleModel(model)) return false;
     await submitSmartLabelBatch({
       label,
-      model: gatewayCatalogModelSlug(haikuDefaultEnabled ? "anthropic/claude-haiku-5.5" : MODEL),
+      model,
       gatewayKey,
       teamId,
       usageUserId: haikuDefaultEnabled ? userId : generalConfig.hyperAiId,

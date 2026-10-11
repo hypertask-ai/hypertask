@@ -11,7 +11,7 @@ import {
   labelActionForOutcome,
   nextSummarizedTs,
   outcomesForItems,
-  slackActionForOutcome,
+  slackHtmlWithInstantFallback,
   type BatchItemOutcome,
   type SlackSummaryBatchItem,
   type SmartLabelBatchItem,
@@ -19,6 +19,8 @@ import {
 import { cancelGatewayBatch, gatewayBatchOutcomes, gatewayBatchState } from "@/lib/ai/batch/gatewayBatch";
 import { applyAiLabelVerdict, getAiActor } from "@/lib/ai/labelClassifier";
 import { generalConfig } from "@/lib/configs/general.config";
+import { decryptSecret } from "@/lib/crypto/byokCipher";
+import { buildSlackThreadSummaryComment } from "@/lib/slack/threadSummary";
 import prisma from "@/lib/prisma";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 
@@ -138,6 +140,7 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
     where: { id: generalConfig.hyperAiId },
     select: { id: true, email: true, displayName: true, photoURL: true },
   });
+  const userNameCache = new Map<string, Promise<string>>();
   for (const outcome of outcomes) {
     const item = items[outcome.id] as SlackSummaryBatchItem;
     const release = { id: item.threadId, summaryBatchId: batch.id };
@@ -146,27 +149,53 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
         projectId: item.projectId,
         taskId: item.taskIds.length === 1 ? item.taskIds[0] : null,
       });
-      const action = slackActionForOutcome(outcome, item);
-      if (action.type === "retry" || !botUser) {
-        // The next slack-thread-summaries run picks the thread up again.
+      if (!botUser) {
         await prisma.slackWatchedThread.updateMany({ where: release, data: { summaryBatchId: null } });
         continue;
       }
       const tasks = await prisma.task.findMany({
         where: { id: { in: item.taskIds }, status: { not: "Deleted" }, project: { teamId: batch.teamId } },
-        select: { id: true, userId: true },
+        select: { id: true, projectId: true, userId: true },
       });
-      for (const task of tasks) {
-        await createCommentService({
-          text: action.html,
-          creatorId: botUser.id,
-          taskId: task.id,
-          ownerId: task.userId,
-          currentUser: botUser,
-          agentId: null,
-          processTaskReferences: false,
-          trustedCaller: true,
+      // A bad item is summarized once through the instant path (never batched again).
+      const result = await slackHtmlWithInstantFallback(outcome, item, async () => {
+        const watched = await prisma.slackWatchedThread.findUnique({
+          where: { id: item.threadId },
+          include: { install: { include: { team: { select: { aiProviderSettings: true } } } } },
         });
+        if (!watched || tasks.length === 0) return null;
+        const projectIds = [...new Set(tasks.map((task) => task.projectId))];
+        return buildSlackThreadSummaryComment({
+          aiProviderSettings: watched.install.team.aiProviderSettings,
+          botToken: decryptSecret(watched.install.encryptedBotToken),
+          channelId: watched.channelId,
+          installedByUserId: watched.install.installedByUserId,
+          projectId: projectIds.length === 1 ? projectIds[0] : null,
+          taskId: tasks.length === 1 ? tasks[0].id : null,
+          teamId: watched.install.teamId,
+          threadTs: watched.threadTs,
+          userNameCache,
+        });
+      });
+      if (result.type === "failed") {
+        // Same as the cron on a failure: leave the summarized mark alone and report it.
+        console.error(`Slack batch item and instant fallback failed for thread ${item.threadId}`);
+        await prisma.slackWatchedThread.updateMany({ where: release, data: { summaryBatchId: null } });
+        continue;
+      }
+      if (result.type === "comment") {
+        for (const task of tasks) {
+          await createCommentService({
+            text: result.html,
+            creatorId: botUser.id,
+            taskId: task.id,
+            ownerId: task.userId,
+            currentUser: botUser,
+            agentId: null,
+            processTaskReferences: false,
+            trustedCaller: true,
+          });
+        }
       }
       const thread = await prisma.slackWatchedThread.findUnique({
         where: { id: item.threadId },
