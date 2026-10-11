@@ -5,7 +5,6 @@ import type {
 import prisma from "@/lib/prisma";
 import { cache } from "react";
 import type { RawFlagMode } from "@/lib/flags/modeCache";
-import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import type { FeatureFlagDefinition, FeatureFlagKind } from "@/lib/flags/definitions";
 
@@ -14,8 +13,7 @@ import {
 } from "@/lib/flags/keys";
 
 // Re-exported so server code keeps importing keys from here. Client components must
-// import "@/lib/flags/keys" directly: this module reaches ioredis through the auth
-// stack and cannot enter a browser bundle.
+// import "@/lib/flags/keys" directly: flag evaluation uses server-only Prisma and caches.
 export * from "@/lib/flags/keys";
 export type { FeatureFlagKind } from "@/lib/flags/definitions";
 export function withFeatureFlagSnapshot<T>(run: () => T): T {
@@ -150,6 +148,7 @@ const isFeatureFlagQaUser = (
 ) => matchesFeatureFlagIdentity(userId, FEATURE_FLAG_QA_USER, db);
 
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
+  const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const session = await getSessionUser(headers);
   return session ? isFeatureFlagOwnerUser(session.userId) : false;
 }
