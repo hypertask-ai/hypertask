@@ -7,7 +7,6 @@ import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   batchEligibleFunding,
   batchEligibleModel,
-  batchProviderOptions,
   buildSlackSummaryBatchRequest,
   chunkForBatch,
   groupByKey,
@@ -96,11 +95,6 @@ export async function submitSlackSummaryBatches(entries: SlackBatchEntry[]) {
               id: entry.threadId,
               model: entry.model,
               transcript: entry.transcript,
-              providerOptions: batchProviderOptions("summary", {
-                teamId: entry.teamId,
-                projectId: entry.item.projectId,
-                userId: entry.userId,
-              }),
             }),
           ),
           items: Object.fromEntries(chunk.map((entry) => [entry.threadId, entry.item])),

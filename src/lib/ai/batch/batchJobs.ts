@@ -11,7 +11,6 @@ import {
   parseMatchingLabelIds,
   type AiLabelDefinition,
 } from "@/lib/ai/labelClassifierOutput";
-import { INCLUDED_WITH_HYPERTASK_GATEWAY_TAG, isSystemAiFeature } from "@/lib/aiUsageClassification";
 import {
   parseSlackSummaryOutput,
   renderSlackSummaryComment,
@@ -89,28 +88,14 @@ export type BatchTextRequest = {
   instructions: string;
   prompt: string;
   maxOutputTokens: number;
-  providerOptions?: { gateway: { tags: string[] } };
 };
 
-/** Same gateway tags the instant path sends (see gatewayProviderOptionsForModel), without a model object. */
-export function batchProviderOptions(
-  feature: "summary" | "smart-label",
-  tags: { teamId: string; projectId?: number | null; userId?: number | null },
-): NonNullable<BatchTextRequest["providerOptions"]> {
-  const gatewayTags: string[] = [feature];
-  const systemFeature = isSystemAiFeature(feature);
-  if (systemFeature) gatewayTags.push(INCLUDED_WITH_HYPERTASK_GATEWAY_TAG);
-  gatewayTags.push(`team:${tags.teamId}`);
-  if (tags.projectId != null) gatewayTags.push(`board:${tags.projectId}`);
-  if (!systemFeature && tags.userId != null) gatewayTags.push(`user:${tags.userId}`);
-  return { gateway: { tags: gatewayTags } };
-}
-
+// Requests carry no per-request gateway options: async batches reject anything but
+// safetyIdentifier per request. Usage is attributed by our own AiUsage rows instead.
 export function buildSlackSummaryBatchRequest(args: {
   id: string;
   model: string;
   transcript: string;
-  providerOptions?: BatchTextRequest["providerOptions"];
 }): BatchTextRequest {
   return {
     id: args.id,
@@ -119,7 +104,6 @@ export function buildSlackSummaryBatchRequest(args: {
     instructions: `${SLACK_SUMMARY_SYSTEM}\n\n${SLACK_SUMMARY_JSON_INSTRUCTIONS}`,
     prompt: slackSummaryPrompt(args.transcript),
     maxOutputTokens: SLACK_SUMMARY_MAX_OUTPUT_TOKENS,
-    providerOptions: args.providerOptions,
   };
 }
 
@@ -128,7 +112,6 @@ export function buildSmartLabelBatchRequest(args: {
   model: string;
   task: { title: string; description: string };
   definitions: AiLabelDefinition[];
-  providerOptions?: BatchTextRequest["providerOptions"];
 }): BatchTextRequest {
   return {
     id: args.id,
@@ -137,7 +120,6 @@ export function buildSmartLabelBatchRequest(args: {
     instructions: LABEL_CLASSIFIER_INSTRUCTIONS,
     prompt: labelClassifierPrompt(args.task, args.definitions),
     maxOutputTokens: LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS,
-    providerOptions: args.providerOptions,
   };
 }
 

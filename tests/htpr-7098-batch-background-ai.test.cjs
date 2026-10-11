@@ -38,10 +38,9 @@ test("flag gate reads the flag for the real user and counts a failed read as Off
   assert.match(read("src/lib/ai/labelClassifier.ts"), /batchBackgroundAiEnabled\(userId\)/);
 });
 
-test("slack request: same prompt as the instant path plus a JSON instruction, tagged like the instant call", () => {
+test("slack request: same prompt as the instant path plus a JSON instruction, no per-request gateway options", () => {
   const { SLACK_SUMMARY_SYSTEM, slackSummaryPrompt } = load(path.join(root, "src/lib/slack/threadSummaryPrompt.ts"));
-  const providerOptions = jobs.batchProviderOptions("summary", { teamId: "team-1", projectId: 9, userId: 4 });
-  const request = jobs.buildSlackSummaryBatchRequest({ id: "thread-1", model: "anthropic/claude-haiku-5.5", transcript: "[1] Ann: hi", providerOptions });
+  const request = jobs.buildSlackSummaryBatchRequest({ id: "thread-1", model: "anthropic/claude-haiku-5.5", transcript: "[1] Ann: hi" });
   assert.equal(request.id, "thread-1");
   assert.equal(request.type, "text");
   assert.equal(request.model, "anthropic/claude-haiku-5.5");
@@ -49,23 +48,22 @@ test("slack request: same prompt as the instant path plus a JSON instruction, ta
   assert.equal(request.prompt, slackSummaryPrompt("[1] Ann: hi"));
   assert.ok(request.instructions.startsWith(SLACK_SUMMARY_SYSTEM));
   assert.match(request.instructions, /ONLY a JSON object/);
-  // System features carry the included tag and never a user tag.
-  assert.deepEqual(request.providerOptions, { gateway: { tags: ["summary", "included-with-hypertask", "team:team-1", "board:9"] } });
+  // Async batches reject per-request gateway options other than safetyIdentifier (live error 2026-10-11).
+  assert.equal(request.providerOptions, undefined);
 });
 
-test("label request: same prompt as classifyTaskAgainstLabels, user tag kept", () => {
+test("label request: same prompt as classifyTaskAgainstLabels, no per-request gateway options", () => {
   const { LABEL_CLASSIFIER_INSTRUCTIONS, labelClassifierPrompt } = load(path.join(root, "src/lib/ai/labelClassifierOutput.ts"));
   const definitions = [{ labelId: "L1", prompt: "Anything about billing" }];
   const task = { title: "Fix invoice", description: "x".repeat(5000) };
   const request = jobs.buildSmartLabelBatchRequest({
     id: "t7", model: "google/gemini-3.1-flash-lite", task, definitions,
-    providerOptions: jobs.batchProviderOptions("smart-label", { teamId: "team-1", projectId: 2, userId: 4 }),
   });
   assert.equal(request.instructions, LABEL_CLASSIFIER_INSTRUCTIONS);
   assert.equal(request.prompt, labelClassifierPrompt(task, definitions));
   assert.equal(request.maxOutputTokens, 500);
   assert.ok(request.prompt.length < 5000 + 400); // description still cut at 2,000 characters
-  assert.deepEqual(request.providerOptions.gateway.tags, ["smart-label", "team:team-1", "board:2", "user:4"]);
+  assert.equal(request.providerOptions, undefined);
   // The instant path sends the same text.
   const classifier = read("src/lib/ai/labelClassifier.ts");
   assert.match(classifier, /prompt: labelClassifierPrompt\(task, definitions\)/);
