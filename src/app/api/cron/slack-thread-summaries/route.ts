@@ -4,6 +4,7 @@ import { createCommentService } from "@/utils/controllers/comments/createComment
 import { generalConfig } from "@/lib/configs/general.config";
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
+import { HTPR_7127_SLACK_SUMMARY_QUERY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import {
   needsSlackThreadSummary,
@@ -35,8 +36,28 @@ export async function GET(request: NextRequest) {
   }
 
   const nowMs = Date.now();
+  const onlyUnsummarized = await isFeatureEnabled(
+    HTPR_7127_SLACK_SUMMARY_QUERY_FLAG,
+    0,
+  ).catch(() => false);
   const candidates = await prisma.slackWatchedThread.findMany({
-    where: { lastMessageTs: { lte: slackIdleCutoffTs(nowMs) }, summaryBatchId: null },
+    where: {
+      lastMessageTs: { lte: slackIdleCutoffTs(nowMs) },
+      summaryBatchId: null,
+      // Slack ts values are fixed-width digit strings, so string order is time order.
+      ...(onlyUnsummarized
+        ? {
+            OR: [
+              { lastSummarizedTs: null },
+              {
+                lastSummarizedTs: {
+                  lt: prisma.slackWatchedThread.fields.lastMessageTs,
+                },
+              },
+            ],
+          }
+        : {}),
+    },
     orderBy: { lastMessageTs: "asc" },
     take: 50,
     include: {
