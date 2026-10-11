@@ -1,12 +1,23 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { test } = require('node:test');
+const { test: nodeTest } = require('node:test');
+const { Worker } = require('node:worker_threads');
+const test = (name, check) => nodeTest(name, { timeout: 30_000 }, check);
+// A separate thread can stop synchronous loops and leaked handles even under plain node.
+const watchdog = new Worker(`
+  setTimeout(() => {
+    require('node:fs').writeSync(2, 'compose-task-palette exceeded its 120 second deadline\\n');
+    process.kill(process.pid, 'SIGKILL');
+  }, 120_000);
+`, { eval: true });
+watchdog.unref();
 const React = require('react');
 const { JSDOM } = require('jsdom');
 const { createJiti } = require('jiti');
 const query = require('@tanstack/react-query');
 const root = path.resolve(__dirname, '..');
+const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: true, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
 const flag = 'htpr-6929-compose-task-writer';
 const newFlag = 'htpr-6937-new-task-window';
 const tooltipFlag = 'htpr-6950-tooltip-top-layer';
@@ -27,7 +38,8 @@ async function withPalette(t, config, check) {
     return focus.apply(this, args);
   };
   const cached = new Map(Object.entries(require.cache));
-  const stub = (filename, exports) => { require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
+  const stubbed = new Set();
+  const stub = (filename, exports) => { stubbed.add(filename); require.cache[filename] = { id: filename, filename, loaded: true, exports }; };
   const source = (file, exports) => stub(path.join(root, file), exports);
   const flags = { [flag]: config.enabled ?? true, [newFlag]: config.newWindow ?? false, 'htpr-6951-task-writing-progress': config.progress ?? config.newWindow ?? false, [tooltipFlag]: config.topLayer ?? false };
   const TaskContext = React.createContext(undefined);
@@ -47,7 +59,7 @@ async function withPalette(t, config, check) {
   const setters = new Map(atomNames.map((name) => [name, (next) => set(name, next)]));
   const state = { useRecoilValue: useValue, useRecoilState: (atom) => [useValue(atom), setters.get(atom)], useSetRecoilState: (atom) => setters.get(atom) };
   const requests = [], navigations = [], cacheAdds = [], cacheUpdates = [], viewedTasks = [], loadedBoards = [];
-  const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+  const queryClient = new query.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 1_000 } } });
   let legacyJ = 0, reactRoot;
   const legacy = (e) => { if (e.ctrlKey && e.code === 'KeyJ' && !e.shiftKey) legacyJ++; };
   const resetShowCommands = () => set('showCommandsAtom', { show: false, mode: 0 });
@@ -79,7 +91,6 @@ async function withPalette(t, config, check) {
     source('src/hooks/MultiPages/useAddDeleteTaskInBoards.tsx', { default: () => ({ createTaskGlobally: (body) => cacheAdds.push(body) }) });
     source('src/hooks/General/useProjectQuery.ts', { useProjectQuery: () => ({ updateActiveItemAndItemInView: (task) => viewedTasks.push(task) }) });
     source('src/hooks/MultiPages/useUpdateTaskInBoards.tsx', { default: () => ({ updateTaskInCache: (...args) => cacheUpdates.push(args) }) });
-    const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false, extensions: ['.js', '.jsx', '.ts', '.tsx', '.json'], jsx: { runtime: 'automatic' } });
     // Exercise the real greeting/board resolution, but defer the network workflow
     // (covered independently in compose-task-writer.test.cjs) to inspect UI state.
     source('src/lib/deriveCurrentBoardBilling.ts', { deriveCurrentBoardBilling: () => null });
@@ -168,12 +179,16 @@ async function withPalette(t, config, check) {
     await check({ dom, input, type, press, clickTab, finish, fail, rerender, flags, values, set, requests, navigations, cacheAdds, cacheUpdates, queryClient, viewedTasks, loadedBoards, shells, capture, baseline, source, stub, jiti, mountProbe, headerState: () => headerState, legacyJ: () => legacyJ });
   } finally {
     document.removeEventListener('keydown', legacy);
-    if (reactRoot) await React.act(async () => reactRoot.unmount());
-    queryClient.clear();
-    for (const key of Object.keys(require.cache)) if (!cached.has(key)) delete require.cache[key];
-    for (const [key, value] of cached) require.cache[key] = value;
-    for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
-    dom.window.close();
+    try {
+      if (reactRoot) await React.act(async () => reactRoot.unmount());
+    } finally {
+      queryClient.clear();
+      // Source modules capture per-test stubs; keep compiled dependencies cached.
+      for (const key of Object.keys(require.cache)) if (!cached.has(key) && (stubbed.has(key) || !key.includes(`${path.sep}node_modules${path.sep}`))) delete require.cache[key];
+      for (const [key, value] of cached) require.cache[key] = value;
+      for (const [key, descriptor] of globals) descriptor ? Object.defineProperty(global, key, descriptor) : delete global[key];
+      dom.window.close();
+    }
   }
 }
 
