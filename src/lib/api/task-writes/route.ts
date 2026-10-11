@@ -2,8 +2,6 @@ import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 
 // Pages has already parsed JSON. This narrow Web-request interface avoids a
 // second parse/serialization and also accepts a real App Router Request.
@@ -102,25 +100,5 @@ export function taskWriteHandler(
       return res.status(response.status).send(text);
     }
     return res.status(response.status).json(text ? JSON.parse(text) : undefined);
-  };
-}
-
-// TEMP-6992: removed with the flag in the last HTPR-6992 commit.
-export function withTaskWriteFlag(
-  legacy: NextApiHandler,
-  method: string,
-  loadRoute: () => Promise<TaskWriteRoute>,
-): NextApiHandler {
-  const route = taskWriteHandler({ [method]: loadRoute });
-  return async (req, res) => {
-    if (req.method !== method) return legacy(req, res);
-    let enabled = false;
-    try {
-      const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
-      enabled = !!session && await isFeatureEnabled(HTPR_6923_APP_ROUTER_WRITES_FLAG, session.userId);
-    } catch {
-      // A flag/auth lookup outage must not enable the new write path.
-    }
-    return enabled ? route(req, res) : legacy(req, res);
   };
 }
