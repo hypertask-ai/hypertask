@@ -421,7 +421,7 @@ test("trusted validation rejects candidate replacement of the canonical policy",
   assert.match(result.stderr, /Trusted parity policy evolution failed/);
 });
 
-test("trusted parity workflows pin a bounded native CLI transition", () => {
+test("trusted parity workflows pin the current native CLI and carry no transition", () => {
   const root = path.resolve(__dirname, "..");
   const runnerPackage = JSON.parse(
     fs.readFileSync(path.join(root, "config/parity/runner/package.json"), "utf8"),
@@ -477,8 +477,10 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
   assert.equal(productionJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
   assert.equal(verifierJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
   for (const job of [productionJob, verifierJob]) {
-    assert.match(job.env.TRUSTED_CLI_NEXT_VERSION, /^\d+\.\d+\.\d+$/);
-    assert.notEqual(job.env.TRUSTED_CLI_NEXT_VERSION, job.env.TRUSTED_CLI_VERSION);
+    assert.deepEqual(
+      Object.keys(job.env).filter((key) => key.includes("NEXT")),
+      [],
+    );
     assert.match(job.env.TRUSTED_CLI_VERSION, /^\d+\.\d+\.\d+$/);
     assert.match(job.env.TRUSTED_CLI_BINARY_VERSION, /^\d+\.\d+\.\d+$/);
     assert.match(job.env.TRUSTED_CLI_BINARY_SHA256, /^[a-f0-9]{64}$/);
@@ -496,10 +498,6 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
     /^sha512-[A-Za-z0-9+/]+={0,2}$/,
   );
   assert.equal(lockedPackage.integrity, verifierJob.env.TRUSTED_CLI_NPM_INTEGRITY);
-  assert.equal(productionJob.env.TRUSTED_CLI_NEXT_VERSION, verifierJob.env.TRUSTED_CLI_NEXT_VERSION);
-  assert.match(verifierJob.env.TRUSTED_CLI_NEXT_BINARY_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.match(verifierJob.env.TRUSTED_CLI_NEXT_BINARY_SHA256, /^[a-f0-9]{64}$/);
-  assert.match(verifierJob.env.TRUSTED_CLI_NEXT_NPM_INTEGRITY, /^sha512-[A-Za-z0-9+/]+={0,2}$/);
   assert.equal(runnerPackage.dependencies[packageName], contract.cliPackage.version);
   assert.equal(lockedPackage.version, contract.cliPackage.version);
   assert.equal(
@@ -526,11 +524,11 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
     .split("\n");
   assert.match(
     productionSource,
-    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   assert.match(
     productionLogicalCommands.join("\n"),
-    /if \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   const productionGuards = productionLogicalCommands
     .map((line, index) => (/^if\b.*; then$/.test(line) ? index : -1))
@@ -591,11 +589,11 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
   );
   assert.match(
     verifierSource,
-    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$CONTRACT_PACKAGE" != "\$TRUSTED_CLI_PACKAGE" \] \|\| \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   assert.match(
     verifierSource,
-    /fs\.readFileSync\(`candidate\/config\/parity\/runner\/\$\{name\}`, "utf8"\) !==/,
+    /if \(read\("candidate", name\) !== read\("trusted", name\)\) fail\(\);/,
   );
   assert.match(
     verifierSource,
@@ -603,29 +601,19 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
   );
   assert.match(
     verifierSource,
-    /--trusted-cli-version "\$CONTRACT_VERSION"/,
+    /--trusted-cli-version "\$TRUSTED_CLI_VERSION"/,
   );
-  assert.match(verifierSource, /integrity: process\.env\.TRUSTED_CLI_NEXT_NPM_INTEGRITY/);
-  assert.match(verifierSource, /JSON\.stringify\(candidateLock\) !== JSON\.stringify\(expectedLock\)/);
+  assert.doesNotMatch(verifierSource, /NEXT|expectedLock|structuredClone/);
   assertNativeBinaryVerified(verifierLogicalCommands, "verifier");
-  assertNativeBinaryVerified(verifierLogicalCommands, "verifier next", "NEXT_");
-  const transition = verifierLogicalCommands.indexOf(
-    'if [ "$CONTRACT_VERSION" = "$TRUSTED_CLI_NEXT_VERSION" ]; then',
-  );
-  const nextDownload = verifierLogicalCommands.findIndex((line) =>
-    line.includes("releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}"),
-  );
-  assert.ok(transition >= 0 && transition < nextDownload);
-  assert.equal(verifierLogicalCommands[nextDownload - 1], 'CLI_BINARY="$PARITY_TMP/hypertask-next"');
 });
 
-function assertNativeBinaryVerified(logicalCommands, label, prefix = "") {
+function assertNativeBinaryVerified(logicalCommands, label) {
   const download = logicalCommands.findIndex((line) =>
-    line.includes("releases/download/v${TRUSTED_CLI_" + prefix + "BINARY_VERSION}"),
+    line.includes("releases/download/"),
   );
   const verify = logicalCommands.findIndex((line) =>
     line.includes(
-      '"$TRUSTED_CLI_' + prefix + 'BINARY_SHA256  $CLI_BINARY" | sha256sum --check',
+      '"$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check',
     ),
   );
   const execution = logicalCommands.findIndex((line) =>
@@ -634,119 +622,18 @@ function assertNativeBinaryVerified(logicalCommands, label, prefix = "") {
   assert.ok(download >= 0 && download < verify && verify < execution, label);
   assert.equal(
     logicalCommands[download],
-    'curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_' + prefix + 'BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"',
+    'curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"',
     label,
   );
   assert.equal(
     logicalCommands[verify],
-    'if ! echo "$TRUSTED_CLI_' + prefix + 'BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then',
+    'if ! echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then',
     label,
   );
   assert.equal(logicalCommands[verify + 1], "exit 1", label);
   assert.equal(logicalCommands[verify + 2], "fi", label);
   assert.equal(logicalCommands[verify + 3], 'chmod 755 "$CLI_BINARY"', label);
 }
-
-test("production CLI transition accepts only current/current, current/next and next/next", (t) => {
-  const root = path.resolve(__dirname, "..");
-  const job = yaml.load(fs.readFileSync(path.join(root, ".github/workflows/ci-tests.yml"), "utf8"))
-    .jobs["production-cli-parity"];
-  const source = job.steps.find((step) => step.run?.includes("LATEST_VERSION=")).run;
-  const guards = source.split("PARITY_TMP=")[0];
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "parity-transition-"));
-  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-  fs.mkdirSync(path.join(temporary, "config/parity"), { recursive: true });
-  const current = job.env.TRUSTED_CLI_VERSION;
-  const next = job.env.TRUSTED_CLI_NEXT_VERSION;
-  for (const version of [current, next, "99.0.0"]) {
-    for (const latest of [current, next, "99.0.0"]) {
-      fs.writeFileSync(path.join(temporary, "config/parity/contract.json"), JSON.stringify({
-        cliPackage: { name: job.env.TRUSTED_CLI_PACKAGE, version },
-      }));
-      const result = spawnSync("bash", ["-e", "-c", 'npm() { printf "%s\\n" "$LATEST_FIXTURE"; }\n' + guards], {
-        cwd: temporary,
-        env: { ...process.env, ...job.env, LATEST_FIXTURE: latest },
-        encoding: "utf8",
-      });
-      const permitted = (version === current && [current, next].includes(latest)) ||
-        (version === next && latest === next);
-      assert.equal(result.status === 0, permitted, `${version}/${latest}: ${result.stdout}\n${result.stderr}`);
-    }
-  }
-  fs.writeFileSync(path.join(temporary, "config/parity/contract.json"), JSON.stringify({
-    cliPackage: { name: "untrusted-package", version: current },
-  }));
-  const rejected = spawnSync("bash", ["-e", "-c", guards], {
-    cwd: temporary, env: { ...process.env, ...job.env }, encoding: "utf8",
-  });
-  assert.notEqual(rejected.status, 0);
-  assert.match(rejected.stdout, /untrusted package/);
-});
-
-test("trusted transition accepts only unchanged current or the exact reviewed next runner", (t) => {
-  const root = path.resolve(__dirname, "..");
-  const job = yaml.load(fs.readFileSync(path.join(root, ".github/workflows/parity-contract-trusted.yml"), "utf8"))
-    .jobs["parity-contract-trusted"];
-  const guards = job.steps.find((step) => step.run?.includes("CONTRACT_PACKAGE=")).run.split("PARITY_TMP=")[0];
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "parity-runner-transition-"));
-  t.after(() => fs.rmSync(temporary, { recursive: true, force: true }));
-  for (const directory of ["trusted", "candidate"]) {
-    fs.mkdirSync(path.join(temporary, directory, "config/parity/runner"), { recursive: true });
-  }
-  const packageName = job.env.TRUSTED_CLI_PACKAGE;
-  const cliKey = `node_modules/${packageName}`;
-  const currentPackageText = fs.readFileSync(path.join(root, "config/parity/runner/package.json"), "utf8");
-  const currentLockText = fs.readFileSync(path.join(root, "config/parity/runner/package-lock.json"), "utf8");
-  fs.writeFileSync(path.join(temporary, "trusted/config/parity/runner/package.json"), currentPackageText);
-  fs.writeFileSync(path.join(temporary, "trusted/config/parity/runner/package-lock.json"), currentLockText);
-  const nextPackage = JSON.parse(currentPackageText);
-  nextPackage.dependencies[packageName] = job.env.TRUSTED_CLI_NEXT_VERSION;
-  const nextLock = JSON.parse(currentLockText);
-  nextLock.packages[""].dependencies[packageName] = job.env.TRUSTED_CLI_NEXT_VERSION;
-  Object.assign(nextLock.packages[cliKey], {
-    version: job.env.TRUSTED_CLI_NEXT_VERSION,
-    resolved: `https://registry.npmjs.org/${packageName}/-/hypertask_cli-${job.env.TRUSTED_CLI_NEXT_VERSION}.tgz`,
-    integrity: job.env.TRUSTED_CLI_NEXT_NPM_INTEGRITY,
-  });
-  const run = (version, packageText, lockText, env = {}) => {
-    fs.writeFileSync(path.join(temporary, "candidate/config/parity/contract.json"), JSON.stringify({
-      cliPackage: { name: packageName, version },
-    }));
-    fs.writeFileSync(path.join(temporary, "candidate/config/parity/runner/package.json"), packageText);
-    fs.writeFileSync(path.join(temporary, "candidate/config/parity/runner/package-lock.json"), lockText);
-    return spawnSync("bash", ["-e", "-c", guards], {
-      cwd: temporary, env: { ...process.env, ...job.env, ...env }, encoding: "utf8",
-    });
-  };
-  for (const [version, packageText, lockText] of [
-    [job.env.TRUSTED_CLI_VERSION, currentPackageText, currentLockText],
-    [job.env.TRUSTED_CLI_NEXT_VERSION, JSON.stringify(nextPackage), JSON.stringify(nextLock)],
-  ]) {
-    const result = run(version, packageText, lockText);
-    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-  }
-  assert.notEqual(run(job.env.TRUSTED_CLI_VERSION, currentPackageText + "\n", currentLockText).status, 0);
-  assert.notEqual(run(job.env.TRUSTED_CLI_VERSION, currentPackageText, currentLockText, {
-    TRUSTED_CLI_NPM_INTEGRITY: "sha512-untrusted",
-  }).status, 0);
-  assert.notEqual(run("99.0.0", currentPackageText, currentLockText).status, 0);
-  for (const mutate of [
-    (lock) => { lock.packages[cliKey].integrity = "sha512-untrusted"; },
-    (lock) => { lock.packages[cliKey].resolved = "https://untrusted.example/cli.tgz"; },
-    (lock) => { lock.packages[cliKey].bin.hypertask = "untrusted.js"; },
-    (lock) => { lock.packages["node_modules/typescript"].version = "99.0.0"; },
-    (lock) => { lock.packages["node_modules/untrusted"] = { version: "1.0.0" }; },
-  ]) {
-    const changed = structuredClone(nextLock);
-    mutate(changed);
-    const result = run(job.env.TRUSTED_CLI_NEXT_VERSION, JSON.stringify(nextPackage), JSON.stringify(changed));
-    assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /not the reviewed lock/);
-  }
-  const changedPackage = structuredClone(nextPackage);
-  changedPackage.scripts = { postinstall: "untrusted" };
-  assert.notEqual(run(job.env.TRUSTED_CLI_NEXT_VERSION, JSON.stringify(changedPackage), JSON.stringify(nextLock)).status, 0);
-});
 
 test("trusted validation permits only the CLI package selected by the trusted runner", () => {
   const root = path.resolve(__dirname, "..");

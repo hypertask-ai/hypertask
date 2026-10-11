@@ -3,7 +3,7 @@
   "title": "Hypertask five-surface catalog parity contract",
   "cliPackage": {
     "name": "@hypertask/hypertask_cli",
-    "version": "2.0.9"
+    "version": "2.0.10"
   },
   "jobs": [
     {
