@@ -79,7 +79,7 @@ export default  async function handler(
                 ai_prompt: aiPrompt,
             }
         })
-        if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id)
+        if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id, userRow.id)
         void broadcastBoardChange(projectId, { originUserId: userObj.id })
         return res.status(200).json(createdLabel)
     }
@@ -161,7 +161,7 @@ export default  async function handler(
         return { createdLabel, taskLabels, agentWebhookDeliveryIds };
       });
 
-    if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id)
+    if (aiPrompt) scheduleBackfillAiLabel(createdLabel.id, userRow.id)
 
     try {
       await publishAgentWebhookDeliveries(agentWebhookDeliveryIds);

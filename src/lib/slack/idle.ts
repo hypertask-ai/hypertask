@@ -3,6 +3,8 @@ export const SLACK_THREAD_IDLE_MS = 30 * 60 * 1000;
 export type SlackThreadSummaryState = {
   lastMessageTs: string;
   lastSummarizedTs: string | null;
+  /** HTPR-7098: set while the summary waits in a batch. */
+  summaryBatchId?: string | null;
 };
 
 export function slackTsToMilliseconds(value: string): number {
@@ -21,6 +23,8 @@ export function needsSlackThreadSummary(
   nowMs = Date.now(),
   idleMs = SLACK_THREAD_IDLE_MS,
 ): boolean {
+  if (thread.summaryBatchId) return false;
+
   const lastMessageMs = slackTsToMilliseconds(thread.lastMessageTs);
   if (!Number.isFinite(lastMessageMs) || lastMessageMs > nowMs - idleMs) {
     return false;
