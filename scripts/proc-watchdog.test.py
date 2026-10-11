@@ -54,7 +54,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
         server = subprocess.Popen(['node', str(t / 'server.js')])
         shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'])
         session = subprocess.Popen([str(t / 'claude'), '-c', 'import time; time.sleep(300)', f'{tmp}/tests/x.test.cjs'])
-        premerge = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', f'{tmp}/premerge-local-fds-x/search.mjs'])
+        premerge = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', f'{tmp}/scripts/premerge-local-search.mjs'])
         for _ in range(50):
             if (t / 'child.pid').exists() and (t / 'child.pid').read_text():
                 break
@@ -150,5 +150,9 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     r = pw.redact(['curl', '-H', 'Authorization: Bearer abcVALUE1', '--api-key', 'abcVALUE2', 'X_TOKEN=abcVALUE3',
                    'https://u:abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
     check('whole sensitive arguments and flag values are hidden', 'abcVALUE' not in r and 'tests/a.test.cjs' in r)
+    check('a value starting with a dash is hidden too', '-abcVALUE' not in pw.redact(['--token', '-abcVALUE7', 'x']))
+    check('a server under a path named premerge-local is not a premerge job',
+          k('node /srv/premerge-local-notes/server.js') is None)
+    check('next start from a disposable premerge copy is', k('node /tmp/premerge-local-fds-a/node_modules/next/dist/bin/next start') == 'premerge')
 
 sys.exit(1 if fails else print('ALL PASS') or 0)

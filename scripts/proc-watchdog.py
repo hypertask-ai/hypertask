@@ -30,7 +30,8 @@ ONLY = os.environ.get('PROC_WATCHDOG_ONLY', '')  # tests: only consider command 
 
 # First match wins. Patterns read the full command line.
 KINDS = [
-    ('premerge', re.compile(r'premerge-local')),
+    # premerge-local.sh and its search server, and anything run from a disposable /tmp/premerge-local-* copy.
+    ('premerge', re.compile(r'premerge-local(-search)?\.(sh|mjs)\b|/tmp/premerge-local-[^/\s]+/')),
     ('test', re.compile(r'(^|/)(node|bun)\s.*\b(tests?|__tests__)/\S+\.(test|spec)\.[cm]?[jt]sx?\b')),
     ('test', re.compile(r'(^|/)node\s(.*\s)?--test\b')),
     ('test', re.compile(r'(^|/|\s)(vitest|jest)(\.m?js)?(\s|$)')),
@@ -157,15 +158,29 @@ def same(pid, start):
         return False
 
 
+def send(pid, start, sig):
+    """Signal pid only if it is still the process we read: a pidfd pins it, then its start time is checked."""
+    try:
+        fd = os.pidfd_open(pid)
+    except OSError:
+        return False
+    try:
+        if not same(pid, start):
+            return False
+        signal.pidfd_send_signal(fd, sig)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
+
+
 def stop_all(hits):
     """SIGTERM every selected tree at once (children first), one shared grace period, then SIGKILL what is left."""
     members = {h['pid']: [m for m in reversed(h['tree']) if same(*m)] for h in hits}
     for group in members.values():
-        for pid, _ in group:
-            try:
-                os.kill(pid, signal.SIGTERM)
-            except OSError:
-                pass
+        for pid, start in group:
+            send(pid, start, signal.SIGTERM)
     everyone = [m for group in members.values() for m in group]
     deadline = time.time() + GRACE
     while time.time() < deadline and any(same(*m) for m in everyone):
@@ -174,12 +189,7 @@ def stop_all(hits):
     for root, group in members.items():
         forced = 0
         for pid, start in group:
-            if same(pid, start):
-                try:
-                    os.kill(pid, signal.SIGKILL)
-                    forced += 1
-                except OSError:
-                    pass
+            forced += send(pid, start, signal.SIGKILL)
         result[root] = (len(group), forced)
     return result
 
@@ -188,19 +198,17 @@ def redact(argv):
     """Command line with every sensitive argument, and the value after a sensitive flag, replaced by ***."""
     out, hide_next = [], False
     for arg in argv:
-        if hide_next and not arg.startswith('-'):
-            out.append('***')
-            hide_next = False
-            continue
-        hide_next = False
         arg = re.sub(r'://[^/@\s]+@', '://***@', arg)
-        if SENSITIVE.search(arg):
+        sensitive = SENSITIVE.search(arg)
+        flag = re.match(r'(-{1,2}[A-Za-z0-9_-]+)=', arg)
+        if hide_next:
+            out.append('***')  # the value after a credential flag, whatever it looks like
+        elif sensitive:
             # "--token=v" keeps only its flag name; anything else is hidden whole and so is the next argument.
-            flag = re.match(r'(-{1,2}[A-Za-z0-9_-]+)=', arg)
             out.append(flag.group(1) + '=***' if flag else '***')
-            hide_next = not flag
         else:
             out.append(arg)
+        hide_next = bool(sensitive) and not flag
     return ' '.join(out)
 
 
