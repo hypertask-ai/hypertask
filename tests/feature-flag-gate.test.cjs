@@ -1647,3 +1647,79 @@ test("per-flag wrapper cannot mutate generated data through imports or aliases",
     assert.match(result.reason, /data-only generated registry wrapper/);
   }
 });
+
+test('flags read inside JSX attribute callbacks gate only when the callback is referenced', async (t) => {
+  const cases = [
+    ['onSubmit={send}', 'const send=()=>{if(enabled)doWork();};return <form onSubmit={send}/>;', true],
+    ['inline arrow calls send', 'const send=()=>{if(enabled)doWork();};return <button onClick={()=>send()}/>;', true],
+    ['inline arrow reads flag', 'return <button onClick={()=>{if(enabled)doWork();}}/>;', true],
+    ['useCallback result in attribute', 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form onSubmit={send}/>;', true],
+    ['defined but never referenced', 'const send=()=>{if(enabled)doWork();};return <form/>;', false],
+    ['useCallback never referenced', 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form/>;', false],
+    ['inline arrow never calls send', 'const send=()=>{if(enabled)doWork();};return <button onClick={()=>doWork()}/>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', 'import {useCallback} from "react";\nimport {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\nexport function Widget(){const enabled=useFlag(OTHER_FLAG);' + body + '}\n');
+    const head = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, head, fixture.dir)).pass, expected, name);
+  }
+});
+
+test('JSX attribute callbacks gate only when their JSX is consumed', async (t) => {
+  const send = 'const send=()=>{if(enabled)doWork();};';
+  const cases = [
+    ['discarded const, identifier', send + 'const unused=<button onClick={send}/>;return <div/>;', false],
+    ['discarded const, inline arrow', send + 'const unused=<button onClick={()=>send()}/>;return <div/>;', false],
+    ['discarded expression statement', send + '<button onClick={send}/>;return <div/>;', false],
+    ['const returned', send + 'const el=<button onClick={send}/>;return <div>{el}</div>;', true],
+    ['const returned directly, inline arrow', send + 'const el=<button onClick={()=>send()}/>;return el;', true],
+    ['const passed as call argument', send + 'const el=<button onClick={send}/>;render(el);return <div/>;', true],
+    ['conditional in return', send + 'return cond?<button onClick={send}/>:null;', true],
+    ['unused function returns the element', send + 'const el=<button onClick={send}/>;function unused(){return el;} return <div/>;', false],
+    ['unused arrow returns the element', send + 'const el=<button onClick={send}/>;const unused=()=>el;return <div/>;', false],
+    ['unreachable return of the element', send + 'const el=<button onClick={send}/>;function helper(){return null;return el;} helper();return <div/>;', false],
+    ['unreachable return in render', send + 'const el=<button onClick={send}/>;return <div/>;return el;', false],
+    ['false && element', send + 'const el=<button onClick={send}/>;return <div>{false && el}</div>;', false],
+    ['0 && element', send + 'const el=<button onClick={send}/>;return <div>{0 && el}</div>;', false],
+    ['null && element', send + 'const el=<button onClick={send}/>;return <div>{null && el}</div>;', false],
+    ['true || element', send + 'const el=<button onClick={send}/>;return <div>{true || el}</div>;', false],
+    ['untaken ternary, false ? el : y', send + 'const el=<button onClick={send}/>;return <div>{false ? el : null}</div>;', false],
+    ['untaken ternary, true ? y : el', send + 'const el=<button onClick={send}/>;return <div>{true ? null : el}</div>;', false],
+    ['if (false) block returns element', send + 'const el=<button onClick={send}/>;if(false){return el;}return <div/>;', false],
+    ['inline element in false &&', send + 'return <div>{false && <button onClick={send}/>}</div>;', false],
+    ['cond && element, non-literal', send + 'const el=<button onClick={send}/>;return <div>{cond && el}</div>;', true],
+    ['true ? el : y', send + 'const el=<button onClick={send}/>;return <div>{true ? el : null}</div>;', true],
+    ['live helper returns the element', send + 'const el=<button onClick={send}/>;function helper(){return el;} return <div>{helper()}</div>;', true],
+    ['live arrow helper returns the element', send + 'const el=<button onClick={send}/>;const helper=()=>el;return <div>{helper()}</div>;', true],
+  ];
+  for (const [name, body, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\ndeclare function render(x: unknown): void;\ndeclare const cond: boolean;\nexport function Widget(){const enabled=useFlag(OTHER_FLAG);' + body + '}\n');
+    const head = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, head, fixture.dir)).pass, expected, name);
+  }
+});
+
+test('only the real React useCallback binds a callback', async (t) => {
+  const body = 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form onSubmit={send}/>;';
+  const head = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\n';
+  const component = (extra = '') => 'export function Widget(){const enabled=useFlag(OTHER_FLAG);' + extra + body + '}\n';
+  const cases = [
+    ['named import', 'import {useCallback} from "react";\n' + component(), true],
+    ['aliased import', 'import {useCallback as uc} from "react";\n' + component().replace('useCallback(', 'uc('), true],
+    ['default import', 'import React from "react";\n' + component().replace('useCallback(', 'React.useCallback('), true],
+    ['namespace import', 'import * as R from "react";\n' + component().replace('useCallback(', 'R.useCallback('), true],
+    ['local function', 'function useCallback<T>(fn: T, deps: unknown[]): T { return fn; }\n' + component(), false],
+    ['import from another module', 'import {useCallback} from "./other";\n' + component(), false],
+    ['unrelated object method', 'declare const lib: {useCallback<T>(fn: T, deps: unknown[]): T};\n' + component().replace('useCallback(', 'lib.useCallback('), false],
+    ['namespace from another module', 'import * as R from "./other";\n' + component().replace('useCallback(', 'R.useCallback('), false],
+    ['shadowed by local wrapper', 'import {useCallback} from "react";\n' + 'export function Widget(){const enabled=useFlag(OTHER_FLAG);const useCallback=<T,>(fn: T, deps: unknown[])=>fn;' + body + '}\n', false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', head + source);
+    const sha = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, sha, fixture.dir)).pass, expected, name);
+  }
+});
