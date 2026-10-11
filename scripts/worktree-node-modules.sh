@@ -21,3 +21,11 @@ cp -al "$src" "$dst" || {
   rm -rf "$dst"   # dst was created by this cp just now, a partial copy of real files only
   echo 'worktree-node-modules: hardlink copy failed (different filesystem?). Run npm ci in the worktree instead.' >&2; exit 1
 }
+# Tools that write inside node_modules in place (prisma generate writes node_modules/.prisma/client,
+# the default output here; caches) must not share inodes with main: give these real copies.
+for sub in .prisma .cache @prisma/client; do
+  if [ -d "$src/$sub" ] && [ ! -L "$src/$sub" ]; then
+    rm -rf "${dst:?}/$sub"
+    cp -a "$src/$sub" "$dst/$sub"
+  fi
+done

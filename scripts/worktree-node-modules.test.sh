@@ -9,6 +9,8 @@ echo '{"name":"t","version":"1.0.0","dependencies":{"dep":"file:../lib/dep"}}' >
 (cd "$T/main" && npm install --offline --no-audit --no-fund >/dev/null 2>&1) || { bad 'setup npm install'; exit 1; }
 # A real (non-link) file so the content check exercises hardlinks.
 mkdir -p "$T/main/node_modules/real"; echo 'keep-me' > "$T/main/node_modules/real/f.txt"
+mkdir -p "$T/main/node_modules/.prisma/client" "$T/main/node_modules/.cache" "$T/main/node_modules/@prisma/client"
+echo 'gen' > "$T/main/node_modules/.prisma/client/index.js"; echo c > "$T/main/node_modules/.cache/c"; echo p > "$T/main/node_modules/@prisma/client/index.js"
 count() { find "$1" | wc -l; }
 before=$(count "$T/main/node_modules")
 for d in wt wt2; do mkdir "$T/$d"; cp "$T/main/package.json" "$T/main/package-lock.json" "$T/$d/"; done
@@ -17,9 +19,15 @@ for d in wt wt2; do mkdir "$T/$d"; cp "$T/main/package.json" "$T/main/package-lo
 "$repo/scripts/worktree-node-modules.sh" "$T/main" "$T/wt" || bad 'helper failed'
 [ ! -L "$T/wt/node_modules" ] && [ -d "$T/wt/node_modules" ] && ok 'copy is a real directory' || bad 'copy is not a real directory'
 [ "$(stat -c %h "$T/main/node_modules/real/f.txt")" -ge 2 ] && ok 'files are hardlinked' || bad 'files are not hardlinked'
+# Generated and cache folders are real copies; an in-place append must not reach main.
+printf x >> "$T/wt/node_modules/.prisma/client/index.js"; printf x >> "$T/wt/node_modules/@prisma/client/index.js"
+[ "$(cat "$T/main/node_modules/.prisma/client/index.js")" = gen ] && [ "$(cat "$T/main/node_modules/@prisma/client/index.js")" = p ] && ok 'in-place write in .prisma and @prisma/client does not reach main' || bad 'in-place write reached main'
+[ "$(stat -c %h "$T/main/node_modules/.cache/c")" = 1 ] && ok '.cache is a real copy' || bad '.cache is shared'
+[ "$(stat -c %h "$T/main/node_modules/real/f.txt")" -ge 2 ] && ok 'plain package file still shares its inode' || bad 'plain package file lost its hardlink'
 (cd "$T/wt" && npm ci --offline --no-audit --no-fund >/dev/null 2>&1) || bad 'npm ci in worktree failed'
 [ "$(count "$T/main/node_modules")" = "$before" ] && ok "main node_modules intact ($before entries)" || bad 'main node_modules changed'
 [ "$(cat "$T/main/node_modules/real/f.txt")" = keep-me ] && ok 'main file content unchanged' || bad 'main file content changed'
+
 
 # Idempotent, and replaces a symlink without touching its target.
 "$repo/scripts/worktree-node-modules.sh" "$T/main" "$T/wt" && ok 'second run is a no-op' || bad 'second run failed'
