@@ -27,11 +27,13 @@ active=$(jq -r '.stop_hook_active // false' <<<"$payload" 2>/dev/null)
 # Prints "<pid>\x1f<name>" for the Claude session this hook runs under (user-given name, text after " | " dropped).
 session_info() {
   if [ -n "${SHIP_SESSION_NAME:-}" ]; then printf '%s\037%s' "${SHIP_SESSION_PID:-}" "$SHIP_SESSION_NAME"; return; fi
-  local pid=$$ f
+  local pid=$$ f st
   while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
     f=$SESSIONS/$pid.json
     if [ -f "$f" ]; then printf '%s\037%s' "$pid" "$(jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null)"; return; fi
-    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    # Parent pid from /proc: ps costs about 90 ms a call here, and post runs on every tool call of every session.
+    if read -r st < "/proc/$pid/stat" 2>/dev/null; then read -r _ pid _ <<<"${st##*) }"
+    else pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' '); fi
   done
 }
 IFS=$'\037' read -r spid name < <(session_info; echo)
@@ -66,7 +68,8 @@ events_mark() {
 
 if [ "$mode" = wait ]; then
   # One waiter per session; a waiter whose session is gone or that nears its timeout leaves without a wake.
-  exec 7>"$STATE/$slot.waiter.${spid:-x}.lock"; flock -n 7 || exit 0
+  # Waits up to 0.5 s so runner-deliver's brief probe of this lock never makes a starting waiter leave.
+  exec 7>>"$STATE/$slot.waiter.${spid:-x}.lock"; flock -w 0.5 7 || exit 0
   start=$(date +%s)
   while :; do
     if [[ $spid =~ ^[0-9]+$ ]] && ! kill -0 "$spid" 2>/dev/null; then exit 0; fi

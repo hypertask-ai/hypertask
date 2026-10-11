@@ -157,7 +157,7 @@ eq "hooks after the wake see nothing" "$(hook 'RUNNER 3' "$pl" post)$(hook 'RUNN
 wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1 & W1=$!; sleep 0.3
 start=$(date +%s%N); wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && [ $(( ($(date +%s%N) - start) / 1000000 )) -lt 1000 ] && ok "second waiter for the same session leaves at once" || bad "second waiter rc=$rc"
-kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null
+pkill -P "$W1" 2>/dev/null; kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null  # the hook is a child of the background pipeline
 start=$(date +%s); wait_hook 'RUNNER 3' 999999999 30 >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && [ $(( $(date +%s) - start )) -lt 3 ] && ok "waiter of a dead session leaves without a wake" || bad "dead-session waiter rc=$rc"
 eq "waiter ignores a non-runner session" "$(ev runner-3 w2 x; wait_hook 'HTPR-9' "$LIVE" 2>&1; echo "rc=$?")|$(undelivered runner-3)" "rc=0|1"
