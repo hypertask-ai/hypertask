@@ -41,6 +41,8 @@ export const commentInclude = (userId: number, projectId: number) => ({
       id: true,
       emoji: true,
       userId: true,
+      // HTPR-7122: set when an agent reacted; userId is then its owner, not the reactor.
+      agentId: true,
     },
   },
 }) satisfies Prisma.CommentInclude;

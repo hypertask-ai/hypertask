@@ -8,6 +8,7 @@ import {
   CommentReactionTarget,
   createCommentReactionHandler,
 } from '@/lib/mcp/comments/reactionHandler';
+import { writeCommentReaction, type ReactionAgent } from '@/lib/mcp/comments/reactionStore';
 import { persistCommentReactionWebhook, prepareCommentReactionWebhook } from '@/lib/agentWebhooks/commentReaction';
 import { publishAgentWebhookDeliveries } from '@/lib/agentWebhooks/outbox';
 import { broadcastTaskComment } from '@/lib/realtime/server';
@@ -16,10 +17,10 @@ import { sendDataNewCommentFCM } from '@/utils/controllers/FCM';
 
 const REACTION_LOCK_CLASS = 1_309_542_515;
 
-function unifiedEmoji(emoji: string): string {
-  return Array.from(emoji)
-    .map((character) => character.codePointAt(0)!.toString(16))
-    .join('-');
+async function reactionAgent(agentId: string | null): Promise<ReactionAgent | null> {
+  if (!agentId) return null;
+  const agent = await prisma.agent.findUnique({ where: { id: agentId }, select: { displayName: true } });
+  return { id: agentId, displayName: agent?.displayName?.trim() || null };
 }
 
 async function setReaction(
@@ -27,10 +28,19 @@ async function setReaction(
   userId: number,
   emoji: string,
   active: boolean,
-  reactorIsAgent: boolean
+  agentId: string | null
 ): Promise<CommentReactionResult> {
+  // HTPR-7122: an agent token reacts as the agent. userId stays the owner, for access only.
+  const agent = await reactionAgent(agentId);
   // HTPR-7095: a newly added reaction and its agent webhook outbox row are written together, then published after commit.
-  const webhookInput = { commentId: target.commentId, reactorUserId: userId, reactorIsAgent, emoji, added: active };
+  const webhookInput = {
+    commentId: target.commentId,
+    reactorUserId: userId,
+    reactorIsAgent: Boolean(agent),
+    reactorAgentId: agent?.id ?? null,
+    emoji,
+    added: active,
+  };
   // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
   const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
   let deliveryIds: string[] = [];
@@ -38,57 +48,13 @@ async function setReaction(
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(${REACTION_LOCK_CLASS}::int, ${target.commentId}::int)
     `;
-    const unified = unifiedEmoji(emoji);
-    const existing = await tx.reaction.findMany({
-      where: { commentId: target.commentId, userId, unified },
-      orderBy: { createdAt: 'asc' },
-    });
-    const wasActive = existing.some((reaction) => !reaction.isDeleted);
-    let reaction: { id: string; emoji: string; userId: number } | null = null;
-
-    if (active) {
-      const saved = existing[0]
-        ? await tx.reaction.update({
-            where: { id: existing[0].id },
-            data: {
-              isDeleted: false,
-              emoji,
-              unified,
-              names: [emoji],
-              taskId: target.taskId,
-              updatedAt: new Date(),
-            },
-            select: { id: true, emoji: true, userId: true },
-          })
-        : await tx.reaction.create({
-            data: {
-              emoji,
-              unified,
-              names: [emoji],
-              commentId: target.commentId,
-              taskId: target.taskId,
-              userId,
-            },
-            select: { id: true, emoji: true, userId: true },
-          });
-      reaction = saved;
-      if (existing.length > 1) {
-        await tx.reaction.updateMany({
-          where: { id: { in: existing.slice(1).map((item) => item.id) } },
-          data: { isDeleted: true, updatedAt: new Date() },
-        });
-      }
-    } else if (existing.length > 0) {
-      await tx.reaction.updateMany({
-        where: { id: { in: existing.map((item) => item.id) } },
-        data: { isDeleted: true, updatedAt: new Date() },
-      });
-    }
-
-    const reactions = await tx.reaction.findMany({
-      where: { commentId: target.commentId, isDeleted: false },
-      select: { id: true, emoji: true, userId: true },
-      orderBy: { createdAt: 'asc' },
+    const { wasActive, reaction, reactions } = await writeCommentReaction(tx, {
+      commentId: target.commentId,
+      taskId: target.taskId,
+      userId,
+      agent,
+      emoji,
+      active,
     });
     if (preparedWebhook && !wasActive && active) {
       deliveryIds = await persistCommentReactionWebhook(tx, preparedWebhook, webhookInput);
@@ -107,7 +73,8 @@ async function notifyReaction(
   userId: number,
   emoji: string,
   active: boolean,
-  result: CommentReactionResult
+  result: CommentReactionResult,
+  agentId: string | null
 ) {
   const sideEffects: Promise<unknown>[] = [
     broadcastTaskComment(target.taskId, { originUserId: userId }),
@@ -126,6 +93,8 @@ async function notifyReaction(
           type: 'Reacted',
           projectId: target.projectId,
           fromUserId: userId,
+          // HTPR-7122: the inbox names the agent, never its owner, as the reactor.
+          ...(agentId ? { fromAgentId: agentId } : {}),
         }
       );
       const devices = await prisma.subscribedDevices.findMany({
@@ -184,7 +153,7 @@ export const POST = createCommentReactionHandler({
     };
   },
   setReaction: (target, userId, emoji, active, ctx) =>
-    setReaction(target, userId, emoji, active, Boolean(ctx.agentId)),
-  afterChange: (target, userId, emoji, active, result) =>
-    notifyReaction(target, userId, emoji, active, result),
+    setReaction(target, userId, emoji, active, ctx.agentId ?? null),
+  afterChange: (target, userId, emoji, active, result, ctx) =>
+    notifyReaction(target, userId, emoji, active, result, ctx.agentId ?? null),
 });

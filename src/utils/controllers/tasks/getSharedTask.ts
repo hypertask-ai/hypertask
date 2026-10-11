@@ -62,7 +62,13 @@ export const getSharedComments = async (
               'emoji', r."emoji",
               'count', COUNT(r.id),
               'unified', r."unified",
-              'users', JSONB_AGG(u.*)
+              -- HTPR-7122: an agent reaction shows the agent, never its owner.
+              'users', JSONB_AGG(CASE WHEN r."agentId" IS NULL THEN TO_JSONB(u.*) ELSE JSONB_BUILD_OBJECT(
+                  'id', NULL,
+                  'isAgent', true,
+                  'displayName', COALESCE(NULLIF(BTRIM(r."agentDisplayName"), ''), 'Agent') || ' (agent)',
+                  'photoURL', NULL
+              ) END)
           ) AS reaction_data
           FROM "Reaction" r
           JOIN "User" u ON r."userId" = u.id

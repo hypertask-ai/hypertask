@@ -83,6 +83,37 @@ const hiddenCommentAgent = (
   )
 `;
 
+// HTPR-7122: a reactor inside a reaction group (alias r). An agent's reaction shows the
+// agent as "<name> (agent)", never its owner, with id null so it never reads as the
+// viewer's own reaction. The name follows the agent-comment visibility rule above.
+const reactionAgentJoins = Prisma.sql`
+  LEFT JOIN "Agent" agent ON r."agentId" IS NOT NULL AND agent.id = r."agentId"
+  LEFT JOIN "Task" reaction_task ON r."agentId" IS NOT NULL AND reaction_task.id = r."taskId"
+`;
+
+const reactionAgentVisible = (userId: number) => Prisma.sql`
+  (agent.id IS NOT NULL AND (
+    agent."userId" = ${userId}
+    OR (
+      agent.visibility = 'TEAM'::"AgentVisibility"
+      AND (${hasAccessibleAgentProject(userId, Prisma.sql`reaction_task."projectId"`)})
+    )
+  ))
+`;
+
+const reactionReactor = (userId: number, humanReactor: Prisma.Sql) => Prisma.sql`
+  CASE WHEN r."agentId" IS NULL THEN ${humanReactor} ELSE JSONB_BUILD_OBJECT(
+    'id', NULL,
+    'isAgent', true,
+    'agentId', CASE WHEN ${reactionAgentVisible(userId)} THEN r."agentId" END,
+    'displayName', CASE WHEN ${reactionAgentVisible(userId)}
+      THEN COALESCE(NULLIF(BTRIM(agent."displayName"), ''), r."agentDisplayName", 'Agent') || ' (agent)'
+      ELSE 'Private agent' END,
+    'photoURL', NULL,
+    'email', NULL
+  ) END
+`;
+
 const publicCommentAgent = Prisma.sql`
   CASE WHEN agent.id IS NULL OR agent_visibility.hidden
   THEN 'null'::jsonb ELSE JSONB_BUILD_OBJECT(
@@ -529,9 +560,10 @@ function commentsQuery(db: Db, taskId: number, userId: number) {
     ),
     reaction_groups AS (
       SELECT r."commentId", r."emoji", r."unified",
-        COUNT(r.id)::int AS "count", JSONB_AGG(${slimUser}) AS users
+        COUNT(r.id)::int AS "count", JSONB_AGG(${reactionReactor(userId, slimUser)}) AS users
       FROM "Reaction" r
       JOIN "User" u ON r."userId" = u.id
+      ${reactionAgentJoins}
       WHERE r."commentId" IN (SELECT id FROM base_comments) AND r."isDeleted" = false
       GROUP BY r."commentId", r."emoji", r."unified"
     ),
@@ -673,9 +705,10 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
     ),
     reaction_groups AS (
       SELECT r."commentId", r."emoji", r."unified",
-        COUNT(r.id)::int AS "count", JSONB_AGG(${slimUser}) AS users
+        COUNT(r.id)::int AS "count", JSONB_AGG(${reactionReactor(userId, slimUser)}) AS users
       FROM "Reaction" r
       JOIN "User" u ON r."userId" = u.id
+      ${reactionAgentJoins}
       WHERE r."commentId" IN (SELECT id FROM base_comments) AND r."isDeleted" = false
       GROUP BY r."commentId", r."emoji", r."unified"
     ),

@@ -268,7 +268,7 @@ Technical: Requires team_id from get_user_context.teams (UUID string or number).
   GET_COMMENTS: {
     name: buildToolName('get_comments_for_task'),
     description:
-      'Gets user comments for a specific task, including each active reaction with its emoji, reactor user ID, and display name when available. Use task_id or ticket_number (e.g., "DEV-1") to identify the task. Set include_activity=true to include chronological task history such as label, move, assignment, and priority changes. Supports pagination and sorting by creation date for comments-only results.',
+      'Gets user comments for a specific task, including each active reaction with its emoji, reactor user ID, and display name when available. A reaction with isAgent true was made by the named agent, never by that user, and never counts as their approval. Use task_id or ticket_number (e.g., "DEV-1") to identify the task. Set include_activity=true to include chronological task history such as label, move, assignment, and priority changes. Supports pagination and sorting by creation date for comments-only results.',
   },
 
   ADD_COMMENT: {

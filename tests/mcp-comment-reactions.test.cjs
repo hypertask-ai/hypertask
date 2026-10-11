@@ -13,6 +13,7 @@ const jiti = require('jiti')(__filename, {
 const {
   commentReactionInclude,
   mapMcpCommentReaction,
+  reactionAgentIds,
 } = jiti(path.join(root, 'src/lib/mcp/comments/reactionResponse.ts'))
 
 const routeSource = fs.readFileSync(
@@ -230,7 +231,7 @@ function loadCommentsRoute({
       findTaskByIdentifier: async (...args) => { resolverCalls.push(args); return resolveTask(...args) },
       validateTaskIdentifier: () => ({ valid: true }),
     },
-    '@/lib/mcp/comments/reactionResponse': { commentReactionInclude, mapMcpCommentReaction },
+    '@/lib/mcp/comments/reactionResponse': { commentReactionInclude, mapMcpCommentReaction, reactionAgentIds },
     '@/lib/mcp/comments/activityMetadata': { withActivityMetadata: (comment) => comment },
     '@/lib/mcp/boards/links': {
       buildMcpTaskUrl: (projectId, uniqueIndex) =>

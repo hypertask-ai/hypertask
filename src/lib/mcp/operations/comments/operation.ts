@@ -37,7 +37,9 @@ import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import {
   commentReactionInclude,
   mapMcpCommentReaction,
+  reactionAgentIds,
   type McpCommentReaction,
+  type VisibleReactionAgents,
 } from '@/lib/mcp/comments/reactionResponse'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -155,13 +157,34 @@ const commentInclude = (userId: number, projectId: number) => ({
   reactions: commentReactionInclude
 })
 
+// HTPR-7122: names of the agents behind agent reactions, with the same visibility
+// rule as an agent's comment. A hidden agent reads as "Private agent".
+async function loadVisibleReactionAgents(
+  agentIds: string[],
+  userId: number,
+  projectId: number
+): Promise<VisibleReactionAgents> {
+  if (agentIds.length === 0) return new Map()
+  const agents = await prisma.agent.findMany({
+    where: { id: { in: agentIds } },
+    select: mcpVisibleAgentSelect(userId, projectId),
+  })
+  const visible = new Map<string, string>()
+  for (const agent of agents) {
+    const summary = mapVisibleMcpAgent(agent, userId, projectId)
+    if (summary) visible.set(summary.id, summary.displayName)
+  }
+  return visible
+}
+
 // Helper function to map comment to response format. Activity-inclusive responses
 // retain the app endpoint's raw activity payload and add an explicit row type.
 function mapCommentToResponse(
   comment: any,
   userId: number,
   projectId: number,
-  includeActivity = false
+  includeActivity = false,
+  reactionAgents: VisibleReactionAgents = new Map()
 ): CommentItem {
   const agent = mapVisibleMcpAgent(comment.agent, userId, projectId)
   const agentVisible = !comment.agent ? !comment.agentDisplayName : Boolean(agent)
@@ -190,7 +213,9 @@ function mapCommentToResponse(
       fileSize: a.fileSize ? (typeof a.fileSize === 'string' ? parseInt(a.fileSize) || 0 : a.fileSize) : 0,
       fileSource: a.fileSource || ''
     })),
-    reactions: comment.reactions.map(mapMcpCommentReaction)
+    reactions: comment.reactions.map((reaction: Parameters<typeof mapMcpCommentReaction>[0]) =>
+      mapMcpCommentReaction(reaction, reactionAgents)
+    )
   }
 
   if (!includeActivity) return mappedComment
@@ -357,9 +382,15 @@ export async function GET(request: NextRequest) {
       user.id
     )
 
+    const reactionAgents = await loadVisibleReactionAgents(
+      reactionAgentIds(comments),
+      user.id,
+      task.projectId
+    )
+
     // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
-      mapCommentToResponse(comment, user.id, task.projectId, includeActivity)
+      mapCommentToResponse(comment, user.id, task.projectId, includeActivity, reactionAgents)
     ).map((mapped, index) =>
       applyDurableCommentAttribution(
         mapped,

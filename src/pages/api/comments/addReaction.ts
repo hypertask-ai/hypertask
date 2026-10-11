@@ -52,6 +52,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     unified:unified,
                     commentId:commentId,
                     userId:userId,
+                    // HTPR-7122: a person's click never touches their agents' reactions.
+                    agentId:null,
                 },
             })
             if (findReaction.length===0 ){
@@ -112,6 +114,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                         unified:unified,
                         commentId:commentId,
                         userId:userId,
+                        agentId:null,
                     }
                 })
 
@@ -159,6 +162,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                         unified:unified,
                         commentId:commentId,
                         userId:userId,
+                        agentId:null,
                     }
                 })
                 void broadcastTaskComment(taskId, { originUserId: userId });

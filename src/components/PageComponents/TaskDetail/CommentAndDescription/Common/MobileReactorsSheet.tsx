@@ -83,11 +83,12 @@ const MobileReactorsSheet = ({
 
         {/* Who reacted. */}
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 pb-2">
-          {users.map((user) => {
-            const isCurrentUser = user.id === currentUser?.id;
+          {users.map((user, index) => {
+            // HTPR-7122: an agent reactor has id null and its own "(agent)" name.
+            const isCurrentUser = user.id != null && user.id === currentUser?.id;
             return (
               <div
-                key={user.id}
+                key={user.id ?? `agent-${index}`}
                 className="flex items-center gap-3 rounded-[6px] px-2 py-2"
               >
                 <UserAvatar

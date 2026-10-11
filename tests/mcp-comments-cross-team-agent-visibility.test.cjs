@@ -121,6 +121,7 @@ function loadRoute(comments) {
     "@/lib/mcp/comments/reactionResponse": {
       commentReactionInclude: {},
       mapMcpCommentReaction: (r) => r,
+      reactionAgentIds: () => [],
     },
     "@/lib/flags": {
       HTPR_6516_AGENT_ATTRIBUTION_FLAG: "htpr-6516-agent-attribution",

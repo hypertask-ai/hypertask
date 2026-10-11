@@ -1780,6 +1780,12 @@ model Reaction {
   userId Int
   user   User @relation(fields: [userId], references: [id])
 
+  // HTPR-7122: set when an agent token made the reaction. userId stays the agent's
+  // owner for access, but the reaction belongs to the agent, never to the owner.
+  agentId          String?
+  // Keeps the agent's name after the managed identity is deleted.
+  agentDisplayName String?
+
   Notification Notification[]
 
   @@index([commentId, isDeleted, emoji, unified])
