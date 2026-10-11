@@ -9,7 +9,16 @@ import {
   needsSlackThreadSummary,
   slackIdleCutoffTs,
 } from "@/lib/slack/idle";
-import { buildSlackThreadSummaryComment } from "@/lib/slack/threadSummary";
+import { batchBackgroundAiEnabled } from "@/app/api/ai/_lib/planGate";
+import {
+  prepareSlackSummaryForBatch,
+  submitSlackSummaryBatches,
+  type SlackBatchEntry,
+} from "@/lib/slack/threadSummaryBatch";
+import {
+  buildSlackThreadSummaryComment,
+  type SlackThreadSource,
+} from "@/lib/slack/threadSummary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +36,7 @@ export async function GET(request: NextRequest) {
 
   const nowMs = Date.now();
   const candidates = await prisma.slackWatchedThread.findMany({
-    where: { lastMessageTs: { lte: slackIdleCutoffTs(nowMs) } },
+    where: { lastMessageTs: { lte: slackIdleCutoffTs(nowMs) }, summaryBatchId: null },
     orderBy: { lastMessageTs: "asc" },
     take: 50,
     include: {
@@ -55,6 +64,7 @@ export async function GET(request: NextRequest) {
   const failures: string[] = [];
   const userNameCache = new Map<string, Promise<string>>();
   let summarized = 0;
+  const batchEntries: SlackBatchEntry[] = [];
 
   for (const thread of threads) {
     try {
@@ -72,7 +82,7 @@ export async function GET(request: NextRequest) {
       }
 
       const projectIds = [...new Set(tasks.map((task) => task.projectId))];
-      const commentText = await buildSlackThreadSummaryComment({
+      const summaryContext = {
         aiProviderSettings: thread.install.team.aiProviderSettings,
         botToken: decryptSecret(thread.install.encryptedBotToken),
         channelId: thread.channelId,
@@ -82,7 +92,23 @@ export async function GET(request: NextRequest) {
         teamId: thread.install.teamId,
         threadTs: thread.threadTs,
         userNameCache,
-      });
+      };
+      // HTPR-7098: with the flag on, the summary waits in a half-price batch instead of running now.
+      // Teams on their own AI key get `instant` back and keep the existing path.
+      let source: SlackThreadSource | undefined;
+      if (await batchBackgroundAiEnabled(thread.install.installedByUserId)) {
+        const prepared = await prepareSlackSummaryForBatch(summaryContext, thread, tasks.map((task) => task.id));
+        if (prepared.type === "empty") {
+          await markThreadSummarized(thread.id, thread.lastMessageTs);
+          continue;
+        }
+        if (prepared.type === "batch") {
+          batchEntries.push(prepared.entry);
+          continue;
+        }
+        source = prepared.source;
+      }
+      const commentText = await buildSlackThreadSummaryComment({ ...summaryContext, source });
       if (!commentText) {
         await markThreadSummarized(thread.id, thread.lastMessageTs);
         continue;
@@ -108,9 +134,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const batched = await submitSlackSummaryBatches(batchEntries);
+  failures.push(...batched.failed);
+
   return NextResponse.json({
     candidates: threads.length,
     summarized,
+    batched: batched.queued.length,
     failed: failures,
   });
 }

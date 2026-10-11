@@ -198,6 +198,8 @@ test("ambient summaries remain attributed to the integration identity", async ()
     "@/lib/crypto/byokCipher": { decryptSecret: () => actor.botToken },
     "@/utils/controllers/comments/createCommentService": { createCommentService: async (input) => comments.push(input) },
     "@/lib/slack/threadSummary": { buildSlackThreadSummaryComment: async () => "Ambient summary" },
+    "@/app/api/ai/_lib/planGate": { batchBackgroundAiEnabled: async () => false },
+    "@/lib/slack/threadSummaryBatch": { prepareSlackSummaryForBatch: async () => { throw new Error("flag is off"); }, submitSlackSummaryBatches: async () => ({ queued: [], failed: [] }) },
     "@/lib/prisma": { __esModule: true, default: {
       slackWatchedThread: { findMany: async () => [{ id: "thread", lastMessageTs: "1.0", lastSummarizedTs: null, matchedTaskIds: [10], channelId: "C1", threadTs: "1.0", install: { teamId: actor.teamId, installedByUserId: 6, encryptedBotToken: "test", team: { aiProviderSettings: {} } } }], update: async () => {} },
       user: { findUnique: async ({ where }) => { assert.equal(where.id, bot.id); return bot; } },

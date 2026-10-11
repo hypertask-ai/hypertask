@@ -468,7 +468,7 @@ const route = (method: string) => taskWriteRoute({
       if (req.method === "POST") {
         const { name, prompt } = validateFields(req.body);
         const result = await createSmartSplit(projectId, userId, name, prompt);
-        scheduleBackfillAiLabel(result.label.id);
+        scheduleBackfillAiLabel(result.label.id, userId);
         void broadcastBoardChange(projectId, { originUserId: userId });
         return viewWriteJson(result, 201);
       }
@@ -478,7 +478,7 @@ const route = (method: string) => taskWriteRoute({
         if (!viewId) throw new SmartSplitError("Smart split view is required");
         const { name, prompt } = validateFields(req.body);
         const result = await editSmartSplit(projectId, userId, viewId, name, prompt);
-        if (result.promptChanged) scheduleBackfillAiLabel(result.labelId);
+        if (result.promptChanged) scheduleBackfillAiLabel(result.labelId, userId);
         void broadcastBoardChange(projectId, { originUserId: userId });
         return viewWriteJson({ success: true, slug: result.slug }, 200);
       }

@@ -60,3 +60,11 @@ test("live read uses only app QA cookies, forbids redirects and rejects failed a
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test("with the QA account view, unreleased flags follow what that account sees (YPER4-289)", () => {
+  const defaults = { a: "OWNER_AND_QA", b: "OWNER_AND_QA", c: "OWNER_ONLY", d: "EVERYONE", e: "OWNER_AND_QA" };
+  assert.deepEqual(localFlagModes(defaults, { e: true }, [], { a: true, b: false, c: false, d: false }), {
+    a: "OWNER_AND_QA", b: "OFF", c: "OWNER_ONLY", d: "OFF", e: "EVERYONE",
+  });
+  assert.throws(() => localFlagModes(defaults, { a: false }, [], { a: "yes" }), /Invalid QA account/);
+});

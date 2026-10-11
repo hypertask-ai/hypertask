@@ -204,7 +204,7 @@ async function main() {
       "@/app/api/ai/_lib/modelProvider": { ...h.modelApi, gatewayProviderOptionsForModel: () => undefined },
       "@/app/api/ai/_lib/taskContent": { convertHtmlToText: (value) => value },
       "@/lib/configs/general.config": { generalConfig: { hyperAiId: 100 } },
-      "@/lib/ai/labelClassifierOutput": { parseMatchingLabelIds: () => [] },
+      "@/lib/ai/labelClassifierOutput": { parseMatchingLabelIds: () => [], labelClassifierPrompt: () => "", LABEL_CLASSIFIER_INSTRUCTIONS: "", LABEL_CLASSIFIER_MAX_OUTPUT_TOKENS: 500 },
       ai: { generateText: async (args) => {
         picked = args.model.modelId;
         await args.model.doGenerate({ prompt: [], maxOutputTokens: args.maxOutputTokens });

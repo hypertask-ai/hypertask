@@ -102,6 +102,101 @@ test('images use existing uploads, writer media tokens and task attachment linki
   });
 });
 
+function manualImagePaste(url) {
+  const { getSchema } = require('@tiptap/core');
+  const { DOMParser, DOMSerializer } = require('prosemirror-model');
+  const { EditorState } = require('prosemirror-state');
+  const nodeView = path.join(root, 'src/components/RTE/Extensions/resizableMedia/ResizableMediaNodeView.tsx');
+  require.cache[nodeView] = { id: nodeView, filename: nodeView, loaded: true, exports: { ResizableMediaNodeView: () => null } };
+  const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
+  const { ResizableMedia } = jiti(path.join(root, 'src/components/RTE/Extensions/resizableMedia/resizableMedia.ts'));
+  const { getMediaPasteDropPlugin } = jiti(path.join(root, 'src/components/RTE/Extensions/resizableMedia/mediaPasteDropPlugin/mediaPasteDropPlugin.ts'));
+  const schema = getSchema([
+    require('@tiptap/extension-document').default,
+    require('@tiptap/extension-paragraph').default,
+    require('@tiptap/extension-text').default,
+    require('@tiptap/extension-hard-break').default,
+    require('@tiptap/extension-link').default.configure({ HTMLAttributes: { target: '_blank' } }),
+    ResizableMedia,
+  ]);
+  const view = { state: EditorState.create({ schema }), dispatch(tr) { this.state = this.state.apply(tr); } };
+  let prevented = false;
+  const plugin = getMediaPasteDropPlugin({});
+  const handled = plugin.props.handlePaste.call(plugin, view, {
+    clipboardData: { items: [], files: [], getData: () => url },
+    preventDefault() { prevented = true; },
+  });
+  assert.equal(handled, true);
+  assert.equal(prevented, true);
+  const dom = new JSDOM('');
+  const normalize = (html) => {
+    dom.window.document.body.innerHTML = html;
+    const doc = DOMParser.fromSchema(schema).parse(dom.window.document.body);
+    const container = dom.window.document.createElement('div');
+    container.append(DOMSerializer.fromSchema(schema).serializeFragment(doc.content, { document: dom.window.document }));
+    return container.innerHTML;
+  };
+  const container = dom.window.document.createElement('div');
+  container.append(DOMSerializer.fromSchema(schema).serializeFragment(view.state.doc.content, { document: dom.window.document }));
+  return { html: container.innerHTML, normalize, close: () => dom.window.close() };
+}
+
+for (const url of ['https://screencast2.com/hCUBu.png', 'https://cdn.example.com/PHOTO.JPEG?version=2&size=large#preview']) {
+  test(`compose saves the same link and image as manual paste: ${url}`, async () => {
+    await withWriter({ html: '<h1 id="ai-generated-task-title">Screenshot</h1><p>[[HT_MEDIA_1]]</p>' }, async ({ createComposedTask, project, writes, creates }) => {
+      const manual = manualImagePaste(url);
+      try {
+        const result = await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+        assert.equal(result.writerFailed, false);
+        assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p>');
+        assert.equal(manual.normalize(creates[0].description), manual.html);
+        assert.match(creates[0].description, /<a [^>]*href=/);
+        assert.match(creates[0].description, /<br><img /);
+      } finally { manual.close(); }
+    });
+  });
+}
+
+test('compose fallback retains the unfurled image URL and uploaded images use distinct tokens', async () => {
+  for (const writerThrows of [false, true]) {
+    await withWriter({ writerThrows }, async ({ createComposedTask, project, creates, writes }) => {
+      const url = 'https://screencast2.com/hCUBu.png';
+      const result = await createComposedTask({ text: url, files: [{ name: 'attached.png', type: 'image/png' }], project, userId: 985, unfurlImageUrls: true });
+      assert.equal(result.writerFailed, writerThrows);
+      const body = new JSDOM(creates[0].description);
+      try {
+        assert.equal(body.window.document.querySelector('a').href, url);
+        assert.deepEqual([...body.window.document.querySelectorAll('img')].map((image) => image.src), [url, 'https://files.hypertask.app/attached.png']);
+        assert.equal(writes[0].body.taskDescription, '<p>[[HT_MEDIA_1]]</p><p>[[HT_MEDIA_2]]</p>');
+      } finally { body.window.close(); }
+    });
+  }
+});
+
+test('compose keeps non-image URLs as plain links and does not unfurl image URLs embedded in prose', async () => {
+  for (const url of ['https://example.com/docs', 'https://example.com/file.heic', 'https://example.com/page?image=photo.png']) {
+    const html = `<p><a href="${url}">${url}</a></p>`;
+    await withWriter({ html: `<h1 id="ai-generated-task-title">Reference</h1>${html}` }, async ({ createComposedTask, project, creates, writes }) => {
+      await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+      assert.equal(creates[0].description, html);
+      assert.equal(writes[0].body.taskDescription, `<p>${url}</p>`);
+    });
+  }
+  await withWriter({ writerThrows: true }, async ({ createComposedTask, project, creates }) => {
+    await createComposedTask({ text: 'Use https://example.com/photo.png as context', files: [], project, userId: 985, unfurlImageUrls: true });
+    assert.equal(creates[0].description, '<p>Use https://example.com/photo.png as context</p>');
+  });
+});
+
+test('with the HTPR-7051 bugfix flag off, compose keeps the pasted image URL as plain text', async () => {
+  const url = 'https://screencast2.com/hCUBu.png';
+  await withWriter({ html: `<h1 id="ai-generated-task-title">Screenshot</h1><p>${url}</p>` }, async ({ createComposedTask, project, writes, creates }) => {
+    await createComposedTask({ text: url, files: [], project, userId: 985 });
+    assert.equal(writes[0].body.taskDescription, `<p>${url}</p>`);
+    assert.doesNotMatch(creates[0].description, /<img /);
+  });
+});
+
 for (const [label, config] of [
   ['HTTP error', { writerOk: false }], ['network failure', { writerThrows: true }],
   ['SSE error after 200', { html: '<h1 id="ai-generated-task-title">Partial</h1>\nevent: error\ndata: {"content":"failed"}\n\nevent: done\n' }],

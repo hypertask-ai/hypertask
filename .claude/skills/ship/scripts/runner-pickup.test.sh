@@ -112,11 +112,132 @@ eq "delivered item is not requeued or announced" "$(activity)" "$before"
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 eq "prompt mode adds context instead of blocking" "$(hook 'RUNNER 3' "$pl" prompt | jq -r .hookSpecificOutput.hookEventName)" "UserPromptSubmit"
 
+# ---- YPER4-284: board events reach the session through the hook, exactly once ----
+jq -c '.items|=map(.delivered=true)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+ev() { jq -nc --arg id "$2" --arg t "$3" '{id:$id, ts:1, text:$t, delivered:false}' >> "$RUNNER_INBOX_DIR/$1.events.jsonl"; }
+undelivered() { jq -s 'map(select(.delivered|not))|length' "$RUNNER_INBOX_DIR/$1.events.jsonl"; }
+ctx() { jq -r '.hookSpecificOutput | "\(.hookEventName)|\(.additionalContext)"'; }
+ev runner-3 e1 'Board event for Runner 3: Valentin Yeo commented "one"'
+ev runner-3 e2 'Board event for Runner 3: Valentin Yeo commented "two"'
+out=$(SHIP_SESSION_PID=4242 hook 'RUNNER 3' "$pl" post)
+case "$(ctx <<<"$out")" in
+  'PostToolUse|Board events for RUNNER 3, delivered by the events hook'*$'\n1) Board event for Runner 3: Valentin Yeo commented "one"\n2) Board event for Runner 3: Valentin Yeo commented "two"') ok "post: both events as PostToolUse additionalContext";;
+  *) bad "post output: $out";;
+esac
+eq "post: events marked delivered" "$(undelivered runner-3)" "0"
+eq "post: second call is silent (exactly once)" "$(hook 'RUNNER 3' "$pl" post)" ""
+eq "every run refreshes the hook-alive marker with the session pid" "$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")" "4242"
+ev runner-3 e3 'three'
+eq "prompt: event as UserPromptSubmit additionalContext" "$(hook 'RUNNER 3' "$pl" prompt | ctx | tail -1)" "1) three"
+ev runner-3 e4 'four'
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+out=$(hook 'RUNNER 3' '{"session_id":"abcdef123456","cwd":"'$T'/work","stop_hook_active":true}')
+eq "stop: events block even with an unmet gate and stop_hook_active" "$(jq -r .decision <<<"$out")|$(jq -r .reason <<<"$out" | tail -1)" "block|1) four"
+eq "stop: second stop is silent" "$(hook 'RUNNER 3' "$pl")" ""
+ev runner-3 e5 'five'
+eq "non-runner session name gets nothing" "$(hook 'HTPR-1 | something' "$pl" post)|$(hook 'RUNNER' "$pl" prompt)" "|"
+eq "and the runner's event stays queued" "$(undelivered runner-3)" "1"
+eq "another runner does not take runner 3's event" "$(hook 'RUNNER 5' "$pl" post)|$(undelivered runner-3)" "|1"
+hook 'RUNNER 3' "$pl" post > /dev/full 2>/dev/null
+eq "output write fails: event is not marked, it comes again" "$(undelivered runner-3)" "1"
+eq "and the retry hands it over" "$(hook 'RUNNER 3' "$pl" post | ctx | tail -1)" "1) five"
+ev infra-manager i1 'for the manager'; ev speed-runner s1 'for speed'
+eq "INFRA MANAGER gets its own slot" "$(hook 'INFRA MANAGER' "$pl" post | ctx | tail -1)" "1) for the manager"
+eq "SPEED RUNNER gets its own slot" "$(hook 'SPEED RUNNER | perf' "$pl" prompt | ctx | tail -1)" "1) for speed"
+# Waiter (asyncRewake): wakes with exit 2 only for a new event, once, one per session.
+wait_hook() { echo "$pl" | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX="${3:-1}" "$HOOK" wait; }
+sleep 300 & LIVE=$!
+eq "empty inbox: waiter does not wake (exit 0, no output)" "$(wait_hook 'RUNNER 3' "$LIVE" 2>&1; echo "rc=$?")" "rc=0"
+( sleep 0.5; ev runner-3 w1 'wake up' ) &
+out=$(wait_hook 'RUNNER 3' "$LIVE" 5 2>&1 >/dev/null; echo "rc=$?")
+case "$out" in *$'\n1) wake up\nrc=2') ok "new event: waiter prints it on stderr and exits 2";; *) bad "waiter: $out";; esac
+eq "woken event marked delivered" "$(undelivered runner-3)" "0"
+eq "after delivery: no second wake for the same event" "$(wait_hook 'RUNNER 3' "$LIVE" 2>&1; echo "rc=$?")" "rc=0"
+eq "hooks after the wake see nothing" "$(hook 'RUNNER 3' "$pl" post)$(hook 'RUNNER 3' "$pl")" ""
+wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1 & W1=$!; sleep 0.3
+start=$(date +%s%N); wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && [ $(( ($(date +%s%N) - start) / 1000000 )) -lt 1000 ] && ok "second waiter for the same session leaves at once" || bad "second waiter rc=$rc"
+pkill -P "$W1" 2>/dev/null; kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null  # the hook is a child of the background pipeline
+start=$(date +%s); wait_hook 'RUNNER 3' 999999999 30 >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && [ $(( $(date +%s) - start )) -lt 3 ] && ok "waiter of a dead session leaves without a wake" || bad "dead-session waiter rc=$rc"
+[ ! -e "$RUNNER_INBOX_DIR/runner-3.waiter.999999999.lock" ] && ok "a dead session's waiter removes its lock file" || bad "dead-session waiter lock left behind"
+# Slot ownership: a waiter whose slot another live session has taken consumes nothing and leaves without a wake.
+sleep 300 & OTHER=$!
+( sleep 0.6; printf '{"pid":%s,"ts":%s}\n' "$OTHER" "$(date +%s)" > "$RUNNER_INBOX_DIR/runner-3.hook-alive"; ev runner-3 own1 'not yours' ) &
+out=$(wait_hook 'RUNNER 3' "$LIVE" 4 2>&1; echo "rc=$?")
+eq "waiter whose slot was taken by another pid: exit 0, nothing printed" "$out" "rc=0"
+eq "and it consumed nothing" "$(undelivered runner-3)" "1"
+hookp() { echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$LIVE" "$HOOK" "$1"; }
+eq "prompt/post/stop of the displaced session emit nothing" "$(hookp post)$(hookp prompt)$(hookp stop)" ""
+eq "and consumed nothing either" "$(undelivered runner-3)" "1"
+kill "$OTHER" 2>/dev/null; sleep 0.2; hookp post >/dev/null  # owner gone: this session takes the slot back and gets the event
+eq "when the owner is gone the session takes the slot over" "$(undelivered runner-3)" "0"
+# Atomic acquisition: two sessions starting together on a free slot leave exactly one owner; the loser consumes nothing.
+sleep 300 & PA=$!; sleep 300 & PB=$!
+race() { # mode: both sessions start at once on a free slot with one pending event
+  rm -f "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"; ev runner-3 race "race-$1"
+  local oa ob
+  oa=$T/oa; ob=$T/ob
+  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PA" "$HOOK" "$1" > "$oa" 2>/dev/null &
+  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PB" "$HOOK" "$1" > "$ob" 2>/dev/null &
+  wait
+  local n=0; [ -s "$oa" ] && n=$((n+1)); [ -s "$ob" ] && n=$((n+1))
+  echo "$n|$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")|$(undelivered runner-3)"
+}
+for m in prompt post stop; do
+  for i in 1 2 3 4 5; do
+    r=$(race $m)
+    case "$r" in "1|$PA|0"|"1|$PB|0") ;; *) bad "concurrent $m start #$i: $r"; continue 2;; esac
+  done
+  ok "two concurrent $m starts: exactly one owner and one delivery (5 trials)"
+done
+# A session that loses the slot between its start and its take consumes nothing (recheck under the events lock).
+printf '{"pid":%s,"ts":1}\n' "$PB" > "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"; ev runner-3 lost 'lost'
+eq "loser of the slot consumes nothing in prompt, post and stop" "$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" prompt)$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" post)$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" stop)|$(undelivered runner-3)" "|1"
+# Rename: a session whose current name no longer maps to its captured slot releases the slot; the replacement takes it.
+SESS=$T/sessions; mkdir -p "$SESS"
+printf '{"nameSource":"user","name":"RUNNER 3"}\n' > "$SESS/$$.json"
+rm -f "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"
+oldwait() { echo "$pl" | RUNNER_PICKUP_SESSIONS_DIR=$SESS RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX=8 "$HOOK" wait; }
+oldwait >/dev/null 2>&1 & OW=$!
+sleep 0.5
+eq "before the rename the waiter owns the slot" "$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")" "$$"
+printf '{"nameSource":"user","name":"HTPR-9 | other work"}\n' > "$SESS/$$.json"
+wait "$OW"; rc=$?
+eq "renamed waiter exits 0 and releases the marker" "$rc|$([ -e "$RUNNER_INBOX_DIR/runner-3.hook-alive" ] && echo kept || echo gone)" "0|gone"
+ev runner-3 ren1 'for the new RUNNER 3'
+eq "renamed session consumes nothing in post" "$(echo "$pl" | RUNNER_PICKUP_SESSIONS_DIR=$SESS "$HOOK" post)|$(undelivered runner-3)" "|1"
+out=$(bash -c 'printf "{\"nameSource\":\"user\",\"name\":\"RUNNER 3\"}\n" > "$1/$$.json"; echo "$2" | RUNNER_PICKUP_SESSIONS_DIR=$1 "$3" post' _ "$SESS" "$pl" "$HOOK")
+eq "a new session named RUNNER 3 takes the slot and gets the event" "$(ctx <<<"$out" | tail -1)|$(undelivered runner-3)" "1) for the new RUNNER 3|0"
+rm -f "$SESS/$$.json"; kill "$PA" "$PB" 2>/dev/null
+# A backlog over 9,000 characters goes out in several calls, whole events, each exactly once.
+pad=$(printf 'x%.0s' $(seq 500)); for i in $(seq 1 30); do ev runner-3 "big-$i" "event-$i $pad"; done
+c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx); c3=$(hook 'RUNNER 3' "$pl" post | ctx)
+[ "${#c1}" -le 9000 ] && [ "${#c2}" -le 9000 ] && [ -n "$c2" ] && ok "backlog split: each call under 9,000 characters (${#c1}, ${#c2})" || bad "backlog sizes ${#c1} ${#c2}"
+eq "every backlog event handed over exactly once, in order, nothing left" "$(printf '%s\n%s\n' "$c1" "$c2" | grep -o 'event-[0-9]*' | tr '\n' ' ')|$c3|$(undelivered runner-3)" "$(for i in $(seq 1 30); do printf 'event-%s ' "$i"; done)||0"
+ev runner-3 huge "huge-start $(printf 'y%.0s' $(seq 12000)) huge-end"; ev runner-3 after-huge 'small after huge'
+c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx)
+case "$c1" in *huge-start*'[cut by the events hook: this event was '*' characters]') [ "${#c1}" -le 9000 ] && ok "one event over the limit is cut with a note (${#c1})" || bad "cut event too long ${#c1}";; *) bad "huge event: ${c1:0:200}";; esac
+eq "the event after it comes on the next call" "$(tail -1 <<<"$c2")|$(undelivered runner-3)" "1) small after huge|0"
+eq "waiter ignores a non-runner session" "$(ev runner-3 w2 x; wait_hook 'HTPR-9' "$LIVE" 2>&1; echo "rc=$?")|$(undelivered runner-3)" "rc=0|1"
+kill "$LIVE" 2>/dev/null
+# The new-ticket handover keeps its gate: one undelivered ticket, an unmet gate, only events are handed over.
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+out=$(hook 'RUNNER 3' "$pl")
+case "$(jq -r .reason <<<"$out")" in *'New ticket'*) bad "ticket handed over despite an unmet gate";; *'1) x') ok "unmet gate holds the ticket, not the event";; *) bad "gate split: $out";; esac
+
 # Install: copies files, merges hooks once, enables the timer through a fake systemctl.
 mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/systemctl"
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
-eq "install registers Stop and UserPromptSubmit once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length)]|join(",")' "$T/settings.json")" "1,1"
+eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,2,1,1"
+eq "the waiters run with asyncRewake and the longest safe timeout (2000000 s) (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,2000000],[true,2000000],[true,2000000]]'
+wt() { jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | .timeout]' "$T/settings.json"; }
+for old in 604800 86400; do
+  jq --argjson o "$old" '.hooks |= with_entries(.value |= map(.hooks |= map(if (.command|endswith(" wait")) then .timeout = $o else . end)))' "$T/settings.json" > "$T/s.x" && mv "$T/s.x" "$T/settings.json"
+  PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1
+  eq "install upgrades existing $old s waiter entries to 2000000" "$(wt)" '[2000000,2000000,2000000]'
+done
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 

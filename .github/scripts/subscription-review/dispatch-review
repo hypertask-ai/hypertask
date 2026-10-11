@@ -11,6 +11,10 @@ fi
 
 curl_config=${HYPERTASK_REVIEW_CURL_CONFIG:-/etc/hypertask-ai-review/reviewer-curl.conf}
 [ -r "$curl_config" ] || { echo "Reviewer dispatch credential is unavailable" >&2; exit 78; }
+# Calls on hypertask-ai/hypertask use the review GitHub App's own rate-limit bucket (YPER4-286);
+# if its token cannot be minted, fall back to the stored credential so reviews keep running.
+app_config=$("${HYPERTASK_REVIEW_APP_TOKEN_BIN:-/usr/local/libexec/hypertask-review-app-token}" 2>/dev/null) && [ -r "$app_config" ] \
+  || { echo "Review App token unavailable; using the fallback credential" >&2; app_config=$curl_config; }
 
 state_root=${HYPERTASK_REVIEW_STATE_ROOT:-/var/lib/hypertask-ai-review}
 lock_file="$state_root/locks/pr-${pr_number}.lock"
@@ -18,7 +22,7 @@ exec 9>"$lock_file"
 flock -w 30 9 || { echo "Another dispatch is validating PR #${pr_number}" >&2; exit 75; }
 
 payload=$(curl -fsS \
-  --config "$curl_config" \
+  --config "$app_config" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   "https://api.github.com/repos/hypertask-ai/hypertask/pulls/${pr_number}")
@@ -44,7 +48,7 @@ if [ -e "$state_file" ]; then
 fi
 
 review_state=$(curl -fsS \
-  --config "$curl_config" \
+  --config "$app_config" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
   "https://api.github.com/repos/hypertask-ai/hypertask/commits/${actual_sha}/status" \

@@ -12,6 +12,7 @@ test("only server-internal callers opt out of the membership check", () => {
     "src/utils/controllers/tasks/sweepAutoArchive.ts", // cron
     "src/app/api/webhooks/github/route.ts", // signature-checked webhook
     "src/app/api/cron/slack-thread-summaries/route.ts", // authenticated cron
+    "src/lib/ai/batch/collectBatches.ts", // HTPR-7098: posts the Slack summary as the HyperAI bot, same as the cron
     "src/utils/controllers/comments/createCommentService.ts", // where the option is propagated
     "src/utils/controllers/comments/persistComment.ts",
     "src/utils/controllers/comments/commentCreationTypes.ts",

@@ -3,7 +3,7 @@ import { createRequire } from "node:module";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { localFlagModes, readPlainQaFlags } from "./premerge-local-flags.mjs";
+import { QA_ACCOUNT_STATE, localFlagModes, readPlainQaFlags } from "./premerge-local-flags.mjs";
 
 const stateFile = process.env.BROWSER_SMOKE_STATE_FILE;
 if (!stateFile) throw new Error("BROWSER_SMOKE_STATE_FILE is required");
@@ -320,7 +320,13 @@ try {
     if (overrides.some((value, index) => index % 2 === 0 && value !== "--flag") || overrides.length % 2) {
       throw new Error("Invalid local flag arguments");
     }
-    modes = localFlagModes(defaults, await readPlainQaFlags(), overrides.filter((_, index) => index % 2));
+    const plain = await readPlainQaFlags();
+    const qa = await readPlainQaFlags(QA_ACCOUNT_STATE);
+    // Loud, not silent: the committed copy is what browser checks and QA plans read.
+    const live = localFlagModes(defaults, plain, [], qa);
+    const drift = Object.keys(live).filter(key => key in modes && modes[key] !== live[key]).map(key => `${key}: file ${modes[key]}, live ${live[key]}`);
+    if (drift.length) console.error(`WARNING: e2e/smoke/production-flag-modes.json differs from the live flag modes (${drift.length}). Using live. Fix: node scripts/flags/production-flag-modes.mjs --write\n${drift.join("\n")}`);
+    modes = localFlagModes(defaults, plain, overrides.filter((_, index) => index % 2), qa);
     await writeFile(path.join(path.dirname(stateFile), "flag-modes.json"), JSON.stringify({ modes }));
   }
   // Controls reseed a running app, so invalidate its previous raw-mode snapshot.

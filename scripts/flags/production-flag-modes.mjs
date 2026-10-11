@@ -7,7 +7,8 @@
 //   node scripts/flags/production-flag-modes.mjs --check-live   file equals the live modes right now (runs where --write can run)
 //
 // Live modes come from /api/admin/flags when an agent session token is in the environment (exact
-// modes), otherwise from the plain QA session's /api/flags view (released or not). CI never calls
+// modes), otherwise from two /api/flags views: the plain QA user (Everyone or not) and the QA
+// account itself (also sees Owner + QA). Together they tell Everyone, Owner + QA and Off apart. CI never calls
 // either: it only runs --check, which reads the repo alone.
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -44,10 +45,11 @@ export function buildSnapshot(defaults, live, now = new Date()) {
     modes = Object.fromEntries(Object.keys(defaults).map((key) => [key, stored.get(key) ?? defaults[key]]));
     view = "admin";
   } else {
-    // The plain QA account only says released or not. Not released keeps the registry default,
-    // unless that default is Everyone, which would contradict the live view, so it becomes Off.
-    modes = localFlagModes(defaults, live);
-    for (const [key, mode] of Object.entries(modes)) if (mode === "EVERYONE" && live[key] !== true) modes[key] = "OFF";
+    // The plain user only says Everyone or not. With the QA account's view too, a flag the QA account
+    // cannot see is Off, never its registry default (HTPR-5908 was Off live while the copy said Owner + QA).
+    const plain = live.plain ?? live;
+    modes = localFlagModes(defaults, plain, [], live.qa);
+    for (const [key, mode] of Object.entries(modes)) if (mode === "EVERYONE" && plain[key] !== true) modes[key] = "OFF";
     view = "plain-qa";
   }
   return { source: SNAPSHOT_SOURCE, view, capturedAt: now.toISOString(), modes: sorted(modes) };
@@ -109,9 +111,13 @@ export async function readLive(env = process.env, fetcher = fetch) {
     return flags;
   }
   try {
-    return await readPlainQaFlags(path.join(env.HOME ?? "", ".config/hypertask-videos/storageState-qa-normal.json"));
+    const home = env.HOME ?? "";
+    return {
+      plain: await readPlainQaFlags(path.join(home, ".config/hypertask-videos/storageState-qa-normal.json")),
+      qa: await readPlainQaFlags(path.join(home, ".config/hypertask-videos/storageState-qa.json")),
+    };
   } catch (error) {
-    throw new Error(`Cannot read live flag modes: the plain QA session cookie is missing or expired, or the read failed (${error.message})`);
+    throw new Error(`Cannot read live flag modes: the QA session cookie is missing or expired (plain user or QA account), or the read failed (${error.message})`);
   }
 }
 
