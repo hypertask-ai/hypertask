@@ -14,6 +14,7 @@ function loadPost({ flagOn, knownLabelIds }) {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
   let created = 0;
+  let createdLabels;
   const json = (body, init) => ({ body, status: init && init.status });
   const stubs = {
     "@/lib/mcp/routeWrapper": {
@@ -33,14 +34,18 @@ function loadPost({ flagOn, knownLabelIds }) {
       getSectionForTask: async () => ({ section: { id: 5, section_title: "To do" } }),
       validateParentTask: async () => ({}),
       validateProjectMemberIds: async () => ({}),
-      createTask: async () => { created += 1; return { id: 1 }; },
+      createTask: async (data) => { created += 1; createdLabels = data.labels; return { id: 1 }; },
       // Same contract as the real matcher: label ids or names (case-insensitive).
-      matchLabelIds: (projectLabels, labels) => ({
-        ids: [],
-        unresolved: labels.map(String).filter((entry) => !projectLabels.some(
+      matchLabelIds: (projectLabels, labels) => {
+        const find = (entry) => projectLabels.find(
           (label) => label.id === entry || label.value?.trim().toLowerCase() === entry.trim().toLowerCase(),
-        )),
-      }),
+        );
+        const entries = labels.map(String);
+        return {
+          ids: entries.map(find).filter(Boolean).map((label) => label.id),
+          unresolved: entries.filter((entry) => !find(entry)),
+        };
+      },
     },
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (t) => t },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (s) => s },
@@ -81,7 +86,7 @@ function loadPost({ flagOn, knownLabelIds }) {
   } finally {
     Module._load = originalLoad;
   }
-  return { POST: m.exports.POST, created: () => created };
+  return { POST: m.exports.POST, created: () => created, createdLabels: () => createdLabels };
 }
 
 const request = (labels) => ({ body: { labels }, headers: { get: () => null } });
@@ -103,11 +108,12 @@ test("known labels still create the ticket", async () => {
   assert.equal(created(), 1);
 });
 
-test("label names still resolve (flag on)", async () => {
-  const { POST, created } = loadPost({ flagOn: true, knownLabelIds: ["a"] });
-  const res = await POST(request(["name a"]));
+test("label names resolve to ids before the ticket is created (flag on)", async () => {
+  const { POST, created, createdLabels } = loadPost({ flagOn: true, knownLabelIds: ["a", "b"] });
+  const res = await POST(request(["name a", "b"]));
   assert.equal(res.status, 200);
   assert.equal(created(), 1);
+  assert.deepEqual(createdLabels(), ["a", "b"]);
 });
 
 test("flag off keeps the old path (no pre-check)", async () => {

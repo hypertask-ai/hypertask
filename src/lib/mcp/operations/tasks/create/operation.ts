@@ -136,13 +136,16 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Validate parent task exists (a bad client-supplied id must 404, not 500)
+        // HTPR-7121: name unknown labels, and pass label names on as ids
+        let labelIds = labels;
         if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
             const projectLabels = await prisma.label.findMany({
                 where: { projectId: project_id },
                 select: { id: true, value: true }
             });
-            const missing = matchLabelIds(projectLabels, labels).unresolved;
+            const match = matchLabelIds(projectLabels, labels);
+            const missing = match.unresolved;
+            labelIds = match.ids;
             if (missing.length > 0) {
                 return NextResponse.json(
                     {
@@ -156,6 +159,7 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        // Validate parent task exists (a bad client-supplied id must 404, not 500)
         const parentCheck = await validateParentTask(project_id, parent_task_id);
         if (parentCheck.error) {
             return NextResponse.json(
@@ -245,7 +249,7 @@ export async function POST(request: NextRequest) {
                     projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
                     teamId: projectCheck.project.teamId,
                     images: images || [],
-                    labels: labels || [],
+                    labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
                     agentId: ctx.agentId || undefined
