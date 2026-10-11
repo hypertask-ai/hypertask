@@ -125,7 +125,14 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       const dock = document.querySelector<HTMLElement>('nav[aria-label="Primary navigation"]');
       const dockRect = dock?.getBoundingClientRect();
       const dockTop = dockRect && dockRect.height && dockRect.top < viewportTop + viewportHeight && dockRect.bottom > viewportTop ? dockRect.top : undefined;
-      setMobileBounds({ ...mobileSearchPickerBounds(viewportTop, viewportHeight, container.firstElementChild!.getBoundingClientRect().bottom, dockTop), left, width });
+      const next = { ...mobileSearchPickerBounds(viewportTop, viewportHeight, container.firstElementChild!.getBoundingClientRect().bottom, dockTop), left, width };
+      // Keep the same state object when nothing moved, so the selected-row effect does not rerun.
+      setMobileBounds((previous) => previous && (Object.keys(next) as (keyof typeof next)[]).every((key) => previous[key] === next[key]) ? previous : next);
+    };
+    // Scrolling the suggestion list itself must not re-measure, or the list snaps back to the selected row.
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Node && pickerRef.current?.contains(event.target)) return;
+      measure();
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -133,13 +140,13 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     viewport?.addEventListener('resize', measure);
     viewport?.addEventListener('scroll', measure);
     window.addEventListener('resize', measure);
-    window.addEventListener('scroll', measure, true);
+    window.addEventListener('scroll', onScroll, true);
     return () => {
       observer.disconnect();
       viewport?.removeEventListener('resize', measure);
       viewport?.removeEventListener('scroll', measure);
       window.removeEventListener('resize', measure);
-      window.removeEventListener('scroll', measure, true);
+      window.removeEventListener('scroll', onScroll, true);
     };
   }, [mobileOverlay]);
 
