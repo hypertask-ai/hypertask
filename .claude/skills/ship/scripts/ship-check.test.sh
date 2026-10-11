@@ -1132,8 +1132,9 @@ echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener plus URL)" || bad "nochange pass case"
 echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
-for x in merged deployed proof pr; do
-  N $x YPER4-901 | grep -q "$x ok" && ok "nochange passes $x" || bad "nochange $x"
+# Each must print what its ship-gates EXPECT line matches (pr expects "title ok").
+for x in merged:merged deployed:deployed proof:proof pr:title; do
+  N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
 done
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
 git -C "$NC/work" push -q origin :refs/heads/r3/yper4-901-fix 2>/dev/null
