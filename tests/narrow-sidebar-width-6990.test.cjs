@@ -22,8 +22,8 @@ function frame(enabled, mobile = false, pathname = "/detail/project-15/6990", ph
     "@/components/Common/Tooltip": { __esModule: true, default: noop },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(mobile) },
     "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
-    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([flagKey, phoneFlagKey].includes(key)); return key === flagKey ? enabled : phoneEnabled; }, useFlagLoaded: () => true },
-    "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: flagKey, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: phoneFlagKey },
+    "@/hooks/useFlag": { useFlag: (key) => { assert.ok([flagKey, phoneFlagKey, "htpr-7055-chat-overlays-ticket"].includes(key)); return key === flagKey ? enabled : key === phoneFlagKey ? phoneEnabled : false; }, useFlagLoaded: () => true },
+    "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: flagKey, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG: phoneFlagKey, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG: "htpr-7055-chat-overlays-ticket" },
   };
   const source = fs.readFileSync(path.join(root, "src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx"), "utf8");
   const js = ts.transpileModule(source, {
