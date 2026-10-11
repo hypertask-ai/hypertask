@@ -48,6 +48,11 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
+/** HTPR-7051: media placeholders belong in the description; never leave one in a title. */
+export function stripTaskWriterMediaTokens(text: string): string {
+  return text.replace(MEDIA_TOKEN_RE, " ").replace(/\s{2,}/g, " ").trim();
+}
+
 export function extractTaskWriterPromptMedia(
   prompt: string,
   mediaOffsetOrFactory: number | TaskWriterMediaTokenFactory = 0

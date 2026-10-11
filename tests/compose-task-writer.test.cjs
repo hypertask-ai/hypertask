@@ -157,6 +157,19 @@ for (const url of ['https://screencast2.com/hCUBu.png', 'https://cdn.example.com
   });
 }
 
+test('HTPR-7051 a media token the writer puts in the title is removed, and the image stays in the description', async () => {
+  const url = 'https://screencast2.com/hCUBu.png';
+  for (const [writerTitle, savedTitle] of [['Review image [[HT_MEDIA_1]]', 'Review image'], ['[[HT_MEDIA_1]]', url]]) {
+    await withWriter({ html: `<h1 id="ai-generated-task-title">${writerTitle}</h1><p>[[HT_MEDIA_1]]</p>` }, async ({ createComposedTask, project, creates }) => {
+      const result = await createComposedTask({ text: url, files: [], project, userId: 985, unfurlImageUrls: true });
+      assert.equal(result.writerFailed, false);
+      assert.equal(creates[0].title, savedTitle);
+      assert.doesNotMatch(creates[0].description, /HT_MEDIA/);
+      assert.match(creates[0].description, /<br><img /);
+    });
+  }
+});
+
 test('compose fallback retains the unfurled image URL and uploaded images use distinct tokens', async () => {
   for (const writerThrows of [false, true]) {
     await withWriter({ writerThrows }, async ({ createComposedTask, project, creates, writes }) => {
