@@ -871,7 +871,7 @@ const notificationSettingsProtectedHashes = {
   "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
   // HTPR-7038: add only the reset backup/completion models; retain all existing schema bytes.
   // HTPR-7076: add only the two nullable AiUsage cache token columns.
-  "src/prisma/schema.prisma": "95623cc6a7d1c21182c8e9af534e7d3ec4162221913b30b13542ce175980eabd",
+  "src/prisma/schema.prisma": "a0cb2d8736c7f0c2cda155a1e9514563fbc138267a0d13d0ec7e2b22ba74537f",
   "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": "c30396e30d121cac255f7a17d2b72d1efaeb3fef4560e76828b46849cb3ed618",
   "src/utils/controllers/notifications/projectMute.ts": "16c4dd2964146fccbc160654ee537356ab037524bbb2549ed0a07fa7e26ccd3b",
   "src/app/api/notifications/project-mute/route.ts": "b1debce26eeb1aeb76f4e0beab91c30749b6c33cc0a8dcabf25b7fe726583ee0",

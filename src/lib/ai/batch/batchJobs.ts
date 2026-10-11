@@ -2,6 +2,8 @@
  * HTPR-7098: pure helpers for background AI jobs that wait in a gateway batch (half price).
  * No database, network or SDK calls here, so every rule can be tested on its own.
  */
+import { createHash } from "node:crypto";
+
 import {
   labelClassifierPrompt,
   LABEL_CLASSIFIER_INSTRUCTIONS,
@@ -51,9 +53,32 @@ export type SmartLabelBatchItem = {
   labelId: string;
   /** The label prompt the request was built from; the apply step drops the verdict if it changed. */
   promptAtSubmit: string;
-  /** ISO time of the task snapshot the request was built from (stale check). */
+  /** Hash of the title and plain-text description the model saw; the apply step drops the verdict if it changed. */
+  contentHash: string;
+  /** ISO time of the task snapshot (unused once contentHash is set; kept for the shared apply signature). */
   snapshotAt: string;
 };
+
+/** What a smart label verdict is about: title plus plain-text description, as the prompt sends them. */
+export function labelTaskContentHash(task: { title: string; description: string }): string {
+  return createHash("sha256").update(JSON.stringify([task.title, task.description])).digest("hex");
+}
+
+/**
+ * Stable per chunk, so a retried submit replays the same gateway batch instead of paying twice.
+ * Covers the request ids and prompts: a thread that grew since the first try is a new batch.
+ */
+export function batchIdempotencyKey(
+  kind: BatchKind,
+  teamId: string,
+  requests: Array<{ id: string; prompt: string }>,
+): string {
+  const hash = createHash("sha256");
+  for (const request of [...requests].sort((a, b) => a.id.localeCompare(b.id))) {
+    hash.update(JSON.stringify([request.id, request.prompt]));
+  }
+  return `htpr-7098:${kind}:${teamId}:${hash.digest("hex").slice(0, 32)}`;
+}
 
 export type BatchTextRequest = {
   id: string;

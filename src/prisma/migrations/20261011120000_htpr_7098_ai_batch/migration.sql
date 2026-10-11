@@ -11,12 +11,14 @@ CREATE TABLE IF NOT EXISTS "AiBatch" (
   "model" TEXT NOT NULL,
   "items" JSONB NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "lastCheckedAt" TIMESTAMP(3),
+  "claimedAt" TIMESTAMP(3),
   "completedAt" TIMESTAMP(3),
   CONSTRAINT "AiBatch_pkey" PRIMARY KEY ("id")
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS "AiBatch_gatewayBatchId_key" ON "AiBatch"("gatewayBatchId");
-CREATE INDEX IF NOT EXISTS "AiBatch_status_createdAt_idx" ON "AiBatch"("status", "createdAt");
+CREATE INDEX IF NOT EXISTS "AiBatch_status_lastCheckedAt_idx" ON "AiBatch"("status", "lastCheckedAt");
 
 DO $$
 DECLARE
@@ -26,6 +28,7 @@ BEGIN
     BEGIN
       PERFORM set_config('lock_timeout', '2s', true);
       ALTER TABLE "SlackWatchedThread" ADD COLUMN IF NOT EXISTS "summaryBatchId" TEXT;
+      CREATE INDEX IF NOT EXISTS "SlackWatchedThread_summaryBatchId_idx" ON "SlackWatchedThread"("summaryBatchId");
       EXIT;
     EXCEPTION WHEN lock_not_available THEN
       attempt := attempt + 1;

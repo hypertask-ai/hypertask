@@ -26,6 +26,8 @@ import { createCommentService } from "@/utils/controllers/comments/createComment
 
 const MAX_BATCHES_PER_RUN = 20;
 const ORPHAN_GRACE_MS = 60 * 60 * 1000;
+const APPLY_RECLAIM_MS = 15 * 60 * 1000;
+const MAX_RUN_MS = 240 * 1000;
 
 type BatchRow = {
   id: string;
@@ -40,13 +42,22 @@ type BatchRow = {
 
 export async function collectBatches(nowMs = Date.now()) {
   const pending = await prisma.aiBatch.findMany({
-    where: { status: "pending" },
-    orderBy: { createdAt: "asc" },
+    where: {
+      OR: [
+        { status: "pending" },
+        // A run that died or timed out mid-apply: apply again (every apply step is safe to repeat).
+        { status: "applying", claimedAt: { lt: new Date(nowMs - APPLY_RECLAIM_MS) } },
+      ],
+    },
+    // Never-checked rows first, then the least recently checked, so a stuck row cannot starve the rest.
+    orderBy: { lastCheckedAt: { sort: "asc", nulls: "first" } },
     take: MAX_BATCHES_PER_RUN,
   });
   let completed = 0;
   let cancelled = 0;
   for (const batch of pending) {
+    // maxDuration is 300s; stop claiming new batches when about a minute is left.
+    if (Date.now() - nowMs > MAX_RUN_MS) break;
     try {
       const result = await collectOne(batch, nowMs);
       if (result === "completed") completed += 1;
@@ -59,45 +70,67 @@ export async function collectBatches(nowMs = Date.now()) {
   return { pending: pending.length, completed, cancelled, releasedThreads: released };
 }
 
+type Plan = { outcomes: BatchItemOutcome[]; finalStatus: "completed" | "cancelled" } | "waiting";
+
+async function planBatch(batch: BatchRow, itemIds: string[], stale: boolean): Promise<Plan> {
+  const allFailed = outcomesForItems(itemIds, []);
+  const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: batch.teamId });
+  if (!gatewayKey) {
+    return stale ? { outcomes: allFailed, finalStatus: "cancelled" } : "waiting";
+  }
+  const state = await gatewayBatchState(gatewayKey, batch.gatewayBatchId);
+  if (state === "pending") {
+    if (!stale) return "waiting";
+    // Gateway batches end within 24h. Past 25h, stop waiting and fall back.
+    await cancelGatewayBatch(gatewayKey, batch.gatewayBatchId).catch((error) =>
+      console.error(`AI batch ${batch.id} cancel failed`, error),
+    );
+    return { outcomes: allFailed, finalStatus: "cancelled" };
+  }
+  if (state === "failed") {
+    // The batch as a whole failed but items may still have results: apply those, fail the rest.
+    const outcomes = await gatewayBatchOutcomes(gatewayKey, batch.gatewayBatchId, itemIds).catch(() => allFailed);
+    return { outcomes, finalStatus: "completed" };
+  }
+  return { outcomes: await gatewayBatchOutcomes(gatewayKey, batch.gatewayBatchId, itemIds), finalStatus: "completed" };
+}
+
 async function collectOne(batch: BatchRow, nowMs: number): Promise<"waiting" | "completed" | "cancelled"> {
+  // Mark the look first so a row that keeps erroring moves to the back of the queue.
+  await prisma.aiBatch.update({ where: { id: batch.id }, data: { lastCheckedAt: new Date() } });
   const items = (batch.items ?? {}) as Record<string, unknown>;
   const itemIds = Object.keys(items);
-  const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: batch.teamId });
   const stale = isBatchStale(batch.createdAt, nowMs);
 
-  let outcomes: BatchItemOutcome[];
-  let finalStatus: "completed" | "cancelled" = "completed";
-  if (!gatewayKey) {
-    if (!stale) return "waiting";
-    outcomes = outcomesForItems(itemIds, []);
-    finalStatus = "cancelled";
-  } else {
-    const state = await gatewayBatchState(gatewayKey, batch.gatewayBatchId);
-    if (state === "pending") {
-      if (!stale) return "waiting";
-      // Gateway batches end within 24h. Past 25h, stop waiting and let the work retry.
-      await cancelGatewayBatch(gatewayKey, batch.gatewayBatchId).catch((error) =>
-        console.error(`AI batch ${batch.id} cancel failed`, error),
-      );
-      outcomes = outcomesForItems(itemIds, []);
-      finalStatus = "cancelled";
-    } else if (state === "failed") {
-      outcomes = outcomesForItems(itemIds, []);
-    } else {
-      outcomes = await gatewayBatchOutcomes(gatewayKey, batch.gatewayBatchId, itemIds);
-    }
+  let plan: Plan;
+  try {
+    plan = await planBatch(batch, itemIds, stale);
+  } catch (error) {
+    // Past the 25 hour limit an error is final: cancel and release the work instead of looping forever.
+    if (!stale) throw error;
+    console.error(`AI batch ${batch.id} is stale and errored; cancelling`, error);
+    plan = { outcomes: outcomesForItems(itemIds, []), finalStatus: "cancelled" };
   }
+  if (plan === "waiting") return "waiting";
 
-  // Claim before applying so an overlapping cron run cannot post the same results twice.
+  // Claim before applying so an overlapping cron run cannot apply the same results twice.
+  // "applying" rows whose claim is over 15 minutes old are taken again; every apply step is safe to repeat.
   const claimed = await prisma.aiBatch.updateMany({
-    where: { id: batch.id, status: "pending" },
-    data: { status: finalStatus, completedAt: new Date() },
+    where: {
+      id: batch.id,
+      OR: [
+        { status: "pending" },
+        { status: "applying", claimedAt: { lt: new Date(nowMs - APPLY_RECLAIM_MS) } },
+      ],
+    },
+    data: { status: "applying", claimedAt: new Date() },
   });
   if (claimed.count === 0) return "waiting";
 
-  if (batch.kind === "slack-summary") await applySlackBatch(batch, items, outcomes);
-  else if (batch.kind === "smart-label") await applyLabelBatch(batch, items, outcomes);
-  return finalStatus;
+  if (batch.kind === "slack-summary") await applySlackBatch(batch, items, plan.outcomes);
+  else if (batch.kind === "smart-label") await applyLabelBatch(batch, items, plan.outcomes);
+  await prisma.aiBatch.update({ where: { id: batch.id }, data: { status: plan.finalStatus, completedAt: new Date() } });
+  return plan.finalStatus;
 }
 
 async function logUsage(
@@ -145,6 +178,12 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
     const item = items[outcome.id] as SlackSummaryBatchItem;
     const release = { id: item.threadId, summaryBatchId: batch.id };
     try {
+      // Already applied (or released) by an earlier pass of this batch: post nothing a second time.
+      const marked = await prisma.slackWatchedThread.findUnique({
+        where: { id: item.threadId },
+        select: { lastSummarizedTs: true, summaryBatchId: true },
+      });
+      if (marked?.summaryBatchId !== batch.id) continue;
       await logUsage(batch, outcome, {
         projectId: item.projectId,
         taskId: item.taskIds.length === 1 ? item.taskIds[0] : null,
@@ -197,15 +236,10 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
           });
         }
       }
-      const thread = await prisma.slackWatchedThread.findUnique({
-        where: { id: item.threadId },
-        select: { lastSummarizedTs: true, summaryBatchId: true },
-      });
-      if (thread?.summaryBatchId !== batch.id) continue;
       await prisma.slackWatchedThread.update({
         where: { id: item.threadId },
         data: {
-          lastSummarizedTs: nextSummarizedTs(thread.lastSummarizedTs, item.lastMessageTsAtSubmit),
+          lastSummarizedTs: nextSummarizedTs(marked.lastSummarizedTs, item.lastMessageTsAtSubmit),
           summaryBatchId: null,
         },
       });
@@ -233,6 +267,7 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
         matchingLabelIds: action.matchingLabelIds,
         actor,
         snapshotAt: new Date(item.snapshotAt),
+        contentHash: item.contentHash,
       });
     } catch (error) {
       console.error(`Smart label batch result failed for task ${item.taskId}`, error);
@@ -260,7 +295,7 @@ async function releaseOrphanedSlackThreads(nowMs: number): Promise<number> {
     batches
       .filter(
         ({ status, completedAt }) =>
-          status === "pending" || (completedAt && nowMs - completedAt.getTime() < ORPHAN_GRACE_MS),
+          status === "pending" || status === "applying" || (completedAt && nowMs - completedAt.getTime() < ORPHAN_GRACE_MS),
       )
       .map(({ id }) => id),
   );

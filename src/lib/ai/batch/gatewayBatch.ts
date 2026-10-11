@@ -21,10 +21,15 @@ function referenceFor(gatewayKey: string, id: string) {
 }
 
 /** Starts one batch (all requests share one model) and returns the gateway batch id. */
-export async function startGatewayBatch(gatewayKey: string, requests: BatchTextRequest[]): Promise<string> {
+export async function startGatewayBatch(
+  gatewayKey: string,
+  requests: BatchTextRequest[],
+  idempotencyKey: string,
+): Promise<string> {
   const started = await startBatch({
     provider: provider(gatewayKey),
     requests,
+    providerOptions: { gateway: { idempotencyKey } },
   });
   return started.id;
 }

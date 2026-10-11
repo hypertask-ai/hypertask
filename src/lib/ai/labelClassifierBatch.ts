@@ -7,6 +7,7 @@ import {
   batchProviderOptions,
   buildSmartLabelBatchRequest,
   chunkForBatch,
+  labelTaskContentHash,
   type SmartLabelBatchItem,
 } from "@/lib/ai/batch/batchJobs";
 import { submitBatch } from "@/lib/ai/batch/submitBatch";
@@ -58,6 +59,7 @@ export async function submitSmartLabelBatch(args: {
             projectId: task.projectId,
             labelId: args.label.id,
             promptAtSubmit: args.label.prompt,
+            contentHash: labelTaskContentHash(task),
             snapshotAt: task.updatedAt.toISOString(),
           },
         ]),

@@ -5,7 +5,7 @@ import { generateText } from "ai";
 import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { batchBackgroundAiEnabled, haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { gatewayCatalogModelSlug } from "@/app/api/ai/_lib/sharedAllowance";
-import { batchEligibleFunding, batchEligibleModel } from "@/lib/ai/batch/batchJobs";
+import { batchEligibleFunding, batchEligibleModel, labelTaskContentHash } from "@/lib/ai/batch/batchJobs";
 import { submitSmartLabelBatch } from "@/lib/ai/labelClassifierBatch";
 import {
   gatewayFundingSourceForApiKey,
@@ -136,6 +136,7 @@ export async function applyAiLabelVerdict({
   matchingLabelIds,
   actor,
   snapshotAt,
+  contentHash,
 }: {
   taskId: number;
   projectId: number;
@@ -143,17 +144,26 @@ export async function applyAiLabelVerdict({
   matchingLabelIds: string[];
   actor: IUser;
   snapshotAt: Date;
+  /**
+   * HTPR-7098: batch results arrive hours later and any edit bumps updatedAt, so a batch verdict is
+   * stale only when the title or description the model saw has changed. Instant path leaves this unset.
+   */
+  contentHash?: string;
 }) {
   // The task may have been edited, moved, or archived while classification
   // was in flight. Don't let a stale verdict overwrite newer state.
   const currentTask = await prisma.task.findFirst({
     where: { id: taskId, projectId, status: "Normal" },
-    select: { updatedAt: true },
+    select: { updatedAt: true, title: true, description: true, description_: { select: { content: true } } },
   });
-  if (
-    !currentTask?.updatedAt ||
-    currentTask.updatedAt.getTime() > snapshotAt.getTime()
-  ) return;
+  if (!currentTask?.updatedAt) return;
+  if (contentHash) {
+    const currentHash = labelTaskContentHash({
+      title: currentTask.title,
+      description: convertHtmlToText(currentTask.description_?.content || currentTask.description || ""),
+    });
+    if (currentHash !== contentHash) return;
+  } else if (currentTask.updatedAt.getTime() > snapshotAt.getTime()) return;
 
   const currentLabels = await prisma.label.findMany({
     where: {
@@ -175,7 +185,16 @@ export async function applyAiLabelVerdict({
   const { changed, deliveryIds } = await prisma.$transaction(async (tx) => {
     // The task can move after the optimistic check above. Lock it and repeat
     // the board, status, and freshness checks before attaching board labels.
-    const lockedTasks = await tx.$queryRaw<Array<{ id: number }>>`
+    const lockedTasks = contentHash
+      ? await tx.$queryRaw<Array<{ id: number }>>`
+      SELECT "id"
+      FROM "Task"
+      WHERE "id" = ${taskId}
+        AND "projectId" = ${projectId}
+        AND "status" = 'Normal'
+      FOR UPDATE
+    `
+      : await tx.$queryRaw<Array<{ id: number }>>`
       SELECT "id"
       FROM "Task"
       WHERE "id" = ${taskId}
