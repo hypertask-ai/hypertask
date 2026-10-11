@@ -1,6 +1,6 @@
 import Tooltip from '@/components/Common/Tooltip';
 import { useFlag } from '@/hooks/useFlag';
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys';
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG, HTPR_7047_SHARP_PLUS_SIGNS_FLAG } from '@/lib/flags/keys';
 import { TDefaultEditFocus, TSectionPayload } from '@/models/CreateTaskModalModels/model';
 import React, { useState } from 'react'
 import { DroppableStateSnapshot } from '@hello-pangea/dnd';
@@ -65,9 +65,17 @@ const TooltipAndIcon = (
     }:{
         text:string,keyCombination:string[], left:number, bottom:number, size?:number, className?:string
     })=>{
+    const sharpPlusEnabled = useFlag(HTPR_7047_SHARP_PLUS_SIGNS_FLAG);
+    // Keep 2px strokes despite theme thinning; snap painted edges without moving the button.
     return (
         <>
-        <Plus size={size} className={`sm:mx-0 xs:mx-2 ${className}`} strokeWidth={1.75}/>
+        <Plus
+            size={size}
+            className={`sm:mx-0 xs:mx-2 ${className} ${sharpPlusEnabled ? 'keep-stroke' : ''}`}
+            strokeWidth={sharpPlusEnabled ? 2 : 1.75}
+            absoluteStrokeWidth={sharpPlusEnabled}
+            shapeRendering={sharpPlusEnabled ? 'crispEdges' : undefined}
+        />
              <Tooltip
                     left={left}
                     bottom={bottom}
