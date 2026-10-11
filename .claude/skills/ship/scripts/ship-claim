@@ -9,6 +9,10 @@
 # before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
 # last`); if that read fails the old claim counts. Losing to the same agent identity (another
 # session) never unassigns, because that would remove the winner.
+# A claim also stops counting (YPER4-269) when (a) its agent is no longer assigned to the ticket (read once
+# with `hypertask tasks get`; skipped if that read fails, if no agent is assigned, or if the claim is within
+# 5 min of ours, because a claimer may not have assigned itself yet), or (b) the same agent later posted a
+# comment whose visible text starts with Handing over / Handed over / Stepping back / Released / Unclaimed.
 # Resume command: 2nd argument, else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 set -uo pipefail
@@ -16,20 +20,27 @@ set -uo pipefail
 # decide <resume-id> <comments.json> [idle-ids-file]
 # Prints "WIN", "NOOURS" or "LOSE<TAB>name<TAB>agent id<TAB>old(0|1)<TAB>same-agent(0|1)".
 # idle-ids-file: agent ids (one per line) with no recent activity; their claims older than 6 h are ignored.
+# assigned-ids-file: agent ids (one per line) now assigned; empty or missing = unknown, rule (a) is skipped.
 decide() {
-  local idle=${3:-/dev/null}
-  jq -r --arg rid "$1" --rawfile idle "$idle" '
+  local idle=${3:-/dev/null} asg=${4:-/dev/null}
+  jq -r --arg rid "$1" --rawfile idle "$idle" --rawfile asg "$asg" '
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
     def at: [(.createdAt // ""), ((.id // 0) | tonumber? // 0)];
     def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
     def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
+    def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
     ($idle | split("\n") | map(select(. != ""))) as $idle
+    | ($asg | split("\n") | map(select(. != ""))) as $asg
     | [.comments[] | select(key != "")] as $c
     | [$c[] | select(txt | test("Stepping back"))] as $back
+    | [$c[] | select(handover)] as $gone
+    | ([$c[] | select(txt | contains($rid)) | secs] | min // 0) as $mine
     | [$c[] | select(txt | contains("Claimed."))
-        | . as $k | select(([$back[] | select(sess == ($k | sess) and at > ($k | at))] | length) == 0)] as $claims
+        | . as $k | select(([$back[] | select(sess == ($k | sess) and at > ($k | at))] | length) == 0)
+        | select(([$gone[] | select(key == ($k | key) and (sess == "" or sess == ($k | sess)) and at > ($k | at))] | length) == 0)
+        | select(($asg | length) == 0 or ($asg | index($k | key)) or (($k | secs) > $mine - 300))] as $claims
     | [$claims[] | select(txt | contains($rid))] as $ours
     | if ($ours | length) == 0 then "NOOURS"
       else ($ours | sort_by(at) | first) as $me
@@ -48,7 +59,7 @@ decide() {
 if [ "${1:-}" = decide ]; then
   [ $# -ge 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json> [idle-ids-file]" >&2; exit 2; }
   jq -e '.comments | type == "array"' "$3" >/dev/null 2>&1 || { echo "ship-claim: $3 is not readable comments JSON" >&2; exit 2; }
-  decide "$2" "$3" "${4:-}" || exit 2
+  decide "$2" "$3" "${4:-}" "${5:-}" || exit 2
   exit 0
 fi
 
@@ -68,10 +79,13 @@ RID=${RESUME##* }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
-W=$(mktemp); IDLE=$(mktemp); trap 'rm -f "$W" "$IDLE"' EXIT
+W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG"' EXIT
 "$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
   && jq -e '.comments | type == "array"' "$W" >/dev/null \
   || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
+
+# Agents now assigned (one read). A failed read leaves the file empty, which skips rule (a).
+"$HT" tasks get "$T" --json 2>/dev/null | jq -r '.tasks[0] | [.agent.id?, (.assignees[]?.agent.id?)] | .[] | select(. != null)' > "$ASG" 2>/dev/null || : > "$ASG"
 
 # An old competing claim is ignored only when its agent shows no activity in the last 6 h. Read failure = still active.
 agent_idle() {
@@ -84,7 +98,7 @@ agent_idle() {
 
 res=NOOURS
 for _ in 1 2 3 4 5 6 7 8; do
-  res=$(decide "$RID" "$W" "$IDLE") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
+  res=$(decide "$RID" "$W" "$IDLE" "$ASG") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
   case "$res" in
     LOSE*)
       IFS=$'\t' read -r _ other oid old same <<< "$res"
