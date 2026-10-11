@@ -49,12 +49,14 @@ export const useSessionAndChatHistory = (
   const currentProject = useRecoilValue(currentProjectAtom);
   const dockedScope = useRecoilValue(dockedChatScopeAtom);
   const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);
+  const nameBoardRef = useRef<number | undefined>(undefined);
   let scopedBoardId: number | undefined = fullScreenScope ?? undefined;
   if (!(pathname?.startsWith("/chat") ?? false)) {
     if (dockedScope === null) scopedBoardId = currentProject?.id;
     else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
   }
-  const nameBoardId = chatNames ? scopedBoardId : undefined;
+  if (chatNames) nameBoardRef.current = scopedBoardId;
+  else nameBoardRef.current = undefined;
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
@@ -113,7 +115,7 @@ export const useSessionAndChatHistory = (
     }
 
     try {
-      const res = await AI_Chat_API.createSessionNext(taskId, nameBoardId);
+      const res = await AI_Chat_API.createSessionNext(taskId, nameBoardRef.current);
       const body = res.data;
 
       if (!body?.success || !body.session?.id) {
@@ -155,7 +157,7 @@ export const useSessionAndChatHistory = (
     } catch (error) {
       console.log("🚀 ~ useSessionAndChatHistory ~ error:", error);
     }
-  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId, nameBoardId]);
+  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId]);
 
   const selectSession = useCallback(
     (sessionId: string) => {
