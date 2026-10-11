@@ -53,7 +53,147 @@ const ALWAYS = [
 const EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".json"];
 const LITERAL_RE = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g;
 const JOIN_RE = /\b(?:path\.)?(?:join|resolve)\(/g;
-const DYNAMIC_RE = /\b(?:require|import)\((?!\s*(?:["'`]|(?:path\.)?(?:join|resolve)\())/;
+const DYNAMIC_RE = /\b(?:require|import)\((?!\s*(?:["'`)]|(?:path\.)?(?:join|resolve)\())/;
+
+const DYNAMIC_G = new RegExp(DYNAMIC_RE.source, "g");
+
+// Loader shims (YPER4-267). Tests load a TypeScript file with a small helper:
+// load("src/lib/x.ts", stubs) transpiles the file and hands it a require hook
+// like `(request) => stubs[request] ?? require(request)`. That inner require
+// forwards a specifier somebody else asked for, so on its own it says nothing
+// about unknown dependencies: the file the loader reads is named by a literal
+// at the call site (already an edge) and its own imports are traced from that
+// file. Such a require is not "dynamic". The loader is dangerous only when it
+// is called with a path the picker cannot read.
+const KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "function", "return", "with", "else", "do", "try"]);
+const FN_RE =
+  /\bfunction\s*([A-Za-z_$][\w$]*)?\s*\(([^()]*)\)\s*\{|\(([^()]*)\)\s*=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*\{/g;
+
+// Index of the closer matching the opener at `open`, or -1.
+function matchClose(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+// End of an expression-bodied arrow that starts at `from`.
+function expressionEnd(text, from) {
+  let depth = 0;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) return i;
+      depth--;
+    } else if ((c === ";" || c === ",") && depth === 0) return i;
+  }
+  return text.length;
+}
+
+function functionRanges(text) {
+  const fns = [];
+  FN_RE.lastIndex = 0;
+  let m;
+  while ((m = FN_RE.exec(text))) {
+    let name = m[1] ?? "";
+    const params = m[2] ?? m[3] ?? m[4] ?? m[6] ?? "";
+    const after = FN_RE.lastIndex;
+    if (m[5] !== undefined) {
+      if (KEYWORDS.has(m[5])) continue;
+      name = m[5];
+    }
+    let start;
+    let end;
+    if (m[3] !== undefined || m[4] !== undefined) {
+      start = after + text.slice(after).match(/^\s*/)[0].length;
+      end = text[start] === "{" ? matchClose(text, start) : expressionEnd(text, start);
+    } else {
+      start = after - 1;
+      end = matchClose(text, start);
+    }
+    if (end === -1) continue;
+    if (!name) {
+      const before = text.slice(Math.max(0, m.index - 80), m.index);
+      const decl = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?$/.exec(before);
+      if (decl) name = decl[1];
+    }
+    const ids = params
+      .split(",")
+      .map((p) => /^\s*(?:\.\.\.)?([A-Za-z_$][\w$]*)\s*(?:=|$)/.exec(p)?.[1])
+      .filter(Boolean);
+    fns.push({ name, params: new Set(ids), start, end });
+  }
+  return fns;
+}
+
+// Splits non-literal require/import calls into loader shims (the argument is a
+// parameter of an enclosing function) and genuinely dynamic ones.
+function classifyDynamic(text) {
+  const loaders = new Set();
+  let dynamic = false;
+  const fns = functionRanges(text);
+  DYNAMIC_G.lastIndex = 0;
+  let m;
+  while ((m = DYNAMIC_G.exec(text))) {
+    const arg = /^\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(text.slice(DYNAMIC_G.lastIndex));
+    const around = fns.filter((f) => f.start <= m.index && m.index <= f.end);
+    if (!arg || !around.some((f) => f.params.has(arg[1]))) {
+      dynamic = true;
+      continue;
+    }
+    // Every named function around the forwarding require is a loader.
+    for (const f of around) if (f.name) loaders.add(f.name);
+  }
+  loaders.delete("require");
+  loaders.delete("import");
+  return { dynamic, loaders };
+}
+
+const LOADER_ARG_OK = new Set(["__dirname", "root"]);
+const callCache = new Map();
+const rangeCache = new Map();
+const rangesOf = (file, text) => {
+  if (!rangeCache.has(file)) rangeCache.set(file, functionRanges(text));
+  return rangeCache.get(file);
+};
+
+// True when `text` calls `name(...)` with a first argument that is not a plain
+// string literal or a path.join/resolve of literals and __dirname/root.
+function callsWithUnknownPath(file, text, name, loaders) {
+  const key = `${file}\0${name}\0${[...loaders].sort().join(",")}`;
+  if (callCache.has(key)) return callCache.get(key);
+  const re = new RegExp(`(?<![\\w$.])${name.replace(/\$/g, "\\$")}\\s*\\(`, "g");
+  let bad = false;
+  let m;
+  while (!bad && (m = re.exec(text))) {
+    if (/\bfunction\s+$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue;
+    // A call from inside a loader forwards that loader's own input; its callers
+    // are checked instead.
+    if (rangesOf(file, text).some((f) => f.name && loaders.has(f.name) && f.start <= m.index && m.index <= f.end)) continue;
+    const open = m.index + m[0].length - 1;
+    const rest = text.slice(open + 1);
+    if (/^\s*(?:"[^"\n]*"|'[^'\n]*'|`[^`$]*`)\s*[,)]/.test(rest)) continue;
+    const j = /^\s*(?:path\.)?(?:join|resolve)\(/.exec(rest);
+    if (j) {
+      const inner = open + 1 + j[0].length - 1;
+      const close = matchClose(text, inner);
+      if (close !== -1) {
+        const args = text.slice(inner + 1, close).split(",").map((a) => a.trim());
+        if (args.every((a) => LOADER_ARG_OK.has(a) || /^(?:"[^"]*"|'[^']*'|`[^`$]*`)$/.test(a))) continue;
+      }
+    }
+    bad = true;
+  }
+  callCache.set(key, bad);
+  return bad;
+}
 
 const analysisCache = new Map();
 const existsCache = new Map();
@@ -114,7 +254,7 @@ function joinRefs(text, dir) {
 
 function analyze(file) {
   if (analysisCache.has(file)) return analysisCache.get(file);
-  const result = { edges: new Set(), refs: [], dynamic: false };
+  const result = { edges: new Set(), refs: [], dynamic: false, loaders: new Set(), text: "" };
   analysisCache.set(file, result);
   let text = "";
   try {
@@ -123,6 +263,7 @@ function analyze(file) {
     return result;
   }
   if (!/\.(?:[cm]?[jt]sx?)$/.test(file)) return result;
+  result.text = text;
   const dir = path.posix.dirname(file);
   // path.join(root, "src") is mostly the "@/" alias shim. A bare top-level
   // directory only counts as a dependency on its whole tree when the file
@@ -153,7 +294,11 @@ function analyze(file) {
   for (const { ref, prefix } of joinRefs(text, dir)) add(ref, prefix);
   // Any non-literal require/import makes the file unresolvable, whatever else
   // it resolves.
-  result.dynamic = DYNAMIC_RE.test(text);
+  if (DYNAMIC_RE.test(text)) {
+    const { dynamic, loaders } = classifyDynamic(text);
+    result.dynamic = dynamic;
+    result.loaders = loaders;
+  }
   return result;
 }
 
@@ -167,9 +312,11 @@ function reaches(testFile, changed) {
   const weak = new Set();
   const seen = new Set([testFile]);
   const queue = [testFile];
+  const loaders = new Set();
   while (queue.length > 0) {
     const file = queue.pop();
-    const { edges, refs, dynamic } = analyze(file);
+    const { edges, refs, dynamic, loaders: found } = analyze(file);
+    for (const name of found) loaders.add(name);
     // Reaching any unresolvable file (test, helper, src, script) means the
     // real dependencies are unknown, so the test always runs.
     if (dynamic) return null;
@@ -186,6 +333,13 @@ function reaches(testFile, changed) {
         queue.push(next);
       }
     }
+  }
+  // A loader shim is only safe while every call names its file with a literal.
+  for (const file of seen) {
+    if (loaders.size === 0) break;
+    if (!file.startsWith("tests/")) continue;
+    const { text } = analyze(file);
+    for (const name of loaders) if (callsWithUnknownPath(file, text, name, loaders)) return null;
   }
   return { hit, weak };
 }

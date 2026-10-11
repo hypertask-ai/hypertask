@@ -71,6 +71,16 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
   put("tests/mixed.test.cjs", 'require("./helper.cjs");\nrequire(process.env.X);\n');
   put("src/lib/loader.ts", "export const load = (n: string) => require(n);\n");
   put("tests/viaLoader.test.cjs", 'require("../src/lib/loader");\n');
+  put("src/lib/shimTarget.ts", "export const t = 1;\n");
+  const shim =
+    "function load(file, stubs = {}) {\n" +
+    "  const mod = { require: (request) => stubs[request] ?? require(request) };\n" +
+    "  return mod;\n}\n";
+  put("tests/shimLiteral.test.cjs", shim + 'load("src/lib/shimTarget.ts");\n');
+  put("tests/shimDynamic.test.cjs", shim + "load(process.env.X);\n");
+  put("tests/helpers/loadTs.cjs", "exports.loadTsModule = " + "function loadTsModule(file) { return require(file); };\n");
+  put("tests/shimHelper.test.cjs", 'const { loadTsModule } = require("./helpers/loadTs.cjs");\nloadTsModule("src/lib/shimTarget.ts");\n');
+  put("tests/shimHelperDynamic.test.cjs", 'const { loadTsModule } = require("./helpers/loadTs.cjs");\nloadTsModule(process.env.X);\n');
   put("tests/test-inventory.test.cjs", "// guard\n");
   put("tests/demo-smoke.test.cjs", "// guard\n");
   put("tests/file-size-limit.test.cjs", "// guard\n");
@@ -85,6 +95,15 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
     assert.ok(leaf.includes("tests/mixed.test.cjs"), "static helper plus dynamic require");
     assert.ok(leaf.includes("tests/viaLoader.test.cjs"), "dynamic require reached in src");
     assert.ok(!leaf.includes("tests/join.test.cjs"), "unrelated test is skipped");
+    // YPER4-267: a test loader shim forwards specifiers, so a literal path at
+    // the call site is a plain edge and the test is not always-selected.
+    const viaShim = pick("src/lib/shimTarget.ts");
+    assert.ok(viaShim.includes("tests/shimLiteral.test.cjs"), "literal loader path is traced");
+    assert.ok(viaShim.includes("tests/shimHelper.test.cjs"), "loader in a test helper is traced");
+    assert.ok(!pick("src/lib/other.ts").includes("tests/shimLiteral.test.cjs"), "shim test is not always-selected");
+    assert.ok(!pick("src/lib/other.ts").includes("tests/shimHelper.test.cjs"), "helper shim test is not always-selected");
+    assert.ok(pick("src/lib/other.ts").includes("tests/shimDynamic.test.cjs"), "loader with non-literal path stays untraceable");
+    assert.ok(pick("src/lib/other.ts").includes("tests/shimHelperDynamic.test.cjs"), "helper loader with non-literal path stays untraceable");
     assert.ok(pick("src/lib/dir/index.ts").includes("tests/barrel.test.ts"), "directory index");
     assert.ok(pick("src/lib/other.ts").includes("tests/join.test.cjs"), "path.join with __dirname");
   } finally {
