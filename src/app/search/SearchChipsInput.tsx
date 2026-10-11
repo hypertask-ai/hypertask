@@ -157,7 +157,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [autocompleteEnabled, open, selectedIndex, rows.length, mobileEnabled, mobileBounds]);
 
   useEffect(() => {
-    if (!mobileFlagEnabled || !isMobile) return;
+    if (!mobileEnabled) return;
     const input = inputRef.current;
     const beforeInput = (event: InputEvent) => {
       if (!isMobileSearchSubmit(event.inputType, composingRef.current || event.isComposing)) return;
@@ -170,7 +170,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     // React's beforeinput shim does not expose every soft-keyboard inputType.
     input?.addEventListener('beforeinput', beforeInput);
     return () => input?.removeEventListener('beforeinput', beforeInput);
-  }, [mobileFlagEnabled, isMobile, value, onRun, inputRef]);
+  }, [mobileEnabled, value, onRun, inputRef]);
 
   useEffect(() => {
     if (!layoutEnabled) return;
@@ -504,7 +504,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
-          {!mobileEnabled && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
+          {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
         </div>
       ) : open && (
         <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
