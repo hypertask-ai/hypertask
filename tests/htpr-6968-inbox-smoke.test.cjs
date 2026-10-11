@@ -34,6 +34,7 @@ class Locator {
   _apiName = "Locator";
   first() { return this; }
   async innerText() { return "Inbox notifications have loaded successfully."; }
+  async allInnerTexts() { return ["Inbox"]; }
   async _expect(expression) {
     assert.ok(["to.have.count", "to.be.attached"].includes(expression));
     return { matches: true, received: expression === "to.have.count" ? 0 : undefined };
