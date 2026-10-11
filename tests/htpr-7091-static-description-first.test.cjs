@@ -91,9 +91,20 @@ test("content the static copy cannot match keeps the editor-first path", () => {
     "<p>a<br> b</p>",
     "<p>unclosed",
     "<p><iframe src='x'></iframe></p>",
+    '<p><img src=x onerror="alert(1<2)"></p>',
+    "<p>a < b</p>",
+    "<p>a > b</p>",
+    '<p><a href="javascript:alert(1)">l</a></p>',
+    '<p><a href="data:text/html,x">l</a></p>',
   ]) {
     assert.equal(isPlainDescriptionHtml(raw), false, String(raw));
   }
+});
+
+test("a failed editor load is not cached, so the next intent retries", () => {
+  const slot = fs.readFileSync(path.join(dir, "DescriptionEditorSlot.tsx"), "utf8");
+  assert.match(slot, /pendingEditor = null;\s*throw error;/);
+  assert.match(slot, /onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load/);
 });
 
 test("linkified content stays in the static subset", () => {

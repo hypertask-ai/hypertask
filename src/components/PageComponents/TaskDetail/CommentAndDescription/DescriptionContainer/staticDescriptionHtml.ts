@@ -10,7 +10,10 @@ import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 const TAG = /<(\/?)([a-zA-Z][a-zA-Z0-9]*)((?:\s+[^<>]*)?)\/?>/g;
 const BLOCKS = new Set(["p", "h1", "h2", "h3", "ul", "ol", "li"]);
 const INLINE = new Set(["strong", "b", "em", "i", "u", "s", "a", "br"]);
-const LINK_ATTRS = /^\s+href="[^"<>]*"(?:\s+target="_blank")?(?:\s+rel="[^"<>]*")?\s*$/;
+const LINK_ATTRS = /^\s+href="(?:https?:\/\/|mailto:|\/)[^"<>]*"(?:\s+target="_blank")?(?:\s+rel="[^"<>]*")?\s*$/i;
+// Text the editor saved never holds a raw angle bracket (it writes &lt; and
+// &gt;), so one means markup this check did not read: keep the editor path.
+const RAW_BRACKET = /[<>]/;
 
 // The editor collapses stray whitespace while it parses; the static copy would
 // keep it (the editor's own style preserves spaces), so any such whitespace
@@ -29,6 +32,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined): boolean 
     cursor = match.index + match[0].length;
     const [, closing, name, attrs] = match;
     const tag = name.toLowerCase();
+    if (RAW_BRACKET.test(text)) return false;
     // Loose text outside a block would be wrapped by the editor, not by us.
     if (stack.length === 0 && text.trim()) return false;
     if (!BLOCKS.has(tag) && !INLINE.has(tag)) return false;
@@ -52,8 +56,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined): boolean 
       stack.push(tag);
     }
   }
-  if (stack.length || html.slice(cursor).trim()) return false;
-  return true;
+  if (stack.length || html.slice(cursor).trim()) return false;  return true;
 }
 
 const EMPTY_PARAGRAPH = '<p><br class="ProseMirror-trailingBreak"></p>';

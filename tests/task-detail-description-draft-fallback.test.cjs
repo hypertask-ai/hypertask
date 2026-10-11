@@ -38,8 +38,9 @@ test("task detail starts loading its always-mounted description editor right aft
   assert.match(body, /<DescriptionEditorSlot/);
   assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
   assert.match(slot, /import\("@\/components\/RTE\/TipTapTaskDetail"\)/);
-  assert.match(slot, /useEffect\(\(\) => \{\s*if \(!lazy\) return;[\s\S]*preloadDescriptionEditor\(\)/);
-  assert.match(slot, /onPointerDownCapture: preload,\s*onFocusCapture: preload,\s*onKeyDownCapture: preload/);
+  assert.match(slot, /const load = useCallback\(\(\) => \{\s*preloadDescriptionEditor\(\)/);
+  assert.match(slot, /useEffect\(\(\) => \{\s*if \(!lazy\) return;[\s\S]*load\(\);/);
+  assert.match(slot, /onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load/);
 });
 
 test("the meaningful-draft guard rejects the empty formats created for new tasks", () => {

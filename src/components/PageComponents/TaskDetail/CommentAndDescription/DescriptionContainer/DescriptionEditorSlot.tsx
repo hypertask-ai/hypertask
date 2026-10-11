@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import type { TiptapProps } from "@/components/RTE/useTaskDetailEditorState";
 import StaticDescriptionShell, { StaticDescriptionBody, type DescriptionIntentProps } from "./StaticDescriptionShell";
 import { StaticDescriptionPlaceholderContext } from "./StaticDescriptionPlaceholder";
@@ -18,16 +18,16 @@ let loadedEditor: EditorComponent | null = null;
 let pendingEditor: Promise<EditorComponent> | null = null;
 
 export function preloadDescriptionEditor(): Promise<EditorComponent> {
-  pendingEditor ??= importEditor().then((module) => (loadedEditor = module.default));
+  pendingEditor ??= importEditor().then(
+    (module) => (loadedEditor = module.default),
+    (error) => {
+      // A failed chunk load must not stick: the next mount or edit intent retries.
+      pendingEditor = null;
+      throw error;
+    },
+  );
   return pendingEditor;
 }
-
-const preload = () => void preloadDescriptionEditor();
-const intentProps: DescriptionIntentProps = {
-  onPointerDownCapture: preload,
-  onFocusCapture: preload,
-  onKeyDownCapture: preload,
-};
 
 /**
  * HTPR-7091: with `lazy`, the slot shows the description as static HTML (a copy
@@ -47,16 +47,29 @@ export default function DescriptionEditorSlot({
     [defaultContent, isMbl],
   );
 
+  const liveRef = useRef(true);
+  const load = useCallback(() => {
+    preloadDescriptionEditor().then(
+      (component) => {
+        if (liveRef.current) setEditor(() => component);
+      },
+      // Stays static and readable; the next edit intent retries the load.
+      () => {},
+    );
+  }, []);
+  const intentProps = useMemo<DescriptionIntentProps>(
+    () => ({ onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load }),
+    [load],
+  );
+
   useEffect(() => {
     if (!lazy) return;
-    let live = true;
-    preloadDescriptionEditor().then((component) => {
-      if (live) setEditor(() => component);
-    });
+    liveRef.current = true;
+    load();
     return () => {
-      live = false;
+      liveRef.current = false;
     };
-  }, [lazy]);
+  }, [lazy, load]);
 
   if (!lazy) return <EagerEditor {...editorProps} />;
   if (!Editor) {
