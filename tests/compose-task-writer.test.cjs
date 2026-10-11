@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const path = require('node:path');
 const { createJiti } = require('jiti');
 const { JSDOM } = require('jsdom');
+const { loadSharedRoute } = require('./helpers/groupb-route.cjs');
 const root = path.resolve(__dirname, '..');
 const flag = 'htpr-6929-compose-task-writer';
 
@@ -288,11 +289,28 @@ test('shared server writer gates compose before accessing a board; legacy writer
   }
 });
 
+// Loads the shared create handler (the code behind /api/tasks/createGlobally POST)
+// with strict stubs; only the packages it needs at runtime come from node_modules.
+function loadCreateGlobal(stubs) {
+  const real = new Set(['next/server', 'zod', 'better-auth/cookies']);
+  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/lib/api/task-writes/create-global.ts'), 'utf8'), {
+    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
+  }).outputText;
+  const mod = { exports: {} };
+  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
+    if (real.has(request)) return require(request);
+    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
+    return stubs[request];
+  });
+  return mod.exports;
+}
+
 test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
   let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
+  const sharedRoute = loadSharedRoute(async () => session);
   const stubs = {
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
-    '@/lib/api/task-writes/create-global-effects': {},
+    './route': sharedRoute,
+    './create-global-effects': {},
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
@@ -303,7 +321,6 @@ test('actual create endpoint rejects disabled Compose before database work and p
       user: { findUnique: async () => { userReads++; return { id: 985 }; } },
       project: { findFirst: async () => { boardReads++; return null; } },
     } },
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => session },
     '@/lib/auth/session': { SESSION_COOKIE: 'session', verifySession: () => null },
     '@/lib/auth/resolveActingAgent': { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: () => ({}) },
@@ -312,17 +329,11 @@ test('actual create endpoint rejects disabled Compose before database work and p
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {},
     '@/utils/controllers/activities/createAssignedActivity': {},
   };
-  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/pages/api/tasks/createGlobally.ts'), 'utf8'), {
-    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
-  });
+  const created = loadCreateGlobal(stubs);
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
   const post = async (body) => {
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-    await mod.exports.default({ method: 'POST', headers: {}, cookies: {}, body: { title: 'Test note', projectId: 7, userId: 985, ...body } }, res);
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
+    await handler({ method: 'POST', headers: {}, cookies: {}, body: { title: 'Test note', projectId: 7, userId: 985, ...body } }, res);
     return res;
   };
   let result = await post({ requestKind: 'compose-task' });
@@ -418,9 +429,10 @@ test('save existing target enforces both flags, edit permissions, board match an
   const { isEmptyComposeTarget } = createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts'));
   let compose = true, newWindow = false, authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
+  const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
   const stubs = {
-    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
-    '@/lib/api/task-writes/create-global-effects': {},
+    './route': sharedRoute,
+    './create-global-effects': {},
     '@/lib/ai/taskWriterDueDate': {},
     '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
@@ -431,7 +443,6 @@ test('save existing target enforces both flags, edit permissions, board match an
       project: { findFirst: async () => authorized ? { id: 7 } : null },
       task: { findFirst: async (query) => { taskReads.push(query); return target; } },
     } },
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 985 }) },
     '@/lib/auth/session': { SESSION_COOKIE: 'session', verifySession: () => null },
     '@/lib/auth/resolveActingAgent': { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     '@/utils/controllers/projects/getAllIncludes': { taskWriteAccessWhere: (userId, agentId) => ({ canWrite: { userId, agentId } }) },
@@ -441,17 +452,11 @@ test('save existing target enforces both flags, edit permissions, board match an
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {}, '@/utils/controllers/activities/createAssignedActivity': {},
   };
-  const code = require('typescript').transpileModule(require('node:fs').readFileSync(path.join(root, 'src/pages/api/tasks/createGlobally.ts'), 'utf8'), {
-    compilerOptions: { esModuleInterop: true, module: require('typescript').ModuleKind.CommonJS },
-  }).outputText;
-  const mod = { exports: {} };
-  new Function('module', 'exports', 'require', code)(mod, mod.exports, (request) => {
-    assert.ok(request in stubs, `Unexpected dependency: ${request}`);
-    return stubs[request];
-  });
+  const created = loadCreateGlobal(stubs);
+  const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
   const post = async (extra = {}) => {
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
-    await mod.exports.default({ method: 'POST', headers: {}, cookies: {}, body: {
+    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
+    await handler({ method: 'POST', headers: {}, cookies: {}, body: {
       title: 'Written title', description: '<p>Written body</p>', projectId: 7, userId: 985, requestKind: 'compose-task', existingTaskId: 52, ...extra,
     } }, res);
     return res;

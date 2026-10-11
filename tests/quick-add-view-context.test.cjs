@@ -216,7 +216,7 @@ test("priority-top position preserves ranking and legacy Urgent unless a view pr
   const disabled = await create({ activeFilters: filters({ Labels: labels }), sorting: "Priority", position: "top", flag: false });
   assert.equal(disabled.posts[0].body.index, 0);
   assert.equal(disabled.posts[0].url, "/api/tasks/create");
-  for (const file of ["src/pages/api/tasks/createGlobally.ts", "src/lib/api/task-writes/create-global.ts"]) {
+  for (const file of ["src/lib/api/task-writes/create-global.ts"]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
     assert.match(source, /const body = \{[\s\S]*?\branking,[\s\S]*?const task = await tx\.task\.create\(\{\s*data: \{\s*\.\.\.body,/);
     assert.match(source, /priority_index: priority\.priority_index/);

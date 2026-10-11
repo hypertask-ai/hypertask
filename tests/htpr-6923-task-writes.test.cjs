@@ -1,8 +1,9 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
-const crypto = require("node:crypto");
 const { load } = require("./task-route-loader.cjs");
+// Responses and effects are pinned by digest from the pre-retirement handlers (HTPR-6992).
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const pin = pins("a1-task-writes");
 
 const routeFiles = {
   update: "src/pages/api/tasks/single.ts",
@@ -19,9 +20,8 @@ class FixedDate extends RealDate {
   constructor(...args) { super(...(args.length ? args : [fixedNow])); }
 }
 
-function fixture(kind, scenario, flagMode) {
+function fixture(kind, scenario) {
   const effects = [];
-  const flags = [];
   const session = scenario.noAuth ? null : { userId: 985, source: "better-auth" };
   const actor = { id: 985, displayName: "QA", photoURL: "qa.png", email: "qa@example.invalid" };
   const task = { id: 42, projectId: 15, title: "Changed", nested: { retained: true } };
@@ -30,14 +30,6 @@ function fixture(kind, scenario, flagMode) {
       if (scenario.authThrows) throw new Error("Auth lookup unavailable");
       return session;
     } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": {
-      isFeatureEnabled: async (key, userId) => {
-        flags.push({ key, userId });
-        if (flagMode === "throw") throw new Error("Flag lookup unavailable");
-        return flagMode === true;
-      },
-    },
     "@/lib/auth/sessionUserRecord": {
       loadSessionUserRecord: async (userId) => {
         effects.push(["actor", userId]);
@@ -95,13 +87,9 @@ function fixture(kind, scenario, flagMode) {
       default: (...args) => effects.push(["notify", ...args]),
     },
   };
-  const legacy = load(routeFiles[kind], {
-    ...mocks,
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
-  }).default;
   const current = load(routeFiles[kind], mocks).default;
   const operation = load(operationFiles[kind], mocks).PUT;
-  return { legacy, current, operation, session, effects, flags };
+  return { current, operation, effects };
 }
 
 async function invoke(handler, body, method = "PUT") {
@@ -170,25 +158,20 @@ const scenarios = {
 
 for (const kind of Object.keys(scenarios)) {
   for (const [name, scenario] of scenarios[kind]) {
-    test(`${kind}: original / flag-on / flag-off parity: ${name}`, async () => {
+    test(`${kind}: shared handler matches pinned contract: ${name}`, async () => {
       global.Date = FixedDate;
       const originalConsole = { log: console.log, warn: console.warn, error: console.error };
       console.log = console.warn = console.error = () => {};
       try {
         const body = Object.hasOwn(scenario, "body") ? scenario.body : kind === "update" ? update : move;
-        const before = fixture(kind, scenario, false);
-        const expected = await invoke(before.legacy, body);
-        if (scenario.expected) assert.deepEqual(expected, scenario.expected);
-        for (const mode of [true, false, "throw"]) {
-          const after = fixture(kind, scenario, mode);
-          assert.deepEqual(await invoke(after.current, body), expected);
-          assert.deepEqual(json(after.effects), json(before.effects), "mutation/query/notification/realtime arguments are unchanged");
-          assert.deepEqual(after.flags, scenario.noAuth || scenario.authThrows ? [] : [{ key: "htpr-6923-app-router-writes", userId: 985 }]);
-        }
-        const web = fixture(kind, scenario, true);
+        const after = fixture(kind, scenario);
+        const response = await invoke(after.current, body);
+        if (scenario.expected) assert.deepEqual(response, scenario.expected);
+        const expected = pin(kind, `${kind}: ${name}`, { response, effects: json(after.effects) });
+        const web = fixture(kind, scenario);
         const result = await web.operation({ headers: new Headers(), json: async () => body });
-        assert.deepEqual({ status: result.status, body: await result.json() }, expected, "Web-request handler has the same contract");
-        assert.deepEqual(json(web.effects), json(before.effects));
+        assert.deepEqual({ status: result.status, body: await result.json() }, expected.response, "Web-request handler has the same contract");
+        assert.deepEqual(json(web.effects), expected.effects);
       } finally {
         global.Date = RealDate;
         Object.assign(console, originalConsole);
@@ -197,44 +180,12 @@ for (const kind of Object.keys(scenarios)) {
   }
 }
 
-test("non-migrated methods never evaluate the flag or load a new operation", async () => {
+test("non-migrated methods answer 405 without loading the operation", async () => {
   for (const kind of ["update", "move"]) {
     for (const method of kind === "update" ? ["POST", "PATCH"] : ["GET", "DELETE", "POST", "PATCH"]) {
-      const before = fixture(kind, {}, false);
-      const after = fixture(kind, {}, true);
-      assert.deepEqual(await invoke(after.current, {}, method), await invoke(before.legacy, {}, method));
-      assert.deepEqual(after.flags, []);
+      const after = fixture(kind, {});
+      assert.deepEqual(await invoke(after.current, {}, method), { status: 405, body: { message: "Method not allowed" } });
+      assert.deepEqual(after.effects, []);
     }
-  }
-});
-
-test("flag-off does not load the new handler; flag-on failures never retry legacy", async () => {
-  for (const mode of [false, true]) {
-    const fx = fixture("update", {}, mode);
-    const { withTaskWriteFlag } = load("src/lib/api/task-writes/route.ts", {
-      "@/lib/auth/getSessionUser": { getSessionUser: async () => fx.session },
-      "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-      "@/lib/flags": { isFeatureEnabled: async () => mode },
-    });
-    let legacy = 0;
-    let loaded = 0;
-    const handler = withTaskWriteFlag(async (_req, res) => { legacy++; res.status(200).json({ legacy: true }); }, "PUT", async () => {
-      loaded++;
-      return async () => { throw new Error("failed after write"); };
-    });
-    if (mode) await assert.rejects(invoke(handler, update), /failed after write/);
-    else assert.deepEqual(await invoke(handler, update), { status: 200, body: { legacy: true } });
-    assert.equal(legacy, mode ? 0 : 1);
-    assert.equal(loaded, mode ? 1 : 0);
-  }
-});
-
-test("original handler bodies are pinned independently of flag-on implementations", () => {
-  const hashes = require("./htpr-6923-verify.cjs").legacyHashes;
-  for (const [kind, file] of Object.entries(routeFiles)) {
-    const source = fs.readFileSync(file, "utf8")
-      .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
-      .replace(/export default withTaskWriteFlag\([\s\S]*$/, "export default handler;\n");
-    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), hashes[kind], file);
   }
 });

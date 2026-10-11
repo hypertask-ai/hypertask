@@ -1,77 +1,12 @@
-import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
-import type { NextApiHandler } from "next";
-import {
-  linkTaskPullRequest,
-  PullRequestLinkError,
-} from "@/lib/pullRequests/taskPullRequests";
-import { AgentMutationLeaseConflictError } from "@/lib/mcp/tasks/agentMutationFence";
-import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
-import { broadcastTaskChange } from "@/lib/realtime/server";
+import type { NextApiRequest, NextApiResponse } from "next";
+import { taskWriteHandler } from "@/lib/api/task-writes/route";
 
-interface LinkPullRequestHandlerDependencies {
-  verifySession: typeof verifySession;
-  linkTaskPullRequest: typeof linkTaskPullRequest;
-  broadcastTaskChange: typeof broadcastTaskChange;
-}
-
-export function createLinkPullRequestHandler({
-  verifySession: verifySignedSession,
-  linkTaskPullRequest: linkPullRequest,
-  broadcastTaskChange: broadcastChange,
-}: LinkPullRequestHandlerDependencies): NextApiHandler {
-  return async (request, response) => {
-    if (request.method !== "POST") {
-      return response.status(405).json({ message: "Method not allowed" });
-    }
-
-    const session = verifySignedSession(request.cookies[SESSION_COOKIE]);
-    if (!session) {
-      return response.status(401).json({ message: "Unauthorized" });
-    }
-    const userId = session.id;
-    const taskId = Number(request.body?.taskId);
-    if (!Number.isSafeInteger(taskId) || taskId <= 0) {
-      return response.status(400).json({ message: "Bad request" });
-    }
-    if (typeof request.body?.url !== "string") {
-      return response
-        .status(400)
-        .json({ message: "Pull request URL is required" });
-    }
-
-    try {
-      const result = await linkPullRequest({
-        taskId,
-        userId,
-        url: request.body.url,
-      });
-      try {
-        await broadcastChange(taskId, { originUserId: userId });
-      } catch (error) {
-        console.warn("/api/tasks/linkPullRequest realtime delivery failed", error);
-      }
-      return response.status(result.created ? 201 : 200).json(result);
-    } catch (error) {
-      if (error instanceof PullRequestLinkError) {
-        return response
-          .status(error.status)
-          .json({ message: error.message, code: error.code });
-      }
-      if (error instanceof AgentMutationLeaseConflictError) {
-        return response.status(409).json({ message: error.message });
-      }
-      console.error("/api/tasks/linkPullRequest", error);
-      return response.status(500).json({ message: "Internal server error" });
-    }
-  };
-}
-
-const handler = createLinkPullRequestHandler({
-  verifySession,
-  linkTaskPullRequest,
-  broadcastTaskChange,
+const handler = taskWriteHandler({
+  POST: async () => (await import("@/lib/api/task-writes/link-pull-request")).POST,
 });
 
-export default withTaskWriteFlag(handler, "POST", async () =>
-  (await import("@/lib/api/task-writes/link-pull-request")).POST,
-);
+// No app caller is known (HTPR-6992); this log shows any remaining outside use.
+export default function legacyRoute(req: NextApiRequest, res: NextApiResponse) {
+  console.warn("legacy route hit: /api/tasks/linkPullRequest");
+  return handler(req, res);
+}

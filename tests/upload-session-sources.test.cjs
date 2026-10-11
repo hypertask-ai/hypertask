@@ -22,7 +22,6 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: {
-    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
     "@": path.join(root, "src"),
   },
 });
@@ -52,7 +51,6 @@ function loadRoute(sessionUser = null, { flagEnabled = true } = {}) {
   const uploaded = [];
   const seenHeaders = [];
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async (headers) => {
         seenHeaders.push(headers);
@@ -108,6 +106,7 @@ function responseRecorder() {
       this.body = body;
       return this;
     },
+    setHeader() {},
   };
 }
 
@@ -249,7 +248,7 @@ function loadFinalizeRoute({
     },
   };
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
+    "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession: () => ({ id: 6 }),
@@ -311,15 +310,17 @@ function loadFinalizeRoute({
   Module._load = (request, parent, isMain) =>
     stubs[request] ?? originalLoad(request, parent, isMain);
   try {
-    delete require.cache[
-      path.join(root, "src/pages/api/tasks/uploadFinalize.ts")
-    ];
+    for (const file of [
+      "src/pages/api/tasks/uploadFinalize.ts",
+      "src/lib/api/task-writes/upload-finalize.ts",
+    ]) {
+      delete require.cache[path.join(root, file)];
+    }
     const load = require("jiti")(
       path.join(root, `tests/upload-finalize-${++finalizeLoadId}.cjs`),
       {
         interopDefault: true,
         alias: {
-          "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
           "@": path.join(root, "src"),
         },
         cache: false,

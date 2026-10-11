@@ -34,7 +34,11 @@ test("every existing App Router task route uses the single loader and the shared
     assert.doesNotMatch(source, /request\.json\(/);
     if (source.includes("export async function POST")) assert.match(source, /readJsonBody</);
   }
-  assert.match(read("src/pages/api/tasks/getAll.ts"), /loadCurrentUser\(/);
+  // getAll identity now comes from the shared task-write handler, never inline cookies.
+  const getAll = read("src/lib/api/task-writes/getAll.ts");
+  assert.match(getAll, /getSessionUser\(/);
+  assert.doesNotMatch(getAll, /isValidUser|cookies\(\)|nookies_user/);
+  assert.doesNotMatch(read("src/pages/api/tasks/getAll.ts"), /getSessionUser|isValidUser|cookies\(\)|nookies_user/);
 });
 
 test("there are no same-URL Pages task twins eligible for deletion", () => {

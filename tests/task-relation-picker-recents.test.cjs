@@ -3,6 +3,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const ts = require("typescript");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 const picker = fs.readFileSync(
@@ -10,7 +11,11 @@ const picker = fs.readFileSync(
   "utf8",
 );
 const route = fs.readFileSync(
-  path.join(root, "src/pages/api/tasks/searchAll.ts"),
+  path.join(root, "src/lib/api/task-writes/search-all.ts"),
+  "utf8",
+);
+const routeCore = fs.readFileSync(
+  path.join(root, "src/lib/api/task-writes/route.ts"),
   "utf8",
 );
 const recentTasks = fs.readFileSync(
@@ -42,6 +47,7 @@ function loadTypeScript(relativePath, stubs) {
 function responseRecorder() {
   const result = { status: null, body: null };
   const response = {
+    setHeader() {},
     status(status) {
       result.status = status;
       return response;
@@ -56,8 +62,7 @@ function responseRecorder() {
 
 function loadRecentRoute(identity) {
   const recentCalls = [];
-  const handler = loadTypeScript("src/pages/api/tasks/searchAll.ts", {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (legacy) => legacy },
+  const handler = load("src/pages/api/tasks/searchAll.ts", {
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () =>
         identity && identity.status === "verified"
@@ -79,7 +84,7 @@ function loadRecentRoute(identity) {
         return { status: 200, json: [{ id: 10, title: "Allowed task" }] };
       },
     },
-  });
+  }).default;
   return { handler, recentCalls };
 }
 
@@ -204,10 +209,9 @@ test("the relation picker loads recently worked tasks before a search", () => {
 
 test("recent task lookup is authenticated and board-scoped", () => {
   assert.match(route, /mode === "recent"/);
-  assert.match(route, /getSessionUser\(/);
-  assert.match(route, /if \(!session\) \{[\s\S]*?status\(401\)/);
+  assert.match(routeCore, /getSessionUser\(/);
+  assert.match(routeCore, /if \(!session\) \{[\s\S]*?status: 401/);
   assert.match(route, /userId: session\.userId/);
-  assert.match(route, /status\(401\)/);
   assert.match(recentTasks, /project:\s*getProjectWhere\(userId\)/);
   assert.match(recentTasks, /updatedByUserIds:\s*\{ has: userId \}/);
 });

@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const Module = require("node:module");
 const test = require("node:test");
+const { load } = require("./task-route-loader.cjs");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
@@ -35,7 +36,6 @@ function loadArchiveHandler() {
   const broadcasts = [];
   const updated = [];
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/prisma": {
       __esModule: true,
       default: {
@@ -77,7 +77,7 @@ function loadArchiveHandler() {
       default: async () => undefined,
     },
     "@/models/model": {},
-    "../queues/duedateQueue": {
+    "@/pages/api/queues/duedateQueue": {
       cancelDueDateJob: async () => undefined,
     },
     "@/utils/controllers/tasks/single": {
@@ -98,21 +98,8 @@ function loadArchiveHandler() {
     },
   };
 
-  const javascript = transpileHandler("src/pages/api/tasks/(un)archive.ts");
-  const originalLoad = Module._load;
-  Module._load = (request, parent, isMain) =>
-    stubs[request] ?? originalLoad(request, parent, isMain);
-  try {
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", javascript)(
-      mod,
-      mod.exports,
-      (request) => stubs[request] ?? require(request)
-    );
-    return { handler: mod.exports.default, updated, broadcasts };
-  } finally {
-    Module._load = originalLoad;
-  }
+  const { handler } = { handler: load("src/pages/api/tasks/(un)archive.ts", stubs).default };
+  return { handler, updated, broadcasts };
 }
 
 async function callArchive(handler, { taskId, status, userId = MEMBER_USER_ID }) {
@@ -124,6 +111,7 @@ async function callArchive(handler, { taskId, status, userId = MEMBER_USER_ID })
   let statusCode = 0;
   let payload;
   const res = {
+    setHeader() {},
     status(code) {
       statusCode = code;
       return res;

@@ -216,7 +216,7 @@ export function useAiChatState() {
     currentSession,
     showWelcomeScreen,
     isSessionPending,
-    sessions,
+    sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled,
     selectSession: selectSessionInHistory,
     isSuccess: chatHistoryReady,
     addMessageToSessionQuery,
@@ -250,6 +250,7 @@ export function useAiChatState() {
     // land a send into a conversation the user has since navigated away
     // from (HTPR-6100).
     taskId ?? "no-task",
+    ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {
@@ -286,7 +287,7 @@ export function useAiChatState() {
   messageListRef, hasAttemptedRestoreRef, previousProjectIdRef, toggleCreateTaskGlobally, token,
   dockedProjectId, scopedProjectId, boardScopeIsExplicit, editor, editorEnabled,
   editorMountProps, taskId, shouldLoadChatHistory, createSession, activeSession,
-  currentSession, showWelcomeScreen, isSessionPending, sessions, selectSessionInHistory,
+  currentSession, showWelcomeScreen, isSessionPending, sessions, historySessions, hasMoreSessions, isLoadingMoreSessions, pagingError, loadMoreSessions, refreshHistorySessions, resolveHistorySession, getDisplayedSession, sessionPagingEnabled, selectSessionInHistory,
   chatHistoryReady, addMessageToSessionQuery, updateLastMessageInSessionCache, appendMessageToSessionCache, updateSessionTitle,
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,

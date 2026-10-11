@@ -1092,7 +1092,7 @@ test("the Inbox integration hydrates, reconciles, persists confirmed data, measu
   const revisionSource = read("src/lib/inboxSync/revision.ts");
   const clear = read("src/lib/localReadModels/clear.ts");
   const signout = read("src/hooks/MultiPages/HTC/useSignout.ts");
-  const accessRoute = read("src/pages/api/notifications/access.ts");
+  const accessRoute = read("src/lib/api/notification-writes/access.ts");
   const accessController = read(
     "src/utils/controllers/notifications/getAccessibleProjectIds.ts",
   );

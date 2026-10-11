@@ -180,7 +180,7 @@ test("MCP createTask signs the internal hop with the authenticated agentId", () 
 });
 
 test("createGlobally resolves acting agent from the signed session claim", () => {
-  const source = read("src/pages/api/tasks/createGlobally.ts");
+  const source = read("src/lib/api/task-writes/create-global.ts");
   assert.match(source, /resolveActingAgent\(/);
   assert.match(source, /sessionAgentId: signedSession\?\.agentId/);
   assert.match(source, /bodyAgentId: requestedAgentId/);

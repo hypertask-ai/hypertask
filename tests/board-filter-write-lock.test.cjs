@@ -161,15 +161,15 @@ test("every concurrent existing-board filter writer participates in the lock pro
   const source = (relativePath) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
   assert.equal(
-    (source("src/pages/api/projects/views/create-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/create-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     2,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/update-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/update-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/unsaved-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/unsaved-view.ts").match(/withBoardFilterWriteLock\(/g) ?? []).length,
     2,
   );
   assert.equal(
@@ -177,11 +177,11 @@ test("every concurrent existing-board filter writer participates in the lock pro
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/create-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/create-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/update-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/update-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     1,
   );
   assert.equal(
@@ -189,7 +189,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     2,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/smart-split.ts").match(/acquireBoardFilterWriteLock\(tx, projectId\)/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/smart-split.ts").match(/acquireBoardFilterWriteLock\(tx, projectId\)/g) ?? []).length,
     3,
   );
   assert.equal(
@@ -201,7 +201,7 @@ test("every concurrent existing-board filter writer participates in the lock pro
     1,
   );
   assert.equal(
-    (source("src/pages/api/projects/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
+    (source("src/lib/api/project-writes/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
     2,
   );
 });

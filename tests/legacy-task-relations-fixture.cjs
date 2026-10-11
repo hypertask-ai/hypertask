@@ -88,13 +88,16 @@ function fixture({ enabled = false, userId = 7, compat, failFlag = false, failQu
     return roots.map((item) => projectRow("Task", item, args));
   } } };
   const mocks = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/prisma": { default: database },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere },
     "@/lib/agents/visibility": visibility,
     "@/lib/auth/currentUser": { loadCurrentUser: async (...args) => {
       calls.auth.push(args);
       return userId == null ? null : { userId };
+    } },
+    "@/lib/auth/getSessionUser": { getSessionUser: async (...args) => {
+      calls.auth.push(args);
+      return userId == null ? null : { userId, source: "better-auth" };
     } },
     "@/lib/flags": { HTPR_6924_REST_COMPAT_FLAG: "htpr-6924-rest-compat", isFeatureEnabled: async (...args) => {
       calls.flags.push(args);

@@ -3,47 +3,21 @@
 // unread-aware digest. Exercise the handlers so equivalent insecure code fails
 // even if the implementation is renamed or reformatted.
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 
 function loadTypeScript(relativePath, stubs) {
-  const filename = path.join(root, relativePath);
-  const source = fs.readFileSync(filename, "utf8");
-  const javascript = ts.transpileModule(source, {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: filename,
-  }).outputText;
-  const loadedModule = { exports: {} };
-  const localRequire = (request) => stubs[request] ?? require(request);
-
-  new Function(
-    "module",
-    "exports",
-    "require",
-    "__filename",
-    "__dirname",
-    javascript,
-  )(
-    loadedModule,
-    loadedModule.exports,
-    localRequire,
-    filename,
-    path.dirname(filename),
-  );
-  return loadedModule.exports.default ?? loadedModule.exports;
+  const loaded = load(relativePath, stubs);
+  return loaded.default ?? loaded;
 }
 
 function responseRecorder() {
   const result = { status: null, body: null };
   const response = {
+    setHeader() {},
     status(status) {
       result.status = status;
       return response;
@@ -63,7 +37,6 @@ function request(body, method = "POST") {
 function loadGetByTaskRoute(session) {
   const controllerCalls = [];
   const handler = loadTypeScript("src/pages/api/notifications/getByTask.ts", {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
@@ -82,7 +55,6 @@ function loadCommentSeenRoute(session) {
   const controllerCalls = [];
   const commentWrites = [];
   const handler = loadTypeScript("src/pages/api/comments/updateSeen.ts", {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },

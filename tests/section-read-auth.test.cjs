@@ -13,7 +13,6 @@ const sections = projects.map(({ id }) => ({ id: id * 10, projectId: id, deleted
 function harness({ userId = 42 } = {}) {
   const calls = [];
   const mocks = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/prisma": { default: {
       section: { findMany: async (query) => {
         calls.push(["sections", query]);
@@ -51,7 +50,7 @@ function harness({ userId = 42 } = {}) {
   }
   async function request(route, body = {}) {
     const handler = load(`src/pages/api/section/${route}.ts`, mocks).default;
-    const res = { status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
+    const res = { setHeader() {}, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };
     await handler({ method: "POST", headers: {}, body }, res);
     return res;
   }
@@ -65,7 +64,8 @@ for (const route of ["getAll", "getByTaskId"]) {
       const res = await h.request(route, body);
       assert.equal(res.statusCode, 401);
       assert.deepEqual(res.body, { message: "Unauthorized" });
-      assert.deepEqual(h.calls.map(([kind]) => kind), ["session"]);
+      // The adapter looks the user up, then the shared route retries it before the 401.
+      assert.ok(h.calls.length > 0 && h.calls.every(([kind]) => kind === "session"));
     }
   });
 }

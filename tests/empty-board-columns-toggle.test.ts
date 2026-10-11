@@ -358,7 +358,7 @@ test("the command toggles both directions through the optimistic shared save", (
 
 test("the canonical URL view reaches the durable unsaved-view branch", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/unsaved-view.ts"),
     "utf8",
   );
   const transientGuard = source.indexOf("shouldUseTransientTabSettings(");

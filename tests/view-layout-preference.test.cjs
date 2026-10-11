@@ -252,16 +252,16 @@ test("the additive migration leaves every existing view nullable", () => {
 
 test("create, update, unsaved, and Save View all carry board_layout", () => {
   for (const relative of [
-    "src/pages/api/projects/views/create-view.ts",
-    "src/pages/api/projects/views/update-view.ts",
-    "src/pages/api/projects/views/unsaved-view.ts",
+    "src/lib/api/project-writes/views/create-view.ts",
+    "src/lib/api/project-writes/views/update-view.ts",
+    "src/lib/api/project-writes/views/unsaved-view.ts",
     "src/components/Modals/ViewModals/SaveViewModal.tsx",
   ]) {
     const source = fs.readFileSync(path.join(root, relative), "utf8");
     assert.match(source, /board_layout/, relative);
   }
   const updateRoute = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/update-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/update-view.ts"),
     "utf8",
   );
   assert.match(updateRoute, /hasBoardLayout/);
@@ -276,7 +276,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   assert.ok(layoutBranch >= 0 && unsavedCleanup > layoutBranch);
   assert.match(
     updateRoute.slice(layoutBranch, unsavedCleanup),
-    /return res\.status\(200\)\.json\(\{ viewId, board_layout: boardLayout \}\)/,
+    /return viewWriteJson\(\{ viewId, board_layout: boardLayout \}, 200\)/,
     "layout-only updates must return before generic Save View cleanup",
   );
 
@@ -287,7 +287,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   assert.match(manageViews, /updateViewLayout\(currentProject\.id, editView\.id, layoutPreference\)/);
 
   const createRoute = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/create-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/create-view.ts"),
     "utf8",
   );
   assert.match(
@@ -307,7 +307,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   );
 
   const unsavedRoute = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/unsaved-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/unsaved-view.ts"),
     "utf8",
   );
   assert.match(
