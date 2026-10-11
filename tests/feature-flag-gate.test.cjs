@@ -1665,3 +1665,45 @@ test('flags read inside JSX attribute callbacks gate only when the callback is r
     assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, head, fixture.dir)).pass, expected, name);
   }
 });
+
+test('JSX attribute callbacks gate only when their JSX is consumed', async (t) => {
+  const send = 'const send=()=>{if(enabled)doWork();};';
+  const cases = [
+    ['discarded const, identifier', send + 'const unused=<button onClick={send}/>;return <div/>;', false],
+    ['discarded const, inline arrow', send + 'const unused=<button onClick={()=>send()}/>;return <div/>;', false],
+    ['discarded expression statement', send + '<button onClick={send}/>;return <div/>;', false],
+    ['const returned', send + 'const el=<button onClick={send}/>;return <div>{el}</div>;', true],
+    ['const returned directly, inline arrow', send + 'const el=<button onClick={()=>send()}/>;return el;', true],
+    ['const passed as call argument', send + 'const el=<button onClick={send}/>;render(el);return <div/>;', true],
+    ['conditional in return', send + 'return cond?<button onClick={send}/>:null;', true],
+  ];
+  for (const [name, body, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\ndeclare function render(x: unknown): void;\ndeclare const cond: boolean;\nexport function Widget(){const enabled=useFlag(OTHER_FLAG);' + body + '}\n');
+    const head = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, head, fixture.dir)).pass, expected, name);
+  }
+});
+
+test('only the real React useCallback binds a callback', async (t) => {
+  const body = 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form onSubmit={send}/>;';
+  const head = 'import {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\n';
+  const component = (extra = '') => 'export function Widget(){const enabled=useFlag(OTHER_FLAG);' + extra + body + '}\n';
+  const cases = [
+    ['named import', 'import {useCallback} from "react";\n' + component(), true],
+    ['aliased import', 'import {useCallback as uc} from "react";\n' + component().replace('useCallback(', 'uc('), true],
+    ['default import', 'import React from "react";\n' + component().replace('useCallback(', 'React.useCallback('), true],
+    ['namespace import', 'import * as R from "react";\n' + component().replace('useCallback(', 'R.useCallback('), true],
+    ['local function', 'function useCallback<T>(fn: T, deps: unknown[]): T { return fn; }\n' + component(), false],
+    ['import from another module', 'import {useCallback} from "./other";\n' + component(), false],
+    ['unrelated object method', 'declare const lib: {useCallback<T>(fn: T, deps: unknown[]): T};\n' + component().replace('useCallback(', 'lib.useCallback('), false],
+    ['namespace from another module', 'import * as R from "./other";\n' + component().replace('useCallback(', 'R.useCallback('), false],
+    ['shadowed by local wrapper', 'import {useCallback} from "react";\n' + 'export function Widget(){const enabled=useFlag(OTHER_FLAG);const useCallback=<T,>(fn: T, deps: unknown[])=>fn;' + body + '}\n', false],
+  ];
+  for (const [name, source, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', head + source);
+    const sha = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, sha, fixture.dir)).pass, expected, name);
+  }
+});

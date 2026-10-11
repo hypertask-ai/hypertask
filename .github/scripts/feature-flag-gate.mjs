@@ -191,7 +191,32 @@ function branchesStaticallyEquivalent(left, right) {
   return a.getText() === b.getText();
 }
 
-function functionBindingName(fn) {
+// True when `callee` is React's useCallback: a named import from "react"
+// (aliases allowed) or <namespace/default import of "react">.useCallback.
+function isReactUseCallback(callee, checker) {
+  if (!checker) return false;
+  const isReact = (importDeclaration) => Boolean(importDeclaration &&
+    typescript.isImportDeclaration(importDeclaration) &&
+    typescript.isStringLiteral(importDeclaration.moduleSpecifier) &&
+    importDeclaration.moduleSpecifier.text === "react");
+  if (typescript.isIdentifier(callee)) {
+    const declarations = checker.getSymbolAtLocation(callee)?.declarations ?? [];
+    return declarations.length > 0 && declarations.every((declaration) =>
+      typescript.isImportSpecifier(declaration) &&
+      (declaration.propertyName ?? declaration.name).text === "useCallback" &&
+      isReact(declaration.parent.parent.parent));
+  }
+  if (typescript.isPropertyAccessExpression(callee) && callee.name.text === "useCallback" &&
+      typescript.isIdentifier(callee.expression)) {
+    const declarations = checker.getSymbolAtLocation(callee.expression)?.declarations ?? [];
+    return declarations.length > 0 && declarations.every((declaration) =>
+      (typescript.isNamespaceImport(declaration) && isReact(declaration.parent.parent)) ||
+      (typescript.isImportClause(declaration) && isReact(declaration.parent)));
+  }
+  return false;
+}
+
+function functionBindingName(fn, checker = null) {
   if (fn.name && typescript.isIdentifier(fn.name)) return fn.name;
   if (typescript.isVariableDeclaration(fn.parent) && typescript.isIdentifier(fn.parent.name) &&
       fn.parent.initializer === fn) {
@@ -204,8 +229,7 @@ function functionBindingName(fn) {
   // const send = useCallback(() => {...}, [deps]) binds the callback to `send`.
   const call = fn.parent;
   if (typescript.isCallExpression(call) && call.arguments[0] === fn &&
-      ((typescript.isIdentifier(call.expression) && call.expression.text === "useCallback") ||
-       (typescript.isPropertyAccessExpression(call.expression) && call.expression.name.text === "useCallback")) &&
+      isReactUseCallback(call.expression, checker) &&
       typescript.isVariableDeclaration(call.parent) && typescript.isIdentifier(call.parent.name) &&
       call.parent.initializer === call) {
     return call.parent.name;
@@ -213,12 +237,52 @@ function functionBindingName(fn) {
   return null;
 }
 
-// True when `node` is the value of a JSX attribute: onClick={node}.
-function isJsxAttributeValue(node) {
+// True when the JSX holding `node` is consumed: reached through the returned
+// expression, an argument of a call, or a const that is itself consumed.
+function jsxResultIsConsumed(node, checker, seen = new Set()) {
+  let child = node;
+  for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
+    if (typescript.isReturnStatement(parent)) return true;
+    if (typescript.isArrowFunction(parent)) return child === parent.body;
+    if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
+        parent.arguments?.includes(child)) return true;
+    if (typescript.isVariableDeclaration(parent)) {
+      if (parent.initializer !== child || !typescript.isIdentifier(parent.name)) return false;
+      const symbol = checker.getSymbolAtLocation(parent.name);
+      if (!symbol || seen.has(symbol)) return false;
+      seen.add(symbol);
+      let consumed = false;
+      (function find(item) {
+        if (consumed) return;
+        if (typescript.isIdentifier(item) && item !== parent.name &&
+            checker.getSymbolAtLocation(item) === symbol &&
+            jsxResultIsConsumed(item, checker, seen)) {
+          consumed = true;
+          return;
+        }
+        typescript.forEachChild(item, find);
+      })(node.getSourceFile());
+      return consumed;
+    }
+    if (typescript.isParenthesizedExpression(parent) || typescript.isAsExpression(parent) ||
+        typescript.isNonNullExpression(parent) || typescript.isSatisfiesExpression(parent) ||
+        typescript.isTypeAssertionExpression(parent) || typescript.isConditionalExpression(parent) ||
+        typescript.isBinaryExpression(parent) || typescript.isJsxExpression(parent) ||
+        typescript.isJsxElement(parent) || typescript.isJsxFragment(parent) ||
+        typescript.isJsxAttribute(parent) || typescript.isJsxAttributes(parent) ||
+        typescript.isJsxOpeningElement(parent) || typescript.isJsxSelfClosingElement(parent) ||
+        typescript.isArrayLiteralExpression(parent) || typescript.isSpreadElement(parent)) continue;
+    return false;
+  }
+  return false;
+}
+
+// True when `node` is the value of a JSX attribute (onClick={node}) in JSX that is consumed.
+function isJsxAttributeValue(node, checker) {
   let child = node;
   while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
   return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
-    typescript.isJsxAttribute(child.parent.parent));
+    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker));
 }
 
 function isExportedVariableStatement(statement) {
@@ -402,7 +466,7 @@ function collectLiveFunctions(sourceFile, checker) {
   const identifierExports = identifierDefaultExportFunctions(sourceFile, checker);
   const writtenSymbols = writtenBindingSymbols(sourceFile, checker);
   const reboundFunctions = new Set(functions.filter((fn) => {
-    const name = functionBindingName(fn);
+    const name = functionBindingName(fn, checker);
     return name && writtenSymbols.has(checker.getSymbolAtLocation(name));
   }));
   // Export recognition remains intact for the ungated-sibling check, but a
@@ -410,7 +474,7 @@ function collectLiveFunctions(sourceFile, checker) {
   const live = new Set(functions.filter((fn) => !reboundFunctions.has(fn) && isExportedUiEntry(fn, identifierExports)));
   const functionBySymbol = new Map();
   for (const fn of functions) {
-    const name = functionBindingName(fn);
+    const name = functionBindingName(fn, checker);
     const symbol = name && checker.getSymbolAtLocation(name);
     if (symbol && !writtenSymbols.has(symbol)) functionBySymbol.set(symbol, fn);
   }
@@ -458,13 +522,13 @@ function collectLiveFunctions(sourceFile, checker) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxAttributeValue(fn) || !isLiveCallSite(fn, live)) continue;
+      if (live.has(fn) || !isJsxAttributeValue(fn, checker) || !isLiveCallSite(fn, live)) continue;
       live.add(fn);
       changed = true;
     }
     for (const fn of functions) {
       if (live.has(fn) || reboundFunctions.has(fn)) continue;
-      const name = functionBindingName(fn);
+      const name = functionBindingName(fn, checker);
       if (!name) continue;
       const symbol = checker.getSymbolAtLocation(name);
       if (!symbol) continue;
@@ -478,7 +542,7 @@ function collectLiveFunctions(sourceFile, checker) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxAttributeValue(node) &&
+        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker) &&
             checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
           referenced = true;
           return;
