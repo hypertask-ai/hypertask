@@ -28,8 +28,11 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   launcher=()
   # Group setup and its foreground jobs so down also cancels a queued build.
   if [ "$action" = up ]; then launcher=(setsid --wait); fi
-  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
+  exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" PREMERGE_NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
+# A 3 GB Node heap keeps next build and next start under the 6 GB watchdog limit (YPER4-302);
+# set PREMERGE_NODE_OPTIONS to override.
+export NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:---max-old-space-size=3072}"
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
   exec python3 "$root/scripts/proc-watchdog.py" "$action"
 fi

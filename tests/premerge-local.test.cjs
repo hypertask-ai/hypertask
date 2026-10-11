@@ -26,7 +26,9 @@ test('premerge-local defaults to up, clears inherited secrets and refuses env fi
     copyFileSync(script, candidate);
     writeFileSync(path.join(root, '.env'), 'DATABASE_URL=must-not-be-read\n');
     writeFileSync(path.join(root, 'bin/docker'), `#!/bin/sh
-[ -z "\$DATABASE_URL\$SESSION_SECRET\$VERCEL_TOKEN\$NODE_OPTIONS" ] || exit 19
+[ -z "\$DATABASE_URL\$SESSION_SECRET\$VERCEL_TOKEN" ] || exit 19
+# Only the script's own heap default may reach child tools, never the inherited value (YPER4-302).
+[ "\$NODE_OPTIONS" = "--max-old-space-size=3072" ] || exit 19
 [ "$1" = info ] && exit 0
 exit 20
 `, { mode: 0o755 });
