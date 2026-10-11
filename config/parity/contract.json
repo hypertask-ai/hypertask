@@ -40,9 +40,16 @@
           "^GET /api/mcp/tasks/\\[taskId\\]/agent-activity$"
         ],
         "mcp": ["^hypertask_(agent_presence|list_agents)$"],
-        "cli": ["^presence$", "^agents list$"],
+        "cli": ["^presence$", "^agents list$", "^agents get$", "^agents archive$"],
         "ai_chat": ["^hypertask_(agent_presence|ask_agent)$", "^hypertask_list_agents$"],
         "hyperai": ["^hypertask_(agent_presence|list_agents)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agents get", "agents archive"]
+        }
       }
     },
     {
@@ -181,9 +188,16 @@
       "matches": {
         "api": ["^(GET|POST) /api/mcp/tasks/(next|lease/(claim|heartbeat|release)|session)$"],
         "mcp": ["^hypertask_next_tasks$"],
-        "cli": ["^task next$"],
+        "cli": ["^task next$", "^agent new-tickets$", "^agent poll$"],
         "ai_chat": ["^hypertask_next_tasks$"],
         "hyperai": ["^hypertask_next_tasks$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agent new-tickets", "agent poll"]
+        }
       }
     },
     {
@@ -192,9 +206,16 @@
       "matches": {
         "api": ["^(POST|PATCH) /api/mcp/tasks/(create|update|move|batch|escalate)$", "^POST /api/mcp/tasks/card-actions$"],
         "mcp": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
-        "cli": ["^task (create|update|move|move-board)$"],
+        "cli": ["^task (create|update|move|move-board)$", "^agent move$"],
         "ai_chat": ["^hypertask_(create_task|update_task|move_task_between_boards)$"],
         "hyperai": ["^hypertask_(create_task|update_task|move_task_between_boards)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agent move"]
+        }
       }
     },
     {
@@ -203,9 +224,16 @@
       "matches": {
         "api": ["^POST /api/mcp/(assignees/assign|tasks/attachments)$", "^GET /api/mcp/tasks/attachments$"],
         "mcp": ["^hypertask_(assign_user|attach_files)$"],
-        "cli": ["^task (assign|unassign)$"],
+        "cli": ["^task (assign|unassign)$", "^agent drop$", "^agent hand$", "^agent take$"],
         "ai_chat": ["^hypertask_(assign_user|unassign_user|attach_files)$"],
         "hyperai": ["^hypertask_(assign_user|attach_files)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agent drop", "agent hand", "agent take"]
+        }
       }
     },
     {
@@ -249,9 +277,16 @@
       "matches": {
         "api": ["^(POST|PATCH) /api/mcp/projects$", "^PATCH /api/mcp/projects/\\[projectId\\]$", "^(POST|PATCH) /api/mcp/projects/archive$", "^(GET|PUT|DELETE) /api/mcp/projects/\\[projectId\\]/instructions$", "^POST /api/mcp/projects/\\[projectId\\]/members$", "^POST /api/mcp/teams/\\[teamId\\]/boards$", "^PUT /api/mcp/projects/\\[projectId\\]/playbook$"],
         "mcp": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
-        "cli": ["^project (create-board|archive|invite|instructions)( |$)"],
+        "cli": ["^project (create-board|archive|invite|instructions)( |$)", "^project delete$", "^project update$"],
         "ai_chat": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"],
         "hyperai": ["^hypertask_(create_board|project_admin|board_config)$", "^hypertask_rename_board$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["project delete", "project update"]
+        }
       }
     },
     {
@@ -293,9 +328,16 @@
       "matches": {
         "api": ["^(GET|POST|PATCH|DELETE) /api/mcp/comments($|/\\[comment_id\\]$)", "^POST /api/mcp/comments/\\[comment_id\\]/reactions$"],
         "mcp": ["^hypertask_(get_comments_for_task|add_comment_to_task|update_comment|delete_comment)$"],
-        "cli": ["^comment (list|add|update|delete)$"],
+        "cli": ["^comment (list|add|update|delete)$", "^agent say$", "^comment react$", "^comment unreact$"],
         "ai_chat": ["^hypertask_(get_comments_for_task|add_comment|update_comment|delete_comment)$"],
         "hyperai": ["^hypertask_(get_comments_for_task|add_comment_to_task|update_comment|delete_comment)$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agent say", "comment react", "comment unreact"]
+        }
       }
     },
     {
@@ -451,10 +493,22 @@
           "^webhook test$",
           "^webhook replay$",
           "^webhook rotate-secret$",
-          "^webhook delete$"
+          "^webhook delete$",
+          "^agent dev$",
+          "^agent replay$",
+          "^agents webhook configure$",
+          "^agents webhook get$",
+          "^agents webhook rotate-secret$"
         ],
         "ai_chat": ["^hypertask_agent_webhook$"],
         "hyperai": ["^hypertask_agent_webhook$"]
+      },
+      "planned": {
+        "cli": {
+          "issue": "https://app.hypertask.ai/detail/project-15/7113",
+          "expires": "2026-11-05",
+          "entries": ["agent dev", "agent replay", "agents webhook configure", "agents webhook get", "agents webhook rotate-secret"]
+        }
       }
     },
     {
