@@ -18,13 +18,13 @@ test("local browser smoke persists per-flag defaults and respects flag overrides
     let saved;
     let invalidations = 0;
     const run = new (Object.getPrototypeOf(async function () {}).constructor)(
-      "jiti", "path", "root", "process", "localFlagModes", "readPlainQaFlags", "writeFile", "stateFile", "prisma", "withFlagModeInvalidation",
+      "jiti", "path", "root", "process", "localFlagModes", "readPlainQaFlags", "QA_ACCOUNT_STATE", "writeFile", "stateFile", "prisma", "withFlagModeInvalidation",
       `const allFlagsOn = false, liveLikeControl = false, localPremerge = true; let modes = {};\n${source.slice(start, end)}\nreturn modes;`,
     );
     const modes = await run(
       () => ({ FEATURE_FLAG_KEYS: Object.keys(defaults), defaultFeatureFlagMode: key => defaults[key] }),
       path, root, { argv: ["node", "seed-browser-smoke.mjs", ...overrides] }, localFlagModes,
-      async () => ({ released: true, bugfix: false }),
+      async state => state === "qa-account-state" ? {} : ({ released: true, bugfix: false }), "qa-account-state",
       async (_file, content) => { saved = JSON.parse(content).modes; }, path.join(root, "e2e/smoke/.state/test/state.json"),
       { featureFlag: { upsert: async ({ where, create, update }) => {
         assert.equal(create.key, where.key);
