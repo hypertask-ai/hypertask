@@ -3,8 +3,6 @@ import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { hashApiKey } from '@/lib/apiKeys';
-import { auth } from '@/lib/auth/betterAuth';
-import { getSessionUser } from '@/lib/auth/getSessionUser';
 import { hasAnyManagementPermission, hasDataPermission, hasManagementReadPermission, hasManagementWritePermission, hasUsageReadPermission, parseManagementPermissions } from '@/lib/mcp/managementPermissions';
 import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry';
 import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -260,6 +258,7 @@ export async function validateManagementOrSessionAuth(
   // browser session. Session auth is a fallback only when no bearer was sent.
   if (request.headers.has('Authorization')) return null
 
+  const { getSessionUser } = await import('@/lib/auth/getSessionUser')
   const session = await getSessionUser(request.headers)
   if (!session) return null
 
@@ -285,6 +284,7 @@ export async function validateManagementOrSessionAuth(
 
 export async function validateManagementApiKey(token: string): Promise<McpAuthContext | null> {
   try {
+    const { auth } = await import('@/lib/auth/betterAuth')
     const result = await auth.api.verifyApiKey({
       body: {
         key: token,
