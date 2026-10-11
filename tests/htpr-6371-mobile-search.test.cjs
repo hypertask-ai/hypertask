@@ -156,3 +156,10 @@ test('real input, composition and native beforeinput events complete phone chips
     dom.window.close()
   }
 })
+
+
+test('phone overlay omits Bootstrap important margins instead of trying to override them inline', () => {
+  assert.match(input, /mobileOverlay \? "bg-containerBackground" : "mt-4"/)
+  assert.match(input, /mobileOverlay \? "min-h-\[44px\] h-11 truncate bg-containerBackground" : "mt-2"/)
+  assert.doesNotMatch(input, /className=\{`mt-[24] [^`]*mobileOverlay/)
+})

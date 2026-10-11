@@ -495,7 +495,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       </div>
       {open && layoutFlagEnabled && layoutRequested && autocompleteEnabled ? (
         <div ref={pickerRef} id={listId} role="listbox" aria-label="Search suggestions" data-search-layout
-          style={pickerStyle} className={`mt-4 w-full min-w-0 ${mobileOverlay ? "bg-containerBackground" : ""}`} onMouseDown={(event) => event.preventDefault()}>
+          style={pickerStyle} className={`w-full min-w-0 ${mobileOverlay ? "bg-containerBackground" : "mt-4"}`} onMouseDown={(event) => event.preventDefault()}>
           {tips ? <>
             <h2 className="mb-2 text-meta font-medium text-text-light-gray">Recent searches</h2>
             {rows.filter((row) => row.kind === 'recent').map((row) => renderRow(row, rows.indexOf(row)))}
@@ -529,7 +529,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       {!picker && hydrationStatus && <div role={hydrationStatus === 'error' ? 'alert' : 'status'} className="mt-2 text-content text-text-light-gray">{hydrationStatus === 'error' ? 'Could not rebuild search filters. Reload to retry.' : 'Loading search filters...'}</div>}
       {summary && (!layoutEnabled || mobileOverlay) && <button type="button"
         style={mobileOverlay && mobileBounds ? { position: 'fixed', top: mobileBounds.summaryTop, left: mobileBounds.left, width: mobileBounds.width, marginTop: 0, zIndex: 301 } : undefined}
-        className={`mt-2 block text-left text-content text-white-black hover:bg-active-elementBg ${mobileOverlay ? "min-h-[44px] h-11 truncate bg-containerBackground" : ""}`}
+        className={`block text-left text-content text-white-black hover:bg-active-elementBg ${mobileOverlay ? "min-h-[44px] h-11 truncate bg-containerBackground" : "mt-2"}`}
         onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}
         onKeyDown={(event) => { if (event.key === 'Enter') event.stopPropagation(); }} onClick={mobileEnabled ? runSearch : () => onRun(value)}>Show results for: {summary}</button>}
     </div>
