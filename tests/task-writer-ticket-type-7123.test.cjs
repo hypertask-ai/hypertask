@@ -85,13 +85,14 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     "@/lib/mcp/routeWrapper": { wrapMcpRoute: (handler) => handler, validateMcpRouteAuth: async () => ({ user: { id: 985 } }), checkMcpRouteRateLimit: async () => null },
     "@/lib/mcp/auth": {}, "@/lib/ai/taskWriterDuplicateGuard": { taskTitleFromBrief: () => "Research Paperclip" },
     "@/lib/errors/reportError": { reportError: async () => {} },
+    "@/lib/ai/taskWriterTicketType": load(path.join(root, "src/lib/ai/taskWriterTicketType.ts")),
   };
   async function post(kind) {
     const route = moduleWithStubs(kind === "app" ? "src/app/api/ai/task-writer/route.ts" : "src/app/api/mcp/ai/task-writer/route.ts", stubs);
     const body = kind === "mcp" ? { project_id: 7123, prompt: "Analyze Paperclip", mode }
       : { projectId: 7123, PROMPT: "Analyze Paperclip", aiMode: mode === "task_writer" ? "AiTaskWriter" : "WriteWithAI", ...(requestKind ? { requestKind } : {}) };
     const response = await route.POST({ json: async () => body });
-    return { status: response.status, content: await response.text() };
+    return { status: response.status, content: await response.text(), headers: response.headers };
   }
   return { post, checks, calls };
 }
@@ -155,11 +156,45 @@ test("Ctrl+J compose path: sends AiTaskWriter with compose-task and gets the rul
   assert.ok(!off.calls[0].instructions.includes(RULE));
 });
 
-test("Ctrl+J compose path: the column and labels never come from the model output", () => {
+test("Ctrl+J compose path: only the validated ticket type can move the column, never the model's status or tags", () => {
   const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
   assert.doesNotMatch(compose, /ai-generated-task-(status|tags)/);
-  assert.match(compose, /sectionId: defaults\?\.data\.sectionId/);
+  assert.match(compose, /typedSection \? typedSection\.id : defaults\?\.data\.sectionId/);
   assert.match(compose, /\.\.\.taskFields/);
+});
+
+const MARKER = "TICKET TYPE MARKER";
+const typeSpan = (value) => `<span id="ai-generated-task-type" style="display:none">${value}</span>`;
+
+test("compose-task with the flag on asks for the type marker and announces it with a header", async () => {
+  const h = harness({ enabled: true, output: draft + typeSpan("improvement"), requestKind: "compose-task" });
+  const r = await h.post("app");
+  assert.ok(h.calls[0].instructions.includes(MARKER));
+  assert.equal(r.headers.get("X-Task-Writer-Ticket-Type"), "enabled");
+  assert.ok(r.content.endsWith(typeSpan("improvement")));
+});
+
+test("the server keeps only a valid type and drops junk, so compose never sees one", async () => {
+  const junk = await harness({ enabled: true, output: draft + typeSpan("chore"), requestKind: "compose-task" }).post("app");
+  assert.ok(!junk.content.includes("ai-generated-task-type"));
+  assert.ok(junk.content.startsWith('<h1 id="ai-generated-task-title">Agents react with emoji</h1>'));
+  const none = await harness({ enabled: true, output: draft, requestKind: "compose-task" }).post("app");
+  assert.equal(none.content, draft);
+  const messy = await harness({ enabled: true, output: draft + typeSpan("Bug") + typeSpan("feature"), requestKind: "compose-task" }).post("app");
+  assert.ok(messy.content.endsWith(typeSpan("bug")));
+  assert.equal(messy.content.split("ai-generated-task-type").length - 1, 1);
+});
+
+test("flag off or not a compose request: no marker prompt, no header, output untouched", async () => {
+  const off = harness({ enabled: false, output: draft + typeSpan("improvement"), requestKind: "compose-task" });
+  const offResult = await off.post("app");
+  assert.ok(!off.calls[0].instructions.includes(MARKER));
+  assert.equal(offResult.headers.get("X-Task-Writer-Ticket-Type"), null);
+  assert.equal(offResult.content, draft + typeSpan("improvement"));
+  const manual = harness({ enabled: true, output: draft });
+  const manualResult = await manual.post("app");
+  assert.ok(!manual.calls[0].instructions.includes(MARKER));
+  assert.equal(manualResult.headers.get("X-Task-Writer-Ticket-Type"), null);
 });
 
 test("flag is a bugfix flag that defaults to Everyone", () => {

@@ -33,6 +33,7 @@ import {
   formatTaskWriterRetrievedContext,
   TASK_WRITER_RESEARCH_REQUEST_RULE,
   TASK_WRITER_TICKET_TYPE_RULE,
+  TASK_WRITER_TICKET_TYPE_MARKER,
 } from "@/app/api/ai/_lib/taskWriterPrompt";
 import {
   buildTaskWriterRetrievalQuery,
@@ -369,8 +370,14 @@ export async function prepareTaskWriterRun(
     suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
   // HTPR-7123: tell improvements and features apart from bugs, after the cached fixed part.
+  let ticketTypeEnabled = false;
   if (body.aiMode === "AiTaskWriter" && (await isFeatureEnabled(HTPR_7123_WRITER_TICKET_TYPE_FLAG, userId))) {
     suffix += `\n\n${TASK_WRITER_TICKET_TYPE_RULE}`;
+    // Ctrl+J creating a new ticket also states the type, so compose can pick the matching column.
+    if (body.requestKind === "compose-task" && body.existingTaskId == null) {
+      ticketTypeEnabled = true;
+      suffix += `\n\n${TASK_WRITER_TICKET_TYPE_MARKER}`;
+    }
   }
   const instructions = await cachedInstructionsForUser(userId, {
     modelId: selected.modelId,
@@ -400,6 +407,7 @@ export async function prepareTaskWriterRun(
     skills: skillResolution.skills,
     usageTaskId,
     dueDateContext,
+    ticketTypeEnabled,
   };
 }
 

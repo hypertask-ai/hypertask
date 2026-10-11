@@ -263,6 +263,7 @@ function routeStubs(error, reports) {
     "node-html-parser": require("node-html-parser"),
     "@/utils/htmlEscape": {},
     "@/lib/ai/taskWriterDueDate": {},
+    "@/lib/ai/taskWriterTicketType": {},
     "ai": { generateText: async () => { throw error; } },
     "@/lib/errors/reportError": { reportError: async (payload) => reports.push(payload) },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },

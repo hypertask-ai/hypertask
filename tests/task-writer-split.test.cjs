@@ -12,6 +12,7 @@ const flag = "htpr-7056-ctrlj-split-tasks";
 const dueDateFlag = "htpr-7054-ctrlj-due-date";
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const dates = jiti(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
+const ticketTypes = jiti(path.join(root, "src/lib/ai/taskWriterTicketType.ts"));
 const { escapeHtml } = jiti(path.join(root, "src/utils/htmlEscape.ts"));
 const multiPrompt = "Create three separate tasks: focus search with a shortcut, export CSV, and fix the settings typo.";
 const drafts = ["Focus search", "Export CSV", "Fix settings typo"].map(title => ({ title, description: `<p>${title}</p>` }));
@@ -44,7 +45,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     zod: { z }, "@/lib/flags": flags,
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: dueDateFlag },
-    "@/lib/ai/taskWriterDueDate": dates,
+    "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}), taskWriteAccessWhere: () => ({}) },
     "@/lib/ai/composeTaskTarget": { isEmptyComposeTarget: () => true },
     "@/app/api/ai/_lib/editorAi": editor,
@@ -65,7 +66,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
     zod: { z },
-    "@/lib/ai/taskWriterDueDate": dates,
+    "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": { escapeHtml },
     ai: {
       Output,
@@ -84,6 +85,7 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/app/api/ai/_lib/taskWriterProperties": { extractTaskWriterProperties: html => ({ description: html }), hasUsableTaskWriterDraft: () => true, TASK_WRITER_EMPTY_DRAFT_MESSAGE: "" },
   });
   const composer = load("src/lib/ai/composeTask.ts", {
+    "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/lib/media/browserRenderableImage": { isBrowserRenderableImage: () => false },
     axios: { default: { get: async () => ({ data: { sectionId: 12, section: "Todo", ranking: "a" } }) } },
     "@/lib/constants/APIRouteConstants": { taskWriterRoute: "/api/ai/task-writer" },

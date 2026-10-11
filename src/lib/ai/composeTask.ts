@@ -11,6 +11,7 @@ import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, ret
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 
 export function composeTaskBoardId(
@@ -78,7 +79,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: { title: string; description: string; writerDueDate?: string }[] = [];
+  let drafts: { title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType }[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     const media = extractTaskWriterMedia(rawDescription, createTaskWriterMediaTokenFactory(rawDescription, text));
@@ -132,6 +133,8 @@ export async function createComposedTask({
     } else {
       html = await response.text();
     }
+    // HTPR-7123: only a server that announced the ticket type is read for it.
+    const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
     // This endpoint streams raw HTML on success, but SSE error frames can arrive
     // after a 200. A partial answer must not be mistaken for a completed ticket.
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
@@ -146,17 +149,20 @@ export async function createComposedTask({
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
         }
-        return { title: draft.title, description: draft.description,
+        const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
+        return { title: draft.title, description: typed ? typed.html : draft.description,
+          ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const written = extractTitleAndDescription(html);
+      const typed = typedWriter ? readTaskWriterTicketType(html) : null;
+      const written = extractTitleAndDescription(typed ? typed.html : html);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}) }];
+      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
@@ -193,13 +199,18 @@ export async function createComposedTask({
   }
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
+  // HTPR-7123: a column the view filters on is the user's choice; otherwise the type picks the column.
+  const viewPicksColumn = !!filters?.addedFilters.some((filter) => filter.type === "Status");
   for (const [index, draft] of drafts.entries()) {
+    const typedSection = !existingTaskId && !viewPicksColumn
+      ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
     try {
       const created = await createNewTaskGloballyAPIHandler({
         userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
         title: draft.title, ...{ description: draft.description },
-        sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
-        ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
+        sectionId: typedSection ? typedSection.id : defaults?.data.sectionId,
+        section_title: typedSection ? typedSection.title : defaults?.data.section,
+        ranking: typedSection ? undefined : defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
         ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });

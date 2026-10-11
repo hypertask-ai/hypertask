@@ -105,6 +105,13 @@
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   },
   {
+    "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
+    "id": "task-writer-ticket-type-marker",
+    "version": "1",
+    "partsHash": "19da74b2e7bb5a0f7d01b2971c4df15bce29d15d573e12488e561535d1b5a35a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
     "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
     "id": "task-writer-board-research-rules",
     "version": "1",

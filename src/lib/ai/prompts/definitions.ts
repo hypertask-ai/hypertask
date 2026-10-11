@@ -362,6 +362,12 @@ If yes, send.`],
 - A request for new or better behavior is an improvement (a change to something that exists) or a feature (a whole new capability). Never label it a bug, and never put it in a Bugs column. Use the improvement or feature label or column when the board has one; otherwise leave the tag and status out.
 - When you are unsure whether it is a defect, do not call it a bug.`],
   },
+  "task-writer-ticket-type-marker": {
+    id: "task-writer-ticket-type-marker",
+    version: "1",
+    parts: [`<h3>TICKET TYPE MARKER</h3>
+- End the output with one hidden span that states the ticket type you decided above: <span id="ai-generated-task-type" style="display:none">improvement</span>. The value is exactly one of bug, improvement or feature. For structured tasks, put this span at the end of each task's description.`],
+  },
   "task-writer-board-research-rules": {
     id: "task-writer-board-research-rules",
     version: "1",
