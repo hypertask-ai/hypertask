@@ -144,6 +144,8 @@ function loadRoute(comments) {
   loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request);
+  stubs["@/lib/mcp/comments/visibleReactionAgents"] =
+    require("./helpers/visible-reaction-agents.cjs").loadVisibleReactionAgentsModule(loaded.require);
   loaded._compile(javascript, routePath);
   return { GET: loaded.exports.GET, getQuery: () => commentFindManyQuery };
 }

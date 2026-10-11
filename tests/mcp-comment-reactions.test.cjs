@@ -284,6 +284,8 @@ function loadCommentsRoute({
     if (modules[request]) return modules[request]
     throw new Error(`Unexpected import: ${request}`)
   }
+  modules['@/lib/mcp/comments/visibleReactionAgents'] =
+    require('./helpers/visible-reaction-agents.cjs').loadVisibleReactionAgentsModule(mockRequire)
 
   new Function('module', 'exports', 'require', routeJavascript)(
     routeModule,

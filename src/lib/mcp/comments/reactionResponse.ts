@@ -93,6 +93,30 @@ export function mapMcpCommentReaction(
   }
 }
 
+/**
+ * A reaction write's rows as the caller may see them. The write is already
+ * committed, so a failed agent lookup only hides every agent as "Private agent";
+ * it never fails the request.
+ */
+export async function mapReactionWriteResult<
+  T extends { reaction: McpCommentReactionRecord | null; reactions: McpCommentReactionRecord[] }
+>(
+  result: T,
+  loadVisibleAgents: (agentIds: string[]) => Promise<VisibleReactionAgents>
+): Promise<Omit<T, 'reaction' | 'reactions'> & { reaction: McpCommentReaction | null; reactions: McpCommentReaction[] }> {
+  let visibleAgents: VisibleReactionAgents = new Map()
+  try {
+    visibleAgents = await loadVisibleAgents(reactionAgentIds([{ reactions: result.reactions }]))
+  } catch (error) {
+    console.error('[comment-reaction] agent visibility lookup failed', error)
+  }
+  return {
+    ...result,
+    reaction: result.reaction && mapMcpCommentReaction(result.reaction, visibleAgents),
+    reactions: result.reactions.map((row) => mapMcpCommentReaction(row, visibleAgents)),
+  }
+}
+
 /** The distinct agent ids behind agent reactions in these comments. */
 export function reactionAgentIds(
   comments: ReadonlyArray<{ reactions?: ReadonlyArray<{ agentId?: string | null }> }>

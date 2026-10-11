@@ -124,8 +124,39 @@ test("the MCP route reacts as the calling agent and names it on the inbox notifi
   assert.match(route, /fromAgentId: agentId/);
   assert.doesNotMatch(route, /where: \{ commentId: target\.commentId, userId, unified \}/);
   // The write response names only agents the caller may see, like the comment reads.
-  assert.match(route, /loadVisibleReactionAgents\(\s*reactionAgentIds\(\[\{ reactions: result\.reactions \}\]\)/);
-  assert.match(route, /reactions: result\.reactions\.map\(\(row\) => mapMcpCommentReaction\(row, visibleAgents\)\)/);
+  assert.match(route, /return mapReactionWriteResult\(result, \(agentIds\) =>\s*loadVisibleReactionAgents\(agentIds, userId, target\.projectId\)/);
+});
+
+test("a reaction write response hides agents, and survives a rejected agent lookup", async () => {
+  const { mapReactionWriteResult } = loadTs("src/lib/mcp/comments/reactionResponse.ts");
+  const agentRow = { id: "r1", emoji: "👍", userId: 6, agentId: RUNNER.id, agentDisplayName: "Runner 5" };
+  const human = { id: "r2", emoji: "👍", userId: 7, agentId: null, agentDisplayName: null };
+  const result = { changed: true, reaction: agentRow, reactions: [agentRow, human] };
+
+  const seen = [];
+  const visible = await mapReactionWriteResult(result, async (ids) => {
+    seen.push(ids);
+    return new Map([[RUNNER.id, "Runner 5"]]);
+  });
+  assert.deepEqual(seen, [[RUNNER.id]]);
+  assert.equal(visible.changed, true);
+  assert.deepEqual(visible.reaction.agent, { id: RUNNER.id, displayName: "Runner 5" });
+
+  const hidden = await mapReactionWriteResult(result, async () => new Map());
+  assert.deepEqual(hidden.reaction.agent, { displayName: "Private agent" });
+  assert.equal(JSON.stringify(hidden).includes(RUNNER.id), false);
+  assert.equal(JSON.stringify(hidden).includes("Runner 5"), false);
+
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    const failed = await mapReactionWriteResult(result, async () => { throw new Error("db down"); });
+    assert.equal(failed.changed, true);
+    assert.deepEqual(failed.reactions.map((row) => row.agent ?? null), [{ displayName: "Private agent" }, null]);
+    assert.equal(JSON.stringify(failed).includes("Runner 5"), false);
+  } finally {
+    console.error = originalError;
+  }
 });
 
 test("MCP reads mark an agent reaction and never attach the owner's user", () => {
