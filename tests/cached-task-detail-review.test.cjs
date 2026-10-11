@@ -43,6 +43,9 @@ test("creator hydration enables description quoting without changing the frozen 
     "../ContextMenu": { HighlightMenu },
     "../ContextMenu/QuoteButton": { __esModule: true, default: QuoteButton },
     "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": { __esModule: true, default: Editor },
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (content) => content },
     "./InnerHtmlDescription": { __esModule: true, default: noop },

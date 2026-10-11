@@ -143,6 +143,9 @@ async function fixture(t, { mobile = true, hasDraft = false, hasDraftInit = fals
     "../ContextMenu": { HighlightMenu: () => null },
     "../ContextMenu/QuoteButton": () => null,
     "@/components/RTE/TipTapTaskDetail": Editor,
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": Editor,
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": () => null,
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: content => content },
     "@/hooks/useFlag": { useFlag: () => true },

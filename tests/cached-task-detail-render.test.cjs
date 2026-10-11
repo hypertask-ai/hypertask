@@ -150,6 +150,7 @@ test("description paints cached content and drafts before constructing the rich 
   const noop = () => null;
   let secondaryPanelsReady = false;
   let editorMounts = 0;
+  const Editor = () => { editorMounts++; return React.createElement("div", null, "Editor ready"); };
   const mocks = {
     "react": React,
     "react/jsx-runtime": require("react/jsx-runtime"),
@@ -163,7 +164,10 @@ test("description paints cached content and drafts before constructing the rich 
     "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: (draft) => Boolean(draft.content) },
     "../ContextMenu": { HighlightMenu: noop },
     "../ContextMenu/QuoteButton": { __esModule: true, default: noop },
-    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: () => { editorMounts++; return React.createElement("div", null, "Editor ready"); } },
+    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": { __esModule: true, default: Editor },
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (content) => content },
     "./InnerHtmlDescription": { __esModule: true, default: ({ id, descriptionText }) => React.createElement("div", { id, dangerouslySetInnerHTML: { __html: descriptionText } }) },
