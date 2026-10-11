@@ -7,6 +7,8 @@ const ts = require("typescript");
 const React = require("react");
 const { renderToStaticMarkup } = require("react-dom/server");
 
+const { loadSharedRoute } = require("./helpers/groupb-route.cjs");
+
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
@@ -19,13 +21,18 @@ function load(file, stubs = {}) {
   mod.filename = filename;
   mod.require = request => {
     if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
-    if (request === "@/lib/api/task-writes/route") return { withTaskWriteFlag: (handler) => handler };
+    if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (Object.hasOwn(stubs, request)) return stubs[request];
-    if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
+    if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
   };
   mod._compile(javascript, filename);
   return mod.exports;
+}
+// Pages-style handler: the real task-write adapter around the shared project route.
+function loadPagesRoute(sharedFile, stubs) {
+  const shared = load(sharedFile, stubs);
+  return loadSharedRoute(stubs["@/lib/auth/getSessionUser"].getSessionUser).taskWriteHandler({ POST: async () => shared.POST });
 }
 const jiti = require("jiti")(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { getSequentialLetters } = jiti(path.join(root, "src/utils/helperFunctions/helperFunctions.ts"));
@@ -198,12 +205,12 @@ test("migration provides cascade, per-board uniqueness and indexed historical pr
 });
 test("update route uses the safe controller with the authenticated caller", async () => {
   const f = writes();
-  const route = load("src/pages/api/projects/update.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/update.ts", {
     "@/utils/controllers/projects/update": f.controller,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async id => ({ id }) },
-  }).default;
-  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; }, setHeader() {} };
   await route({ method: "POST", headers: {}, body: { projectId: 15, title: "Board", uniqueIdentifier: "NEW", userId: 99 } }, res);
   assert.equal(res.code, 200);
   assert.equal(f.aliases.length, 1);
@@ -374,11 +381,11 @@ test("create unique prefix rejects legacy lowercase and mixed-case board prefixe
 });
 test("create route cannot spoof an enabled user's identity to bypass the flag", async () => {
   const calls = [];
-  const route = load("src/pages/api/projects/create.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/create.ts", {
     "@/utils/controllers/projects/create": { __esModule: true, default: async (...args) => { calls.push(args); return { status: 200, json: {} }; } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 2343 }) },
-  }).default;
-  const res = { status() { return this; }, json() {} };
+  });
+  const res = { status() { return this; }, json() {}, setHeader() {} };
   await route({ method: "POST", headers: {}, body: { userId: 6, title: "Board", teamId: "team", googleAccountId: "account", ticketPrefix: "NEW" } }, res);
   assert.deepEqual(calls[0], [2343, "Board", "team", "account", "NEW"]);
 });
@@ -395,7 +402,7 @@ test("move numbering after permanent deletion uses MAX plus one, not count", asy
   assert.doesNotMatch(source, /taskCount|getUniqueTaskCount/);
 });
 test("transaction locks and fresh prefix reads protect concurrent create and move writes", () => {
-  for (const file of ["src/utils/controllers/tasks/create.ts", "src/pages/api/tasks/createGlobally.ts"]) {
+  for (const file of ["src/utils/controllers/tasks/create.ts", "src/lib/api/task-writes/create-global.ts"]) {
     const source = read(file);
     assert.ok(source.indexOf("pg_advisory_xact_lock") < source.indexOf("await tx.project.findUnique"));
     assert.match(source, /await tx.project.findUnique/);
@@ -716,12 +723,12 @@ test("review: prefix-only patch submits no title and preserves a concurrent rena
   assert.deepEqual(posts[0], ["/api/projects/update", { projectId: 15, uniqueIdentifier: "NEW" }]);
   const f = writes();
   f.board.title = "Renamed by another user";
-  const route = load("src/pages/api/projects/update.ts", {
+  const route = loadPagesRoute("src/lib/api/project-writes/update.ts", {
     "@/utils/controllers/projects/update": f.controller,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: async id => ({ id }) },
-  }).default;
-  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; } };
+  });
+  const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; }, setHeader() {} };
   await route({ method: "POST", headers: {}, body: posts[0][1] }, res);
   assert.equal(res.code, 200);
   assert.equal(f.board.title, "Renamed by another user");

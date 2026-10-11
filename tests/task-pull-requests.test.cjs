@@ -21,9 +21,7 @@ const {
   linkTaskPullRequest,
   PullRequestLinkError,
 } = jiti(path.join(root, "src/lib/pullRequests/taskPullRequests.ts"));
-const { createLinkPullRequestHandler } = jiti(
-  path.join(root, "src/pages/api/tasks/linkPullRequest.ts"),
-);
+const { load } = require("./task-route-loader.cjs");
 
 test("parseGithubPullRequestUrl accepts only canonical GitHub pull request URLs", () => {
   assert.deepEqual(
@@ -391,17 +389,35 @@ test("linkTaskPullRequest is idempotent and does not duplicate activity", async 
 function loadBrowserLinkRoute(verifySession, { broadcastError = null } = {}) {
   const linkCalls = [];
   const broadcastCalls = [];
-  const handler = createLinkPullRequestHandler({
-    verifySession,
-    linkTaskPullRequest: async (input) => {
-      linkCalls.push(input);
-      return { created: false, pullRequest: { id: "linked-pr-id" } };
+  // The shared App Router handler now owns this route; adapt it to the
+  // (req, res) shape the assertions below use.
+  const { POST } = load("src/lib/api/task-writes/link-pull-request.ts", {
+    "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession },
+    "@/lib/pullRequests/taskPullRequests": {
+      PullRequestLinkError: class PullRequestLinkError extends Error {},
+      linkTaskPullRequest: async (input) => {
+        linkCalls.push(input);
+        return { created: false, pullRequest: { id: "linked-pr-id" } };
+      },
     },
-    broadcastTaskChange: async (...args) => {
-      broadcastCalls.push(args);
-      if (broadcastError) throw broadcastError;
+    "@/lib/mcp/tasks/agentMutationFence": {
+      AgentMutationLeaseConflictError: class AgentMutationLeaseConflictError extends Error {},
+    },
+    "@/lib/realtime/server": {
+      broadcastTaskChange: async (...args) => {
+        broadcastCalls.push(args);
+        if (broadcastError) throw broadcastError;
+      },
     },
   });
+  const handler = async (req, res) => {
+    const response = await POST({
+      headers: new Headers(),
+      cookies: req.cookies,
+      json: async () => req.body,
+    });
+    return res.status(response.status).json(await response.json());
+  };
   return { handler, linkCalls, broadcastCalls };
 }
 

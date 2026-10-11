@@ -207,12 +207,12 @@ for (const [file, method, error] of [[versionsPath, "GET", "Internal server erro
   });
 }
 
-test("legacy getAll retains POST-only status and JSON contract", async () => {
+test("getAll retains POST-only status and JSON contract", async () => {
   async function invoke(options, method, body) {
     const { route, calls } = fixture("src/pages/api/tasks/getAll.ts", options);
     const result = {};
     const response = { status(status) { result.status = status; return this; }, json(json) { result.json = json; return this; } };
-    await route.default({ method, body, headers: {} }, response);
+    await route.default({ method, body, headers: {}, query: {} }, response);
     return { result, calls };
   }
   for (const [options, method, body, expected] of [

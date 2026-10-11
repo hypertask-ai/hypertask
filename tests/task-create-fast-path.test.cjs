@@ -347,10 +347,13 @@ test("failed task create traces are explicitly incomplete", () => {
 });
 
 test("the global task route keeps noncritical work out of the response path", () => {
-  const source = fs.readFileSync(
-    path.join(root, "src/pages/api/tasks/createGlobally.ts"),
-    "utf8",
-  );
+  // The deferred work moved into create-global-effects.ts with the shared handler.
+  const source = [
+    "src/lib/api/task-writes/create-global.ts",
+    "src/lib/api/task-writes/create-global-effects.ts",
+  ]
+    .map((file) => fs.readFileSync(path.join(root, file), "utf8"))
+    .join("\n");
 
   assert.match(source, /description_:\s*\{\s*create:/);
   assert.match(source, /schedulePostCreateWork\(/);
@@ -411,12 +414,13 @@ test("task create telemetry completes after each visible UI transition", () => {
 
 test("the global task route validates the claimed agent actor", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/pages/api/tasks/createGlobally.ts"),
+    path.join(root, "src/lib/api/task-writes/create-global.ts"),
     "utf8",
   );
 
   assert.match(source, /agentId: requestedAgentId/);
-  assert.match(source, /const session = await getSessionUser/);
+  // The shared route wrapper authenticates and passes the session in.
+  assert.match(source, /operation: async \(body, session, request\)/);
   assert.match(source, /userId: requestedUserId/);
   assert.match(source, /const userId = session\.userId/);
   assert.match(source, /prisma\.user\.findUnique/);
@@ -424,5 +428,5 @@ test("the global task route validates the claimed agent actor", () => {
   assert.match(source, /getActiveAgentOwnerId\(agentId\)/);
   assert.match(source, /agentOwnerId !== session\.userId/);
   assert.match(source, /isAgentOnBoard\(Number\(projectId\), agentId\)/);
-  assert.match(source, /status\(403\)\.json\(\{ message: "Forbidden" \}\)/);
+  assert.match(source, /\{ message: "Forbidden" \}, \{ status: 403/);
 });

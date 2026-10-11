@@ -199,7 +199,7 @@ test("writer drops an invalid model date and interrupted streams never publish a
   assert.doesNotMatch(interrupted.text, /ai-generated-task-due-date/);
 });
 
-function saveHarness(kind, enabled) {
+function saveHarness(enabled) {
   const writes = [], updates = [], jobs = [];
   const prisma = {
     user: { findUnique: async () => ({ id: 985 }) },
@@ -216,10 +216,6 @@ function saveHarness(kind, enabled) {
   const stubs = {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: (handler) => handler,
-      taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request),
-    },
     "./route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
     "@/lib/api/task-writes/create-global-effects": effects, "./create-global-effects": effects,
     "@/lib/ai/composeTaskTarget": load(path.join(root, "src/lib/ai/composeTaskTarget.ts")),
@@ -239,23 +235,18 @@ function saveHarness(kind, enabled) {
     "../queues/duedateQueue": queue, "@/pages/api/queues/duedateQueue": queue,
     "next/server": { NextResponse: { json: Response.json } }, "better-auth/cookies": { parseCookies: () => new Map() },
   };
-  const api = moduleWithStubs(kind === "legacy" ? "src/pages/api/tasks/createGlobally.ts" : "src/lib/api/task-writes/create-global.ts", stubs);
+  const api = moduleWithStubs("src/lib/api/task-writes/create-global.ts", stubs);
   const post = async (extra = {}) => {
     const body = { title: "Review onboarding", description: "<p>Review</p>", projectId: 7, userId: 985, sectionId: 12, requestKind: "compose-task", writerDueDate: "2026-10-16", writerTimeZone: "America/Los_Angeles", ...extra };
-    if (kind === "app") {
-      const response = await api.POST({ json: async () => body, headers: new Headers(), cookies: {} }, { userId: 985 });
-      return { status: response.status, body: await response.json() };
-    }
-    const res = { status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; }, setHeader() {} };
-    await api.default({ method: "POST", body, headers: {}, cookies: {} }, res);
-    return { status: res.code, body: res.body };
+    const response = await api.POST({ json: async () => body, headers: new Headers(), cookies: {} }, { userId: 985 });
+    return { status: response.status, body: await response.json() };
   };
   return { post, writes, updates, jobs };
 }
 
-for (const kind of ["legacy", "app"]) {
-  test(`${kind} normal create saves validated deadline at the picker's local default time and schedules it`, async () => {
-    const h = saveHarness(kind, true);
+{
+  test(`app normal create saves validated deadline at the picker's local default time and schedules it`, async () => {
+    const h = saveHarness(true);
     assert.equal((await h.post()).status, 200);
     assert.equal(h.writes[0].dueDate.toISOString(), "2026-10-16T16:00:00.000Z");
     assert.equal(h.writes[0].dueDateNotifiedAt, null);
@@ -265,8 +256,8 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.writes.length, 2);
     assert.equal(h.writes[1].dueDate ?? null, null);
   });
-  test(`${kind} existing empty ticket uses the normal update controller and resets its due-date job`, async () => {
-    const h = saveHarness(kind, true);
+  test(`app existing empty ticket uses the normal update controller and resets its due-date job`, async () => {
+    const h = saveHarness(true);
     assert.equal((await h.post({ existingTaskId: 52 })).status, 200);
     assert.equal(h.updates[0].dueDate.toISOString(), "2026-10-16T16:00:00.000Z");
     assert.equal(h.updates[0].dueDateNotifiedAt, null);
@@ -274,8 +265,8 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.jobs[1].schedule[0].taskId, 52);
     assert.equal(h.writes.length, 0);
   });
-  test(`${kind} flag off ignores writer date, preserves ordinary due dates, and never alters an existing deadline`, async () => {
-    const h = saveHarness(kind, false);
+  test(`app flag off ignores writer date, preserves ordinary due dates, and never alters an existing deadline`, async () => {
+    const h = saveHarness(false);
     assert.equal((await h.post()).status, 200);
     assert.equal(h.writes[0].dueDate, undefined);
     assert.equal(h.jobs.length, 0);
@@ -283,7 +274,7 @@ for (const kind of ["legacy", "app"]) {
     assert.equal(h.writes[1].dueDate, "2026-10-20T09:00:00Z");
     assert.equal((await h.post({ existingTaskId: 52 })).status, 200);
     assert.equal(h.updates[0].dueDate, undefined);
-    const manual = saveHarness(kind, true);
+    const manual = saveHarness(true);
     assert.equal((await manual.post({ requestKind: undefined })).status, 200);
     assert.equal(manual.writes[0].dueDate, undefined);
   });

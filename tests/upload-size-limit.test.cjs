@@ -11,7 +11,6 @@ const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
   alias: {
-    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
     "@": path.join(root, "src"),
   },
 });
@@ -172,11 +171,11 @@ test("a platform 413 with no JSON body still yields a readable message", async (
 // the fallback for small files.
 
 const uploadUrlRoute = jiti(
-  path.join(root, "src/pages/api/tasks/uploadUrl.ts")
+  path.join(root, "src/lib/api/task-writes/upload-url.ts")
 );
 const uploadGrant = jiti(path.join(root, "src/lib/storage/uploadGrant.ts"));
 const finalizeRoute = jiti(
-  path.join(root, "src/pages/api/tasks/uploadFinalize.ts")
+  path.join(root, "src/lib/api/task-writes/upload-finalize.ts")
 );
 const {
   directUploadContentType,

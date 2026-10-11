@@ -2,8 +2,7 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const Module = require("node:module");
-const ts = require("typescript");
+const { load } = require("./task-route-loader.cjs");
 
 // GET and DELETE on /api/tasks/single are only reachable behind this handler's own
 // checks: the edge middleware passes cookieless requests straight through, and the
@@ -11,19 +10,6 @@ const ts = require("typescript");
 // so this exercises the handler rather than asserting on its source.
 
 const root = path.resolve(__dirname, "..");
-const source = fs.readFileSync(
-  path.join(root, "src/pages/api/tasks/single.ts"),
-  "utf8",
-);
-
-const javascript = ts.transpileModule(source, {
-  compilerOptions: {
-    esModuleInterop: true,
-    module: ts.ModuleKind.CommonJS,
-    target: ts.ScriptTarget.ES2020,
-  },
-}).outputText;
-
 const MEMBER_PROJECT = 15;
 const FOREIGN_PROJECT = 99;
 const TASK_ON_MEMBER_BOARD = 1;
@@ -41,7 +27,6 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const updated = [];
   const broadcasts = [];
   const stubs = {
-    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
@@ -155,20 +140,8 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
     },
   };
 
-  const originalLoad = Module._load;
-  Module._load = (request, parent, isMain) =>
-    stubs[request] ?? originalLoad(request, parent, isMain);
-  try {
-    const mod = { exports: {} };
-    new Function("module", "exports", "require", javascript)(
-      mod,
-      mod.exports,
-      (request) => stubs[request] ?? require(request),
-    );
-    return { handler: mod.exports.default, deleted, updated, broadcasts };
-  } finally {
-    Module._load = originalLoad;
-  }
+  const handler = load("src/pages/api/tasks/single.ts", stubs).default;
+  return { handler, deleted, updated, broadcasts };
 }
 
 function call(handler, { method, taskId, body }) {
@@ -181,6 +154,7 @@ function call(handler, { method, taskId, body }) {
   let status = 0;
   let payload;
   const res = {
+    setHeader() {},
     status(code) {
       status = code;
       return res;
