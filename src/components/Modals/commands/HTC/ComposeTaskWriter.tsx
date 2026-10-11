@@ -118,7 +118,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   }
   const targetBoard: IProject | undefined = boards.find((board) => board.id === targetBoardId)
     ?? (destinationProject?.id === targetBoardId ? destinationProject : undefined)
-    ?? (currentProject?.id === targetBoardId ? currentProject : undefined);
+    ?? (currentProject && currentProject.id === targetBoardId ? currentProject : undefined);
   const boardShortcut = getShortcutDisplay({ key: 66, modifiers: ["ctrl", "shift"], description: "Change board" }, isApple).join("+");
   const openBoardPicker = () => {
     if (!boardChipEnabled || writing || dictating) return;

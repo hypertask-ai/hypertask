@@ -51,7 +51,7 @@ async function withPalette(t, config, check) {
   const project = { id: 7, title: 'QA Sandbox', uniqueIdentifier: 'QASA' };
   const values = new Map(Object.entries({
     inViewObjectAtom: config.inView ?? { taskId: null },
-    currentProjectAtom: config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
+    currentProjectAtom: config.project === null ? null : config.project ?? project, currentUserAtom: { id: 985, uid: 'qa' },
     boardLayoutAtom: 'board', calendarSettingsAtom: {}, frequentlyUsedHTCAton: {}, lastUsedBoardsAtom: config.recency ?? {},
     showCommandsAtom: { show: config.open ?? true, mode: 0, paletteTab: config.tab ?? 'search', composeProject: config.destinationProject }, composeTaskChatIntroAtom: null,
   }));
@@ -1483,5 +1483,17 @@ test('board list bounds arrows to filtered rows, tolerates no matches, and revea
     assert.equal(document.activeElement, input());
     assert.deepEqual([input().selectionStart, input().selectionEnd, input().selectionDirection], [4, 8, 'backward']);
     assert.equal(requests.length, 0);
+  });
+});
+
+test('board chip without a current or remembered board lets the user pick before creating', async (t) => {
+  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, project: null, url: '/inbox' }, async ({ type, press, requests }) => {
+    assert.equal(chip().textContent, 'Choose a board');
+    await press('B', boardKey());
+    await press('Enter', { code: 'Enter' });
+    assert.equal(chip().textContent, 'QA Sandbox');
+    await type('Create on the chosen board');
+    await press('Enter', { code: 'Enter' });
+    assert.equal(requests[0].body.project.id, 7);
   });
 });
