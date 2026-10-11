@@ -1,7 +1,7 @@
 {
   "source": "https://app.hypertask.ai/api/admin/flags",
   "view": "plain-qa",
-  "capturedAt": "2026-10-11T02:03:20.965Z",
+  "capturedAt": "2026-10-11T07:04:50.758Z",
   "modes": {
     "htpr-3533-google-calendar": "OWNER_AND_QA",
     "htpr-4228-admin-only-time-reports": "EVERYONE",
@@ -156,6 +156,7 @@
     "htpr-7048-ctrlj-chat-lease": "EVERYONE",
     "htpr-7049-reload-after-image-chat": "EVERYONE",
     "htpr-7050-ctrl-o-links": "EVERYONE",
+    "htpr-7052-chat-names": "OWNER_AND_QA",
     "htpr-7054-ctrlj-due-date": "EVERYONE",
     "htpr-7055-chat-overlays-ticket": "OWNER_AND_QA",
     "htpr-7056-ctrlj-split-tasks": "OWNER_AND_QA",
