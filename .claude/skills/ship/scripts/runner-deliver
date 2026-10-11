@@ -1,14 +1,21 @@
 #!/usr/bin/env bash
-# runner-deliver <n>: type one message (stdin) into the live "RUNNER <n>" Claude session through tmux (YPER4-256).
+# runner-deliver <n>: hand one message (stdin) to the live "RUNNER <n>" Claude session (YPER4-256, YPER4-284).
+# A session whose events hook is installed and enabled gets the message in its own inbox file
+# ($STATE/<slot>.events.jsonl, slot runner-<n>, infra-manager or speed-runner); the hook (.claude/hooks/runner-inbox-stop.sh)
+# hands it over as its own message between tool calls, at turn end, or by waking the idle session. Nothing is typed.
+# Only a live session without the hook (its slot not listed in $STATE/events-hook.enabled, or no $STATE/<slot>.hook-alive
+# naming its pid) still gets the old tmux typing, and every such use is logged to $STATE/typing-fallback.log.
 # Falls back to the "INFRA MANAGER" session with a "No live Runner <n>:" prefix; if neither is live the message is
 # queued in $STATE/runner-<n>.pending.jsonl for the next runner-pickup tick. Exit 0 delivered, 3 queued, 2 usage.
-# Claude Code queues typed input while busy, so this works for idle and busy sessions. Text is sent literally (-l).
+# $RUNNER_DELIVER_ID names the event: the same id never enters an inbox twice. Without it every call is a new event.
 # A pane whose input box holds Valentin's half-typed text is never typed into: the message is queued and retried (YPER4-274).
 set -uo pipefail
 STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
 TMUX=${RUNNER_PICKUP_TMUX:-tmux}
 SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
 MAXLEN=${RUNNER_DELIVER_MAXLEN:-3000}
+EVENT_ID=${RUNNER_DELIVER_ID:-}
+FALLBACK_LOG=$STATE/typing-fallback.log
 # <target> is a runner number or a named slug. Slug table: "slug|session name|fall back to INFRA MANAGER (1/0)".
 SLUGS='infra-manager|INFRA MANAGER|0
 speed-runner|SPEED RUNNER|1'
@@ -35,6 +42,26 @@ find_pid() {
   done
   return 1
 }
+# Inbox slot for a session name: RUNNER <n> -> runner-<n>, INFRA MANAGER -> infra-manager, SPEED RUNNER -> speed-runner.
+slot_for() { case "$1" in "RUNNER "*) echo "runner-${1#RUNNER }" ;; *) local s=${1,,}; echo "${s// /-}" ;; esac; }
+# True when the session with pid $2 runs the events hook: its slot is enabled and its hook-alive marker names that pid.
+hook_alive() {
+  local enabled=$STATE/events-hook.enabled mpid
+  [ -f "$enabled" ] && grep -qxE "\*|$1" "$enabled" 2>/dev/null || return 1
+  mpid=$(jq -r '.pid // empty' "$STATE/$1.hook-alive" 2>/dev/null) || return 1
+  [ -n "$mpid" ] && [ "$mpid" = "$2" ]
+}
+# Append {id, ts, text, delivered:false} to the slot's inbox under its lock unless that id is already there (temp file + rename).
+inbox_add() {
+  local slot=$1 msg=$2 f=$STATE/$1.events.jsonl id=$EVENT_ID line
+  [ -n "$id" ] || id="gen:$(date +%s%N)-$$-$RANDOM"
+  line=$(jq -nc --arg id "$id" --arg t "$msg" --argjson ts "$(date +%s)" '{id:$id, ts:$ts, text:$t, delivered:false}') || return 1
+  mkdir -p "$STATE" || return 1
+  ( flock -w 10 9 || exit 1
+    if [ -f "$f" ] && jq -e --arg id "$id" 'select(.id == $id)' "$f" 2>/dev/null | grep -q .; then exit 0; fi
+    { cat "$f" 2>/dev/null; printf '%s\n' "$line"; } > "$f.tmp.$$" && mv "$f.tmp.$$" "$f" ) 9>"$STATE/$slot.events.lock"
+}
+fallback_log() { mkdir -p "$STATE" 2>/dev/null; printf '%s typed into %s (pane %s): no events hook in that session\n' "$(date -Is)" "$1" "$2" >> "$FALLBACK_LOG" 2>/dev/null; }
 # tmux pane whose pane_pid is the claude pid or one of its ancestors.
 find_pane() {
   local pid=$1 panes hit
@@ -69,7 +96,7 @@ send() {
 # Queue under the per-target lock that runner-pickup also takes when it drains the file. Exit 3 only once the line is written.
 queue() {
   local line
-  line=$(jq -nc --arg t "$text" --argjson ts "$(date +%s)" '{ts:$ts, text:$t}') || exit 1
+  line=$(jq -nc --arg t "$text" --arg id "$EVENT_ID" --argjson ts "$(date +%s)" '{ts:$ts, text:$t} + (if $id == "" then {} else {id:$id} end)') || exit 1
   mkdir -p "$STATE" || exit 1
   ( flock -w 10 9 || exit 1; printf '%s\n' "$line" >> "$STATE/runner-$n.pending.jsonl" ) 9>"$STATE/runner-$n.queue.lock" || { echo "could not queue for $n" >&2; exit 1; }
   echo "queued for $n${1:+ ($1)}"; exit 3
@@ -77,16 +104,23 @@ queue() {
 
 pane=""; prefix=""
 if [ "$session" != "INFRA MANAGER" ]; then
-  if pid=$(find_pid "$session"); then pane=$(find_pane "$pid") || pane=""; fi
+  if pid=$(find_pid "$session"); then
+    slot=$(slot_for "$session")
+    if hook_alive "$slot" "$pid"; then inbox_add "$slot" "$text" && { echo "delivered to the $session inbox"; exit 0; }; fi
+    pane=$(find_pane "$pid") || pane=""
+  fi
   if [ -n "$pane" ]; then
     send "$pane" "$text"; rc=$?
-    [ "$rc" = 0 ] && { echo "delivered to $session"; exit 0; }
+    [ "$rc" = 0 ] && { fallback_log "$session" "$pane"; echo "delivered to $session"; exit 0; }
     [ "$rc" = 4 ] && queue "$session is typing"
   fi
   pane=""; prefix="No live ${session,,}: "; [[ $n =~ ^[1-9] ]] && prefix="No live Runner $n: "
 fi
 if [ "$fallback" = 1 ] || [ "$session" = "INFRA MANAGER" ]; then
-  if pid=$(find_pid "INFRA MANAGER"); then pane=$(find_pane "$pid") || pane=""; fi
-  if [ -n "$pane" ] && send "$pane" "$prefix$text"; then echo "delivered to INFRA MANAGER"; exit 0; fi
+  if pid=$(find_pid "INFRA MANAGER"); then
+    if hook_alive infra-manager "$pid"; then inbox_add infra-manager "$prefix$text" && { echo "delivered to the INFRA MANAGER inbox"; exit 0; }; fi
+    pane=$(find_pane "$pid") || pane=""
+  fi
+  if [ -n "$pane" ] && send "$pane" "$prefix$text"; then fallback_log "INFRA MANAGER" "$pane"; echo "delivered to INFRA MANAGER"; exit 0; fi
 fi
 queue

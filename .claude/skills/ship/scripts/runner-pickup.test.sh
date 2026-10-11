@@ -112,11 +112,67 @@ eq "delivered item is not requeued or announced" "$(activity)" "$before"
 jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
 eq "prompt mode adds context instead of blocking" "$(hook 'RUNNER 3' "$pl" prompt | jq -r .hookSpecificOutput.hookEventName)" "UserPromptSubmit"
 
+# ---- YPER4-284: board events reach the session through the hook, exactly once ----
+jq -c '.items|=map(.delivered=true)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+ev() { jq -nc --arg id "$2" --arg t "$3" '{id:$id, ts:1, text:$t, delivered:false}' >> "$RUNNER_INBOX_DIR/$1.events.jsonl"; }
+undelivered() { jq -s 'map(select(.delivered|not))|length' "$RUNNER_INBOX_DIR/$1.events.jsonl"; }
+ctx() { jq -r '.hookSpecificOutput | "\(.hookEventName)|\(.additionalContext)"'; }
+ev runner-3 e1 'Board event for Runner 3: Valentin Yeo commented "one"'
+ev runner-3 e2 'Board event for Runner 3: Valentin Yeo commented "two"'
+out=$(SHIP_SESSION_PID=4242 hook 'RUNNER 3' "$pl" post)
+case "$(ctx <<<"$out")" in
+  'PostToolUse|Board events for RUNNER 3, delivered by the events hook'*$'\n1) Board event for Runner 3: Valentin Yeo commented "one"\n2) Board event for Runner 3: Valentin Yeo commented "two"') ok "post: both events as PostToolUse additionalContext";;
+  *) bad "post output: $out";;
+esac
+eq "post: events marked delivered" "$(undelivered runner-3)" "0"
+eq "post: second call is silent (exactly once)" "$(hook 'RUNNER 3' "$pl" post)" ""
+eq "every run refreshes the hook-alive marker with the session pid" "$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")" "4242"
+ev runner-3 e3 'three'
+eq "prompt: event as UserPromptSubmit additionalContext" "$(hook 'RUNNER 3' "$pl" prompt | ctx | tail -1)" "1) three"
+ev runner-3 e4 'four'
+printf -- '- [ ] G1: open work\n  CHECK: true\n' > "$T/work/.unlazy/s-abcdef12/GATES.md"
+out=$(hook 'RUNNER 3' '{"session_id":"abcdef123456","cwd":"'$T'/work","stop_hook_active":true}')
+eq "stop: events block even with an unmet gate and stop_hook_active" "$(jq -r .decision <<<"$out")|$(jq -r .reason <<<"$out" | tail -1)" "block|1) four"
+eq "stop: second stop is silent" "$(hook 'RUNNER 3' "$pl")" ""
+ev runner-3 e5 'five'
+eq "non-runner session name gets nothing" "$(hook 'HTPR-1 | something' "$pl" post)|$(hook 'RUNNER' "$pl" prompt)" "|"
+eq "and the runner's event stays queued" "$(undelivered runner-3)" "1"
+eq "another runner does not take runner 3's event" "$(hook 'RUNNER 5' "$pl" post)|$(undelivered runner-3)" "|1"
+hook 'RUNNER 3' "$pl" post > /dev/full 2>/dev/null
+eq "output write fails: event is not marked, it comes again" "$(undelivered runner-3)" "1"
+eq "and the retry hands it over" "$(hook 'RUNNER 3' "$pl" post | ctx | tail -1)" "1) five"
+ev infra-manager i1 'for the manager'; ev speed-runner s1 'for speed'
+eq "INFRA MANAGER gets its own slot" "$(hook 'INFRA MANAGER' "$pl" post | ctx | tail -1)" "1) for the manager"
+eq "SPEED RUNNER gets its own slot" "$(hook 'SPEED RUNNER | perf' "$pl" prompt | ctx | tail -1)" "1) for speed"
+# Waiter (asyncRewake): wakes with exit 2 only for a new event, once, one per session.
+wait_hook() { echo "$pl" | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX="${3:-1}" "$HOOK" wait; }
+sleep 300 & LIVE=$!
+eq "empty inbox: waiter does not wake (exit 0, no output)" "$(wait_hook 'RUNNER 3' "$LIVE" 2>&1; echo "rc=$?")" "rc=0"
+( sleep 0.5; ev runner-3 w1 'wake up' ) &
+out=$(wait_hook 'RUNNER 3' "$LIVE" 5 2>&1 >/dev/null; echo "rc=$?")
+case "$out" in *$'\n1) wake up\nrc=2') ok "new event: waiter prints it on stderr and exits 2";; *) bad "waiter: $out";; esac
+eq "woken event marked delivered" "$(undelivered runner-3)" "0"
+eq "after delivery: no second wake for the same event" "$(wait_hook 'RUNNER 3' "$LIVE" 2>&1; echo "rc=$?")" "rc=0"
+eq "hooks after the wake see nothing" "$(hook 'RUNNER 3' "$pl" post)$(hook 'RUNNER 3' "$pl")" ""
+wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1 & W1=$!; sleep 0.3
+start=$(date +%s%N); wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && [ $(( ($(date +%s%N) - start) / 1000000 )) -lt 1000 ] && ok "second waiter for the same session leaves at once" || bad "second waiter rc=$rc"
+kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null
+start=$(date +%s); wait_hook 'RUNNER 3' 999999999 30 >/dev/null 2>&1; rc=$?
+[ "$rc" = 0 ] && [ $(( $(date +%s) - start )) -lt 3 ] && ok "waiter of a dead session leaves without a wake" || bad "dead-session waiter rc=$rc"
+eq "waiter ignores a non-runner session" "$(ev runner-3 w2 x; wait_hook 'HTPR-9' "$LIVE" 2>&1; echo "rc=$?")|$(undelivered runner-3)" "rc=0|1"
+kill "$LIVE" 2>/dev/null
+# The new-ticket handover keeps its gate: one undelivered ticket, an unmet gate, only events are handed over.
+jq -c '.items|=map(.delivered=false)' "$inbox" > "$inbox.x" && mv "$inbox.x" "$inbox"
+out=$(hook 'RUNNER 3' "$pl")
+case "$(jq -r .reason <<<"$out")" in *'New ticket'*) bad "ticket handed over despite an unmet gate";; *'1) x') ok "unmet gate holds the ticket, not the event";; *) bad "gate split: $out";; esac
+
 # Install: copies files, merges hooks once, enables the timer through a fake systemctl.
 mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/systemctl"
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
-eq "install registers Stop and UserPromptSubmit once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length)]|join(",")' "$T/settings.json")" "1,1"
+eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,1,1,1"
+eq "the waiters run with asyncRewake and a day-long timeout" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,86400],[true,86400]]'
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 

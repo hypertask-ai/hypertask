@@ -294,6 +294,49 @@ eq "empty box with a dim suggestion and a status line: delivered" "$(deliver 3 '
 # Markup parsing stays fast on hostile input.
 start=$(date +%s); h=$(head -c 100000 /dev/zero | tr '\0' '<'); post 3 comment.created d-h1 "$(comment "$h" 995)" >/dev/null
 [ $(( $(date +%s) - start )) -lt 5 ] && ok "pathological markup handled quickly" || bad "slow markup"
+# ---- YPER4-284: a session with the events hook gets an inbox entry, never typing ----
+HOOK=$HERE/../../../hooks/runner-inbox-stop.sh
+printf '#!/bin/sh\necho "$@" >> "%s/tmux-called"\nexit 1\n' "$T" > "$T/notmux"; chmod +x "$T/notmux"
+alive() { printf '{"pid":%s,"ts":1}\n' "$2" > "$T/inbox/$1.hook-alive"; }
+evs() { jq -s 'length' "$T/inbox/$1.events.jsonl" 2>/dev/null || echo 0; }
+take() { echo '{}' | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" "$HOOK" post | jq -r '.hookSpecificOutput.additionalContext // empty'; }
+idel() { printf '%s' "$3" | RUNNER_DELIVER_ID=$2 RUNNER_PICKUP_TMUX=$T/notmux ./runner-deliver "$1" >/dev/null 2>&1; echo $?; }
+session runner "RUNNER 3" "$RUNPID"; rm -f "$T/inbox/runner-3.pending.jsonl" "$T/tmux-called" "$T/inbox/typing-fallback.log"
+echo runner-3 > "$T/inbox/events-hook.enabled"; alive runner-3 "$RUNPID"
+eq "hook alive: delivered to the inbox (exit 0)" "$(idel 3 ev-1 'hello inbox')" "0"
+eq "tmux never called" "$(cat "$T/tmux-called" 2>/dev/null)" ""
+eq "inbox entry has id, text, undelivered" "$(jq -c '[.id,.text,.delivered]' "$T/inbox/runner-3.events.jsonl")" '["ev-1","hello inbox",false]'
+eq "same id again is dropped (dedupe)" "$(idel 3 ev-1 'hello inbox')|$(evs runner-3)" "0|1"
+scr "$R" "$P "$'\033[39m''half a sent' "$R" '  status'
+for i in $(seq 1 20); do idel 3 "burst-$i" "event $i" >/dev/null; done
+eq "20 events while he types: all in the inbox, none typed or queued" "$(evs runner-3)|$(cat "$T/tmux-called" 2>/dev/null)|$([ -s "$T/inbox/runner-3.pending.jsonl" ] && echo queued)" "21||"
+( for i in $(seq 1 10); do idel 3 "par-$((i % 5))" "parallel $i" >/dev/null & done; wait )
+eq "parallel writers with repeated ids: 5 new entries, no corruption" "$(evs runner-3)" "26"
+got=$(take 'RUNNER 3' "$RUNPID")
+eq "hook hands over every event once" "$(grep -c '^[0-9]*) ' <<<"$got")|$(take 'RUNNER 3' "$RUNPID")" "26|"
+rm -f "$T/screens/1"
+: > "$TMUX_LOG"
+eq "webhook comment accepted" "$(post 3 comment.created d-284a "$(comment 'via the hook' 2840)")" "200"
+for _ in $(seq 50); do [ "$(jq -s 'map(select(.delivered|not))|length' "$T/inbox/runner-3.events.jsonl")" = 1 ] && break; sleep 0.1; done
+eq "webhook event lands in the inbox under its comment id, nothing typed" "$(jq -rs 'map(select(.delivered|not))[0].id' "$T/inbox/runner-3.events.jsonl")|$(sent)" "comment:2840|0"
+case "$(take 'RUNNER 3' "$RUNPID")" in *'1) Board event for Runner 3: Valentin Yeo commented on'*'"via the hook"'*) ok "hook output carries the webhook message";; *) bad "webhook via hook";; esac
+# Fallback typing only without the hook, and every use is logged.
+alive runner-3 1; : > "$TMUX_LOG"
+eq "stale marker (other pid): typed as before" "$(printf 'old way' | RUNNER_DELIVER_ID=ev-2 ./runner-deliver 3 >/dev/null; echo $?)|$(lastline)" "0|%1|literal|old way"
+grep -q 'typed into RUNNER 3 (pane %1): no events hook' "$T/inbox/typing-fallback.log" && ok "fallback typing logged with time and target" || bad "fallback log"
+alive runner-3 "$RUNPID"; echo infra-manager > "$T/inbox/events-hook.enabled"; : > "$TMUX_LOG"
+eq "slot not enabled: typed as before" "$(printf 'not enabled' | ./runner-deliver 3 >/dev/null; echo $?)|$(sent)" "0|1"
+eq "two fallback lines logged" "$(grep -c 'RUNNER 3' "$T/inbox/typing-fallback.log")" "2"
+# No live runner: INFRA MANAGER's inbox gets it with the prefix when its hook is alive.
+sleep 300 & INFRA2=$!; PIDS="$PIDS $INFRA2"; session infra "INFRA MANAGER" "$INFRA2"; alive infra-manager "$INFRA2"
+session runner "RUNNER 5" 999999999; rm -f "$T/tmux-called"
+eq "no live runner, INFRA hook alive: INFRA inbox" "$(idel 3 ev-3 'lost runner')|$(jq -r .text "$T/inbox/infra-manager.events.jsonl")|$(cat "$T/tmux-called" 2>/dev/null)" "0|No live Runner 3: lost runner|"
+eq "infra-manager target goes to its own inbox" "$(idel infra-manager ev-4 'direct')|$(evs infra-manager)" "0|2"
+# Pending records keep their id; the retry goes to the inbox once the hook is alive.
+session runner "RUNNER 3" "$RUNPID"; echo '*' > "$T/inbox/events-hook.enabled"
+printf '{"ts":1,"text":"from the queue","id":"q-1"}\n{"ts":1,"text":"from the queue","id":"q-1"}\n' > "$T/inbox/runner-3.pending.jsonl"; inbox
+: > "$TMUX_LOG"; RUNNER_PICKUP_NOW=$(( $(date +%s) + 30 )) ./runner-pickup run 3 2>/dev/null
+eq "queued record retried into the inbox once, nothing typed" "$(jq -rs 'map(select(.id=="q-1"))|length' "$T/inbox/runner-3.events.jsonl")|$(sent)" "1|0"
 bash -n runner-webhook.test.sh 2>/dev/null; python3 -m py_compile runner-webhook && ok "runner-webhook compiles" || bad "py_compile"
 
 echo "$passes passed, $fails failed"

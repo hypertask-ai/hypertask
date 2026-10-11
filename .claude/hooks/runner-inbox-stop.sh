@@ -1,45 +1,124 @@
 #!/usr/bin/env bash
-# runner-inbox-stop.sh stop|prompt: hand an idle RUNNER session the next ticket assigned to its agent (YPER4-244).
-# Inert unless the session is named "RUNNER <n>", the stop is not already a hook continuation and the unlazy ledger
-# has no unmet gate. Each queued ticket is delivered once, then marked delivered. Never touches the network.
+# runner-inbox-stop.sh stop|prompt|post|wait: hand board events and new tickets to a named session as its own message,
+# never typed into its input box (YPER4-244, YPER4-284). Inert unless the session is named "RUNNER <n>", "INFRA MANAGER"
+# or "SPEED RUNNER". Never touches the network.
+#   prompt (UserPromptSubmit) and post (PostToolUse): pending board events as additionalContext, so a busy session sees
+#          them between tool calls; prompt also hands a RUNNER its next assigned ticket.
+#   stop   (Stop): pending board events, and for an idle RUNNER its next ticket, as decision "block".
+#   wait   (Stop and SessionStart, with "asyncRewake": true): waits in the background until a board event lands in the
+#          inbox, prints it on stderr and exits 2, which wakes the idle session (code.claude.com/docs/en/hooks, asyncRewake).
+#          It never exits 2 without a new event, keeps one waiter per session and leaves quietly before its timeout.
+# Board events come from runner-deliver through $STATE/<slot>.events.jsonl (slot runner-<n>, infra-manager, speed-runner).
+# Each event is handed over once: the hook writes its output first and only then marks the event delivered, so a crash
+# in between repeats an event instead of losing it. Every run refreshes $STATE/<slot>.hook-alive with the session pid;
+# runner-deliver only uses the inbox for a session whose marker names its pid and whose slot is in events-hook.enabled.
+# The new-ticket handover keeps its old rules: not on a Stop that is already a hook continuation, and not while the
+# session's unlazy ledger has an unmet gate. Board events are not held back by either.
 set -uo pipefail
 mode=${1:-stop}
 STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
+SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
+POLL=${RUNNER_EVENTS_POLL:-2}
+WAIT_MAX=${RUNNER_EVENTS_WAIT_MAX:-85800}  # below the 86400 s timeout the installer sets, so the waiter is never cancelled
+KEEP=300                                   # delivered event ids kept for dedupe
 payload=$(cat 2>/dev/null || true)
-[ "$(jq -r '.stop_hook_active // false' <<<"$payload" 2>/dev/null)" != true ] || exit 0
+active=$(jq -r '.stop_hook_active // false' <<<"$payload" 2>/dev/null)
 
-session_name() {
-  [ -z "${SHIP_SESSION_NAME:-}" ] || { printf '%s' "$SHIP_SESSION_NAME"; return; }
+# Prints "<pid>\x1f<name>" for the Claude session this hook runs under (user-given name, text after " | " dropped).
+session_info() {
+  if [ -n "${SHIP_SESSION_NAME:-}" ]; then printf '%s\037%s' "${SHIP_SESSION_PID:-}" "$SHIP_SESSION_NAME"; return; fi
   local pid=$$ f
   while [ -n "$pid" ] && [ "$pid" -gt 1 ]; do
-    f=$HOME/.claude/sessions/$pid.json
-    if [ -f "$f" ]; then jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null; return; fi
+    f=$SESSIONS/$pid.json
+    if [ -f "$f" ]; then printf '%s\037%s' "$pid" "$(jq -r 'select(.nameSource == "user") | .name // empty' "$f" 2>/dev/null)"; return; fi
     pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
   done
 }
-name=$(session_name); name=${name%% | *}
-[[ $name =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || exit 0
-n=${BASH_REMATCH[1]}
-inbox=$STATE/runner-$n.json
-[ -s "$inbox" ] || exit 0
-
-# Idle means no unmet gate in this session's unlazy ledger (unchecked and not abandoned).
-sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null); cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
-for ledger in "${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md"; do
-  [ -n "$sid" ] && [ -f "$ledger" ] || continue
-  while IFS= read -r id; do
-    grep -qE "^ABANDON: $id( |:|$)" "$ledger" || exit 0
-  done < <(grep -E '^- \[ \] ' "$ledger" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')
-done
-
-exec 8>"$STATE/runner-$n.lock"; flock -x 8
-item=$(jq -c '[.items[] | select(.delivered | not)] | first // empty' "$inbox" 2>/dev/null)
-[ -n "$item" ] || exit 0
-ticket=$(jq -r .ticket <<<"$item")
-jq -c --arg t "$ticket" '.items |= map(if .ticket == $t then .delivered = true else . end)' "$inbox" > "$inbox.tmp" && mv "$inbox.tmp" "$inbox" || exit 0
-msg="New ticket assigned to you on the board: $(jq -r .title <<<"$item") $(jq -r .url <<<"$item"). Run /ship $ticket."
-if [ "$mode" = prompt ]; then
-  jq -n --arg m "$msg" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $m}}'
-else
-  jq -n --arg m "$msg" '{decision: "block", reason: $m}'
+IFS=$'\037' read -r spid name < <(session_info; echo)
+name=${name%% | *}
+runner=""
+case "$name" in
+  "INFRA MANAGER") slot=infra-manager ;;
+  "SPEED RUNNER") slot=speed-runner ;;
+  *) [[ $name =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || exit 0; runner=${BASH_REMATCH[1]}; slot=runner-$runner ;;
+esac
+mkdir -p "$STATE" 2>/dev/null || exit 0
+events=$STATE/$slot.events.jsonl
+if [[ $spid =~ ^[0-9]+$ ]]; then
+  printf '{"pid":%s,"ts":%s,"mode":"%s"}\n' "$spid" "$(date +%s)" "$mode" > "$STATE/$slot.hook-alive.$$" 2>/dev/null \
+    && mv "$STATE/$slot.hook-alive.$$" "$STATE/$slot.hook-alive" 2>/dev/null
 fi
+
+# Undelivered events as one message (empty when none). Call with the events lock held.
+events_message() {
+  [ -s "$events" ] || return 0
+  jq -rs --arg who "$name" 'map(select(.delivered | not)) | select(length > 0)
+    | "Board events for \($who), delivered by the events hook (not typed by anyone at the keyboard):\n"
+      + (to_entries | map("\(.key + 1)) \(.value.text)") | join("\n"))' "$events" 2>/dev/null
+}
+# Marks every event that was undelivered when events_message ran as delivered and trims old delivered ids.
+# Call with the events lock held, after the output is written.
+events_mark() {
+  [ -s "$events" ] || return 0
+  jq -cs --argjson keep "$KEEP" 'map(.delivered = true) | .[-$keep:] | .[]' "$events" > "$events.tmp.$$" 2>/dev/null \
+    && mv "$events.tmp.$$" "$events" 2>/dev/null || rm -f "$events.tmp.$$"
+}
+
+if [ "$mode" = wait ]; then
+  # One waiter per session; a waiter whose session is gone or that nears its timeout leaves without a wake.
+  exec 7>"$STATE/$slot.waiter.${spid:-x}.lock"; flock -n 7 || exit 0
+  start=$(date +%s)
+  while :; do
+    if [[ $spid =~ ^[0-9]+$ ]] && ! kill -0 "$spid" 2>/dev/null; then exit 0; fi
+    [ $(( $(date +%s) - start )) -lt "$WAIT_MAX" ] || exit 0
+    if [ -s "$events" ] && grep -q '"delivered":false' "$events" 2>/dev/null; then
+      exec 8>"$STATE/$slot.events.lock"; flock -x 8
+      msg=$(events_message)
+      if [ -n "$msg" ]; then printf '%s\n' "$msg" >&2; events_mark; exit 2; fi
+      flock -u 8; exec 8>&-
+    fi
+    sleep "$POLL"
+  done
+fi
+
+# Board events (any mode), taken under the events lock that is held until they are marked.
+exec 8>"$STATE/$slot.events.lock"; flock -x 8
+msg=$(events_message)
+
+# A RUNNER's next assigned ticket (prompt and stop only, with the old guards).
+ticket=""; inbox=$STATE/runner-$runner.json
+ticket_ok() {
+  [ -n "$runner" ] && [ "$mode" != post ] && [ -s "$inbox" ] || return 1
+  [ "$mode" != stop ] || [ "$active" != true ] || return 1
+  # Idle means no unmet gate in this session's unlazy ledger (unchecked and not abandoned).
+  local sid cwd ledger id
+  sid=$(jq -r '.session_id // empty' <<<"$payload" 2>/dev/null); cwd=$(jq -r '.cwd // empty' <<<"$payload" 2>/dev/null)
+  for ledger in "${cwd:-$PWD}/.unlazy/s-${sid:0:8}/GATES.md" "$HOME/.local/state/unlazy/sessions/${sid:0:8}/GATES.md"; do
+    [ -n "$sid" ] && [ -f "$ledger" ] || continue
+    while IFS= read -r id; do
+      grep -qE "^ABANDON: $id( |:|$)" "$ledger" || return 1
+    done < <(grep -E '^- \[ \] ' "$ledger" | sed -E 's/^- \[ \] ([^:]+):.*/\1/')
+  done
+  return 0
+}
+if ticket_ok; then
+  exec 9>"$STATE/runner-$runner.lock"; flock -x 9
+  item=$(jq -c '[.items[] | select(.delivered | not)] | first // empty' "$inbox" 2>/dev/null)
+  if [ -n "$item" ]; then
+    ticket=$(jq -r .ticket <<<"$item")
+    tmsg="New ticket assigned to you on the board: $(jq -r .title <<<"$item") $(jq -r .url <<<"$item"). Run /ship $ticket."
+    msg=${msg:+$msg$'\n\n'}$tmsg
+  fi
+fi
+[ -n "$msg" ] || exit 0
+
+case "$mode" in
+  prompt) jq -n --arg m "$msg" '{hookSpecificOutput: {hookEventName: "UserPromptSubmit", additionalContext: $m}}' ;;
+  post) jq -n --arg m "$msg" '{hookSpecificOutput: {hookEventName: "PostToolUse", additionalContext: $m}}' ;;
+  *) jq -n --arg m "$msg" '{decision: "block", reason: $m}' ;;
+esac || exit 0
+events_mark
+if [ -n "$ticket" ]; then
+  jq -c --arg t "$ticket" '.items |= map(if .ticket == $t then .delivered = true else . end)' "$inbox" > "$inbox.tmp" && mv "$inbox.tmp" "$inbox"
+fi
+exit 0
