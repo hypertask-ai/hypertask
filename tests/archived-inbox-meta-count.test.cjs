@@ -56,6 +56,7 @@ function loadHandler() {
   const calls = { groupBy: [], taskFindMany: [], notificationFindMany: 0 };
   for (const relativePath of [
     "src/pages/api/notifications/getAllInbox.ts",
+    "src/lib/api/notification-writes/archived-read.ts",
     "src/lib/prisma.ts",
     "src/utils/controllers/notifications/getAll.ts",
   ]) {
@@ -104,6 +105,7 @@ async function callMeta(handler, query) {
   let statusCode;
   let body;
   const res = {
+    setHeader() {},
     status(code) {
       statusCode = code;
       return this;
@@ -114,7 +116,7 @@ async function callMeta(handler, query) {
     },
   };
   await handler(
-    { query: { mode: "meta", ...query }, headers: {} },
+    { method: "GET", query: { mode: "meta", ...query }, headers: {} },
     res,
   );
   return { statusCode, body };

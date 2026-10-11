@@ -1,11 +1,41 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const ts = require("typescript");
+const fs = require("node:fs");
+const path = require("node:path");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
-const { notificationSettingsRoutes: routes, notificationSettingsLegacySources, notificationSettings } = require("./htpr-6923-verify.cjs");
-const sources = notificationSettingsLegacySources();
+const { pins } = require("./helpers/htpr-6992-pins.cjs");
+const rawPin = pins("a2-slice-11");
+// Pins group by route so the fixture holds one digest per route.
+const SPECIAL = { "matrix save": "matrix/POST", "splits save": "splits/POST", "archive meta": "getAllInbox/GET", "archived list": "getAllInbox/GET", mute: "mute/POST", unmute: "mute/POST", "304 getPushNotificationStatus": "getPushNotificationStatus/GET", "304 changePushNotificationStatus": "changePushNotificationStatus/POST" };
+const groupOf = key => SPECIAL[key] ?? key.match(/([A-Za-z]+\/(?:GET|POST))/)?.[1] ?? key;
+const pin = (key, value) => rawPin(groupOf(key), key, value);
+const root = path.resolve(__dirname, "..");
+// Route map: shared module, methods served and Pages file per endpoint; anyMethod endpoints answer every HTTP method.
+const routes = {
+  access: { module: "access", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/access.ts" },
+  changePushNotificationStatus: { module: "push-status-write", methods: ["POST"], anyMethod: false, path: "src/pages/api/notifications/changePushNotificationStatus.ts" },
+  getAll: { module: "all-read", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/getAll.ts" },
+  getAllInbox: { module: "archived-read", methods: ["GET"], anyMethod: true, path: "src/pages/api/notifications/getAllInbox.ts" },
+  getCount: { module: "count-read", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/getCount.ts" },
+  getPushNotificationStatus: { module: "push-status-read", methods: ["GET"], anyMethod: false, path: "src/pages/api/notifications/getPushNotificationStatus.ts" },
+  matrix: { module: "matrix", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/matrix.ts" },
+  mute: { module: "mute", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/mute.ts" },
+  preference: { module: "preference", methods: ["POST"], anyMethod: false, path: "src/pages/api/notifications/preference.ts" },
+  splits: { module: "splits", methods: ["GET", "POST"], anyMethod: false, path: "src/pages/api/notifications/splits.ts" },
+};
+function notificationSettings() {
+  for (const entry of Object.values(routes)) {
+    const page = fs.readFileSync(path.join(root, entry.path), "utf8");
+    for (const method of entry.methods) {
+      assert.ok(page.includes(entry.anyMethod ? '"*"' : `${method}: async`), `${entry.path} lists ${entry.anyMethod ? "every method" : method}`);
+      assert.ok(page.includes(`(await import("@/lib/api/notification-writes/${entry.module}")).${method}`));
+    }
+    assert.ok(fs.readFileSync(path.join(root, `src/lib/api/notification-writes/${entry.module}.ts`), "utf8").includes("taskWriteRoute"));
+    assert.ok(!fs.existsSync(path.join(root, entry.path.replace("src/pages/api/", "src/app/api/").replace(/\.ts$/, "/route.ts"))), "no URL twin");
+  }
+}
 const clean = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const endpoints = Object.entries(routes).flatMap(([name, entry]) => entry.methods.map(method => ({ name, method, ...entry })));
 const inputs = {
@@ -17,18 +47,8 @@ const inputs = {
   splits: { body: { splitsNoImportant: ["project:15", "system:Assigned", "project:15"], userId: 6 } },
   mute: { query: { taskId: "42" }, body: { taskId: "42", muted: true, userId: 6 } },
 };
-function compileOriginal(source, mocks) {
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
-  const mod = { exports: {} };
-  new Function("require", "module", "exports", compiled)(specifier => {
-    assert.ok(Object.hasOwn(mocks, specifier), `Unexpected original dependency: ${specifier}`);
-    const mock = mocks[specifier];
-    return Object.hasOwn(mock, "default") ? { __esModule: true, ...mock } : mock;
-  }, mod, mod.exports);
-  return mod.exports.default;
-}
-function fixture(endpoint, scenario = {}, mode = false) {
-  const effects = [], flags = [], loads = [], auth = [], realtime = [];
+function fixture(endpoint, scenario = {}) {
+  const effects = [], loads = [], auth = [], realtime = [];
   const userId = scenario.userId ?? 985;
   const session = scenario.noAuth ? null : { userId, source: "better-auth" };
   const state = {
@@ -88,10 +108,6 @@ function fixture(endpoint, scenario = {}, mode = false) {
       if (scenario.authThrows) throw new Error("Auth unavailable");
       return session;
     } },
-    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
-    "@/lib/flags": { isFeatureEnabled: async (key, id) => {
-      flags.push([key, id]); if (mode === "outage") throw new Error("Flag unavailable"); return mode === true;
-    } },
     "@/lib/prisma": { default: db },
     "@/lib/realtime/server": { broadcastInboxChange: (...args) => { realtime.push(args); step("inbox-realtime", ...args); }, broadcastProjectChange: (...args) => { realtime.push(args); step("project-realtime", ...args); } },
     "@/utils/controllers/notifications/getAll": {
@@ -101,7 +117,7 @@ function fixture(endpoint, scenario = {}, mode = false) {
     "@/utils/controllers/notifications/getCount": { default: async id => { step("inbox-count", id); return { status: scenario.controllerStatus ?? 200, json: { all: 3, unseen: 1 } }; } },
     "@/utils/controllers/notifications/getAccessibleProjectIds": { getInboxAccessibleProjectIds: async id => { step("inbox-access", id); return scenario.noRows ? [] : [15, 16]; } },
   };
-  // HTPR-7092: all-read now reads through the Decisions wrapper, a pass-through while the flag is off.
+  // HTPR-7092: all-read reads through the Decisions wrapper, a pass-through while its flag is off.
   mocks["@/utils/controllers/notifications/getAllWithDecisions"] = mocks["@/utils/controllers/notifications/getAll"];
   mocks["@/lib/inboxSplitSettings"] = load("src/lib/inboxSplitSettings.ts", mocks);
   const web = load(`src/lib/api/notification-writes/${endpoint.module}.ts`, mocks)[endpoint.method];
@@ -111,7 +127,7 @@ function fixture(endpoint, scenario = {}, mode = false) {
     return load(`src/lib/api/notification-writes/${endpoint.module}.ts`, mocks)[method];
   } });
   mocks[`@/lib/api/notification-writes/${endpoint.module}`] = routeModule;
-  return { legacy: compileOriginal(sources[endpoint.name], mocks), current: load(endpoint.path, mocks).default, web, effects, flags, loads, auth, state, realtime };
+  return { current: load(endpoint.path, mocks).default, web, effects, loads, auth, state, realtime };
 }
 function input(endpoint, scenario = {}) {
   return {
@@ -152,23 +168,23 @@ async function invoke(fx, endpoint, scenario = {}, target = "current") {
     return result;
   });
 }
-async function parity(endpoint, scenario = {}) {
-  const old = fixture(endpoint, scenario), expected = await invoke(old, endpoint, scenario, "legacy");
-  for (const mode of [false, "outage", true, "web"]) {
-    const fx = fixture(endpoint, scenario, mode);
-    assert.deepEqual(await invoke(fx, endpoint, scenario, mode === "web" ? "web" : "current"), expected, `${endpoint.name}/${endpoint.method}: ${mode} wire`);
-    assert.deepEqual(fx.effects, old.effects, `${endpoint.name}: ${mode} ordered inbox/storage/realtime effects`);
-    assert.deepEqual(fx.state, old.state, `${endpoint.name}: ${mode} stored state`);
-    assert.deepEqual(fx.realtime, old.realtime);
-    assert.equal(fx.loads.length, mode === true && !scenario.noAuth && !scenario.authThrows ? 1 : 0);
-    if (fx.flags.length) assert.deepEqual(fx.flags, [["htpr-6923-app-router-writes", scenario.userId ?? 985]]);
-    if (mode === "web" || mode === true && !scenario.noAuth && !scenario.authThrows) assert.equal(fx.auth.length, 1, "shared path reuses the signed session");
-    else assert.equal(fx.auth.length, old.auth.length + 1, "Off/outage retains legacy auth after preflight");
-  }
+// Runs the Pages adapter, pins wire, effects and stored state, then checks the shared Web handler agrees.
+async function parity(endpoint, scenario = {}, key = `${endpoint.name}/${endpoint.method}: ${JSON.stringify(scenario)}`) {
+  const old = fixture(endpoint, scenario), expected = await invoke(old, endpoint, scenario, "current");
+  pin(key, { expected, effects: old.effects, state: old.state, realtime: old.realtime });
+  assert.equal(old.loads.length, 1, "listed method always loads the shared route");
+  // The adapter passes its session on; only a missing session makes the shared route look it up again.
+  assert.equal(old.auth.length, scenario.noAuth || scenario.authThrows ? 2 : 1);
+  const fx = fixture(endpoint, scenario);
+  assert.deepEqual(await invoke(fx, endpoint, scenario, "web"), expected, `${endpoint.name}/${endpoint.method}: web wire`);
+  assert.deepEqual(fx.effects, old.effects, `${endpoint.name}: web ordered inbox/storage/realtime effects`);
+  assert.deepEqual(fx.state, old.state, `${endpoint.name}: web stored state`);
+  assert.deepEqual(fx.realtime, old.realtime);
+  assert.equal(fx.auth.length, 1, "shared path reuses the signed session");
   return { old, expected };
 }
 
-test("slice-11 complete inventory, independent fixture bytes, retained mute/services, untouched slices 10/12 and no App twins", notificationSettings);
+test("slice-11 structure: each Pages file is a thin adapter to its shared route and there are no App twins", notificationSettings);
 const cases = [
   ["success", {}], ["unauthenticated", { noAuth: true }], ["auth precedes invalid input", { noAuth: true, body: null, query: {} }],
   ["auth outage", { authThrows: true }], ["null body", { body: null }], ["undefined body", { body: undefined }],
@@ -178,30 +194,36 @@ const cases = [
 ];
 for (const endpoint of endpoints) {
   const label = `${endpoint.name}/${endpoint.method}`;
-  for (const [name, scenario] of cases) test(`${label}: ${name} original/Off/outage/On/Web`, () => parity(endpoint, scenario));
+  for (const [name, scenario] of cases) test(`${label}: ${name} matches pinned wire, effects and Web handler`, () => parity(endpoint, scenario, `${label}: ${name}`));
   test(`${label}: real Web Request preserves wire and effects`, async () => {
-    const old = fixture(endpoint), fx = fixture(endpoint);
-    assert.deepEqual(await invoke(fx, endpoint, { realWeb: true }, "web"), await invoke(old, endpoint, {}, "legacy"));
+    const { old, expected } = await parity(endpoint, {}, `${label}: real web success`);
+    const fx = fixture(endpoint);
+    assert.deepEqual(await invoke(fx, endpoint, { realWeb: true }, "web"), expected);
     assert.deepEqual(fx.effects, old.effects);
   });
   for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", undefined]) {
     if (endpoint.methods.includes(method)) continue;
-    test(`${label}: other method ${method} retains legacy behavior`, async () => {
-      const scenario = { method }, old = fixture(endpoint), fx = fixture(endpoint, {}, true);
-      assert.deepEqual(await invoke(fx, endpoint, scenario), await invoke(old, endpoint, scenario, "legacy"));
-      assert.deepEqual(fx.effects, old.effects);
-      if (endpoint.anyMethod && method !== undefined) assert.deepEqual(fx.loads, ["GET"]);
-      else { assert.deepEqual(fx.flags, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, old.auth); }
+    test(`${label}: other method ${method} ${endpoint.anyMethod ? "reaches the shared route" : "answers 405"}`, async () => {
+      const scenario = { method }, fx = fixture(endpoint);
+      const result = await invoke(fx, endpoint, scenario);
+      if (endpoint.anyMethod) {
+        assert.deepEqual(fx.loads, ["GET"]);
+        pin(`${label}: other method ${method}`, { result, effects: fx.effects });
+      } else {
+        assert.equal(result.status, 405);
+        pin(`${label}: other method ${method}`, result);
+        assert.deepEqual(fx.effects, []); assert.deepEqual(fx.loads, []); assert.deepEqual(fx.auth, []);
+      }
     });
   }
-  test(`${label}: route load failure never retries legacy`, async () => {
-    const fx = fixture(endpoint, { loadThrows: true }, true);
+  test(`${label}: route load failure surfaces without running the operation`, async () => {
+    const fx = fixture(endpoint, { loadThrows: true });
     assert.deepEqual(await invoke(fx, endpoint), { throws: "Error: Route load unavailable" });
     assert.deepEqual(fx.effects, []); assert.equal(fx.loads.length, 1);
   });
   test(`${label}: every success-path failure boundary has no duplicate effects`, async () => {
-    const success = fixture(endpoint); await invoke(success, endpoint, {}, "legacy");
-    for (let failAt = 1; failAt <= success.effects.length; failAt++) await parity(endpoint, { failAt });
+    const success = fixture(endpoint); await invoke(success, endpoint, {}, "current");
+    for (let failAt = 1; failAt <= success.effects.length; failAt++) await parity(endpoint, { failAt }, `${label}: failAt ${failAt}`);
   });
   if (endpoint.method === "POST") test(`${label}: malformed Web JSON retains historical 500 catch`, async () => {
     const fx = fixture(endpoint);
@@ -242,34 +264,34 @@ const branches = {
   ],
 };
 for (const endpoint of endpoints) for (const [index, scenario] of (branches[`${endpoint.name}/${endpoint.method}`] ?? []).entries()) {
-  test(`${endpoint.name}/${endpoint.method}: branch ${index} preserves signed scope and ordered effects`, () => parity(endpoint, scenario));
+  test(`${endpoint.name}/${endpoint.method}: branch ${index} preserves signed scope and ordered effects`, () => parity(endpoint, scenario, `${endpoint.name}/${endpoint.method}: branch ${index}`));
 }
 
 const endpoint = (name, method) => endpoints.find(row => row.name === name && row.method === method);
 test("matrix saves category choices while retaining important-split metadata", async () => {
-  const { old, expected } = await parity(endpoint("matrix", "POST"));
+  const { old, expected } = await parity(endpoint("matrix", "POST"), {}, "matrix save");
   assert.equal(expected.status, 200);
   assert.deepEqual(old.effects.map(([label]) => label), ["settings-read", "settings-update"]);
   assert.deepEqual(old.effects[1][1].where, { userId: 985 });
   assert.deepEqual(expected.body.matrix, { mentions: { email: true, push: false }, splitsNoImportant: ["project:15"], showImportantSplit: true });
-  assert.deepEqual(old.realtime, [], "legacy settings save has no realtime fan-out");
+  assert.deepEqual(old.realtime, [], "settings save has no realtime fan-out");
 });
 test("split save deduplicates and performs one atomic update without overwriting categories", async () => {
-  const { old } = await parity(endpoint("splits", "POST"));
+  const { old } = await parity(endpoint("splits", "POST"), {}, "splits save");
   assert.deepEqual(old.effects.map(([label]) => label), ["splits-atomic-update"]);
   assert.deepEqual(old.effects[0][2], ['["project:15","system:Assigned"]', 985]);
   assert.deepEqual(old.state.setting.notificationMatrix.comments, { email: false, push: true });
   assert.equal(old.state.setting.notificationMatrix.showImportantSplit, true);
 });
 test("archive metadata de-duplicates pairs, rechecks board access and excludes moved/null tasks", async () => {
-  const { old, expected } = await parity(endpoint("getAllInbox", "GET"), { query: { mode: "meta" } });
+  const { old, expected } = await parity(endpoint("getAllInbox", "GET"), { query: { mode: "meta" } }, "archive meta");
   assert.deepEqual(expected.body, { total: 3, byProject: [{ projectId: 15, name: "Alpha", count: 2 }, { projectId: 16, name: "Beta", count: 1 }] });
   assert.deepEqual(old.effects.map(([label]) => label), ["inbox-pairs", "inbox-task-boards"]);
   assert.deepEqual(old.effects[1][1].where.id, { in: [42, 43, 44] });
   assert.deepEqual(old.effects[1][1].where.project.OR[0], { ownerId: 985 });
 });
 test("archived list retains query parsing, cursor, access, reminders, order and distinct rows", async () => {
-  const { old } = await parity(endpoint("getAllInbox", "GET"));
+  const { old } = await parity(endpoint("getAllInbox", "GET"), {}, "archived list");
   const args = old.effects.at(-1)[1];
   assert.deepEqual(old.effects.map(([label]) => label), ["inbox-include", "inbox-read"]);
   assert.equal(args.take, 50); assert.deepEqual(args.cursor, { id: 20 }); assert.equal(args.skip, 1);
@@ -278,14 +300,14 @@ test("archived list retains query parsing, cursor, access, reminders, order and 
   assert.deepEqual(args.where, { userId: 985, status: "Archive", agentId: null, task: { project: { status: "Normal", OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }] }, projectId: 15, title: { contains: "task", mode: "insensitive" }, Reminders: { every: { status: { not: "Normal" } } } } });
 });
 test("mute retains upsert and unmute delete scoped to signed actor with no new authorization or broadcast", async () => {
-  const muted = await parity(endpoint("mute", "POST"));
+  const muted = await parity(endpoint("mute", "POST"), {}, "mute");
   assert.deepEqual(muted.old.effects, [["mute-upsert", { where: { taskId_userId: { taskId: 42, userId: 985 } }, update: {}, create: { taskId: 42, userId: 985 } }]]);
-  const unmuted = await parity(endpoint("mute", "POST"), { body: { taskId: 42, muted: false } });
+  const unmuted = await parity(endpoint("mute", "POST"), { body: { taskId: 42, muted: false } }, "unmute");
   assert.deepEqual(unmuted.old.effects, [["mute-delete", { where: { taskId: 42, userId: 985 } }]]);
 });
 test("304 bodies remain available to Pages until its HTTP boundary", async () => {
   for (const row of [endpoint("getPushNotificationStatus", "GET"), endpoint("changePushNotificationStatus", "POST")]) {
-    const { expected } = await parity(row, { body: {}, query: {} });
+    const { expected } = await parity(row, { body: {}, query: {} }, `304 ${row.name}`);
     assert.equal(expected.status, 304); assert.ok(expected.body.message);
   }
 });
@@ -303,12 +325,8 @@ async function wire(fx, endpoint, scenario, target) {
 }
 for (const row of endpoints) for (const scenario of [{}, { noAuth: true }, { body: {}, query: {} }, { failAt: 1 }]) {
   test(`${row.name}/${row.method}: actual Pages HTTP bytes and headers ${JSON.stringify(scenario)}`, async () => {
-    const old = fixture(row, scenario), expected = await quiet(() => wire(old, row, scenario, "legacy"));
-    if (expected.status === 304) { assert.equal(expected.body, ""); assert.equal(expected.headers["content-type"], undefined); }
-    for (const mode of [false, "outage", true]) {
-      const fx = fixture(row, scenario, mode);
-      assert.deepEqual(await quiet(() => wire(fx, row, scenario, "current")), expected);
-      assert.deepEqual(fx.effects, old.effects);
-    }
+    const fx = fixture(row, scenario), actual = await quiet(() => wire(fx, row, scenario, "current"));
+    if (actual.status === 304) { assert.equal(actual.body, ""); assert.equal(actual.headers["content-type"], undefined); }
+    pin(`http ${row.name}/${row.method} ${JSON.stringify(scenario)}`, { actual, effects: fx.effects });
   });
 }
