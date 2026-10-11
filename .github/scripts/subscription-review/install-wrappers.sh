@@ -32,6 +32,12 @@ install -o root -g root -m 755 "$source_dir/hax-review" /usr/local/libexec/hyper
 install -o root -g root -m 755 "$source_dir/hax-entrypoint" /usr/local/bin/hypertask-hax-subscription-review
 install -o root -g reviewdispatch -m 750 "$source_dir/dispatch-review" /usr/local/libexec/hypertask-dispatch-review
 install -o root -g reviewdispatch -m 750 "$source_dir/dispatch-scan" /usr/local/libexec/hypertask-dispatch-scan
+# The dispatcher makes its calls on hypertask-ai/hypertask with the review GitHub App's own token (YPER4-286).
+# That also needs two files set up outside the repo, never committed:
+#   /etc/hypertask-ai-review/review-app.pem  the App key from `stack-key github-app GITHUB_APP_REVIEW_PRIVATE_KEY_FILE`, owner reviewdispatch, mode 600
+#   /etc/hypertask-ai-review/review-app.env  APP_ID and INSTALLATION_ID lines, root:reviewdispatch, mode 640
+# Without them the scripts fall back to reviewer-curl.conf.
+install -o root -g reviewdispatch -m 750 "$source_dir/review-app-token" /usr/local/libexec/hypertask-review-app-token
 install -m 644 "$source_dir/hypertask-ai-review-dispatch.service" /etc/systemd/system/hypertask-ai-review-dispatch.service
 install -m 644 "$source_dir/hypertask-ai-review-dispatch.timer" /etc/systemd/system/hypertask-ai-review-dispatch.timer
 install -m 440 "$source_dir/sudoers" /etc/sudoers.d/hypertask-ai-review

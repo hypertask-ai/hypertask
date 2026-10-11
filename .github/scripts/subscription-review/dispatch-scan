@@ -4,6 +4,10 @@ set -euo pipefail
 [ "$#" -eq 0 ] || exit 64
 curl_config=${HYPERTASK_REVIEW_CURL_CONFIG:-/etc/hypertask-ai-review/reviewer-curl.conf}
 [ -r "$curl_config" ] || { echo "Reviewer dispatch credential is unavailable" >&2; exit 78; }
+# Calls on hypertask-ai/hypertask use the review GitHub App's own rate-limit bucket (YPER4-286);
+# if its token cannot be minted, fall back to the stored credential so reviews keep running.
+app_config=$("${HYPERTASK_REVIEW_APP_TOKEN_BIN:-/usr/local/libexec/hypertask-review-app-token}" 2>/dev/null) && [ -r "$app_config" ] \
+  || { echo "Review App token unavailable; using the fallback credential" >&2; app_config=$curl_config; }
 state_root=${HYPERTASK_REVIEW_STATE_ROOT:-/var/lib/hypertask-ai-review}
 completed_dir="$state_root/completed"
 dispatch_review_bin=${HYPERTASK_DISPATCH_REVIEW_BIN:-/usr/local/libexec/hypertask-dispatch-review}
@@ -24,7 +28,7 @@ if [ -s "$etag_file" ] && [ -s "$list_file" ]; then
   etag_args=(-H "If-None-Match: $(tr -d '\r\n' <"$etag_file")")
 fi
 curl -fsS \
-  --config "$curl_config" \
+  --config "$app_config" \
   -D "$header_file" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -75,4 +79,4 @@ while IFS=$'\t' read -r pr_number head_sha updated_at; do
   fi
 done < <(jq -r '.[] | select(.draft == false and .head.repo.full_name == "hypertask-ai/hypertask") | [.number, .head.sha, (.updated_at // "")] | @tsv' "$list_file")
 
-echo "dispatch-scan: list_calls=1 list_status=${list_status} rescanned_prs=${rescanned} skipped_prs=${skipped} ratelimit_remaining=${remaining:-unknown}"
+echo "dispatch-scan: list_calls=1 list_status=${list_status} rescanned_prs=${rescanned} skipped_prs=${skipped} ratelimit_remaining=${remaining:-unknown} credential=$([ "$app_config" = "$curl_config" ] && echo fallback || echo app)"
