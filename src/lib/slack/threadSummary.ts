@@ -12,7 +12,6 @@ import { resolveSystemModel } from "@/lib/systemModelLadder";
 import { callSlackApi } from "@/lib/slack/api";
 import {
   renderSlackSummaryComment,
-  SLACK_SUMMARY_MAX_OUTPUT_TOKENS,
   SLACK_SUMMARY_SYSTEM,
   slackSummaryPrompt,
   slackSummarySchema,
@@ -116,7 +115,7 @@ export async function buildSlackThreadSummaryComment(
     model,
     schema: slackSummarySchema,
     maxRetries: 2,
-    maxOutputTokens: SLACK_SUMMARY_MAX_OUTPUT_TOKENS,
+    maxOutputTokens: 400,
     providerOptions: providerOptionsForAiModel(model, "summary", {
       teamId: context.teamId,
       projectId: context.projectId,
