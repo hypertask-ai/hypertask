@@ -257,7 +257,9 @@ test('seeded board card opens a ticket and stays open', { tag: ['@id:board-card-
   expect(documentRequests, 'card click must not reload the document').toBe(0)
 })
 
-const ERROR_MARKERS = [/something went wrong/i, /application error/i, /internal server error/i]
+// Matched against whole headings only: task titles and descriptions on the page can quote
+// these words (YPER4-304), but the app's and Next's error screens put them in an h1/h2.
+const ERROR_MARKERS = [/^something went wrong$/i, /^application error\b/i, /^internal server error\.?$/i]
 
 // A Vercel bot challenge on the runner's IP is not a broken view — the health
 // job in prod-health.yml treats the same signal as unrunnable, never a
@@ -381,9 +383,9 @@ for (const view of VIEWS) {
       await expect(page, `${view.path} has no fallback title`).not.toHaveTitle(view.notTitle, { timeout: 15_000 })
     }
 
-    const bodyText = await page.locator('body').innerText()
+    const headings = (await page.locator('h1, h2').allInnerTexts()).map((text) => text.trim())
     for (const marker of ERROR_MARKERS) {
-      expect(bodyText, `${view.path} rendered an error page`).not.toMatch(marker)
+      expect(headings.find((heading) => marker.test(heading)), `${view.path} rendered an error page`).toBeUndefined()
     }
 
     if (process.env.BROWSER_SMOKE_PR) {
