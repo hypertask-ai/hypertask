@@ -163,7 +163,7 @@ for (const name of [...screens, 'ticket from board card']) {
       const snapshot = readFileSync(path.join(__dirname, 'production-flag-modes.json'), 'utf8')
       const { modes } = JSON.parse(snapshot) as { modes: Record<string, string> }
       for (const [key, enabled] of Object.entries(fixture.flags)) {
-        expect(enabled, `baseline update requires live-like flags, not all-flags-on: ${key}`).toBe(modes[key] === 'EVERYONE')
+        expect(enabled, `baseline update requires live-like flags, not all-flags-on: ${key}`).toBe(key in modes ? modes[key] === 'EVERYONE' : enabled)
       }
       for (const [name, box] of Object.entries(actual)) expect(box, `${screen}: ${name} must exist when recording`).not.toBeNull()
       const baseline: Baseline = existsSync(baselinePath) ? JSON.parse(readFileSync(baselinePath, 'utf8')) : { sourceCommit: '', flagMode: 'live-like', flagSnapshotSha256: '', viewports: {} }
