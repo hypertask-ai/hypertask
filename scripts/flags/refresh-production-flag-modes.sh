@@ -29,8 +29,8 @@ if git diff --quiet -I'"capturedAt"' -- "$file" && [ "$committed_age" -lt 7 ]; t
 fi
 git checkout -q -B flag-modes-refresh
 git add "$file"
-git -c user.name="Dev 1 (HT)" -c user.email="dev1@hypertask.ai" commit -q -m "YPER4-253 [INFRA] Refresh the live switch settings copy"
-git push -q --force-with-lease origin flag-modes-refresh
+git commit -q -m "YPER4-253 [INFRA] Refresh the live switch settings copy"
+git push -q --force origin flag-modes-refresh
 if [ -n "$(gh pr list --repo hypertask-ai/hypertask --head flag-modes-refresh --state open --json number --jq '.[].number')" ]; then
   echo "flag-modes-refresh: updated the open pull request"
   exit 0
