@@ -33,12 +33,29 @@ mk "$(c 12 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 1
 eq "tie -> lower comment id wins (ours)" "$(decide)" WIN
 
 mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" \
-   "$(c 11 2026-10-11T10:01:00.000Z a1 'RUNNER 7' '<p><strong>Stepping back: RUNNER 9 claimed this first.</strong></p>')" \
+   "$(c 11 2026-10-11T10:01:00.000Z a1 'RUNNER 7' '<p><strong>Stepping back: RUNNER 9 claimed this first.</strong></p><p>Next: go on. Resume this Claude session: claude --resume other-sess</p>')" \
    "$(c 12 2026-10-11T10:02:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "claimant that stepped back is ignored" "$(decide)" WIN
 
 mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")"
 eq "own claim missing -> NOOURS" "$(decide)" NOOURS
+
+# Review fixes: stale window, assignees, shared identity, malformed input.
+mk "$(c 10 2026-10-11T01:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+eq "claim older than 6 h before ours is ignored" "$(decide)" WIN
+mk "$(c 10 2026-10-11T04:30:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+eq "claim 5.5 h before ours still counts" "$(decide)" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
+echo '{"tasks":[{"assignees":[{"agent":{"id":"a2","displayName":"RUNNER 3"}}]}]}' > "$D/t-gone.json"
+echo '{"tasks":[{"assignees":[{"agent":{"id":"a1","displayName":"RUNNER 7"}},{"agent":{"id":"a2","displayName":"RUNNER 3"}}]}]}' > "$D/t-here.json"
+eq "earlier claimant no longer assigned is ignored" "$(./ship-claim decide $ME "$D/c.json" "$D/t-gone.json")" WIN
+eq "earlier claimant still assigned counts" "$(./ship-claim decide $ME "$D/c.json" "$D/t-here.json")" "$(printf 'LOSE\tRUNNER 7')"
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
+eq "shared identity: other session's earlier claim wins" "$(decide)" "$(printf 'LOSE\tRUNNER 3')"
+mk "$(c 10 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")" "$(c 11 2026-10-11T10:00:20.000Z a2 'RUNNER 3' "$(claim other-sess)")"
+eq "shared identity: ours earliest -> proceed" "$(decide)" WIN
+echo 'not json' > "$D/bad.json"; ./ship-claim decide $ME "$D/bad.json" >/dev/null 2>&1; eq "malformed JSON -> exit 2" "$?" 2
+./ship-claim decide $ME "$D/missing.json" >/dev/null 2>&1; eq "missing file -> exit 2" "$?" 2
 
 # Full flow with stubs.
 cat > "$D/vcc" <<'EOF'
@@ -66,6 +83,11 @@ mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "flow winner exit code" "$rc" 0
 grep -q unassign "$D/log" && bad "winner unassigned" || ok "winner stays assigned"
 
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim argsess)")"
+unset SHIP_CLAIM_RESUME; : > "$D/log"; ./ship-claim YPER4-999 "codex resume argsess" >/dev/null; eq "resume command as 2nd argument" "$?" 0
+grep -q 'codex resume argsess' "$D/log" && ok "argument lands in the claim comment" || bad "argument missing in comment"
+env -u CLAUDE_CODE_SESSION_ID -u CODEX_SESSION_ID -u CODEX_THREAD_ID ./ship-claim YPER4-999 >/dev/null 2>"$D/err"; eq "no resume id anywhere -> exit 2" "$?" 2
+grep -q 'pass the resume command' "$D/err" && ok "clear error names the argument" || bad "error text"
 ./ship-claim bogus >/dev/null 2>&1; eq "bad ticket -> exit 2" "$?" 2
 
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ]
