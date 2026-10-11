@@ -247,9 +247,23 @@ export function presentedAgentTokenGeneration(decoded: jwt.JwtPayload): string |
 /**
  * Validates JWT token for MCP API access
  */
+// Adds the wait of one auth database read to options.timings.dbMs (HTPR-6965). Measurement only.
+async function timeDbRead<T>(options: ValidateMcpAuthOptions, read: () => PromiseLike<T>): Promise<T> {
+  const timings = options.timings
+  if (!timings) return read()
+  const started = performance.now()
+  try {
+    return await read()
+  } finally {
+    timings.dbMs = (timings.dbMs ?? 0) + (performance.now() - started)
+  }
+}
+
 export async function validateJwtToken(token: string, options: ValidateMcpAuthOptions = {}): Promise<McpAuthContext | null> {
   const log = options.boundedLogging ? boundedMcpAuthLog : console.log
+  const verifyStarted = performance.now()
   const decoded = verifyMcpJwtToken(token, options)
+  if (options.timings) options.timings.jwtMs = performance.now() - verifyStarted
   if (options.failureSnapshot) options.failureSnapshot.verifiedJwt = decoded
   if (!decoded) return null
 
@@ -274,7 +288,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     // Fetch user from database (including revocation timestamp)
     let user
     if (userId) {
-      user = await prisma.user.findUnique({
+      user = await timeDbRead(options, () => prisma.user.findUnique({
         where: { id: userId },
         select: {
           id: true,
@@ -282,9 +296,9 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           displayName: true,
           mcpTokensRevokedAt: true,
         }
-      })
+      }))
     } else if (email) {
-      user = await prisma.user.findFirst({
+      user = await timeDbRead(options, () => prisma.user.findFirst({
         where: { email },
         select: {
           id: true,
@@ -292,7 +306,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           displayName: true,
           mcpTokensRevokedAt: true,
         }
-      })
+      }))
     } else {
       return null
     }
@@ -305,10 +319,10 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     if (isOAuthAccessToken) {
       if (oauthClientId === null) return null
       if (oauthClientId !== undefined) {
-        const client = await prisma.oAuthClient.findUnique({
+        const client = await timeDbRead(options, () => prisma.oAuthClient.findUnique({
           where: { client_id: oauthClientId },
           select: { client_id: true },
-        })
+        }))
         if (options.failureSnapshot) options.failureSnapshot.oauthClient = client
         if (!client) {
           log('[MCP Auth] OAuth client was removed')
@@ -321,12 +335,12 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     if (isOAuthAccessToken && oauthClientId === undefined) {
       revocationJtis.push(oauthLegacyRevocationJti(user.id))
     }
-    const revokedToken = await prisma.revokedToken.findFirst({
+    const revokedToken = await timeDbRead(options, () => prisma.revokedToken.findFirst({
       where: {
         user_id: user.id,
         jti: { in: revocationJtis },
       },
-    })
+    }))
 
     if (options.failureSnapshot) options.failureSnapshot.revokedToken = revokedToken
     if (revokedToken) {
@@ -389,7 +403,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           return null
         }
       }
-      const agent = await prisma.agent.findFirst({
+      const agent = await timeDbRead(options, () => prisma.agent.findFirst({
         where: {
           id: rawAgentId,
           userId: user.id,
@@ -402,7 +416,7 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
           mcpTokenJti: true,
           runtimeGeneration: true,
         },
-      })
+      }))
       if (!agent) {
         log('[MCP Auth] Invalid or revoked agent on token:', rawAgentId)
         return null

@@ -7,7 +7,7 @@ import {
   mcpUnauthorizedResponse,
   validateMcpAuth,
 } from '@/lib/mcp/auth'
-import type { McpAuthContext, McpAuthFailureSnapshot, ValidateMcpAuthOptions } from './auth/types'
+import type { McpAuthContext, McpAuthFailureSnapshot, McpAuthTimings, ValidateMcpAuthOptions } from './auth/types'
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
@@ -52,8 +52,34 @@ type RouteScope = {
   rate?: ReturnType<typeof checkMcpRateLimit>
   json?: Promise<unknown>
   failure: McpAuthFailureSnapshot
+  timings: McpAuthTimings & { authMs?: number; rateMs?: number }
 }
 const routeScopes = new AsyncLocalStorage<RouteScope>()
+
+// HTPR-6965: Server-Timing for the wrapped path only. Phase names and durations, nothing
+// about the caller. ratelimit includes auth when the check resolves the caller's tier.
+function serverTimingHeader(timings: RouteScope['timings'], totalMs: number): string {
+  const handlerMs = Math.max(0, totalMs - (timings.authMs ?? 0) - (timings.rateMs ?? 0))
+  return [
+    ['auth', timings.authMs],
+    ['auth_jwt', timings.jwtMs],
+    ['auth_db', timings.dbMs],
+    ['ratelimit', timings.rateMs],
+    ['handler', handlerMs],
+  ]
+    .filter((phase): phase is [string, number] => phase[1] !== undefined)
+    .map(([name, ms]) => `${name};dur=${ms.toFixed(1)}`)
+    .join(', ')
+}
+
+async function timed<T>(record: (ms: number) => void, run: () => Promise<T>): Promise<T> {
+  const started = performance.now()
+  try {
+    return await run()
+  } finally {
+    record(performance.now() - started)
+  }
+}
 
 function scopeFor(request: NextRequest): RouteScope | undefined {
   const scope = routeScopes.getStore()
@@ -67,7 +93,8 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
   return async (request, ...args) => {
     if (getMcpOperationContext(request) || !(await shouldUseMcpRouteWrapper(request))) return legacy(request, ...args)
-    const scope: RouteScope = { originalRequest: request, request, failure: {} }
+    const started = performance.now()
+    const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {
       get(target, property) {
         if (property === 'json') return () => scope.json ??= target.json()
@@ -76,24 +103,34 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
       },
     })
     scope.request = wrappedRequest
-    return routeScopes.run(scope, () => legacy(wrappedRequest, ...args))
+    const result = await routeScopes.run(scope, () => legacy(wrappedRequest, ...args))
+    try {
+      if (result instanceof Response) {
+        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, performance.now() - started))
+      }
+    } catch {
+      // Immutable response headers: skip the measurement, never fail the call.
+    }
+    return result
   }
 }
 
 export function validateMcpRouteAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}) {
   const scope = scopeFor(request)
   if (!scope) return validateMcpAuth(request, options)
-  return scope.auth ??= validateMcpAuth(scope.originalRequest, {
+  return scope.auth ??= timed(ms => { scope.timings.authMs = ms }, () => validateMcpAuth(scope.originalRequest, {
     ...options,
     boundedLogging: true,
     failureSnapshot: scope.failure,
-  })
+    timings: scope.timings,
+  }))
 }
 
 export function checkMcpRouteRateLimit(request: NextRequest) {
   const scope = scopeFor(request)
   if (!scope) return checkMcpRateLimit(request)
-  return scope.rate ??= checkMcpRateLimit(scope.originalRequest, () => validateMcpRouteAuth(request))
+  return scope.rate ??= timed(ms => { scope.timings.rateMs = ms }, () =>
+    checkMcpRateLimit(scope.originalRequest, () => validateMcpRouteAuth(request)))
 }
 
 export function mcpRouteUnauthorizedResponse(
