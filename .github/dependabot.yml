@@ -55,6 +55,12 @@ updates:
         versions: [">= 1.7.0"]
       - dependency-name: "@better-auth/passkey"
         versions: [">= 1.7.0"]
+      # @dicebear/core 10 drops createAvatar (src/lib/avatar.ts), and
+      # @dicebear/bottts-neutral has no 10.x yet (its newest 9.4.3 peers on
+      # core ^9), so #1065 failed CI (YPER4-298). Upgrade core and the style
+      # together once a matching style release exists, and delete this entry.
+      - dependency-name: "@dicebear/core"
+        versions: [">= 10.0.0"]
       # isomorphic-dompurify 3+ bundles jsdom 27+, which broke the server
       # sanitizer on Vercel twice on 2026-10-01 (missing jsdom stylesheet,
       # then ERR_REQUIRE_ESM from @exodus/bytes; HTPR-6795, rolled back in
