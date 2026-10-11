@@ -43,7 +43,8 @@ KINDS = [
 # Never stopped, even when a pattern matches their command line (a session's own prompt can mention a test).
 NEVER = {'claude', 'codex', 'hax', 'tmux', 'tmux: server', 'systemd', 'sshd', 'zsb', 'proc-watchdog.py'}
 SHELLS = {'bash', 'sh', 'dash', 'zsh', 'fish'}
-SECRET = re.compile(r'(?i)((?:token|secret|password|key|auth)[^=\s]*[=\s]+)\S+')
+# An argument naming a credential is hidden whole (and the value after such a --flag).
+SENSITIVE = re.compile(r'(?i)token|secret|passw|api[-_]?key|auth|bearer|cookie|credential|session[-_]?id|private[-_]?key')
 
 
 def clock_ticks():
@@ -81,6 +82,7 @@ def read_procs():
         procs[int(entry.name)] = {
             'ppid': int(fields[1]), 'start': start, 'age': uptime - start / clock_ticks(), 'rss_kb': rss,
             'cmd': raw.rstrip(b'\0').replace(b'\0', b' ').decode(errors='replace'), 'name': name, 'cwd': cwd,
+            'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'),
         }
     return procs
 
@@ -141,7 +143,7 @@ def over_limit(procs):
             reasons.append(f'using {rss / 1048576:.1f} GB')
         if reasons:
             hits.append({'pid': pid, 'kind': kind, 'reason': ' and '.join(reasons), 'age': age, 'rss_kb': rss,
-                         'cmd': procs[pid]['cmd'], 'cwd': procs[pid]['cwd'],
+                         'cmd': procs[pid]['cmd'], 'argv': procs[pid]['argv'], 'cwd': procs[pid]['cwd'],
                          'tree': [(m, procs[m]['start']) for m in members]})
     return hits
 
@@ -155,60 +157,103 @@ def same(pid, start):
         return False
 
 
-def stop(hit):
-    members = [m for m in reversed(hit['tree']) if same(*m)]  # children first
-    for pid, _ in members:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except OSError:
-            pass
-    deadline = time.time() + GRACE
-    while time.time() < deadline and any(same(*m) for m in members):
-        time.sleep(0.2)
-    killed = 0
-    for pid, start in members:
-        if same(pid, start):
+def stop_all(hits):
+    """SIGTERM every selected tree at once (children first), one shared grace period, then SIGKILL what is left."""
+    members = {h['pid']: [m for m in reversed(h['tree']) if same(*m)] for h in hits}
+    for group in members.values():
+        for pid, _ in group:
             try:
-                os.kill(pid, signal.SIGKILL)
-                killed += 1
+                os.kill(pid, signal.SIGTERM)
             except OSError:
                 pass
-    return len(members), killed
+    everyone = [m for group in members.values() for m in group]
+    deadline = time.time() + GRACE
+    while time.time() < deadline and any(same(*m) for m in everyone):
+        time.sleep(0.2)
+    result = {}
+    for root, group in members.items():
+        forced = 0
+        for pid, start in group:
+            if same(pid, start):
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                    forced += 1
+                except OSError:
+                    pass
+        result[root] = (len(group), forced)
+    return result
 
 
-def short(text, n):
-    text = SECRET.sub(r'\1***', text)
+def redact(argv):
+    """Command line with every sensitive argument, and the value after a sensitive flag, replaced by ***."""
+    out, hide_next = [], False
+    for arg in argv:
+        if hide_next:
+            out.append('***')
+            hide_next = False
+            continue
+        arg = re.sub(r'://[^/@\s]+@', '://***@', arg)
+        if SENSITIVE.search(arg):
+            name = re.split(r'[=:]', arg, maxsplit=1)
+            out.append(name[0] + ('=***' if len(name) > 1 else ''))
+            hide_next = len(name) == 1 and arg.startswith('-')
+        else:
+            out.append(arg)
+    return ' '.join(out)
+
+
+def short(argv, n):
+    text = redact(argv)
     return text if len(text) <= n else text[:n - 3] + '...'
+
+
+def notify(message):
+    """Send to INFRA MANAGER; a message that cannot be delivered is kept and retried on the next sweep."""
+    pending = STATE / 'unsent.txt'
+    messages = ([m for m in pending.read_text().split('\n') if m] if pending.exists() else []) + ([message] if message else [])
+    left = []
+    for m in messages:
+        try:
+            rc = subprocess.run([NOTIFY, 'infra-manager'], input=m.encode(), timeout=30,
+                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
+        except (OSError, subprocess.TimeoutExpired):
+            rc = 1
+        # runner-deliver: 0 delivered, 3 queued for its own retry; anything else is ours to retry.
+        if rc not in (0, 3):
+            left.append(m)
+    if left:
+        STATE.mkdir(parents=True, exist_ok=True)
+        pending.write_text('\n'.join(left) + '\n')
+        print(f'{len(left)} warning(s) not sent, kept in {pending}', file=sys.stderr)
+    elif pending.exists():
+        pending.unlink()
 
 
 def sweep(dry_run=False):
     hits = over_limit(read_procs())
     if dry_run:
         for h in hits:
-            print(f"would stop {h['kind']} pid {h['pid']} ({h['reason']}, {len(h['tree'])} processes): {short(h['cmd'], 160)}")
+            print(f"would stop {h['kind']} pid {h['pid']} ({h['reason']}, {len(h['tree'])} processes): {short(h['argv'], 160)}")
         print(f'{len(hits)} over the limits')
         return 0
     if not hits:
+        notify(None)
         return 0
     STATE.mkdir(parents=True, exist_ok=True)
     now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+    stopped = stop_all(hits)
     lines = []
     with open(STATE / 'kills.log', 'a') as log:
         for h in hits:
-            stopped, forced = stop(h)
+            count, forced = stopped[h['pid']]
             log.write(json.dumps({'ts': now, 'pid': h['pid'], 'kind': h['kind'], 'reason': h['reason'],
-                                  'processes': stopped, 'forced': forced, 'cwd': h['cwd'],
-                                  'cmd': short(h['cmd'], 400)}) + '\n')
-            lines.append(f"{h['kind']} pid {h['pid']} ({h['reason']}) in {h['cwd'] or '?'}: {short(h['cmd'], 120)}")
+                                  'processes': count, 'forced': forced, 'cwd': h['cwd'],
+                                  'cmd': short(h['argv'], 400)}) + '\n')
+            lines.append(f"{h['kind']} pid {h['pid']} ({h['reason']}) in {h['cwd'] or '?'}: {short(h['argv'], 120)}")
             print(f"stopped {lines[-1]}")
-    message = (f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB): '
-               + '; '.join(lines[:8]) + ('; and more' if len(lines) > 8 else '')
-               + f". Log: {STATE / 'kills.log'}. https://app.hypertask.ai/detail/project-4060/278")
-    try:
-        subprocess.run([NOTIFY, 'infra-manager'], input=message.encode(), timeout=60,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except (OSError, subprocess.TimeoutExpired) as err:
-        print(f'warning not sent: {err}', file=sys.stderr)
+    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB): '
+           + '; '.join(lines[:8]) + ('; and more' if len(lines) > 8 else '')
+           + f". Log: {STATE / 'kills.log'}. https://app.hypertask.ai/detail/project-4060/278")
     return 0
 
 

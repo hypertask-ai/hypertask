@@ -4,4 +4,4 @@ Description=Stop test, build and premerge processes older than 2 hours or over 6
 Type=oneshot
 Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
 ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/proc-watchdog/proc-watchdog.py sweep
-TimeoutStartSec=3min
+TimeoutStartSec=2min

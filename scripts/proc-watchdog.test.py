@@ -115,6 +115,21 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     if alive(sec):
         sec.kill()
 
+    # 5b. A warning that cannot be delivered is kept and sent on the next sweep.
+    bad = t / 'notify-bad'
+    bad.write_text('#!/bin/sh\ncat >/dev/null\nexit 1\n')
+    bad.chmod(0o755)
+    (t / 'notify.msg').unlink(missing_ok=True)
+    sec = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid')])
+    time.sleep(1.2)
+    run('sweep', PROC_WATCHDOG_MAX_AGE='1', PROC_WATCHDOG_NOTIFY=str(bad))
+    check('undelivered warning kept for retry', (t / 'state/unsent.txt').exists())
+    run('sweep')
+    check('kept warning sent on the next sweep', 'stopped 1 runaway' in (t / 'notify.msg').read_text()
+          and not (t / 'state/unsent.txt').exists())
+    if alive(sec):
+        sec.kill()
+
     # 6. Matching: real command lines from the VPS.
     sys.path.insert(0, str(HERE))
     import importlib.util
@@ -132,5 +147,8 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('next start is not a build', k('npm exec next start -p 3000', 'npm exec next') is None)
     check('astro dev is not a build', k('/usr/bin/node /p/node_modules/astro/bin/astro.mjs dev --port 4399') is None)
     check('claude never matches', k('claude --resume x tests/a.test.cjs', 'claude') is None)
+    r = pw.redact(['curl', '-H', 'Authorization: Bearer abcVALUE1', '--api-key', 'abcVALUE2', 'X_TOKEN=abcVALUE3',
+                   'https://u:abcVALUE4@h/x', 'tests/a.test.cjs'])
+    check('whole sensitive arguments and flag values are hidden', 'abcVALUE' not in r and 'tests/a.test.cjs' in r)
 
 sys.exit(1 if fails else print('ALL PASS') or 0)
