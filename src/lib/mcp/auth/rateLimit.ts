@@ -79,8 +79,8 @@ export async function checkMcpRateLimit(
       state = { pending: 0 }
       localCounts.set(key, state)
     }
-    const skipWait = state?.count !== undefined &&
-      state.count + state.pending + 1 <= MCP_RATE_LIMIT_PER_MINUTE / 2
+    const skipWait = state?.count !== undefined && state.pending === 0 &&
+      state.count + 1 <= MCP_RATE_LIMIT_PER_MINUTE / 2
     if (state) state.pending++
     const localState = state
     const increment = (async () => {
@@ -97,9 +97,9 @@ export async function checkMcpRateLimit(
         if (localState) localState.pending--
       }
     })()
-    // Skip only below half the anonymous limit, including every unconfirmed local call.
-    // Each call still increments Redis; other-instance traffic can overshoot until replies
-    // confirm a higher count, after which the next call awaits the shared limit again.
+    // Skip only with no unconfirmed increment and confirmed count + 1 <= half the anonymous limit.
+    // Every call still increments Redis; once the shared count exceeds the limit, each instance
+    // admits at most one extra call before awaiting Redis and enforcing the limit again.
     if (skipWait) {
       try {
         after(() => increment.then(() => {}))

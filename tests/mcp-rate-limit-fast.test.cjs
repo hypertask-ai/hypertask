@@ -125,7 +125,7 @@ test('first call awaits its INCR and sets expiry before returning', async () => 
   assert.deepEqual(h.expires, [[h.increments[0], 60]])
 })
 
-test('later low-count calls return without waiting and increment exactly once per call', async () => {
+test('sequential low-count calls return without waiting and increment exactly once per call', async () => {
   const h = harness()
   await h.call()
   h.hold()
@@ -133,26 +133,44 @@ test('later low-count calls return without waiting and increment exactly once pe
     const next = await observe(h.call())
     assert.equal(next.settled, true)
     assert.equal(await next.result, null)
+    assert.equal(h.background.length, 1)
+    h.release()
+    await h.drain()
   }
   assert.equal(h.increments.length, 5)
-  assert.equal(h.background.length, 4)
+  assert.equal(h.pending.length, 0)
   assert.equal(h.stats().flagCalls, 1, 'flag modes are cached off the hot path')
-  while (h.pending.length) h.release()
-  await h.drain()
   assert.equal(h.rate.__counts.values().next().value.count, 5)
 })
 
-test('unconfirmed calls count toward half-limit and force synchronous fallback', async () => {
+test('a second low-count call awaits while another increment is unconfirmed', async () => {
+  const h = harness()
+  await h.call()
+  h.hold()
+  assert.equal((await observe(h.call())).settled, true)
+  const concurrent = await observe(h.call())
+  assert.equal(concurrent.settled, false)
+  assert.equal(h.increments.length, 3)
+  assert.equal(h.background.length, 1)
+  h.release()
+  await h.drain()
+  assert.equal(h.rate.__counts.values().next().value.pending, 1)
+  h.release()
+  assert.equal(await concurrent.result, null)
+  assert.equal(h.increments.length, 3)
+})
+
+test('confirmed count plus one above half-limit forces synchronous fallback', async () => {
   const h = harness({ initial: 58 })
   await h.call() // confirmed 59
   h.hold()
   assert.equal((await observe(h.call())).settled, true) // projected 60
+  h.release()
+  await h.drain()
   const threshold = await observe(h.call()) // projected 61
   assert.equal(threshold.settled, false)
   h.release()
-  h.release()
   assert.equal(await threshold.result, null)
-  await h.drain()
   const next = await observe(h.call())
   assert.equal(next.settled, false, 'confirmed count above 60 always awaits')
   h.release()
@@ -178,15 +196,39 @@ test('jumping background call is allowed, then the next call awaits and returns 
   assert.deepEqual(await response.json(), { message: 'Rate limit exceeded. Please slow down and try again shortly.' })
 })
 
-test('out-of-order background replies never lower the known shared count', async () => {
+test('a shared-count jump admits only one of ten concurrent calls before Redis replies', async () => {
+  const h = harness()
+  await h.call() // confirmed 1
+  h.jump(699)
+  h.hold()
+  const calls = await Promise.all(Array.from({ length: 10 }, () => observe(h.call())))
+  assert.equal(calls.filter(call => call.settled).length, 1)
+  assert.equal(h.background.length, 1)
+  assert.equal(h.increments.length, 11)
+  assert.equal(h.pending.length, 10)
+  for (const call of calls) {
+    if (call.settled) assert.equal(await call.result, null)
+  }
+  while (h.pending.length) h.release()
+  for (const call of calls) {
+    if (!call.settled) assert.equal((await call.result).status, 429)
+  }
+  await h.drain()
+  assert.equal(h.increments.length, 11, 'every call increments exactly once')
+  assert.equal(h.rate.__counts.values().next().value.count, 709)
+  assert.equal(h.rate.__counts.values().next().value.pending, 0)
+})
+
+test('out-of-order replies never lower the known shared count', async () => {
   const h = harness()
   await h.call()
   h.hold()
   await h.call()
   h.jump(699)
-  await h.call()
+  const concurrent = await observe(h.call())
+  assert.equal(concurrent.settled, false)
   h.release(1)
-  await tick()
+  assert.equal((await concurrent.result).status, 429)
   h.release()
   await h.drain()
   assert.equal(h.rate.__counts.values().next().value.count, 700)
@@ -331,13 +373,13 @@ test('custom anonymous limit controls the conservative half-limit threshold', as
   const h = harness({ env: { MCP_RATE_LIMIT_PER_MINUTE: '10' }, initial: 3 })
   await h.call()
   h.hold()
-  await h.call() // projected 5
+  assert.equal((await observe(h.call())).settled, true) // projected 5
+  h.release()
+  await h.drain()
   const next = await observe(h.call()) // projected 6
   assert.equal(next.settled, false)
   h.release()
-  h.release()
   await next.result
-  await h.drain()
 })
 
 test('anonymous-tier counts still resolve auth and enforce 120, while agents can reach 600', async () => {
