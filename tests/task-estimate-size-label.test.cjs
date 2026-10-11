@@ -31,9 +31,9 @@ function load(relative, dependencies) {
 function picker(enabled, mode = "Task") {
   const writes = [], closes = [], refreshes = [];
   const constants = { __esModule: true, default: { EstimateConstants: estimates, CommentsTQPrefixKey: "comments" } };
-  const keys = { HTPR_6978_SIZE_LABEL_CLICK_FLAG: flag, HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" };
+  const keys = { HTPR_6978_SIZE_LABEL_CLICK_FLAG: flag, HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" };
   const useFlag = key => {
-    if (key === keys.HTPR_6975_TYPED_WRITES_FLAG) return false;
+    if (key === keys.HTPR_6975_TYPED_WRITES_FLAG || key === keys.HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG) return false;
     assert.equal(key, flag);
     return enabled;
   };
@@ -41,6 +41,7 @@ function picker(enabled, mode = "Task") {
     "@/hooks/useFlag": { useFlag },
     "@/lib/flags/keys": keys,
     "@/lib/api/typedClient": {},
+    "@/hooks/MultiPages/useUpdateTaskInBoards": { __esModule: true, default: () => ({ updateTaskInCache: noop }) },
     "@/hooks/MultiPages/useGetEstimateForTask": { useGetEstimateForTask: () => ({ data: { estimate_index: 3 } }) },
     "@/lib/constants": constants,
     "@/store": { inViewObjectAtom: "task", currentProjectAtom: "project", calendarTaskFiltersAtom: "calendar" },
