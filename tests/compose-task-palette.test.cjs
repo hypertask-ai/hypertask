@@ -174,6 +174,7 @@ async function withPalette(t, config, check) {
         }
       }
       const filename = path.join(directory, 'src/components/Modals/commands/HTC/commands.tsx');
+      delete require.cache[path.join(directory, 'src/components/Modals/commands/HTC/ComposeTaskWriter.tsx')];
       delete require.cache[filename];
       Palette = jiti(filename).default;
       reactRoot = require('react-dom/client').createRoot(document.getElementById('root'));
@@ -1447,4 +1448,40 @@ test('board shortcut matches platform footer, filters list, and restores caret a
       assert.equal(requests[0].body.project.id, 9);
     });
   }
+});
+
+test('board chip flag off renders exactly clean production Compose on desktop and phone', async (t) => {
+  for (const mobile of [false, true]) {
+    await withPalette(t, { boardChip: false, newWindow: true, mobile, tab: 'compose', url: '/inbox', previousBoard: 'project-7' }, async ({ baseline, loadedBoards }) => {
+      assert.equal(chip(), null);
+      assert.equal(loadedBoards.length, 0);
+      if (process.env.COMPOSE_BASELINE_DIR) await baseline(process.env.COMPOSE_BASELINE_DIR);
+    });
+  }
+});
+
+test('board list bounds arrows to filtered rows, tolerates no matches, and reveals same-board choice', async (t) => {
+  await withPalette(t, { boardChip: true, newWindow: true, tab: 'compose', boards: composeBoards, url: '/project?id=7' }, async ({ dom, input, type, press, requests }) => {
+    await type('Do not send from the board list');
+    input().setSelectionRange(4, 8, 'backward');
+    await press('B', boardKey());
+    const filter = async (value) => React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(boardList(), value);
+      boardList().dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    await filter('no matching board');
+    await press('ArrowDown', { code: 'ArrowDown' });
+    await press('Enter', { code: 'Enter' });
+    assert.ok(boardList());
+    assert.equal(requests.length, 0);
+    await filter('Sandbox');
+    await press('ArrowDown', { code: 'ArrowDown' });
+    await press('ArrowUp', { code: 'ArrowUp' });
+    await press('Enter', { code: 'Enter' });
+    assert.equal(boardList(), null);
+    assert.equal(chip().textContent, 'QA Sandbox');
+    assert.equal(document.activeElement, input());
+    assert.deepEqual([input().selectionStart, input().selectionEnd, input().selectionDirection], [4, 8, 'backward']);
+    assert.equal(requests.length, 0);
+  });
 });
