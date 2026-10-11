@@ -38,6 +38,60 @@ test("a referenced source file selects the tests naming it", async () => {
   assert.ok(selected.includes("tests/account-token-revocation.test.cjs"));
 });
 
+test("a test importing a changed file by relative path is selected (YPER4-238)", async () => {
+  // ai-chat-cancellation.test.ts imports "../src/app/api/ai/chat/stream/streamLease"
+  // with no extension, so the repo-relative path never appears in its text.
+  const selected = await select(["src/app/api/ai/chat/stream/streamLease.ts"]);
+  assert.notEqual(selected, "ALL");
+  assert.ok(selected.includes("tests/ai-chat-cancellation.test.ts"));
+});
+
+test("the import graph follows aliases, relative hops, path.join and unresolvable requires", () => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const { execFileSync } = require("node:child_process");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "select-graph-"));
+  const put = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  put("scripts/test-inventory.mjs", fs.readFileSync(path.join(root, "scripts/test-inventory.mjs"), "utf8"));
+  put(".github/scripts/select-tests.mjs", fs.readFileSync(path.join(root, ".github/scripts/select-tests.mjs"), "utf8"));
+  put("src/lib/leaf.ts", "export const leaf = 1;\n");
+  put("src/lib/mid.ts", 'import { leaf } from "@/lib/leaf";\nexport const mid = leaf;\n');
+  put("src/lib/dir/index.ts", "export const d = 1;\n");
+  put("src/lib/other.ts", "export const other = 1;\n");
+  put("src/lib/orphan.ts", "export const orphan = 1;\n");
+  put("tests/alias.test.cjs", 'require("../src/lib/mid");\n');
+  put("tests/barrel.test.ts", 'import "../src/lib/dir";\n');
+  put("tests/join.test.cjs", 'const p = require("node:path").join(__dirname, "..", "src", "lib", "other.ts");\n');
+  put("tests/helper.cjs", 'require("../src/lib/leaf");\n');
+  put("tests/viahelper.test.cjs", 'require("./helper.cjs");\n');
+  put("tests/dynamic.test.cjs", "const name = process.env.X;\nrequire(name);\n");
+  put("tests/mixed.test.cjs", 'require("./helper.cjs");\nrequire(process.env.X);\n');
+  put("src/lib/loader.ts", "export const load = (n: string) => require(n);\n");
+  put("tests/viaLoader.test.cjs", 'require("../src/lib/loader");\n');
+  put("tests/test-inventory.test.cjs", "// guard\n");
+  put("tests/demo-smoke.test.cjs", "// guard\n");
+  put("tests/file-size-limit.test.cjs", "// guard\n");
+  const pick = (file) =>
+    execFileSync(process.execPath, [".github/scripts/select-tests.mjs", file], { cwd: dir, encoding: "utf8" })
+      .trim().split("\n");
+  try {
+    const leaf = pick("src/lib/leaf.ts");
+    assert.ok(leaf.includes("tests/alias.test.cjs"), "alias + relative hop");
+    assert.ok(leaf.includes("tests/viahelper.test.cjs"), "through a test helper");
+    assert.ok(leaf.includes("tests/dynamic.test.cjs"), "unresolvable require widens");
+    assert.ok(leaf.includes("tests/mixed.test.cjs"), "static helper plus dynamic require");
+    assert.ok(leaf.includes("tests/viaLoader.test.cjs"), "dynamic require reached in src");
+    assert.ok(!leaf.includes("tests/join.test.cjs"), "unrelated test is skipped");
+    assert.ok(pick("src/lib/dir/index.ts").includes("tests/barrel.test.ts"), "directory index");
+    assert.ok(pick("src/lib/other.ts").includes("tests/join.test.cjs"), "path.join with __dirname");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test("nested suites are discoverable, not just the flat tests dir", async () => {
   const selected = await select([
     "tests/security/getCount.test.ts",
