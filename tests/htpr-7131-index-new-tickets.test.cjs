@@ -69,10 +69,6 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
     "@/pages/api/queues/FAST/generateSummary": { default: noop },
     "@/utils/controllers/activities/createAssignedActivity": { assignmentActivityUserSelect: {} },
     "@vercel/functions": { waitUntil: (promise) => background.push(promise) },
-    "@/lib/api/task-writes/route": {
-      withTaskWriteFlag: (handler) => handler,
-      taskWriteRoute: ({ prepare, operation }) => async (request) => operation(await request.json(), await prepare({ userId: actor.id })),
-    },
   };
   const body = { title: "uniqueword title", description: "", projectId: 7049, sectionId: 9, section: "Todo", ranking: "a", userId: actor.id };
   async function create(kind, extra = {}) {
@@ -89,13 +85,16 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
       return { status: 200 };
     }
     if (kind === "app-router") {
-      const response = await load("src/lib/api/task-writes/create.ts", mocks).POST({ json: async () => ({ ...body, ...extra }) });
+      const response = await load("src/lib/api/task-writes/create.ts", mocks).POST({ headers: new Headers(), json: async () => ({ ...body, ...extra }) });
       return { status: response.status, json: await response.json() };
     }
     let response;
     await load("src/pages/api/tasks/create.ts", mocks).default(
       { method: "POST", headers: {}, body: { ...body, ...extra } },
-      { status: (status) => ({ json: (json) => { response = { status, json }; return response; } }) },
+      {
+        setHeader: () => undefined,
+        status: (status) => ({ json: (json) => { response = { status, json }; return response; } }),
+      },
     );
     return response;
   }
@@ -104,10 +103,10 @@ function harness(enabled, { failIndex = false, denied = false } = {}) {
 
 for (const enabled of [true, false]) {
   for (const [kind, variant, extra] of [
-    ["legacy", "API and quick add", {}],
-    ["legacy", "urgent quick add", { index: 0 }],
-    ["legacy", "fullscreen", { fullScreenTask: true }],
-    ["legacy", "inferred rank", { ranking: undefined, section: undefined }],
+    ["pages", "API and quick add", {}],
+    ["pages", "urgent quick add", { index: 0 }],
+    ["pages", "fullscreen", { fullScreenTask: true }],
+    ["pages", "inferred rank", { ranking: undefined, section: undefined }],
     ["app-router", "typed API and quick add", {}],
     ["app-router", "fullscreen", { fullScreenTask: true }],
     ["core", "agent creation", { agentId: "agent-1" }],
@@ -130,7 +129,7 @@ for (const enabled of [true, false]) {
   }
 }
 
-for (const kind of ["legacy", "core"]) {
+for (const kind of ["pages", "core"]) {
   test(`${kind} hands indexing to waitUntil instead of making creation wait`, async () => {
     const fx = harness(true);
     await fx.create(kind);
@@ -153,7 +152,7 @@ for (const kind of ["legacy", "core"]) {
 test("denied creation never indexes a task", async () => {
   const fx = harness(true, { denied: true });
   fx.releaseIndex();
-  assert.equal((await fx.create("legacy")).status, 404);
+  assert.equal((await fx.create("pages")).status, 404);
   await Promise.all(fx.background);
   assert.deepEqual(fx.indexed, []);
   assert.deepEqual(fx.flags, []);
@@ -174,9 +173,14 @@ test("bugfix registry definition defaults to Everyone with a release risk", () =
 
 test("all public creation paths converge on the tested creators", () => {
   const source = (file) => fs.readFileSync(path.join(root, file), "utf8");
-  for (const file of ["src/pages/api/tasks/createGlobally.ts", "src/lib/api/task-writes/create-global.ts"]) {
-    assert.match(source(file), /schedulePostCreateWork\(\{/);
+  for (const [file, shared] of [
+    ["src/pages/api/tasks/create.ts", "create"],
+    ["src/pages/api/tasks/createGlobally.ts", "create-global"],
+  ]) {
+    assert.match(source(file), /export default taskWriteHandler\(\{/);
+    assert.ok(source(file).includes(`POST: async () => (await import("@/lib/api/task-writes/${shared}")).POST`));
   }
+  assert.match(source("src/lib/api/task-writes/create-global.ts"), /schedulePostCreateWork\(\{/);
   assert.match(source("src/lib/mcp/operations/tasks/create/operation.ts"), /await createTask\(\{/);
   assert.match(source("src/lib/mcp/tasks/services.ts"), /\/api\/tasks\/createGlobally/);
   assert.match(source("src/lib/ai/tools/createTask.ts"), /await createTask\(\{/);

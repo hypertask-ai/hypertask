@@ -216,7 +216,6 @@ function saveHarness(enabled) {
   const stubs = {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
-    "./route": { taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request) },
     "@/lib/api/task-writes/create-global-effects": effects, "./create-global-effects": effects,
     "@/lib/ai/composeTaskTarget": load(path.join(root, "src/lib/ai/composeTaskTarget.ts")),
     "@/lib/flags": { ...keys, isFeatureEnabled: async (flag) => flag === key ? enabled : true },
@@ -235,6 +234,7 @@ function saveHarness(enabled) {
     "../queues/duedateQueue": queue, "@/pages/api/queues/duedateQueue": queue,
     "next/server": { NextResponse: { json: Response.json } }, "better-auth/cookies": { parseCookies: () => new Map() },
   };
+  stubs["./route"] = moduleWithStubs("src/lib/api/task-writes/route.ts", stubs);
   const api = moduleWithStubs("src/lib/api/task-writes/create-global.ts", stubs);
   const post = async (extra = {}) => {
     const body = { title: "Review onboarding", description: "<p>Review</p>", projectId: 7, userId: 985, sectionId: 12, requestKind: "compose-task", writerDueDate: "2026-10-16", writerTimeZone: "America/Los_Angeles", ...extra };
