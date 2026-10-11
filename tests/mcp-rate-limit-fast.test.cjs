@@ -26,28 +26,30 @@ function load(file, stubs, extras = {}, append = '') {
 
 const decision = load('src/lib/mcp/rateLimitDecision.ts', {})
 
-function harness({ mode = 'EVERYONE', initial = 0, env = {}, afterThrows = false, agent = true } = {}) {
+function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store = new Map() } = {}) {
   let now = 120_000
   let hold = false
   let checked = false
-  let count = initial
   let authCalls = 0
   let flagCalls = 0
   let flagFails = false
   let connectionWait
+  let connectionFails = false
   let expiryFails = false
   const increments = []
   const expires = []
   const pending = []
-  const background = []
   const warnings = []
   class Clock extends Date { static now() { return now } }
+  const increment = (key, amount, method) => {
+    increments.push({ key, amount, method })
+    const result = (store.get(key) ?? initial) + amount
+    store.set(key, result)
+    return hold ? new Promise((resolve, reject) => pending.push({ resolve, reject, result })) : Promise.resolve(result)
+  }
   const redis = {
-    incr: key => {
-      increments.push(key)
-      const result = ++count
-      return hold ? new Promise((resolve, reject) => pending.push({ resolve, reject, result })) : Promise.resolve(result)
-    },
+    incr: key => increment(key, 1, 'incr'),
+    incrby: (key, amount) => increment(key, amount, 'incrby'),
     expire: async (...args) => {
       expires.push(args)
       if (expiryFails) throw new Error('Fixture expiry failure')
@@ -55,10 +57,7 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, afterThrows = false
     },
   }
   const rate = load('src/lib/mcp/auth/rateLimit.ts', {
-    'next/server': { NextRequest, NextResponse, after: run => {
-      if (afterThrows) throw new Error('No request lifecycle')
-      background.push(run)
-    } },
+    'next/server': { NextRequest, NextResponse },
     crypto: require('node:crypto'),
     '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: flagKey },
     '@/lib/flags': { featureFlagCandidateUserIds: async (...args) => {
@@ -71,6 +70,7 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, afterThrows = false
       const wait = connectionWait
       connectionWait = undefined
       if (wait) await wait
+      if (connectionFails) throw new Error('Fixture connection failure')
       return redis
     } },
     '@/lib/mcp/rateLimitDecision': decision,
@@ -85,17 +85,18 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, afterThrows = false
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   return {
-    rate, request, increments, expires, pending, background, warnings,
+    rate, request, increments, expires, pending, warnings, store,
     call: token => rate.checkMcpRateLimit(request(token)),
     hold: () => { hold = true },
     release: (index = 0) => { const [item] = pending.splice(index, 1); item.resolve(item.result) },
     reject: () => { pending.shift().reject(new Error('Fixture Redis failure')) },
-    drain: () => Promise.all(background.splice(0).map(run => run())),
     advance: ms => { now += ms },
-    jump: value => { count = value },
+    jump: value => { store.set(increments[0].key, value) },
+    count: () => store.get(increments[0].key),
     setMode: value => { mode = value },
     failFlag: () => { flagFails = true },
     failExpiry: () => { expiryFails = true },
+    failConnection: () => { connectionFails = true },
     holdConnection: () => {
       let release
       connectionWait = new Promise(resolve => { release = resolve })
@@ -113,147 +114,173 @@ async function observe(call) {
   return { result, settled }
 }
 
-test('first call awaits its INCR and sets expiry before returning', async () => {
+const state = h => h.rate.__counts.values().next().value
+
+test('first call awaits plain INCR and sets expiry before returning', async () => {
   const h = harness()
   h.hold()
   const first = await observe(h.call())
   assert.equal(first.settled, false)
-  assert.equal(h.increments.length, 1)
-  assert.equal(h.background.length, 0)
+  assert.deepEqual(h.increments.map(({ method, amount }) => [method, amount]), [['incr', 1]])
   h.release()
   assert.equal(await first.result, null)
-  assert.deepEqual(h.expires, [[h.increments[0], 60]])
+  assert.deepEqual(h.expires, [[h.increments[0].key, 60]])
+  assert.deepEqual(state(h), { count: 1, reserved: 0 })
 })
 
-test('sequential low-count calls return without waiting and increment exactly once per call', async () => {
+test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhaustion awaits again', async () => {
   const h = harness()
-  await h.call()
-  h.hold()
-  for (let i = 0; i < 4; i++) {
-    const next = await observe(h.call())
-    assert.equal(next.settled, true)
-    assert.equal(await next.result, null)
-    assert.equal(h.background.length, 1)
-    h.release()
-    await h.drain()
+  let admitted = 0
+  const allow = async result => {
+    assert.equal(await result, null)
+    admitted++
+    assert.ok(h.count() >= admitted, 'Redis has already counted every admitted call')
   }
-  assert.equal(h.increments.length, 5)
-  assert.equal(h.pending.length, 0)
+  await allow(h.call())
+  h.hold()
+  const lease = await observe(h.call())
+  assert.equal(lease.settled, false)
+  assert.deepEqual(h.increments.map(({ method, amount }) => [method, amount]), [['incr', 1], ['incrby', 10]])
+  h.release()
+  await allow(lease.result)
+  assert.deepEqual(state(h), { count: 11, reserved: 9 })
+  const connect = h.holdConnection()
+  for (let i = 0; i < 9; i++) {
+    const prepaid = await observe(h.call())
+    assert.equal(prepaid.settled, true, 'prepaid calls do not even wait for a Redis connection')
+    await allow(prepaid.result)
+    assert.equal(h.increments.length, 2)
+    assert.equal(state(h).reserved, 8 - i)
+  }
+  const exhausted = await observe(h.call())
+  assert.equal(exhausted.settled, false)
+  connect()
+  await tick()
+  assert.equal(h.increments.length, 3)
+  assert.equal(h.increments[2].method, 'incrby')
+  h.release()
+  await allow(exhausted.result)
   assert.equal(h.stats().flagCalls, 1, 'flag modes are cached off the hot path')
-  assert.equal(h.rate.__counts.values().next().value.count, 5)
 })
 
-test('a second low-count call awaits while another increment is unconfirmed', async () => {
+test('concurrent lease requests await their own prepayment before admission', async () => {
   const h = harness()
   await h.call()
   h.hold()
-  assert.equal((await observe(h.call())).settled, true)
-  const concurrent = await observe(h.call())
-  assert.equal(concurrent.settled, false)
-  assert.equal(h.increments.length, 3)
-  assert.equal(h.background.length, 1)
-  h.release()
-  await h.drain()
-  assert.equal(h.rate.__counts.values().next().value.pending, 1)
-  h.release()
-  assert.equal(await concurrent.result, null)
-  assert.equal(h.increments.length, 3)
-})
-
-test('confirmed count plus one above half-limit forces synchronous fallback', async () => {
-  const h = harness({ initial: 58 })
-  await h.call() // confirmed 59
-  h.hold()
-  assert.equal((await observe(h.call())).settled, true) // projected 60
-  h.release()
-  await h.drain()
-  const threshold = await observe(h.call()) // projected 61
-  assert.equal(threshold.settled, false)
-  h.release()
-  assert.equal(await threshold.result, null)
-  const next = await observe(h.call())
-  assert.equal(next.settled, false, 'confirmed count above 60 always awaits')
-  h.release()
-  await next.result
-})
-
-test('jumping background call is allowed, then the next call awaits and returns unchanged 429', async () => {
-  const h = harness()
-  await h.call()
-  h.jump(699)
-  h.hold()
-  const jumping = await observe(h.call())
-  assert.equal(jumping.settled, true)
-  assert.equal(await jumping.result, null)
-  h.release()
-  await h.drain()
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  h.release()
-  const response = await next.result
-  assert.equal(response.status, 429)
-  assert.equal(response.headers.get('Retry-After'), '60')
-  assert.deepEqual(await response.json(), { message: 'Rate limit exceeded. Please slow down and try again shortly.' })
-})
-
-test('a shared-count jump admits only one of ten concurrent calls before Redis replies', async () => {
-  const h = harness()
-  await h.call() // confirmed 1
-  h.jump(699)
-  h.hold()
-  const calls = await Promise.all(Array.from({ length: 10 }, () => observe(h.call())))
-  assert.equal(calls.filter(call => call.settled).length, 1)
-  assert.equal(h.background.length, 1)
-  assert.equal(h.increments.length, 11)
-  assert.equal(h.pending.length, 10)
-  for (const call of calls) {
-    if (call.settled) assert.equal(await call.result, null)
-  }
+  const calls = await Promise.all(Array.from({ length: 5 }, () => observe(h.call())))
+  assert.equal(calls.filter(call => call.settled).length, 0)
+  assert.equal(h.increments.length, 6)
+  assert.ok(h.increments.slice(1).every(write => write.method === 'incrby'))
+  let admitted = 1
   while (h.pending.length) h.release()
   for (const call of calls) {
-    if (!call.settled) assert.equal((await call.result).status, 429)
+    assert.equal(await call.result, null)
+    admitted++
+    assert.ok(h.count() >= admitted)
   }
-  await h.drain()
-  assert.equal(h.increments.length, 11, 'every call increments exactly once')
-  assert.equal(h.rate.__counts.values().next().value.count, 709)
-  assert.equal(h.rate.__counts.values().next().value.pending, 0)
 })
 
-test('out-of-order replies never lower the known shared count', async () => {
-  const h = harness()
+test('known count over 50 uses plain INCR and awaits near the limit', async () => {
+  const h = harness({ initial: 50 })
   await h.call()
+  assert.equal(state(h).count, 51)
   h.hold()
+  for (let i = 0; i < 2; i++) {
+    const next = await observe(h.call())
+    assert.equal(next.settled, false)
+    assert.equal(h.increments.at(-1).method, 'incr')
+    h.release()
+    assert.equal(await next.result, null)
+  }
+})
+
+test('known count exactly 50 can reserve through half the anonymous limit', async () => {
+  const h = harness({ initial: 49 })
+  await h.call()
+  assert.equal(await h.call(), null)
+  assert.equal(h.increments[1].method, 'incrby')
+  assert.deepEqual(state(h), { count: 60, reserved: 9 })
+})
+
+test('shared jump to 699 blocks the lease and every later call synchronously with unchanged 429', async () => {
+  const h = harness()
   await h.call()
   h.jump(699)
-  const concurrent = await observe(h.call())
-  assert.equal(concurrent.settled, false)
-  h.release(1)
-  assert.equal((await concurrent.result).status, 429)
-  h.release()
-  await h.drain()
-  assert.equal(h.rate.__counts.values().next().value.count, 700)
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  h.release()
-  assert.equal((await next.result).status, 429)
+  h.hold()
+  for (let i = 0; i < 3; i++) {
+    const next = await observe(h.call())
+    assert.equal(next.settled, false)
+    assert.equal(h.increments.at(-1).method, i === 0 ? 'incrby' : 'incr')
+    h.release()
+    const response = await next.result
+    assert.equal(response.status, 429)
+    assert.equal(response.headers.get('Retry-After'), '60')
+    assert.deepEqual(await response.json(), { message: 'Rate limit exceeded. Please slow down and try again shortly.' })
+    assert.equal(state(h).reserved, 0)
+  }
 })
 
-test('new window drops prior entries and awaits first increment; old replies cannot repopulate it', async () => {
+test('two instances sharing Redis admit at most 120 of 130 interleaved anonymous calls, never overshooting', async () => {
+  const store = new Map()
+  const instances = [harness({ store, agent: false }), harness({ store, agent: false })]
+  let admitted = 0
+  let blocked = 0
+  for (let i = 0; i < 130; i++) {
+    const h = instances[i % 2]
+    const result = await h.call()
+    if (result === null) admitted++
+    else { assert.equal(result.status, 429); blocked++ }
+    assert.ok(h.count() >= admitted, `shared count covers ${admitted} admitted calls`)
+    assert.ok(admitted <= 120)
+  }
+  assert.ok(admitted >= 120 - 2 * 9, 'only unused prepaid slots may block early')
+  assert.ok(blocked >= 10)
+  assert.equal(admitted + blocked, 130)
+  assert.notEqual(instances[0].rate.__counts, instances[1].rate.__counts)
+})
+
+test('raced lease above half-limit creates no reservation and classifies the returned count', async () => {
+  const h = harness({ agent: false })
+  await h.call()
+  h.jump(115)
+  assert.equal((await h.call()).status, 429)
+  assert.deepEqual(state(h), { count: 125, reserved: 0 })
+  assert.equal((await h.call()).status, 429)
+  assert.equal(h.increments.at(-1).method, 'incr')
+})
+
+test('new window clears prepaid reservations and awaits its first plain INCR', async () => {
+  const h = harness()
+  await h.call()
+  await h.call()
+  assert.equal(state(h).reserved, 9)
+  h.advance(60_000)
+  h.hold()
+  const next = await observe(h.call())
+  assert.equal(next.settled, false)
+  assert.notEqual(h.increments[0].key, h.increments[2].key)
+  assert.equal(h.increments[2].method, 'incr')
+  h.release()
+  assert.equal(await next.result, null)
+  assert.equal(h.rate.__counts.size, 1)
+  assert.deepEqual(state(h), { count: 1, reserved: 0 })
+  assert.equal(h.expires.length, 2)
+})
+
+test('old-window lease replies cannot repopulate reservations in the new window', async () => {
   const h = harness()
   await h.call()
   h.hold()
-  await h.call()
+  const old = await observe(h.call())
   h.advance(60_000)
-  h.jump(0)
   const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  assert.notEqual(h.increments[0], h.increments[2])
-  assert.equal(h.rate.__counts.size, 1)
-  h.release()
-  await h.drain()
-  assert.equal(h.rate.__counts.values().next().value.count, undefined)
-  h.release()
+  h.release(1)
   assert.equal(await next.result, null)
+  h.release()
+  assert.equal(await old.result, null)
+  assert.equal(h.rate.__counts.size, 1)
+  assert.match([...h.rate.__counts.keys()][0], /:180$/)
+  assert.deepEqual(state(h), { count: 1, reserved: 0 })
 })
 
 test('a request delayed across the window boundary cannot reinsert an expired entry', async () => {
@@ -269,45 +296,60 @@ test('a request delayed across the window boundary cannot reinsert an expired en
   assert.match([...h.rate.__counts.keys()][0], /:180$/)
 })
 
-test('awaited Redis errors and first-count expiry errors retain fail-open behavior', async () => {
+test('awaited Redis and first-write expiry errors clear entries and fail open', async () => {
   const h = harness()
+  await h.call()
   h.hold()
-  const first = await observe(h.call())
+  const lease = await observe(h.call())
   h.reject()
-  assert.equal(await first.result, null)
+  assert.equal(await lease.result, null)
   assert.equal(h.warnings.length, 1)
+  assert.equal(h.rate.__counts.size, 0)
+  const next = await observe(h.call())
+  assert.equal(next.settled, false)
+  assert.equal(h.increments.at(-1).method, 'incr')
+  h.release()
+  assert.equal(await next.result, null)
   const expiry = harness()
   expiry.failExpiry()
   assert.equal(await expiry.call(), null)
   assert.equal(expiry.warnings.length, 1)
-  assert.equal(expiry.rate.__counts.values().next().value.count, undefined)
+  assert.equal(expiry.rate.__counts.size, 0)
 })
 
-test('background Redis error is swallowed, logged once, and makes the next call await', async () => {
+test('connection errors clear known entries and fail open', async () => {
+  const h = harness({ initial: 50 })
+  await h.call()
+  h.failConnection()
+  assert.equal(await h.call(), null)
+  assert.equal(h.rate.__counts.size, 0)
+  assert.equal(h.warnings.length, 1)
+})
+
+test('a lease recreating an expired Redis key sets expiry when returned count equals increment', async () => {
   const h = harness()
   await h.call()
-  h.hold()
+  h.store.clear()
   assert.equal(await h.call(), null)
-  h.reject()
-  await h.drain()
-  assert.equal(h.warnings.length, 1)
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  h.release()
-  assert.equal(await next.result, null)
+  assert.equal(h.count(), 10)
+  assert.equal(h.expires.length, 2)
+  assert.deepEqual(state(h), { count: 10, reserved: 9 })
 })
 
 for (const mode of ['OFF', 'OWNER_ONLY', 'OWNER_AND_QA']) {
-  test(`${mode} uses the legacy always-await path`, async () => {
+  test(`${mode} uses the legacy always-await plain INCR path without reservations`, async () => {
     const h = harness({ mode })
     await h.call()
     h.hold()
-    const next = await observe(h.call())
-    assert.equal(next.settled, false)
-    assert.equal(h.background.length, 0)
-    h.release()
-    assert.equal(await next.result, null)
-    assert.equal(h.increments.length, 2)
+    for (let i = 0; i < 3; i++) {
+      const next = await observe(h.call())
+      assert.equal(next.settled, false)
+      assert.equal(h.increments.at(-1).method, 'incr')
+      assert.equal(h.rate.__counts.size, 0)
+      h.release()
+      assert.equal(await next.result, null)
+    }
+    assert.equal(h.increments.length, 4)
   })
 }
 
@@ -327,59 +369,56 @@ test('flag lookup failure uses always-await and rechecks after the cache expires
   assert.equal(h.stats().flagCalls, 2)
   h.release()
   await retried.result
+  assert.ok(h.increments.every(write => write.method === 'incr'))
 })
 
-test('turning the flag off clears stale counts and turning it on awaits a fresh count', async () => {
+test('turning the flag off clears reservations and turning it on awaits a fresh count', async () => {
   const h = harness()
   await h.call()
+  await h.call()
+  assert.equal(state(h).reserved, 9)
   h.setMode('OFF')
   h.advance(30_001)
   await h.call()
+  assert.equal(h.increments.at(-1).method, 'incr')
   assert.equal(h.rate.__counts.size, 0)
   h.setMode('EVERYONE')
   h.advance(30_001)
   h.hold()
   const next = await observe(h.call())
   assert.equal(next.settled, false)
+  assert.equal(h.increments.at(-1).method, 'incr')
   h.release()
   await next.result
 })
 
-test('bounded map evicts old entries conservatively and never stores raw tokens', async () => {
+test('bounded map evicts reservations conservatively and never stores raw tokens', async () => {
   const h = harness()
-  for (let i = 0; i < 1_001; i++) await h.call(`fixture-token-${i}`)
+  await h.call('fixture-token-0')
+  await h.call('fixture-token-0')
+  for (let i = 1; i < 1_001; i++) await h.call(`fixture-token-${i}`)
   assert.equal(h.rate.__counts.size, 1_000)
   for (const key of h.rate.__counts.keys()) assert.match(key, /^mcp:ratelimit:[a-f0-9]{64}:120$/)
   h.hold()
   const evicted = await observe(h.call('fixture-token-0'))
   assert.equal(evicted.settled, false)
-  assert.equal(h.rate.__counts.size, 1_000)
+  assert.equal(h.increments.at(-1).method, 'incr')
   h.release()
   await evicted.result
+  assert.equal(h.rate.__counts.size, 1_000)
 })
 
-test('after registration failure awaits the already-started increment exactly once', async () => {
-  const h = harness({ afterThrows: true })
-  await h.call()
-  h.hold()
-  const next = await observe(h.call())
-  assert.equal(next.settled, false)
-  assert.equal(h.increments.length, 2)
-  h.release()
-  assert.equal(await next.result, null)
-})
-
-test('custom anonymous limit controls the conservative half-limit threshold', async () => {
-  const h = harness({ env: { MCP_RATE_LIMIT_PER_MINUTE: '10' }, initial: 3 })
-  await h.call()
-  h.hold()
-  assert.equal((await observe(h.call())).settled, true) // projected 5
-  h.release()
-  await h.drain()
-  const next = await observe(h.call()) // projected 6
-  assert.equal(next.settled, false)
-  h.release()
-  await next.result
+test('custom anonymous limit controls whether a ten-slot lease fits below half-limit', async () => {
+  for (const [limit, expected] of [['10', 'incr'], ['22', 'incrby']]) {
+    const h = harness({ env: { MCP_RATE_LIMIT_PER_MINUTE: limit } })
+    await h.call()
+    h.hold()
+    const next = await observe(h.call())
+    assert.equal(next.settled, false)
+    assert.equal(h.increments[1].method, expected)
+    h.release()
+    assert.equal(await next.result, null)
+  }
 })
 
 test('anonymous-tier counts still resolve auth and enforce 120, while agents can reach 600', async () => {

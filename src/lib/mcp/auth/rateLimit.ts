@@ -1,4 +1,4 @@
-import { after, NextRequest, NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
@@ -15,7 +15,8 @@ const MCP_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_RATE_LIMIT_PER_MINUTE) 
 const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
 
 const MAX_LOCAL_COUNTS = 1_000
-const localCounts = new Map<string, { count?: number; pending: number }>()
+const LEASE = 10
+const localCounts = new Map<string, { count: number; reserved: number }>()
 let localWindowStart: number | undefined
 let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 
@@ -59,11 +60,12 @@ export async function checkMcpRateLimit(
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
 
+  let key: string | undefined
   try {
     const tokenHash = createHash('sha256').update(token).digest('hex')
     const nowSeconds = Math.floor(Date.now() / 1000)
     const windowStartSeconds = Math.floor(nowSeconds / MCP_RATE_LIMIT_WINDOW_SECONDS) * MCP_RATE_LIMIT_WINDOW_SECONDS
-    const key = `mcp:ratelimit:${tokenHash}:${windowStartSeconds}`
+    key = `mcp:ratelimit:${tokenHash}:${windowStartSeconds}`
 
     if (localWindowStart !== windowStartSeconds) {
       localCounts.clear()
@@ -71,45 +73,30 @@ export async function checkMcpRateLimit(
     }
     const fastEnabled = await shouldUseFastRateLimit()
     if (!fastEnabled) localCounts.clear()
+    const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
+    // The shared count includes every admitted call, prepaid, so no limit is exceeded.
+    // Unused slots can only block up to LEASE - 1 calls early per instance, and are reserved
+    // only while the shared count is at most half the lowest limit.
+    if (prepaid && prepaid.reserved > 0) {
+      prepaid.reserved--
+      return null
+    }
+
     const redis = await getRedis()
     const trackCount = fastEnabled && localWindowStart === windowStartSeconds
-    let state = trackCount ? localCounts.get(key) : undefined
-    if (trackCount && !state) {
-      if (localCounts.size >= MAX_LOCAL_COUNTS) localCounts.delete(localCounts.keys().next().value!)
-      state = { pending: 0 }
-      localCounts.set(key, state)
-    }
-    const skipWait = state?.count !== undefined && state.pending === 0 &&
-      state.count + 1 <= MCP_RATE_LIMIT_PER_MINUTE / 2
-    if (state) state.pending++
-    const localState = state
-    const increment = (async () => {
-      try {
-        const count = await redis.incr(key)
-        if (count === 1) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
-        if (localState) localState.count = Math.max(localState.count ?? 0, count)
-        return count
-      } catch (err) {
-        if (localState) localState.count = undefined
-        console.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
-        return undefined
-      } finally {
-        if (localState) localState.pending--
+    const state = trackCount ? localCounts.get(key) : undefined
+    const increment = state && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
+    const count = await (increment === LEASE ? redis.incrby(key, LEASE) : redis.incr(key))
+    if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+    if (trackCount && localWindowStart === windowStartSeconds) {
+      if (!localCounts.has(key) && localCounts.size >= MAX_LOCAL_COUNTS) {
+        localCounts.delete(localCounts.keys().next().value!)
       }
-    })()
-    // Skip only with no unconfirmed increment and confirmed count + 1 <= half the anonymous limit.
-    // Every call still increments Redis; once the shared count exceeds the limit, each instance
-    // admits at most one extra call before awaiting Redis and enforcing the limit again.
-    if (skipWait) {
-      try {
-        after(() => increment.then(() => {}))
-        return null
-      } catch {
-        // Outside a supported request lifecycle, await the same increment, never a second one.
-      }
+      localCounts.set(key, {
+        count,
+        reserved: increment === LEASE && count <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE - 1 : 0,
+      })
     }
-    const count = await increment
-    if (count === undefined) return null
 
     const countOutcome = classifyMcpRateLimitCount(count)
     if (countOutcome === 'allow') return null
@@ -129,6 +116,7 @@ export async function checkMcpRateLimit(
       { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
     )
   } catch (err) {
+    if (key) localCounts.delete(key)
     console.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
     return null
   }
