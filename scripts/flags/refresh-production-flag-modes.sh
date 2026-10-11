@@ -17,7 +17,7 @@ trap 'git -C "$repo" worktree remove --force "$work" >/dev/null 2>&1 || true; rm
 git -C "$repo" fetch -q origin production
 git -C "$repo" worktree add -q --detach "$work" origin/production
 cd "$work"
-ln -s "$repo/node_modules" node_modules
+"$repo/scripts/worktree-node-modules.sh" "$repo" "$work"
 if ! node scripts/flags/production-flag-modes.mjs --write; then
   echo "flag-modes-refresh: FAILED to read the live switch settings (QA session cookie missing or expired, or the read failed); nothing changed" >&2
   exit 1
