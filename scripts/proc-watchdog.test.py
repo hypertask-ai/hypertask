@@ -148,7 +148,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('astro dev is not a build', k('/usr/bin/node /p/node_modules/astro/bin/astro.mjs dev --port 4399') is None)
     check('claude never matches', k('claude --resume x tests/a.test.cjs', 'claude') is None)
     r = pw.redact(['curl', '-H', 'Authorization: Bearer abcVALUE1', '--api-key', 'abcVALUE2', 'X_TOKEN=abcVALUE3',
-                   'https://u:abcVALUE4@h/x', 'tests/a.test.cjs'])
+                   'https://u:abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
     check('whole sensitive arguments and flag values are hidden', 'abcVALUE' not in r and 'tests/a.test.cjs' in r)
 
 sys.exit(1 if fails else print('ALL PASS') or 0)

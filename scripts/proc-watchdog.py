@@ -44,7 +44,7 @@ KINDS = [
 NEVER = {'claude', 'codex', 'hax', 'tmux', 'tmux: server', 'systemd', 'sshd', 'zsb', 'proc-watchdog.py'}
 SHELLS = {'bash', 'sh', 'dash', 'zsh', 'fish'}
 # An argument naming a credential is hidden whole (and the value after such a --flag).
-SENSITIVE = re.compile(r'(?i)token|secret|passw|api[-_]?key|auth|bearer|cookie|credential|session[-_]?id|private[-_]?key')
+SENSITIVE = re.compile(r'(?i)token|secret|passw|key|auth|bearer|cookie|credential|session[-_]?id')
 
 
 def clock_ticks():
@@ -188,15 +188,17 @@ def redact(argv):
     """Command line with every sensitive argument, and the value after a sensitive flag, replaced by ***."""
     out, hide_next = [], False
     for arg in argv:
-        if hide_next:
+        if hide_next and not arg.startswith('-'):
             out.append('***')
             hide_next = False
             continue
+        hide_next = False
         arg = re.sub(r'://[^/@\s]+@', '://***@', arg)
         if SENSITIVE.search(arg):
-            name = re.split(r'[=:]', arg, maxsplit=1)
-            out.append(name[0] + ('=***' if len(name) > 1 else ''))
-            hide_next = len(name) == 1 and arg.startswith('-')
+            # "--token=v" keeps only its flag name; anything else is hidden whole and so is the next argument.
+            flag = re.match(r'(-{1,2}[A-Za-z0-9_-]+)=', arg)
+            out.append(flag.group(1) + '=***' if flag else '***')
+            hide_next = not flag
         else:
             out.append(arg)
     return ' '.join(out)
@@ -210,23 +212,33 @@ def short(argv, n):
 def notify(message):
     """Send to INFRA MANAGER; a message that cannot be delivered is kept and retried on the next sweep."""
     pending = STATE / 'unsent.txt'
-    messages = ([m for m in pending.read_text().split('\n') if m] if pending.exists() else []) + ([message] if message else [])
-    left = []
-    for m in messages:
+
+    def save(items):
+        if items:
+            STATE.mkdir(parents=True, exist_ok=True)
+            tmp = pending.with_suffix('.tmp')
+            tmp.write_text('\n'.join(items) + '\n')
+            tmp.replace(pending)
+        elif pending.exists():
+            pending.unlink()
+
+    left = ([m for m in pending.read_text().split('\n') if m] if pending.exists() else []) + ([message] if message else [])
+    save(left)  # a new warning is on disk before any delivery attempt, so a killed sweep cannot lose it
+    budget = time.time() + 40  # stays well inside the unit's 2 minute limit after the 10 s grace
+    for m in list(left):
+        if time.time() > budget:
+            break
         try:
-            rc = subprocess.run([NOTIFY, 'infra-manager'], input=m.encode(), timeout=30,
+            rc = subprocess.run([NOTIFY, 'infra-manager'], input=m.encode(), timeout=10,
                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode
         except (OSError, subprocess.TimeoutExpired):
             rc = 1
-        # runner-deliver: 0 delivered, 3 queued for its own retry; anything else is ours to retry.
-        if rc not in (0, 3):
-            left.append(m)
+        # runner-deliver: 0 delivered, 3 queued for its own retry; anything else stays for the next sweep.
+        if rc in (0, 3):
+            left.remove(m)
+            save(left)
     if left:
-        STATE.mkdir(parents=True, exist_ok=True)
-        pending.write_text('\n'.join(left) + '\n')
         print(f'{len(left)} warning(s) not sent, kept in {pending}', file=sys.stderr)
-    elif pending.exists():
-        pending.unlink()
 
 
 def sweep(dry_run=False):
