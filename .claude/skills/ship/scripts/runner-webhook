@@ -183,11 +183,13 @@ def dedupe_key(p):
     return None
 
 
-def deliver(n, message):
-    """True when runner-deliver typed or durably queued the message. A timeout kills its whole process group."""
+def deliver(n, message, event_id=None):
+    """True when runner-deliver put the message in the session inbox, typed it (no hook) or durably queued it.
+    event_id lets the inbox drop a repeat of the same event. A timeout kills its whole process group."""
     try:
+        env = dict(os.environ, RUNNER_DELIVER_ID=event_id) if event_id else None
         proc = subprocess.Popen([DELIVER, str(n)], stdin=subprocess.PIPE, stdout=subprocess.DEVNULL,
-                                stderr=subprocess.DEVNULL, start_new_session=True)
+                                stderr=subprocess.DEVNULL, start_new_session=True, env=env)
         try:
             proc.communicate(message.encode(), timeout=DELIVER_TIMEOUT)
         except subprocess.TimeoutExpired:
@@ -212,7 +214,7 @@ def handle(n, p, delivery_id):
                 with Seen(f"runner-{n}.seen") as seen_k:
                     if not (key and seen_k.has(key)):
                         message = build_message(n, p)
-                        ok = deliver(n, message) if message else True
+                        ok = deliver(n, message, key or (f"delivery:{delivery_id}" if delivery_id else None)) if message else True
                         if ok and message:
                             log(f"runner {n}: {p.get('event')} delivered")
                         if ok and key:
