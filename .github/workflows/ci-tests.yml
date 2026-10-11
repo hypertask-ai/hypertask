@@ -563,7 +563,7 @@ jobs:
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
       TRUSTED_CLI_VERSION: "1.13.29"
-      TRUSTED_CLI_NEXT_VERSION: "2.0.0"
+      TRUSTED_CLI_NEXT_VERSION: "2.0.7"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:

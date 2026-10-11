@@ -9,6 +9,7 @@ import { useTaskDetailModalActions } from "./useTaskDetailModalActions";
 import type { TaskDetailContext } from "./TaskDetailContext";
 import { createTaskDetailKeyboard } from "./taskDetailKeyboard";
 import { useTaskDetailInitialScroll } from "./useTaskDetailInitialScroll";
+import { useLinkedCommentScroll } from "./useLinkedCommentScroll";
 import { useTaskDetailReadiness } from "./useTaskDetailReadiness";
 import { TaskDetailPanels } from "./TaskDetailPanels";
 import type { TaskDetailProps } from "./useTaskDetailState";
@@ -22,6 +23,7 @@ const TaskDetail: React.FC<TaskDetailProps> = (props) => {
   Object.assign(context, useTaskDetailModalActions(() => context));
   const keyboardContext = { ...context, ...createTaskDetailKeyboard(context) };
   const effects0 = useTaskDetailInitialScroll(keyboardContext);
+  useLinkedCommentScroll(keyboardContext);
   useTaskDetailReadiness({ ...keyboardContext, ...effects0 });
   return TaskDetailPanels(context);
 };

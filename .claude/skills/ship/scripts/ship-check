@@ -175,7 +175,8 @@ check_nochange() {
 nochange_ok() {
   [ -s "$EVID/$2/nochange" ] || return 1
   local out; out=$(nochange_verify "$2") || fail "nochange for $2 no longer holds: $out"
-  echo "$1 ok (nochange: resolved without a change)"
+  # The pr gate expects "title ok"; there is no PR title to check, so say why it passes.
+  if [ "$1" = pr ]; then echo "title ok (nochange: resolved without a change, no PR)"; else echo "$1 ok (nochange: resolved without a change)"; fi
 }
 
 merge_sha() {

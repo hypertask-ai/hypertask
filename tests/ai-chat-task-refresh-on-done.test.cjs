@@ -34,7 +34,7 @@ async function runTurn({ attachments = [], enabled = true, preserveEditorContent
     scopedProjectId: PROJECT_ID, isFullScreenChat: false, taskId: TASK_ID, modelTeamId: 1, contextList: [],
     currentAiOption: { id: "model", model: "model", source: "openai" }, pathname: "/detail/project-15/7049", currentUser: { id: 7 },
     streamingSessionRef: { ...refs }, streamingAssistantMessageRef: { ...refs }, streamingRequestRef: { ...refs },
-    setCurrentStreamingSession() {}, chatRoute: "/api/ai/chat/stream", turnFailureState: true,
+    setCurrentStreamingSession() {}, chatRoute: "/api/ai/chat/stream",
     setAgentStatus() {}, updateSessionTitle() {}, queryClient, drainQueuedMessage() {}, handleSendMessageRef: { current: null },
     reloadTaskAfterChat: enabled,
   };

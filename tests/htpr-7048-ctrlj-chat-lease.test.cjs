@@ -103,7 +103,7 @@ function harness({ enabled = true } = {}) {
     "@/lib/nativeAgent/heartbeatTurnEnvelope": { decodeHeartbeatTurnMessage: () => ({ prompt: "heartbeat", metadata: { executionId: streamId, agentId, claimedAt: "2026-10-09T00:00:00.000Z", scanWatermark: "2026-10-09T00:00:00.000Z" } }) },
     "@/lib/prisma": { default: { user: { findUnique: async () => user }, chatSession: { updateMany: async () => ({ count: 1 }) } } },
     "@/lib/flags": { isFeatureEnabled },
-    "@/lib/flags/keys": { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG: flag, HTPR_6278_CHAT_TURN_FAILURE_FLAG: "deadline" },
+    "@/lib/flags/keys": { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG: flag },
     "@/app/api/ai/chat/stream/ensureNativeChatTurn": { ensureNativeChatTurn: async () => "persisted", findNativeAssistantReplay: async () => ({ status: "missing" }) },
     "@/app/api/ai/_lib/currentTaskContext": { resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/chat/stream/streamLease": leases,

@@ -7,22 +7,72 @@ curl_config=${HYPERTASK_REVIEW_CURL_CONFIG:-/etc/hypertask-ai-review/reviewer-cu
 state_root=${HYPERTASK_REVIEW_STATE_ROOT:-/var/lib/hypertask-ai-review}
 completed_dir="$state_root/completed"
 dispatch_review_bin=${HYPERTASK_DISPATCH_REVIEW_BIN:-/usr/local/libexec/hypertask-dispatch-review}
+# An unchanged PR is looked at again only after this many seconds, so a stalled or failed
+# review still gets its retry without every PR costing API calls on every scan.
+recheck_seconds=${HYPERTASK_REVIEW_RECHECK_SECONDS:-600}
+scan_dir="$state_root/scan"
+mkdir -p "$scan_dir/seen"
+list_file="$scan_dir/list.json"
+etag_file="$scan_dir/etag"
+header_file=$(mktemp "$scan_dir/.headers.XXXXXX")
+body_file=$(mktemp "$scan_dir/.list.XXXXXX")
+trap 'rm -f -- "$header_file" "$body_file"' EXIT
 
+# One conditional list call per scan: a 304 answer costs no rate limit quota.
+etag_args=()
+if [ -s "$etag_file" ] && [ -s "$list_file" ]; then
+  etag_args=(-H "If-None-Match: $(tr -d '\r\n' <"$etag_file")")
+fi
 curl -fsS \
   --config "$curl_config" \
+  -D "$header_file" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/valentinyeo/hypertasks/pulls?state=open&base=staging&per_page=100" \
-  | jq -r '.[] | select(.draft == false and .head.repo.full_name == "valentinyeo/hypertasks") | [.number, .head.sha] | @tsv' \
-  | while IFS=$'\t' read -r pr_number head_sha; do
-      if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ && "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
-        echo "Review discovery received invalid pull request metadata" >&2
-        continue
-      fi
-      if [ -e "$completed_dir/$head_sha" ]; then
-        continue
-      fi
-      if ! "$dispatch_review_bin" "$pr_number" "$head_sha"; then
-        echo "Review discovery could not process PR #${pr_number}; the next timer run will retry" >&2
-      fi
-    done
+  "${etag_args[@]}" \
+  "https://api.github.com/repos/hypertask-ai/hypertask/pulls?state=open&base=production&per_page=100" \
+  >"$body_file"
+
+list_status=200
+if grep -qE '^HTTP/[0-9.]+ 304' "$header_file"; then
+  list_status=304
+else
+  new_etag=$(grep -i '^etag:' "$header_file" | tail -n 1 | cut -d: -f2- | tr -d '\r\n' | sed 's/^ *//' || true)
+  mv -f -- "$body_file" "$list_file"
+  if [ -n "$new_etag" ]; then
+    printf '%s\n' "$new_etag" >"$etag_file"
+  else
+    rm -f -- "$etag_file"
+  fi
+fi
+remaining=$(grep -i '^x-ratelimit-remaining:' "$header_file" | tail -n 1 | cut -d: -f2 | tr -d ' \r\n' || true)
+
+rescanned=0
+skipped=0
+now=$(date +%s)
+while IFS=$'\t' read -r pr_number head_sha updated_at; do
+  if ! [[ "$pr_number" =~ ^[1-9][0-9]*$ && "$head_sha" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "Review discovery received invalid pull request metadata" >&2
+    continue
+  fi
+  if [ -e "$completed_dir/$head_sha" ]; then
+    continue
+  fi
+  seen_file="$scan_dir/seen/$pr_number"
+  key="$head_sha ${updated_at:-none}"
+  if [ -r "$seen_file" ]; then
+    read -r seen_key_sha seen_key_updated seen_at <"$seen_file" || true
+    if [ "$seen_key_sha $seen_key_updated" = "$key" ] && [[ "${seen_at:-}" =~ ^[0-9]+$ ]] \
+      && [ $(( now - seen_at )) -lt "$recheck_seconds" ]; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+  fi
+  rescanned=$((rescanned + 1))
+  if "$dispatch_review_bin" "$pr_number" "$head_sha"; then
+    printf '%s %s\n' "$key" "$now" >"$seen_file"
+  else
+    echo "Review discovery could not process PR #${pr_number}; the next timer run will retry" >&2
+  fi
+done < <(jq -r '.[] | select(.draft == false and .head.repo.full_name == "hypertask-ai/hypertask") | [.number, .head.sha, (.updated_at // "")] | @tsv' "$list_file")
+
+echo "dispatch-scan: list_calls=1 list_status=${list_status} rescanned_prs=${rescanned} skipped_prs=${skipped} ratelimit_remaining=${remaining:-unknown}"

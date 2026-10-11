@@ -5,7 +5,7 @@ import { INBOX_QUERY_KEY } from "@/hooks/Inbox/useGetNotifications";
 import { parseAiStreamErrorContent } from "./aiChatShared";
 import type { AiChatSendContext } from "./aiChatSend";
 
-type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "turnFailureState" | "reloadTaskAfterChat"> & {
+type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQuery" | "updateSessionTitle" | "setIsTyping" | "queryClient" | "reloadTaskAfterChat"> & {
   response: { body: NonNullable<Response["body"]> };
   session: IChatSession;
   assistantMessageId: string;
@@ -15,7 +15,7 @@ type Context = Pick<AiChatSendContext, "setAgentStatus" | "addMessageToSessionQu
 export async function consumeAiChatStream(context: Context) {
   const {
   response, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-  updateSessionTitle, setIsTyping, queryClient, streamTaskId, turnFailureState, reloadTaskAfterChat,
+  updateSessionTitle, setIsTyping, queryClient, streamTaskId, reloadTaskAfterChat,
   } = context;
 
 
@@ -260,7 +260,7 @@ export async function consumeAiChatStream(context: Context) {
       // Without this the thread looks wedged with no explanation. Partial
       // content stays visible; the notice appends below it under a temporary
       // id so it can never compete with a durably persisted reply.
-      if (turnFailureState && !sawDone && !streamErrorHandled) {
+      if (!sawDone && !streamErrorHandled) {
         const partial = aiContent.trim().length > 0;
         setAgentStatus(undefined);
         addMessageToSessionQuery(
