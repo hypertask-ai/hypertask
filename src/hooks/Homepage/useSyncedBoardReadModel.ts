@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import type { QueryClient } from "@tanstack/react-query";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 
 import type { IProjectsAll } from "@/models/model";
 import type { BoardSyncPayloadV1 } from "@/lib/boardSync/contract";
@@ -68,12 +70,16 @@ export const buildAuthorizedLocalPublication = ({
   authorizedProjectIds,
   current,
   payload,
+  keepHydratedCache = false,
 }: {
   accountId: number;
   projectId: number;
   authorizedProjectIds: number[];
   current?: ProjectsAllWithIndex;
   payload: BoardSyncPayloadV1;
+  // HTPR-7129: edits made in a ticket patch the in-memory board while the
+  // board is unmounted, so its saved snapshot is older. Keep the memory copy.
+  keepHydratedCache?: boolean;
 }): AuthorizedLocalPublication | null => {
   if (
     !authorizedProjectIds.includes(projectId) ||
@@ -93,7 +99,7 @@ export const buildAuthorizedLocalPublication = ({
   if (
     currentIndex >= 0 &&
     isBoardPayloadHydrated(authorizedCurrentProjects![currentIndex]) &&
-    ownedCurrent?.dataOrigin !== "network"
+    (keepHydratedCache || ownedCurrent?.dataOrigin !== "network")
   ) {
     return {
       projectsData: {
@@ -159,7 +165,9 @@ export const publishPreparedLocalBoard = async ({
   queryClient,
   claimPublication,
   onPublished,
+  keepHydratedCache = false,
 }: {
+  keepHydratedCache?: boolean;
   proof: BoardAuthorizationProof;
   prepareLocalRead: () => Promise<BoardSyncPayloadV1 | null>;
   getCurrentScope: () => LocalBoardPublicationScope;
@@ -228,6 +236,7 @@ export const publishPreparedLocalBoard = async ({
     authorizedProjectIds: proof.authorizedProjectIds,
     current: currentCache,
     payload,
+    keepHydratedCache,
   });
   if (!publication) return false;
   // A second proof for the same route still has an available local fallback.
@@ -339,9 +348,13 @@ export const usePreparedBoardReadModel = ({
     return promise;
   }, []);
 
+  // A ref, so a late flag load never restarts the route-entry publication.
+  const keepHydratedCacheRef = useRef(false);
+  keepHydratedCacheRef.current = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
   const authorizeAndPublishLocalBoard = useCallback(
     (proof: BoardAuthorizationProof) =>
       publishPreparedLocalBoard({
+        keepHydratedCache: keepHydratedCacheRef.current,
         proof,
         prepareLocalRead,
         getCurrentScope: () => runtimeRef.current,

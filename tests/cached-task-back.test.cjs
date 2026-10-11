@@ -516,7 +516,7 @@ test("board Back never schedules the four-second stale-children reveal", async t
 test("board protection hard-navigates after six seconds, never reveals stale children, and cancels on ready or departure", () => {
   const body = source.match(/if \(!boardBack \|\| historyDestination\?\.pathname !== "\/project" \|\| !protectedSource\) return;\n([\s\S]*?)\n  \}, \[boardBack, historyDestination, protectedSource\]\);/)?.[1];
   assert.ok(body);
-  const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", body);
+  const protect = new Function("window", "historyDestination", "protectedSource", "setHistoryDestination", "setBoardShell", body);
   for (const outcome of ["timeout", "ready", "forward", "different board"]) {
     const calls = [], timers = new Map();
     let boardReady = false, staleTitle = true, observe;
@@ -531,7 +531,7 @@ test("board protection hard-navigates after six seconds, never reveals stale chi
         disconnect() { calls.push("disconnect"); }
       },
     };
-    const cleanup = protect(win, { pathname: "/project" }, sourceNode, value => calls.push(value));
+    const cleanup = protect(win, { pathname: "/project" }, sourceNode, value => calls.push(value), () => {});
     assert.deepEqual(calls, []);
     if (outcome === "ready") {
       boardReady = true; observe();

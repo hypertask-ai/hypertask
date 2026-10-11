@@ -252,8 +252,9 @@ test("background history refreshes preserve the mounted cached detail, but route
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: currentAccountId }) },
     "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6972-subtask-link" ? false : flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+  // useState is stubbed to one value here, so the HTPR-7129 board shell stays off.
+  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6972-subtask-link" || key === "htpr-7129-board-card-fresh-after-escape" ? false : flagEnabled },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
