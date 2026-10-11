@@ -31,7 +31,7 @@ function moduleWithStubs(file, stubs, globals = {}) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, output = "", boardResearch = false, finishReason = "stop", mode = "task_writer" } = {}) {
+function harness({ enabled = true, output = "", finishReason = "stop", mode = "task_writer" } = {}) {
   const checks = [], calls = [];
   const editor = {
     ...moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {}),
@@ -49,7 +49,7 @@ function harness({ enabled = true, output = "", boardResearch = false, finishRea
     } },
     "@/lib/flags": { HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG: key, isFeatureEnabled: async (flag, userId) => {
       checks.push([flag, userId]);
-      return flag === key ? enabled : flag === "board-research" && boardResearch;
+      return flag === key ? enabled : false;
     } },
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },
     "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => ({}) },
@@ -62,7 +62,7 @@ function harness({ enabled = true, output = "", boardResearch = false, finishRea
     "@/app/api/ai/_lib/skills": { resolveSkills: async (text) => ({ cleanedText: text, systemPromptAddition: "Fixture skill", skills: [] }) },
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/_lib/taskWriterBoardResearch": {
-      HTPR_6363_TASK_WRITER_RESEARCH_FLAG: "board-research", TASK_WRITER_BOARD_RESEARCH_RULES: "Fixture board research",
+      TASK_WRITER_BOARD_RESEARCH_RULES: "Fixture board research",
       buildTaskWriterRetrievalQuery: ({ prompt }) => prompt,
       formatRelatedTicketCandidates: () => "", formatBoardVocabulary: () => "",
     },
@@ -160,9 +160,9 @@ async function main() {
         assert.ok(error.content.includes(message));
       }
     }
-    for (const boardResearch of [false, true]) {
+    {
       for (const enabled of [false, true]) {
-        const h = harness({ enabled, boardResearch, output: normal });
+        const h = harness({ enabled, output: normal });
         await h.post(kind);
         const instructions = h.calls[0].instructions;
         assert.equal(instructions.includes("RESEARCH REQUESTS"), enabled);

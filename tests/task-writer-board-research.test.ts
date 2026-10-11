@@ -2,12 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "./refactored-module-source.cjs";
 import { resolve } from "node:path";
 import test from "node:test";
-import researchFlag from "../src/lib/flags/definitions/htpr-6363-task-writer-research";
 
 import {
   buildTaskWriterRetrievalQuery,
   formatRelatedTicketCandidates,
-  HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
   mergeTaskWriterContextBudget,
   TASK_WRITER_BOARD_RESEARCH_RULES,
   taskWriterCandidateUrl,
@@ -26,12 +24,6 @@ test("shared source fidelity stays free of board-research exceptions", () => {
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Proposed:/);
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Open questions/);
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Related tickets/);
-});
-
-test("flag key is registered for Owner+QA rollout", () => {
-  assert.equal(researchFlag.key, HTPR_6363_TASK_WRITER_RESEARCH_FLAG);
-  assert.equal(researchFlag.kind, "bugfix");
-  assert.equal(researchFlag.defaultMode, "OWNER_AND_QA");
 });
 
 test("retrieval query prefers cumulative user briefs over the conversation blob", () => {

@@ -38,7 +38,6 @@ import {
   formatBoardVocabulary,
   formatRelatedTicketCandidates,
   formatStyleExamples,
-  HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
   TASK_WRITER_BOARD_RESEARCH_RULES,
   TASK_WRITER_RELATED_CANDIDATE_LIMIT,
   TASK_WRITER_STYLE_EXAMPLE_LIMIT,
@@ -227,9 +226,7 @@ export async function prepareTaskWriterRun(
   // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
   // the model query are never blank (the skill body still carries the intent).
   const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
-  const boardResearchEnabled =
-    body.aiMode === "AiTaskWriter" &&
-    (await isFeatureEnabled(HTPR_6363_TASK_WRITER_RESEARCH_FLAG, userId));
+  const boardResearchEnabled = body.aiMode === "AiTaskWriter";
   // Search uses user-authored text only when research is on. The model still
   // receives the full conversation prompt via body.PROMPT / effectivePrompt.
   const retrievalQuery = boardResearchEnabled
