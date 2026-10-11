@@ -4,7 +4,7 @@ import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCreateTaskBody } from '@/lib/mcp/tasks/validators';
-import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
+import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds, matchLabelIds } from '@/lib/mcp/tasks/services';
 import { mapTaskToDetail } from '@/lib/mcp/tasks/mappers';
 import { CreateTaskBody, TaskDetail } from '@/lib/mcp/tasks/types';
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
@@ -138,17 +138,16 @@ export async function POST(request: NextRequest) {
 
         // Validate parent task exists (a bad client-supplied id must 404, not 500)
         if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
-            const known = await prisma.label.findMany({
-                where: { projectId: project_id, id: { in: labels.map(String) } },
-                select: { id: true }
+            const projectLabels = await prisma.label.findMany({
+                where: { projectId: project_id },
+                select: { id: true, value: true }
             });
-            const knownIds = new Set(known.map(label => label.id));
-            const missing = labels.map(String).filter(id => !knownIds.has(id));
+            const missing = matchLabelIds(projectLabels, labels).unresolved;
             if (missing.length > 0) {
                 return NextResponse.json(
                     {
                         ...buildFieldError('not_found', 'labels', 'Not found'),
-                        message: `Label(s) not found on board ${project_id}: ${missing.join(', ')}. Labels are board-specific; list this board's labels and pass their ids.`,
+                        message: `Label(s) not found on board ${project_id}: ${missing.join(', ')}. Available labels: ${projectLabels.map(label => label.value).filter(Boolean).join(', ') || 'none'}.`,
                         ...(dryRun && { valid: false }),
                         ...(correlationId && { correlationId })
                     },

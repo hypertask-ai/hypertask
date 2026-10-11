@@ -34,6 +34,13 @@ function loadPost({ flagOn, knownLabelIds }) {
       validateParentTask: async () => ({}),
       validateProjectMemberIds: async () => ({}),
       createTask: async () => { created += 1; return { id: 1 }; },
+      // Same contract as the real matcher: label ids or names (case-insensitive).
+      matchLabelIds: (projectLabels, labels) => ({
+        ids: [],
+        unresolved: labels.map(String).filter((entry) => !projectLabels.some(
+          (label) => label.id === entry || label.value?.trim().toLowerCase() === entry.trim().toLowerCase(),
+        )),
+      }),
     },
     "@/lib/mcp/tasks/mappers": { mapTaskToDetail: (t) => t },
     "@/utils/helperFunctions/sanitizeRichHtml": { sanitizeRichHtml: (s) => s },
@@ -52,8 +59,7 @@ function loadPost({ flagOn, knownLabelIds }) {
       __esModule: true,
       default: {
         label: {
-          findMany: async ({ where }) =>
-            where.id.in.filter((id) => knownLabelIds.includes(id)).map((id) => ({ id })),
+          findMany: async () => knownLabelIds.map((id) => ({ id, value: `Name ${id}` })),
         },
       },
     },
@@ -93,6 +99,13 @@ test("unknown label ids return a 404 that names them (flag on)", async () => {
 test("known labels still create the ticket", async () => {
   const { POST, created } = loadPost({ flagOn: true, knownLabelIds: ["a", "b"] });
   const res = await POST(request(["a", "b"]));
+  assert.equal(res.status, 200);
+  assert.equal(created(), 1);
+});
+
+test("label names still resolve (flag on)", async () => {
+  const { POST, created } = loadPost({ flagOn: true, knownLabelIds: ["a"] });
+  const res = await POST(request(["name a"]));
   assert.equal(res.status, 200);
   assert.equal(created(), 1);
 });
