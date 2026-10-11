@@ -157,7 +157,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [autocompleteEnabled, open, selectedIndex, rows.length, mobileEnabled, mobileBounds]);
 
   useEffect(() => {
-    if (!mobileEnabled) return;
+    if (!mobileFlagEnabled || !isMobile) return;
     const input = inputRef.current;
     const beforeInput = (event: InputEvent) => {
       if (!isMobileSearchSubmit(event.inputType, composingRef.current || event.isComposing)) return;
@@ -170,7 +170,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     // React's beforeinput shim does not expose every soft-keyboard inputType.
     input?.addEventListener('beforeinput', beforeInput);
     return () => input?.removeEventListener('beforeinput', beforeInput);
-  }, [mobileEnabled, value, onRun, inputRef]);
+  }, [mobileFlagEnabled, isMobile, value, onRun, inputRef]);
 
   useEffect(() => {
     if (!layoutEnabled) return;

@@ -25,7 +25,7 @@ test('flag off and desktop retain the existing rows, summary and chip styles', (
   assert.match(input, /mobileOverlay && mobileBounds \? \{/)
   assert.match(input, /mobileEnabled \? "min-w-0 max-w-\[200px\] truncate" : layoutEnabled \? "min-w-0 break-all"/)
   assert.match(input, /summary && \(!layoutEnabled \|\| mobileOverlay\)/)
-  assert.match(input, /if \(!mobileEnabled\) return;[\s\S]*?addEventListener\('beforeinput', beforeInput\)/)
+  assert.match(input, /if \(!mobileFlagEnabled \|\| !isMobile\) return;[\s\S]*?addEventListener\('beforeinput', beforeInput\)/)
   assert.match(input, /else row\?\.scrollIntoView/)
 })
 
