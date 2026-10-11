@@ -103,7 +103,11 @@ headers=""
 
 case "$url" in
   https://api.vercel.com/v6/deployments*)
-    body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
+    if [ -n "\${HC_DEPLOYMENTS_JSON:-}" ]; then
+      body=\$(printf '%s' "\$HC_DEPLOYMENTS_JSON" | sed "s/__SHA__/\$SHA/g")
+    else
+      body=\$(printf '{"deployments":[{"uid":"deploy-current","state":"READY","meta":{"githubCommitSha":"%s"}},{"uid":"deploy-prev","state":"READY","meta":{"githubCommitSha":"other"}}]}' "\$SHA")
+    fi
     ;;
   https://api.vercel.com/v10/projects/*/promote/*)
     printf '%s' "\$url" > "\$RUNNER_TEMP/promoted"
@@ -185,7 +189,9 @@ async function runHealthCheck(hcSequence, extraEnv = {}) {
   await chmod(join(bin, "git"), 0o755);
 
   try {
-    const result = spawnSync("bash", ["-c", await workflowScript()], {
+    // GitHub runs this `run:` block as `bash -e`; HC_ERREXIT replays that (YPER4-306).
+    const flags = extraEnv.HC_ERREXIT ? ["-e"] : [];
+    const result = spawnSync("bash", [...flags, "-c", await workflowScript()], {
       cwd: process.cwd(),
       encoding: "utf8",
       env: {
@@ -308,6 +314,22 @@ test("a fully healthy run exits clean and never rolls back", async () => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /Production healthy/);
   assert.equal(promoted, null, "a healthy run must not promote");
+});
+
+// YPER4-306: a failed build plus a retry gives one commit two deployments. Picking one
+// must not kill the pipe under pipefail, and the READY retry wins over the failed build.
+test("two deployments for one commit pick the READY one without a broken pipe", async () => {
+  const failed = (n) => `{"uid":"deploy-oom-${n}","state":"ERROR","meta":{"githubCommitSha":"__SHA__"},"pad":"${"x".repeat(40000)}"}`;
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_ERREXIT: "1",
+    HC_DEPLOYMENTS_JSON: `{"deployments":[${failed(1)},${failed(2)},{"uid":"deploy-retry","state":"READY","meta":{"githubCommitSha":"__SHA__"}}]}`,
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.doesNotMatch(result.stderr, /Broken pipe/);
+  assert.match(result.stdout, /deployment state: READY/);
+  assert.match(result.stdout, /Production healthy/);
+  assert.equal(promoted, null);
 });
 
 test("a stale healthy probe body from an earlier attempt is not healthy", async () => {
