@@ -103,10 +103,17 @@ jobs:
             # One commit can have several deployments (a failed build plus a retry). Pick in
             # jq: `| head -1` closes the pipe early and pipefail turns that into a failed job
             # (YPER4-306). The READY one wins; otherwise the newest.
-            DEPLOY_JSON=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=10" \
+            # A readable list with no deployment for this commit is NOTFOUND (ignored build step);
+            # an unreadable or failed API response stays unknown and keeps waiting (YPER4-307).
+            if DEPLOY_JSON=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=10" \
               | jq -c --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)]
-                  | (map(select(.state == "READY")) + .) | .[0] // empty') || DEPLOY_JSON=""
-            STATE=$(echo "$DEPLOY_JSON" | jq -r '.state // "NOTFOUND"') || STATE=""
+                  | (map(select(.state == "READY")) + .) | .[0] // empty'); then
+              STATE=$(echo "$DEPLOY_JSON" | jq -r '.state // "NOTFOUND"') || STATE=""
+              [ -n "$DEPLOY_JSON" ] || STATE="NOTFOUND"
+            else
+              DEPLOY_JSON=""
+              STATE=""
+            fi
             echo "[$i] deployment state: $STATE"
             case "$STATE" in
               READY|ERROR|CANCELED) break ;;

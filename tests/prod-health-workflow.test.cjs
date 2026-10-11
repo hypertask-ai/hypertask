@@ -339,6 +339,21 @@ test("two deployments for one commit pick the READY one without a broken pipe", 
   assert.equal(promoted, null);
 });
 
+// YPER4-307: a commit with no deployment (ignored build step) must be reported as such
+// after the 4-minute window, not polled for 20 minutes and then health-checked.
+test("a commit with no deployment exits clean as an ignored build", async () => {
+  const { result, promoted } = await runHealthCheck("ok ok healthy", {
+    HC_DEPLOYMENTS_JSON: '{"deployments":[{"uid":"deploy-other","state":"READY","meta":{"githubCommitSha":"other"}}]}',
+  });
+
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /\[12\] deployment state: NOTFOUND/);
+  assert.doesNotMatch(result.stdout, /\[13\] deployment state/);
+  assert.match(result.stdout, /No production deployment for/);
+  assert.doesNotMatch(result.stdout, /Production healthy/);
+  assert.equal(promoted, null);
+});
+
 for (const [name, extraEnv] of [
   ["a non-JSON deployment response", { HC_DEPLOYMENTS_JSON: "<html>unavailable</html>" }],
   ["a failed deployment request", { HC_DEPLOYMENTS_EXIT_CODE: "7" }],
