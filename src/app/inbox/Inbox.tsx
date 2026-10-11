@@ -66,6 +66,9 @@ import {
 } from "@/lib/contexts/Inbox/BulkSelectionContext";
 import { ArchiveNotificationIcon } from "@/lib/IconsLocal";
 import RemindMeInbox from "@/components/notifications/inboxSplit/RemindMeInbox";
+import { InboxSelectedCount } from "@/app/inbox/InboxSelectedCount";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7111_INBOX_SELECTED_COUNT_FLAG } from "@/lib/flags/keys";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { useInboxZeroStyling } from "@/hooks/Inbox/useInboxZeroStyling";
@@ -1038,9 +1041,14 @@ const SplitTitlesContainer: FC<IProps> = ({ children, contentGap = false }) => {
 
 const ButtonGroup = () => {
   const { selectedIdsArray, handleBulkArchive } = useBulkSelectionContext();
+  const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
 
   return (
     <div className="flex items-center gap-2">
+      <InboxSelectedCount
+        enabled={showSelectedCount}
+        count={selectedIdsArray.length}
+      />
       <div
         className={`transition-all duration-75 ${
           selectedIdsArray.length > 0 ? "flex items-center gap-2" : "hidden"
