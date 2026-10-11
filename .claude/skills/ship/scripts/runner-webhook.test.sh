@@ -10,15 +10,16 @@ T=$(mktemp -d); PIDS=""
 cleanup() { for p in $PIDS; do kill "$p" 2>/dev/null; done; rm -rf "$T"; }; trap cleanup EXIT
 export HOME=$T/home RUNNER_INBOX_DIR=$T/inbox RUNNER_PICKUP_SESSIONS_DIR=$T/sessions RUNNER_WEBHOOK_SECRETS=$T/keys
 export RUNNER_PICKUP_RATE_MARKER=$T/none RUNNER_CHAT_REPLY_CMD=/lib/runner-chat-reply
-mkdir -p "$HOME" "$T/sessions" "$T/keys" "$T/inbox"
+mkdir -p "$HOME" "$T/sessions" "$T/keys" "$T/inbox" "$T/screens"
 echo "$RANDOM$RANDOM-test-key" > "$T/keys/runner-3"; chmod 600 "$T/keys/runner-3"
 
 # Fake tmux: one pane per line of $FAKE_PANES, send-keys recorded as "<pane>|<mode>|<text>".
-export TMUX_LOG=$T/tmux.log FAKE_PANES=$T/panes RUNNER_PICKUP_TMUX=$T/tmux
+export TMUX_LOG=$T/tmux.log FAKE_PANES=$T/panes FAKE_SCREENS=$T/screens RUNNER_PICKUP_TMUX=$T/tmux
 cat > "$T/tmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
   list-panes) cat "$FAKE_PANES" ;;
+  capture-pane) f=$FAKE_SCREENS/${5#%}; if [ -f "$f" ]; then cat "$f"; else printf '\342\224\200\342\224\200\n\342\235\257\302\240 \033[2mTry "fix lint"\033[0m\n\342\224\200\342\224\200\n  status line text\n'; fi ;;
   send-keys) pane=$3; shift 3; if [ "$1" = Enter ]; then echo "$pane|enter|" >> "$TMUX_LOG"; else echo "$pane|literal|$2" >> "$TMUX_LOG"; fi ;;
 esac
 EOF
@@ -229,6 +230,7 @@ cat > "$T/slowtmux" <<'EOF'
 #!/usr/bin/env bash
 case "$1" in
   list-panes) cat "$FAKE_PANES" ;;
+  capture-pane) f=$FAKE_SCREENS/${5#%}; if [ -f "$f" ]; then cat "$f"; else printf '\342\224\200\342\224\200\n\342\235\257\302\240 \033[2mTry "fix lint"\033[0m\n\342\224\200\342\224\200\n  status line text\n'; fi ;;
   send-keys) pane=$3; shift 3; [ "$1" != Enter ] || { echo "$pane|enter|" >> "$TMUX_LOG"; exit 0; }; sleep 0.3; echo "$pane|literal|$2" >> "$TMUX_LOG" ;;
 esac
 EOF
@@ -268,6 +270,27 @@ eq "abandoned work file is recovered and delivered" "$(lastline)" '%1|literal|st
 printf '{"ts":1,"text":"stranded 2"}\n' > "$T/inbox/runner-3.pending.jsonl.work.99998"
 RUNNER_DELIVER=$T/deliver-fail RUNNER_PICKUP_NOW=$(( $(date +%s) + 13 )) ./runner-pickup run 3 2>/dev/null
 eq "failed recovery keeps the record" "$(cat "$T"/inbox/runner-3.pending.jsonl* 2>/dev/null | jq -r .text | grep -c 'stranded 2')" "1"
+# YPER4-274: never type into a pane while Valentin has text in its input box; queue and retry instead.
+R=$'\342\224\200\342\224\200'; P=$'\342\235\257\302\240'; scr() { printf '%s\n' "$@" > "$T/screens/1"; }
+rm -f "$T/inbox/runner-3.pending.jsonl"; : > "$TMUX_LOG"
+scr "$R" "$P "$'\033[39m''half a sent' "$R" '  status'
+eq "typed text in the box: queued, exit 3" "$(deliver 3 'wait for me')" "3"
+eq "nothing typed into his pane, no keys at all" "$(wc -l < "$TMUX_LOG" | tr -d ' ')" "0"
+eq "queued for the next tick" "$(jq -r .text "$T/inbox/runner-3.pending.jsonl")" "wait for me"
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 20 )) ./runner-pickup run 3 2>/dev/null
+eq "retry while he still types: still nothing typed" "$(sent)|$(jq -r .text "$T/inbox/runner-3.pending.jsonl")" "0|wait for me"
+scr "$R" "$P "$'\033[2m\033[39mPress up to edit queued messages\033[0m' "$R"
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 21 )) ./runner-pickup run 3 2>/dev/null
+eq "box empty again (dim hint only): retry delivers" "$(lastline)" '%1|literal|wait for me'
+[ ! -s "$T/inbox/runner-3.pending.jsonl" ] && ok "queue drained after delivery" || bad "queue not drained"
+: > "$TMUX_LOG"; scr "$R" "$P " '  second line typed' "$R" '  status'
+eq "text on a later input line counts as typing" "$(deliver 3 'x')|$(sent)" "3|0"
+scr 'Do you want to proceed?' "$P"'1. Yes' '  2. No'
+eq "a dialog or menu on screen is not typed into" "$(deliver 3 'x')|$(sent)" "3|0"
+scr 'no prompt here'
+eq "no input box found: queued, never typed" "$(deliver 3 'x')|$(sent)" "3|0"
+rm -f "$T/screens/1" "$T/inbox/runner-3.pending.jsonl"
+eq "empty box with a dim suggestion and a status line: delivered" "$(deliver 3 'go')|$(lastline)" "0|%1|literal|go"
 # Markup parsing stays fast on hostile input.
 start=$(date +%s); h=$(head -c 100000 /dev/zero | tr '\0' '<'); post 3 comment.created d-h1 "$(comment "$h" 995)" >/dev/null
 [ $(( $(date +%s) - start )) -lt 5 ] && ok "pathological markup handled quickly" || bad "slow markup"
