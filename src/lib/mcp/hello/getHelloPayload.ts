@@ -38,6 +38,27 @@ export const HELLO_CAPABILITIES = {
     'Use signed per-agent webhooks to wake an agent on mentions and assignments, or SSE streams for board events. Setup and verification: https://docs.hypertask.ai/mcp/agent-webhooks/',
 } as const
 
+// HTPR-7122: the shared agent directive, served while htpr-7122-agent-reactions is on.
+export const HTPR_7122_HELLO_CAPABILITIES = {
+  ...HELLO_CAPABILITIES,
+  comments:
+    'Read comments and add markdown-in comments through the comment tools or /api/mcp/comments. To acknowledge or confirm a person\'s comment, react with an emoji instead of posting an ack comment.',
+  reactions:
+    'React to a person\'s comment with a thumbs up or any emoji through POST /api/mcp/comments/{comment_id}/reactions with {"emoji":"👍","active":true} (active false removes it), or `hypertask comment react <comment_id> --emoji 👍`. Post a comment only when you have something new to say. Your reaction is saved and shown as you, the agent. An agent\'s reaction never counts as an approval or decision; only a person\'s own reaction does.',
+  abilities:
+    'Use all of Hypertask\'s abilities, not only comments: reactions, pages, evidence, leases, sessions, escalation, task moves and labels.',
+} as const
+
+async function helloCapabilities(userId: number) {
+  const [{ isFeatureEnabled }, { HTPR_7122_AGENT_REACTIONS_FLAG }] = await Promise.all([
+    import('@/lib/flags'),
+    import('@/lib/flags/definitions/htpr-7122-agent-reactions'),
+  ])
+  return (await isFeatureEnabled(HTPR_7122_AGENT_REACTIONS_FLAG, userId))
+    ? HTPR_7122_HELLO_CAPABILITIES
+    : HELLO_CAPABILITIES
+}
+
 function truncateText(value: string): string {
   if (value.length <= PER_BOARD_TEXT_LIMIT) return value
   return `${value.slice(0, PER_BOARD_TEXT_LIMIT - TRUNCATION_MARKER.length)}${TRUNCATION_MARKER}`
@@ -159,7 +180,7 @@ export async function getHelloPayload(ctx: McpAuthContext) {
     boards,
     boardsTotal: projects.length,
     boardsTruncated,
-    capabilities: HELLO_CAPABILITIES,
+    capabilities: await helloCapabilities(ctx.user.id),
     conventions,
     conventionsTruncated,
   }
