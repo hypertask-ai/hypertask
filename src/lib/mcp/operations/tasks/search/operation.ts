@@ -8,7 +8,7 @@ import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
+import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { parseSearchWithChipNames, parseSearchWithNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
@@ -303,10 +303,11 @@ export async function GET(request: NextRequest) {
       const chipsEnabled = await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, user.id)
       const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
       const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, user.id)
+      const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, user.id)
       const personProjectIds = (fuzzyPersonEnabled || commenterEnabled) && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
       const parsedQuery = chipsEnabled
-        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
-        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
+        ? await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled, logicEnabled)
+        : await parseSearchWithNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled, logicEnabled)
       const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
       if (parsed) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,

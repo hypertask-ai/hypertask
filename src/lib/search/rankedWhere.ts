@@ -4,6 +4,7 @@ import prisma from '@/lib/prisma'
 import { searchComments, searchTasks } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import { commenterWhere, searchFilterWhere } from './filters'
 import type { ParsedSearch } from './operators'
+import { searchResultType } from './filters'
 
 export async function rankedSearchWhere(
   parsed: ParsedSearch,
@@ -64,6 +65,12 @@ export async function rankedSearchWhere(
   }
   if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false }
 
+  // HTPR-6368: type:ticket ranks only tickets, type:comment only comments (negated flips it).
+  const typeKinds = (parsed.filters.type ?? []).map(({ value, negated }) => ({ kind: searchResultType(value), negated }))
+  const onlyKinds = typeKinds.filter(({ kind, negated }) => kind && !negated).map(({ kind }) => kind)
+  const allowTasks = !typeKinds.some(({ kind, negated }) => kind === 'ticket' && negated) && (!onlyKinds.length || onlyKinds.includes('ticket'))
+  const allowComments = !typeKinds.some(({ kind, negated }) => kind === 'comment' && negated) && (!onlyKinds.length || onlyKinds.includes('comment'))
+
   const maxWindow = 800
   const maxCandidates = 1600
   const maxIterations = 4
@@ -76,8 +83,8 @@ export async function rankedSearchWhere(
     : rankedIds.length < limit))) {
     iterations++
     const [tasks, comments] = await Promise.all([
-      searchTasks({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, keywordOnly: true }),
-      searchComments({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, limit: window, keywordOnly: true, groupByTask: false }),
+      !allowTasks ? Promise.resolve([]) : searchTasks({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, keywordOnly: true }),
+      !allowComments ? Promise.resolve([]) : searchComments({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, limit: window, keywordOnly: true, groupByTask: false }),
     ])
     const candidates = [...tasks.map((row) => ({ id: Number(row.id), description: row.descriptionText, comment: undefined })),
       ...comments.map((row) => ({ id: Number(row.taskId), description: '', comment: row }))]

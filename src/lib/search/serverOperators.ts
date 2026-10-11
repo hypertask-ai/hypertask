@@ -2,7 +2,7 @@ import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { MAX_SEARCH_OPERATOR_CLAUSES, operatorMatches, parseSearchQuery, type NameOperator, type Names, type ParsedSearch } from './operators'
 
-export async function parseSearchWithNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false): Promise<ParsedSearch> {
+export async function parseSearchWithNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false, logicEnabled = false): Promise<ParsedSearch> {
   const names: Names = {}
   const lookedUp = new Set<string>()
   for (const { operator, valueStart } of operatorMatches(raw).slice(0, MAX_SEARCH_OPERATOR_CLAUSES)) {
@@ -36,7 +36,7 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
       })).map((row) => row.displayName ?? '')]
     }
   }
-  const parsed = parseSearchQuery(raw, names, commenterEnabled)
+  const parsed = parseSearchQuery(raw, names, commenterEnabled, logicEnabled)
   if (fuzzyPersonEnabled) {
     for (const [clauses, isCommenter] of [
       [[...(parsed.filters.from ?? []), ...(parsed.filters.assignee ?? [])], false],
@@ -65,9 +65,9 @@ export async function parseSearchWithNames(raw: string, projectIds: number[], fu
   return parsed
 }
 
-export async function parseSearchWithChipNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false) {
+export async function parseSearchWithChipNames(raw: string, projectIds: number[], fuzzyPersonEnabled = false, personProjectIds = projectIds, commenterEnabled = false, logicEnabled = false) {
   const normalized = raw.replace(/(^|\s)(-?(?:in|board):)#(?=\S)/gi, '$1$2')
-  const parsed = await parseSearchWithNames(normalized, projectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled)
+  const parsed = await parseSearchWithNames(normalized, projectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled, logicEnabled)
   for (const key of ['in', 'board'] as const) {
     for (const filter of parsed.filters[key] ?? []) filter.value = filter.value.replace(/^#/, '')
   }

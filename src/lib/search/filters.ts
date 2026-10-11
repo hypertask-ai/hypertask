@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { isDoneByName } from '@/lib/doneColumns'
-import type { ParsedSearch, SearchFilter, SearchOperator } from './operators'
+import type { ParsedSearch, SearchFilter, SearchFilterKey } from './operators'
 
 const exact = (value: string) => ({ equals: value, mode: 'insensitive' as const })
 const identity = (value: string) => value.replace(/^@/, '').trim()
@@ -19,6 +19,35 @@ function dateCondition(operator: 'before' | 'after' | 'on', raw: string): Prisma
     : operator === 'after'
       ? { gte: next }
       : { gte: day, lt: next } }
+}
+
+// HTPR-6368: result kinds search returns are tickets (title or description) and comments.
+export const SEARCH_RESULT_TYPES = { ticket: 'ticket', tickets: 'ticket', task: 'ticket', tasks: 'ticket', comment: 'comment', comments: 'comment' } as const
+export const searchResultType = (value: string) => SEARCH_RESULT_TYPES[value.trim().toLowerCase() as keyof typeof SEARCH_RESULT_TYPES]
+const PRIORITY_NAMES = ['urgent', 'high', 'medium', 'low']
+const NO_MATCH: Prisma.TaskWhereInput = { id: -1 }
+
+function typeWhere(name: string): Prisma.TaskWhereInput {
+  const type = searchResultType(name)
+  if (type === 'comment') return { comments: { some: { activity: { equals: Prisma.DbNull } } } }
+  return type === 'ticket' ? { id: { gt: 0 } } : NO_MATCH
+}
+
+function priorityWhere(name: string): Prisma.TaskWhereInput {
+  const lower = name.trim().toLowerCase()
+  if (['none', 'no', 'no priority', 'no-priority'].includes(lower)) {
+    return { OR: [{ priority: { is: null } }, { priority: { is: { Priority_Value: exact('No Priority') } } }] }
+  }
+  return PRIORITY_NAMES.includes(lower) ? { priority: { is: { Priority_Value: exact(lower) } } } : NO_MATCH
+}
+
+function containsPhrase(phrase: string): Prisma.TaskWhereInput {
+  const contains = { contains: phrase, mode: 'insensitive' as const }
+  return { OR: [
+    { title: contains },
+    { description_: { is: { content: contains } } },
+    { comments: { some: { activity: { equals: Prisma.DbNull }, OR: [{ commentText: contains }, { text: contains }] } } },
+  ] }
 }
 
 export function commenterWhere(filters: SearchFilter[], text = ''): Prisma.CommentWhereInput {
@@ -39,7 +68,7 @@ export function commenterWhere(filters: SearchFilter[], text = ''): Prisma.Comme
   }
 }
 
-function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[], text = ''): Prisma.TaskWhereInput {
+function filterWhere(operator: SearchFilterKey, { value, userIds }: SearchFilter, done: Prisma.TaskWhereInput[], text = ''): Prisma.TaskWhereInput {
   const name = identity(value)
   const id = numeric(name)
   if (id === null && userIds !== undefined) {
@@ -68,6 +97,9 @@ function filterWhere(operator: SearchOperator, { value, userIds }: SearchFilter,
         case 'due-date': return { dueDate: { not: null } }
         default: return { id: -1 }
       }
+    case 'type': return typeWhere(name)
+    case 'priority': return priorityWhere(name)
+    case 'phrase': return containsPhrase(name)
     case 'before':
     case 'after':
     case 'on': return dateCondition(operator, name) ?? { id: -1 }
@@ -89,7 +121,7 @@ export async function searchFilterWhere(
     .filter((section) => section.isDone ?? isDoneByName(section.section_title))
     .map((section) => ({ projectId: section.projectId, section: section.section_title }))
   const groups: Prisma.TaskWhereInput[] = []
-  for (const [key, values] of Object.entries(parsed.filters) as [SearchOperator, SearchFilter[]][]) {
+  for (const [key, values] of Object.entries(parsed.filters) as [SearchFilterKey, SearchFilter[]][]) {
     const included = values.filter(({ negated }) => !negated)
     if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
     for (const filter of values.filter(({ negated }) => negated)) {
