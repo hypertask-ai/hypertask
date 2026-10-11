@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
+import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
@@ -12,6 +13,25 @@ const MCP_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_RATE_LIMIT_PER_MINUTE) 
 // keys get a higher published limit instead of being treated as anonymous scraping
 // traffic (HTPR-4431). Picked as 5x default; tune via env if it's wrong in practice.
 const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
+
+const MAX_LOCAL_COUNTS = 1_000
+const localCounts = new Map<string, { count?: number; pending: number }>()
+let localWindowStart: number | undefined
+let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
+
+async function shouldUseFastRateLimit(): Promise<boolean> {
+  if (fastFlagDecision && fastFlagDecision.expiresAt > Date.now()) return fastFlagDecision.enabled
+  try {
+    const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+    // No token-derived user: only the global Everyone mode returns null.
+    const enabled = await featureFlagCandidateUserIds(HTPR_7133_MCP_RATELIMIT_FAST_FLAG) === null
+    fastFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
+    return enabled
+  } catch {
+    fastFlagDecision = { enabled: false, expiresAt: Date.now() + 30_000 }
+    return false
+  }
+}
 
 /**
  * Determines whether the request count alone is enough to allow or block a
@@ -45,11 +65,51 @@ export async function checkMcpRateLimit(
     const windowStartSeconds = Math.floor(nowSeconds / MCP_RATE_LIMIT_WINDOW_SECONDS) * MCP_RATE_LIMIT_WINDOW_SECONDS
     const key = `mcp:ratelimit:${tokenHash}:${windowStartSeconds}`
 
-    const redis = await getRedis()
-    const count = await redis.incr(key)
-    if (count === 1) {
-      await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+    if (localWindowStart !== windowStartSeconds) {
+      localCounts.clear()
+      localWindowStart = windowStartSeconds
     }
+    const fastEnabled = await shouldUseFastRateLimit()
+    if (!fastEnabled) localCounts.clear()
+    const redis = await getRedis()
+    const trackCount = fastEnabled && localWindowStart === windowStartSeconds
+    let state = trackCount ? localCounts.get(key) : undefined
+    if (trackCount && !state) {
+      if (localCounts.size >= MAX_LOCAL_COUNTS) localCounts.delete(localCounts.keys().next().value!)
+      state = { pending: 0 }
+      localCounts.set(key, state)
+    }
+    const skipWait = state?.count !== undefined &&
+      state.count + state.pending + 1 <= MCP_RATE_LIMIT_PER_MINUTE / 2
+    if (state) state.pending++
+    const localState = state
+    const increment = (async () => {
+      try {
+        const count = await redis.incr(key)
+        if (count === 1) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+        if (localState) localState.count = Math.max(localState.count ?? 0, count)
+        return count
+      } catch (err) {
+        if (localState) localState.count = undefined
+        console.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
+        return undefined
+      } finally {
+        if (localState) localState.pending--
+      }
+    })()
+    // Skip only below half the anonymous limit, including every unconfirmed local call.
+    // Each call still increments Redis; other-instance traffic can overshoot until replies
+    // confirm a higher count, after which the next call awaits the shared limit again.
+    if (skipWait) {
+      try {
+        after(() => increment.then(() => {}))
+        return null
+      } catch {
+        // Outside a supported request lifecycle, await the same increment, never a second one.
+      }
+    }
+    const count = await increment
+    if (count === undefined) return null
 
     const countOutcome = classifyMcpRateLimitCount(count)
     if (countOutcome === 'allow') return null

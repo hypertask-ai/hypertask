@@ -63,6 +63,8 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false, us
   const decision = load('src/lib/mcp/rateLimitDecision.ts', {})
   const rate = load('src/lib/mcp/auth/rateLimit.ts', {
     'next/server': { NextRequest, NextResponse }, crypto,
+    '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: 'htpr-7133-mcp-ratelimit-fast' },
+    '@/lib/flags': { featureFlagCandidateUserIds: async () => [] },
     '@/lib/redis': { getRedis: async () => ({ incr: async () => { events.push('rate'); return count }, expire: async () => {} }) },
     '@/lib/mcp/rateLimitDecision': decision, './session': { ...session, validateMcpAuth: async request => { authCalls++; return session.validateMcpAuth(request) } },
     '../operationContext': context,
