@@ -21,12 +21,12 @@ payload=$(curl -fsS \
   --config "$curl_config" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/valentinyeo/hypertasks/pulls/${pr_number}")
+  "https://api.github.com/repos/hypertask-ai/hypertask/pulls/${pr_number}")
 
 actual_sha=$(jq -r '.head.sha' <<<"$payload")
 [ "$(jq -r '.state' <<<"$payload")" = open ] || { echo "PR #${pr_number} is not open" >&2; exit 65; }
-[ "$(jq -r '.base.ref' <<<"$payload")" = staging ] || { echo "PR #${pr_number} does not target staging" >&2; exit 65; }
-[ "$(jq -r '.head.repo.full_name' <<<"$payload")" = valentinyeo/hypertasks ] || { echo "Fork PRs cannot use the subscription reviewer" >&2; exit 65; }
+[ "$(jq -r '.base.ref' <<<"$payload")" = production ] || { echo "PR #${pr_number} does not target production" >&2; exit 65; }
+[ "$(jq -r '.head.repo.full_name' <<<"$payload")" = hypertask-ai/hypertask ] || { echo "Fork PRs cannot use the subscription reviewer" >&2; exit 65; }
 [[ "$actual_sha" =~ ^[0-9a-f]{40}$ ]] || { echo "GitHub returned an invalid head SHA" >&2; exit 69; }
 [ -z "$requested_sha" ] || [ "$requested_sha" = "$actual_sha" ] || { echo "Requested head is no longer current" >&2; exit 75; }
 
@@ -47,17 +47,24 @@ review_state=$(curl -fsS \
   --config "$curl_config" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/valentinyeo/hypertasks/commits/${actual_sha}/status" \
-  | jq -r '[.statuses[] | select(.context == "ai-review" or .context == "claude-review") | {context, state}]
-      | group_by(.context) | map(.[0].state)
-      | if index("success") then "success" elif index("failure") then "failure" else "missing" end')
-if [ "$review_state" = success ] || [ "$review_state" = failure ]; then
+  "https://api.github.com/repos/hypertask-ai/hypertask/commits/${actual_sha}/status" \
+  | jq -r '[.statuses[] | select(.context == "claude-review")][0] | "\(.state // "missing")\t\(.description // "")"')
+review_desc=${review_state#*	}
+review_state=${review_state%%	*}
+# An "AI review infrastructure failure" is a provider outage, not a verdict:
+# fall through so the bounded retry below re-dispatches it (max 2 attempts).
+if [ "$review_state" = success ]; then
+  # Marker lets the scan skip this finished head with zero API calls.
   completed_tmp=$(mktemp "$state_root/completed/.${actual_sha}.XXXXXX")
   trap 'rm -f -- "$completed_tmp"' EXIT
   printf '%s\n' "$review_state" >"$completed_tmp"
   chmod 600 "$completed_tmp"
   mv -f -- "$completed_tmp" "$completed_file"
   trap - EXIT
+  echo "Review already completed for ${actual_sha}"
+  exit 0
+fi
+if [ "$review_state" = failure ] && ! grep -qi "infrastructure failure" <<<"$review_desc"; then
   echo "Review already completed for ${actual_sha}"
   exit 0
 fi
@@ -71,7 +78,7 @@ run_state=$(curl -fsS \
   --config "$curl_config" \
   -H "Accept: application/vnd.github+json" \
   -H "X-GitHub-Api-Version: 2022-11-28" \
-  "https://api.github.com/repos/valentinyeo/hypertask-reviewer/actions/workflows/review.yml/runs?event=repository_dispatch&per_page=100" \
+  "https://api.github.com/repos/hypertask-ai/reviewer/actions/workflows/review.yml/runs?event=repository_dispatch&per_page=100" \
   | jq -r --arg title "$run_title" \
       '[.workflow_runs[] | select(.display_title == $title)][0].status // "missing"')
 if [ "$run_state" = queued ] || [ "$run_state" = in_progress ]; then
@@ -101,7 +108,7 @@ jq -n --arg pr "$pr_number" --arg sha "$actual_sha" \
       -H "X-GitHub-Api-Version: 2022-11-28" \
       -H "Content-Type: application/json" \
       -d @- \
-      "https://api.github.com/repos/valentinyeo/hypertask-reviewer/dispatches"
+      "https://api.github.com/repos/hypertask-ai/reviewer/dispatches"
 
 next_attempt=$((automatic_attempts + 1))
 printf '%s\n' "$next_attempt" | install -m 600 /dev/stdin "$state_file"

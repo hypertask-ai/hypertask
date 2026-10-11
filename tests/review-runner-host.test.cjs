@@ -2,7 +2,7 @@ const test = require('node:test')
 const assert = require('node:assert/strict')
 const { access, readFile } = require('node:fs/promises')
 
-// The review engine itself lives in valentinyeo/hypertask-reviewer. What stays
+// The review engine itself lives in hypertask-ai/reviewer. What stays
 // here is the runner host contract: who may invoke the subscription wrappers,
 // how the dispatch timer reaches the broker, and how auto-merge treats the
 // review gate.
@@ -52,11 +52,11 @@ test('root-installed poller is the only automatic review dispatcher', async () =
   assert.match(broker, /select\(\.display_title == \$title\)/)
   assert.match(broker, /automatic_attempts.*-ge 2/)
   assert.match(broker, /commits\/\$\{actual_sha\}\/status/)
-  assert.match(broker, /\.context == \"ai-review\" or \.context == \"claude-review\"/)
+  assert.match(broker, /\.context == \"claude-review\"/)
   assert.match(broker, /completed_file/)
   assert.match(broker, /event=repository_dispatch/)
   assert.match(broker, /event_type:"review_pr",client_payload:/)
-  assert.match(broker, /hypertask-reviewer\/dispatches/)
+  assert.match(broker, /reviewer\/dispatches/)
   assert.doesNotMatch(broker, /workflow_dispatch/)
   assert.doesNotMatch(broker, /actions\/workflows\/review\.yml\/dispatches/)
   const autoMerge = await readFile('.github/workflows/automerge.yml', 'utf8')
