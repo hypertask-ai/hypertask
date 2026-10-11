@@ -1,3 +1,4 @@
+import type { setTaskDueDate, setTaskStartDate } from "@/lib/api/typedClient";
 import {
   fetchUserPreference,
   USER_PREFERENCES_QUERY_KEY,
@@ -242,10 +243,11 @@ export async function uploadDocumentsToS3(
 
 export async function setDueDateApiHandler(
   dueDate:Date|undefined,
-  taskId:number
+  taskId:number,
+  typedWrite?: typeof setTaskDueDate
 ){
   try {
-    const result = await axios.post("/api/tasks/setDueDate", {
+    const result = typedWrite ? await typedWrite({ taskId, dueDate }) : await axios.post("/api/tasks/setDueDate", {
       taskId,
       dueDate
     });
@@ -258,10 +260,11 @@ export async function setDueDateApiHandler(
 // HTPR-4884: planned start date. Undefined clears it.
 export async function setStartDateApiHandler(
   startDate: Date | undefined,
-  taskId: number
+  taskId: number,
+  typedWrite?: typeof setTaskStartDate
 ) {
   try {
-    const result = await axios.post("/api/tasks/setStartDate", {
+    const result = typedWrite ? await typedWrite({ taskId, startDate: startDate ?? null }) : await axios.post("/api/tasks/setStartDate", {
       taskId,
       startDate: startDate ?? null,
     });

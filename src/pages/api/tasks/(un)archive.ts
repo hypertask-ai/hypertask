@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler } from "next";
 import prisma from "@/lib/prisma";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
@@ -142,4 +143,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/archive")).POST,
+);

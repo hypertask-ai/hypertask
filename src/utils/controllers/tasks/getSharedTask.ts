@@ -212,6 +212,7 @@ export const checkIfBoardMember = async (userId: number, projectId: number) => {
       where: {
         userId: userId,
         projectId: projectId,
+        agentId: null,
       },
       include: {
         user: true,

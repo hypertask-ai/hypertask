@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import {
@@ -33,6 +34,7 @@ async function findDraftWithAccess(draftId: number, userId: number) {
 }
 
 export async function POST(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -198,4 +200,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
       { status: 500 }
     )
   }
+
+  })(request)
 }

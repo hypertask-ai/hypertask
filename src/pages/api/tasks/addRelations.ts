@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import {
   addRelatedTasks,
   isTaskRelationType,
@@ -58,4 +59,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/add-relations")).POST,
+);

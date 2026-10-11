@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import taskSearchByParam from "@/utils/controllers/tasks/taskSearchByParam";
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
@@ -42,4 +43,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/task-writes/search-by-param")).GET,
+);

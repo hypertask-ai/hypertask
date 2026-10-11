@@ -8,6 +8,7 @@ import {
 import { taskChannel, COMMENT_EVENT, TASK_EVENT } from "@/lib/realtime/shared";
 import {
   mergeRealtimeTaskDetail,
+  preserveTaskAssigneesChangedDuringFetch,
   refreshTaskDetailQueryCache,
   shouldApplyRealtimeTaskDetail,
   shouldRefetchTaskDetail,
@@ -15,6 +16,10 @@ import {
 } from "@/lib/realtime/taskDetailRefresh";
 import { refreshTaskComments } from "@/lib/realtime/taskCommentsRefresh";
 import type { IAttachment, ITask } from "@/models/model";
+
+import { fetchScopedTaskDetail, taskDetailReadKey, shouldRefetchDetailOnMount } from "@/lib/taskDetailReads";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 
 export const TASK_COMMENTS_RECONCILE_INTERVAL_MS = 10_000;
 
@@ -27,6 +32,8 @@ type UseTaskCommentsRealtimeOptions = {
   taskProjectId?: number | null;
   taskUniqueIndex?: number | string | null;
   currentTaskTitle?: string;
+  currentTaskAssignees?: ITask["assignees"];
+  keepAssignee?: boolean;
   setCurrentTask?: Dispatch<SetStateAction<ITask | null>>;
   setDescription?: Dispatch<SetStateAction<string>>;
   setDescriptionAttachments?: Dispatch<SetStateAction<IAttachment[]>>;
@@ -39,7 +46,8 @@ export const TASK_DETAIL_REALTIME_FETCH_CACHE = "no-store" as const;
 
 async function fetchTaskDetailForRealtime(
   projectId: number,
-  uniqueIndex: number | string
+  uniqueIndex: number | string,
+  signal?: AbortSignal,
 ): Promise<ITask | null> {
   // cache: "no-store" is required: a default GET can reuse a pre-change
   // response, so the side panel stays on the mount-time section/title/due
@@ -48,7 +56,7 @@ async function fetchTaskDetailForRealtime(
   // key only on the URL (getTask used to answer `public` — HTPR-6281 QA #2).
   const response = await fetch(
     `/api/tasks/getTask?project=project-${projectId}&uniqueIndex=${uniqueIndex}&_=${Date.now()}`,
-    { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin" }
+    { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", ...(signal ? { signal } : {}) }
   );
   if (!response.ok) return null;
   return response.json();
@@ -62,6 +70,8 @@ export function useTaskCommentsRealtime(
   options: UseTaskCommentsRealtimeOptions = {}
 ): void {
   const queryClient = useQueryClient();
+  const flagReady = useFlagReady(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const wasConnected = useRef(false);
   const shouldRefetchTask = useRef(false);
   const shouldSyncTaskContent = useRef(false);
@@ -72,20 +82,24 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee = false,
     preserveEditorContent = false,
     hasPullRequests = false,
   } = options;
   const currentTaskTitleRef = useRef(options.currentTaskTitle);
   currentTaskTitleRef.current = options.currentTaskTitle;
+  const currentTaskAssigneesRef = useRef(options.currentTaskAssignees);
+  currentTaskAssigneesRef.current = options.currentTaskAssignees;
 
   useEffect(() => {
-    if (taskId == null) return;
+    if (taskId == null || !flagReady) return;
     const activeTaskId = taskId;
 
     let cancelled = false;
     let unsubscribe: (() => void) | undefined;
     let refreshInFlight = false;
     let refreshRequestedDuringFlight = false;
+    let skipInitialSatelliteRefresh = false;
     let subscriptionHealthy = false;
     let fallbackActive = false;
     let fallbackTimer: ReturnType<typeof setInterval> | null = null;
@@ -103,9 +117,12 @@ export function useTaskCommentsRealtime(
       }
 
       refreshInFlight = true;
+      const refreshSatellites = !skipInitialSatelliteRefresh;
+      skipInitialSatelliteRefresh = false;
       const includeTaskRefetch = shouldRefetchTask.current;
       const includeTaskContentSync = shouldSyncTaskContent.current;
       const titleAtFetchStart = currentTaskTitleRef.current;
+      const assigneesAtFetchStart = currentTaskAssigneesRef.current;
       shouldRefetchTask.current = false;
       shouldSyncTaskContent.current = false;
 
@@ -123,8 +140,11 @@ export function useTaskCommentsRealtime(
           const task = await refreshTaskDetailQueryCache({
             queryClient,
             taskId,
-            fetchTask: () =>
-              fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex),
+            readQueryKey: dedupe && currentUserId ? taskDetailReadKey(currentUserId, taskId) : undefined,
+            ...(refreshSatellites ? {} : { refreshSatellites: false }),
+            fetchTask: (signal) => dedupe && currentUserId
+              ? fetchScopedTaskDetail(taskId, taskProjectId, Number(taskUniqueIndex), signal, { cache: TASK_DETAIL_REALTIME_FETCH_CACHE, credentials: "same-origin", cacheBust: true })
+              : fetchTaskDetailForRealtime(taskProjectId, taskUniqueIndex, signal),
           });
 
           if (
@@ -138,10 +158,11 @@ export function useTaskCommentsRealtime(
             })
           ) {
             setCurrentTask?.((currentTask) => {
-              const refreshed = mergeRealtimeTaskDetail(
+              const refreshed = preserveTaskAssigneesChangedDuringFetch(
                 currentTask,
-                task,
-                includeTaskContentSync
+                mergeRealtimeTaskDetail(currentTask, task, includeTaskContentSync),
+                assigneesAtFetchStart,
+                keepAssignee,
               );
               // A pre-rename response must not reset the title and feed the
               // old value into the title editor's pending autosave.
@@ -219,7 +240,15 @@ export function useTaskCommentsRealtime(
         );
         fallbackWarningLogged = true;
       }
-      runFallbackCycle();
+      // A cached open or authorized server seed already supplies this initial read.
+      const initialRead = dedupe && !wasConnected.current && reason === "unavailable" && currentUserId
+        ? queryClient.getQueryState(taskDetailReadKey(currentUserId, activeTaskId)) : undefined;
+      if (!initialRead || !(initialRead.fetchStatus === "fetching" ||
+        (initialRead.status === "success" && !shouldRefetchDetailOnMount({ state: initialRead })))) {
+        // Initial metadata queries own their reads; only later reconciliation needs satellite invalidation.
+        skipInitialSatelliteRefresh = dedupe && !wasConnected.current && reason === "unavailable" && canReconcile();
+        runFallbackCycle();
+      }
       fallbackTimer = setInterval(
         runFallbackCycle,
         TASK_COMMENTS_RECONCILE_INTERVAL_MS
@@ -252,6 +281,13 @@ export function useTaskCommentsRealtime(
         shouldSyncTaskDetailContent(event, preserveEditorContent)
       );
     };
+
+    const onLocalTaskChange = (event: Event) => {
+      if ((event as CustomEvent<{ taskId: number }>).detail?.taskId === activeTaskId) {
+        refetchTaskAndActivity();
+      }
+    };
+    window.addEventListener(TASK_EVENT, onLocalTaskChange);
 
     async function connectAndSubscribe() {
       if (cancelled || connectionAttemptInFlight) return;
@@ -357,6 +393,7 @@ export function useTaskCommentsRealtime(
       fallbackTimer = null;
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener(TASK_EVENT, onLocalTaskChange);
       unsubscribe?.();
     };
   }, [
@@ -368,7 +405,10 @@ export function useTaskCommentsRealtime(
     setCurrentTask,
     setDescription,
     setDescriptionAttachments,
+    keepAssignee,
     preserveEditorContent,
     hasPullRequests,
+    dedupe,
+    flagReady,
   ]);
 }

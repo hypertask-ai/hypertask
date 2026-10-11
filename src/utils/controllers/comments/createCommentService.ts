@@ -23,9 +23,6 @@ import { persistAgentRunTriggerWebhooks, persistAgentTaskRunPromptWebhooks, pers
 import { persistBoardWebhookEvents, publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { generalConfig } from "@/lib/configs/general.config";
 import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
-import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from "@/lib/flags/keys";
-import { normalizeRichTextStructure } from "@/utils/helperFunctions/normalizeRichTextStructure";
 import { buildAgentInvocationSelector, claimPendingAgentInvocation, DirectReplyAlreadyHandledError } from "@/utils/controllers/comments/agentInvocationCorrelation";
 import { claimInboundEmailProcessing, completeInboundEmailProcessing, findInboundEmailReceipt, recordInboundEmailComment, releaseInboundEmailProcessing, requireInboundEmailComment } from "@/utils/controllers/comments/inboundEmailReceipt";
 import { persistAgentRunActivity, persistAgentRunSelection } from "@/lib/agentRuns/persistence";
@@ -133,13 +130,7 @@ export async function createCommentService(params: CreateCommentParams) {
   ) {
     throw new Error("Agent selection does not match this task comment");
   }
-  const normalizePlainText = await isFeatureEnabled(
-    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-    accessUserId ?? currentUser.id
-  );
-  const text = normalizePlainText
-    ? normalizeBlockHtml(inputText)
-    : normalizeRichTextStructure(inputText);
+  const text = normalizeBlockHtml(inputText);
 
   const task = await prisma.task.findFirst({
     where: {

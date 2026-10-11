@@ -50,7 +50,7 @@ ones, so older comments that cite them still point at the same rule.
 | 89 | After a flag has been on Everyone for 14 days, open a ticket to remove the flag and the dead branch. | ship-feature-behind-flag |
 | 90 | When a flagged feature is live, comment on the ticket, @mention Valentin, name the flag, and link `https://app.hypertask.ai/admin/flags`. | ship-feature-behind-flag |
 | 92 | Pull request title is `HTPR-NNNN [TYPE] ...`. | fix-bug |
-| 93 | An additive migration behind a flag goes to AI Review. A destructive migration, and money, auth, security, or irreversible data, go to Valentin Review. Auto-merge stays off. | fix-bug, `open-pr.sh` |
+| 93 | An additive migration behind a flag stays In Progress while the runner works it (Valentin, 2026-10-10). A destructive migration, and money, auth, security, or irreversible data, go to Valentin Review. Auto-merge stays off. | fix-bug, `open-pr.sh` |
 | 95 | Claim and comment as `vcc`, never as userId 6. | verify-qa |
 | 97 | Never assign userId 6 for any reason. If Valentin assigned himself or moved the ticket by hand, leave it. | verify-qa, `open-pr.sh` |
 | 98 | When Valentin @mentions the session, the reply @mentions him back with the editor's mention markup. | verify-qa |

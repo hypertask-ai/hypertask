@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -41,7 +42,9 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/notification-writes/preference")).POST,
+);
 
 
 

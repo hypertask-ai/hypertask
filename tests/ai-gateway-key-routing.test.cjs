@@ -48,6 +48,7 @@ function stubPlan(plan = "Pro", lunaFree = false) {
   stubModule("src/app/api/ai/_lib/planGate.ts", {
     assertImageModelAllowedForPlan: async () => {},
     assertModelAllowedForPlan: async () => {},
+    haikuDefaultModelEnabled: async () => false, haiku55ModelEnabled: async () => false,
     lunaFreePlanEnabled: async () => lunaFree,
     storePlanIdForProject: async () =>
       typeof plan === "function" ? plan() : plan,
@@ -1023,6 +1024,7 @@ test("model and effort dimensions resolve every supported provider configuration
     ["gemini-3.5-flash-lite", undefined, undefined],
     ["gemini-3.8-flash", undefined, undefined],
     ["claude-haiku-4.5", undefined, undefined],
+    ["claude-haiku-5-5", undefined, claudeThinking("adaptive", "medium")],
     ["custom", undefined, undefined],
   ];
 
@@ -1064,6 +1066,7 @@ test("model and effort dimensions resolve every supported provider configuration
     "grok-4.20-thinking": ["gpt-6-luna", "standard"],
     "grok-4.5": ["gpt-6-luna", "standard"],
     "claude-haiku-4.5": ["claude-haiku-4.5", undefined],
+    "claude-haiku-5-5": ["claude-haiku-5-5", undefined],
     custom: ["custom", undefined],
   };
 

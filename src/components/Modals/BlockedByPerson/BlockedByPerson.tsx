@@ -1,3 +1,6 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { setTaskWaitingOn } from "@/lib/api/typedClient";
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Check } from "lucide-react";
@@ -39,6 +42,9 @@ const BlockedByPersonModal = ({
   onClose: (fields?: WaitingOnFields) => void;
 }) => {
   const queryClient = useQueryClient();
+  const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
+  let typedWrite: typeof setTaskWaitingOn | undefined;
+  if (typedClient) typedWrite = setTaskWaitingOn;
   const [keyword, setKeyword] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -76,7 +82,7 @@ const BlockedByPersonModal = ({
     if (saving) return;
     setSaving(true);
     try {
-      const response = await axios.post<WaitingOnFields>(
+      const response = typedWrite ? await typedWrite({ taskId, userId: user.id === 0 ? null : user.id }) : await axios.post<WaitingOnFields>(
         "/api/tasks/waiting-on",
         { taskId, userId: user.id === 0 ? null : user.id }
       );

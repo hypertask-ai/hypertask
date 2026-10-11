@@ -4,7 +4,7 @@ import { fetchTaskDetail } from "@/utils/controllers/taskDetail/load";
 const tasksGetTask = async (project: string, uniqueIndex: any, user: IUser) => {
   try {
     const task = await fetchTaskDetail(project, uniqueIndex, user.id);
-    if (!task) throw "Task not found";
+    if (!task) return { status: 404, json: null };
     return { status: 200, json: task };
   } catch (error) {
     console.log({ error });

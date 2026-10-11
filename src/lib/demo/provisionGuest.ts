@@ -9,6 +9,7 @@ import {
   PriorityConstants,
 } from "@/lib/constants/constants";
 import prisma from "@/lib/prisma";
+import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { createProjectViewAndCreateDefault } from "@/utils/controllers/projects/create";
 import { createProjectWithStableName } from "@/utils/controllers/projects/createProjectWithStableName";
@@ -18,6 +19,7 @@ import { generateDemoBoard, type DemoBoard } from "./generateDemoBoard";
 import {
   GUEST_SEED_TASKS,
   GUEST_SEED_TASKS_IN_PROGRESS,
+  getGuestSeedTasksInProgress,
 } from "./guestSeedTasks";
 import { GUEST_UID_PREFIX } from "./guest";
 
@@ -290,6 +292,11 @@ async function provisionGeneratedBoard(
   const tasks: GeneratedTaskRecord[] = [];
   const createdTaskIds: number[] = [];
   const dueDateBase = new Date();
+  const seedTasks = boardKind === "skeleton"
+    ? getGuestSeedTasksInProgress(
+        await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, owner.userId),
+      )
+    : [];
   let taskCount = 0;
   for (const [columnIndex, column] of board.columns.entries()) {
     const section = await prisma.section.create({
@@ -308,6 +315,7 @@ async function provisionGeneratedBoard(
       const created = await createTaskCore({
         title: task.title,
         description:
+          seedTasks.find((seed) => seed.title === task.title)?.description ??
           (task as { description?: string }).description ?? "",
         userId: owner.userId,
         projectId: project.id,

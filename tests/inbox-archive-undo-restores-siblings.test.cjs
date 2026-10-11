@@ -84,9 +84,11 @@ async function loadMarkAsDone({ row }) {
   resetModules([
     "src/pages/api/notifications/markAsDone.ts",
     "src/lib/auth/getSessionUser.ts",
+    "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
   ]);
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: handler => handler });
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });
@@ -117,10 +119,13 @@ async function loadArchiveBulk() {
   };
   resetModules([
     "src/pages/api/notifications/(un)archiveBulk.ts",
+    "src/lib/flags.ts",
     "src/lib/auth/getSessionUser.ts",
+    "src/lib/api/task-writes/route.ts",
     "src/lib/realtime/server.ts",
     "src/lib/prisma.ts",
   ]);
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: handler => handler });
   stubModule("src/lib/auth/getSessionUser.ts", {
     getSessionUser: async () => ({ userId: 6 }),
   });
@@ -129,6 +134,10 @@ async function loadArchiveBulk() {
     socketIdFromHeader: () => null,
   });
   stubModule("src/lib/prisma.ts", { default: prisma });
+  stubModule("src/lib/flags.ts", {
+    HTPR_6989_BULK_ARCHIVE_UNDO_FLAG: "htpr-6989-bulk-archive-undo",
+    isFeatureEnabled: async () => false,
+  });
   const handler = loadTs("src/pages/api/notifications/(un)archiveBulk.ts");
   return { handler, calls };
 }

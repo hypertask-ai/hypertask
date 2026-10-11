@@ -1,3 +1,4 @@
+import { recordAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
@@ -8,7 +9,7 @@ import { hasAnyManagementPermission, hasDataPermission, hasManagementReadPermiss
 import { logMcpCliUsage } from '@/lib/mcp/clientTelemetry';
 import { HTPR_6542_TEAM_SCOPED_MANAGEMENT_KEYS_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { ACCOUNT_MANAGEMENT_KEY_PREFIX, getManagementKeyTeam, TEAM_MANAGEMENT_KEY_PREFIX } from '@/lib/mcp/managementKeyTeamScope';
-import { JWT_MCP_AUDIENCE, validateJwtToken } from './verifyJwt';
+import { JWT_MCP_AUDIENCE, validateJwtToken, boundedMcpAuthLog } from './verifyJwt';
 import type { McpAuthContext, ValidateMcpAuthOptions } from './types';
 import { getMcpOperationContext } from '../operationContext';
 
@@ -74,6 +75,7 @@ export async function validateMcpAuth(
     }
 
     console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
+    recordAuthenticatedConnection(request, managementCtx.user.id, token)
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
@@ -82,6 +84,7 @@ export async function validateMcpAuth(
     const ctx = await validateApiKey(token)
     if (ctx) {
       console.log('[MCP Auth] API key validated for user:', ctx.user.id)
+      recordAuthenticatedConnection(request, ctx.user.id, token)
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
@@ -90,14 +93,18 @@ export async function validateMcpAuth(
     return null
   }
 
-  const ctx = await validateJwtToken(token)
+  const connectedAt = new Date()
+  const ctx = await validateJwtToken(token, options)
   if (ctx) {
-    console.log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
-    logMcpCliUsage(request, token, ctx)
+    const log = options.boundedLogging ? boundedMcpAuthLog : console.log
+    log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
+    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt)
+    logMcpCliUsage(request, token, ctx, options.boundedLogging ? boundedMcpAuthLog : undefined)
     return ctx
   }
 
-  console.log('[MCP Auth] JWT token validation failed')
+  if (options.boundedLogging) boundedMcpAuthLog('[MCP Auth] JWT token validation failed')
+  else console.log('[MCP Auth] JWT token validation failed')
   return null
 }
 

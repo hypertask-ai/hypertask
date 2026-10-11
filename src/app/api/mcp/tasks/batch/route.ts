@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import {
   handleBatchBody,
@@ -7,6 +8,7 @@ import {
 } from '@/lib/mcp/tasks/batchTasks'
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)
   if (rateLimited) return rateLimited
   const ctx = await validateMcpAuth(request)
@@ -35,4 +37,6 @@ export async function POST(request: NextRequest) {
   }
 
   return handleBatchBody(request, ctx, body)
+
+  })(request)
 }

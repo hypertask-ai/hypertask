@@ -21,7 +21,7 @@ import { PuppeteerAgent } from '@midscene/web/puppeteer';
 import { flows, getFlow } from './flows/index.mjs';
 import { api, prepareQa, createFixtureTask, findCreatedTask, cleanupQaAfterFlow, observeFixtures, uploadFixture, resolveStep, APP_ORIGIN } from './qa-session.mjs';
 
-const RESULTS_DIR = 'midscene_run';
+const RESULTS_DIR = path.resolve('midscene_run');
 const RESULTS_FILE = path.join(RESULTS_DIR, 'results-latest.json');
 const SCREENSHOT_DIR = path.join(RESULTS_DIR, 'screenshots');
 
@@ -50,9 +50,43 @@ function parseArgs(argv) {
 // resolving. Any other failure (a real 404/500 page, a timeout, an assertion
 // failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
+// YPER4-266: a page open that hits a short network blip is tried again, twice at most.
+const TRANSIENT_NETWORK_ERROR = /\bnet::(ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_TIMED_OUT)\b/;
+const GOTO_EXTRA_TRIES = 2;
+const GOTO_RETRY_WAIT_MS = 2_000;
+
+// HTPR-7063: Midscene's aiInput sometimes loses the start of the text when the chat
+// composer re-renders while typing. Type with the keyboard instead, read the
+// text back, and type again until it matches.
+const normalizeText = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fillVerified(page, selector, value) {
+  let lastSeen = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const handle = await page.waitForSelector(selector, { visible: true, timeout: 30_000 });
+    // Settle: the same DOM node must survive a short pause (no re-mount).
+    await handle.evaluate((el) => { el.dataset.fillMarker = 'settle'; });
+    await pause(750);
+    const stable = await handle.evaluate((el) => el.isConnected && el.dataset.fillMarker === 'settle');
+    if (!stable) continue;
+    await handle.click();
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyA');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(value, { delay: 15 });
+    await pause(300);
+    lastSeen = await page.$eval(selector, (el) => (typeof el.value === 'string' ? el.value : el.textContent) || '');
+    if (normalizeText(lastSeen) === normalizeText(value)) return `typed on attempt ${attempt}`;
+  }
+  throw new Error(`fillVerified: ${selector} did not hold the full text after 3 attempts (last seen: ${JSON.stringify(normalizeText(lastSeen))})`);
+}
 
 async function runStep(page, agent, step, fixture) {
   switch (step.action) {
+    case 'fillVerified':
+      return fillVerified(page, step.arg, step.value);
     case 'click':
       if (step.optional && !(await page.$(step.arg))) return;
       await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
@@ -74,6 +108,12 @@ async function runStep(page, agent, step, fixture) {
       if (!task?.id || task.title !== step.value) throw new Error('Task save returned no matching task');
       return;
     }
+    case 'waitForTaskCard':
+      // Persisted data and network idle do not imply that React has rendered the card.
+      await page.waitForFunction((title) => [...document.querySelectorAll('.kanban-task-card')].some((card) =>
+        card.getClientRects().length > 0 && [...card.querySelectorAll('p')].some((text) => text.textContent.trim() === title)),
+      { timeout: 30_000 }, step.arg);
+      return;
     case 'verifyCreatedTask':
       if ((await findCreatedTask(page, fixture)).length !== 1) throw new Error('Expected one persisted QA task');
       return;
@@ -135,14 +175,21 @@ async function runStep(page, agent, step, fixture) {
       return;
     }
     case 'goto': {
-      try {
-        await page.goto(step.arg, { waitUntil: 'networkidle2', timeout: 60_000 });
-        return { resolvedUrl: step.arg };
-      } catch (err) {
-        const message = err?.message || String(err);
-        if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;
-        await page.goto(step.fallback, { waitUntil: 'networkidle2', timeout: 60_000 });
-        return { resolvedUrl: step.fallback };
+      for (let attempt = 0; ; attempt++) {
+        try {
+          await page.goto(step.arg, { waitUntil: 'networkidle2', timeout: 60_000 });
+          return { resolvedUrl: step.arg };
+        } catch (err) {
+          const message = err?.message || String(err);
+          if (attempt < GOTO_EXTRA_TRIES && TRANSIENT_NETWORK_ERROR.test(message)) {
+            console.warn(`Navigation to ${step.arg} hit a network error (${message.split('\n')[0]}); retry ${attempt + 1} of ${GOTO_EXTRA_TRIES}`);
+            await pause(step.retryDelayMs ?? GOTO_RETRY_WAIT_MS);
+            continue;
+          }
+          if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;
+          await page.goto(step.fallback, { waitUntil: 'networkidle2', timeout: 60_000 });
+          return { resolvedUrl: step.fallback };
+        }
       }
     }
     case 'aiWaitFor':
@@ -178,8 +225,11 @@ async function runFlow(browser, flow) {
   let fixture;
   let stopObserving;
   let agent;
+  let beforeStepScreenshot;
   try {
+    result.failedStep = 'Browser viewport setup';
     await page.setViewport({ width: 1440, height: 1000 });
+    beforeStepScreenshot = await page.screenshot().catch(() => null);
     result.failedStep = 'QA sign-in and private board ownership check';
     if (flow.signedIn) {
       fixture = await prepareQa(page, flow);
@@ -190,6 +240,8 @@ async function runFlow(browser, flow) {
     for (const [index, template] of flow.steps.entries()) {
       const step = resolveStep(template, fixture?.values || {});
       result.failedStep = `${index + 1}. ${step.action}: ${step.arg}`;
+      // Retain real browser evidence if a failed step closes the page or breaks screenshots.
+      beforeStepScreenshot = await page.screenshot().catch(() => beforeStepScreenshot);
       const output = await runStep(page, agent, step, fixture);
       if (process.argv.includes('--force-failure') && process.argv[process.argv.indexOf('--force-failure') + 1] === flow.id) {
         throw new Error('Forced failure for reporter dry-run verification');
@@ -204,9 +256,11 @@ async function runFlow(browser, flow) {
       }
     }
 
+    result.failedStep = 'Capture completed flow screenshot';
     await mkdir(SCREENSHOT_DIR, { recursive: true });
-    result.screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
-    await page.screenshot({ path: result.screenshotPath, fullPage: true });
+    const completedScreenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
+    await page.screenshot({ path: completedScreenshotPath, fullPage: true });
+    result.screenshotPath = completedScreenshotPath;
     result.ok = true;
     result.reportPath = agent.reportFile || null;
   } catch (err) {
@@ -216,7 +270,11 @@ async function runFlow(browser, flow) {
       const screenshotPath = path.join(SCREENSHOT_DIR, `${flow.id}-${Date.now()}.png`);
       await page.screenshot({ path: screenshotPath, fullPage: true }).catch(async (err) => {
         console.warn(`[${flow.id}] Full-page screenshot failed: ${err.message}; capturing viewport`);
-        await page.screenshot({ path: screenshotPath });
+        await page.screenshot({ path: screenshotPath }).catch(async () => {
+          if (!beforeStepScreenshot) throw err;
+          await writeFile(screenshotPath, beforeStepScreenshot);
+          result.error += '; screenshot shows the last available pre-step viewport';
+        });
       });
       result.screenshotPath = screenshotPath;
     } catch {

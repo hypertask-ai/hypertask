@@ -1,4 +1,5 @@
 import crypto from 'node:crypto'
+import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
@@ -24,6 +25,7 @@ export type PortableTool = {
   name: string
   description: string
   parameters: z.ZodObject<z.ZodRawShape>
+  annotations?: ToolAnnotations
   inputSchema?: Record<string, unknown>
   outputSchema?: Record<string, unknown>
   input_examples?: unknown[]
@@ -228,6 +230,7 @@ async function dispatchMethod(
           name: tool.name,
           description: tool.description,
           inputSchema: tool.inputSchema ?? jsonSchemaFor(tool.parameters),
+          ...(tool.annotations ? { annotations: tool.annotations } : {}),
           ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
           ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
         })),

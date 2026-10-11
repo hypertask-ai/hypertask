@@ -25,6 +25,7 @@ export type TAiModelKey =
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "claude-haiku-4.5"
+  | "claude-haiku-5-5"
   | "custom";
 
 export type TAiEffort = "light" | "standard" | "high";
@@ -52,6 +53,7 @@ export type TAiModelOptionId =
   | "gemini-3.5-flash-lite"
   | "gemini-3.8-flash"
   | "claude-haiku-4.5"
+  | "claude-haiku-5-5"
   | "custom";
 
 export type TAiProviderOptions = Record<string, Record<string, any>>;
@@ -71,6 +73,7 @@ export type TAiModelOption = {
 
 export type TAiModelDefinition = {
   key: TAiModelKey;
+  modelClass: string;
   label: string;
   provider: TAiProviderKey | "custom";
   priceTier?: 1 | 2 | 3;
@@ -89,15 +92,23 @@ export type TAiImageModelDefinition = {
 };
 
 export const aiModelDefinitions: TAiModelDefinition[] = [
-  { key: "gpt-6-luna", label: "6 Luna", provider: "openai", priceTier: 2 },
+  {
+    key: "gpt-6-luna",
+    modelClass: "gpt-luna",
+    label: "6 Luna",
+    provider: "openai",
+    priceTier: 2,
+  },
   {
     key: "gpt-5.6-terra",
+    modelClass: "gpt-terra",
     label: "5.6 Terra",
     provider: "openai",
     priceTier: 2,
   },
   {
     key: "gpt-6.1-sol",
+    modelClass: "gpt-sol",
     label: "6.1 Sol",
     provider: "openai",
     priceTier: 3,
@@ -105,6 +116,7 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   },
   {
     key: "claude-opus-5-5",
+    modelClass: "claude-opus",
     label: "Opus 5.5",
     provider: "anthropic",
     priceTier: 3,
@@ -112,51 +124,84 @@ export const aiModelDefinitions: TAiModelDefinition[] = [
   },
   {
     key: "claude-sonnet-5-5",
+    modelClass: "claude-sonnet",
     label: "Sonnet 5.5",
     provider: "anthropic",
     priceTier: 2,
   },
   {
     key: "claude-haiku-4.5",
+    modelClass: "claude-haiku",
     label: "Haiku 4.5",
     provider: "anthropic",
     priceTier: 1,
   },
   {
+    key: "claude-haiku-5-5",
+    modelClass: "claude-haiku",
+    label: "Haiku 5.5",
+    provider: "anthropic",
+    priceTier: 1,
+  },
+  {
     key: "deepseek-v4.1-flash",
+    modelClass: "deepseek-flash",
     label: "DeepSeek V4.1 Flash",
     provider: "deepseek",
     priceTier: 1,
   },
   {
     key: "deepseek-v4-pro",
+    modelClass: "deepseek-pro",
     label: "DeepSeek V4 Pro",
     provider: "deepseek",
     priceTier: 1,
   },
-  { key: "kimi-k2.5", label: "Kimi K2.5", provider: "moonshot", priceTier: 1 },
-  { key: "kimi-k3", label: "Kimi K3", provider: "moonshot", priceTier: 3 },
+  {
+    key: "kimi-k2.5",
+    modelClass: "kimi-k2.5-free", // Valentin, 2026-10-08: keep K2.5 next to K3 because it was on the free plan.
+    label: "Kimi K2.5",
+    provider: "moonshot",
+    priceTier: 1,
+  },
+  {
+    key: "kimi-k3",
+    modelClass: "kimi-k3",
+    label: "Kimi K3",
+    provider: "moonshot",
+    priceTier: 3,
+  },
   {
     key: "qwen3.7-plus",
+    modelClass: "qwen-plus",
     label: "Qwen3.7 Plus",
     provider: "alibaba",
     priceTier: 1,
   },
-  { key: "glm-5.3-flash", label: "GLM-5.3 Flash", provider: "zhipu", priceTier: 2 },
+  {
+    key: "glm-5.3-flash",
+    modelClass: "glm-flash",
+    label: "GLM-5.3 Flash",
+    provider: "zhipu",
+    priceTier: 2,
+  },
   {
     key: "gemini-3.5-flash-lite",
+    modelClass: "gemini-flash-lite",
     label: "Gemini 3.5 Flash Lite",
     provider: "google",
     priceTier: 1,
   },
   {
     key: "gemini-3.8-flash",
+    modelClass: "gemini-flash",
     label: "Gemini 3.8 Flash",
     provider: "google",
     priceTier: 2,
   },
   {
     key: "custom",
+    modelClass: "custom",
     label: "Custom endpoint",
     provider: "custom",
   },
@@ -380,6 +425,19 @@ export const aiModelOptions: TAiModelOption[] = [
     modelKey: "claude-haiku-4.5",
   },
   {
+    id: "claude-haiku-5-5",
+    source: "claude",
+    title: "Haiku 5.5",
+    model: "claude-haiku-5.5",
+    directModel: "claude-haiku-5-5",
+    desc: "Fast and cheap Claude with adaptive thinking",
+    reasoning: "thinking",
+    modelKey: "claude-haiku-5-5",
+    providerOptions: {
+      anthropic: { thinking: { type: "adaptive" }, effort: "medium" },
+    },
+  },
+  {
     id: "deepseek-v4.1-flash",
     source: "gateway",
     title: "DeepSeek V4.1 Flash",
@@ -484,19 +542,41 @@ export const MOBILE_AI_CHAT_QUICK_MODEL_IDS = [
 
 export const LUNA_FREE_MODEL_KEY: TAiModelKey = "gpt-6-luna";
 
+export type AiDefaultModelContext = {
+  haiku55Enabled?: boolean;
+  haikuDefaultEnabled?: boolean;
+  // HTPR-7075: background jobs run on Claude 5.5 only (Haiku 5.5 by default).
+  backgroundClaudeEnabled?: boolean;
+  plan?: StorePlanKind | null;
+  hasByok?: boolean;
+};
+
+export function defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, backgroundClaudeEnabled, plan, hasByok }: AiDefaultModelContext, productionDefault: TAiModelKey = "gpt-6-luna"): TAiModelKey {
+  return backgroundClaudeEnabled || haikuDefaultEnabled || (haiku55Enabled && ((hasByok && plan !== "Free") || plan === "Pro" || plan === "AI" || plan === "BYOK"))
+    ? "claude-haiku-5-5"
+    : productionDefault;
+}
+
+export function hasHaikuByokProvider(providers: ReadonlySet<string>): boolean {
+  return ["claude", "anthropic", "gateway", "openrouter"].some((provider) => providers.has(provider));
+}
+
 // `lunaFree` is the per-user htpr-6722-latest-models flag: with it on, Luna
 // counts as an included (tier 1) model on Free plans and is their default.
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
   lunaFree = false,
+  haiku55Enabled = false,
+  haikuDefaultEnabled = false,
 ): TAiModelOption {
-  return storePlanId === "Pro" ||
+  const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
     (storePlanId === "BYOK" && hasEligibleByokCredential) ||
     (storePlanId === "Free" && lunaFree)
     ? preferredAiModelOption
     : defaultAiModelOption;
+  return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
 }
 
 // Model picker resolution: an explicit saved choice (or team/board default)
@@ -504,9 +584,10 @@ export function getDefaultAiModelOptionForPlan(
 export function resolveAiModelOption(
   savedOptionIds: readonly (string | null | undefined)[],
   planDefault: TAiModelOption,
+  haiku55Enabled = false,
 ): TAiModelOption {
   for (const id of savedOptionIds) {
-    const option = getAiModelOptionById(id);
+    const option = getAiModelOptionById(id, haiku55Enabled);
     if (option) return option;
   }
   return planDefault;
@@ -561,12 +642,32 @@ const RETIRED_OPTION_ID_ALIASES: Record<string, TAiModelOptionId> = {
   "grok-4.5": "gpt-6-luna",
 };
 
+// HTPR-7075: a saved pick of any Claude version older than 5.5 resolves to the
+// 5.5 model of the same class when Claude 5.5 mode is on. Read-time only; the
+// saved value is never rewritten. Thinking variants keep their reasoning mode.
+const LEGACY_CLAUDE_OPTION_ID = /^claude-(haiku|sonnet|opus)-(?!5[.-]5(?:$|-))/;
+
+export function upgradeLegacyClaudeOptionId(id: string): string {
+  const match = LEGACY_CLAUDE_OPTION_ID.exec(id);
+  if (!match) return id;
+  if (match[1] === "haiku") return "claude-haiku-5-5";
+  return `claude-${match[1]}-5-5-${id.includes("thinking") ? "thinking" : "instant"}`;
+}
+
+export function isClaude55Model(modelId: string): boolean {
+  return /(?:^|\/)claude-(?:haiku|sonnet|opus)-5[.-]5(?:-\d{8})?$/.test(modelId);
+}
+
 export function getAiModelOptionById(
-  id: string | null | undefined
+  id: string | null | undefined,
+  haiku55Enabled = false,
 ): TAiModelOption | undefined {
-  const normalized = id?.trim();
+  const trimmed = id?.trim();
+  const normalized = trimmed && haiku55Enabled && (isHaiku45Model(trimmed) || isHaiku55Model(trimmed))
+    ? "claude-haiku-5-5" : trimmed;
   if (!normalized) return undefined;
-  const resolved = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
+  const aliased = RETIRED_OPTION_ID_ALIASES[normalized] ?? normalized;
+  const resolved = haiku55Enabled ? upgradeLegacyClaudeOptionId(aliased) : aliased;
   return aiModelOptions.find((option) => option.id === resolved);
 }
 
@@ -607,8 +708,14 @@ export function isPremiumAiModelKey(modelKey: TAiModelKey): boolean {
 // Every automatic pick goes through here instead: prefer non-premium, and only
 // fall back to a premium option when nothing else is available.
 export function pickAutoAiModelOption<T extends TAiModelOption>(
-  candidates: readonly T[]
+  candidates: readonly T[],
+  haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): T | undefined {
+  if (defaultModelKeyFor({ ...context, haiku55Enabled }) === "claude-haiku-5-5") {
+    const haiku = candidates.find((candidate) => candidate.modelKey === "claude-haiku-5-5");
+    if (haiku) return haiku;
+  }
   return (
     candidates.find(
       (candidate) => !isPremiumAiModelKey(candidate.modelKey)
@@ -622,7 +729,9 @@ export function pickAutoAiModelOption<T extends TAiModelOption>(
 // and only widen the search when that leaves nothing (HTPR-4688).
 export function pickReplacementAiModelOption<T extends TAiModelOption>(
   currentModelKey: TAiModelKey,
-  candidates: readonly T[]
+  candidates: readonly T[],
+  haiku55Enabled = false,
+  context: AiDefaultModelContext = {},
 ): T | undefined {
   const tierOf = (modelKey: TAiModelKey) =>
     getAiModelDefinition(modelKey)?.priceTier ?? 3;
@@ -630,10 +739,10 @@ export function pickReplacementAiModelOption<T extends TAiModelOption>(
   const noPricier = candidates.filter(
     (candidate) => tierOf(candidate.modelKey) <= currentTier
   );
-  return pickAutoAiModelOption(noPricier.length > 0 ? noPricier : candidates);
+  return pickAutoAiModelOption(noPricier.length > 0 ? noPricier : candidates, haiku55Enabled, context);
 }
 
-export function resolveAiModelMention(value: string | null | undefined) {
+export function resolveAiModelMention(value: string | null | undefined, haiku55Enabled = false) {
   const normalized = value?.trim().replace(/^@/, "").toLowerCase();
   if (!normalized) return undefined;
 
@@ -644,8 +753,8 @@ export function resolveAiModelMention(value: string | null | undefined) {
   );
   if (!definition) return undefined;
 
-  const modelOption = getNearestAiModelOption(definition.key);
-  return modelOption ? { definition, modelOption } : undefined;
+  const modelOption = getAiModelOptionById(getNearestAiModelOption(definition.key)?.id, haiku55Enabled);
+  return modelOption ? { definition: getAiModelDefinition(modelOption.modelKey)!, modelOption } : undefined;
 }
 
 export function resolveAiImageModelMention(
@@ -706,4 +815,27 @@ export function getNearestAiModelOption(
   });
 
   return getAiModelOption(modelKey, nearestEffort, options);
+}
+
+export function isHaiku55Model(modelId: string): boolean {
+  return /(?:^|\/)claude-haiku-5[.-]5$/.test(modelId);
+}
+
+export function isAiModelOptionVisible(
+  option: TAiModelOption,
+  haiku55Enabled: boolean,
+): boolean {
+  return haiku55Enabled
+    ? option.modelKey !== "claude-haiku-4.5"
+    : option.modelKey !== "claude-haiku-5-5";
+}
+
+export function isHaiku45Model(modelId: string): boolean {
+  return /(?:^|\/)claude-haiku-4[.-]5(?:-\d{8})?$/.test(modelId);
+}
+
+export function resolveHaikuModelId(modelId: string, haiku55Enabled: boolean): string {
+  return haiku55Enabled && isHaiku45Model(modelId)
+    ? modelId.includes("/") ? "anthropic/claude-haiku-5.5" : "claude-haiku-5-5"
+    : modelId;
 }

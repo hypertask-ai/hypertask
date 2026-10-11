@@ -1,6 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { readFileSync } = require('node:fs');
+const { readFileSync, mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
 const { spawnSync } = require('node:child_process');
 const vm = require('node:vm');
 const ts = require('typescript');
@@ -40,6 +42,7 @@ function setupHarness({ state = { cookies: [{ name: 'ht_session', value: 'fixtur
         writeFileSync(_file, value) { results.push(JSON.parse(value)); },
       };
       if (name === '../../src/lib/auth/session') return { verifySession() { throw new Error('unexpected PR session check'); } };
+      if (name === './lib/qa-session') return { renewQaSession: async () => {} };
       if (name === './lib/realtime') return { withRealtime: (route) => route };
       return require(name);
     },
@@ -98,18 +101,51 @@ test('demo no-account setting cannot bypass production login', async () => {
 test('missing Actions secret fails the job rather than warning and reporting green', () => {
   const step = workflow.jobs.smoke.steps.find((item) => item.id === 'provisioned');
   assert.notEqual(step['continue-on-error'], true);
-  assert.equal(step.env.SMOKE_SESSION_STATE, '${{ secrets.SMOKE_SESSION_STATE }}');
+  assert.equal(step.env.QA_LOGIN_EMAIL, '${{ secrets.QA_LOGIN_EMAIL }}');
+  assert.equal(step.env.QA_LOGIN_PASSWORD, '${{ secrets.QA_LOGIN_PASSWORD }}');
   for (const [state, expectedStatus] of [['', 1], ['fixture-state', 0]]) {
     const output = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
-      encoding: 'utf8', env: { ...process.env, SMOKE_SESSION_STATE: state, GITHUB_OUTPUT: '/dev/null' },
+      encoding: 'utf8', env: { ...process.env, QA_LOGIN_EMAIL: state, QA_LOGIN_PASSWORD: state, GITHUB_OUTPUT: '/dev/null', GITHUB_STEP_SUMMARY: '/dev/null' },
     });
     assert.equal(output.status, expectedStatus, output.stdout + output.stderr);
-    if (expectedStatus) assert.match(output.stdout, loginMessage);
+    if (expectedStatus) assert.match(output.stdout, /QA renewal credentials are missing/);
   }
   assert.ok(!workflow.jobs.smoke.steps.some((item) => /skipping smoke QA/.test(item.run || '')));
   const smoke = workflow.jobs.smoke.steps.find((item) => item.id === 'smoke');
   assert.equal(smoke.env.SMOKE_POSTDEPLOY, '1');
   assert.match(smoke.run, /--project Desktop --project Mobile/);
+});
+
+test('post-deploy smoke pins the persistent QA 985 fixture instead of the old QA 2343 vars', () => {
+  const { env } = workflow.jobs.smoke.steps.find((item) => item.id === 'smoke');
+  assert.equal(env.SMOKE_BOARD_PATH, '/project?id=6121&surface=board');
+  assert.equal(env.SMOKE_TASK_PATH, '/detail/project-6121/1');
+  const boardId = new URL(env.SMOKE_BOARD_PATH, env.SMOKE_BASE_URL).searchParams.get('id');
+  assert.equal(env.SMOKE_TASK_PATH.split('/')[2], `project-${boardId}`);
+});
+
+test('smoke setup generates Prisma after npm ci and fails closed if generation fails', () => {
+  const step = workflow.jobs.smoke.steps.find((item) => item.id === 'setup-npm');
+  const directory = mkdtempSync(path.join(tmpdir(), 'smoke-prisma-'));
+  try {
+    for (const command of ['npm', 'npx']) {
+      writeFileSync(path.join(directory, command), `#!/bin/sh\nprintf '%s\\n' '${command} '"$*" >> "$COMMAND_LOG"\nif [ '${command}' = npx ]; then exit "$GENERATE_STATUS"; fi\n`, { mode: 0o700 });
+    }
+    for (const status of [0, 1]) {
+      const log = path.join(directory, `commands-${status}.log`);
+      const result = spawnSync('bash', ['-e', '-o', 'pipefail', '-c', step.run], {
+        encoding: 'utf8',
+        env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, COMMAND_LOG: log, GENERATE_STATUS: String(status) },
+      });
+      assert.deepEqual(readFileSync(log, 'utf8').trim().split('\n'), ['npm ci', 'npx prisma generate']);
+      assert.equal(result.status, status, result.stdout + result.stderr);
+    }
+    assert.equal(step['continue-on-error'], true);
+    const preflight = workflow.jobs.smoke.steps.find((item) => item.name === 'Record a setup failure as unrunnable');
+    assert.match(preflight.if, /steps\.setup-npm\.outcome == 'failure'/);
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 test('branch smoke proof skips all board-writing jobs with the documented dispatch input', () => {

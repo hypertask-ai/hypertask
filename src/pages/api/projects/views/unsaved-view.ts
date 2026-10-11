@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // route = "/api/projects/views/unsaved-view"
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
@@ -80,7 +81,7 @@ const handler: NextApiHandler = async (
           { ownerId: userId },
           {
             members: {
-              some: { userId: currentUser.id, status: "Accepted" },
+              some: { userId: currentUser.id, agentId: null, status: "Accepted" },
             },
           },
         ],
@@ -476,7 +477,9 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/unsaved-view")).POST,
+);
 
 const createUserProjectView = async (
   userId: number,

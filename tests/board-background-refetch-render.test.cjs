@@ -37,6 +37,7 @@ const noopComponent = () => null;
 const atoms = new Proxy({}, { get: (_, key) => key });
 const moduleMocks = {
   "@/components/Global/FirstScreenMobileChrome": { __esModule: true, default: noopComponent },
+  "@/components/PageComponents/Onboarding/AgentConnectCard": { AgentConnectCard: noopComponent },
   "nookies": { __esModule: true, default: { set: noop } },
   "next/navigation": {
     useRouter: () => ({ replace: noop }),
@@ -45,6 +46,7 @@ const moduleMocks = {
   },
   "@tanstack/react-query": { useQueryClient: () => queryClient },
   "@/store": atoms,
+  "@/models/enums": { CommandMode: { InviteMember: "InviteMember" } },
   "@/lib/state": {
     useRecoilState: (atom) => [atom === "boardLayoutAtom" ? "board" : false, noop],
     useRecoilValue: () => false,
@@ -126,9 +128,10 @@ const moduleMocks = {
   "@/lib/firstScreen/BoardDocumentBoundary": { __esModule: true, default: ({ children }) => children },
   "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null },
-    "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
+    "@/hooks/useFlag": { useFlag: () => instantTicketOpen, useFlagLoaded: () => true },
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant-ticket-open" },
   "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailLocation: () => undefined },
+  "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: noopComponent },
   "lucide-react": { ChevronLeft: noopComponent },
   "@/components/Common/Tooltip": { __esModule: true, default: noopComponent },

@@ -1,0 +1,199 @@
+import { z } from "zod";
+import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
+import { taskReadQuery } from "@/lib/api/task-writes/read-query";
+import { notificationWriteJson } from "./response";
+import { Prisma } from "@prisma/client";
+import prisma from "@/lib/prisma";
+import { notificationInboxInclude } from "@/utils/controllers/notifications/getAll";
+import type { ArchiveBoardScope } from "@/store";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+
+const ARCHIVED_INBOX_PAGE_SIZE = 50;
+
+const archivedInboxOrderBy: Prisma.NotificationOrderByWithRelationInput[] = [
+  { archivedAt: { sort: "desc", nulls: "last" } },
+  { id: "desc" },
+];
+
+const parseOptionalInt = (value: string | string[] | undefined) => {
+  const parsed = parseInt(Array.isArray(value) ? value[0] : value ?? "");
+  return Number.isFinite(parsed) ? parsed : undefined;
+};
+
+const parseOptionalQuery = (value: string | string[] | undefined) => {
+  const query = (Array.isArray(value) ? value[0] : value)?.trim();
+  return query || undefined;
+};
+
+const parseBoardScope = (value: string | string[] | undefined): ArchiveBoardScope => {
+  const scope = Array.isArray(value) ? value[0] : value;
+  return scope === "active" || scope === "archived" || scope === "all"
+    ? scope
+    : "active";
+};
+
+// Boards the user can see archived notifications from.
+const archivedInboxProjectWhere = (
+  userId: number,
+  boardScope: ArchiveBoardScope
+): Prisma.ProjectWhereInput => ({
+  ...(boardScope === "all"
+    ? {}
+    : { status: boardScope === "active" ? "Normal" : "Archive" }),
+  OR: [
+    { ownerId: userId },
+    {
+      members: {
+        some: {
+          userId,
+          agentId: null,
+        },
+      },
+    },
+  ],
+});
+
+const getArchivedInboxWhere = (
+  userId: number,
+  projectId?: number | null,
+  boardScope: ArchiveBoardScope = "active",
+  q?: string
+): Prisma.NotificationWhereInput => ({
+  userId,
+  status: "Archive",
+  agentId: null,
+  task: {
+    project: archivedInboxProjectWhere(userId, boardScope),
+    ...(projectId ? { projectId } : {}),
+    ...(q?.trim()
+      ? {
+          title: {
+            contains: q.trim().toLowerCase(),
+            mode: "insensitive",
+          },
+        }
+      : {}),
+    Reminders: {
+      every: {
+        status: { not: "Normal" },
+      },
+    },
+  },
+});
+
+const getArchivedInboxMeta = async (
+  userId: number,
+  projectId?: number | null,
+  boardScope: ArchiveBoardScope = "active"
+) => {
+  // One row per (type, taskId) so counts match the list's distinct de-dup.
+  // HTPR-6509: GROUP BY returns only the distinct pairs, then one lookup maps
+  // their tasks to boards, instead of loading every archived notification.
+  const pairs = await prisma.notification.groupBy({
+    by: ["type", "taskId"],
+    where: getArchivedInboxWhere(userId, projectId, boardScope),
+  });
+
+  const pairsPerTask = new Map<number, number>();
+  for (const pair of pairs) {
+    if (pair.taskId == null) continue;
+    pairsPerTask.set(pair.taskId, (pairsPerTask.get(pair.taskId) ?? 0) + 1);
+  }
+  const tasks = pairsPerTask.size
+    ? await prisma.task.findMany({
+        // Same board access as the grouped query, so a task moved to a board
+        // the user can't see in between is neither counted nor named.
+        where: {
+          id: { in: Array.from(pairsPerTask.keys()) },
+          project: archivedInboxProjectWhere(userId, boardScope),
+        },
+        select: {
+          id: true,
+          projectId: true,
+          project: { select: { id: true, name: true, title: true } },
+        },
+      })
+    : [];
+
+  const byProject = new Map<
+    number,
+    { projectId: number; name: string; count: number }
+  >();
+  // Counted from the tasks the lookup still returns, so total matches the
+  // per-board counts even if a task moved away between the two queries.
+  let total = 0;
+  for (const task of tasks) {
+    const pid = task.projectId;
+    const count = pairsPerTask.get(task.id) ?? 0;
+    total += count;
+    const existing = byProject.get(pid);
+    if (existing) {
+      existing.count += count;
+      continue;
+    }
+    const project = task.project;
+    byProject.set(pid, {
+      projectId: pid,
+      name: project?.title ?? project?.name ?? `Project ${pid}`,
+      count,
+    });
+  }
+
+  return {
+    total,
+    byProject: Array.from(byProject.values()).sort(
+      (a, b) => b.count - a.count || a.name.localeCompare(b.name)
+    ),
+  };
+};
+
+const getRoute = taskWriteRoute({
+  schema: z.custom<Record<string, any>>(() => true),
+  validationMessage: "Invalid request",
+  allowNullBody: true,
+  operation: async (body, session) => {
+    const userId = session.userId;
+    const {cursor, mode, projectId, boardScope: rawBoardScope, q} = body
+    const parsedCursor = parseOptionalInt(cursor);
+    const parsedProjectId = parseOptionalInt(projectId);
+    const boardScope = parseBoardScope(rawBoardScope);
+    const parsedQuery = parseOptionalQuery(q);
+
+    if (mode === "meta") {
+      const meta = await getArchivedInboxMeta(
+        userId,
+        parsedProjectId,
+        boardScope
+      );
+      return notificationWriteJson(meta, 200);
+    }
+
+    const notificationsToReturn = await prisma.notification.findMany({
+      take: ARCHIVED_INBOX_PAGE_SIZE,
+      ...(parsedCursor ? { cursor: { id: parsedCursor }, skip: 1 } : {}),
+      distinct: ["type", "taskId"],
+      orderBy: archivedInboxOrderBy,
+      include: notificationInboxInclude(userId),
+      where: getArchivedInboxWhere(
+        userId,
+        parsedProjectId,
+        boardScope,
+        parsedQuery
+      ),
+    });
+
+    return notificationWriteJson(notificationsToReturn, 200)
+  },
+});
+
+export const GET: TaskWriteRoute = async (request, authenticatedSession) => {
+  try {
+    const session = authenticatedSession ?? await getSessionUser(request.headers);
+    if (!session) return notificationWriteJson({ message: "Unauthorized" }, 401);
+    const body = taskReadQuery(request);
+    return await getRoute({ ...request, headers: request.headers, json: async () => body }, session);
+  } catch (error) {
+    console.error(error);
+    return notificationWriteJson(error, 500);
+  }
+};

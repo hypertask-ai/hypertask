@@ -74,8 +74,6 @@ export function resolveCommentEnterShortcutAction({
   key,
   shiftKey,
   altKey,
-  consistentCommentShortcuts,
-  keepDirectTaskOpen,
   isInboxFlow,
   isCommentMode,
   inInbox,
@@ -84,21 +82,19 @@ export function resolveCommentEnterShortcutAction({
   key: string;
   shiftKey: boolean;
   altKey: boolean;
-  consistentCommentShortcuts: boolean;
-  keepDirectTaskOpen: boolean;
   isInboxFlow: boolean;
   isCommentMode: boolean;
   inInbox: boolean;
 }): CommentEnterShortcutAction | null {
   if (!commandKey || key !== "Enter") return null;
 
-  if (consistentCommentShortcuts && isCommentMode && !altKey) {
+  if (isCommentMode && !altKey) {
     if (shiftKey) return "send-and-stay";
-    return keepDirectTaskOpen && !isInboxFlow ? "send" : "send-and-move";
+    return isInboxFlow ? "send-and-move" : "send";
   }
   if (shiftKey && !altKey) {
     if (!isInboxFlow) return "ignore";
-    return isCommentMode ? "send-and-stay" : "send";
+    return "send";
   }
   if (shiftKey && altKey) {
     if (!isCommentMode) return "send";

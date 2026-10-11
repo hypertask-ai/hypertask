@@ -1,3 +1,7 @@
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { measuredSizeNumber, measuredSizeString } from "@/lib/attachments/measuredSize";
 import {
@@ -39,6 +43,7 @@ import { USER_DRAFTS_QUERY_KEY } from "@/hooks/General/useGetUserDrafts";
 import { useGetUserPreferences } from "@/hooks/General/useGetUserPreferences";
 import {
   defaultAiModelOption,
+  getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   resolveAiImageModelMention,
   resolveAiModelMention,
@@ -46,6 +51,8 @@ import {
 import { getAiModelPreferenceIds } from "@/lib/aiModelPreferences";
 import { LEARN_TUTORIAL_COMMENT_SAVED_EVENT } from "@/lib/tutorial/learnTutorialState";
 import { uploadSingleFileViaApi } from "@/lib/storage/uploadViaApi";
+import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 
 export default function useSaveContent() {
   const {
@@ -73,6 +80,7 @@ export default function useSaveContent() {
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [currentProject] = useRecoilState(currentProjectAtom);
   const queryClient = useQueryClient();
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const _mbl = useContext(MobileViewContext);
   const hyperAiId = process.env.NEXT_PUBLIC_HYPERAI_ID || "332";
   const { resetDescriptionQuery } = useProjectQuery();
@@ -80,22 +88,30 @@ export default function useSaveContent() {
   const { postHyperMention, postImageGeneration } = useHyperMention();
   const currentBoardBilling = useCurrentBoardBilling();
   const { data: userPreferences } = useGetUserPreferences();
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const defaultBilling = currentBoardBilling;
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
     "improveWriting",
     currentProject?.teamId,
   );
   const improveWritingOption =
-    getAiModelOptionById(improveWritingOptionIds.teamScoped) ??
-    getAiModelOptionById(improveWritingOptionIds.global);
+    getAiModelOptionById(improveWritingOptionIds.teamScoped, haiku55Enabled) ??
+    getAiModelOptionById(improveWritingOptionIds.global, haiku55Enabled) ??
+    (haiku55Enabled ? getAiModelOptionById(currentProject?.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
   const improveWritingModel =
     improveWritingOption?.id ??
     currentProject?.ai_custom_instructions?.[0]?.model_selected ??
-    defaultAiModelOption.id;
+    defaultModelOption.id;
   const improveWritingSource =
     improveWritingOption?.source ??
     currentProject?.ai_custom_instructions?.[0]?.source_selected ??
-    defaultAiModelOption.source;
+    defaultModelOption.source;
   const invalidateUserDrafts = () => {
     queryClient.invalidateQueries({
       queryKey: USER_DRAFTS_QUERY_KEY(currentUser?.id),
@@ -230,7 +246,7 @@ export default function useSaveContent() {
                     const displayName = span.getAttribute("data-id");
                     const imageModelMention =
                       resolveAiImageModelMention(displayName);
-                    const modelMention = resolveAiModelMention(displayName);
+                    const modelMention = resolveAiModelMention(displayName, haiku55Enabled);
                     if (imageModelMention) {
                       imageMention = {
                         ...mentionBody,
@@ -434,6 +450,7 @@ export default function useSaveContent() {
       setHasDraftInit(false);
       const response = await updateTask(newTask);
       if (response.status === 200) {
+        if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { description_: response.data.description_ ?? { ...currentTask.description_, content: descriptionContent } });
         invalidateUserDrafts();
         return "Success";
       }
@@ -497,6 +514,7 @@ export default function useSaveContent() {
         });
         
         if (response.status === 200) {
+          if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { description_: response.data.description_ ?? { ...currentTask.description_, content: result.html } });
           setDescription(result.html ?? unprocessedHTML ?? "");
           if (result.hyperMention && currentTask)
             postHyperMention("Description", "Update", {

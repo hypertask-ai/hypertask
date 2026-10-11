@@ -1,3 +1,4 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
 import { NextRequest, NextResponse } from 'next/server'
 import { getTeamGatewayFunding } from '@/app/api/ai/_lib/byokKeys'
@@ -6,13 +7,7 @@ import {
   gatewayBillingPeriodRange,
   gatewayGet,
 } from '@/app/api/settings/ai-usage/gatewayUsage'
-import {
-  checkMcpRateLimit,
-  extractBearerToken,
-  isManagementKeyToken,
-  type McpAuthContext,
-  validateMcpAuth,
-} from '@/lib/mcp/auth'
+import { extractBearerToken, isManagementKeyToken, type McpAuthContext } from '@/lib/mcp/auth'
 import {
   hasDataPermission,
   hasUsageReadPermission,
@@ -270,6 +265,7 @@ async function getTeamUsage(ctx: McpAuthContext, request: NextRequest) {
  * data.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -340,7 +336,10 @@ export async function GET(request: NextRequest) {
     // A dynamic `by` defeats Prisma's precise groupBy inference, so type the
     // args and result explicitly. groupBy is whitelisted against GROUPS above.
     type UsageRow = {
-      _sum: { inputTokens: number | null; outputTokens: number | null; totalTokens: number | null }
+      _sum: {
+        inputTokens: number | null; outputTokens: number | null; totalTokens: number | null
+        cachedInputTokens: number | null; cacheWriteInputTokens: number | null
+      }
       _count: { _all: number }
     } & Record<string, string | number | null>
     const groupField = DB_FIELD[groupBy]
@@ -348,9 +347,18 @@ export async function GET(request: NextRequest) {
     const rows = (await groupByFn({
       by: [groupField],
       where: { projectId, ...(since ? { createdAt: { gte: since } } : {}) },
-      _sum: { inputTokens: true, outputTokens: true, totalTokens: true },
+      // HTPR-7076: cache reads and writes are part of inputTokens, shown so the cached share can be measured.
+      _sum: { inputTokens: true, outputTokens: true, totalTokens: true, cachedInputTokens: true, cacheWriteInputTokens: true },
       _count: { _all: true },
     })) as UsageRow[]
+
+    let showCache = false
+    try {
+      const { promptCacheEnabled } = await import('@/app/api/ai/_lib/planGate')
+      showCache = await promptCacheEnabled(ctx.user.id)
+    } catch {
+      // A failed flag read keeps the report as before.
+    }
 
     const groups = rows
       .map((r) => ({
@@ -359,6 +367,12 @@ export async function GET(request: NextRequest) {
         inputTokens: r._sum.inputTokens ?? 0,
         outputTokens: r._sum.outputTokens ?? 0,
         totalTokens: r._sum.totalTokens ?? 0,
+        ...(showCache
+          ? {
+              cachedInputTokens: r._sum.cachedInputTokens ?? 0,
+              cacheWriteInputTokens: r._sum.cacheWriteInputTokens ?? 0,
+            }
+          : {}),
       }))
       .sort((a, b) => b.totalTokens - a.totalTokens)
 
@@ -382,4 +396,6 @@ export async function GET(request: NextRequest) {
     console.error('[MCP AI Usage] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

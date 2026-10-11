@@ -1,3 +1,4 @@
+import { hasHaikuByokProvider } from "@/lib/aiModelOptions";
 import type { CurrentBoardBilling } from "@/store";
 
 type ByokBillingPick = Pick<
@@ -32,4 +33,8 @@ export function isByokProviderEnabledForSource(
   }
   if (source === "gateway") return false;
   return !!byokProviderFlags?.find((r) => r.provider === source)?.enabled;
+}
+
+export function hasHaikuByokProviderFlags(byokProviderFlags: ByokBillingPick["byokProviderFlags"] | undefined): boolean {
+  return hasHaikuByokProvider(new Set(byokProviderFlags?.filter((row) => row.enabled).map((row) => row.provider)));
 }

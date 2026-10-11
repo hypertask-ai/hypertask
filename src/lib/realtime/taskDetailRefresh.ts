@@ -1,3 +1,4 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { COMMENT_EVENT, TASK_EVENT } from "./shared";
 
 type TaskDetailRealtimeRefreshInput = {
@@ -83,6 +84,36 @@ export function mergeRealtimeTaskDetail<T extends RealtimeTaskStaleness>(
   };
 }
 
+const pendingTaskAssigneeWrites = new Map<number, number>();
+
+export function beginTaskAssigneeWrite(taskId: number): () => void {
+  pendingTaskAssigneeWrites.set(taskId, (pendingTaskAssigneeWrites.get(taskId) ?? 0) + 1);
+  return () => {
+    const remaining = (pendingTaskAssigneeWrites.get(taskId) ?? 0) - 1;
+    if (remaining > 0) pendingTaskAssigneeWrites.set(taskId, remaining);
+    else pendingTaskAssigneeWrites.delete(taskId);
+  };
+}
+
+export function preserveTaskAssigneesChangedDuringFetch<
+  T extends RealtimeTaskIdentity & { assignees?: unknown },
+>(
+  currentTask: T | null,
+  fetchedTask: T,
+  assigneesAtFetchStart: T["assignees"],
+  keepAssignee: boolean,
+): T {
+  // A read can start after the optimistic toggle but before its write commits.
+  return keepAssignee &&
+    currentTask &&
+    currentTask.id === fetchedTask.id &&
+    currentTask.projectId === fetchedTask.projectId &&
+    (currentTask.assignees !== assigneesAtFetchStart ||
+      (currentTask.id != null && pendingTaskAssigneeWrites.has(currentTask.id)))
+    ? { ...fetchedTask, assignees: currentTask.assignees }
+    : fetchedTask;
+}
+
 type TaskDetailSatelliteFields = {
   id?: number | null;
   priority?: unknown;
@@ -133,16 +164,26 @@ export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteF
   queryClient,
   taskId,
   fetchTask,
+  readQueryKey,
+  refreshSatellites = true,
 }: {
   queryClient: TaskDetailQueryClient;
   taskId: number;
-  fetchTask: () => Promise<T | null>;
+  fetchTask: (signal?: AbortSignal) => Promise<T | null>;
+  readQueryKey?: readonly unknown[];
+  refreshSatellites?: boolean;
 }): Promise<T | null> {
   await queryClient.cancelQueries({ queryKey: ["task-", taskId] });
-  const task = await fetchTask();
+  let task: T | null;
+  if (readQueryKey) {
+    const client = queryClient as QueryClient;
+    const queryKey = readQueryKey;
+    await client.cancelQueries({ queryKey, exact: true });
+    task = await client.fetchQuery({ queryKey, staleTime: 0, queryFn: ({ signal }) => fetchTask(signal) });
+  } else task = await fetchTask();
   if (task) {
     queryClient.setQueryData(["task-", taskId], task);
-    await seedTaskDetailSatelliteCaches(queryClient, task);
+    if (refreshSatellites) await seedTaskDetailSatelliteCaches(queryClient, task);
   }
   return task;
 }

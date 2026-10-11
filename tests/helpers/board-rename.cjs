@@ -17,6 +17,7 @@ function loadTs(file, stubs) {
   const mod = { exports: {} };
   new Function("module", "exports", "require", source)(
     mod, mod.exports, (request) => {
+      if (request === "@/lib/mcp/routeWrapper") return require("./mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
       assert.ok(request in stubs, `Unexpected import: ${request}`);
       return stubs[request];
     },

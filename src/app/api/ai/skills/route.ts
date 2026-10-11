@@ -3,7 +3,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
 import { getCurrentUserFromCookies } from "@/app/api/ai/_lib/editorAi";
-import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
+import {
+  assertProjectAccess,
+  ProjectAccessError,
+} from "@/app/api/ai/_lib/customInstructions";
+import {
+  HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG,
+  isFeatureEnabled,
+} from "@/lib/flags";
 import {
   assertSkillScopeAccess,
   skillErrorResponse,
@@ -60,6 +67,12 @@ export async function GET(request: NextRequest) {
     });
     return NextResponse.json({ skills });
   } catch (error) {
+    if (
+      error instanceof ProjectAccessError &&
+      (await isFeatureEnabled(HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, user.id))
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,
@@ -99,6 +112,12 @@ export async function POST(request: NextRequest) {
     });
     return NextResponse.json({ skill }, { status: 201 });
   } catch (error) {
+    if (
+      error instanceof ProjectAccessError &&
+      (await isFeatureEnabled(HTPR_6966_SKILLS_ACCESS_DENIAL_FLAG, user.id))
+    ) {
+      return NextResponse.json({ error: error.message }, { status: 404 });
+    }
     await reportError({
       message: error instanceof Error ? error.message : "AI request failed",
       stack: error instanceof Error ? error.stack : undefined,

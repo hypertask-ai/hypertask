@@ -45,7 +45,6 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
   };
   global.clearInterval = (id) => timers.delete(id);
 
-  let flag = false;
   let connects = 0;
   let subscribes = 0;
   const fullReconciles = [];
@@ -67,8 +66,6 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
     "@/lib/firstScreen/boardDocument": { getBoardDocument: () => seeded ? {} : null },
-    "@/hooks/useFlag": { useFlag: () => flag },
-    "@/lib/flags/keys": { SCOPED_BOARD_REFETCH_FLAG: "scoped" },
     "@/lib/realtime/client": {
       connectRealtimeClient: async () => {
         connects += 1;
@@ -101,8 +98,8 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
   new Function("require", "module", "exports", compiled)(
     (specifier) => mocks[specifier] ?? require(specifier), loaded, loaded.exports,
   );
-  function Board({ projectId = 15, accountId = 8 }) {
-    loaded.exports.useBoardRealtime(projectId, { accountId });
+  function Board({ projectId = 15, accountId = 8, options = { accountId } }) {
+    loaded.exports.useBoardRealtime(projectId, options);
     return null;
   }
   const root = createRoot(document.getElementById("root"));
@@ -125,7 +122,6 @@ async function mountBoardRealtime(t, { realtime = false, subscribed = false, see
     subscribes: () => subscribes,
     timerStarts: () => timerStarts,
     render,
-    setFlag: async (value) => { flag = value; await render(); },
     tick: async () => {
       await React.act(async () => { for (const callback of [...timers.values()]) callback(); });
     },
@@ -141,9 +137,9 @@ test("fallback startup reuses the initial board load and polls only on the inter
   assert.equal(board.fullReconciles.length, 0);
   assert.equal(board.timers.size, 1);
 
-  await board.setFlag(true);
-  assert.equal(board.connects(), 1, "hydrating the scoped policy must not restart realtime");
-  assert.equal(board.timerStarts(), 1, "flag hydration must not reset the polling clock");
+  await board.render();
+  assert.equal(board.connects(), 1, "rerendering must not restart realtime");
+  assert.equal(board.timerStarts(), 1, "rerendering must not reset the polling clock");
   assert.equal(board.scopedReconciles.length, 0);
   await board.tick();
   assert.equal(board.scopedReconciles.length, 1, "one interval means one boardTasks reconcile");
@@ -151,19 +147,24 @@ test("fallback startup reuses the initial board load and polls only on the inter
   assert.equal(board.planningRefetches.length, 1);
 });
 
-test("flag hydration preserves the subscription and routes subsequent real events with the new policy", async (t) => {
+test("rerendering preserves the subscription and every real event uses scoped reconciliation", async (t) => {
   const board = await mountBoardRealtime(t, { realtime: true, subscribed: true });
   assert.equal(board.fullReconciles.length, 1, "one catch-up covers the query/subscription gap");
-  await board.setFlag(true);
+  await board.render();
   assert.equal(board.subscribes(), 1);
-  assert.equal(board.fullReconciles.length, 1, "policy hydration must not run catch-up again");
+  assert.equal(board.fullReconciles.length, 1, "rerendering must not run catch-up again");
 
   await board.emit(board.channel, "board:changed", { action: "create" });
   assert.equal(board.scopedReconciles.length, 1);
   assert.equal(board.fullReconciles.length, 1);
-  await board.setFlag(false);
+  await board.render();
   await board.emit(board.channel, "board:changed", { action: "archive" });
-  assert.equal(board.fullReconciles.length, 2);
+  assert.equal(board.scopedReconciles.length, 2);
+  assert.deepEqual(board.scopedReconciles, [
+    [board.queryClient, 15, 8],
+    [board.queryClient, 15, 8],
+  ]);
+  assert.equal(board.fullReconciles.length, 1);
   assert.deepEqual(board.triggers, ["event", "event"]);
   assert.equal(board.subscribes(), 1);
 });
@@ -188,7 +189,7 @@ test("a document catches the subscription gap with a scoped background read, the
 
 test("a real dropped connection reconciles once after subscription recovery", async (t) => {
   const board = await mountBoardRealtime(t, { realtime: true, subscribed: true });
-  await board.setFlag(true);
+  await board.render();
   const initialReconciles = board.fullReconciles.length;
   board.connection.state = "unavailable";
   await board.emit(board.connection, "state_change", { previous: "connected", current: "unavailable" });
@@ -207,9 +208,9 @@ test("a real dropped connection reconciles once after subscription recovery", as
   assert.equal(board.fullReconciles.length, initialReconciles + 1);
 });
 
-test("a brief real reconnect still re-proves account access with the scoped flag enabled", async (t) => {
+test("a brief real reconnect still re-proves account access without a flag", async (t) => {
   const board = await mountBoardRealtime(t, { realtime: true, subscribed: true });
-  await board.setFlag(true);
+  await board.render();
   const initialReconciles = board.fullReconciles.length;
   board.connection.state = "connecting";
   await board.emit(board.connection, "state_change", { previous: "connected", current: "connecting" });
@@ -227,4 +228,13 @@ test("changing board or account still replaces the subscription", async (t) => {
   assert.equal(board.subscribes(), 2);
   await board.render({ projectId: 16, accountId: 9 });
   assert.equal(board.subscribes(), 3);
+});
+
+test("events without an account still use full reconciliation", async (t) => {
+  const board = await mountBoardRealtime(t, { realtime: true, subscribed: true });
+  await board.render({ options: {} });
+  const initialReconciles = board.fullReconciles.length;
+  await board.emit(board.channel, "board:changed", { action: "rename" });
+  assert.equal(board.fullReconciles.length, initialReconciles + 1);
+  assert.equal(board.scopedReconciles.length, 0);
 });

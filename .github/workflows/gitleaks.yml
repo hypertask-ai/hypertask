@@ -9,6 +9,8 @@ jobs:
   secret-scan:
     name: secret-scan
     runs-on: ubuntu-latest
+    # Deleting a branch adds no commits, so there is nothing to scan.
+    if: github.event_name != 'push' || !github.event.deleted
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -17,6 +19,8 @@ jobs:
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
         run: |
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
           if [ -n "$PR_BASE_SHA" ]; then
@@ -24,5 +28,14 @@ jobs:
             # covered by the push scan, so one old finding cannot turn every open PR red.
             ./gitleaks detect --no-banner --source . --redact --log-opts "$PR_BASE_SHA..$PR_HEAD_SHA"
           else
-            ./gitleaks detect --no-banner --source . --redact
+            # A push scans only the commits it adds, so a finding on another branch cannot turn
+            # every push red. A new branch (or an unknown previous tip after a force push) scans
+            # everything not already on production.
+            range="origin/production..$PUSH_HEAD_SHA"
+            if [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
+              && git cat-file -e "$PUSH_BEFORE_SHA^{commit}" 2>/dev/null; then
+              range="$PUSH_BEFORE_SHA..$PUSH_HEAD_SHA"
+            fi
+            echo "Scanning $range"
+            ./gitleaks detect --no-banner --source . --redact --log-opts "$range"
           fi

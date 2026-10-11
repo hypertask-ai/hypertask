@@ -25,6 +25,9 @@ export type TNotification =
 
 export interface INotificationBody {
   sender: string;
+  senderUserId?: number;
+  senderEmail?: string;
+  senderName?: string;
   title: string;
   link: string;
   recipient: any;
@@ -54,13 +57,14 @@ interface NotificationContent {
   eyebrow?: string;
   contextTitle?: string;
   ctaLabel: string;
+  secondaryCta?: { label: string; link: string };
   ctaColor?: string;
   quoteBorder?: string;
 }
 
 const settingsUrl = "https://app.hypertask.ai/settings";
 
-function renderLayout(content: NotificationContent, link: string): string {
+export function renderLayout(content: NotificationContent, link: string, unsubscribeUrl?: string): string {
   const previewHtml =
     content.previewHtml ??
     (content.preview ? escapeHtml(content.preview) : "");
@@ -107,9 +111,12 @@ function renderLayout(content: NotificationContent, link: string): string {
         .email-body { background-color: #0e0e0e !important; color: #ffffff !important; }
         .email-card { background-color: #27292D !important; border-color: rgb(35,37,42) !important; color: #ffffff !important; }
         .wordmark, .content-list { color: #ffffff !important; }
+        /* Graphite: --bg-comment-description #262a30; --color-white-black #ffffff. */
+        .onboarding-code { background-color: #262a30 !important; color: #ffffff !important; }
         .preview { background-color: #2F343C !important; color: #ffffff !important; border-left-color: #4455BB !important; }
         .mention-hl { background-color: #403a28 !important; color: #d29f02 !important; }
         .cta { background-color: #4455BB !important; color: #ffffff !important; }
+        .secondary-cta { color: #8e9093 !important; }
         .footer { color: #858585 !important; }
         .footer-link { color: #4455BB !important; }
 ${identityDarkModeStyles}      }
@@ -127,14 +134,54 @@ ${identityDarkModeStyles}      }
             <div class="wordmark" style="margin:0 0 28px;color:#262525;font-size:13px;font-weight:700;letter-spacing:0.04em;">Hypertask</div>
             <h1 style="margin:0 0 20px;font-size:20px;line-height:1.4;font-weight:600;">${content.heading}</h1>
             ${identity}${eyebrow}${contextTitle}${preview}
+            ${content.secondaryCta ? `<a class="secondary-cta" href="${escapeHtml(content.secondaryCta.link)}" style="display:inline-block;margin:0 16px 12px 0;color:#727279;font-size:14px;text-decoration:none;">${escapeHtml(content.secondaryCta.label)}</a>` : ""}
             <a class="cta" href="${escapeHtml(link)}" style="display:inline-block;padding:10px 16px;background-color:${content.ctaColor ?? "#4455BB"};color:#ffffff;border-radius:4px;font-size:15px;font-weight:600;text-decoration:none;">${content.ctaLabel}</a>
-            <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a></p>
+            <p class="footer" style="margin:32px 0 0;color:#858585;font-size:12px;line-height:1.5;">Hypertask · <a class="footer-link" href="${settingsUrl}" style="color:#4455BB;text-decoration:underline;">Notification settings</a>${unsubscribeUrl ? ` · <a class="footer-link" href="${escapeHtml(unsubscribeUrl)}" style="color:#4455BB;text-decoration:underline;">Unsubscribe</a>` : ""}</p>
           </div>
         </td>
       </tr>
     </table>
   </body>
 </html>`;
+}
+
+export function renderAgentFirstTaskEmail(input: {
+  agentName: string;
+  taskTitle: string;
+  boardName: string;
+  projectId: number;
+  uniqueIndex: number;
+}): { subject: string; html: string } {
+  const subject = "Your agent just finished its first task";
+  return {
+    subject,
+    html: renderLayout(
+      {
+        heading: subject,
+        listHtml: `<div class="content-list" style="margin:0 0 24px;color:#18181b;font-size:14px;line-height:1.6;"><p>${escapeHtml(input.agentName)} completed '${escapeHtml(input.taskTitle)}' on ${escapeHtml(input.boardName)}.</p><p>Hypertask works best when your team and your agents share the board.</p></div>`,
+        ctaLabel: "Review the work",
+        secondaryCta: {
+          label: "Invite a teammate",
+          link: `https://app.hypertask.ai/project?id=${input.projectId}&invite=1`,
+        },
+      },
+      `https://app.hypertask.ai/detail/project-${input.projectId}/${input.uniqueIndex}`,
+    ),
+  };
+}
+
+export function renderAgentConnectedEmail(client: string, boardId?: number): { subject: string; html: string } {
+  return {
+    subject: "Your agent is connected",
+    html: renderLayout(
+      {
+        heading: "Your agent is connected",
+        preview: `${client} just talked to Hypertask. Ask your agent to pick up the top task on your board.`,
+        ctaLabel: "Open your board",
+      },
+      boardId ? `https://app.hypertask.ai/project?id=${boardId}` : "https://app.hypertask.ai",
+    ),
+  };
 }
 
 export interface IDigestEvent {
@@ -212,7 +259,8 @@ export function renderDigestEmail(
 
 export function renderNotificationEmail(
   type: TNotification,
-  body: INotificationBody
+  body: INotificationBody,
+  inviteContext = false
 ): { subject: string; html: string } {
   const sender = escapeHtml(body.sender);
   const title = escapeHtml(body.title);
@@ -296,10 +344,15 @@ export function renderNotificationEmail(
       };
     case "Invite":
       return {
-        subject: `${body.sender} has invited you to the Kanban Board "${body.title}"`,
+        subject: inviteContext
+          ? `${body.sender} invited you to "${body.title}" on Hypertask`
+          : `${body.sender} has invited you to the Kanban Board "${body.title}"`,
         html: renderLayout(
           {
-            heading: `${sender} invited you to join &ldquo;${title}&rdquo;`,
+            heading: `${sender} invited you to join &ldquo;${title}&rdquo;${inviteContext ? " on Hypertask" : ""}`,
+            preview: inviteContext
+              ? `${body.sender} invited you to join ${body.title} on Hypertask, a board where people and AI agents (Claude Code, Cursor and others) pick up and finish tasks together.`
+              : undefined,
             ctaLabel: "Accept invite",
           },
           body.link

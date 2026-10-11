@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
 import { broadcastTaskChange } from "@/lib/realtime/server";
@@ -13,7 +14,7 @@ import {
   sanitizeAgentCredentials,
   type PublicAgent,
 } from "@/lib/agents/publicAgent";
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   accessibleAgentMembershipWhere,
   boardAgentVisibilityWhere,
@@ -168,10 +169,7 @@ export function taskWhere(
     project: {
       id: slug.projectId,
       status: { not: Status.Deleted },
-      OR: [
-        { members: { some: { userId } } },
-        { ownerId: userId },
-      ],
+      ...projectContentAccessWhere(userId),
     },
   };
 }
@@ -198,7 +196,7 @@ export async function findTaskNumberAlias(slug: TaskDetailSlug, userId: number) 
 export async function findTaskByTicketNumber(ticketNumber: string, userId: number, projectId?: number) {
   const projectAccess = {
     status: { not: Status.Deleted },
-    OR: [{ members: { some: { userId } } }, { ownerId: userId }],
+    ...projectContentAccessWhere(userId),
   };
   try {
     const task = await findTaskByIdentifier(
@@ -219,7 +217,7 @@ export async function findTaskByTicketNumber(ticketNumber: string, userId: numbe
 }
 
 /** Task detail SSR — fields used by TaskDetailComp + hooks (see taskDetail benchmark parity). */
-export function taskDetailInclude(userId: number, projectId: number) {
+export function taskDetailInclude(userId: number, projectId: number, cachedRelations = false) {
   return {
     user: { select: userSelect },
     description_: {
@@ -354,6 +352,10 @@ export function taskDetailInclude(userId: number, projectId: number) {
         projectId: true,
         sectionId: true,
         createdAt: true,
+        ...(cachedRelations ? {
+          // Only the source board has been authorized by taskWhere.
+          description_: { where: { task: { projectId } }, select: { content: true } },
+        } : {}),
       },
     },
     parentTask: {
@@ -363,6 +365,10 @@ export function taskDetailInclude(userId: number, projectId: number) {
         ticketNumber: true,
         title: true,
         projectId: true,
+        ...(cachedRelations ? {
+          status: true,
+          description_: { where: { task: { projectId } }, select: { content: true } },
+        } : {}),
         subTasks: {
           where: { status: { not: Status.Deleted } },
           select: {
@@ -455,9 +461,11 @@ export async function fetchTaskDetail(
     : parseDetailSlug([projectSlug, String(uniqueIndex)]);
   if (!slug) return null;
 
+  const cachedRelations = await isFeatureEnabled(HTPR_6972_SUBTASK_LINK_FLAG, userId) &&
+    await isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId);
   const task = await prisma.task.findFirst({
     where: taskWhere(slug, userId),
-    include: taskDetailInclude(userId, slug.projectId),
+    include: taskDetailInclude(userId, slug.projectId, cachedRelations),
   });
 
   if (!task) return null;
@@ -633,6 +641,7 @@ export async function fetchCommentsForSlug(slug: TaskDetailSlug, userId: number)
         AND t.status <> 'Deleted'::"Status" AND p.status <> 'Deleted'::"Status"
         AND (p."ownerId" = ${userId} OR EXISTS (
           SELECT 1 FROM "Member" m WHERE m."projectId" = p.id AND m."userId" = ${userId}
+            AND m."agentId" IS NULL
         ))
       LIMIT 1
     ),

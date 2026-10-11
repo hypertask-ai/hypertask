@@ -8,7 +8,7 @@
  * All tool names are prefixed with service name for better discovery.
  */
 
-import { buildToolName, validateToolNames } from './mcp-standards';
+import { buildToolName } from './mcp-standards';
 import { REPORT_CAPABILITIES } from '@/utils/controllers/reports/reportService';
 import { TOOL_SUMMARIES } from './tool-summaries';
 
@@ -497,41 +497,4 @@ export const TOOL_NAMES: string[] = Object.values(TOOL_METADATA).map((tool) => t
  */
 export function getToolMetadata(name: string): ToolMetadata | undefined {
   return Object.values(TOOL_METADATA).find((tool) => tool.name === name);
-}
-
-/**
- * Validate that all tools are registered and follow naming standards
- */
-export function validateToolMetadata(registeredToolNames: string[]): void {
-  const expectedTools = new Set(TOOL_NAMES);
-  const registeredTools = new Set(registeredToolNames);
-
-  // Find missing tools
-  const missing = [...expectedTools].filter((name) => !registeredTools.has(name));
-  
-  // Find extra tools (not in metadata)
-  const extra = [...registeredTools].filter((name) => !expectedTools.has(name));
-
-  // Validate naming standards
-  const validationResults = validateToolNames(registeredToolNames);
-  const invalidNames = validationResults.filter((r) => !r.valid);
-
-  if (missing.length > 0) {
-    console.warn(`⚠️  Tools defined in metadata but not registered: ${missing.join(', ')}`);
-  }
-
-  if (extra.length > 0) {
-    console.warn(`⚠️  Tools registered but not in metadata: ${extra.join(', ')}`);
-  }
-
-  if (invalidNames.length > 0) {
-    console.error(`❌ Tools with invalid naming (must start with service prefix):`);
-    invalidNames.forEach(({ name, error }) => {
-      console.error(`   - ${name}: ${error}`);
-    });
-  }
-
-  if (missing.length === 0 && extra.length === 0 && invalidNames.length === 0) {
-    console.info(`✓ All ${registeredTools.size} tools properly registered and follow naming standards`);
-  }
 }

@@ -12,6 +12,7 @@ export const AGENT_WEBHOOK_EVENTS = [
   "task.updated",
   "task.created",
   "chat.message",
+  "comment.reaction",
   ...AGENT_RUN_WEBHOOK_EVENTS,
 ] as const;
 
@@ -67,6 +68,16 @@ export const AGENT_WEBHOOK_EVENT_DEFINITIONS = {
       chat: "Chat object with sessionId, messageId, text, and userName.",
       agentBrief:
         "Optional bounded snapshot of the agent's current ticket, recent tickets, open pull requests, and recent comments.",
+    },
+  },
+  "comment.reaction": {
+    subscribable: true,
+    label: "Comment reaction",
+    description: "Sent when a person adds an emoji reaction to a comment written by this agent. Removed reactions and reactions by agents send nothing.",
+    payload: {
+      commentId: "Numeric ID of the agent's comment.",
+      emoji: "The emoji the person reacted with.",
+      commentExcerpt: "Plain text start of the agent's comment, at most 200 characters.",
     },
   },
   "run.created": {
@@ -254,6 +265,8 @@ export type AgentWebhookEventInput = {
   agentBrief?: AgentWebhookChatBrief;
   commentId?: number;
   commentHtml?: string;
+  emoji?: string;
+  commentExcerpt?: string;
   changes?: AgentWebhookTaskChanges;
   assignees?: AgentWebhookTaskAssignee[];
   labels?: AgentWebhookTaskLabel[];

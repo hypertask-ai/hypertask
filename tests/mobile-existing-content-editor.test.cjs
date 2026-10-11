@@ -227,7 +227,7 @@ test("comment updates authorize against stored ownership and sync attachments at
   assert.match(save, /replaceAttachments: shouldSyncAttachments/);
   assert.match(commentService, /if \(attachments && replaceAttachments\)/);
   assert.match(commentRoute, /replaceAttachments === true && attachments === undefined/);
-  assert.match(commentService, /findFirst\(\{[\s\S]*?where: \{ id: commentId, creatorId: userId \}/);
+  assert.match(commentService, /findFirst\(\{[\s\S]*?where: \{ id: commentId, creatorId: userId, task: \{ project: projectContentAccessWhere\(userId, agentId\) \} \}/);
   assert.match(commentService, /if \(!comment\)[\s\S]*?Comment not found or not owned by user/);
   assert.match(commentService, /prisma\.\$transaction\(async \(transaction\)/);
   assert.match(commentService, /attachmentIdsToDelete[\s\S]*?transaction\.attachment\.deleteMany/);

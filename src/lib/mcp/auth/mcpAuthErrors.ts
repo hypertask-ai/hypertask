@@ -3,9 +3,9 @@ import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
 import { hasDataPermission } from '@/lib/mcp/managementPermissions';
 import { isOAuthAccessTokenPayload, oauthClientIdFromPayload, oauthLegacyRevocationJti } from '@/lib/mcp/oauthTokenContract';
-import { MCP_TOKEN_ISSUED_AT_MS_CLAIM, presentedAgentTokenGeneration, storedAgentTokenGeneration, tokenRevocationJtis, verifyMcpJwtToken } from './verifyJwt';
+import { MCP_TOKEN_ISSUED_AT_MS_CLAIM, presentedAgentTokenGeneration, storedAgentTokenGeneration, tokenRevocationJtis, verifyMcpJwtToken, boundedMcpAuthLog } from './verifyJwt';
 import { extractBearerToken, isManagementKeyToken, validateManagementApiKey } from './session';
-import type { McpAuthContext } from './types';
+import type { McpAuthContext, McpAuthFailureSnapshot } from './types';
 
 /**
  * Creates a standardized 401 Unauthorized response for MCP routes
@@ -100,7 +100,8 @@ export type McpAuthFailureLookup = {
  */
 export async function classifyMcpAuthFailure(
   request: NextRequest,
-  db?: McpAuthFailureLookup
+  db?: McpAuthFailureLookup,
+  snapshot?: McpAuthFailureSnapshot,
 ): Promise<McpUnauthorizedReason> {
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return 'missing_token'
@@ -128,7 +129,7 @@ export async function classifyMcpAuthFailure(
   // Revocation state is disclosed only after signature verification, the same
   // rule the token refresh route follows, so a forged token cannot probe
   // whether some jti has been revoked.
-  const verified = verifyMcpJwtToken(token)
+  const verified = snapshot?.verifiedJwt !== undefined ? snapshot.verifiedJwt : verifyMcpJwtToken(token)
   if (!verified) {
     // Verification also fails on expiry. `exp` is inside the token the caller
     // already holds, so naming expiry discloses nothing new, and it is the one
@@ -145,7 +146,9 @@ export async function classifyMcpAuthFailure(
     const email = typeof verified.sub === 'string' ? verified.sub.toLowerCase() : null
     const select = { id: true, mcpTokensRevokedAt: true }
     let user: { id: number; mcpTokensRevokedAt: Date | null } | null = null
-    if (userId) {
+    if (snapshot?.user !== undefined) {
+      user = snapshot.user
+    } else if (userId) {
       user = await lookup.user.findUnique({ where: { id: userId }, select })
     } else if (email) {
       user = await lookup.user.findFirst({ where: { email }, select })
@@ -162,7 +165,7 @@ export async function classifyMcpAuthFailure(
     if (isOAuthAccessToken && oauthClientId === undefined) {
       revocationJtis.push(oauthLegacyRevocationJti(user.id))
     }
-    const revoked = await lookup.revokedToken.findFirst({
+    const revoked = snapshot?.revokedToken !== undefined ? snapshot.revokedToken : await lookup.revokedToken.findFirst({
       where: {
         user_id: user.id,
         jti: { in: revocationJtis },
@@ -172,7 +175,7 @@ export async function classifyMcpAuthFailure(
     if (revoked) return 'token_revoked'
 
     if (oauthClientId !== undefined) {
-      const client = await lookup.oAuthClient.findUnique({
+      const client = snapshot?.oauthClient !== undefined ? snapshot.oauthClient : await lookup.oAuthClient.findUnique({
         where: { client_id: oauthClientId },
         select: { client_id: true },
       })
@@ -200,7 +203,7 @@ export async function classifyMcpAuthFailure(
     // may come back as a bad request.
     const agentId = verified.agentId
     if (typeof agentId === 'string' && agentId.length > 0) {
-      const agent = await lookup.agent.findFirst({
+      const agent = snapshot?.agent ?? await lookup.agent.findFirst({
         where: { id: agentId, userId: user.id },
         select: { id: true, mcpTokenJti: true, revokedAt: true },
       })
@@ -220,7 +223,8 @@ export async function classifyMcpAuthFailure(
 
     return 'invalid_token'
   } catch (error) {
-    console.error('[MCP Auth] Failed to classify rejection:', error)
+    if (snapshot) boundedMcpAuthLog('[MCP Auth] Failed to classify rejection:', error)
+    else console.error('[MCP Auth] Failed to classify rejection:', error)
     return 'invalid_token'
   }
 }
@@ -233,10 +237,11 @@ export async function classifyMcpAuthFailure(
  */
 export async function mcpUnauthorizedResponse(
   request: NextRequest,
-  db?: McpAuthFailureLookup
+  db?: McpAuthFailureLookup,
+  snapshot?: McpAuthFailureSnapshot,
 ) {
   return createUnauthorizedResponse(
     undefined,
-    await classifyMcpAuthFailure(request, db)
+    await classifyMcpAuthFailure(request, db, snapshot)
   )
 }

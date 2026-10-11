@@ -1,11 +1,9 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  validateMcpAuth,
-  checkMcpRateLimit,
-  createUnauthorizedResponse,
-} from "@/lib/mcp/auth";
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { assertProjectAccess } from "@/app/api/ai/_lib/customInstructions";
 import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import prisma from "@/lib/prisma";
@@ -38,6 +36,7 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -53,19 +52,26 @@ export async function GET(
       include: { attachments: true },
     });
 
-    return NextResponse.json({ success: true, instruction });
+    const haiku55Enabled = await haiku55ModelEnabled(ctx.user.id);
+    const selected = haiku55Enabled ? getAiModelOptionById(instruction?.model_selected, true) : undefined;
+    return NextResponse.json({ success: true, instruction: instruction && selected ? {
+      ...instruction, model_selected: selected.id, source_selected: selected.source,
+    } : instruction });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to read custom instructions";
     const status = message.includes("access denied") ? 403 : 400;
     return NextResponse.json({ success: false, error: message }, { status });
   }
+
+  })(request)
 }
 
 export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -135,4 +141,6 @@ export async function PUT(
     const status = message.includes("access denied") ? 403 : 400;
     return NextResponse.json({ success: false, error: message }, { status });
   }
+
+  })(request)
 }

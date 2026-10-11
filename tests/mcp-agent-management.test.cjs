@@ -445,6 +445,76 @@ test('archive and delete schemas are strict and MCP tools call owned-agent route
   assert.ok(MCP_TOOLS.some((tool) => tool.name === 'hypertask_delete_agent'))
 })
 
+test('createAgent uses the personal-sign-in route only when asked (HTPR-7118)', async () => {
+  const requests = []
+  const service = new ManagementService({
+    makeRequest: async (...args) => {
+      requests.push(args)
+      return { success: true }
+    },
+  })
+  await service.createAgent({ display_name: 'Bot' })
+  await service.createAgent({ display_name: 'Bot' }, { useBearerRoute: true })
+  assert.deepEqual(
+    requests.map(([path, options]) => [path, options.method]),
+    [
+      ['/mcp/admin/agents', 'POST'],
+      ['/mcp/agents/create', 'POST'],
+    ]
+  )
+})
+
+test('/mcp/agents/create is routed before the agent id route (HTPR-7118)', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'src/lib/mcp/operations/index.ts'),
+    'utf8'
+  )
+  const create = source.indexOf('agents\\/create$/')
+  const byId = source.indexOf('agents\\/([^\\/]+)$/')
+  assert.ok(create > -1 && byId > -1 && create < byId)
+})
+
+test('creating an agent refuses a board the person cannot access (HTPR-7118)', async () => {
+  const { createAgentForUser } = jiti(path.join(root, 'src/lib/mcp/agents/create.ts'))
+  const prisma = jiti(path.join(root, 'src/lib/prisma.ts')).default
+  const originalAgent = prisma.agent.findFirst
+  const originalProject = prisma.project.findFirst
+  const originalTransaction = prisma.$transaction
+  const projectQueries = []
+  let transactions = 0
+  prisma.agent.findFirst = async () => null
+  prisma.project.findFirst = async (args) => {
+    projectQueries.push(args)
+    return null
+  }
+  prisma.$transaction = async () => {
+    transactions += 1
+  }
+  try {
+    const response = await createAgentForUser(
+      new Request('http://localhost/api/mcp/agents/create', {
+        method: 'POST',
+        body: JSON.stringify({ display_name: 'Bot', project_ids: [99] }),
+      }),
+      { id: 6, email: 'person@example.com' }
+    )
+    assert.equal(response.status, 403)
+    assert.equal(
+      (await response.json()).error,
+      'You do not have access to project 99'
+    )
+    assert.deepEqual(projectQueries[0].where.OR, [
+      { ownerId: 6 },
+      { members: { some: { userId: 6, agentId: null } } },
+    ])
+    assert.equal(transactions, 0)
+  } finally {
+    prisma.agent.findFirst = originalAgent
+    prisma.project.findFirst = originalProject
+    prisma.$transaction = originalTransaction
+  }
+})
+
 test('list_agents has a strict empty schema and is registered in MCP_TOOLS', () => {
   assert.deepEqual(ListAgentsInputSchema.parse({}), {})
   assert.equal(ListAgentsInputSchema.safeParse({ include_tokens: true }).success, false)

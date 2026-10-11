@@ -9,6 +9,7 @@ export const runtime = "nodejs";
 const ALLOWED_TOOLS = new Set([
   "claude",
   "claude-code",
+  "codex",
   "cursor",
   "vscode",
   "chatgpt",

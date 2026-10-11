@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, "..");
 const noop = () => null;
 
 function load(relative, dependencies, declaration) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relative)) return require("./helpers/flag-files.cjs").load(relative);
   let source = fs.readFileSync(path.join(root, relative), "utf8");
   if (declaration) {
     const tree = ts.createSourceFile(relative, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -118,6 +119,8 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
   const MobileViewContext = React.createContext(mobile);
   const Frame = load("src/components/AI_CHAT/AI_Chat_Closed_Layout.tsx", {
     react: React,
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
+    "@/lib/flags/keys": load("src/lib/flags/keys.ts", {}),
     "next/navigation": { usePathname: () => pathname },
     "lucide-react": { ChevronLeft: noop },
     "@/components/Common/Tooltip": { default: noop },
@@ -296,7 +299,15 @@ test("the task title passes its stable ref to autosizing on the first render", (
 });
 
 test("an unset priority stays null while its background query loads, keeping the No Priority row height", () => {
+  const metaHook = load("src/lib/useTaskDetailMetaField.ts", {
+    "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
+    "@/lib/flags/keys": {},
+    "@/lib/taskDetailReads": {},
+  });
   const { useGetPriorityForTask } = load("src/hooks/MultiPages/useGetPriorityForTask.ts", {
+    "@/lib/useTaskDetailMetaField": metaHook,
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }) },
     "@/utils/api/global": { default: {} },
   });
@@ -347,11 +358,14 @@ function editorPanels(flag) {
   return load("src/components/RTE/TaskDetailEditorPanels.tsx", {
     useFlag: (key) => key === "instant" && flag,
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
     showCommandsAtom: "commands",
     createPortal: noop,
+    useContext: React.useContext,
+    StaticDescriptionPlaceholderContext: React.createContext(null),
     TiptapProvider: ({ children }) => children,
     TiptapBubbleMenu: noop,
     TiptapMainContainer: () => React.createElement("div", { "data-editor": true }),
@@ -388,6 +402,10 @@ function threadRender({ hydrated, mobile = false, measured = false, comments = f
     useDescriptionAndCommentsContext: () => ({ comments: [{ text: "Existing comment" }], stacked: [] }),
     useFlag: () => true,
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
+    HTPR_6899_STABLE_LAYOUT_FLAG: "stable",
+    HTPR_7074_TICKET_PAGE_CLS_FLAG: "cls",
+    useThreadSettled: () => ({ settled: true, slotRef: () => {} }),
+    SettledComposerSlot: ({ children }) => children,
     useTaskContext: () => ({
       currentTask: { id: 42 }, secondaryPanelsReady: true,
       virtualizer: { getVirtualItems: () => items, getTotalSize: () => measured ? (comments ? 800 : 711) : 200, measureElement: noop },

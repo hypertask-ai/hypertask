@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import {
   HTPR_6470_PROJECT_DELETE_FLAG,
@@ -14,6 +15,7 @@ import deleteProject from '@/utils/controllers/projects/delete'
  * app's owner-or-admin lifecycle path and is separately feature-gated.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -85,4 +87,6 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Archive Board] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

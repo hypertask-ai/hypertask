@@ -56,6 +56,9 @@ jobs:
       # "Skip the build when the review is already red" reads commit statuses
       # for GitHub AI Review; without this the gh call 403s and aborts the job.
       statuses: read
+      packages: read
+    env:
+      HTPR_PG_IMAGE: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     outputs:
       test_failed: ${{ steps.test-outcome.outputs.failed }}
       failed_tests: ${{ steps.test-outcome.outputs.failed_tests }}
@@ -124,6 +127,9 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 1
+
+      - name: Guard CI image sources
+        run: node --test tests/ci-image-sources.test.cjs
 
       # ci-build is a required status check, so path-filtered PRs must still
       # report success (paths-ignore at the trigger level would leave it
@@ -292,6 +298,18 @@ jobs:
             fi
           fi
 
+      - name: Authenticate CI image pulls
+        if: github.event_name == 'push' || steps.scope.outputs.build_needed == 'true'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Pull PostgreSQL test image
+        if: github.event_name == 'push' || steps.select.outputs.require_pg == '1'
+        run: docker pull "$HTPR_PG_IMAGE"
+
       - name: Test
         if: github.event_name != 'push' && steps.scope.outputs.build_needed == 'true'
         env:
@@ -315,7 +333,7 @@ jobs:
           echo "failed=${{ steps.push-test.outcome == 'failure' }}" >> "$GITHUB_OUTPUT"
           failures=""
           if [ -f "$RUNNER_TEMP/push-test.log" ]; then
-            failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p' "$RUNNER_TEMP/push-test.log" \
+            failures=$(sed -nE 's/^[[:space:]]*not ok [0-9]+ - (.*)$/\1/p; s/^[[:space:]]*✖ (.*) \([0-9.]+ms\)$/\1/p' "$RUNNER_TEMP/push-test.log" \
               | awk 'BEGIN { ORS="" } NR <= 3 { if (NR > 1) printf "; "; printf "%s", $0 }')
           fi
           echo "failed_tests=${failures:-test command failed before naming a test}" >> "$GITHUB_OUTPUT"
@@ -349,9 +367,13 @@ jobs:
     timeout-minutes: 25
     permissions:
       contents: read
+      packages: read
     services:
       postgres:
-        image: postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        image: ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           POSTGRES_DB: hypertask_smoke
           POSTGRES_USER: browser_smoke
@@ -364,7 +386,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       redis:
-        image: redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        image: ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         ports:
           - 6379:6379
         options: >-
@@ -373,7 +398,10 @@ jobs:
           --health-timeout 5s
           --health-retries 12
       soketi:
-        image: quay.io/soketi/soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        image: ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           SOKETI_DEFAULT_APP_ID: app-id
           SOKETI_DEFAULT_APP_KEY: app-key
@@ -393,6 +421,15 @@ jobs:
         with:
           node-version: 24
           cache: npm
+      # YPER4-252: a layout lock baseline or ratchet only changes with the ticket where Valentin
+      # approved it, named in approvedIn and in a "Layout change approved: <URL>" PR body line.
+      - name: Layout change needs a recorded approval
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch --depth=1 origin "$BASE_SHA"
+          node .github/scripts/layout-lock-approval.mjs
       - name: Install dependencies and Chromium
         run: |
           npm ci --prefer-offline --no-audit --no-fund
@@ -456,13 +493,22 @@ jobs:
             sleep 2
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
-          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts --grep 'seeded board card opens'
           # Layout lock must also cover unreleased and newly registered flags.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --all-flags-on
-          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts
+          npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
+      # Failing parts are listed in the job log; their "after" screenshots (baseline boxes outlined) are here.
+      - name: Upload layout lock screenshots
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: layout-lock-matrix
+          path: test-results/layout-lock-matrix/
+          if-no-files-found: ignore
+          retention-days: 7
 
   production-test-warning:
     name: production-test-warning
@@ -490,20 +536,10 @@ jobs:
           BEFORE_SHA: ${{ github.event.before }}
           FAILED_TESTS: ${{ needs.ci-tests.outputs.failed_tests }}
           GH_TOKEN: ${{ github.token }}
-          TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
+          ALERT_GITHUB_TOKEN: ${{ secrets.AUTOMERGE_TOKEN }}
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
         run: |
           set -euo pipefail
-
-          send_alert() {
-            local message="$1" code
-            code=$(curl -s --connect-timeout 10 --max-time 60 -o "$RUNNER_TEMP/telegram.json" -w '%{http_code}' \
-              -X POST "https://api.telegram.org/bot$TG_TOKEN/sendMessage" \
-              -d chat_id="$TG_CHAT" --data-urlencode text="$message" 2>/dev/null) || true
-            if [ "${code:-}" != "200" ]; then
-              echo "::error::Telegram alert failed (HTTP ${code:-none}): $(cat "$RUNNER_TEMP/telegram.json" 2>/dev/null || true)"
-            fi
-          }
 
           HISTORY=$(node .github/scripts/should-auto-revert.mjs "$GITHUB_REPOSITORY" "$BEFORE_SHA" 2>/dev/null) || HISTORY='{}'
           HISTORY_REASON=$(printf '%s' "$HISTORY" | jq -r '.reason // "previous production test result unavailable"' 2>/dev/null || true)
@@ -512,7 +548,7 @@ jobs:
           RUN_URL="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           FAILED_TESTS="${FAILED_TESTS:-test command failed before naming a test}"
           MESSAGE=$(printf 'What failed: %s\nLive site changed: no\nNext: production stays live while the test failure is investigated\nRun: %s' "$FAILED_TESTS" "$RUN_URL")
-          send_alert "$MESSAGE"
+          node .github/scripts/production-alert.mjs setup production-tests "$MESSAGE"
           echo "::warning::$FAILED_TESTS failed. Production was not reverted or rolled back."
 
   production-cli-parity:
@@ -526,8 +562,9 @@ jobs:
       contents: read
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "1.13.29"
-      TRUSTED_CLI_NEXT_VERSION: "2.0.0"
+      TRUSTED_CLI_VERSION: "2.0.9"
+      TRUSTED_CLI_BINARY_VERSION: "0.2.14"
+      TRUSTED_CLI_BINARY_SHA256: "3b4286ff78d66042b9a564150c548d3a6fc0cdc1e02bbda13128f7a39cab683f"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -545,21 +582,27 @@ jobs:
             echo "Parity contract selected untrusted package $CONTRACT_PACKAGE"
             exit 1
           fi
-          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ] && [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_NEXT_VERSION" ]; then
+          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
             echo "Parity contract selected untrusted version $CONTRACT_VERSION"
             exit 1
           fi
           LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)
-          if [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_VERSION" ] && \
-             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_NEXT_VERSION" ] && \
-             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_NEXT_VERSION:$TRUSTED_CLI_NEXT_VERSION" ]; then
-            echo "Parity transition does not permit contract $CONTRACT_VERSION with npm latest $LATEST_VERSION"
+          if [ "$LATEST_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
+            echo "Parity contract pins $CONTRACT_VERSION but production is $LATEST_VERSION"
             exit 1
           fi
           PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
           cp config/parity/runner/package.json config/parity/runner/package-lock.json "$PARITY_TMP/"
           npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund
-          env -u GITHUB_TOKEN -u GH_TOKEN "$PARITY_TMP/node_modules/.bin/hypertask" capabilities --json > "$PARITY_TMP/capabilities.json"
+          CLI_BINARY="$PARITY_TMP/hypertask-native"
+          curl --fail --location --silent --show-error \
+            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
+            --output "$CLI_BINARY"
+          if ! echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then
+            exit 1
+          fi
+          chmod 755 "$CLI_BINARY"
+          env -u GITHUB_TOKEN -u GH_TOKEN "$CLI_BINARY" capabilities --json > "$PARITY_TMP/capabilities.json"
           node scripts/parity-contract.mjs \
             --check \
             --cli-capabilities "$PARITY_TMP/capabilities.json" \

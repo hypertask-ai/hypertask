@@ -1,5 +1,8 @@
 "use client";
 
+import { setNotificationSeen } from "@/lib/api/typedClient";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+
 import { useFirstScreenSurface, type FirstScreenSnapshot } from "@/lib/firstScreen/SurfaceContext";
 import { projectInboxDateGroup } from "@/lib/firstScreen/inbox";
 import type { INotification, TRemoveFromInboxMode } from "@/models/model";
@@ -32,7 +35,8 @@ import { markAsUnseen, markNotificationSeen } from "@/utils/api/Inbox";
 import Link from "next/link";
 import { NotificationProvider } from "@/lib/contexts/NotificationContext";
 import NotificationRow, { Seen } from "../NotificationRow";
-import RemindMeComponent from "@/components/Modals/RemindMe/RemindMeComponent";
+import dynamic from "next/dynamic";
+const RemindMeComponent = dynamic(() => import("@/components/Modals/RemindMe/RemindMeComponent"));
 import SwipeableNotificationRow from "./SwipeableNotificationRow";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useUpdateInView from "@/hooks/Inbox/useUpdateInView";
@@ -337,6 +341,9 @@ const InboxSplit = ({
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
   const [tipsEnabled] = useRecoilState(showQuickTipsAtom);
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
+  const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+  let typedWrite: typeof setNotificationSeen | undefined;
+  if (typedWrites) typedWrite = setNotificationSeen;
   const shortcutNudgesEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const [showSubtaskLinkingModal, setShowSubtaskLinkingModal] =
     useState<boolean>(false);
@@ -822,6 +829,8 @@ const InboxSplit = ({
       void markAsUnseen(
         Number.parseInt(selectedNotification.id),
         selectedNotification.seen,
+        undefined,
+        typedWrite,
       ).finally(() =>
         queryClient.invalidateQueries({
           queryKey: queryKey ?? inboxDataQueryKey(currentUser?.id),
@@ -967,7 +976,7 @@ const InboxSplit = ({
       });
     }
 
-    void markNotificationSeen(Number.parseInt(notification.id)).finally(() =>
+    void markNotificationSeen(Number.parseInt(notification.id), typedWrite).finally(() =>
       queryClient.invalidateQueries({ queryKey: cacheKey, exact: true }),
     );
   };

@@ -4,6 +4,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 
 // Create an instance of PrismaClient
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 // Example usage
@@ -19,7 +20,9 @@ const sectionGetAll = async (userId:number) => {
   }
   try {
     // Get all sections
-    const sections = await prisma.section.findMany();
+    const sections = await prisma.section.findMany({
+      where: { project: projectContentAccessWhere(userId) },
+    });
     // console.log('Field Names:', Prisma.SectionScalarFieldEnum);
     return({
       status:200,

@@ -50,7 +50,7 @@ export default async function InvitePage(
       // This will exit the function and perform the redirect
       if (result.status === 200) {
         const redirectUrl = `/project?id=${projectId}${
-          view && view !== "undefined" ? `&view=${view}` : ""
+          view && view !== "undefined" ? `&view=${encodeURIComponent(view)}` : ""
         }`;
         redirect(redirectUrl);
       }

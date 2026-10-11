@@ -35,7 +35,6 @@ const stubs = new Map([
   [
     "src/lib/flags.ts",
     {
-      HTPR_6372_SEARCH_RANKING_FLAG: "htpr-6372-search-ranking",
       HTPR_6369_SEARCH_OPERATORS_FLAG: "htpr-6369-search-operators",
       HTPR_6370_SEARCH_CHIPS_FLAG: "htpr-6370-search-chips",
       HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: "htpr-6688-search-autocomplete",
@@ -44,7 +43,7 @@ const stubs = new Map([
       HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: "htpr-6881-search-fuzzy-person",
       HTPR_6880_SEARCH_COMMENTER_FLAG: "htpr-6880-search-commenter",
       HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: "htpr-6882-search-match-highlights",
-      isFeatureEnabled: async (key) => key === "htpr-6372-search-ranking" && (setup.rankingEnabled ?? false),
+      isFeatureEnabled: async (key) => false,
     },
   ],
 ]);
@@ -82,14 +81,12 @@ async function call({
   body,
   onSearch = () => ({ status: 200 }),
   projectError,
-  rankingEnabled = false,
 }) {
   setup = {
     session,
     projectIds: accessibleProjectIds,
     onSearch,
     projectError,
-    rankingEnabled,
   };
   const res = response();
   await handler({ method: "POST", body, headers: {} }, res);
@@ -152,15 +149,14 @@ test("document search forwards a context board for the ranker to validate", asyn
   });
   assert.equal(res.statusCode, 200);
   assert.equal(searchArgs[3].contextProjectId, 339);
-  assert.equal(searchArgs[3].applyRelevanceCut, false);
+  assert.equal(searchArgs[3].applyRelevanceCut, true);
 });
 
-test("document search enables the relevance cut when the flag is on", async () => {
+test("document search always enables the relevance cut", async () => {
   let searchArgs;
   const res = await call({
     session: { userId: 6 },
     accessibleProjectIds: [15],
-    rankingEnabled: true,
     body: {
       projectIds: [15],
       searchQuery: "inbox icon",

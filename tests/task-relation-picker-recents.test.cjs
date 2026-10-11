@@ -57,6 +57,7 @@ function responseRecorder() {
 function loadRecentRoute(identity) {
   const recentCalls = [];
   const handler = loadTypeScript("src/pages/api/tasks/searchAll.ts", {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (legacy) => legacy },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () =>
         identity && identity.status === "verified"

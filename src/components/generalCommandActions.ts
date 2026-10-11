@@ -1,3 +1,4 @@
+import type { createSection } from "@/lib/api/typedClient";
 import { CommandMode } from "@/models/enums";
 import { IAgent, IProject, ISection, IUser } from "@/models/model";
 import axios from "axios";
@@ -15,7 +16,7 @@ import type { createCommandModalCallbacks } from "./commandModalCallbacks";
 
 type Context = Pick<ReturnType<typeof useCommandsState>, "boardCloseHandler" | "inViewObject" | "assignTaskUser" | "currentUser" | "router" | "_currentProject" | "queryClient" | "setCurrentProject" | "goToProjectShortcut" | "_activeItem" | "activeSectionId" | "setBoardColumnsViewAPI" | "getProjectIdxAndAllData" | "updateProjectView" | "renameBoard" | "removeMemberFromBoard" | "addAgentToBoard" | "removeAgentFromBoard" | "inviteNewMembersToBoard" | "setShowCommands" | "setCommandMode"> &
   Pick<ReturnType<typeof createCommandModalCallbacks>, "toggleAssignModal"> &
-  { ticketPrefixEnabled?: boolean };
+  { ticketPrefixEnabled?: boolean; createSectionWriter?: typeof createSection };
 
 export function createGeneralCommandActions(context: Context) {
   const {
@@ -23,7 +24,7 @@ export function createGeneralCommandActions(context: Context) {
   router, _currentProject, queryClient, setCurrentProject, goToProjectShortcut,
   _activeItem, activeSectionId, setBoardColumnsViewAPI, getProjectIdxAndAllData, updateProjectView,
   renameBoard, removeMemberFromBoard, addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard,
-  setShowCommands, setCommandMode, ticketPrefixEnabled = false,
+  setShowCommands, setCommandMode, ticketPrefixEnabled = false, createSectionWriter,
   } = context;
 
 
@@ -267,7 +268,11 @@ export function createGeneralCommandActions(context: Context) {
     // open forever with no message when the create failed.
     let response;
     try {
-      response = await axios.post("/api/section/create", {
+      response = createSectionWriter ? await createSectionWriter({
+        projectId: _currentProject.id,
+        title,
+        ranking,
+      }) : await axios.post("/api/section/create", {
         projectId: _currentProject.id,
         title,
         ranking,

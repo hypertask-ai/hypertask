@@ -1,3 +1,4 @@
+import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
@@ -630,6 +631,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (authCode.redirect_uri !== MOBILE_REDIRECT_URI) {
+      recordAgentConnection(authCode.user.id, session.accessToken, "mcp", client.client_name);
+    }
     return tokenResponse(
       session.accessToken,
       agentId ? undefined : accessTokenExpirySeconds,

@@ -20,10 +20,14 @@ import {
   createSharedAllowanceMiddleware,
   gatewayCatalogModelSlug,
   modelPricing,
+  modelCostUsd,
   sharedAiAllowanceErrorMessage,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
+  isHaiku55Model,
+  isHaiku45Model,
+  resolveHaikuModelId,
   type TAiModelOption,
   type TAiProviderOptions,
 } from "@/lib/aiModelOptions";
@@ -197,6 +201,12 @@ function resolveUntracedAiModel(
     throw new Error("AI model id is required");
   }
 
+  if (process.env.HT_PREMERGE_AI_STUB === "1" || process.env.HT_PREMERGE_QUEUE_STUB === "1") {
+    const { createPremergeLanguageModel } = require("./premergeModel") as typeof import("./premergeModel");
+    const stub = createPremergeLanguageModel(model);
+    if (stub) return stub;
+  }
+
   const byokApiKey =
     typeof byokCredential === "string" ? byokCredential : undefined;
 
@@ -284,7 +294,7 @@ export function inheritAiModelUsage(model: LanguageModel, source: LanguageModel)
   else modelUsageContexts.set(model, context);
 }
 
-async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number) {
+async function generationCostUsd(modelId: string, provider: string, inputTokens: number, outputTokens: number, cacheReadTokens = 0, cacheWriteTokens = 0) {
   if (!inputTokens && !outputTokens) return 0;
   if (provider === "byok:custom") return null;
   const slug = modelId.includes("/") ? modelId : `${modelId.startsWith("claude-") ? "anthropic" : "openai"}/${modelId}`;
@@ -294,7 +304,7 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
       modelPricing(slug),
       new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
     ]);
-    return pricing ? inputTokens * pricing.inputUsdPerToken + outputTokens * pricing.outputUsdPerToken : null;
+    return pricing ? modelCostUsd(pricing, inputTokens, outputTokens, cacheReadTokens, cacheWriteTokens) : null;
   } catch {
     return null;
   } finally {
@@ -309,11 +319,14 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
     const identity = identifyPrompt(prompt);
     const traceId = randomUUID();
     let recorded = false;
-    return (outcome: "ok" | "failed" | "cancelled", usage?: { inputTokens: { total?: number }; outputTokens: { total?: number } }, error?: unknown) => {
+    return (outcome: "ok" | "failed" | "cancelled", usage?: { inputTokens: { total?: number; cacheRead?: number; cacheWrite?: number }; outputTokens: { total?: number } }, error?: unknown) => {
       if (recorded) return;
       recorded = true;
       const inputTokens = usage?.inputTokens.total ?? 0;
       const outputTokens = usage?.outputTokens.total ?? 0;
+      // HTPR-7076: null when the provider reports no cache breakdown, a number (maybe 0) when it does.
+      const cachedInputTokens = usage?.inputTokens.cacheRead ?? null;
+      const cacheWriteInputTokens = usage?.inputTokens.cacheWrite ?? null;
       const row: AiUsageRecord = {
         userId: attribution.userId ?? null,
         teamId: attribution.teamId,
@@ -329,6 +342,8 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         outcome,
         inputTokens,
         outputTokens,
+        cachedInputTokens,
+        cacheWriteInputTokens,
         totalTokens: inputTokens + outputTokens,
         latencyMs: Math.min(2147483647, Math.max(0, Math.round(performance.now() - startedAt))),
       };
@@ -340,7 +355,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
       const statusCode = typeof failure?.statusCode === "number" && Number.isInteger(failure.statusCode) && failure.statusCode >= 100 && failure.statusCode <= 599
         ? failure.statusCode : null;
       const observation = (async () => {
-        row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens);
+        row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
         await Promise.allSettled([
           logAiUsage(row),
           recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
@@ -357,6 +372,36 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   };
   return {
     specificationVersion: "v4",
+    transformParams: async ({ params }) => {
+      if (!isHaiku55Model(modelId)) return params;
+      // Check at inference so raw ids, saved choices and BYOK cannot bypass the flag.
+      const enabled = await import("@/app/api/ai/_lib/planGate")
+        .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
+        .catch(() => false);
+      if (!enabled) throw new Error("This AI model is unavailable.");
+      const { temperature: _temperature, topP: _topP, topK: _topK, ...supportedParams } = params;
+      // Adaptive thinking shares maxOutputTokens with the answer and can exhaust
+      // these small budgets before emitting any text or structured output.
+      const directOutput = params.responseFormat?.type === "json" ||
+        (params.maxOutputTokens != null && params.maxOutputTokens <= 1200);
+      return {
+        ...supportedParams,
+        providerOptions: {
+          ...params.providerOptions,
+          anthropic: {
+            ...params.providerOptions?.anthropic,
+            thinking: { type: directOutput ? "disabled" : "adaptive" },
+            effort: directOutput ? "low" : "medium",
+          },
+          ...(directOutput && (context.provider === "byok:openrouter" || context.provider === "openrouter") ? {
+            openrouter: {
+              ...params.providerOptions?.openrouter,
+              reasoning: { enabled: false },
+            },
+          } : {}),
+        },
+      };
+    },
     wrapGenerate: async ({ doGenerate, params }) => {
       const record = start(params.prompt);
       try {
@@ -412,13 +457,43 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
   };
 }
 
-function traceLanguageModel(model: LanguageModel, provider: string): LanguageModel {
+function traceLanguageModel(
+  model: LanguageModel,
+  provider: string,
+  replacement?: () => LanguageModel,
+): LanguageModel {
   if (typeof model === "string") throw new Error("A resolved AI model is required");
   const context: ModelUsageContext = { provider };
-  const traced = wrapLanguageModel({
+  let traced = wrapLanguageModel({
     model,
     middleware: createUsageTracingMiddleware(context, model.modelId),
   });
+  if (replacement && isHaiku45Model(model.modelId)) {
+    // Resolve before the original model's allowance and tracing middleware run.
+    const upgradedModel = async () => {
+      const enabled = await import("@/app/api/ai/_lib/planGate")
+        .then(({ haiku55ModelEnabled }) => haiku55ModelEnabled(context.userId))
+        .catch(() => false);
+      if (!enabled) return null;
+      const upgraded = replacement();
+      configureAiModelUsage(upgraded, context);
+      return upgraded as ReturnType<typeof wrapLanguageModel>;
+    };
+    traced = wrapLanguageModel({
+      model: traced,
+      middleware: {
+        specificationVersion: "v4",
+        wrapGenerate: async ({ doGenerate, params }) => {
+          const upgraded = await upgradedModel();
+          return upgraded ? upgraded.doGenerate(params) : doGenerate();
+        },
+        wrapStream: async ({ doStream, params }) => {
+          const upgraded = await upgradedModel();
+          return upgraded ? upgraded.doStream(params) : doStream();
+        },
+      },
+    });
+  }
   modelUsageContexts.set(traced, context);
   return traced;
 }
@@ -430,14 +505,34 @@ export function resolveAiModel(
   modelOption?: TAiModelOption,
   directProvider?: TAiProviderKey,
 ): LanguageModel {
+  const persistedModelId = isCustomEndpointConfig(byokCredential) ? byokCredential.modelId : modelId;
   return traceLanguageModel(
     resolveUntracedAiModel(provider, modelId, byokCredential, modelOption, directProvider),
     aiUsageProviderForCredential(provider, byokCredential, modelOption, directProvider),
+    isHaiku45Model(persistedModelId)
+      ? () => resolveAiModel(
+          provider,
+          provider === "claude"
+            ? isVercelAiGatewayKey(byokCredential) ? "claude-haiku-5.5" : "claude-haiku-5-5"
+            : resolveHaikuModelId(modelId, true),
+          isCustomEndpointConfig(byokCredential)
+            ? { ...byokCredential, modelId: resolveHaikuModelId(persistedModelId, true) }
+            : byokCredential,
+          modelOption ? { ...modelOption, directModel: "claude-haiku-5-5" } : undefined,
+          directProvider,
+        )
+      : undefined,
   );
 }
 
 export function resolveGatewayModel(modelSlug: string, gatewayApiKey?: string): LanguageModel {
-  return traceLanguageModel(resolveUntracedGatewayModel(modelSlug, gatewayApiKey), "gateway");
+  return traceLanguageModel(
+    resolveUntracedGatewayModel(modelSlug, gatewayApiKey),
+    "gateway",
+    isHaiku45Model(modelSlug)
+      ? () => resolveGatewayModel(resolveHaikuModelId(modelSlug, true), gatewayApiKey)
+      : undefined,
+  );
 }
 
 export function aiUsageProviderForCredential(
@@ -471,6 +566,12 @@ function resolveUntracedGatewayModel(
   modelSlug: string,
   gatewayApiKey?: string,
 ): LanguageModel {
+  if (process.env.HT_PREMERGE_AI_STUB === "1" || process.env.HT_PREMERGE_QUEUE_STUB === "1") {
+    const { createPremergeLanguageModel } = require("./premergeModel") as typeof import("./premergeModel");
+    const stub = createPremergeLanguageModel(modelSlug);
+    if (stub) return stub;
+  }
+
   const teamKey = isVercelAiGatewayKey(gatewayApiKey)
     ? gatewayApiKey?.trim()
     : undefined;

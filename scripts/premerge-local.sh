@@ -18,6 +18,11 @@ while [ "$#" -gt 0 ]; do
   shift 2
 done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# A symlinked node_modules lets npm ci empty the shared install (YPER4-247). Backstop: refuse it.
+if [ "$action" = up ] && [ -L "$root/node_modules" ]; then
+  echo "premerge-local: $root/node_modules is a symlink. Replace it with a hardlinked copy: scripts/worktree-node-modules.sh <main checkout> $root" >&2
+  exit 1
+fi
 # Inherited production variables must not reach npm, Prisma, the seed or Next.
 if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   launcher=()
@@ -26,7 +31,7 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
-  exec python3 "$root/scripts/premerge-local-sweep.py" "$action"
+  exec python3 "$root/scripts/proc-watchdog.py" "$action"
 fi
 cd "$root"
 umask 077
@@ -125,13 +130,13 @@ printf 'POSTGRES_DB=hypertask_smoke\nPOSTGRES_USER=browser_smoke\nPOSTGRES_PASSW
 printf 'SOKETI_DEFAULT_APP_ID=app-id\nSOKETI_DEFAULT_APP_KEY=app-key\nSOKETI_DEFAULT_APP_SECRET=%s\n' "$pusher_secret" >"$state/soketi.env"
 docker run -d --name "$prefix-postgres" -p 127.0.0.1::5432 --env-file "$state/postgres.env" \
   --health-cmd 'pg_isready -U browser_smoke -d hypertask_smoke' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
+  ghcr.io/hypertask-ai/ci-postgres:16-bookworm@sha256:bb3e1a57e5407e0a5280b4211980a5e537f4abd234a87014ac979849a78dd825
 docker run -d --name "$prefix-redis" -p 127.0.0.1::6379 \
   --health-cmd 'redis-cli ping' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
+  ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf
 docker run -d --name "$prefix-soketi" -p 127.0.0.1::6001 --env-file "$state/soketi.env" \
   --health-cmd 'wget --no-verbose --tries=1 --spider http://127.0.0.1:6001' --health-interval 2s --health-timeout 5s --health-retries 30 \
-  quay.io/soketi/soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
+  ghcr.io/hypertask-ai/ci-soketi:1.6-16-alpine@sha256:5e45fe1adbf2d4ef8022d0126a3c7e4371b7b08f35784b76a2dc353954ee885c
 for service in postgres redis soketi; do
   for ((attempt=0; attempt<90; attempt++)); do
     health=$(docker inspect --format '{{.State.Health.Status}}' "$prefix-$service")
@@ -155,6 +160,8 @@ url="http://127.0.0.1:$app_port"
   printf 'TURBOPUFFER_BASE_URL=http://127.0.0.1:%s\nTURBOPUFFER_API_KEY=disposable-fixture\n' "$search_port"
   printf 'SESSION_SECRET=%s\nJWT_SECRET=%s\nBETTER_AUTH_SECRET=%s\n' "$(secret)" "$(secret)" "$(secret)"
   printf 'BETTER_AUTH_URL=%s\nQSTASH_CALLBACK_BASE_URL=%s\nQSTASH_AUTO_REGISTER_SWEEP=false\n' "$url" "$url"
+  # Server-side self calls read this; NEXT_PUBLIC_* is baked at build time, so it is set before next build.
+  printf 'NEXT_PUBLIC_BASEURL=%s\n' "$url"
   printf 'NEXT_PUBLIC_PUSHER_KEY=app-key\nNEXT_PUBLIC_PUSHER_HOST=127.0.0.1\nNEXT_PUBLIC_PUSHER_PORT=%s\nNEXT_PUBLIC_PUSHER_USE_TLS=false\nNEXT_PUBLIC_PUSHER_CLUSTER=mt1\n' "$pusher_port"
   printf 'PUSHER_APP_ID=app-id\nPUSHER_KEY=app-key\nPUSHER_SECRET=%s\nPUSHER_HOST=127.0.0.1\nPUSHER_PORT=%s\nPUSHER_USE_TLS=false\nPUSHER_CLUSTER=mt1\n' "$pusher_secret" "$pusher_port"
 } >"$state/credentials.env"
@@ -164,6 +171,7 @@ set -a
 source "$state/credentials.env"
 set +a
 export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
+export HT_PREMERGE_AI_STUB=1 HT_PREMERGE_QUEUE_STUB=1
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
 setsid node "$root/scripts/premerge-local-search.mjs" "$state/card-fixture.json" "$search_port" >"$state/search.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &

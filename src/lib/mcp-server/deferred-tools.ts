@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { TOOL_ANNOTATIONS } from './config/tool-annotations'
 import {
   DESCRIBE_TOOL_NAME,
   SEARCH_TOOLS_NAME,
@@ -36,6 +37,7 @@ export type ListedTool = {
   description: string
   inputSchema: Record<string, unknown>
   outputSchema?: Record<string, unknown>
+  annotations?: PortableTool['annotations']
 }
 
 const MINIMAL_INPUT_SCHEMA: Record<string, unknown> = { type: 'object' }
@@ -71,6 +73,7 @@ export function listToolsDeferred(tools: readonly CatalogTool[]): ListedTool[] {
     name: tool.name,
     description: deferredDescription(tool),
     inputSchema: META_LIST_SCHEMAS[tool.name] ?? MINIMAL_INPUT_SCHEMA,
+    ...(tool.annotations ? { annotations: tool.annotations } : {}),
   }))
 }
 
@@ -88,6 +91,7 @@ export function listToolsFull(tools: readonly CatalogTool[]): ListedTool[] {
     name: tool.name,
     description: tool.description,
     inputSchema: jsonSchemaFor(tool.parameters),
+    ...(tool.annotations ? { annotations: tool.annotations } : {}),
   }))
 }
 
@@ -131,6 +135,7 @@ export function describeToolCatalog(
     description: tool.description,
     inputSchema: withSharedDefs(tool.inputSchema ?? jsonSchemaFor(tool.parameters)),
     outputSchema: { ...(tool.outputSchema ?? TOOL_OUTPUT_SCHEMA) },
+    ...(tool.annotations ? { annotations: tool.annotations } : {}),
     ...(tool.input_examples?.length ? { input_examples: tool.input_examples } : {}),
   }
 }
@@ -160,11 +165,12 @@ const describeParameters = z
   })
   .strict()
 
-export function createMetaTools(getCatalog: () => readonly CatalogTool[]): CatalogTool[] {
+export function createMetaTools(getCatalog: () => readonly CatalogTool[], v2 = false): CatalogTool[] {
   const searchTools: CatalogTool = {
     name: SEARCH_TOOLS_NAME,
     description: `${TOOL_SUMMARIES.SEARCH_TOOLS}\n\nUse this when the client loaded only the meta tools. Match on name or description, then call ${DESCRIBE_TOOL_NAME} before the real tool.`,
     parameters: searchParameters,
+    ...(v2 ? { annotations: TOOL_ANNOTATIONS[SEARCH_TOOLS_NAME] } : {}),
     execute: async (args) => {
       const parsed = searchParameters.parse(args)
       return JSON.stringify({
@@ -177,6 +183,7 @@ export function createMetaTools(getCatalog: () => readonly CatalogTool[]): Catal
     name: DESCRIBE_TOOL_NAME,
     description: `${TOOL_SUMMARIES.DESCRIBE_TOOL}\n\nCall this immediately before tools/call when the client has only the short catalog.`,
     parameters: describeParameters,
+    ...(v2 ? { annotations: TOOL_ANNOTATIONS[DESCRIBE_TOOL_NAME] } : {}),
     execute: async (args) => {
       const parsed = describeParameters.parse(args)
       const described = describeToolCatalog(getCatalog(), parsed.name)
@@ -199,6 +206,6 @@ export function toolsForConnect(
     return tools
   }
   const catalog: CatalogTool[] = [...tools]
-  catalog.push(...createMetaTools(() => catalog))
+  catalog.push(...createMetaTools(() => catalog, tools.some((tool) => tool.annotations)))
   return catalog
 }

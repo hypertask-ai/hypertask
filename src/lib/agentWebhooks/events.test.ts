@@ -16,6 +16,7 @@ test("agent webhook discovery describes events, signing, and retries", () => {
     "task.updated",
     "task.created",
     "chat.message",
+    "comment.reaction",
     "run.created",
     "run.prompted",
     "run.stopped",

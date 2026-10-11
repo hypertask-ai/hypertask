@@ -5,11 +5,15 @@ import {
   INSTALL_COMMAND,
   LOGIN_COMMAND,
 } from "@/components/Modals/CliInstall/constants";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7033_CLI_INSTALL_COMMAND_FLAG } from "@/lib/flags/keys";
+import { CLI_WINDOWS_NOTE } from "@/lib/onboarding/installCommands";
 import SettingsCard from "./SettingsCard";
 import SettingsCodeRow from "./SettingsCodeRow";
 import SettingsSectionShell from "./SettingsSectionShell";
 
 const CliSection = () => {
+  const cliInstallCommandEnabled = useFlag(HTPR_7033_CLI_INSTALL_COMMAND_FLAG);
   return (
     <SettingsSectionShell title="CLI">
       <SettingsCard title="Install">
@@ -17,6 +21,11 @@ const CliSection = () => {
           Install the Hypertask command-line interface on macOS or Linux.
         </p>
         <SettingsCodeRow value={INSTALL_COMMAND} />
+        {cliInstallCommandEnabled && (
+          <p className="px-2 text-dense font-medium text-text-light-gray">
+            {CLI_WINDOWS_NOTE}
+          </p>
+        )}
       </SettingsCard>
 
       <SettingsCard title="Sign In">

@@ -41,6 +41,13 @@ test("finds an existing destination after the first PostHog page", async () => {
   );
 });
 
+test("prefers the full-access PostHog key over the read-only personal key", async () => {
+  const { postHogApiKey } = await import(scriptUrl);
+  assert.equal(postHogApiKey({ POSTHOG_FULL_API_KEY: "full", POSTHOG_PERSONAL_API_KEY: "ro" }), "full");
+  assert.equal(postHogApiKey({ POSTHOG_FULL_API_KEY: " ", POSTHOG_PERSONAL_API_KEY: "ro" }), "ro");
+  assert.throws(() => postHogApiKey({}), /POSTHOG_FULL_API_KEY or POSTHOG_PERSONAL_API_KEY is required/);
+});
+
 test("rejects pagination outside the configured PostHog endpoint", async () => {
   const { findDestination } = await import(scriptUrl);
   await assert.rejects(

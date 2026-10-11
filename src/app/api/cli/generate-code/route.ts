@@ -1,3 +1,5 @@
+import { loadCurrentUser } from '@/lib/auth/currentUser';
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from '@/lib/flags';
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { isValidUser } from '@/utils/edgeHelpers';
@@ -11,11 +13,19 @@ export async function POST(request: NextRequest) {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get('nookies_user');
     
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
 
-    const { isValid, user } = isValidUser(userCookie.value);
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
     
     if (!isValid || !user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

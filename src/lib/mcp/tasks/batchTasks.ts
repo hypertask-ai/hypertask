@@ -10,7 +10,7 @@ import {
   type TaskClearAssigneesHandler,
   type TaskUpdateAssigneeHandler,
   type UpdateTaskBody,
-} from '@/lib/mcp/tasks/updateTask'
+} from '@/lib/mcp/tasks/updateTaskSelector'
 import type { TaskDetail } from '@/lib/mcp/tasks/types'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'

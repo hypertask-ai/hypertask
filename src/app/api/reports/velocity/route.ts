@@ -1,3 +1,5 @@
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import {
   buildVelocityReport,
@@ -25,7 +27,18 @@ async function getCurrentUserFromCookies(): Promise<CookieUser | null> {
 }
 
 export async function GET(request: NextRequest) {
-  const cookieUser = await getCurrentUserFromCookies();
+  const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+  let restCompat = false;
+  if (currentUser) {
+    try {
+      restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+    } catch {
+      // Flag lookup failure preserves the legacy entry path.
+    }
+  }
+  const cookieUser = restCompat && currentUser
+    ? currentUser.user
+    : await getCurrentUserFromCookies();
   const userId = Number(cookieUser?.id);
   if (!Number.isInteger(userId) || userId <= 0) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

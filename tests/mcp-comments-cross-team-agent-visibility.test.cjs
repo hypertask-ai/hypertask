@@ -140,7 +140,9 @@ function loadRoute(comments) {
   };
   const loaded = new Module(routePath);
   loaded.filename = routePath;
-  loaded.require = (request) => stubs[request] ?? require(request);
+  loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
+      ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
+      : stubs[request] ?? require(request);
   loaded._compile(javascript, routePath);
   return { GET: loaded.exports.GET, getQuery: () => commentFindManyQuery };
 }

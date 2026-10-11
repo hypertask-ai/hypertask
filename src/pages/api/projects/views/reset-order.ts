@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   resetUserViewOrder,
@@ -31,4 +32,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/reset-order")).POST,
+);

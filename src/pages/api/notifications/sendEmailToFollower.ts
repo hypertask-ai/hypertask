@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiRequest, NextApiResponse } from "next";
 import { sendMentionEmail } from "@/utils/controllers/notifications/sendMentionEmail";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -54,4 +55,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/notification-writes/follower-email")).POST,
+);

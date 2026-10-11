@@ -183,6 +183,10 @@ test('shared server writer gates compose before accessing a board; legacy writer
 test('actual create endpoint rejects disabled Compose before database work and preserves legacy/auth checks', async () => {
   let enabled = false, session = { userId: 985 }, flagReads = 0, userReads = 0, boardReads = 0;
   const stubs = {
+    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
+    '@/lib/api/task-writes/create-global-effects': {},
+    '@/lib/ai/taskWriterDueDate': {},
+    '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': createJiti(__filename)(path.join(root, 'src/lib/ai/composeTaskTarget.ts')),
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, isFeatureEnabled: async (key, userId) => {
       assert.equal(key, flag); assert.equal(userId, 985); flagReads++; return enabled;
@@ -307,6 +311,10 @@ test('save existing target enforces both flags, edit permissions, board match an
   let compose = true, newWindow = false, authorized = true, target = null;
   const taskReads = [], updates = [], broadcasts = [], flags = [];
   const stubs = {
+    '@/lib/api/task-writes/route': { withTaskWriteFlag: (handler) => handler },
+    '@/lib/api/task-writes/create-global-effects': {},
+    '@/lib/ai/taskWriterDueDate': {},
+    '@/lib/flags/keys': {},
     '@/lib/ai/composeTaskTarget': { isEmptyComposeTarget },
     '@/lib/flags': { HTPR_6929_COMPOSE_TASK_WRITER_FLAG: flag, HTPR_6937_NEW_TASK_WINDOW_FLAG: newFlag,
       isFeatureEnabled: async (key) => { flags.push(key); return key === flag ? compose : newWindow; } },
@@ -487,4 +495,27 @@ test('an error-only stream never claims that the model is writing', async () => 
     assert.equal(result.writerFailed, true);
     assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context', 'Saving the ticket']);
   });
+});
+
+test('HTPR-7085 failed writer shows the server reason when asked, the generic line otherwise, and still saves the note', async () => {
+  const failing = { ok: false, status: 402, json: async () => ({ error: 'Monthly AI allowance used up' }), text: async () => '' };
+  const sse = 'event: error\ndata: {"code":"task-writer-stream-error","content":"Provider is down"}\n\n';
+  const cases = [
+    [{ response: failing }, true, 'Monthly AI allowance used up'],
+    [{ html: sse }, true, 'Provider is down'],
+    [{ response: failing }, false, undefined],
+    [{ html: 'event: error\ndata: {"content":"failed"}\n\n' }, true, undefined],
+    [{ writerThrows: true }, true, undefined],
+  ];
+  for (const [config, explain, reason] of cases) {
+    await withWriter(config, async ({ createComposedTask, composeTaskAssistantMessage, project, creates }) => {
+      const result = await createComposedTask({ text: 'My note', files: [], project, userId: 985, explainWriterFailure: explain });
+      assert.equal(result.writerFailed, true);
+      assert.equal(result.writerFailureReason, reason);
+      assert.equal(creates[0].title, 'My note');
+      const message = composeTaskAssistantMessage('QASA-44', true, false, undefined, result.writerFailureReason);
+      if (reason) assert.match(message, new RegExp(`unavailable: ${reason}\\. I kept your original text`));
+      else assert.match(message, /The task writer was unavailable, so I kept your original text/);
+    });
+  }
 });

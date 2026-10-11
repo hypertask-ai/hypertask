@@ -108,6 +108,8 @@ function loadRoute({
     { default: async () => ({ id: "project-view-1" }) },
   );
 
+  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
+
   const jiti = require("jiti")(
     path.join(root, `tests/reset-view-jiti-${++entryId}.cjs`),
     {

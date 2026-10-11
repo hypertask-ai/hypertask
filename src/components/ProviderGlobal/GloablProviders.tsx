@@ -18,6 +18,7 @@ import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { KeyCodes, KeyValues } from "@/lib/constants/keyboard-handler";
 import { useQueryClient } from "@tanstack/react-query";
+import { useInboxEFirstPressQueue } from "@/hooks/useInboxEFirstPressQueue";
 import { IProject } from "@/models/model";
 import CachedTaskDetailNavigation from "@/components/PageComponents/TaskDetail/CachedTaskDetailNavigation";
 
@@ -177,6 +178,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
+import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
@@ -622,6 +624,8 @@ export default function GlobalProvider({
   // ------------------------ shortcuts / routing helpers
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
+  useInboxEFirstPressQueue(queryClient);
+  useInboxLegacyWarm(queryClient, authenticatedUserId, pathname, mbl);
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };

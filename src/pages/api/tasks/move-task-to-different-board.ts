@@ -1,5 +1,6 @@
 // /api/tasks/move-task-to-different-board
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { moveTaskToDifferentBoard } from "@/utils/controllers/tasks/moveToDifferentBoard";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -54,4 +55,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/move-to-different-board")).POST,
+);

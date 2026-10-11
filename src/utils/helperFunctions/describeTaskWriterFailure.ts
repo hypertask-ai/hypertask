@@ -2,6 +2,21 @@
 //
 // Lives outside the hook so it can be tested: importing the hook pulls in the Recoil store
 // and React components, which the test runner cannot load.
+export function describeTaskWriterStreamFailure(text: string): string | null {
+  for (const match of text.matchAll(/event: error\r?\ndata: ([^\r\n]+)\r?\n\r?\n/g)) {
+    try {
+      const error = JSON.parse(match[1]);
+      // These markers are emitted only by the HTPR-7060 and HTPR-7077 server gates.
+      if ((error.code === "empty-task-writer-draft" || error.code === "task-writer-stream-error") && typeof error.content === "string") {
+        return error.content;
+      }
+    } catch {
+      // Incomplete or non-JSON frames are not this flagged error.
+    }
+  }
+  return null;
+}
+
 export async function describeTaskWriterFailure(
   response: Response
 ): Promise<string> {

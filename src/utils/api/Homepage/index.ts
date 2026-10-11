@@ -2,6 +2,7 @@ import { type BoardTasksPayload, BOARD_TASKS_KEY, hydrateBoardSections, hydrateB
 export { type BoardTasksPayload, BOARD_TASKS_KEY, hydrateBoardSections, hydrateBoardWithPayload, isBoardPayloadHydrated } from "@/lib/firstScreen/boardPayload";
 import { IProject, ISection, ITask, IUser, IView } from "@/models/model";
 import axios from "axios";
+import type { getBoardDetail } from "@/lib/api/typedClient";
 import axiosClient from "@/utils/axiosClient";
 import { expandInboxApiResponse } from "@/utils/helperFunctions/helperFunctions";
 import {
@@ -117,6 +118,7 @@ export const fetchBoardTasks = async (
     projectId:number,
     userId:number,
     signal?:AbortSignal,
+    typedRead?:typeof getBoardDetail,
 ):Promise<BoardTasksPayload> => {
     const readinessTraceScope = getBoardReadinessTraceScope()
     markBoardReadinessPhase("boardRequestStart", readinessTraceScope)
@@ -136,10 +138,15 @@ export const fetchBoardTasks = async (
 
     markBoardReadinessPhase("boardFallbackStart", readinessTraceScope)
     try {
-        const res = await axios.post(`/api/projects/boardTasks`,
-            { projectId, userId },
-            { signal },
-        )
+        let res;
+        if (typedRead) {
+            res = await typedRead({ projectId, userId }, signal)
+        } else {
+            res = await axios.post(`/api/projects/boardTasks`,
+                { projectId, userId },
+                { signal },
+            )
+        }
         return {
             project: res.data?.project,
             tasks: res.data?.tasks ?? [],

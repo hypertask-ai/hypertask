@@ -1,0 +1,7 @@
+[Unit]
+Description=Kill stale gh polling loops daily
+[Timer]
+OnCalendar=daily
+Persistent=true
+[Install]
+WantedBy=timers.target

@@ -1,7 +1,11 @@
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { useMcpToken } from "@/components/Modals/McpToken";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
-import { defaultAiModelOption } from "@/lib/aiModelOptions";
+import { defaultAiModelOption, getDefaultAiModelOptionForPlan } from "@/lib/aiModelOptions";
 import { ITeamByokApiKey, IUser } from "@/models/model";
 import { processImagesForHyperMention } from "@/utils/helperFunctions/helperFunctions";
 import toast from "react-hot-toast";
@@ -43,8 +47,15 @@ interface IPostImageGeneration {
 }
 
 export function useHyperMention() {
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const { token } = useMcpToken();
   const currentBoardBilling = useCurrentBoardBilling();
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const defaultBilling = currentBoardBilling;
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    : defaultAiModelOption;
 
   async function postHyperMention(
     postFrom: "Description" | "Comment",
@@ -109,12 +120,12 @@ export function useHyperMention() {
             displayName: currentUser?.displayName,
           },
           sourceSelected:
-            sourceSelected === "" ? defaultAiModelOption.source : sourceSelected,
+            sourceSelected === "" ? defaultModelOption.source : sourceSelected,
           modelSelected:
-            modelSelected === "" ? defaultAiModelOption.model : modelSelected,
+            modelSelected === "" ? defaultModelOption.model : modelSelected,
           modelOptionId:
             modelOptionId ??
-            (modelSelected === "" ? defaultAiModelOption.id : modelSelected),
+            (modelSelected === "" ? defaultModelOption.id : modelSelected),
           modelMentionLabel,
           ...(ownerId !== undefined ? { ownerId } : {}),
           images64,

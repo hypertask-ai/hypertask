@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import {
   ProfileValidationError,
   updateOwnProfile,
@@ -37,6 +38,7 @@ function hasField(body: ProfilePatchBody, field: keyof ProfilePatchBody) {
  * Authentication: Bearer token via MCP auth.
  */
 export async function PATCH(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: { id: number; email: string } | null = null
 
   try {
@@ -147,4 +149,6 @@ export async function PATCH(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
