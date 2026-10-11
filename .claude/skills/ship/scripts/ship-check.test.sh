@@ -1095,5 +1095,51 @@ D deployed YPER4-777 >/dev/null && bad "dropped passed deployed after the PR reo
 echo CLOSED > "$DROP_DIR/state-901"
 D bind YPER4-777 901 >/dev/null && [ ! -e "$E/YPER4-777/dropped" ] && ok "bind clears dropped" || bad "bind did not clear dropped"
 
+# nochange path (YPER4-272): infra ticket solved with no code change. Stubs for gh, hypertask and a local origin.
+NC="$E/nc"; mkdir -p "$NC/bin" "$NC/work"
+git init -q --bare "$NC/origin.git"; git clone -q "$NC/origin.git" "$NC/work" 2>/dev/null
+git -C "$NC/work" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+git -C "$NC/work" push -q origin HEAD:refs/heads/production 2>/dev/null
+cat > "$NC/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == pr && $2 == list ]]; then cat "$NC/prs"
+elif [[ $1 == api && $2 == */compare/* ]]; then cat "$NC/ahead"
+else exit 1; fi
+MOCK
+cat > "$NC/bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
+MOCK
+chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
+N() { SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
+echo '[]' > "$NC/prs"; echo 0 > "$NC/ahead"
+echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a ticket with no comment" || ok "nochange refuses a ticket with no comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> the setting was already right.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an opener without evidence" || ok "nochange refuses an opener with no evidence"
+echo '{"success":true,"comments":[{"text":"<p>Note: https://example.com/x</p><p><strong>Resolved without a change:</strong> fine.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted evidence in another comment" || ok "nochange needs the opener and evidence in one comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+N nochange HTPR-901 >/dev/null && bad "nochange accepted an app ticket" || ok "nochange refuses an app ticket (HTPR)"
+echo '[{"number":5,"title":"YPER4-901 [INFRA] a fix"}]' > "$NC/prs"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "nochange refuses an open PR"
+echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-901-fix 2>/dev/null; echo 2 > "$NC/ahead"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote branch" || ok "nochange refuses an origin branch ahead of base"
+echo 0 > "$NC/ahead"
+G 2 vcc task move YPER4-901 $DONE
+echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener plus URL)" || bad "nochange pass case"
+echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
+for x in merged deployed proof pr cleaned; do
+  N $x YPER4-901 | grep -q "$x ok" && ok "nochange passes $x" || bad "nochange $x"
+done
+echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done after nochange" || bad "guard blocks Done after nochange"
+G 2 vcc task move YPER4-902 $DONE
+echo 830 > "$E/YPER4-901/pr"
+N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
+
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'

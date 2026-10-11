@@ -5,6 +5,9 @@
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
+#   ship-check nochange <T>      infra ticket (YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
+#                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
+#                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
@@ -75,7 +78,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -85,7 +88,7 @@ check_duplicate() {
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" "$EVID/$1/nochange" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
 }
 
@@ -100,7 +103,7 @@ check_dropped() {
       (.text // "") | gsub("<[^>]*>"; "") | gsub("&quot;|&#x22;|&#34;"; "\"")
       | test("^\\s*Decided against:\\s*Valentin,\\s*20[0-9]{2}-[0-9]{2}-[0-9]{2}(,[^:\"“”]{0,40})?:\\s*[\"“][^\"“”]+[\"”]"))' >/dev/null \
     || fail "$1 has no comment opening with: Decided against: Valentin, <YYYY-MM-DD>: \"<his words>\""
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
     && echo "recorded $1 as dropped (PR $2 closed unmerged)"
 }
 
@@ -115,6 +118,43 @@ dropped_ok() {
   echo "$1 ok (dropped: PR $n closed unmerged)"
 }
 
+# Infra ticket solved with no code change (YPER4-272). The "Resolved without a change:" comment must carry evidence,
+# and no PR may exist for the ticket: no open PR titled with it, no bound PR, no origin branch named for it that is ahead of BASE.
+check_nochange() {
+  local t=${1:-} low cmts open repo=${SHIP_CHECKOUT:-} b ahead heads
+  [[ $t =~ ^(YPER4|HYFA)-[0-9]+$ ]] || fail "nochange is only for infra tickets (YPER4, HYFA); ${t:-<none>} is an app ticket or not a ticket id and needs the normal PR path"
+  [ -z "$(bound_pr "$t")" ] && [ ! -s "$EVID/$t/duplicate-of" ] && [ ! -s "$EVID/$t/dropped" ] \
+    || fail "$t has a bound PR (or a duplicate/dropped record); use the normal path"
+  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || fail "cannot read comments of $t"
+  # Visible text (tags removed, leading space dropped) must open with the phrase; the same comment must carry evidence.
+  jq -e '.comments | any(.[]; (.text // "") as $x
+      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
+      and ($x | test("https://[^ \"<>]+|<pre|<code")))' >/dev/null <<<"$cmts" \
+    || fail "$t has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with command output)"
+  open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
+    || fail "cannot read open PRs of $REPO"
+  jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open" && fail "$t has an open PR; use the normal path"
+  if [ -z "$repo" ]; then
+    [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
+    repo=$HOME/projects/hypertask
+  fi
+  low=${t,,}
+  heads=$(git -C "$repo" ls-remote --heads origin "*$low*" 2>/dev/null) || fail "cannot list origin branches"
+  while read -r _ b; do
+    [ -n "$b" ] || continue; b=${b#refs/heads/}
+    ahead=$(gh api "repos/$REPO/compare/$BASE...$b" --jq .ahead_by 2>/dev/null) || fail "cannot compare origin branch $b with $BASE"
+    [ "${ahead:-0}" = 0 ] || fail "origin branch $b has $ahead commit(s) not in $BASE; ship it or delete it first"
+  done <<<"$heads"
+  mkdir -p "$EVID/$t" && rm -f "$EVID/$t/branch" && date -u +%FT%TZ > "$EVID/$t/nochange" && echo "nochange ok"
+}
+
+# Nochange ticket: passes while no PR has been bound since (binding a PR clears the record).
+nochange_ok() {
+  [ -s "$EVID/$2/nochange" ] || return 1
+  [ -z "$(bound_pr "$2")" ] || fail "$2 has a bound PR; the nochange record no longer applies"
+  echo "$1 ok (nochange: resolved without a change)"
+}
+
 merge_sha() {
   local row n state sha
   row=$(pr_row "$1") || fail "${row#FAIL: }"
@@ -125,6 +165,7 @@ merge_sha() {
 }
 
 check_pr() {
+  nochange_ok pr "$1" && return 0
   local row; row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
   # A duplicate's PR was checked at bind time and is merged; its original ticket may since be deleted.
@@ -139,10 +180,11 @@ check_pr() {
   fi
 }
 
-check_merged() { dropped_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
+check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
 check_deployed() {
   dropped_ok deployed "$1" && return 0
+  nochange_ok deployed "$1" && return 0
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
@@ -269,6 +311,7 @@ newest_successful_production_sha() {
 check_proof() {
   local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
   dropped_ok proof "$1" && return 0
+  nochange_ok proof "$1" && return 0
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" \
@@ -298,6 +341,7 @@ check_done() {
 }
 
 check_cleaned() {
+  if nochange_ok cleaned "$1" >/dev/null; then echo "cleaned ok (nochange, no branch or PR of this ticket)"; return 0; fi
   local n b rc wt repo=${SHIP_CHECKOUT:-}
   if [ -z "$repo" ]; then
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
@@ -699,6 +743,7 @@ case "${1:-}" in
   branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
   dropped) check_dropped "$2" "$3" ;;
+  nochange) check_nochange "${2:-}" ;;
   premerge) check_title "$2"; check_premerge "$2" ;;
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
@@ -710,5 +755,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,19p' "$0"; exit 1 ;;
+  *) sed -n '2,22p' "$0"; exit 1 ;;
 esac
