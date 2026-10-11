@@ -369,3 +369,53 @@ test('layout lock: ticket page first load stays under the CLS budget', async ({ 
   expect(composerJumps, `layout lock: the comment box moved after it was visible (${testInfo.project.name}). Shifts:\n${detail}`).toEqual([])
   expect(worst.value, `layout lock: ticket first load CLS ${worst.value.toFixed(4)} exceeds ${CLS_BUDGET} (${testInfo.project.name}). Shifts:\n${detail}`).toBeLessThanOrEqual(CLS_BUDGET)
 })
+
+// HTPR-7116: on a phone the ticket opened from a board card vanished again a moment after it
+// showed, because the description editor chunk loaded after the reveal suspended the
+// HTPR-6991 Back boundary. Hold the comments and that chunk back so the race happens every run.
+test('layout lock: phone ticket opened from a board card stays on screen while the editor loads', async ({ page }, testInfo) => {
+  test.skip(testInfo.project.name !== 'Mobile', 'phone ticket open')
+  test.setTimeout(60_000)
+  const fixture = JSON.parse(readFileSync(fixturePath, 'utf8')) as { taskId: number; detailPath: string; flags: Record<string, boolean> }
+  test.skip(!fixture.flags['htpr-6991-back-first-open'] || !fixture.flags['htpr-6752-instant-ticket-open'], 'no Back boundary around the instant ticket')
+  // The seeded description is plain, so it would take HTPR-7091's static path. Rich descriptions
+  // (images, mentions, code) mount the editor directly: take that path here.
+  await page.route('**/api/flags*', async (route) => {
+    const response = await route.fetch()
+    const json = await response.json() as { flags?: Record<string, boolean> }
+    if (json.flags) json.flags['htpr-7091-static-description-first'] = false
+    await route.fulfill({ response, json })
+  })
+  // Comments that arrive after the reveal (a phone network) make the editor mount late.
+  await page.route('**/api/comments/getByTask*', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.continue()
+  })
+  await page.route('**/_next/static/chunks/**', async (route) => {
+    const response = await route.fetch()
+    const body = await response.text()
+    if (body.includes('Edit description')) await new Promise((resolve) => setTimeout(resolve, 1500))
+    await route.fulfill({ response, body })
+  })
+  await page.addInitScript(() => {
+    const state = { shownAt: 0, hiddenAt: 0 }
+    ;(window as unknown as { __ticketOpen: typeof state }).__ticketOpen = state
+    const check = () => {
+      const title = document.querySelector('#title-input')
+      const visible = !!title && title.getClientRects().length > 0
+      if (visible && !state.shownAt) state.shownAt = performance.now()
+      else if (!visible && state.shownAt && !state.hiddenAt) state.hiddenAt = performance.now()
+    }
+    new MutationObserver(check).observe(document, { attributes: true, attributeFilter: ['style', 'hidden', 'class'], childList: true, subtree: true })
+  })
+  await page.goto(withRealtime(process.env.SMOKE_BOARD_PATH!), { waitUntil: 'load' })
+  const card = page.locator(`#task-${fixture.taskId} a[href="${fixture.detailPath}"]`)
+  await expect(card).toBeVisible()
+  await card.click()
+  await expect(page.locator('#title-input')).toBeVisible({ timeout: 15_000 })
+  // Long enough for the held editor chunk to arrive and the panels to mount.
+  await page.waitForTimeout(4000)
+  const { shownAt, hiddenAt } = await page.evaluate(() => (window as unknown as { __ticketOpen: { shownAt: number; hiddenAt: number } }).__ticketOpen)
+  expect(hiddenAt, `layout lock: the ticket vanished ${Math.round(hiddenAt - shownAt)}ms after it showed`).toBe(0)
+  await expect(page.locator('#title-input')).toBeVisible()
+})

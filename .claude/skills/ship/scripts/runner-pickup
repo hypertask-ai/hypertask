@@ -4,7 +4,7 @@
 #   runner-pickup events <n> --dry-run  read runner n's agent inbox and print what would be sent (no send, no state)
 #   runner-pickup install <n>  copy scripts, hook and units to ~/.local/lib, enable the timer, register the hooks
 #   runner-pickup install-webhook  copy the webhook receiver and its unit, enable it (YPER4-256)
-# Backstop (YPER4-256): each tick also reads the agent inbox once and delivers unseen human comments, mentions,
+# Backstop (YPER4-256): each tick also reads the agent inbox once and hands unseen human comments, mentions,
 # assignments and notices to the live runner session through runner-deliver; the webhook receiver is the fast path.
 # Never calls GitHub. One read per tick, exponential backoff on errors, honors the agent-board-poll rate-limit marker.
 set -uo pipefail
@@ -36,13 +36,19 @@ install_units() {
   install -m 0755 "$here/runner-pickup" "$here/runner-deliver" "$here/runner-chat-reply" "$here/ship-identity" "$lib/"
   install -m 0755 "$repo/hooks/runner-inbox-stop.sh" "$lib/runner-inbox-stop.sh"
   install -m 0644 "$repo/systemd/runner-pickup@.service" "$repo/systemd/runner-pickup@.timer" "$unit_dir/"
-  # Register both hooks in the runner checkout's untracked local settings (idempotent).
+  # Register the hooks in the runner checkout's untracked local settings (idempotent). YPER4-284: PostToolUse hands board
+  # events over between tool calls; the "wait" entries run in the background (asyncRewake) and wake an idle session;
+  # the UserPromptSubmit "wait" restarts the waiter after a turn stopped with Esc (no Stop hook runs then).
+  # Registering them changes nothing until the session's slot is listed in $STATE/events-hook.enabled.
   hook_cmd="$lib/runner-inbox-stop.sh"
   [ -s "$settings" ] || { mkdir -p "$(dirname "$settings")"; echo '{}' > "$settings"; }
   tmp=$(mktemp "$settings.XXXXXX")
   jq --arg c "$hook_cmd" '
-    def addhook(ev; arg): .hooks[ev] = ((.hooks[ev] // []) | if any(.[]?.hooks[]?; .command == ($c + " " + arg)) then . else . + [{hooks:[{type:"command", command:($c + " " + arg)}]}] end);
-    .hooks = (.hooks // {}) | addhook("Stop"; "stop") | addhook("UserPromptSubmit"; "prompt")' "$settings" > "$tmp" \
+    def addhook(ev; arg; extra): .hooks[ev] = ((.hooks[ev] // []) | if any(.[]?.hooks[]?; .command == ($c + " " + arg)) then . else . + [{hooks:[{type:"command", command:($c + " " + arg)} + extra]}] end);
+    def wake: {asyncRewake: true, timeout: 2000000};
+    .hooks = (.hooks // {}) | addhook("Stop"; "stop"; {}) | addhook("UserPromptSubmit"; "prompt"; {}) | addhook("PostToolUse"; "post"; {})
+      | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake) | addhook("UserPromptSubmit"; "wait"; wake)
+      | .hooks |= with_entries(.value |= map(.hooks |= map(if .command == ($c + " wait") then .timeout = 2000000 else . end)))' "$settings" > "$tmp" \
     && mv "$tmp" "$settings" || { rm -f "$tmp"; die "cannot update $settings"; }
   systemctl --user daemon-reload && systemctl --user enable --now "runner-pickup@$n.timer" || die "cannot enable runner-pickup@$n.timer"
   echo "runner-pickup: installed for RUNNER $n (timer runner-pickup@$n.timer, hooks in $settings)"
@@ -132,7 +138,7 @@ retry_pending() {
       ok=1
       while IFS= read -r line; do
         [ -n "$line" ] || continue
-        jq -r '.text' <<<"$line" | "$DELIVER" "$target" >/dev/null 2>&1; rc=$?
+        jq -r '.text' <<<"$line" | RUNNER_DELIVER_ID=$(jq -r '.id // empty' <<<"$line") "$DELIVER" "$target" >/dev/null 2>&1; rc=$?
         # 0 delivered, 3 re-queued by runner-deliver itself; anything else stays in the work file.
         if [ "$rc" != 0 ] && [ "$rc" != 3 ]; then printf '%s\n' "$line" >> "$f.left" || { ok=0; break; }; fi
       done < "$f"
@@ -158,7 +164,8 @@ backstop() {
     if [ -n "$resp" ] && events=$(inbox_events "$n" "$resp") && [ -n "$events" ]; then
       bundle_message "$n" "$events" 400
       if [ "$BUNDLE_N" -gt 0 ]; then
-        "$DELIVER" "$n" <<<"$BUNDLE_MSG" >/dev/null 2>&1; rc=$?
+        bid="bundle:$(head -n "$BUNDLE_N" <<<"$events" | jq -r '.key' | sha256sum | cut -c1-32)"
+        RUNNER_DELIVER_ID=$bid "$DELIVER" "$n" <<<"$BUNDLE_MSG" >/dev/null 2>&1; rc=$?
         # 0 delivered, 3 queued by runner-deliver (it keeps the queue); anything else retries next tick.
         # Only the events that fit in the message are marked seen.
         if [ "$rc" = 0 ] || [ "$rc" = 3 ]; then head -n "$BUNDLE_N" <<<"$events" | jq -r '.keys[]' >> "$seenf"; fi
@@ -232,6 +239,9 @@ run_tick() {
   jq -n --argjson items "$merged" --argjson n "$n" --argjson now "$NOW" '{runner: $n, updatedAt: $now, items: $items}' > "$inbox.tmp" \
     && mv "$inbox.tmp" "$inbox"
   log "RUNNER $n: $(jq 'length' <<<"$merged") queued"
+  # Release the ticket lock first: the hook takes the events lock and then this lock, and backstop's delivery takes the
+  # events lock, so holding this one through backstop would invert the order.
+  flock -u 8; exec 8>&-
   backstop "$n" "$inbox_resp"
 }
 

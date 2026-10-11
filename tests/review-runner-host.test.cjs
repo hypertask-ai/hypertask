@@ -63,3 +63,41 @@ test('root-installed poller is the only automatic review dispatcher', async () =
   assert.doesNotMatch(autoMerge, /workflows: \[[^\n]*AI PR Review/)
   assert.match(autoMerge, /cron: "\*\/5 \* \* \* \*"/)
 })
+
+test('hax review wrapper reads the prompt from stdin and never as an argument (HTPR-7115)', async () => {
+  const fs = require('node:fs')
+  const os = require('node:os')
+  const path = require('node:path')
+  const { spawnSync } = require('node:child_process')
+  const dir = '.github/scripts/subscription-review'
+  const wrapper = await readFile(`${dir}/hax-review`, 'utf8')
+  assert.doesNotMatch(wrapper, /\$\(cat\)/)
+  assert.match(wrapper, /--raw -p\s*$/m)
+  const installer = await readFile(`${dir}/install-wrappers.sh`, 'utf8')
+  assert.match(installer, /-o root -g root -m 755 "\$source_dir\/hax-review" \/usr\/local\/libexec\/hypertask-hax-valentin-review/)
+  assert.match(installer, /-o root -g root -m 755 "\$source_dir\/hax-entrypoint" \/usr\/local\/bin\/hypertask-hax-subscription-review/)
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'hax-review-'))
+  try {
+    // The wrapper pins its own environment; neutralize those two lines in a copy only.
+    const copy = path.join(tmp, 'wrapper')
+    fs.writeFileSync(copy, wrapper.replace(/^export (HOME|PATH)=.*$/gm, ''), { mode: 0o755 })
+    const bin = path.join(tmp, 'bin')
+    fs.mkdirSync(bin)
+    fs.writeFileSync(path.join(bin, 'hax'),
+      '#!/usr/bin/env bash\nprintf "%s " "$@" >"$STUB_OUT/args"\nwc -c >"$STUB_OUT/stdin_bytes"\n', { mode: 0o755 })
+    const input = Buffer.alloc(6 * 1024 * 1024, 'a')
+    const res = spawnSync('bash', [copy], {
+      input,
+      maxBuffer: 64 * 1024 * 1024,
+      env: { PATH: `${bin}:/usr/bin:/bin`, STUB_OUT: tmp },
+    })
+    assert.equal(res.status, 0, String(res.stderr))
+    assert.equal(fs.readFileSync(path.join(tmp, 'stdin_bytes'), 'utf8').trim(), String(input.length))
+    const args = fs.readFileSync(path.join(tmp, 'args'), 'utf8')
+    assert.ok(args.length < 300)
+    assert.doesNotMatch(args, /aaaa/)
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true })
+  }
+})

@@ -43,7 +43,7 @@ Both switches require `PREMERGE_LOCAL=1` and the launcher's loopback `browser_sm
 
 Local search uses a loopback, fixture-only keyword service with the two seeded boards. This can verify the real search request, results and tab UI, but not production Turbopuffer ranking, embeddings or indexing. It rejects writes and unsupported queries. This local seeded board does not replace verification after deploy. `up` stays running for the QA session. `down` from another command stops that run, both app and fixture-search processes, containers and private state; EXIT, INT and TERM also clean up. Local lint, tests, typecheck and this webpack build queue automatically through a shared heavy-job cap of `max(2, nproc/6)` slots. Set `HT_HEAVY_SLOTS` consistently for the machine to override it; CI bypasses the cap.
 
-`scripts/premerge-local.sh sweep` stops only marked premerge processes and `ht-premerge-*` containers older than 12 hours. After merge, the manager can opt into the hourly systemd user timer with `scripts/premerge-local.sh --install`. Never install it during PR work. There is no crontab.
+One cleaner owns leftovers (YPER4-280): the process watchdog `scripts/proc-watchdog.py` stops test, build and premerge processes older than 2 hours or over 6 GB (including /tmp copies left by tests) and removes `ht-premerge-*` containers older than 12 hours. `scripts/premerge-local.sh sweep` runs it once; its 5 minute user timer is installed with `scripts/premerge-local.sh --install` after merge, never during PR work, and retires the old premerge-local-sweep timer. Premerge state folders live in the worktree and go with it. There is no crontab.
 
 ## Logins
 

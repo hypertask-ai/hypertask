@@ -562,8 +562,9 @@ jobs:
       contents: read
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "1.13.29"
-      TRUSTED_CLI_NEXT_VERSION: "2.0.9"
+      TRUSTED_CLI_VERSION: "2.0.9"
+      TRUSTED_CLI_BINARY_VERSION: "0.2.14"
+      TRUSTED_CLI_BINARY_SHA256: "3b4286ff78d66042b9a564150c548d3a6fc0cdc1e02bbda13128f7a39cab683f"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -581,21 +582,27 @@ jobs:
             echo "Parity contract selected untrusted package $CONTRACT_PACKAGE"
             exit 1
           fi
-          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ] && [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_NEXT_VERSION" ]; then
+          if [ "$CONTRACT_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
             echo "Parity contract selected untrusted version $CONTRACT_VERSION"
             exit 1
           fi
           LATEST_VERSION=$(npm view "$TRUSTED_CLI_PACKAGE" version)
-          if [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_VERSION" ] && \
-             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_VERSION:$TRUSTED_CLI_NEXT_VERSION" ] && \
-             [ "$CONTRACT_VERSION:$LATEST_VERSION" != "$TRUSTED_CLI_NEXT_VERSION:$TRUSTED_CLI_NEXT_VERSION" ]; then
-            echo "Parity transition does not permit contract $CONTRACT_VERSION with npm latest $LATEST_VERSION"
+          if [ "$LATEST_VERSION" != "$TRUSTED_CLI_VERSION" ]; then
+            echo "Parity contract pins $CONTRACT_VERSION but production is $LATEST_VERSION"
             exit 1
           fi
           PARITY_TMP=$(mktemp -d "$RUNNER_TEMP/hypertask-parity.XXXXXX")
           cp config/parity/runner/package.json config/parity/runner/package-lock.json "$PARITY_TMP/"
           npm ci --prefix "$PARITY_TMP" --ignore-scripts --no-audit --no-fund
-          env -u GITHUB_TOKEN -u GH_TOKEN "$PARITY_TMP/node_modules/.bin/hypertask" capabilities --json > "$PARITY_TMP/capabilities.json"
+          CLI_BINARY="$PARITY_TMP/hypertask-native"
+          curl --fail --location --silent --show-error \
+            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
+            --output "$CLI_BINARY"
+          if ! echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then
+            exit 1
+          fi
+          chmod 755 "$CLI_BINARY"
+          env -u GITHUB_TOKEN -u GH_TOKEN "$CLI_BINARY" capabilities --json > "$PARITY_TMP/capabilities.json"
           node scripts/parity-contract.mjs \
             --check \
             --cli-capabilities "$PARITY_TMP/capabilities.json" \

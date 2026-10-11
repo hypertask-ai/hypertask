@@ -512,12 +512,13 @@ args = sys.argv[1:]
 if os.environ.get('FLAG_LOG'):
     with open(os.environ['FLAG_LOG'], 'a') as log:
         log.write(json.dumps(args) + '\n')
-if args[:2] == ['pr', 'list']:
+if args[:2] == ['api', '-i'] and '/pulls?' in args[2]:
     if os.environ.get('FLAG_LIST_ERROR'):
         sys.exit(1)
-    print(json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'headRefOid': 'a' * 40,
-                       'statusCheckRollup': [] if os.environ.get('FLAG_MISSING_STATUS') else
-                       [{'context': 'premerge-evidence', 'state': os.environ.get('FLAG_ROLLUP', 'SUCCESS')}]}]))
+    if args[3:] == ['-H', 'If-None-Match: "fixture"']:
+        print('HTTP/2.0 304 Not Modified\r\nEtag: "fixture"\r\n\r\n')
+        sys.exit(1)
+    print('HTTP/2.0 200 OK\r\nEtag: "fixture"\r\n\r\n' + json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'head': {'sha': 'a' * 40}}]))
     sys.exit(0)
 if args[:2] == ['pr', 'view']:
     if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
@@ -945,7 +946,7 @@ W() {
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$posts" <<'PY'
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
-assert sum(c[:2] == ['pr', 'list'] for c in calls) == 1
+assert sum(c[:2] == ['api', '-i'] for c in calls) == 1
 assert sum(c[0] == 'api' and '/statuses/' in c[1] for c in calls) == int(sys.argv[2]), calls
 PY
   then ok "sweep: $posts posts"; else bad "sweep: want $want $posts posts got $got $out"; fi
@@ -957,7 +958,6 @@ W 0 1
 W 0 0 FLAG_ROLLUP=FAILURE
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
 W 0 1 FLAG_ROLLUP=FAILURE
-W 0 1 FLAG_MISSING_STATUS=1
 printf 'changed recording' > "$E/YPER4-999/click.webm"
 W 0 1
 rm "$E/YPER4-999/click.webm"
@@ -970,6 +970,11 @@ json.dump(cache, open(path, 'w'))
 PY
 W 0 1 FLAG_ROLLUP=FAILURE
 W 1 0 FLAG_LIST_ERROR=1
+python3 - "$E/sweep-state/cache.json" <<'PY'
+import json, sys
+path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
+json.dump(cache, open(path, 'w'))
+PY
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
@@ -983,7 +988,7 @@ SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
 [ "$got" = 0 ] && [ ! -s "$E/status-log" ] && ok 'sweep exits with no calls while paused' || bad "sweep ran while paused: $got $(cat "$E/status-log")"
 echo $(( $(date +%s) - 10 )) > "$E/pause-until"
 SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
-[ "$got" = 0 ] && grep -q '"pr", "list"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
+[ "$got" = 0 ] && grep -q '"api", "-i"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
 # An unchanged head is skipped: only the one list call and the rules fetch, no per-PR reads and no contents API.
 SWEEP_LOG FLAG_ROLLUP=FAILURE # warm the cache with the status the record really has
 SWEEP_LOG FLAG_ROLLUP=FAILURE; got=$?
@@ -991,7 +996,7 @@ python3 - "$E/status-log" <<'PY' && [ "$got" = 0 ] && ok 'sweep skips an unchang
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 api = [c for c in calls if c[0] in ('api', 'pr')]
-assert [c[:2] for c in api] == [['pr', 'list']], api
+assert [c[:2] for c in api] == [['api', '-i']], api
 assert not any('/contents/' in a for c in calls for a in c)
 PY
 
@@ -1120,7 +1125,13 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an opener without evid
 echo '{"success":true,"comments":[{"text":"<p>Note: https://example.com/x</p><p><strong>Resolved without a change:</strong> fine.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted evidence in another comment" || ok "nochange needs the opener and evidence in one comment"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
-N nochange HTPR-901 >/dev/null && bad "nochange accepted an app ticket" || ok "nochange refuses an app ticket (HTPR)"
+N nochange FOO-901 >/dev/null && bad "nochange accepted a non-ticket id" || ok "nochange refuses a non-ticket id (FOO-901)"
+N nochange HTPR-901x >/dev/null && bad "nochange accepted a malformed id" || ok "nochange refuses a malformed id (HTPR-901x)"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange accepts HTPR with a resolution comment" || bad "nochange HTPR"
+echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR accepted no comment" || ok "nochange HTPR refuses a ticket with no comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+rm -f "$E/HTPR-901/nochange"
 echo '[{"number":5,"title":"YPER4-901 [INFRA] a fix"}]' > "$NC/prs"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "nochange refuses an open PR"
 echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
@@ -1158,6 +1169,18 @@ echo '[{"number":7,"title":"YPER4-901 [INFRA] late fix"}]' > "$NC/prs"
 echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
   && bad "guard allowed Done after a PR appeared" || ok "guard blocks Done when a PR appears after nochange"
 echo '[]' > "$NC/prs"
+# HTPR guard: Done is blocked without nochange, allowed after it, and the id boundary holds (htpr-901 vs htpr-9010).
+rm -f "$E/HTPR-901/nochange"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && bad "guard allowed Done for HTPR without nochange" || ok "guard blocks Done for HTPR without nochange"
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-9010-other 2>/dev/null; echo 3 > "$NC/ahead"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange ignores a branch of HTPR-9010" || bad "nochange matched htpr-9010"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-9010-other 2>/dev/null
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-901-fix 2>/dev/null
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR ignored its own branch" || ok "nochange HTPR refuses its own branch ahead of base"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-901-fix 2>/dev/null; echo 0 > "$NC/ahead"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done for HTPR after nochange" || bad "guard blocks Done for HTPR after nochange"
 # Empty evidence does not count.
 for body in '<code></code>' '<pre> </pre>' '<pre><code>&nbsp;</code></pre>'; do
   jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
