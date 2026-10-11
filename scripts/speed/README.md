@@ -15,7 +15,7 @@ node scripts/speed/measure.mjs --latest
 node scripts/speed/measure.mjs --verify-history
 ```
 
-Default: five samples of each of seven paths on each profile, run serially. Search uses the canonical query URL so legacy live-search debounce and Enter-to-open cannot race the measurement. QA Sandbox board 6859, existing ticket 43, expected title `QA 6667 Enter verification`. No fixture creation. Actions are at least two seconds apart. Desktop 1440x900, no throttling. Phone 390x844, touch/mobile Chromium, 150ms latency, 1.6Mbps down/750Kbps up, 4x CPU. This is phone emulation on a VPS, not a physical-device field measurement.
+Default: five samples of each of seven paths on each profile, run serially. Search uses the canonical query URL so legacy live-search debounce and Enter-to-open cannot race the measurement. QA Sandbox board 6859, existing ticket 43, expected title `QA 6667 Enter verification`. No fixture creation. Actions are at least two seconds apart. Desktop 1440x900, no throttling. Phone 390x844, touch/mobile Chromium with an iPhone user agent and deviceScaleFactor 3 (the repo adds these to the shared context; each phone sample records `innerWidth` and `documentWidth` and fails unless innerWidth is 390), 150ms latency, 1.6Mbps down/750Kbps up, 4x CPU. This is phone emulation on a VPS, not a physical-device field measurement.
 
 | Path | Timed start and visible completion |
 |---|---|
@@ -32,6 +32,8 @@ Two animation frames confirm completion. The same two-second observation tail as
 All app writes and unknown API reads are blocked by the shared CDP policy. Reviewed extensions only: app-shell bootstrap POST, My Tasks GET, keyword search document POST, search values GET. Blocked analytics, read receipts, AI prompts, share creation and activity are listed separately, never counted as successful requests. These timings describe the read-only harness, not unguarded customer traffic.
 
 ## History and interpretation
+
+**Phone numbers before 2026-10-11 are not comparable.** Until then the shared context had only viewport, isMobile and hasTouch, which laid the ticket page out desktop-like (innerWidth 780, document width 834 on the live ticket page; board was fine at 390). Ticket-cold, ticket-warm, search and later phone paths on ticket or search pages may carry that wider layout. Treat the first run with the real phone profile as a new phone baseline; the 15% regression flag against older phone days is not meaningful for those paths.
 
 `~/.local/state/speed/history.json` is an append-only JSON array logically, atomically replaced on disk (0600). It keeps every raw sample and failed/partial run, UTC dates, browser/profile/fixture/protocol, host load and the live full production commit from `/api/version` before and after. A deploy during a run makes it invalid. No repo-local history. A single-process lock refuses overlap; if a killed process leaves `measure.lock`, confirm no measuring process remains before removing only that lock and rerunning. Do not remove history.
 

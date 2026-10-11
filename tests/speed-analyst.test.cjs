@@ -235,3 +235,20 @@ test('timer is daily user-managed and skill registration points at the complete 
   assert.match(read('.claude/skills/speed-analyst/PLAYBOOK.md'), /514,627/);
   assert.match(read('scripts/speed/README.md'), /owning session only, after merge/);
 });
+
+test('phone profile is a real phone: mobile user agent and device scale factor 3 on top of the shared 390 viewport', async () => {
+  const { PHONE_PROFILE, withPhoneProfile } = await analyst;
+  assert.equal(PHONE_PROFILE.deviceScaleFactor, 3);
+  assert.match(PHONE_PROFILE.userAgent, /iPhone.*Mobile/);
+  let received;
+  const context = await withPhoneProfile({ newContext: async options => { received = options; return {}; } }).newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  assert.deepEqual(context, {});
+  assert.deepEqual(received, { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, ...PHONE_PROFILE });
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /shared\.setup\(mobile \? withPhoneProfile\(browser\) : browser, mobile\)/);
+  assert.match(source, /Phone layout is \$\{row\.innerWidth\} wide, expected 390/);
+  // Old-profile history must not count as the same conditions in seven-day comparisons.
+  const { PHONE_PROFILE_KEY } = await analyst;
+  assert.notEqual(PHONE_PROFILE_KEY, 'phone-4g-4x-390x844');
+  assert.match(source, /profiles: \['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY\]/);
+});
