@@ -160,6 +160,8 @@ url="http://127.0.0.1:$app_port"
   printf 'TURBOPUFFER_BASE_URL=http://127.0.0.1:%s\nTURBOPUFFER_API_KEY=disposable-fixture\n' "$search_port"
   printf 'SESSION_SECRET=%s\nJWT_SECRET=%s\nBETTER_AUTH_SECRET=%s\n' "$(secret)" "$(secret)" "$(secret)"
   printf 'BETTER_AUTH_URL=%s\nQSTASH_CALLBACK_BASE_URL=%s\nQSTASH_AUTO_REGISTER_SWEEP=false\n' "$url" "$url"
+  # Server-side self calls read this; NEXT_PUBLIC_* is baked at build time, so it is set before next build.
+  printf 'NEXT_PUBLIC_BASEURL=%s\n' "$url"
   printf 'NEXT_PUBLIC_PUSHER_KEY=app-key\nNEXT_PUBLIC_PUSHER_HOST=127.0.0.1\nNEXT_PUBLIC_PUSHER_PORT=%s\nNEXT_PUBLIC_PUSHER_USE_TLS=false\nNEXT_PUBLIC_PUSHER_CLUSTER=mt1\n' "$pusher_port"
   printf 'PUSHER_APP_ID=app-id\nPUSHER_KEY=app-key\nPUSHER_SECRET=%s\nPUSHER_HOST=127.0.0.1\nPUSHER_PORT=%s\nPUSHER_USE_TLS=false\nPUSHER_CLUSTER=mt1\n' "$pusher_secret" "$pusher_port"
 } >"$state/credentials.env"
