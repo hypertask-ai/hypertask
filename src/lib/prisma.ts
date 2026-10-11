@@ -8,6 +8,7 @@ import { PrismaClient } from '@prisma/client'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { isApiKeyAuthLookup, withApiKeyExpiryGuard } from '@/lib/apiKeyExpiry'
 import { trackPrismaQuery } from '@/lib/queryCountTracker'
+import { createMcpTimingPool, mcpDbTimings } from '@/lib/mcp/dbTiming'
 
 // HTPR-4119: Prisma 7 requires a driver adapter, the query engine no longer
 // connects from a schema-declared url. Build the adapter inside the singleton
@@ -40,41 +41,54 @@ const prismaClientSingleton = () => {
   // fresh client reconnects) -- the repeated cost is client-to-pooler TLS/auth
   // only. Keeping the client-side connection open longer removes that
   // re-handshake on the common case where the next request lands within 5min.
-  const adapter = new PrismaPg({
+  const adapter = new PrismaPg(createMcpTimingPool({
     connectionString: process.env.DATABASE_URL as string,
     idleTimeoutMillis: 5 * 60_000,
     keepAlive: true,
-  })
+  }), { disposeExternalPool: true })
   const client = new PrismaClient({ adapter }).$extends({
     query: {
-      $allModels: {
-        // The `relationJoins` preview feature flips the GLOBAL default relation
-        // load strategy to `join` for every relation-loading read AND write. We
-        // only want `join` on the few hot queries that opt in explicitly (e.g.
-        // the inbox in notifications/getAll), so default every other relation
-        // load back to `query`. This keeps app-wide behaviour byte-identical to
-        // before the flag; a caller overrides with `relationLoadStrategy: "join"`
-        // where a single JOIN beats N per-relation round-trips.
-        async $allOperations({ model, operation, args, query }) {
-          trackPrismaQuery(model)
-          // HTPR-4501: an expired API key must never resolve to an account.
-          // Enforcing it here rather than at one call site means every present
-          // and future lookup-by-secret inherits the check; management screens
-          // list keys by userId and still see expired ones.
-          if (isApiKeyAuthLookup(model, operation, args)) {
-            ;(args as any).where = withApiKeyExpiryGuard((args as any).where)
+      // The `relationJoins` preview feature flips the GLOBAL default relation
+      // load strategy to `join` for every relation-loading read AND write. We
+      // only want `join` on the few hot queries that opt in explicitly (e.g.
+      // the inbox in notifications/getAll), so default every other relation
+      // load back to `query`. This keeps app-wide behaviour byte-identical to
+      // before the flag; a caller overrides with `relationLoadStrategy: "join"`
+      // where a single JOIN beats N per-relation round-trips.
+      async $allOperations({ model, operation, args, query }) {
+        if (model) trackPrismaQuery(model)
+        // HTPR-4501: an expired API key must never resolve to an account.
+        // Enforcing it here rather than at one call site means every present
+        // and future lookup-by-secret inherits the check; management screens
+        // list keys by userId and still see expired ones.
+        if (isApiKeyAuthLookup(model, operation, args)) {
+          ;(args as any).where = withApiKeyExpiryGuard((args as any).where)
+        }
+        if (
+          RELATION_OPS.has(operation) &&
+          args &&
+          typeof args === "object" &&
+          ((args as any).include || (args as any).select) &&
+          (args as any).relationLoadStrategy === undefined
+        ) {
+          ;(args as any).relationLoadStrategy = "query"
+        }
+        const store = mcpDbTimings.getStore()
+        if (!store) return query(args)
+        const started = performance.now()
+        store.queries++
+        try {
+          return await query(args)
+        } finally {
+          // Prisma operation time includes acquisition and all relation queries.
+          // Labels come only from Prisma metadata, never args or raw SQL.
+          const ms = performance.now() - started
+          store.queryMs += ms
+          if (!store.maxOperation || ms > store.maxMs) {
+            store.maxMs = ms
+            store.maxOperation = `${model ?? 'Prisma'}.${operation}`
           }
-          if (
-            RELATION_OPS.has(operation) &&
-            args &&
-            typeof args === "object" &&
-            ((args as any).include || (args as any).select) &&
-            (args as any).relationLoadStrategy === undefined
-          ) {
-            ;(args as any).relationLoadStrategy = "query"
-          }
-          return query(args)
-        },
+        }
       },
     },
   })

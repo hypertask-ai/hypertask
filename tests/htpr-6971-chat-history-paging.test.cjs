@@ -52,6 +52,36 @@ async function withHistory(config, check) {
     '@/lib/byokSelectedProviderGate': { shouldBlockAiDueToByokProvider: () => false },
     '@/lib/demo/isGuestClient': { isGuestCookieUser: () => false },
   }).useAiChatSessions : undefined;
+  const observers = [];
+  let Chat;
+  if (config.rail) {
+    original.push(['IntersectionObserver', Object.getOwnPropertyDescriptor(global, 'IntersectionObserver')]);
+    global.IntersectionObserver = class {
+      constructor(callback, options) { this.callback = callback; this.options = options; observers.push(this); }
+      observe(target) { this.target = target; } disconnect() { this.disconnected = true; }
+    };
+    const mocks = {
+      '@/components/AI_CHAT/AI_Tiptap_Container': { AI_Tiptap_Container: () => null },
+      '@/components/AI_CHAT/MessageList': { MessageList: () => null },
+      '@/components/AI_CHAT/WelcomeScreen': { WelcomeScreen: () => null },
+      '@/hooks/MultiPages/useGetAllTeamsMinimal': { useGetAllTeamsMinimal: () => ({ data: [{ id: 1, title: 'Team', projects: [{ id: 4, title: 'Board four' }, { id: 5, title: 'Board five' }] }] }) },
+      '@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context': { useAiChatContext: () => history },
+      '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
+      '@/lib/flags/keys': { HTPR_6971_CHAT_HISTORY_PAGING_FLAG: flag },
+      '@/lib/state': { useRecoilValue: () => user, useRecoilState: (atom) => React.useState(atom === 'width' ? 280 : atom === 'scope' ? null : []) },
+      '@/store': { fullScreenChatRailWidthAtom: 'width', fullScreenChatScopeAtom: 'scope' },
+      '@/utils/aiChat/sortBoardsByRecent': { sortBoardsByRecent: (teams) => teams },
+      '@/utils/undoActions/helperFuncs': { cn: (...values) => values.filter(Boolean).join(' ') },
+      '@/utils/generateTime': { __esModule: true, default: () => '' },
+      '@/lib/aiChatDisplayMode': { buildFullScreenChatPath: (_, sessionId) => `/chat/${sessionId}`, resolveFullScreenChatReturnPath: () => '/my-tasks' },
+      'next/navigation': { useRouter: () => ({ replace() {} }), useSearchParams: () => new URLSearchParams() },
+    };
+    const ts = require('typescript');
+    const compiled = ts.transpileModule(require('node:fs').readFileSync('src/app/chat/Chat.tsx', 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true } }).outputText;
+    const loaded = { exports: {} };
+    new Function('require', 'module', 'exports', compiled)((name) => mocks[name] ?? require(name), loaded, loaded.exports);
+    Chat = loaded.exports.default;
+  }
   function Probe() { history = useSessionAndChatHistory(taskId, true, taskId !== undefined);
     if (useAiChatSessions) {
       const sessionsRef = React.useRef(history.sessions); sessionsRef.current = history.sessions;
@@ -65,18 +95,76 @@ async function withHistory(config, check) {
       });
     }
     if (config.observe) config.observe(history, taskId);
-    return React.createElement('div', { 'data-ready': history.isSuccess, 'data-pending': history.isSessionPending }, history.currentSession?.messages.map((message) => React.createElement('p', { key: message.id }, message.content))); }
+    return Chat ? React.createElement(Chat) : React.createElement('div', { 'data-ready': history.isSuccess, 'data-pending': history.isSessionPending }, history.currentSession?.messages.map((message) => React.createElement('p', { key: message.id }, message.content))); }
   const root = require('react-dom/client').createRoot(document.getElementById('root'));
   const flush = async () => { for (let i = 0; i < 4; i++) await React.act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)); }); };
   const render = async () => { await React.act(async () => root.render(React.createElement(query.QueryClientProvider, { client }, React.createElement(Probe)))); await flush(); };
   try {
     await render();
-    await check({ history: () => history, resolver: () => resolver, mapChanges, client, requests, rows, flush, render, intro: () => intro, setFlag: (next) => { enabled = next; }, setTask: (next) => { taskId = next; }, setUser: (next) => { user = next; }, api });
+    await check({ history: () => history, resolver: () => resolver, mapChanges, client, requests, rows, flush, render, dom, observers, intro: () => intro, setFlag: (next) => { enabled = next; }, setTask: (next) => { taskId = next; }, setUser: (next) => { user = next; }, api });
   } finally {
     await React.act(async () => root.unmount()); client.clear(); dom.window.close();
     for (const [key, descriptor] of original) { if (descriptor) Object.defineProperty(global, key, descriptor); else delete global[key]; }
   }
 }
+
+test('fullscreen rail renders title-only history independently of the active transcript and pages on scroll', async () => {
+  const transcript = deferred();
+  const rows = [session(9, { messages: [], projectId: 4 }), session(8, { projectId: 4 }), session(7, { projectId: 5 }), session(1, { projectId: 4 })];
+  await withHistory({ rail: true, rows, transcript: (sessionId) => sessionId === id(9) ? transcript.promise : rows.find((row) => row.id === sessionId), page: (options) => response({
+    success: true, sessions: (options.cursor ? rows.slice(3) : rows.slice(0, 3)).map(({ messages, ...row }) => ({ ...row, hasMessages: messages.length > 0 })), nextCursor: options.cursor ? null : 'next',
+  }) }, async ({ history, requests, flush, dom }) => {
+    const titles = () => [...document.querySelectorAll('aside li > div > button')].map((button) => button.textContent.trim());
+    assert.deepEqual(titles(), ['Chat 8', 'Chat 7'], 'summary titles must render before any transcript resolves, excluding empty chats');
+    assert.equal(history().currentSession, undefined);
+    assert.equal(requests.filter(([type]) => type === 'page').length, 1, 'opening fullscreen must not drain history');
+    await React.act(async () => transcript.resolve(rows[0])); await flush();
+    assert.deepEqual(titles(), ['Chat 8', 'Chat 7'], 'an empty active transcript must not hide previous conversations');
+    const rail = document.querySelector('aside .overflow-y-auto');
+    Object.defineProperties(rail, { scrollTop: { configurable: true, value: 800 }, clientHeight: { configurable: true, value: 200 }, scrollHeight: { configurable: true, value: 1000 } });
+    await React.act(async () => rail.dispatchEvent(new dom.window.Event('scroll', { bubbles: true }))); await flush();
+    assert.deepEqual(titles(), ['Chat 8', 'Chat 7', 'Chat 1']);
+    assert.equal(requests.filter(([type]) => type === 'page').length, 2);
+    assert.equal(requests.filter(([type]) => type === 'transcript').length, 1, 'paging must not load other transcripts');
+    await React.act(async () => document.querySelectorAll('aside li > div > button')[2].click()); await flush();
+    assert.equal(history().currentSession.id, id(1));
+    assert.deepEqual(titles(), ['Chat 8', 'Chat 7', 'Chat 1']);
+    await React.act(async () => document.querySelector('aside button[aria-haspopup="menu"]').click());
+    const boardFour = [...document.querySelectorAll('aside [role="menu"] button')].find((button) => button.textContent.includes('Board four'));
+    assert.equal(boardFour.textContent.trim(), 'Board four2', 'board counts use summary message-presence metadata');
+    await React.act(async () => boardFour.click());
+    assert.deepEqual(titles(), ['Chat 8', 'Chat 1']);
+  });
+});
+
+test('fullscreen rail search can reveal older summary pages and OFF/server rollback keep legacy history', async () => {
+  await withHistory({ rail: true }, async ({ observers, requests, flush, dom }) => {
+    const input = document.querySelector('input[aria-label="Search chats"]');
+    await React.act(async () => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, 'chat 1');
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    });
+    assert.equal(document.querySelectorAll('aside li').length, 0);
+    assert.match(document.querySelector('aside').textContent, /No chats found/);
+    const observer = observers.at(-1);
+    assert.ok(observer.target, 'filtered empty/short histories keep the next page reachable');
+    assert.equal(observer.options.root, observer.target.parentElement);
+    await React.act(async () => observer.callback([{ isIntersecting: true }])); await flush();
+    assert.equal(document.querySelector('aside li button').textContent.trim(), 'Chat 1');
+    assert.equal(requests.filter(([type]) => type === 'page').length, 2);
+  });
+  for (const config of [{ on: false }, { legacyServer: true }]) {
+    await withHistory({ rail: true, ...config, rows: [session(9, { messages: [] }), session(1)] }, async ({ history, requests, dom, observers }) => {
+      assert.equal(history().sessionPagingEnabled, false);
+      assert.equal(document.querySelector('aside li button').textContent.trim(), 'Chat 1');
+      assert.equal(observers.length, 0);
+      const pages = requests.filter(([type]) => type === 'page').length;
+      await React.act(async () => document.querySelector('aside .overflow-y-auto').dispatchEvent(new dom.window.Event('scroll', { bubbles: true })));
+      assert.equal(requests.filter(([type]) => type === 'page').length, pages);
+      if (config.on === false) assert.deepEqual(requests.map(([type]) => type), ['legacy']);
+    });
+  }
+});
 
 test('client API negotiates only explicit page/detail calls and accepts both wire shapes on rollback', async () => {
   const calls = [], row = session(1);
@@ -774,9 +862,9 @@ test('a completed delete after task navigation removes its old transcript withou
 test('active newer summary automatically refreshes its transcript while preserving pending local writes', async () => {
   const writing = deferred();
   await withHistory({ message: () => writing.promise }, async ({ history, rows, client, flush }) => {
-    const pending = { id: 'pending-active', content: 'local question', role: 'human', createdAt: new Date() };
+    const pending = { id: 'pending-active', content: 'local question', role: 'human', createdAt: new Date('2026-12-31T00:00:00Z') };
     await React.act(async () => history().addMessageToSessionQuery(id(9), pending));
-    rows[0] = { ...rows[0], updatedAt: new Date('2027-01-01'), messages: [...rows[0].messages, { id: 'remote-active', content: 'new in another tab', createdAt: new Date() }] };
+    rows[0] = { ...rows[0], updatedAt: new Date('2027-01-01'), messages: [...rows[0].messages, { id: 'remote-active', content: 'new in another tab', createdAt: new Date('2026-12-31T00:00:01Z') }] };
     await React.act(async () => client.invalidateQueries({ queryKey: ['chat-session-summaries'] })); await flush();
     assert.equal(history().activeSession, id(9));
     assert.deepEqual(history().currentSession.messages.slice(-2).map(({ id }) => id), ['pending-active', 'remote-active']);

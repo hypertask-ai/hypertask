@@ -574,7 +574,10 @@ if '/files?' in url:
     file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
         file['previous_filename'] = 'src/old-card.tsx'
-    print(json.dumps([file]))
+    files = [file]
+    if os.environ.get('FLAG_REMOVED_DEFINITION'):
+        files.append({'filename': os.environ['FLAG_REMOVED_DEFINITION'], 'status': 'removed'})
+    print(json.dumps(files))
     if os.environ.get('FLAG_PAGE2'):
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
 else:
@@ -928,6 +931,46 @@ S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 S 0 success 'click record ok'
 API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
+# YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
+printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
+printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
+for d in base head; do
+  printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"
+done
+rm "$E/flag-source/flags-head/htpr-1-released.ts"
+printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr-2-other");\n' > "$E/flag-source/base"
+printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
+removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
+sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
+S 0 success 'click record ok' "${removal[@]}"
+P 0 premerge 999 "${removal[@]}"
+F 0 '' "${removal[@]}"
+sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
+S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+cp "$E/record" "$premerge"
+S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+sed '/^Flags:/d' "$E/record" > "$premerge"
+S 1 failure 'missing Flags:; expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
+# A removal-only diff has no touched surviving flag to record, even with an empty Flags line.
+S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+printf 'Flags: \n' >> "$premerge"
+S 0 success 'click record ok' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+S 1 failure 'live flag modes unavailable' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed FLAG_HTTP_ERROR=1
+sed -i 's/Commit:.*/Commit: deadbeef/' "$premerge"
+S 1 failure 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+sed '/^Flags:/d; s/Click: PASS/Click: FAIL/' "$E/record" > "$premerge"
+S 1 failure 'missing passing click' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+rm "$premerge"
+S 1 failure 'record a browser click-through' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts FLAG_STATUS=removed
+# A key that survives in the head registry is never exempt, even if GitHub reports a deleted file.
+cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
+sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
+S 1 failure 'expected Flags: htpr-1-released=EVERYONE' "${removal[@]}"
+rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts" "$E/flag-source/definitions"
+cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
+printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
+cp "$E/record" "$premerge"
 sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
 S 1 failure 'missing passing click'
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
