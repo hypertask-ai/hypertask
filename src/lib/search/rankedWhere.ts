@@ -28,7 +28,7 @@ export async function rankedSearchWhere(
   if (commentMode) {
     const matching = commenterWhere(commenters, parsed.text, phrases)
     // Comment results: only tickets that have a matching comment can page, count or be returned.
-    const effectiveWhere: Prisma.TaskWhereInput = { ...where, AND: [...(where.AND as Prisma.TaskWhereInput[]), { comments: { some: matching } }] }
+    const effectiveWhere: Prisma.TaskWhereInput = { ...where, AND: [...((where.AND ?? []) as Prisma.TaskWhereInput[]), { comments: { some: matching } }] }
     const taskWhere: Prisma.TaskWhereInput = { AND: [effectiveWhere, extraWhere] }
     let cursorValid = true
     let page: { taskId: number }[]

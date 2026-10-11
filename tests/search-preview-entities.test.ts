@@ -37,7 +37,11 @@ for (const [file, exports] of [
   ['src/lib/flags.ts', flags],
   ['src/utils/controllers/projects/getAllIncludes.ts', { projectContentAccessWhere: () => ({}) }],
   ['src/lib/search/serverOperators.ts', { parseSearchWithChipNames: async (query: string) => parseSearchQuery(query) }],
-  ['src/lib/search/filters.ts', { searchFilterWhere: async () => ({}) }],
+  ['src/lib/search/filters.ts', {
+    searchFilterWhere: async () => ({}),
+    resultKinds: () => ({ allowTasks: true, allowComments: true, commentOnly: false, phraseScope: 'any' }),
+    commentHasPhrases: () => true,
+  }],
 ] as const) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports } as NodeModule
