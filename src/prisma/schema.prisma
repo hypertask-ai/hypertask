@@ -748,10 +748,29 @@ model SlackWatchedThread {
   matchedTaskIds   Int[]        @default([])
   lastMessageTs    String
   lastSummarizedTs String?
+  // HTPR-7098: set while this thread's summary waits in an AiBatch, so the cron does not submit it twice.
+  summaryBatchId   String?
   createdAt        DateTime     @default(now())
 
   @@unique([installId, channelId, threadTs])
   @@index([lastMessageTs])
+}
+
+// HTPR-7098: one gateway batch of waiting background AI requests (half price). `items` maps each
+// request id to what the collector applies when the result arrives.
+model AiBatch {
+  id             String    @id @default(uuid())
+  gatewayBatchId String    @unique
+  kind           String // "slack-summary" | "smart-label"
+  status         String    @default("pending") // "pending" | "completed" | "cancelled"
+  teamId         String
+  userId         Int
+  model          String
+  items          Json
+  createdAt      DateTime  @default(now())
+  completedAt    DateTime?
+
+  @@index([status, createdAt])
 }
 
 model Team_Activity {

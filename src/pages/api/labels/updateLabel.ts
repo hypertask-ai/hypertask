@@ -144,7 +144,7 @@ export default async function handler(
         normalizedAiPrompt !== undefined &&
         normalizedAiPrompt !== (previousAiPrompt?.trim() || null);
       if (updatedLabel.ai_prompt && promptChanged) {
-        scheduleBackfillAiLabel(updatedLabel.id);
+        scheduleBackfillAiLabel(updatedLabel.id, session.userId);
       }
       void broadcastBoardChange(updatedLabel.projectId);
       return res.status(200).json(updatedLabel);
