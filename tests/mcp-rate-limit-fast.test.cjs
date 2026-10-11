@@ -38,6 +38,7 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
   let expiryFails = false
   const increments = []
   const expires = []
+  const decrements = []
   const pending = []
   const warnings = []
   class Clock extends Date { static now() { return now } }
@@ -50,6 +51,12 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
   const redis = {
     incr: key => increment(key, 1, 'incr'),
     incrby: (key, amount) => increment(key, amount, 'incrby'),
+    decrby: async (key, amount) => {
+      decrements.push({ key, amount })
+      const result = (store.get(key) ?? initial) - amount
+      store.set(key, result)
+      return result
+    },
     expire: async (...args) => {
       expires.push(args)
       if (expiryFails) throw new Error('Fixture expiry failure')
@@ -89,7 +96,7 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
   return {
-    rate, request, increments, expires, pending, warnings, store,
+    rate, request, increments, expires, decrements, pending, warnings, store,
     call: token => rate.checkMcpRateLimit(request(token)),
     hold: () => { hold = true },
     release: (index = 0) => { const [item] = pending.splice(index, 1); item.resolve(item.result) },
@@ -283,14 +290,21 @@ test('two instances sharing Redis admit at most 120 of 130 interleaved anonymous
   assert.notEqual(instances[0].rate.__counts, instances[1].rate.__counts)
 })
 
-test('raced lease above half-limit creates no reservation and classifies the returned count', async () => {
+test('raced lease above half-limit hands its slots back and decides exactly like a plain INCR', async () => {
   const h = harness({ agent: false })
   await h.call()
   h.jump(115)
-  assert.equal((await h.call()).status, 429)
-  assert.deepEqual(state(h), { count: 125, reserved: 0, leasing: false })
-  assert.equal((await h.call()).status, 429)
-  assert.equal(h.increments.at(-1).method, 'incr')
+  assert.equal(await h.call(), null, 'position 116 is admitted, as a plain INCR would be')
+  assert.equal(h.increments.at(-1).method, 'incrby')
+  assert.deepEqual(h.decrements.map(({ amount }) => amount), [9])
+  assert.equal(h.count(), 116, 'unused slots returned to Redis')
+  assert.equal(state(h).reserved, 0)
+  for (let position = 117; position <= 120; position++) {
+    assert.equal(await h.call(), null)
+    assert.equal(h.increments.at(-1).method, 'incr')
+  }
+  assert.equal((await h.call()).status, 429, 'call 121 is still limited')
+  assert.equal(h.count(), 121)
 })
 
 test('new window clears prepaid reservations and awaits its first plain INCR', async () => {

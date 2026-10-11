@@ -97,6 +97,7 @@ export async function checkMcpRateLimit(
       if (state && increment === LEASE) state.leasing = false
     }
     if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+    let keptSlots = false
     if (trackCount && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds) {
       // Never evict: a full map only means new keys count singly until the window clears it,
       // so no key can lose prepaid slots and lease again.
@@ -107,8 +108,17 @@ export async function checkMcpRateLimit(
       }
       if (entry) {
         entry.count = Math.max(entry.count, count)
-        if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) entry.reserved += LEASE - 1
+        if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) {
+          entry.reserved += LEASE - 1
+          keptSlots = true
+        }
       }
+    }
+    if (increment === LEASE && !keptSlots) {
+      // Another instance raced the count up: hand the unused slots back and decide this call
+      // on its own position, exactly as a plain INCR would have.
+      count -= LEASE - 1
+      await redis.decrby(key, LEASE - 1)
     }
 
     const countOutcome = classifyMcpRateLimitCount(count)
