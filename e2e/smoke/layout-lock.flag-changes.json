@@ -1,5 +1,12 @@
 [
   {
+    "flag": "htpr-6899-stable-layout",
+    "ticket": "https://app.hypertask.ai/detail/project-15/6899",
+    "screen": "ticket/Mobile",
+    "landmarks": ["title", "description", "first-comment", "last-comment", "composer", "properties"],
+    "reason": "The ticket asks instantly opened tickets to stop scrolling after load. Cached phone opens now remain at the top instead of automatically scrolling properties above the title and moving comments past the fixed composer; direct opens and flag-off retain production positioning. Independent composer and title hit-target invariants still apply."
+  },
+  {
     "flag": "htpr-7026-agent-connect-check",
     "ticket": "https://app.hypertask.ai/detail/project-15/7026",
     "screen": "board/Desktop",

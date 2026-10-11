@@ -38,6 +38,17 @@ function normalizeTeamId(teamId: string | number | null | undefined) {
   return normalized || null;
 }
 
+export const teamAiFeatureModelsQueryKey = (
+  teamId: string | number | null | undefined,
+  haiku55Enabled: boolean,
+  haikuDefaultEnabled: boolean,
+) => [
+  "teamAiFeatureModels",
+  normalizeTeamId(teamId),
+  haiku55Enabled,
+  haikuDefaultEnabled,
+];
+
 export function getAiModelPreferenceIds(
   preferences: TAiModelPreferences | null | undefined,
   surface: TAiModelPreferenceSurface,

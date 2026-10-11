@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { ImageModelMiddleware, LanguageModelMiddleware } from "ai";
 
 import { getRedis } from "@/lib/redis";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7079_FAILED_AI_ALLOWANCE_FLAG } from "@/lib/flags/definitions/htpr-7079-failed-ai-allowance";
 import { isHaiku55Model } from "@/lib/aiModelOptions";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import {
@@ -82,26 +84,55 @@ type ModelPricing = {
   };
 };
 
-export function modelCostUsd(pricing: ModelPricing, inputTokens: number, outputTokens: number): number {
+/** HTPR-7076: Anthropic prices cache reads at 0.1x and 5-minute cache writes at 1.25x the input rate. */
+export const CACHE_READ_INPUT_MULTIPLIER = 0.1;
+export const CACHE_WRITE_INPUT_MULTIPLIER = 1.25;
+
+/**
+ * `inputTokens` is the total prompt size and already includes cached tokens
+ * (the AI SDK reports total = noCache + cacheRead + cacheWrite).
+ */
+export function modelCostUsd(
+  pricing: ModelPricing,
+  inputTokens: number,
+  outputTokens: number,
+  cacheReadTokens = 0,
+  cacheWriteTokens = 0,
+): number {
   const input = Math.max(inputTokens, 0);
   const output = Math.max(outputTokens, 0);
+  const cacheRead = Math.min(Math.max(cacheReadTokens || 0, 0), input);
+  const cacheWrite = Math.min(Math.max(cacheWriteTokens || 0, 0), input - cacheRead);
   const rates = pricing.longRequest && input + output > pricing.longRequest.tokenThreshold
     ? pricing.longRequest
     : pricing;
-  return input * rates.inputUsdPerToken + output * rates.outputUsdPerToken;
+  const plainInput = input - cacheRead - cacheWrite;
+  return (
+    (plainInput +
+      cacheRead * CACHE_READ_INPUT_MULTIPLIER +
+      cacheWrite * CACHE_WRITE_INPUT_MULTIPLIER) *
+      rates.inputUsdPerToken +
+    output * rates.outputUsdPerToken
+  );
 }
 
 type AllowanceReservation = {
   amountMicroUsd: number;
   committedKey: string;
   id: string;
+  /**
+   * What the prompt alone costs (no output, no safety margin), or null when
+   * the HTPR-7079 flag is off. A call that fails before any output settles
+   * at this amount instead of the full reservation.
+   */
+  inputOnlyMicroUsd: number | null;
   pricing: ModelPricing;
   reservationsKey: string;
   ttlSeconds: number;
 };
 
 type GatewayUsage = {
-  inputTokens: { total?: number };
+  inputTokens: { total?: number; cacheRead?: number; cacheWrite?: number };
   outputTokens: { total?: number };
 };
 
@@ -280,10 +311,27 @@ export function estimateReservationMicroUsd(args: {
   );
 }
 
+function inputOnlyMicroUsd(pricing: ModelPricing, prompt: unknown): number {
+  return usdToMicroUsd(
+    modelCostUsd(pricing, estimatePromptTokenUpperBound(prompt), 0),
+  );
+}
+
+async function failedCallsCountInputOnly(): Promise<boolean> {
+  try {
+    // No user is attached to a model call, so only the global mode matters:
+    // user 0 matches Everyone and no owner or QA list.
+    return await isFeatureEnabled(HTPR_7079_FAILED_AI_ALLOWANCE_FLAG, 0);
+  } catch {
+    return false;
+  }
+}
+
 function settledUsageMicroUsd(
   usage: GatewayUsage | undefined,
   pricing: ModelPricing,
   reservedMicroUsd: number,
+  inputOnlyBeforeOutputMicroUsd: number | null = null,
 ): number {
   const inputTokens = usage?.inputTokens.total;
   const outputTokens = usage?.outputTokens.total;
@@ -293,9 +341,17 @@ function settledUsageMicroUsd(
     typeof outputTokens !== "number" ||
     !Number.isFinite(outputTokens)
   ) {
-    return reservedMicroUsd;
+    return inputOnlyBeforeOutputMicroUsd === null
+      ? reservedMicroUsd
+      : Math.min(inputOnlyBeforeOutputMicroUsd, reservedMicroUsd);
   }
-  const actualUsd = modelCostUsd(pricing, inputTokens, outputTokens);
+  const actualUsd = modelCostUsd(
+    pricing,
+    inputTokens,
+    outputTokens,
+    usage?.inputTokens.cacheRead,
+    usage?.inputTokens.cacheWrite,
+  );
   return usdToMicroUsd(actualUsd);
 }
 
@@ -582,6 +638,9 @@ async function reserveSharedAllowance(args: {
     pricing,
     prompt: args.prompt,
   });
+  const inputOnly = (await failedCallsCountInputOnly())
+    ? inputOnlyMicroUsd(pricing, args.prompt)
+    : null;
   const id = randomUUID();
   const member = `${id}|${amountMicroUsd}`;
   const expiresAt = Date.now() + RESERVATION_TTL_MS;
@@ -612,6 +671,7 @@ async function reserveSharedAllowance(args: {
     amountMicroUsd,
     committedKey,
     id: member,
+    inputOnlyMicroUsd: inputOnly,
     pricing,
     reservationsKey,
     ttlSeconds: month.ttlSeconds,
@@ -621,11 +681,13 @@ async function reserveSharedAllowance(args: {
 async function settleReservation(
   reservation: AllowanceReservation,
   usage?: GatewayUsage,
+  beforeOutput = false,
 ) {
   const settledMicroUsd = settledUsageMicroUsd(
     usage,
     reservation.pricing,
     reservation.amountMicroUsd,
+    beforeOutput ? reservation.inputOnlyMicroUsd : null,
   );
   const redis = await getRedis();
   await redis.eval(
@@ -655,9 +717,10 @@ async function releaseUnavailableReservation(reservation: AllowanceReservation) 
 async function settleAfterInference(
   reservation: AllowanceReservation,
   usage?: GatewayUsage,
+  beforeOutput = false,
 ) {
   try {
-    await settleReservation(reservation, usage);
+    await settleReservation(reservation, usage, beforeOutput);
   } catch {
     // Inference has already started, so the provider may have billed even when
     // it did not return usage. Retry with the conservative reservation amount.
@@ -719,7 +782,8 @@ export function createSharedAllowanceMiddleware(args: {
         if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
-          await settleAfterInference(reservation);
+          // Nothing was returned, so only the prompt can have been billed.
+          await settleAfterInference(reservation, undefined, true);
         }
         throw error;
       }
@@ -730,7 +794,7 @@ export function createSharedAllowanceMiddleware(args: {
         if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, hasOutput, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
-          await settleAfterInference(reservation);
+          await settleAfterInference(reservation, undefined, !hasOutput);
         }
       };
       try {
@@ -745,7 +809,10 @@ export function createSharedAllowanceMiddleware(args: {
               try {
                 const item = await reader.read();
                 if (item.done) {
-                  if (!settled) await settleAfterInference(reservation);
+                  if (!settled) {
+                    settled = true;
+                    await settleAfterInference(reservation, undefined, !hasOutput);
+                  }
                   controller.close();
                   return;
                 }
@@ -772,7 +839,10 @@ export function createSharedAllowanceMiddleware(args: {
               try {
                 await reader.cancel(reason);
               } finally {
-                if (!settled) await settleAfterInference(reservation);
+                if (!settled) {
+                  settled = true;
+                  await settleAfterInference(reservation, undefined, !hasOutput);
+                }
               }
             },
           }),

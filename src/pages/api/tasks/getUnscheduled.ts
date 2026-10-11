@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
@@ -109,20 +110,7 @@ const fetchidlist = async (id: number) => {
     if (id) {
       const projectid = await prisma.project.findMany({
         where: {
-          OR: [
-            {
-              members: {
-                some: {
-                  userId: id,
-                },
-              },
-            },
-            {
-              ownerId: {
-                in: [id],
-              },
-            },
-          ],
+          ...projectContentAccessWhere(id),
         },
         select: {
           id: true,

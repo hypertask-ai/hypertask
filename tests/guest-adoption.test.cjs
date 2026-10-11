@@ -29,6 +29,9 @@ function loadTs(relativePath) {
   return jiti(path.join(root, relativePath));
 }
 
+const telemetryPath = path.join(root, "src/lib/telemetry/activationOccurrences.ts");
+require.cache[telemetryPath] = { id: telemetryPath, filename: telemetryPath, loaded: true, exports: { recordActivationOccurrence: () => {} } };
+
 const { shouldAdoptGuest } = loadTs(
   "src/utils/controllers/demo/adoptGuestBoards.ts"
 );

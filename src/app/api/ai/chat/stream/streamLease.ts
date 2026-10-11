@@ -45,6 +45,7 @@ export type StreamRedis = Awaited<ReturnType<typeof getRedis>>;
 export type AiChatStreamLease = {
   redis: StreamRedis;
   key: string;
+  keys: string[];
   token: string;
 };
 
@@ -68,9 +69,16 @@ return count
 `;
 
 const acquireIdentifiedStreamScript = `
-if redis.call("exists", KEYS[1]) == 1 then return 0 end
-redis.call("set", KEYS[1], ARGV[1], "EX", ARGV[2])
-redis.call("set", KEYS[2], ARGV[1], "EX", ARGV[2])
+local setCount = tonumber(ARGV[4])
+for i = 1, tonumber(ARGV[3]) do
+  if redis.call("exists", KEYS[i]) == 1 then return 0 end
+end
+for i = setCount + 1, #KEYS do
+  if redis.call("exists", KEYS[i]) == 1 then return 0 end
+end
+for i = 1, setCount do
+  redis.call("set", KEYS[i], ARGV[1], "EX", ARGV[2])
+end
 return 1
 `;
 
@@ -78,6 +86,8 @@ export async function acquireAiChatStreamLease(
   userId: number,
   cancellationIdentity?: AiChatCancellationIdentity,
   redisFactory: () => Promise<StreamRedis> = getRedis,
+  agentId?: string,
+  isolateAgentLease = false,
 ): Promise<AiChatStreamClaim> {
   try {
     const redis = await redisFactory();
@@ -92,21 +102,32 @@ export async function acquireAiChatStreamLease(
     );
     if (!Number.isFinite(count) || count > STREAM_RATE_LIMIT) return "limited";
 
-    const key = activeStreamKey(userId);
-    const token = randomUUID();
+    const key = activeStreamKey(userId, agentId);
+    const keys = [key];
+    if (agentId && !isolateAgentLease) keys.push(activeStreamKey(userId));
+    const activeKeyCount = keys.length;
     if (cancellationIdentity) {
+      keys.push(cancellableStreamKey(
+        userId,
+        cancellationIdentity.sessionId,
+        cancellationIdentity.streamId,
+      ));
+    }
+    // An isolated agent reply still waits for any user-key reply (the owner's,
+    // or an agent reply started before this deploy) but never holds that key.
+    const guardKeys = agentId && isolateAgentLease ? [activeStreamKey(userId)] : [];
+    const token = randomUUID();
+    if (keys.length + guardKeys.length > 1) {
       const acquired = Number(
         await redis.eval(
           acquireIdentifiedStreamScript,
-          2,
-          key,
-          cancellableStreamKey(
-            userId,
-            cancellationIdentity.sessionId,
-            cancellationIdentity.streamId,
-          ),
+          keys.length + guardKeys.length,
+          ...keys,
+          ...guardKeys,
           token,
           STREAM_LEASE_TTL_SECONDS,
+          activeKeyCount,
+          keys.length,
         ),
       );
       if (acquired !== 1) return "busy";
@@ -120,7 +141,7 @@ export async function acquireAiChatStreamLease(
       );
       if (acquired !== "OK") return "busy";
     }
-    return { redis, key, token };
+    return { redis, key, keys, token };
   } catch (error) {
     console.error("[ai/chat/stream] concurrency guard unavailable", error);
     return "unavailable";
@@ -129,15 +150,17 @@ export async function acquireAiChatStreamLease(
 
 export async function releaseAiChatStreamLease(lease: AiChatStreamLease) {
   try {
-    await lease.redis.eval(
-      `if redis.call("get", KEYS[1]) == ARGV[1] then
-         return redis.call("del", KEYS[1])
-       end
-       return 0`,
-      1,
-      lease.key,
-      lease.token,
-    );
+    for (const key of lease.keys) {
+      await lease.redis.eval(
+        `if redis.call("get", KEYS[1]) == ARGV[1] then
+           return redis.call("del", KEYS[1])
+         end
+         return 0`,
+        1,
+        key,
+        lease.token,
+      );
+    }
   } catch (error) {
     console.error(
       `[ai/chat/stream] lease ${lease.key} will expire automatically`,
@@ -149,7 +172,8 @@ export async function releaseAiChatStreamLease(lease: AiChatStreamLease) {
 const cancellationKey = (userId: number, sessionId: string, streamId: string) =>
   `ai-chat:cancel:user:${userId}:session:${sessionId}:stream:${streamId}`;
 
-const activeStreamKey = (userId: number) => `ai-chat:stream-active:user:${userId}`;
+const activeStreamKey = (userId: number, agentId?: string) =>
+  `ai-chat:stream-active:user:${userId}${agentId ? `:agent:${agentId}` : ""}`;
 
 const cancellableStreamKey = (userId: number, sessionId: string, streamId: string) =>
   `ai-chat:stream-identity:user:${userId}:session:${sessionId}:stream:${streamId}`;
@@ -162,9 +186,9 @@ const completionKey = (userId: number, sessionId: string, assistantMessageId: st
 
 const cancelTurnScript = `
 local active = redis.call("get", KEYS[4])
-if not active then return 4 end
 local registered = redis.call("get", KEYS[5])
-if not registered or registered ~= active then return 4 end
+local agentActive = redis.call("get", KEYS[6])
+if not registered or (registered ~= active and registered ~= agentActive) then return 4 end
 local completion = redis.call("get", KEYS[2])
 if completion == "complete" then return 0 end
 if completion then return 3 end
@@ -216,6 +240,7 @@ export async function requestAiChatCancellation(
   assistantMessageId: string,
   streamId: string,
   redisFactory: () => Promise<StreamRedis> = getRedis,
+  agentId?: string,
 ) {
   const redis = await redisFactory();
   const cancellationCount = Number(
@@ -236,12 +261,13 @@ export async function requestAiChatCancellation(
     const outcome = Number(
       await redis.eval(
         cancelTurnScript,
-        5,
+        6,
         cancellationKey(userId, sessionId, streamId),
         completedKey,
         activeToolKey,
         activeStreamKey(userId),
         cancellableStreamKey(userId, sessionId, streamId),
+        activeStreamKey(userId, agentId),
         STREAM_LEASE_TTL_SECONDS,
       ),
     );

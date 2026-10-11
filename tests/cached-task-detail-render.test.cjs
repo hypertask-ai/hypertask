@@ -150,6 +150,7 @@ test("description paints cached content and drafts before constructing the rich 
   const noop = () => null;
   let secondaryPanelsReady = false;
   let editorMounts = 0;
+  const Editor = () => { editorMounts++; return React.createElement("div", null, "Editor ready"); };
   const mocks = {
     "react": React,
     "react/jsx-runtime": require("react/jsx-runtime"),
@@ -163,7 +164,10 @@ test("description paints cached content and drafts before constructing the rich 
     "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: (draft) => Boolean(draft.content) },
     "../ContextMenu": { HighlightMenu: noop },
     "../ContextMenu/QuoteButton": { __esModule: true, default: noop },
-    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: () => { editorMounts++; return React.createElement("div", null, "Editor ready"); } },
+    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": { __esModule: true, default: Editor },
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (content) => content },
     "./InnerHtmlDescription": { __esModule: true, default: ({ id, descriptionText }) => React.createElement("div", { id, dangerouslySetInnerHTML: { __html: descriptionText } }) },
@@ -191,11 +195,13 @@ test("pending cached details paint property geometry immediately but defer edito
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
   assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
-  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
+  // HTPR-7116: `reveal` sets the panels ready (in a transition when its flag is on).
+  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
+  assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
   assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
   assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
-  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
-  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*\/\/[^\n]*\n\s*<SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
 });

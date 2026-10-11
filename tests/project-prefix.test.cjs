@@ -10,6 +10,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -236,7 +237,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: access.taskWriteAccessWhere, getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
@@ -340,6 +341,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     $transaction: async callback => callback(prisma),
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,
@@ -698,7 +700,7 @@ test("review: shared detail resolver handles move aliases and keeps detail acces
   assert.doesNotMatch(source, /findPrefixAliasTasks/);
   const member = lookups({ sourceOwnerId: 9, members: [{ userId: 6, agentId: "legacy-agent" }] });
   assert.equal(await member.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "NEW-123" }), null);
-  assert.equal((await member.detail.findTaskByTicketNumber("NEW-123", 6)).id, 101);
+  assert.equal(await member.detail.findTaskByTicketNumber("NEW-123", 6), null);
   const deleted = lookups({ deletedBoard: true, live: true });
   assert.equal(await deleted.detail.findTaskByTicketNumber("OLD-123", 6), null);
   const lostAccess = lookups();
@@ -890,7 +892,7 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {
   const keys = load("src/lib/flags/keys.ts");
   assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, flagKey);
-  const registry = read("src/lib/flags.ts");
+  const registry = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
   assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });

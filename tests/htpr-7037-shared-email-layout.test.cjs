@@ -93,9 +93,13 @@ test("connected email keeps its original app-home fallback", () => {
 test("shared email layout has its own feature flag restricted to Owner + QA", async () => {
   const registry = load("src/lib/flags.ts", {
     "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
+    "@/lib/flags/definitions": load("src/lib/flags/definitions.ts", {
+      "@/lib/flags/keys": load("src/lib/flags/keys.ts"),
+      "@/lib/agentRuns/model": {},
+    }),
     "@/lib/prisma": { __esModule: true, default: { featureFlag: { findMany: async () => [] } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   const modes = await registry.listFeatureFlagModes();
   assert.equal(registry.HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG, flag);
@@ -151,6 +155,7 @@ async function sendFixture({ name, args }, mode, recipientUserId) {
     "@vercel/functions": { waitUntil: (work) => scheduled.push(work) },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": flags,
+    "@/lib/telemetry/activationAnalytics": { trackActivation: async () => {} },
     "@/lib/redis": { getRedis: async () => ({}) },
     "@/lib/onboarding/qaArm": { isOnboardingQaArmed: async () => true },
     "@/lib/email/sendEmail": { sendEmail: async (mail) => sent.push(mail) },

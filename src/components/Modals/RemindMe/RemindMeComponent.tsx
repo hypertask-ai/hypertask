@@ -66,7 +66,6 @@ const RemindMeComponent = (props: Props) => {
   const [modal, ___] = useState<boolean>(true);
   const [filteredOptions, setFilteredOptions] = useState<(DisplayDate | undefined)[]>(defaultOptions);
   const _mbl = useContext(MobileViewContext);
-  const mobileSafeAreaEnabled = useFlag("htpr-6130-mobile-reminder-safe-area");
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const hideOnMyTasks = myTasksSnoozeEnabled && returnsToMyTasks;
   const returnCopy = hideOnMyTasks
@@ -266,7 +265,7 @@ const RemindMeComponent = (props: Props) => {
         ariaLabel={getHeaderText()}
         fullHeight
         keyboardAware
-        bottomSafeAreaFloor={mobileSafeAreaEnabled}
+        bottomSafeAreaFloor
         bottomSlot={mobileSearchInput}
       >
         {myTasksSnoozeEnabled ? <span className="hidden" data-htpr-6461-my-tasks-snooze aria-hidden /> : null}

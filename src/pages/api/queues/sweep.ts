@@ -17,6 +17,7 @@ import { sweepAutoArchives } from "@/utils/controllers/tasks/sweepAutoArchive";
 import { sweepStaleNudges } from "@/utils/controllers/tasks/sweepStaleNudges";
 import { sweepCycleRollovers } from "@/lib/cycleService";
 import { getRedis } from "@/lib/redis";
+import { HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, isFeatureEnabled, withFeatureFlagSnapshot } from "@/lib/flags";
 import { sweepAgentWebhookDeliveries } from "@/lib/agentWebhooks/delivery";
 import { sweepPendingAgentTaskCreatedWebhooks } from "@/lib/agentWebhooks/taskCreatedRecovery";
 import { sweepBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outboxDelivery";
@@ -256,6 +257,7 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   };
 
   try {
+    const avoidRepeatedWork = await isFeatureEnabled(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG, 0).catch(() => false);
     // Each source is independent: one failing must not block the others.
     try {
       summary.reminders = await sweepReminders();
@@ -294,7 +296,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
 
     try {
-      summary.cycleRollovers = await sweepCycleRollovers();
+      summary.cycleRollovers = avoidRepeatedWork
+        ? await sweepCycleRollovers(new Date(), undefined, true)
+        : await sweepCycleRollovers();
     } catch (error) {
       console.log("🚀 ~ sweep ~ cycleRollovers error:", error);
     }
@@ -342,7 +346,9 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
   }
 }
 
-export default withQstashSignature(handler);
+export default withQstashSignature((req, res) =>
+  withFeatureFlagSnapshot(() => handler(req, res)),
+);
 
 export const config = {
   api: {

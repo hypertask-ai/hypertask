@@ -1,3 +1,4 @@
+import { recordAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
@@ -613,6 +614,7 @@ export async function updateTaskSingle(
     if (!options.trustedCaller) {
       scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
     }
+    recordAgentTaskCompletion(taskBeforeWrite, task, agentId);
     const moveNotification =
       moveActivity && options.taskMovedActivity?.sendNotification
         ? sendTaskMoveNotificationIfNeeded(

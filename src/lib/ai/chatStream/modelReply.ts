@@ -1,4 +1,4 @@
-import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
@@ -29,6 +29,8 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const { instructions, messages, tools, toolExecutions } = inputs;
 
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
+  // HTPR-7075: a Claude 5.5 failure retries on the same model, never on Luna.
+  const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
   state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
   const chunks: string[] = [];
   let result!: ReturnType<typeof streamText>;
@@ -64,13 +66,14 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           attempt === 0 &&
           !state.cancelled &&
           !state.providerAbort.signal.aborted &&
-          (!isHaiku55Model(state.selected.resolvedModelId) || resolveTeamProviderEnabled(state.teamProviderSettings, "openai")) &&
+          (sameModelRetry || !isHaiku55Model(state.selected.resolvedModelId) || resolveTeamProviderEnabled(state.teamProviderSettings, "openai")) &&
           previousModelForFailedStream(
             state.selected.resolvedModelId,
             error,
             chunks.length > 0,
             toolExecutions.length > 0,
             haiku55Enabled,
+            sameModelRetry,
           )
         ) {
           fallbackError = error;
@@ -141,12 +144,15 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
         chunks.length > 0,
         toolExecutions.length > 0,
         haiku55Enabled,
+        sameModelRetry,
       )
       : null;
     if (!previous) break;
     console.warn(
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
+    // The same model keeps its selection (model, credential, options).
+    if (previous.model === state.selected.resolvedModelId) continue;
     const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
     const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
       ? await getByokOrTeamGatewayApiKeyForModelOption(

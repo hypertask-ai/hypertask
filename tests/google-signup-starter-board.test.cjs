@@ -13,6 +13,7 @@ const guestId = 900
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText
@@ -74,7 +75,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
   const aliases = {
     '@/lib/prisma': prisma,
     '@/lib/auth/getSessionUser': {},
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'test-agent-flag' },
+    '@/lib/agentRuns/model': {},
     '@/lib/flags/keys': loadTs('src/lib/flags/keys.ts', {}),
     '@/lib/auth/session': {
       SESSION_COOKIE: 'ht_session', SESSION_TTL_SECONDS: 3600,
@@ -114,8 +115,10 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
+    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
+  aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)

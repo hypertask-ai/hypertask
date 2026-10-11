@@ -48,7 +48,6 @@ type Props = Pick<
   | "sessionLoading"
   | "messages"
   | "sending"
-  | "chatStopAndTimeoutEnabled"
   | "queuedMessages"
   | "awaiting"
   | "deliveryNotice"
@@ -145,7 +144,7 @@ export function AgentChatView({
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
-  handleProposalAction, sending, chatStopAndTimeoutEnabled, queuedMessages, removeQueuedMessage,
+  handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
@@ -215,7 +214,6 @@ export function AgentChatView({
               projectIdForPrefix={projectIdForPrefix}
               handleProposalAction={handleProposalAction}
               sending={sending}
-              chatStopAndTimeoutEnabled={chatStopAndTimeoutEnabled}
               queuedMessages={queuedMessages}
               removeQueuedMessage={removeQueuedMessage}
               awaiting={awaiting}

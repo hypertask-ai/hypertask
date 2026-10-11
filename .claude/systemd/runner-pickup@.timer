@@ -1,0 +1,12 @@
+[Unit]
+Description=Every 3 minutes check the board for tickets assigned to RUNNER %i
+
+[Timer]
+OnBootSec=2min
+OnUnitInactiveSec=3min
+RandomizedDelaySec=45s
+AccuracySec=10s
+Unit=runner-pickup@%i.service
+
+[Install]
+WantedBy=timers.target

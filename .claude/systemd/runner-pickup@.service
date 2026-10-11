@@ -1,0 +1,10 @@
+[Unit]
+Description=Board pickup check for RUNNER %i
+
+[Service]
+# Type=oneshot: systemd itself refuses a second tick while one runs. One board read per tick, no GitHub.
+Type=oneshot
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Environment=HOME=%h
+ExecStart=%h/.local/lib/hypertask/runner-pickup/runner-pickup run %i
+TimeoutStartSec=2min

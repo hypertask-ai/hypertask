@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -111,6 +111,7 @@ export async function lunaFreePlanEnabled(
   userId: number | null | undefined,
 ): Promise<boolean> {
   if (!userId) return false;
+  if (await haikuDefaultModelEnabled(userId)) return true;
   try {
     // Loaded on demand: @/lib/flags reaches the auth stack, which the many
     // callers that only need the plan checks below should not pay for.
@@ -121,7 +122,42 @@ export async function lunaFreePlanEnabled(
   }
 }
 
+/**
+ * HTPR-7075: background AI jobs run on Claude 5.5. Jobs with no user (demo board,
+ * crons) evaluate the flag as user 0, which only an Everyone rollout enables.
+ * A failed read counts as Off, so the old model ladders keep working.
+ */
+export async function backgroundClaudeModelEnabled(userId: number | null | undefined): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7075_BACKGROUND_CLAUDE_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+/** HTPR-7076: cache fixed AI instructions. Failed read counts as Off; no user evaluates as user 0. */
+export async function promptCacheEnabled(userId: number | null | undefined): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    return await isFeatureEnabled(HTPR_7076_PROMPT_CACHE_FLAG, userId ?? 0);
+  } catch {
+    return false;
+  }
+}
+
+export async function haikuDefaultModelEnabled(userId: number | null | undefined): Promise<boolean> {
+  try {
+    const { isFeatureEnabled } = await import("@/lib/flags");
+    if (await isFeatureEnabled(HTPR_7038_HAIKU_DEFAULT_FLAG, userId ?? 0)) return true;
+  } catch {
+    return backgroundClaudeModelEnabled?.(userId) ?? false;
+  }
+  return backgroundClaudeModelEnabled?.(userId) ?? false;
+}
+
 export async function haiku55ModelEnabled(userId: number | null | undefined): Promise<boolean> {
+  if (await haikuDefaultModelEnabled(userId)) return true;
   if (!userId) return false;
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");

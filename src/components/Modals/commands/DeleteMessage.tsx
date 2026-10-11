@@ -24,7 +24,7 @@ const DeleteMessage = ({ callback }: { callback: (id: number) => void }) => {
       if (response.status === 200) {
         setDeleteModal(false);
         callback(idToDelete);
-        toast("Comment deleted succesfully");
+        toast("Comment deleted successfully");
         return;
       }
       if (response.status === 201) {

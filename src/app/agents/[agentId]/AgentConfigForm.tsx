@@ -2,6 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import { aiModelOptions, getAiModelOptionById, isAiModelOptionVisible } from "@/lib/aiModelOptions";
 import { canPinModelOption } from "@/lib/nativeAgent/modelPin";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -53,10 +54,11 @@ export function AgentConfigForm({
   handleVisibilityChange, providerKeyLoaded, visibilityNotice, savingImportant,
   handleImportantToggle, currentUser,
 }: Props) {
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = useFlag(
     HTPR_7010_HAIKU_5_5_FLAG,
-  );
-  const visibleModelOptions = haiku55Enabled
+  ) || haikuDefaultEnabled;
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
     ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
     : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
   return (

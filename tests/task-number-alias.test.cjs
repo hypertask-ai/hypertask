@@ -80,6 +80,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/projects/getAllIncludes": {
+      projectContentAccessWhere: require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", {
+        "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+        "@/utils/controllers/notifications/visibleInboxScope": {},
+      }).projectContentAccessWhere,
       getProjectWhere: (userId, requestedAgentId) => {
         assert.equal(userId, 6);
         assert.equal(requestedAgentId ?? null, agentId);

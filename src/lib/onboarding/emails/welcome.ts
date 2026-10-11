@@ -8,6 +8,7 @@ import { MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
 import { isOnboardingQaArmed } from "@/lib/onboarding/qaArm";
 import prisma from "@/lib/prisma";
 import { getRedis } from "@/lib/redis";
+import { trackActivation } from "@/lib/telemetry/activationAnalytics";
 import { onboardingEmailSkipReason } from "./eligibility";
 import { renderOnboardingEmail } from "./layout";
 
@@ -64,7 +65,7 @@ export async function maybeSendWelcomeEmail(userId: number, opts?: { boardId?: n
         idempotencyKey: `htpr-7025/user/${userId}`,
       });
       sent = true;
-      // HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "welcome" })
+      void trackActivation(userId, "lifecycle_email_sent", { type: "welcome" });
       try {
         await prisma.logs.create({ data: { log: "welcome_email_sent", type: LogType.Signup, status: Status.Normal, LoggedById: userId } });
       } catch (error) {

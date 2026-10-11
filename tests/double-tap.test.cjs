@@ -15,7 +15,7 @@ const { useDoubleTap } = jiti(
 
 const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function renderHarness(threshold = 10) {
+async function renderHarness(threshold = 10, shouldHandleEvent) {
   const dom = new JSDOM('<div id="root"></div>');
   const previous = {
     window: global.window,
@@ -40,9 +40,12 @@ async function renderHarness(threshold = 10) {
         onSingleTap: () => {
           singleTaps += 1;
         },
+        shouldHandleEvent,
       },
     );
-    return React.createElement("button", bind, "comment");
+    return React.createElement("button", bind,
+      React.createElement("span", { "data-target": "control" }, "control"),
+      React.createElement("span", { "data-target": "text" }, "comment"));
   }
 
   const root = createRoot(document.getElementById("root"));
@@ -62,6 +65,40 @@ async function renderHarness(threshold = 10) {
       global.IS_REACT_ACT_ENVIRONMENT = previous.IS_REACT_ACT_ENVIRONMENT;
     },
   };
+}
+
+for (const filtered of [true, false]) {
+  for (const delay of [0, 15]) {
+    test(`${filtered ? "filtered" : "legacy"} native fallback ${filtered ? "remembers" : "does not filter"} a rejected opening control click (delay=${delay})`, async (t) => {
+      const harness = await renderHarness(10, filtered
+        ? (event) => event.target.dataset.target !== "control"
+        : undefined);
+      t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 1000 });
+      try {
+        const control = harness.button.querySelector("[data-target='control']");
+        const text = harness.button.querySelector("[data-target='text']");
+        await React.act(async () => {
+          control.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+          t.mock.timers.tick(delay);
+          text.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true, detail: 2 }));
+          text.dispatchEvent(new harness.dom.window.MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+        });
+        assert.deepEqual(harness.counts(), { doubleTaps: filtered ? 0 : 1, singleTaps: !filtered && delay ? 1 : 0 });
+
+        if (filtered) {
+          await React.act(async () => {
+            text.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true, detail: 1 }));
+            t.mock.timers.tick(15);
+            text.dispatchEvent(new harness.dom.window.MouseEvent("click", { bubbles: true, detail: 2 }));
+            text.dispatchEvent(new harness.dom.window.MouseEvent("dblclick", { bubbles: true, detail: 2 }));
+          });
+          assert.deepEqual(harness.counts(), { doubleTaps: 1, singleTaps: 1 }, "a later accepted opening click must restore the native fallback");
+        }
+      } finally {
+        await harness.cleanup();
+      }
+    });
+  }
 }
 
 test("a native double-click still edits when two taps exceed the custom timer", async () => {

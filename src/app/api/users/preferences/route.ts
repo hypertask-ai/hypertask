@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { readJsonBody } from "@/lib/mcp/readJsonBody";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -56,7 +57,8 @@ async function getCurrentUserFromCookies() {
 
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    // The signed session alone proves identity; preferences only need the id.
+    const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
@@ -66,7 +68,7 @@ export async function GET(request: NextRequest) {
       }
     }
     const user = restCompat && currentUser
-      ? currentUser.user
+      ? { id: currentUser.userId }
       : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
@@ -114,7 +116,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    // The signed session alone proves identity; preferences only need the id.
+    const currentUser = await loadCurrentUser(request.headers).catch(() => null);
     let restCompat = false;
     if (currentUser) {
       try {
@@ -124,7 +127,7 @@ export async function POST(request: NextRequest) {
       }
     }
     const user = restCompat && currentUser
-      ? currentUser.user
+      ? { id: currentUser.userId }
       : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
@@ -133,6 +136,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const modelReset = await ensureHtpr7038ModelReset(user.id);
     let body: Record<string, unknown>;
     if (restCompat) {
       const result = await readJsonBody<Record<string, unknown>>(request, {
@@ -294,6 +298,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           { success: false, error: "Invalid AI model preference team" },
           { status: 400 },
+        );
+      }
+
+      if (preferenceUpdates.length > 0 && modelReset === "failed") {
+        return NextResponse.json(
+          { success: false, error: "Model preferences are temporarily unavailable. Please retry." },
+          { status: 503 },
         );
       }
 

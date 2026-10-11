@@ -267,7 +267,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   assert.match(updateRoute, /hasBoardLayout/);
   assert.match(
     updateRoute,
-    /members:[\s\S]*?some: \{ userId: currentUser\.id, status: "Accepted" \}/,
+    /members:[\s\S]*?some: \{ userId: currentUser\.id, agentId: null, status: "Accepted" \}/,
     "only accepted board members may update a shared view",
   );
 
@@ -292,7 +292,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   );
   assert.match(
     createRoute,
-    /accessibleProject[\s\S]*?members: \{ some: \{ userId, status: "Accepted" \} \}/,
+    /accessibleProject[\s\S]*?members: \{ some: \{ userId, agentId: null, status: "Accepted" \} \}/,
     "creating or replacing a saved view requires accepted board access",
   );
   assert.match(
@@ -312,7 +312,7 @@ test("create, update, unsaved, and Save View all carry board_layout", () => {
   );
   assert.match(
     unsavedRoute,
-    /prisma\.project\.findFirst[\s\S]*?some: \{ userId: currentUser\.id, status: "Accepted" \}/,
+    /prisma\.project\.findFirst[\s\S]*?some: \{ userId: currentUser\.id, agentId: null, status: "Accepted" \}/,
     "unsaved snapshots require accepted board access before reading board data",
   );
   assert.match(

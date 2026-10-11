@@ -14,7 +14,7 @@ const mocks = {
   "lucide-react": { ChevronLeft: () => null },
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: () => true },
+  "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7000_INBOX_NEXT_OPEN_FLAG: "htpr-7000-inbox-next-open" },
   "@/components/Common/Tooltip": { __esModule: true, default: () => null },
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },

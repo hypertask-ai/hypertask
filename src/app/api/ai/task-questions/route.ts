@@ -2,6 +2,7 @@ import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelP
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
+import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { generateText, NoObjectGeneratedError, NoOutputGeneratedError, Output } from "ai";
 import { NextRequest, NextResponse } from "next/server";
@@ -217,7 +218,7 @@ export async function POST(request: NextRequest) {
     });
     const result = await generateText({
       model,
-      instructions: TASK_QUESTIONS_INSTRUCTIONS,
+      instructions: await cachedInstructionsForUser(viewer.id, { modelId: systemModel.model, fixed: TASK_QUESTIONS_INSTRUCTIONS }),
       prompt: renderPrompt("task-questions-prompt-2", (viewerBlock), (task.title), (task.status), (task.section), (description || "(empty)"), (formattedComments)),
       output: Output.object({ schema: taskQuestionsOutputSchema }),
       maxOutputTokens: 500,

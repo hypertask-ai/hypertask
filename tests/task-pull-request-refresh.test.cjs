@@ -211,7 +211,7 @@ test("task detail heals stale rows only after the authorized task lookup", async
   global.fetch = async (url, init) => {
     calls.fetches.push(url);
     assert.equal(calls.reads.length, 1);
-    assert.equal(calls.reads[0].where.project.OR[1].ownerId, 6);
+    assert.equal(calls.reads[0].where.project.OR.find(branch => branch.ownerId !== undefined).ownerId, 6);
     assert.ok(init.signal, "GitHub refresh must have a bounded network timeout");
     return Response.json({
       id: 456, html_url: row.url, title: row.title, state: "closed",

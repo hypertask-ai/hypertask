@@ -77,7 +77,7 @@ const route = taskWriteRoute({
           { ownerId: userId },
           {
             members: {
-              some: { userId: currentUser.id, status: "Accepted" },
+              some: { userId: currentUser.id, agentId: null, status: "Accepted" },
             },
           },
         ],

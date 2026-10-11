@@ -3,7 +3,6 @@
 import AgentAvatar from "@/components/Agents/AgentAvatar";
 import { AI_Tiptap_Container } from "@/components/AI_CHAT/AI_Tiptap_Container";
 import { TypingIndicator } from "@/components/AI_CHAT/TypingIndicator";
-import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
@@ -45,7 +44,6 @@ type Props = Pick<
   | "sessionLoading"
   | "messages"
   | "sending"
-  | "chatStopAndTimeoutEnabled"
   | "queuedMessages"
   | "awaiting"
   | "deliveryNotice"
@@ -109,7 +107,7 @@ export function AgentChatPane({
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
-  handleProposalAction, sending, chatStopAndTimeoutEnabled, queuedMessages, removeQueuedMessage,
+  handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
@@ -232,10 +230,8 @@ export function AgentChatPane({
                 />
               ),
             )}
-            {/* Not a copy of QueuedMessagesStrip: behind the flag a queued message
-                is a cancellable bubble in the thread, not a strip above the
-                composer. The strip goes when the flag does. */}
-            {chatStopAndTimeoutEnabled && activeFeedFilter !== "activity" &&
+            {/* A queued message is a cancellable bubble in the thread, not a strip above the composer. */}
+            {activeFeedFilter !== "activity" &&
               queuedMessages.map((item) => (
                 <div key={item.id} className="flex flex-col items-end">
                   <div className="max-w-[80%] rounded-[4px] bg-shadcn-primary px-3 py-2 text-dense text-primary-foreground whitespace-pre-wrap break-words opacity-70">
@@ -260,16 +256,14 @@ export function AgentChatPane({
                     <span>{selectedAgent.displayName} is working</span>
                   </>
                 )}
-                {chatStopAndTimeoutEnabled && (
-                  <button
-                    type="button"
-                    onClick={() => void handleStop()}
-                    disabled={stopping}
-                    className="font-medium hover:text-white-black disabled:opacity-50"
-                  >
-                    {stopping ? "Stopping…" : "Stop"}
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={() => void handleStop()}
+                  disabled={stopping}
+                  className="font-medium hover:text-white-black disabled:opacity-50"
+                >
+                  {stopping ? "Stopping…" : "Stop"}
+                </button>
               </div>
             )}
           </div>
@@ -290,12 +284,6 @@ export function AgentChatPane({
               <p className="mb-2 text-meta text-text-light-gray">
                 This agent&apos;s runtime has not enabled chat yet.
               </p>
-            )}
-            {!chatStopAndTimeoutEnabled && queuedMessages.length > 0 && (
-              <QueuedMessagesStrip
-                items={queuedMessages}
-                onRemove={removeQueuedMessage}
-              />
             )}
             <div className="relative">
               {mentionOpen && (

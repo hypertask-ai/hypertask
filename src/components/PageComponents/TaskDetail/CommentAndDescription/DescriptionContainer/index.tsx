@@ -8,6 +8,9 @@ import {
   descriptionContainerId,
 } from "@/lib/constants/TaskDetail";
 import { useDoubleTap } from "@/hooks/MultiPages/useDoubleTap";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG } from "@/lib/flags/keys";
+import { isTaskDetailEditTarget } from "@/lib/taskDetailEditTarget";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { isGuestUser } from "@/lib/demo/guest";
@@ -28,6 +31,7 @@ const DescriptionContainer = (
   const _mbl = useContext(MobileViewContext);
   const currentUser = useRecoilValue(currentUserAtom);
   const isGuest = isGuestUser(currentUser);
+  const doubleClickToEdit = useFlag(HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG);
   const { editMode, setCurrentId, currentId, setEditMode, focusOn, hasDraft, hasDraftInit, currentTask } = useTaskContext();
   // const [description, setDescription] = useState<string>(_parsedTask?.description_.content);
 
@@ -63,23 +67,33 @@ const DescriptionContainer = (
     },
     [editDescriptionHandler]
   );
-  const bind = useDoubleTap(handleDoubleTap, 200, { onSingleTap: () => setCurrentId(descriptionContainerId) });
+  const bind = useDoubleTap(handleDoubleTap, 200, {
+    onSingleTap: () => setCurrentId(descriptionContainerId),
+    shouldHandleEvent: doubleClickToEdit
+      ? (event) => isTaskDetailEditTarget(event.target, event.currentTarget)
+      : undefined,
+  });
 
   // HTPR-4659: same edit trigger as a comment. One detector, not two: a plain
   // click selects, and only a deliberate double click opens the editor.
   const pressStartRef = useRef(0);
+  const pressEditableRef = useRef(true);
   const rememberPressStart = useCallback((event: React.MouseEvent) => {
-    if (event.detail <= 1) pressStartRef.current = event.timeStamp;
-  }, []);
+    if (event.detail <= 1) {
+      pressStartRef.current = event.timeStamp;
+      pressEditableRef.current = !doubleClickToEdit || isTaskDetailEditTarget(event.target, event.currentTarget);
+    }
+  }, [doubleClickToEdit]);
   const handleDesktopDoubleClick = useCallback(
     (event: React.MouseEvent) => {
       if (isGuest) return;
+      if (doubleClickToEdit && (!pressEditableRef.current || !isTaskDetailEditTarget(event.target, event.currentTarget))) return;
       // Two unhurried clicks are two single clicks, whatever the OS says.
       if (event.timeStamp - pressStartRef.current > DELIBERATE_DOUBLE_CLICK_MS)
         return;
       editDescriptionHandler();
     },
-    [editDescriptionHandler, isGuest]
+    [doubleClickToEdit, editDescriptionHandler, isGuest]
   );
   const selectDescription = useCallback(
     () => setCurrentId(descriptionContainerId),
@@ -88,6 +102,7 @@ const DescriptionContainer = (
   const handleDesktopClick = useCallback(
     (event: React.MouseEvent) => {
       selectDescription();
+      if (doubleClickToEdit && !isTaskDetailEditTarget(event.target, event.currentTarget)) return;
 
       const target = event.target;
       const isEditorSurface =
@@ -109,7 +124,7 @@ const DescriptionContainer = (
         editGuestDescriptionHandler();
       }
     },
-    [_mbl, editGuestDescriptionHandler, isGuest, selectDescription]
+    [_mbl, doubleClickToEdit, editGuestDescriptionHandler, isGuest, selectDescription]
   );
 
   return (

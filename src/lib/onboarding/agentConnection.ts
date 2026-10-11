@@ -6,6 +6,7 @@ import { getRedis } from "@/lib/redis";
 import { sendEmail } from "@/lib/email/sendEmail";
 import { renderAgentConnectedEmail } from "@/lib/onboarding/emails/agentConnected";
 import { renderAgentConnectedEmail as renderLegacyAgentConnectedEmail } from "@/utils/controllers/notifications/emailTemplates";
+import { trackActivation } from "@/lib/telemetry/activationAnalytics";
 
 const CLIENT_NAMES: Record<string, string> = {
   "claude-code": "Claude Code",
@@ -100,7 +101,7 @@ export async function sendFirstAgentConnectedEmail(userId: number, logId: number
       where: { userId_eventType: { userId, eventType: "agent_connected_email" } },
       data: { success: true },
     });
-    // HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "agent_connected" })
+    void trackActivation(userId, "lifecycle_email_sent", { type: "agent_connected" });
   } catch {
     console.error("Agent connection email failed");
   }

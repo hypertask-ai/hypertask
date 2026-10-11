@@ -282,6 +282,13 @@ export function useTaskCommentsRealtime(
       );
     };
 
+    const onLocalTaskChange = (event: Event) => {
+      if ((event as CustomEvent<{ taskId: number }>).detail?.taskId === activeTaskId) {
+        refetchTaskAndActivity();
+      }
+    };
+    window.addEventListener(TASK_EVENT, onLocalTaskChange);
+
     async function connectAndSubscribe() {
       if (cancelled || connectionAttemptInFlight) return;
       connectionAttemptInFlight = true;
@@ -386,6 +393,7 @@ export function useTaskCommentsRealtime(
       fallbackTimer = null;
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("online", onOnline);
+      window.removeEventListener(TASK_EVENT, onLocalTaskChange);
       unsubscribe?.();
     };
   }, [

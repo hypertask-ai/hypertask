@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
@@ -92,6 +93,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         403,
       );
     }
+    await ensureHtpr7038ModelReset(dbUser.id);
     const userSetting = await prisma.userSetting.findUnique({
       where: { userId: dbUser.id },
       select: { aiModelPreferences: true },
@@ -137,12 +139,13 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
       ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
-      : { hasByok: false, byok: undefined };
+      : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
       lunaFree,
       haiku55Enabled,
+      defaultContext.haikuDefaultEnabled,
     );
     // An agent pinned to a model runs its own turns on it, which is the point
     // of pinning: a sweeper on a cheap model, a coordinator on an expensive

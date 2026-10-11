@@ -138,6 +138,13 @@ export function useFlag(key: string): boolean {
   return (seeded || hydrated) && values[key] === true;
 }
 
+export function useFlagLoaded(key: string): boolean {
+  const { values, seeded } = useContext(FeatureFlagsContext);
+  const hydrated = useHydrated();
+  // Fetch failures may unblock reads, but cannot prove a saved model is unavailable.
+  return (seeded || hydrated) && Object.hasOwn(values, key);
+}
+
 export function useFlagReady(key: string): boolean {
   // An unresolved false is not Off: switching query keys after a read starts duplicates it.
   const { values, fallback } = useContext(FeatureFlagsContext);

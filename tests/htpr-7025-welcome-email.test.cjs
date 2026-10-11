@@ -11,6 +11,7 @@ const key = "htpr-7025-welcome-email";
 process.env.SESSION_SECRET = "welcome-email-test-only-signing-secret";
 
 function load(file, mocks = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText;
@@ -19,7 +20,7 @@ function load(file, mocks = {}) {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
     const target = name.startsWith("@/") ? `src/${name.slice(2)}` : path.join(path.dirname(file), name);
-    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)));
+    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)) && fs.statSync(path.join(root, candidate)).isFile());
     assert.ok(resolved, `Missing test import ${name}`);
     return load(resolved, mocks);
   };
@@ -31,7 +32,7 @@ function harness() {
   const user = { id: 3001, uid: "email_test", email: "new@yopmail.com", joinedAt: new Date("2026-10-09T00:00:00Z"), emailVerified: true, UserSetting: { notification: true, notificationPreference: "all", isVerified: true } };
   const state = { user, enabled: true, qaEnabled: true, failSend: false, failAudit: false, failMarker: false, failQaRead: false, now: 0, owned: { id: 42 }, member: { id: 43 } };
   const values = new Map(), expiries = new Map();
-  const sends = [], logs = [], queries = [], redisCalls = [], flagReads = [], errors = [], events = [];
+  const sends = [], logs = [], queries = [], redisCalls = [], flagReads = [], errors = [], events = [], captures = [];
   const expire = (key_) => {
     if (expiries.has(key_) && expiries.get(key_) <= state.now) { values.delete(key_); expiries.delete(key_); }
   };
@@ -61,6 +62,7 @@ function harness() {
   };
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/lib/telemetry/activationAnalytics": { trackActivation: async (...args) => { captures.push(args); } },
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, isFeatureEnabled: async (flag, id) => { flagReads.push([flag, id]); return id === 985 ? state.qaEnabled : state.enabled; } },
     "@/lib/email/sendEmail": { sendEmail: async (options) => { sends.push(options); if (state.failSend) throw new Error("Provider unavailable"); return { id: "mail-1" }; } },
@@ -72,7 +74,7 @@ function harness() {
     try { return await welcome.maybeSendWelcomeEmail(user.id, opts); }
     finally { console.error = original; }
   }
-  return { state, values, sends, logs, queries, redisCalls, flagReads, errors, events, mocks, send };
+  return { state, values, sends, logs, queries, redisCalls, flagReads, errors, events, captures, mocks, send };
 }
 
 for (const [name, change, reason] of [
@@ -96,6 +98,7 @@ for (const [name, change, reason] of [
     const priorLogs = h.logs.length;
     assert.equal(await h.send(), reason);
     assert.equal(h.sends.length, 0);
+    assert.deepEqual(h.captures, []);
     assert.equal(h.logs.length, priorLogs);
     assert.equal(h.errors.length, 0);
     if (reason === "already_sent") assert.equal(h.redisCalls.length, 0);
@@ -131,6 +134,31 @@ test("successful welcome uses shared MCP command, board, unsubscribe, lease and 
   assert.equal(await h.send(), "already_sent");
   assert.equal(h.sends.length, 1);
   assert.deepEqual(h.queries[0].orderBy, [{ createdAt: "asc" }, { id: "asc" }]);
+  assert.deepEqual(h.captures, [[3001, "lifecycle_email_sent", { type: "welcome" }]]);
+});
+
+test("welcome tracks only accepted delivery and does not await analytics", async () => {
+  const h = harness();
+  let releaseSend;
+  const delivery = new Promise((resolve) => { releaseSend = resolve; });
+  let sendStarted;
+  const started = new Promise((resolve) => { sendStarted = resolve; });
+  h.mocks["@/lib/email/sendEmail"].sendEmail = async () => { sendStarted(); await delivery; };
+  let releaseAnalytics;
+  const analytics = new Promise((resolve) => { releaseAnalytics = resolve; });
+  h.mocks["@/lib/telemetry/activationAnalytics"].trackActivation = (...args) => { h.captures.push(args); return analytics; };
+  const sending = load("src/lib/onboarding/emails/welcome.ts", h.mocks).maybeSendWelcomeEmail(h.state.user.id);
+  try {
+    await started;
+    assert.deepEqual(h.captures, [], "pending delivery must not emit");
+    releaseSend();
+    assert.equal(await Promise.race([sending, new Promise((resolve) => setTimeout(() => resolve("timed_out"), 1000))]), "sent");
+    assert.deepEqual(h.captures, [[3001, "lifecycle_email_sent", { type: "welcome" }]]);
+  } finally {
+    releaseSend();
+    releaseAnalytics();
+    await sending;
+  }
 });
 
 test("concurrent sign-ins send once", async () => {
@@ -176,6 +204,7 @@ test("arming cannot override cohort, consent or durable sent audit and marker", 
 test("send failure logs Error, releases claim and permits retry", async () => {
   const h = harness(); h.state.failSend = true;
   assert.equal(await h.send(), "failed");
+  assert.deepEqual(h.captures, []);
   assert.equal(h.values.has("onboarding:welcome:3001"), false);
   assert.deepEqual(h.logs[0], { log: "welcome_email_failed", type: "Error", status: "Normal", LoggedById: 3001 });
   assert.ok(h.errors[0][1] instanceof Error);
@@ -371,7 +400,7 @@ test("welcome flag is a feature with Owner + QA default and respects OFF", async
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7025_WELCOME_EMAIL_FLAG, key);
   assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
@@ -379,5 +408,5 @@ test("welcome flag is a feature with Owner + QA default and respects OFF", async
   assert.equal(await registry.isFeatureEnabled(key, 3001), false);
   assert.equal(await registry.isFeatureEnabled(key, 985), true);
   row = { mode: "OFF" }; assert.equal(await registry.isFeatureEnabled(key, 985), false);
-  assert.equal(read("src/lib/onboarding/emails/welcome.ts").split('// HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "welcome" })').length, 2);
+  assert.match(read("src/lib/onboarding/emails/welcome.ts"), /sent = true;\s+void trackActivation\(userId, "lifecycle_email_sent", \{ type: "welcome" \}\);/);
 });

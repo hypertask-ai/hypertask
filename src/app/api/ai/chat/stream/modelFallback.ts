@@ -1,4 +1,4 @@
-import { isHaiku55Model } from "../../../../../lib/aiModelOptions";
+import { isClaude55Model, isHaiku55Model } from "../../../../../lib/aiModelOptions";
 
 const PREVIOUS_MODELS: Record<string, string> = {
   "gpt-6-luna": "gpt-5.6-luna",
@@ -15,8 +15,13 @@ export function previousModelForFailedStream(
   hasStreamedContent: boolean,
   hasExecutedTools: boolean,
   haiku55Enabled = false,
+  // HTPR-7075: a Claude 5.5 model retries on itself, never on an older
+  // Claude version or another provider.
+  sameModelRetry = false,
 ): { model: string; status: string } | null {
-  const previous = haiku55Enabled && isHaiku55Model(model)
+  const previous = sameModelRetry && isClaude55Model(model)
+    ? model
+    : haiku55Enabled && isHaiku55Model(model)
     ? "gpt-6-luna"
     : PREVIOUS_MODELS[model];
   if (!previous || hasStreamedContent || hasExecutedTools) return null;

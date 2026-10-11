@@ -13,6 +13,7 @@ const demoBoardId = 42
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: {
       esModuleInterop: true,
@@ -90,7 +91,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
   const aliases = {
     '@/lib/prisma': prisma,
     '@/lib/auth/getSessionUser': {},
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'test-agent-flag' },
+    '@/lib/agentRuns/model': {},
     '@/lib/flags/keys': loadTs('src/lib/flags/keys.ts', {}),
     '@/lib/auth/session': {
       SESSION_COOKIE: 'ht_session', SESSION_TTL_SECONDS: 3600,
@@ -106,6 +107,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
+    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/auth/emailCodeRateLimit': {
       getEmailCodeClientIp: () => '192.0.2.1', claimEmailCodeAttempt: async () => ({ ipAllowed: true, emailAllowed: true }),
@@ -136,6 +138,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
   }
+  aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   const onboarding = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)

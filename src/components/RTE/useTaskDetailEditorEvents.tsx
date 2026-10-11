@@ -19,7 +19,11 @@ type AIGeneratedAttachment = {
   preview: string;
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
+import { useFlag as useStableLayoutFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation) {
+  const instantTicketOpen = useStableLayoutFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const stableLayout = useStableLayoutFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { setShouldShowAITaskWriter, shouldTriggerAiTaskWriter, mode, reply, editor, isMbl, isSelected, handleFocus, shouldShowFullAiTaskWriter, divIds, calculatePopoverPosition, updateDrafts, editorContent, setEditorContent, defaultContent, resetDraft, discardDraft, setResetDraft, id, setAiTriggerData, currentTask, suggestReplyAbortRef, shouldShowInlineDraftAiRef, setTrigger, setEmojiGifPicker, handleOutsideClickDescription, handleOutsideClickComment } = context;
 
 
@@ -36,7 +40,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     setShouldShowAITaskWriter(shouldTriggerAiTaskWriter && !newTaskWindow);
   }, [mode, shouldTriggerAiTaskWriter, newTaskWindow]);
 
-  useEffect(() => {
+  const insertReply = (block: ScrollLogicalPosition = "start", behavior: ScrollBehavior = "smooth") => {
     if (reply) {
       // ponytail: quote starts with an inline mention, so it would glue onto whatever
       // the user already typed. Insert a real text node (HTML leading spaces get trimmed).
@@ -51,8 +55,8 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     if (isSelected) {
       if (mode === "create-comment") {
         document.getElementById("comment-input")?.scrollIntoView({
-          behavior: "smooth",
-          block: "start"
+          behavior,
+          block
         });
       }
       !isMbl && handleFocus();
@@ -65,7 +69,8 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
         }, 100);
       }
     }
-  }, [editor, reply]);
+  };
+  useEffect(stableLayout && instantTicketOpen ? () => insertReply("center", "auto") : insertReply, [editor, reply]);
 
   useEffect(() => {
     if (!shouldShowFullAiTaskWriter) return;

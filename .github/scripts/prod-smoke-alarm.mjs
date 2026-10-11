@@ -99,7 +99,7 @@ async function findOrCreateIncident(fetchImpl, config) {
     "Hypertask project lookup",
   );
   const project = projects.projects?.find((item) => Number(item.id) === PROJECT_ID);
-  const section = project?.sections?.find((item) => item.title === SECTION_TITLE);
+  const section = project?.sections?.find((item) => (item.section_title ?? item.title) === SECTION_TITLE);
   if (!section) throw new Error(`${SECTION_TITLE} is missing from Hypertask project ${PROJECT_ID}`);
 
   const views = escapeHtml(config.failingViews || "No confirmed view was recorded; inspect the run log");

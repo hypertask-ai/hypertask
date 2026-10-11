@@ -20,6 +20,8 @@ interface IProps {
   title: string;
   requestKind?: "compose-task";
   existingTaskId?: number;
+  writerDueDate?: string;
+  writerTimeZone?: string;
   ranking?: string;
   sectionId: number;
   section_title: string;

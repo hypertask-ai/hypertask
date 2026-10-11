@@ -16,8 +16,9 @@ test("local browser smoke persists per-flag defaults and respects flag overrides
   for (const overrides of [[], ["--flag", "bugfix=OFF", "--flag", "explicit=OWNER_AND_QA"]]) {
     const stored = {};
     let saved;
+    let invalidations = 0;
     const run = new (Object.getPrototypeOf(async function () {}).constructor)(
-      "jiti", "path", "root", "process", "localFlagModes", "readPlainQaFlags", "writeFile", "stateFile", "prisma",
+      "jiti", "path", "root", "process", "localFlagModes", "readPlainQaFlags", "writeFile", "stateFile", "prisma", "withFlagModeInvalidation",
       `const allFlagsOn = false, liveLikeControl = false, localPremerge = true; let modes = {};\n${source.slice(start, end)}\nreturn modes;`,
     );
     const modes = await run(
@@ -30,7 +31,9 @@ test("local browser smoke persists per-flag defaults and respects flag overrides
         assert.equal(create.mode, update.mode);
         stored[where.key] = create.mode;
       } } },
+      async write => { invalidations++; return write(); },
     );
+    assert.equal(invalidations, 1);
     assert.deepEqual(modes, {
       ...defaults, released: "EVERYONE",
       ...(overrides.length ? { bugfix: "OFF", explicit: "OWNER_AND_QA" } : {}),

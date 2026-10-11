@@ -91,8 +91,8 @@ G-chords (`G` then second key): `I` inbox, `B` task board, `C` calendar, `A` all
 | `Mod+Shift+D` | Speech to text | palette |
 | `Mod+Shift+F` | Dictate and improve | cheatsheet |
 | `Mod+Shift+,` | Discard draft | cheatsheet |
-| `Mod+ENTER` | With `htpr-5913-consistent-comment-shortcuts`: post a new comment and stay on the current task unless its URL carries `inboxFlow=true`; Inbox flow still advances. Otherwise, save the active text entry as before. | `TipTapTaskDetail.tsx` |
-| `Mod+Shift+ENTER` | With `htpr-5913-consistent-comment-shortcuts`: post a new comment and stay on the task. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
+| `Mod+ENTER` | Post a new comment and stay on the current task unless its URL carries `inboxFlow=true`; Inbox flow still advances. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
+| `Mod+Shift+ENTER` | Post a new comment and stay on the task. Description and existing-comment edits keep their previous behavior. | `TipTapTaskDetail.tsx` |
 
 ## Inbox
 
@@ -140,8 +140,6 @@ Agent Chat's team filter also defaults to whichever team's board you last opened
 All of the bindings above except `@` are also registered in `AllCommands.ts` as a page-scoped "Agent Chat" command group (`agentChatOn`, gated on `pathname.startsWith("/agents/chat")` the same way `onCalendar` gates calendar-only entries). Each entry dispatches a `window` CustomEvent (`src/lib/agents/chatPaletteCommands.ts`, `AGENT_CHAT_COMMAND_EVENT`) rather than duplicating the roster/composer/team state the actions need; `AgentChatClient.tsx` listens for it and calls the same handlers the keydown listeners already call. `@` in the composer stays handler-only below: it isn't a discrete action, it's a live-typing popover with no equivalent "do this once" command to expose.
 
 Public docs (`docs.hypertask.ai` `features/keyboard-shortcuts.mdx`) not updated in this PR: that site lives in a separate repo this codebase can't reach. Someone with access needs to add the team-cycle row (`Alt+Shift+ArrowDown`/`Alt+Shift+ArrowUp`) there to close out the fourth registration.
-
-The comment-submission change from https://app.hypertask.ai/detail/project-15/5913 is also intentionally absent from public docs while its flag is owner-only. Publishing it now would advertise behavior other users do not have; add both rows when the flag is released to Everyone.
 
 ## Handler-only bindings (easy to miss — NOT in the palette)
 
