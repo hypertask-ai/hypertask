@@ -50,6 +50,10 @@ function parseArgs(argv) {
 // resolving. Any other failure (a real 404/500 page, a timeout, an assertion
 // failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
+// YPER4-266: a page open that hits a short network blip is tried again, twice at most.
+const TRANSIENT_NETWORK_ERROR = /\bnet::(ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_TIMED_OUT)\b/;
+const GOTO_EXTRA_TRIES = 2;
+const GOTO_RETRY_WAIT_MS = 2_000;
 
 // HTPR-7063: Midscene's aiInput sometimes loses the start of the text when the chat
 // composer re-renders while typing. Type with the keyboard instead, read the
@@ -177,8 +181,9 @@ async function runStep(page, agent, step, fixture) {
           return { resolvedUrl: step.arg };
         } catch (err) {
           const message = err?.message || String(err);
-          if (step.retryNetworkChange && attempt === 0 && /\bnet::ERR_NETWORK_CHANGED\b/.test(message)) {
-            console.warn(`Navigation interrupted by a network change; retrying ${step.arg} once`);
+          if (attempt < GOTO_EXTRA_TRIES && TRANSIENT_NETWORK_ERROR.test(message)) {
+            console.warn(`Navigation to ${step.arg} hit a network error (${message.split('\n')[0]}); retry ${attempt + 1} of ${GOTO_EXTRA_TRIES}`);
+            await pause(step.retryDelayMs ?? GOTO_RETRY_WAIT_MS);
             continue;
           }
           if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;
