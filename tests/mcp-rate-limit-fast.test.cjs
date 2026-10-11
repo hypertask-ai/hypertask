@@ -80,7 +80,11 @@ function harness({ mode = 'EVERYONE', initial = 0, env = {}, agent = true, store
     },
     '../operationContext': { getMcpOperationContext: () => checked ? { rateLimitChecked: true } : undefined },
   }, { Date: Clock, process: { env }, console: { warn: (...args) => warnings.push(args) } },
-  "module.exports.__counts = typeof localCounts === 'undefined' ? undefined : localCounts;")
+  `module.exports.__counts = typeof localCounts === 'undefined' ? undefined : localCounts;
+  module.exports.__seedCount = (key, count, windowStart) => {
+    localWindowStart = windowStart;
+    localCounts.set(key, { count, reserved: 0, leasing: false });
+  };`)
   const request = (token = 'fixture-token') => new NextRequest('http://fixture.test/api/mcp/tasks', {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   })
@@ -125,7 +129,7 @@ test('first call awaits plain INCR and sets expiry before returning', async () =
   h.release()
   assert.equal(await first.result, null)
   assert.deepEqual(h.expires, [[h.increments[0].key, 60]])
-  assert.deepEqual(state(h), { count: 1, reserved: 0 })
+  assert.deepEqual(state(h), { count: 1, reserved: 0, leasing: false })
 })
 
 test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhaustion awaits again', async () => {
@@ -143,7 +147,7 @@ test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhausti
   assert.deepEqual(h.increments.map(({ method, amount }) => [method, amount]), [['incr', 1], ['incrby', 10]])
   h.release()
   await allow(lease.result)
-  assert.deepEqual(state(h), { count: 11, reserved: 9 })
+  assert.deepEqual(state(h), { count: 11, reserved: 9, leasing: false })
   const connect = h.holdConnection()
   for (let i = 0; i < 9; i++) {
     const prepaid = await observe(h.call())
@@ -163,20 +167,62 @@ test('second call awaits INCRBY 10, nine prepaid calls skip Redis, then exhausti
   assert.equal(h.stats().flagCalls, 1, 'flag modes are cached off the hot path')
 })
 
-test('concurrent lease requests await their own prepayment before admission', async () => {
+for (const leaseFirst of [true, false]) {
+  test(`five concurrent calls preserve one lease and nine reservations with lease reply ${leaseFirst ? 'first' : 'last'}`, async () => {
+    const h = harness()
+    const hash = require('node:crypto').createHash('sha256').update('fixture-token').digest('hex')
+    const key = `mcp:ratelimit:${hash}:120`
+    h.rate.__seedCount(key, 0, 120)
+    const entry = state(h)
+    h.hold()
+    let admitted = 0
+    const allow = async call => {
+      assert.equal(await call, null)
+      admitted++
+      assert.ok(h.count() >= admitted, 'Redis covers every admitted call')
+    }
+    const calls = await Promise.all(Array.from({ length: 5 }, () => observe(h.call())))
+    assert.ok(calls.every(call => !call.settled), 'every call awaits its own prepayment')
+    assert.deepEqual(h.increments.map(({ method, amount }) => [method, amount]), [
+      ['incrby', 10], ['incr', 1], ['incr', 1], ['incr', 1], ['incr', 1],
+    ])
+    assert.equal(entry.leasing, true)
+    const replyOrder = leaseFirst ? [0, 4, 3, 2, 1] : [4, 3, 2, 1, 0]
+    for (const index of replyOrder) {
+      h.release(index === 0 ? 0 : h.pending.length - 1)
+      await allow(calls[index].result)
+      assert.equal(state(h), entry, 'replies update the original entry in place')
+    }
+    assert.equal(h.count(), 14)
+    assert.deepEqual(entry, { count: 14, reserved: 9, leasing: false })
+    for (let i = 0; i < 9; i++) {
+      const prepaid = await observe(h.call())
+      assert.equal(prepaid.settled, true)
+      await allow(prepaid.result)
+      assert.equal(h.increments.length, 5, 'all nine reservations survive concurrent replies')
+      assert.equal(entry.reserved, 8 - i)
+    }
+    assert.equal(admitted, 14)
+  })
+}
+
+test('a delayed connection adds its lease reservations to slots already prepaid', async () => {
   const h = harness()
-  await h.call()
-  h.hold()
-  const calls = await Promise.all(Array.from({ length: 5 }, () => observe(h.call())))
-  assert.equal(calls.filter(call => call.settled).length, 0)
-  assert.equal(h.increments.length, 6)
-  assert.ok(h.increments.slice(1).every(write => write.method === 'incrby'))
-  let admitted = 1
-  while (h.pending.length) h.release()
-  for (const call of calls) {
-    assert.equal(await call.result, null)
-    admitted++
+  assert.equal(await h.call(), null)
+  const entry = state(h)
+  const connect = h.holdConnection()
+  const delayed = await observe(h.call())
+  assert.equal(delayed.settled, false)
+  assert.equal(await h.call(), null)
+  assert.equal(entry.reserved, 9)
+  connect()
+  assert.equal(await delayed.result, null)
+  assert.equal(state(h), entry)
+  assert.deepEqual(entry, { count: 21, reserved: 18, leasing: false })
+  for (let admitted = 4; admitted <= 21; admitted++) {
+    assert.equal(await h.call(), null)
     assert.ok(h.count() >= admitted)
+    assert.equal(h.increments.length, 3)
   }
 })
 
@@ -199,7 +245,7 @@ test('known count exactly 50 can reserve through half the anonymous limit', asyn
   await h.call()
   assert.equal(await h.call(), null)
   assert.equal(h.increments[1].method, 'incrby')
-  assert.deepEqual(state(h), { count: 60, reserved: 9 })
+  assert.deepEqual(state(h), { count: 60, reserved: 9, leasing: false })
 })
 
 test('shared jump to 699 blocks the lease and every later call synchronously with unchanged 429', async () => {
@@ -244,7 +290,7 @@ test('raced lease above half-limit creates no reservation and classifies the ret
   await h.call()
   h.jump(115)
   assert.equal((await h.call()).status, 429)
-  assert.deepEqual(state(h), { count: 125, reserved: 0 })
+  assert.deepEqual(state(h), { count: 125, reserved: 0, leasing: false })
   assert.equal((await h.call()).status, 429)
   assert.equal(h.increments.at(-1).method, 'incr')
 })
@@ -263,7 +309,7 @@ test('new window clears prepaid reservations and awaits its first plain INCR', a
   h.release()
   assert.equal(await next.result, null)
   assert.equal(h.rate.__counts.size, 1)
-  assert.deepEqual(state(h), { count: 1, reserved: 0 })
+  assert.deepEqual(state(h), { count: 1, reserved: 0, leasing: false })
   assert.equal(h.expires.length, 2)
 })
 
@@ -280,7 +326,7 @@ test('old-window lease replies cannot repopulate reservations in the new window'
   assert.equal(await old.result, null)
   assert.equal(h.rate.__counts.size, 1)
   assert.match([...h.rate.__counts.keys()][0], /:180$/)
-  assert.deepEqual(state(h), { count: 1, reserved: 0 })
+  assert.deepEqual(state(h), { count: 1, reserved: 0, leasing: false })
 })
 
 test('a request delayed across the window boundary cannot reinsert an expired entry', async () => {
@@ -317,6 +363,31 @@ test('awaited Redis and first-write expiry errors clear entries and fail open', 
   assert.equal(expiry.rate.__counts.size, 0)
 })
 
+test('a failed concurrent INCR deletes the entry and an old lease cannot reserve on its replacement', async () => {
+  const h = harness()
+  await h.call()
+  const original = state(h)
+  h.hold()
+  const lease = await observe(h.call())
+  const single = await observe(h.call())
+  assert.equal(original.leasing, true)
+  h.pending.splice(1, 1)[0].reject(new Error('Fixture concurrent failure'))
+  assert.equal(await single.result, null)
+  assert.equal(h.rate.__counts.size, 0)
+  const replacement = await observe(h.call())
+  assert.equal(h.increments.at(-1).method, 'incr')
+  h.release(1)
+  assert.equal(await replacement.result, null)
+  const entry = state(h)
+  assert.notEqual(entry, original)
+  h.release()
+  assert.equal(await lease.result, null)
+  assert.equal(original.leasing, false)
+  assert.equal(state(h), entry)
+  assert.deepEqual(entry, { count: 13, reserved: 0, leasing: false })
+  assert.equal(h.warnings.length, 1)
+})
+
 test('connection errors clear known entries and fail open', async () => {
   const h = harness({ initial: 50 })
   await h.call()
@@ -333,7 +404,7 @@ test('a lease recreating an expired Redis key sets expiry when returned count eq
   assert.equal(await h.call(), null)
   assert.equal(h.count(), 10)
   assert.equal(h.expires.length, 2)
-  assert.deepEqual(state(h), { count: 10, reserved: 9 })
+  assert.deepEqual(state(h), { count: 10, reserved: 9, leasing: false })
 })
 
 for (const mode of ['OFF', 'OWNER_ONLY', 'OWNER_AND_QA']) {
@@ -392,6 +463,38 @@ test('turning the flag off clears reservations and turning it on awaits a fresh 
   await next.result
 })
 
+for (const waitFor of ['connection', 'increment']) {
+  test(`turning the flag off during an awaited ${waitFor} prevents old calls repopulating the cache`, async () => {
+    const h = harness()
+    await h.call()
+    const entry = state(h)
+    const connect = waitFor === 'connection' ? h.holdConnection() : undefined
+    h.hold()
+    const old = await observe(h.call())
+    assert.equal(old.settled, false)
+    h.setMode('OFF')
+    h.advance(30_001)
+    const disabled = await observe(h.call())
+    assert.equal(h.rate.__counts.size, 0)
+    h.release(waitFor === 'increment' ? 1 : 0)
+    assert.equal(await disabled.result, null)
+    if (connect) {
+      connect()
+      await tick()
+      assert.equal(h.increments.at(-1).method, 'incr')
+    }
+    h.release()
+    assert.equal(await old.result, null)
+    assert.equal(entry.leasing, false)
+    assert.equal(h.rate.__counts.size, 0)
+    const next = await observe(h.call())
+    assert.equal(next.settled, false)
+    assert.equal(h.increments.at(-1).method, 'incr')
+    h.release()
+    assert.equal(await next.result, null)
+  })
+}
+
 test('bounded map evicts reservations conservatively and never stores raw tokens', async () => {
   const h = harness()
   await h.call('fixture-token-0')
@@ -405,6 +508,32 @@ test('bounded map evicts reservations conservatively and never stores raw tokens
   assert.equal(h.increments.at(-1).method, 'incr')
   h.release()
   await evicted.result
+  assert.equal(h.rate.__counts.size, 1_000)
+})
+
+test('an evicted in-flight lease cannot attach reservations to a replacement entry', async () => {
+  const h = harness()
+  for (let i = 0; i < 1_000; i++) await h.call(`fixture-token-${i}`)
+  const key = h.increments[0].key
+  const original = h.rate.__counts.get(key)
+  h.hold()
+  const lease = await observe(h.call('fixture-token-0'))
+  assert.equal(original.leasing, true)
+  const overflow = await observe(h.call('fixture-overflow'))
+  h.release(1)
+  assert.equal(await overflow.result, null)
+  assert.equal(h.rate.__counts.has(key), false)
+  const replacement = await observe(h.call('fixture-token-0'))
+  assert.equal(h.increments.at(-1).method, 'incr')
+  h.release(1)
+  assert.equal(await replacement.result, null)
+  const entry = h.rate.__counts.get(key)
+  h.release()
+  assert.equal(await lease.result, null)
+  assert.equal(original.leasing, false)
+  assert.notEqual(entry, original)
+  assert.equal(h.rate.__counts.get(key), entry)
+  assert.deepEqual(entry, { count: 12, reserved: 0, leasing: false })
   assert.equal(h.rate.__counts.size, 1_000)
 })
 

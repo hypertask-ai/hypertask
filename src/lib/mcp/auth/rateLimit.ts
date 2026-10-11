@@ -16,7 +16,7 @@ const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_
 
 const MAX_LOCAL_COUNTS = 1_000
 const LEASE = 10
-const localCounts = new Map<string, { count: number; reserved: number }>()
+const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
 let localWindowStart: number | undefined
 let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
 
@@ -83,19 +83,27 @@ export async function checkMcpRateLimit(
     }
 
     const redis = await getRedis()
-    const trackCount = fastEnabled && localWindowStart === windowStartSeconds
+    const trackCount = fastEnabled && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds
     const state = trackCount ? localCounts.get(key) : undefined
-    const increment = state && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
-    const count = await (increment === LEASE ? redis.incrby(key, LEASE) : redis.incr(key))
+    // One lease in flight per key: concurrent calls count singly, so leases never overwrite each other.
+    const increment = state && !state.leasing && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
+    if (state && increment === LEASE) state.leasing = true
+    let count: number
+    try {
+      count = await (increment === LEASE ? redis.incrby(key, LEASE) : redis.incr(key))
+    } finally {
+      if (state && increment === LEASE) state.leasing = false
+    }
     if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
-    if (trackCount && localWindowStart === windowStartSeconds) {
-      if (!localCounts.has(key) && localCounts.size >= MAX_LOCAL_COUNTS) {
-        localCounts.delete(localCounts.keys().next().value!)
+    if (trackCount && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds) {
+      let entry = localCounts.get(key)
+      if (!entry) {
+        if (localCounts.size >= MAX_LOCAL_COUNTS) localCounts.delete(localCounts.keys().next().value!)
+        entry = { count: 0, reserved: 0, leasing: false }
+        localCounts.set(key, entry)
       }
-      localCounts.set(key, {
-        count,
-        reserved: increment === LEASE && count <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE - 1 : 0,
-      })
+      entry.count = Math.max(entry.count, count)
+      if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) entry.reserved += LEASE - 1
     }
 
     const countOutcome = classifyMcpRateLimitCount(count)
