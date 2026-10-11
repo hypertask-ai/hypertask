@@ -4,7 +4,6 @@
  * task edited while the batch ran is left alone exactly as on the instant path.
  */
 import {
-  batchProviderOptions,
   buildSmartLabelBatchRequest,
   chunkForBatch,
   labelTaskContentHash,
@@ -44,11 +43,6 @@ export async function submitSmartLabelBatch(args: {
           model: args.model,
           task,
           definitions,
-          providerOptions: batchProviderOptions("smart-label", {
-            teamId: args.teamId,
-            projectId: task.projectId,
-            userId: args.usageUserId,
-          }),
         }),
       ),
       items: Object.fromEntries(
