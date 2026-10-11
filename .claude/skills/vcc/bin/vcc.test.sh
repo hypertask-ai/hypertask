@@ -123,4 +123,14 @@ printf 'ok hax grandparent blocks activity writes\n'
 allowed launch_hax 'prompt containing -p' comment add X-1 --text hi
 allowed launch_hax interactive comment add X-1 --text hi
 printf 'ok hax without an exact prompt argument remains a runner\n'
+
+# Unknown activity subcommands stop in vcc with its usage, never reach the CLI.
+for args in "activity" "activity --help" "activity list X-1"; do
+  run bash "$vcc" $args
+  [ "$status" = 1 ] || fail "expected exit 1, got $status: vcc $args"
+  [[ $(< "$T/err") == "vcc activity: "* ]] || fail "missing vcc activity error: vcc $args"
+  [[ $(< "$VCC_TEST_TRACE") != *hypertask* ]] || fail "fell through to CLI: vcc $args"
+done
+allowed bash "$vcc" tasks get X-1
+printf 'ok unknown activity subcommands fail in vcc\n'
 printf 'vcc helper guard tests passed\n'
