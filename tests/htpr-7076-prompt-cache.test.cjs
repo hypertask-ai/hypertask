@@ -111,8 +111,8 @@ test("AiUsage schema, migration and recorder carry the two cache columns", () =>
   const schema = fs.readFileSync(path.join(root, "src/prisma/schema.prisma"), "utf8");
   assert.match(schema, /model AiUsage[\s\S]*cachedInputTokens\s+Int\?[\s\S]*cacheWriteInputTokens\s+Int\?/);
   const migration = fs.readFileSync(path.join(root, "src/prisma/migrations/20261011010000_htpr_7076_ai_usage_cache_tokens/migration.sql"), "utf8");
-  assert.match(migration, /ADD COLUMN "cachedInputTokens" INTEGER/);
-  assert.match(migration, /ADD COLUMN "cacheWriteInputTokens" INTEGER/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS "cachedInputTokens" INTEGER/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS "cacheWriteInputTokens" INTEGER/);
 });
 
 function moduleWithStubs(file, stubs) {
