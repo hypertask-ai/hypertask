@@ -239,13 +239,14 @@ function functionBindingName(fn, checker = null) {
 
 // True when the JSX holding `node` is consumed: reached through the returned
 // expression, an argument of a call, or a const that is itself consumed.
-function jsxResultIsConsumed(node, checker, seen = new Set()) {
+function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
-    if (typescript.isReturnStatement(parent)) return true;
-    if (typescript.isArrowFunction(parent)) return child === parent.body;
+    // A consuming use only counts inside a live function on a reachable path.
+    if (typescript.isReturnStatement(parent)) return isLiveCallSite(parent, live);
+    if (typescript.isArrowFunction(parent)) return child === parent.body && live.has(parent);
     if ((typescript.isCallExpression(parent) || typescript.isNewExpression(parent)) &&
-        parent.arguments?.includes(child)) return true;
+        parent.arguments?.includes(child)) return isLiveCallSite(parent, live);
     if (typescript.isVariableDeclaration(parent)) {
       if (parent.initializer !== child || !typescript.isIdentifier(parent.name)) return false;
       const symbol = checker.getSymbolAtLocation(parent.name);
@@ -256,7 +257,7 @@ function jsxResultIsConsumed(node, checker, seen = new Set()) {
         if (consumed) return;
         if (typescript.isIdentifier(item) && item !== parent.name &&
             checker.getSymbolAtLocation(item) === symbol &&
-            jsxResultIsConsumed(item, checker, seen)) {
+            jsxResultIsConsumed(item, checker, live, seen)) {
           consumed = true;
           return;
         }
@@ -278,11 +279,11 @@ function jsxResultIsConsumed(node, checker, seen = new Set()) {
 }
 
 // True when `node` is the value of a JSX attribute (onClick={node}) in JSX that is consumed.
-function isJsxAttributeValue(node, checker) {
+function isJsxAttributeValue(node, checker, live) {
   let child = node;
   while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
   return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
-    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker));
+    typescript.isJsxAttribute(child.parent.parent) && jsxResultIsConsumed(child, checker, live));
 }
 
 function isExportedVariableStatement(statement) {
@@ -522,7 +523,7 @@ function collectLiveFunctions(sourceFile, checker) {
     // An inline callback in a JSX attribute (onClick={() => send()}) runs when
     // the live element it sits in is rendered.
     for (const fn of functions) {
-      if (live.has(fn) || !isJsxAttributeValue(fn, checker) || !isLiveCallSite(fn, live)) continue;
+      if (live.has(fn) || !isJsxAttributeValue(fn, checker, live) || !isLiveCallSite(fn, live)) continue;
       live.add(fn);
       changed = true;
     }
@@ -542,7 +543,7 @@ function collectLiveFunctions(sourceFile, checker) {
           referenced = true;
           return;
         }
-        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker) &&
+        if (typescript.isIdentifier(node) && isJsxAttributeValue(node, checker, live) &&
             checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
           referenced = true;
           return;

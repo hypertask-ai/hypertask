@@ -1676,6 +1676,12 @@ test('JSX attribute callbacks gate only when their JSX is consumed', async (t) =
     ['const returned directly, inline arrow', send + 'const el=<button onClick={()=>send()}/>;return el;', true],
     ['const passed as call argument', send + 'const el=<button onClick={send}/>;render(el);return <div/>;', true],
     ['conditional in return', send + 'return cond?<button onClick={send}/>:null;', true],
+    ['unused function returns the element', send + 'const el=<button onClick={send}/>;function unused(){return el;} return <div/>;', false],
+    ['unused arrow returns the element', send + 'const el=<button onClick={send}/>;const unused=()=>el;return <div/>;', false],
+    ['unreachable return of the element', send + 'const el=<button onClick={send}/>;function helper(){return null;return el;} helper();return <div/>;', false],
+    ['unreachable return in render', send + 'const el=<button onClick={send}/>;return <div/>;return el;', false],
+    ['live helper returns the element', send + 'const el=<button onClick={send}/>;function helper(){return el;} return <div>{helper()}</div>;', true],
+    ['live arrow helper returns the element', send + 'const el=<button onClick={send}/>;const helper=()=>el;return <div>{helper()}</div>;', true],
   ];
   for (const [name, body, expected] of cases) {
     const fixture = makeRepo(t), base = commit(fixture.git, 'base');
