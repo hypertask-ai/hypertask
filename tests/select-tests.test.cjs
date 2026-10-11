@@ -85,6 +85,19 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
   put("tests/shimRef.test.cjs", helperReq + '["src/lib/shimTarget.ts"].map(loadTsModule);\n');
   put("tests/shimAlias.test.cjs", 'const { loadTsModule: l } = require("./helpers/loadTs.cjs");\nl("src/lib/shimTarget.ts");\n');
   put("tests/shimNs.test.cjs", 'const h = require("./helpers/loadTs.cjs");\n// loadTsModule(x) in a comment is ignored\nh.loadTsModule("src/lib/shimTarget.ts");\n');
+  put("tests/helpers/anon.cjs", "module.exports = (p) => require(p);\n");
+  put("tests/shimAnon.test.cjs", 'require("./helpers/anon.cjs")("src/lib/shimTarget.ts");\n');
+  put(
+    "tests/shimNested.test.cjs",
+    "function load(f) { return (r) => require(r); }\n" +
+      "function run(p) { load(process.env.X); return require(p); }\n" +
+      'run("src/lib/shimTarget.ts");\n',
+  );
+  put("tests/helpers/loadRel.cjs", "exports.loadRel = function loadRel(file) { return (r) => require(r); };\n");
+  put("tests/helpers/relTarget.ts", "export const rel = 1;\n");
+  const relReq = 'const { loadRel } = require("./helpers/loadRel.cjs");\n';
+  put("tests/shimRel.test.cjs", relReq + 'loadRel("./relTarget.ts");\n');
+  put("tests/shimRelMissing.test.cjs", relReq + 'loadRel("./nope.ts");\n');
   put("tests/test-inventory.test.cjs", "// guard\n");
   put("tests/demo-smoke.test.cjs", "// guard\n");
   put("tests/file-size-limit.test.cjs", "// guard\n");
@@ -106,6 +119,12 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
     assert.ok(viaShim.includes("tests/shimHelper.test.cjs"), "loader in a test helper is traced");
     assert.ok(!pick("src/lib/other.ts").includes("tests/shimLiteral.test.cjs"), "shim test is not always-selected");
     assert.ok(!pick("src/lib/other.ts").includes("tests/shimHelper.test.cjs"), "helper shim test is not always-selected");
+    const otherPick = pick("src/lib/other.ts");
+    assert.ok(otherPick.includes("tests/shimAnon.test.cjs"), "anonymous exported loader stays always-selected");
+    assert.ok(otherPick.includes("tests/shimNested.test.cjs"), "unknown nested loader call stays always-selected");
+    assert.ok(otherPick.includes("tests/shimRelMissing.test.cjs"), "literal that resolves nowhere stays always-selected");
+    assert.ok(!otherPick.includes("tests/shimRel.test.cjs"), "helper-relative literal is traced, not always-selected");
+    assert.ok(pick("tests/helpers/relTarget.ts").includes("tests/shimRel.test.cjs"), "literal resolved from the helper dir");
     assert.ok(pick("src/lib/other.ts").includes("tests/shimRef.test.cjs"), "loader passed by reference is untraceable");
     assert.ok(pick("src/lib/other.ts").includes("tests/shimAlias.test.cjs"), "destructured loader alias is untraceable");
     assert.ok(viaShim.includes("tests/shimNs.test.cjs"), "namespace call h.loader('lit') is traced");
