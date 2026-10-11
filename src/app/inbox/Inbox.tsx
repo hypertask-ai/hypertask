@@ -107,6 +107,7 @@ const Inbox = ({
   homepageRouter: string;
   originProject: string;
 }) => {
+  const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
   const snapshot = useFirstScreenSurface(currentUser.id);
   const queryClient = useQueryClient();
   const [inboxDocument] = useState(() => {
@@ -839,7 +840,10 @@ const Inbox = ({
             }`}
           >
             <DecisionInboxPanel userId={currentUser.id} />
-            <SplitTitlesContainer contentGap={appShellRailOn && !isInboxZero}>
+            <SplitTitlesContainer
+              contentGap={appShellRailOn && !isInboxZero}
+              SelectedCount={showSelectedCount ? InboxSelectedCount : null}
+            >
               {_notificationsTQ?.structuredData?.tabs.map(
                 (tab: InboxTabMeta, index: number, tabs: InboxTabMeta[]) => (
                   <SplitTitle
@@ -1023,8 +1027,13 @@ export default Inbox;
 interface IProps {
   children?: ReactNode;
   contentGap?: boolean;
+  SelectedCount?: typeof InboxSelectedCount | null;
 }
-const SplitTitlesContainer: FC<IProps> = ({ children, contentGap = false }) => {
+const SplitTitlesContainer: FC<IProps> = ({
+  children,
+  contentGap = false,
+  SelectedCount = null,
+}) => {
   return (
     <div
       className={`inbox-text-left relative hidden items-baseline pr-[16px] pt-4 ${
@@ -1034,21 +1043,21 @@ const SplitTitlesContainer: FC<IProps> = ({ children, contentGap = false }) => {
       <div className="pills-row group relative flex min-h-8 grow flex-wrap items-center gap-[9px]">
         {children}
       </div>
-      <ButtonGroup />
+      <ButtonGroup SelectedCount={SelectedCount} />
     </div>
   );
 };
 
-const ButtonGroup = () => {
+const ButtonGroup = ({
+  SelectedCount,
+}: {
+  SelectedCount: typeof InboxSelectedCount | null;
+}) => {
   const { selectedIdsArray, handleBulkArchive } = useBulkSelectionContext();
-  const showSelectedCount = useFlag(HTPR_7111_INBOX_SELECTED_COUNT_FLAG);
 
   return (
     <div className="flex items-center gap-2">
-      <InboxSelectedCount
-        enabled={showSelectedCount}
-        count={selectedIdsArray.length}
-      />
+      {SelectedCount && <SelectedCount count={selectedIdsArray.length} />}
       <div
         className={`transition-all duration-75 ${
           selectedIdsArray.length > 0 ? "flex items-center gap-2" : "hidden"

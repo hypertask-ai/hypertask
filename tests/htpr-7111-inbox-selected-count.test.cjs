@@ -12,24 +12,24 @@ const root = path.resolve(__dirname, "..");
 const jiti = createJiti(__filename, { alias: { "@": path.join(root, "src") }, jsx: { runtime: "automatic" } });
 const { InboxSelectedCount } = jiti(path.join(root, "src/app/inbox/InboxSelectedCount.tsx"));
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
-const html = (enabled, count) =>
-  renderToStaticMarkup(React.createElement(InboxSelectedCount, { enabled, count }));
+const html = (count) =>
+  renderToStaticMarkup(React.createElement(InboxSelectedCount, { count }));
 
-test("flag on shows N selected, as My Tasks does for any count above zero", () => {
-  assert.match(html(true, 1), />1 selected</);
-  assert.match(html(true, 12), />12 selected</);
-  assert.match(html(true, 3), /whitespace-nowrap/);
+test("shows N selected, as My Tasks does for any count above zero", () => {
+  assert.match(html(1), />1 selected</);
+  assert.match(html(12), />12 selected</);
+  assert.match(html(3), /whitespace-nowrap/);
 });
 
-test("nothing shows with zero selected or with the flag off", () => {
-  assert.equal(html(true, 0), "");
-  assert.equal(html(false, 5), "");
+test("nothing shows with zero selected", () => {
+  assert.equal(html(0), "");
 });
 
-test("the header ButtonGroup renders it behind the ticket flag", () => {
+test("Inbox calls the ticket flag and the header ButtonGroup renders the count from it", () => {
   const src = read("src/app/inbox/Inbox.tsx");
   assert.match(src, /useFlag\(HTPR_7111_INBOX_SELECTED_COUNT_FLAG\)/);
-  assert.match(src, /<InboxSelectedCount[\s\S]*count=\{selectedIdsArray\.length\}/);
+  assert.match(src, /SelectedCount=\{showSelectedCount \? InboxSelectedCount : null\}/);
+  assert.match(src, /\{SelectedCount && <SelectedCount count=\{selectedIdsArray\.length\} \/>\}/);
 });
 
 test("flag defaults to Owner + QA (feature kind)", () => {
