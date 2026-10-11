@@ -6,7 +6,7 @@ const modes = ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"];
 // live is the plain QA user's view (true means Everyone). qa is the QA account's own view when
 // known: true there and false for the plain user means Owner + QA, false in both means Off (or
 // Only me, which the QA account cannot tell apart from Off and which the registry default keeps).
-// Without qa, a flag that is not released keeps its registry default.
+// Without qa, or for a flag missing from it (not deployed yet), a flag that is not released keeps its registry default.
 export function localFlagModes(defaults, live, overrides = [], qa = undefined) {
   if (!live || Array.isArray(live) || typeof live !== "object" ||
       !Object.keys(live).length || !Object.values(live).every(value => typeof value === "boolean")) {
@@ -16,7 +16,7 @@ export function localFlagModes(defaults, live, overrides = [], qa = undefined) {
     throw new Error("Invalid QA account flag view");
   }
   const unreleased = (key, mode) => {
-    if (qa === undefined) return mode;
+    if (qa === undefined || !Object.hasOwn(qa, key)) return mode;
     if (qa[key] === true) return "OWNER_AND_QA";
     return mode === "OWNER_ONLY" ? mode : "OFF";
   };

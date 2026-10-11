@@ -122,9 +122,10 @@ test("the drift report names the flag, the file mode and the live mode", async (
   assert.deepEqual(modeDifferences(fresh(), live), ["htpr-1-a: file OWNER_AND_QA, live OFF"]);
 });
 
-test("the committed copy says the local writing assistance flag is Off", () => {
-  const { modes } = JSON.parse(readFileSync(path.join(root, "e2e/smoke/production-flag-modes.json"), "utf8"));
-  assert.equal(modes["htpr-5908-local-writing-assistance"], "OFF");
+test("a flag missing from both live views (not deployed yet) keeps its registry default", async () => {
+  const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
+  const modes = localFlagModes({ "htpr-1-a": "OWNER_AND_QA", "htpr-2-b": "OWNER_AND_QA" }, { "htpr-1-a": false }, [], { "htpr-1-a": false });
+  assert.deepEqual(modes, { "htpr-1-a": "OFF", "htpr-2-b": "OWNER_AND_QA" });
 });
 
 test("local premerge warns loudly when the copy differs from live and reads the QA account view", () => {
