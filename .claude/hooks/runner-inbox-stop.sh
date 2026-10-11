@@ -46,22 +46,49 @@ session_info() {
 IFS=$'\037' read -r spid name < <(session_info; echo)
 name=${name%% | *}
 runner=""
-case "$name" in
-  "INFRA MANAGER") slot=infra-manager ;;
-  "SPEED RUNNER") slot=speed-runner ;;
-  *) [[ $name =~ ^RUNNER\ ([1-9][0-9]*)$ ]] || exit 0; runner=${BASH_REMATCH[1]}; slot=runner-$runner ;;
-esac
+# Prints the slot a session name maps to (runner-<n>, infra-manager, speed-runner), nothing for any other name.
+slot_of() {
+  case "$1" in
+    "INFRA MANAGER") echo infra-manager ;;
+    "SPEED RUNNER") echo speed-runner ;;
+    *) [[ $1 =~ ^RUNNER\ ([1-9][0-9]*)$ ]] && echo "runner-${BASH_REMATCH[1]}" ;;
+  esac
+}
+slot=$(slot_of "$name"); [ -n "$slot" ] || exit 0
+[[ $slot == runner-* ]] && runner=${slot#runner-}
 mkdir -p "$STATE" 2>/dev/null || exit 0
 events=$STATE/$slot.events.jsonl
 # Slot ownership: the marker names the session that owns the slot. A session whose marker names another live pid does
 # not own it: it emits nothing and consumes nothing. A dead or missing owner is taken over.
 marker_pid() { jq -r '.pid // empty' "$STATE/$slot.hook-alive" 2>/dev/null; }
 owns_slot() { [ "$(marker_pid)" = "$spid" ]; }
+# True when this session's current name (re-read the way the hook did at start) no longer maps to the slot it captured.
+# A session whose name cannot be found at all counts as unchanged.
+renamed() {
+  local info n; info=$(session_info); [ -n "$info" ] || return 1
+  n=${info#*$'\037'}; [ "$(slot_of "${n%% | *}")" != "$slot" ]
+}
+# Gives the slot up after a rename: the marker goes only if it still names this pid, under the owner lock.
+release_slot() {
+  exec 6>>"$STATE/$slot.owner.lock"; flock -x 6
+  owns_slot && rm -f "$STATE/$slot.hook-alive"
+  flock -u 6
+}
+# True when this session may consume the slot's events now: not renamed, and the marker still names it. After a rename
+# the slot is released (a new session with the slot's name can then take it) and the caller emits nothing.
+may_consume() {
+  [[ $spid =~ ^[0-9]+$ ]] || return 0
+  if renamed; then release_slot; return 1; fi
+  owns_slot
+}
 if [[ $spid =~ ^[0-9]+$ ]]; then
+  # Read, check and write under one lock, so two sessions starting together leave exactly one owner.
+  exec 6>>"$STATE/$slot.owner.lock"; flock -x 6
   cur=$(marker_pid)
   if [[ $cur =~ ^[0-9]+$ ]] && [ "$cur" != "$spid" ] && kill -0 "$cur" 2>/dev/null; then exit 0; fi
   printf '{"pid":%s,"ts":%s,"mode":"%s"}\n' "$spid" "$(date +%s)" "$mode" > "$STATE/$slot.hook-alive.$$" 2>/dev/null \
     && mv "$STATE/$slot.hook-alive.$$" "$STATE/$slot.hook-alive" 2>/dev/null
+  flock -u 6
 fi
 
 # Sets msg to the oldest undelivered events that fit in $MAXCHARS (whole events; a single longer event is cut with a note)
@@ -102,7 +129,7 @@ if [ "$mode" = wait ]; then
   start=$(date +%s)
   while :; do
     if [[ $spid =~ ^[0-9]+$ ]] && ! kill -0 "$spid" 2>/dev/null; then rm -f "$STATE/$slot.waiter.$spid.lock"; exit 0; fi
-    if [[ $spid =~ ^[0-9]+$ ]] && ! owns_slot; then exit 0; fi
+    may_consume || exit 0
     if [ $(( $(date +%s) - start )) -ge "$WAIT_MAX" ]; then
       # A hook cannot renew itself; the next prompt, session start or turn end starts a new waiter, and until then
       # runner-deliver logs "no live waiter" for each event and tells INFRA MANAGER once. Logged here so the gap is visible.
@@ -111,7 +138,7 @@ if [ "$mode" = wait ]; then
     fi
     if [ -s "$events" ] && grep -q '"delivered":false' "$events" 2>/dev/null; then
       exec 8>"$STATE/$slot.events.lock"; flock -x 8
-      if [[ $spid =~ ^[0-9]+$ ]] && ! owns_slot; then exit 0; fi
+      may_consume || exit 0
       events_take
       # Mark and wake only when the write succeeded; otherwise the events stay pending.
       if [ -n "$msg" ] && printf '%s\n' "$msg" >&2; then events_mark; exit 2; fi
@@ -123,6 +150,7 @@ fi
 
 # Board events (any mode), taken under the events lock that is held until they are marked.
 exec 8>"$STATE/$slot.events.lock"; flock -x 8
+may_consume || exit 0
 events_take
 
 # A RUNNER's next assigned ticket (prompt and stop only, with the old guards).

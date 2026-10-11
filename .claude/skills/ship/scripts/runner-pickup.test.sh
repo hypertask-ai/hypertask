@@ -172,6 +172,44 @@ eq "prompt/post/stop of the displaced session emit nothing" "$(hookp post)$(hook
 eq "and consumed nothing either" "$(undelivered runner-3)" "1"
 kill "$OTHER" 2>/dev/null; sleep 0.2; hookp post >/dev/null  # owner gone: this session takes the slot back and gets the event
 eq "when the owner is gone the session takes the slot over" "$(undelivered runner-3)" "0"
+# Atomic acquisition: two sessions starting together on a free slot leave exactly one owner; the loser consumes nothing.
+sleep 300 & PA=$!; sleep 300 & PB=$!
+race() { # mode: both sessions start at once on a free slot with one pending event
+  rm -f "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"; ev runner-3 race "race-$1"
+  local oa ob
+  oa=$T/oa; ob=$T/ob
+  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PA" "$HOOK" "$1" > "$oa" 2>/dev/null &
+  echo "$pl" | SHIP_SESSION_NAME="RUNNER 3" SHIP_SESSION_PID="$PB" "$HOOK" "$1" > "$ob" 2>/dev/null &
+  wait
+  local n=0; [ -s "$oa" ] && n=$((n+1)); [ -s "$ob" ] && n=$((n+1))
+  echo "$n|$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")|$(undelivered runner-3)"
+}
+for m in prompt post stop; do
+  for i in 1 2 3 4 5; do
+    r=$(race $m)
+    case "$r" in "1|$PA|0"|"1|$PB|0") ;; *) bad "concurrent $m start #$i: $r"; continue 2;; esac
+  done
+  ok "two concurrent $m starts: exactly one owner and one delivery (5 trials)"
+done
+# A session that loses the slot between its start and its take consumes nothing (recheck under the events lock).
+printf '{"pid":%s,"ts":1}\n' "$PB" > "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"; ev runner-3 lost 'lost'
+eq "loser of the slot consumes nothing in prompt, post and stop" "$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" prompt)$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" post)$(SHIP_SESSION_PID=$PA hook 'RUNNER 3' "$pl" stop)|$(undelivered runner-3)" "|1"
+# Rename: a session whose current name no longer maps to its captured slot releases the slot; the replacement takes it.
+SESS=$T/sessions; mkdir -p "$SESS"
+printf '{"nameSource":"user","name":"RUNNER 3"}\n' > "$SESS/$$.json"
+rm -f "$RUNNER_INBOX_DIR/runner-3.hook-alive"; : > "$RUNNER_INBOX_DIR/runner-3.events.jsonl"
+oldwait() { echo "$pl" | RUNNER_PICKUP_SESSIONS_DIR=$SESS RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX=8 "$HOOK" wait; }
+oldwait >/dev/null 2>&1 & OW=$!
+sleep 0.5
+eq "before the rename the waiter owns the slot" "$(jq -r .pid "$RUNNER_INBOX_DIR/runner-3.hook-alive")" "$$"
+printf '{"nameSource":"user","name":"HTPR-9 | other work"}\n' > "$SESS/$$.json"
+wait "$OW"; rc=$?
+eq "renamed waiter exits 0 and releases the marker" "$rc|$([ -e "$RUNNER_INBOX_DIR/runner-3.hook-alive" ] && echo kept || echo gone)" "0|gone"
+ev runner-3 ren1 'for the new RUNNER 3'
+eq "renamed session consumes nothing in post" "$(echo "$pl" | RUNNER_PICKUP_SESSIONS_DIR=$SESS "$HOOK" post)|$(undelivered runner-3)" "|1"
+out=$(bash -c 'printf "{\"nameSource\":\"user\",\"name\":\"RUNNER 3\"}\n" > "$1/$$.json"; echo "$2" | RUNNER_PICKUP_SESSIONS_DIR=$1 "$3" post' _ "$SESS" "$pl" "$HOOK")
+eq "a new session named RUNNER 3 takes the slot and gets the event" "$(ctx <<<"$out" | tail -1)|$(undelivered runner-3)" "1) for the new RUNNER 3|0"
+rm -f "$SESS/$$.json"; kill "$PA" "$PB" 2>/dev/null
 # A backlog over 9,000 characters goes out in several calls, whole events, each exactly once.
 pad=$(printf 'x%.0s' $(seq 500)); for i in $(seq 1 30); do ev runner-3 "big-$i" "event-$i $pad"; done
 c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx); c3=$(hook 'RUNNER 3' "$pl" post | ctx)
