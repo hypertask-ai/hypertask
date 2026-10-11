@@ -158,6 +158,13 @@ test('real input, composition and native beforeinput events complete phone chips
 })
 
 
+test('phone picker fills the keyboard-safe list even when the separate search layout flag is off', () => {
+  assert.match(input, /mobileEnabled \? "w-full h-full max-h-full max-w-full \[&_button\]:min-h-\[44px\]"/)
+  assert.match(input, /autocompleteEnabled && !mobileEnabled && <div/)
+  assert.match(input, /mobileEnabled && pickerRef\.current\?\.querySelector<HTMLElement>\(`/)
+  assert.match(input, /onPointerDown=\{\(event\) => \{ if \(mobileEnabled\) event\.preventDefault\(\); \}\}/)
+})
+
 test('phone overlay omits Bootstrap important margins instead of trying to override them inline', () => {
   assert.match(input, /mobileOverlay \? "bg-containerBackground" : "mt-4"/)
   assert.match(input, /mobileOverlay \? "min-h-\[44px\] h-11 truncate bg-containerBackground" : "mt-2"/)

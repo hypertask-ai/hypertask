@@ -145,7 +145,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   useEffect(() => {
     if (!autocompleteEnabled || !open) return;
-    const list = pickerRef.current;
+    const list = (mobileEnabled && pickerRef.current?.querySelector<HTMLElement>(`#${listId}`)) || pickerRef.current;
     const row = list?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`);
     if (mobileEnabled && list && row) {
       // Scroll only the list: scrollIntoView can pan the page behind the keyboard.
@@ -507,13 +507,14 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
         </div>
       ) : open && (
-        <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
-          {autocompleteEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
+        <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}>
+          {autocompleteEnabled && !mobileEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
           {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
               loadingLabel="Loading suggestions..."
-              className={mobileEnabled ? "max-w-full [&_button]:min-h-[44px]" : autocompleteEnabled ? "max-w-full" : undefined}
+              className={mobileEnabled ? "w-full h-full max-h-full max-w-full [&_button]:min-h-[44px]" : autocompleteEnabled ? "max-w-full" : undefined}
               isLoading={localRows === null && !tips && loading}
               hasItems={rows.length > 0}
               noResults={!rows.length}
