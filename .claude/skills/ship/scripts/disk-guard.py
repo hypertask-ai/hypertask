@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 from datetime import datetime, timezone
+import errno
 import fcntl
 import io
 import json
@@ -98,7 +99,7 @@ with os.scandir('/proc') as entries:
     processes = [entry.name for entry in entries if entry.name.isdigit()]
 for pid in processes:
     process = '/proc/' + pid
-    links = [process + '/cwd', process + '/root']
+    links = [process + '/cwd', process + '/root', process + '/exe']
     try:
         with os.scandir(process + '/fd') as entries:
             links.extend(entry.path for entry in entries)
@@ -132,7 +133,7 @@ def process_paths(proc=Path('/proc'), processes=None):
         uid, unreadable = None, False
         try:
             uid = process.stat().st_uid
-            links = [process / 'cwd', process / 'root']
+            links = [process / 'cwd', process / 'root', process / 'exe']
             try:
                 links.extend((process / 'fd').iterdir())
             except FileNotFoundError:
@@ -206,10 +207,18 @@ def cmdline_paths(proc=Path('/proc')):
             complete = False
             continue
         args = [arg for arg in raw.decode(errors='replace').split('\0') if arg]
-        programs.update(Path(arg).name for arg in args[:2])
+        # npm rewrites its title into one string ("npm exec next build"), so take the first word too.
+        heads = [arg.split()[0] for arg in args[:2] if arg.split()]
+        try:
+            heads.extend((process / 'comm').read_text(errors='replace').split()[:1])
+        except (FileNotFoundError, ProcessLookupError):
+            pass
+        except OSError:
+            complete = False
+        programs.update(Path(head).name for head in heads)
         for arg in args:
-            # Also catch --cache=/path and PATH-like lists.
-            paths.update(Path(piece) for piece in re.split(r'[=:,]', arg) if piece.startswith('/'))
+            # Also catch --cache=/path, PATH-like lists and rewritten one-string titles.
+            paths.update(Path(piece) for piece in re.split(r'[=:,\s]', arg) if piece.startswith('/'))
     return paths, programs, complete
 
 
@@ -568,22 +577,36 @@ class Guard:
         """Move out of the way first, so a tool starting now sees an empty cache, then delete."""
         trash = self.state / 'trash'
         trash.mkdir(parents=True, exist_ok=True)
+        self.check_trash(trash)
         target = trash / f'{int(self.now)}-{os.getpid()}-{self.removed}-{path.name}'
         try:
             path.rename(target)
-        except OSError:
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise ValueError('cannot move cache aside; kept')
             target = path  # Another filesystem: delete in place after the same checks.
         if target.is_dir() and not target.is_symlink():
             shutil.rmtree(target)
         else:
             target.unlink()
 
+    def check_trash(self, trash):
+        info = trash.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise ValueError('trash folder is a link, not a folder, or not ours')
+
     def empty_trash(self):
         """Finish deletions an interrupted run moved aside; the trash only ever holds checked caches."""
         trash = self.state / 'trash'
-        if self.dry or not trash.is_dir():
+        if self.dry or not os.path.lexists(trash):
             return
-        for item in trash.iterdir():
+        try:
+            self.check_trash(trash)
+            items = list(trash.iterdir())
+        except (OSError, ValueError) as exc:
+            self.log('error', trash, f'trash not emptied: {exc}' if isinstance(exc, ValueError) else 'trash not readable')
+            return
+        for item in items:
             try:
                 if item.lstat().st_uid != os.getuid():
                     raise ValueError('foreign owner')
@@ -639,10 +662,15 @@ class Guard:
             return
         try:
             rows = json.loads(command(['docker', 'system', 'df', '-v', '--format', '{{json .Volumes}}'])) or []
+            if not isinstance(rows, list):
+                raise ValueError('unexpected volume listing')
         except (OSError, subprocess.SubprocessError, ValueError):
             self.log('error', 'docker volumes', 'docker-volumes: Docker unavailable or listing failed')
             return
         for row in rows:
+            if not isinstance(row, dict):
+                self.log('error', 'docker volumes', 'docker-volumes: unexpected volume row')
+                continue
             name = str(row.get('Name', ''))
             label = f'docker volume {name}'
             try:
@@ -677,7 +705,7 @@ class Guard:
                 self.log('removed', label, f'docker-volumes: {kind}', size)
             except ValueError as exc:
                 self.log('kept', label, f'docker-volumes: {exc}')
-            except (OSError, subprocess.SubprocessError, TypeError):
+            except (OSError, subprocess.SubprocessError, TypeError, AttributeError):
                 self.log('error', label, 'docker-volumes: inspection or removal failed')
 
     def browsers_in_use(self, repos):
@@ -707,6 +735,24 @@ class Guard:
             raise ValueError('no Playwright install references found')
         return used
 
+    def npm_running(self):
+        """Reason to keep the npm cache, or None when no npm or npx process runs."""
+        if self.cmdlines is None or NPM_PROGRAMS & self.cmdlines[1]:
+            return 'npm or npx process running'
+        return None
+
+    def open_pr(self, repo, row):
+        """Same open-PR rule as worktree removal; any doubt keeps the worktree untouched."""
+        branch = row.get('branch', '').removeprefix('refs/heads/')
+        if not branch:
+            return 'detached worktree; open PR cannot be ruled out'
+        try:
+            if any(r.get('state') == 'OPEN' for r in self.prs(repo, branch)):
+                return 'OPEN PR for branch; worktree never touched'
+        except (ValueError, AttributeError, TypeError) as exc:
+            return f'open PR check failed: {exc}'
+        return None
+
     def caches(self, repos):
         """Free re-creatable caches, cheapest to rebuild first, until the disk is below CACHE_TARGET."""
         self.empty_trash()
@@ -735,10 +781,15 @@ class Guard:
                 groups.append(('tool-caches', path, 2 * DAY, 'tool rebuilds this cache on demand', None, None))
         npx = self.home / '.npm/_npx'
         if npx.is_dir() and not npx.is_symlink():
-            for entry in sorted(npx.iterdir()):
+            try:
+                entries = sorted(npx.iterdir())
+            except OSError:
+                entries = []
+                self.log('error', npx, 'npx-cache: folder not readable')
+            for entry in entries:
                 groups.append(('npx-cache', entry, 7 * DAY, 'npx reinstalls this package on next use', None, None))
         builds = []
-        for _, rows in repos:
+        for repo, rows in repos:
             for row in rows:
                 tree = row['path']
                 if tree in self.failed_repos or tree == self.protected or inside(tree, self.protected):
@@ -746,20 +797,19 @@ class Guard:
                 build = tree / '.next'
                 try:
                     if build.is_dir() and not build.is_symlink():
-                        builds.append((build.lstat().st_mtime, build, tree))
+                        builds.append((build.lstat().st_mtime, str(build), build, tree, repo, row))
                 except OSError:
                     continue
-        for _, build, tree in sorted(builds):
-            # A process or container using any part of the worktree keeps its build folder.
-            groups.append(('next-build', build, 2 * DAY, 'next build output of an idle worktree', tree, None))
+        for _, _, build, tree, repo, row in sorted(builds, key=lambda b: b[:2]):
+            # A process or container using any part of the worktree keeps its build folder,
+            # and a worktree with an open PR is never touched at all.
+            groups.append(('next-build', build, 2 * DAY, 'next build output of an idle worktree', tree,
+                           lambda repo=repo, row=row: self.open_pr(repo, row)))
         cacache = self.home / '.npm/_cacache'
         if cacache.is_dir() and not cacache.is_symlink():
-            def npm_idle():
-                if self.cmdlines is None or NPM_PROGRAMS & self.cmdlines[1]:
-                    return 'npm or npx process running'
-                return None
             # No npm running at all and one quiet hour since the last cache write.
-            groups.append(('npm-cache', cacache, 3600, 'npm refetches packages on demand', self.home / '.npm', npm_idle))
+            groups.append(('npm-cache', cacache, 3600, 'npm refetches packages on demand', self.home / '.npm',
+                           self.npm_running))
         for category, path, age, reason, guard, check in groups:
             if self.below_target():
                 self.log('kept', 'caches', f'disk below {CACHE_TARGET}% target; remaining caches kept')
@@ -841,7 +891,11 @@ class Guard:
         self.worktrees(repos)
         # A dry run previews every cache at any usage; a real run starts at CACHE_AT.
         if used >= CACHE_AT or self.dry:
-            self.caches(repos)
+            try:
+                self.caches(repos)
+            except Exception:
+                # Never let a cache bug stop the 80% cleanup, the critical flag or the status write.
+                self.log('error', 'caches', 'cache phase failed; remaining caches kept')
         if used >= CLEAN_AT:
             self.temporary()
             self.images()

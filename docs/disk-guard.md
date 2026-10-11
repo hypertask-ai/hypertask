@@ -40,8 +40,12 @@ in place. Reinstall to update the installed copy. No crontab is used.
   `~/.ssh`, `~/.claude`, `~/.codex` or `~/.local/state/vcc-evidence` is ever a
   candidate (YPER4-228). The checks rerun right before each deletion. The
   folder is first renamed into `~/.local/state/disk-guard/trash` so a tool
-  starting at that moment sees an empty cache. A later run finishes trash left
-  by an interrupted run.
+  starting at that moment sees an empty cache. Only a cross-filesystem rename
+  (`EXDEV`) falls back to deleting in place; any other rename error keeps the
+  cache. A later run finishes trash left by an interrupted run, and refuses a
+  trash folder that is a link or not ours. An error anywhere in the cache phase
+  is logged with keep reason `cache phase failed; remaining caches kept` and
+  never stops the 80% cleanup, the critical flag or the status write.
   1. `docker-volumes`: unused (no container, running or stopped) anonymous
      volumes created more than 7 days ago, and leaked
      `ht-smoke-{build,state,dependencies}-*` volumes from
@@ -61,11 +65,14 @@ in place. Reinstall to update the installed copy. No crontab is used.
   5. `next-build`: the `.next` folder of a registered worktree (anywhere,
      including `/tmp`) with no write for 2 days, oldest first. Any process,
      command line or container that uses any part of that worktree keeps it.
-     This applies to worktrees with open PRs too, because only the rebuildable
-     build folder goes. The worktree itself still follows the worktree rules.
+     A worktree whose branch has an open PR is never touched, using the same
+     cached `gh` check as worktree removal. A detached worktree, or a failed,
+     malformed or rate-limited check, also keeps the folder.
      The `~/projects/hypertask` main checkout is never touched.
   6. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
-     process runs at all and nothing was written to it for one hour.
+     process runs at all and nothing was written to it for one hour. npm is
+     found by the first word of each command line and by `/proc/<pid>/comm`,
+     because npm rewrites its title to one string such as `npm ci`.
      Per-file deletion is not used.
 - At 80%, old user-owned `/tmp` leftovers and dangling Docker images can be
   cleaned. Every descendant's newest mtime must be older than two days. Links,
@@ -78,7 +85,7 @@ in place. Reinstall to update the installed copy. No crontab is used.
 - Process inspection first tries a read-only sudo scan across all UIDs, including
   root: `sudo -n /usr/bin/python3 -I -c <fixed embedded script>`, without a shell
   and with a 60-second timeout. The constant script only lists `/proc` entries
-  and reads `cwd`, `root`, and `fd` symlink targets, strips ` (deleted)`, and
+  and reads `cwd`, `root`, `exe`, and `fd` symlink targets, strips ` (deleted)`, and
   returns absolute paths as JSON. Vanished processes/descriptors are skipped;
   other inspection errors fail the scan. No caller data enters the sudo command,
   nothing is written as root, and no privileged helper is installed.

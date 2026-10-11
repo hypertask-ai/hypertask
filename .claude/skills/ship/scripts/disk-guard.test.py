@@ -7,6 +7,7 @@ import io
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -341,17 +342,18 @@ class ProcessTests(Fixture):
         entries = [contextlib.nullcontext(iter([Path('/proc/123')])),
                    contextlib.nullcontext(iter([SimpleNamespace(path='/proc/123/fd/1')]))]
         with patch.object(disk.os, 'scandir', side_effect=entries), \
-             patch.object(disk.os, 'readlink', side_effect=['/tmp/used (deleted)', '/', 'socket:[1]']) as links:
+             patch.object(disk.os, 'readlink', side_effect=['/tmp/used (deleted)', '/', '/usr/bin/node', 'socket:[1]']) as links:
             exec(disk.PRIVILEGED_PROCESS_SCAN, {})
-        self.assertEqual(json.loads(self.output.getvalue()), ['/', '/tmp/used'])
+        self.assertEqual(json.loads(self.output.getvalue()), ['/', '/tmp/used', '/usr/bin/node'])
         self.assertEqual([call.args[0] for call in links.call_args_list],
-                         ['/proc/123/cwd', '/proc/123/root', '/proc/123/fd/1'])
+                         ['/proc/123/cwd', '/proc/123/root', '/proc/123/exe', '/proc/123/fd/1'])
 
     def test_embedded_scan_skips_vanished_processes_and_descriptors(self):
         with patch.object(disk.os, 'scandir', side_effect=[
                 contextlib.nullcontext(iter([Path('/proc/123')])), FileNotFoundError('vanished')]), \
              patch.object(disk.os, 'readlink', side_effect=[FileNotFoundError('vanished'),
-                                                          ProcessLookupError('vanished')]):
+                                                          ProcessLookupError('vanished'),
+                                                          FileNotFoundError('kernel thread')]):
             exec(disk.PRIVILEGED_PROCESS_SCAN, {})
         self.assertEqual(json.loads(self.output.getvalue()), [])
 
@@ -830,7 +832,7 @@ class CacheTests(Fixture):
         self.assertEqual(list((self.guard.state / 'trash').iterdir()), [])
         self.assertIn('next-build: next build output of an idle worktree', (self.guard.state / 'log').read_text())
 
-    def test_cache_open_pr_worktree_kept_but_its_idle_next_removed(self):
+    def test_cache_open_pr_worktree_and_its_next_both_kept(self):
         _, tree = self.repo()
         build = self.output_dir(tree / '.next')
         ignore = self.root / 'ignore'
@@ -843,7 +845,8 @@ class CacheTests(Fixture):
         self.guard.caches(repos)
         self.assertTrue((tree / 'file').exists())
         self.assertIn('OPEN PR', self.output.getvalue())
-        self.assertFalse(build.exists())
+        self.assertTrue(build.exists())
+        self.assertIn('next-build: OPEN PR for branch; worktree never touched', self.output.getvalue())
 
     def test_cache_next_kept_when_a_process_uses_the_worktree(self):
         _, tree = self.repo()
@@ -1113,6 +1116,98 @@ class CacheTests(Fixture):
         self.assertEqual(disk.docker_bytes('1.5GB'), 1500000000)
         self.assertEqual(disk.docker_bytes('0B'), 0)
         self.assertEqual(disk.docker_bytes('N/A'), 0)
+
+
+class ReviewTests(Fixture):
+    def sweep(self):
+        self.guard.caches(self.guard.discover())
+
+    def test_review_real_npm_title_process_blocks_npm_cache(self):
+        node = shutil.which('node')
+        if node is None:
+            self.skipTest('node not installed')
+        child = subprocess.Popen([node, '-e', 'process.title="npm ci"; setTimeout(()=>{},5000)'])
+        try:
+            deadline = time.monotonic() + 5
+            while time.monotonic() < deadline:
+                if Path(f'/proc/{child.pid}/cmdline').read_bytes().startswith(b'npm ci'):
+                    break
+                time.sleep(0.05)
+            self.guard.cmdlines = REAL_CMDLINE_PATHS()
+            self.assertIn('npm', self.guard.cmdlines[1])
+            self.assertEqual(self.guard.npm_running(), 'npm or npx process running')
+            self.guard.cmdlines = (set(), {'node', 'bash'}, True)
+            self.assertIsNone(self.guard.npm_running())  # Positive control: no npm, no keep.
+        finally:
+            child.kill()  # Exactly the pid this test started.
+            child.wait(timeout=10)
+
+    def test_review_open_pr_check_failure_or_detached_keeps_next(self):
+        repo, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        os.environ['GH_EXIT'] = '1'
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('next-build: open PR check failed', self.output.getvalue())
+        self.git(tree, 'checkout', '--detach')
+        self.old(build)
+        self.guard.gh_cache.clear()
+        os.environ['GH_EXIT'] = '0'
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('next-build: detached worktree', self.output.getvalue())
+
+    def test_review_cache_phase_exception_keeps_tmp_cleanup_and_status(self):
+        old = self.output_dir(self.tmp / 'old')
+        with patch.object(self.guard, 'caches', side_effect=RuntimeError('fixture bug')), \
+             patch.object(self.guard, 'usage', return_value=80), patch.object(self.guard, 'images') as images:
+            self.guard.run()
+        self.assertFalse(old.exists())
+        images.assert_called_once()
+        status = json.loads((self.guard.state / 'status.json').read_text())
+        self.assertEqual(status['keep_reasons']['cache phase failed; remaining caches kept'], 1)
+
+    def test_review_bad_docker_rows_and_unreadable_npx_do_not_raise(self):
+        self.docker.return_value = True
+        with patch.object(disk, 'command', return_value=json.dumps(['text', None, 3])):
+            self.guard.volumes()
+        with patch.object(disk, 'command', return_value=json.dumps({'not': 'a list'})):
+            self.guard.volumes()
+        self.assertIn('unexpected volume row', self.output.getvalue())
+        npx = self.output_dir(self.home / '.npm/_npx/abc', 8).parent
+        npx.chmod(0)
+        try:
+            self.sweep()
+        finally:
+            npx.chmod(0o755)
+        self.assertIn('npx-cache: folder not readable', self.output.getvalue())
+
+    def test_review_rename_error_keeps_cache_only_exdev_deletes_in_place(self):
+        npx = self.output_dir(self.home / '.npm/_npx/abc', 8)
+        with patch.object(disk.Path, 'rename', side_effect=PermissionError('fixture')):
+            self.sweep()
+        self.assertTrue(npx.exists())
+        self.assertIn('cannot move cache aside; kept', self.output.getvalue())
+        with patch.object(disk.Path, 'rename', side_effect=OSError(errno.EXDEV, 'cross-device')):
+            self.sweep()
+        self.assertFalse(npx.exists())
+
+    def test_review_symlinked_trash_is_never_emptied_or_used(self):
+        valuable = self.output_dir(self.root / 'valuable', 60)
+        self.guard.state.joinpath('trash').symlink_to(valuable)
+        npx = self.output_dir(self.home / '.npm/_npx/abc', 8)
+        self.sweep()
+        self.assertTrue((valuable / 'output').exists())
+        self.assertTrue(npx.exists())
+        self.assertIn('trash folder is a link', self.output.getvalue())
+
+    def test_review_privileged_scan_reads_exe_link(self):
+        entries = [contextlib.nullcontext(iter([Path('/proc/7')])), contextlib.nullcontext(iter([]))]
+        with patch.object(disk.os, 'scandir', side_effect=entries), \
+             patch.object(disk.os, 'readlink', side_effect=['/', '/', '/tmp/cache/bin/tool']) as links:
+            exec(disk.PRIVILEGED_PROCESS_SCAN, {})
+        self.assertIn('/proc/7/exe', [call.args[0] for call in links.call_args_list])
+        self.assertIn('/tmp/cache/bin/tool', json.loads(self.output.getvalue()))
 
 
 DAY_FIXTURE = 0
