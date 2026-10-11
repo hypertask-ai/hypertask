@@ -18,6 +18,11 @@ while [ "$#" -gt 0 ]; do
   shift 2
 done
 root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+# A symlinked node_modules lets npm ci empty the shared install (YPER4-247). Backstop: refuse it.
+if [ "$action" = up ] && [ -L "$root/node_modules" ]; then
+  echo "premerge-local: $root/node_modules is a symlink. Replace it with a hardlinked copy: scripts/worktree-node-modules.sh <main checkout> $root" >&2
+  exit 1
+fi
 # Inherited production variables must not reach npm, Prisma, the seed or Next.
 if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   launcher=()
