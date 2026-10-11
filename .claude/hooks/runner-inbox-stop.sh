@@ -23,7 +23,7 @@ mode=${1:-stop}
 STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
 SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
 POLL=${RUNNER_EVENTS_POLL:-2}
-WAIT_MAX=${RUNNER_EVENTS_WAIT_MAX:-1999000} # below the 2000000 s timeout the installer sets (Node timers overflow above 2^31-1 ms), so the waiter is never cancelled
+WAIT_MAX=${RUNNER_EVENTS_WAIT_MAX:-0} # 0: wait as long as the session lives (Claude Code does not enforce the timeout on async command hooks); tests set a limit
 KEEP=300                                   # delivered event ids kept for dedupe
 # Events per hook call stay under this many characters (Claude Code moves additionalContext over 10,000 to a file);
 # 600 are left for the new-ticket line.
@@ -130,9 +130,7 @@ if [ "$mode" = wait ]; then
   while :; do
     if [[ $spid =~ ^[0-9]+$ ]] && ! kill -0 "$spid" 2>/dev/null; then rm -f "$STATE/$slot.waiter.$spid.lock"; exit 0; fi
     may_consume || exit 0
-    if [ $(( $(date +%s) - start )) -ge "$WAIT_MAX" ]; then
-      # A hook cannot renew itself; the next prompt, session start or turn end starts a new waiter, and until then
-      # runner-deliver logs "no live waiter" for each event and tells INFRA MANAGER once. Logged here so the gap is visible.
+    if [ "$WAIT_MAX" -gt 0 ] && [ $(( $(date +%s) - start )) -ge "$WAIT_MAX" ]; then
       printf '%s waiter for %s (pid %s) reached its time limit: idle session not wakeable until its next activity\n' "$(date -Is)" "$slot" "$spid" >> "$STATE/typing-fallback.log" 2>/dev/null
       exit 0
     fi
