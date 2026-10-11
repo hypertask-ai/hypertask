@@ -11,7 +11,7 @@ import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, ret
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
-import { readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
+import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 
 export function composeTaskBoardId(
@@ -43,6 +43,12 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
       ? `${greeting}\n\nThe task writer was unavailable: ${writerFailureReason.trim().replace(/[.!?]*$/, ".")} I kept your original text as the title and description.`
       : `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
     : greeting;
+}
+
+function stripWriterMarkers(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => element.remove());
+  return doc.body.innerHTML;
 }
 
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
@@ -150,7 +156,8 @@ export async function createComposedTask({
           throw new Error("Task writer returned an incomplete ticket");
         }
         const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
-        return { title: draft.title, description: typed ? typed.html : draft.description,
+        // Same DOM removal of writer markers that the single-task path does in extractTitleAndDescription.
+        return { title: draft.title, description: typed ? stripWriterMarkers(typed.html) : draft.description,
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
@@ -203,7 +210,8 @@ export async function createComposedTask({
     // HTPR-7123: the ticket type picks the column and the task goes to its top, like the default column.
     // No view setting chooses a column for a new task, so only an existing task or a missing match keeps the default.
     let placement = defaults?.data;
-    const typedSection = !existingTaskId
+    // Only a board whose default column is the Bugs column is rerouted; any other first column keeps today's behaviour.
+    const typedSection = !existingTaskId && isBugsColumn(defaults?.data, project.section ?? project.sections)
       ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
     if (typedSection) {
       try {

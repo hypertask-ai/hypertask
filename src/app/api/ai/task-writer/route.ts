@@ -1,5 +1,5 @@
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
-import { normalizeTaskWriterTicketType, readTaskWriterTicketType, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
+import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
 import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
@@ -108,10 +108,20 @@ export async function POST(request: NextRequest) {
         let streamError: unknown;
         let producedText = false;
 
+        // HTPR-7123: with the ticket type on, text still streams as before; only the possible trailing marker is held back.
+        let held = "";
         const enqueueText = (text: string) => {
           if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
-          // Compose consumes completed HTML, so a due-date or ticket-type request is validated before it is sent.
-          if (text && !dueDateContext && !ticketTypeEnabled) controller.enqueue(encoder.encode(text));
+          // Compose consumes completed HTML, so a due-date request is validated before it is sent.
+          if (!text || dueDateContext) return;
+          if (!ticketTypeEnabled) {
+            controller.enqueue(encoder.encode(text));
+            return;
+          }
+          held += text;
+          const cut = ticketTypeSafeCut(held);
+          if (cut > 0) controller.enqueue(encoder.encode(held.slice(0, cut)));
+          held = held.slice(cut);
         };
         const enqueueError = (status: "error" | "interrupted", content: string, code?: string) => {
           controller.enqueue(
@@ -183,9 +193,11 @@ export async function POST(request: NextRequest) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext || ticketTypeEnabled) {
-            const dated = dueDateContext ? applyTaskWriterDueDate(draft, dueDateContext).html : draft;
+          if (dueDateContext) {
+            const dated = applyTaskWriterDueDate(draft, dueDateContext).html;
             controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
+          } else if (ticketTypeEnabled && held) {
+            controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
           }
           streamCompleted = true;
         } catch (error) {

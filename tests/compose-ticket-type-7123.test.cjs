@@ -182,3 +182,68 @@ test('split tasks are placed per draft by their own type', async () => {
     assert.deepEqual(creates.map((c) => c.description), ['<p>Crashes.</p>', '<p>Export.</p>', '<p>Copy.</p>']);
   });
 });
+
+test('malformed markers: unquoted id, self-closing, nested span and unclosed marker are all removed', () => {
+  assert.deepEqual(types.readTaskWriterTicketType('<p>x</p><span id=ai-generated-task-type style="display:none">bug</span>'), { type: 'bug', html: '<p>x</p>' });
+  assert.deepEqual(types.readTaskWriterTicketType("<p>x</p><span id='ai-generated-task-type'>feature</span>"), { type: 'feature', html: '<p>x</p>' });
+  assert.deepEqual(types.readTaskWriterTicketType('<p>x</p><span id="ai-generated-task-type" />'), { type: null, html: '<p>x</p>' });
+  assert.deepEqual(types.readTaskWriterTicketType('<p>x</p><span id="ai-generated-task-type"><span>improvement</span></span><p>y</p>'), { type: 'improvement', html: '<p>x</p><p>y</p>' });
+  assert.deepEqual(types.readTaskWriterTicketType('<p>x</p><span id="ai-generated-task-type">improvement'), { type: null, html: '<p>x</p>improvement' });
+  assert.equal(types.normalizeTaskWriterTicketType('<p>x</p><span id=ai-generated-task-type>Improvement</span>'), `<p>x</p>${span('improvement')}`);
+});
+
+test('safe cut holds back only a trailing marker or the start of one', () => {
+  assert.equal(types.ticketTypeSafeCut('<p>hello</p>'), 12);
+  assert.equal(types.ticketTypeSafeCut(`<p>hello</p>${span('bug')}`), 12);
+  assert.equal(types.ticketTypeSafeCut('<p>hello</p><sp'), 12);
+  assert.equal(types.ticketTypeSafeCut('<p>hello</p><'), 12);
+  assert.equal(types.ticketTypeSafeCut(`<span>early</span>${'x'.repeat(400)}`), 18 + 400);
+});
+
+test('the Bugs default check: by column id, by title, and false for any other first column', () => {
+  const sections = [{ id: 1, section_title: 'Backlog' }, { id: 2, section_title: 'Bug' }];
+  assert.equal(types.isBugsColumn({ sectionId: 2, section: 'x' }, sections), true);
+  assert.equal(types.isBugsColumn({ sectionId: 9, section: ' Bugs ' }, sections), true);
+  assert.equal(types.isBugsColumn({ sectionId: 1, section: 'Bugs' }, sections), false);
+  assert.equal(types.isBugsColumn(undefined, sections), false);
+});
+
+test('hidden columns are skipped like deleted ones', () => {
+  const sections = [{ id: 1, section_title: 'Improvements', visibility: false }, { id: 2, section_title: 'Improvements' }];
+  assert.deepEqual(types.ticketTypeSection('improvement', sections), { id: 2, title: 'Improvements' });
+  assert.equal(types.ticketTypeSection('improvement', [sections[0]]), null);
+});
+
+test('compose only reroutes when the default column is Bugs; a Backlog first column keeps today\'s behaviour', async () => {
+  const sections = [{ id: 12, section_title: 'Backlog' }, { id: 13, section_title: 'Improvements' }, { id: 14, section_title: 'Bugs' }];
+  for (const type of ['improvement', 'bug', 'feature']) {
+    await withWriter({ response: typed(type), sections, defaults: { sectionId: 12, section: 'Backlog', ranking: 'a' } }, async ({ createComposedTask, project, creates, defaults }) => {
+      await createComposedTask({ text: 'x', files: [], project, userId: 985 });
+      assert.equal(creates[0].sectionId, 12);
+      assert.equal(creates[0].ranking, 'a');
+      assert.deepEqual(defaults, [{ projectId: 7, position: 'top' }]);
+    });
+  }
+});
+
+test('compose skips a hidden matching column and keeps the default', async () => {
+  const sections = [{ id: 12, section_title: 'Bugs' }, { id: 13, section_title: 'Improvements', visibility: false }];
+  await withWriter({ response: typed('improvement'), sections }, async ({ createComposedTask, project, creates }) => {
+    await createComposedTask({ text: 'x', files: [], project, userId: 985 });
+    assert.equal(creates[0].sectionId, 12);
+  });
+});
+
+test('split drafts have every writer marker removed from the saved description, even malformed ones', async () => {
+  const body = JSON.stringify({ tasks: [
+    { title: 'A', description: '<p>One.</p><span id=ai-generated-task-type>improvement</span>' },
+    { title: 'B', description: '<p>Two.</p><span id="ai-generated-task-type"><span>feature</span></span><span id="ai-generated-task-tags">t</span>' },
+    { title: 'C', description: '<p>Three.</p><span id="ai-generated-task-type" />' },
+  ] });
+  const response = { ok: true, headers: { get: (name) => name === 'X-Task-Writer-Ticket-Type' ? 'enabled' : name === 'content-type' ? 'application/json' : null }, body: null, text: async () => body };
+  await withWriter({ response }, async ({ createComposedTask, project, creates }) => {
+    await createComposedTask({ text: 'x', files: [], project, userId: 985 });
+    assert.deepEqual(creates.map((c) => c.description), ['<p>One.</p>', '<p>Two.</p>', '<p>Three.</p>']);
+    assert.deepEqual(creates.map((c) => c.sectionId), [13, 14, 12]);
+  });
+});

@@ -92,7 +92,16 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
     const body = kind === "mcp" ? { project_id: 7123, prompt: "Analyze Paperclip", mode }
       : { projectId: 7123, PROMPT: "Analyze Paperclip", aiMode: mode === "task_writer" ? "AiTaskWriter" : "WriteWithAI", ...(requestKind ? { requestKind } : {}) };
     const response = await route.POST({ json: async () => body });
-    return { status: response.status, content: await response.text(), headers: response.headers };
+    const chunks = [];
+    if (response.body) {
+      const reader = response.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(new TextDecoder().decode(value));
+      }
+    }
+    return { status: response.status, content: chunks.length ? chunks.join("") : await response.text().catch(() => ""), chunks, headers: response.headers };
   }
   return { post, checks, calls };
 }
@@ -184,6 +193,28 @@ test("the server keeps only a valid type and drops junk, so compose never sees o
   const messy = await harness({ enabled: true, output: draft + typeSpan("Bug") + typeSpan("feature"), requestKind: "compose-task" }).post("app");
   assert.ok(messy.content.endsWith(typeSpan("bug")));
   assert.equal(messy.content.split("ai-generated-task-type").length - 1, 1);
+});
+
+test("the draft keeps streaming chunk by chunk and only the trailing marker is held back and normalized", async () => {
+  const body = '<h1 id="ai-generated-task-title">A fairly long title for streaming</h1><p>' + "Body words. ".repeat(20) + "</p>";
+  const typedRun = await harness({ enabled: true, output: body + typeSpan("Improvement"), requestKind: "compose-task" }).post("app");
+  const plain = await harness({ enabled: false, output: body, requestKind: "compose-task" }).post("app");
+  // Streams in many pieces, the first one arrives long before the end, and no piece carries the raw marker.
+  assert.ok(typedRun.chunks.length > 10);
+  assert.equal(typedRun.chunks[0], plain.chunks[0]);
+  assert.equal(typedRun.chunks.slice(0, 5).join(""), plain.chunks.slice(0, 5).join(""));
+  assert.equal(typedRun.chunks.filter((c) => c.includes("ai-generated-task-type")).length, 1);
+  assert.ok(typedRun.chunks[typedRun.chunks.length - 1].includes("ai-generated-task-type"));
+  assert.equal(typedRun.content, body + typeSpan("improvement"));
+  // The body is on the wire before the final piece, so progress labels move on as today.
+  assert.ok(typedRun.chunks.slice(0, -1).join("").length >= body.length - 8);
+});
+
+test("a body with its own span streams through and a model that adds no marker loses nothing", async () => {
+  const body = '<h1 id="ai-generated-task-title">T</h1><p>Use a <span>span</span> here and then more text after it, long enough to pass the hold back window. ' + "More. ".repeat(60) + "</p>";
+  const r = await harness({ enabled: true, output: body, requestKind: "compose-task" }).post("app");
+  assert.equal(r.content, body);
+  assert.ok(r.chunks[0].length > 0);
 });
 
 test("flag off or not a compose request: no marker prompt, no header, output untouched", async () => {
