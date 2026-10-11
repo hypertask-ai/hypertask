@@ -6,7 +6,9 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
+import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, HTPR_7052_AI_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { nameNewChatSession } from "@/lib/ai/chatSessionNaming";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -199,6 +201,24 @@ export async function POST(request: NextRequest) {
       });
     } catch (error) {
       console.error("[ai/chat/stream] session taskId stamp failed:", error);
+    }
+  }
+  // HTPR-7052: name a brand-new chat from its first message, else the ticket or
+  // board it was opened on. Server-gated; a chat that already has a title is untouched.
+  if (body.session_id && !body.chat_history?.length && !heartbeatExecutionId) {
+    try {
+      if (await isFeatureEnabled(HTPR_7052_AI_CHAT_NAMES_FLAG, dbUser.id)) {
+        await nameNewChatSession(prisma, {
+          sessionId: body.session_id,
+          userId: dbUser.id,
+          message: body.message,
+          taskId: contextTaskId,
+          projectId: typeof contextProjectId === "number" ? contextProjectId : null,
+          projectAccess: projectContentAccessWhere(dbUser.id),
+        });
+      }
+    } catch (error) {
+      console.error("[ai/chat/stream] chat naming failed:", error);
     }
   }
   const turnModel = await loadTurnModel(body, dbUser);

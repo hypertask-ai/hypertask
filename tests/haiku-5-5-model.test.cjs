@@ -608,6 +608,7 @@ function chatWithFallback(h, { enabled = true, settings = {}, provider = "claude
     "@/lib/prisma": { user: { findUnique: async () => state.dbUser } },
     "@/lib/flags": { isFeatureEnabled: async () => false }, "@/lib/flags/keys": keys,
     "@/app/api/ai/chat/stream/ensureNativeChatTurn": {},
+    "@/lib/ai/chatSessionNaming": {}, "@/utils/controllers/projects/getAllIncludes": {},
     "@/app/api/ai/_lib/currentTaskContext": { resolveAiUsageTaskId: async () => null },
     "@/app/api/ai/chat/stream/streamLease": { acquireAiChatStreamLease: async () => ({}) },
     "@/app/api/ai/_lib/heartbeatExecution": {}, "@/lib/ai/chatStream/errors": {},

@@ -12,6 +12,9 @@ import {
   userTeamIds,
 } from "@/lib/agents/chatAccess";
 import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
+import { HTPR_7052_AI_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { titleForEmptySession } from "@/lib/ai/chatSessionNaming";
+import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
 
 export const runtime = "nodejs";
 
@@ -155,10 +158,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // HTPR-7052: a chat opened on a ticket (Ctrl+J) starts named after it.
+    let title: string | undefined;
+    if (parsed.data.taskId) {
+      try {
+        if (
+          (await isFeatureEnabled(HTPR_7052_AI_CHAT_NAMES_FLAG, userId)) &&
+          (await userCanAccessTaskContent(userId, parsed.data.taskId))
+        ) {
+          title = await titleForEmptySession(prisma, { taskId: parsed.data.taskId });
+        }
+      } catch {
+        // Naming is best effort; the chat keeps the default title.
+      }
+    }
+
     const session = await prisma.chatSession.create({
       data: {
         userId: userId,
         taskId: parsed.data.taskId,
+        ...(title ? { title } : {}),
       },
       include: {
         messages: {
