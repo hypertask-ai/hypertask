@@ -8,27 +8,27 @@ const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
 
-function load(file, stubs, extra = '', env = {}) {
+function load(file, stubs, extra = '', env = {}, clock = performance) {
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
-  new Function('module', 'exports', 'require', 'process', code + '\n' + extra)(mod, mod.exports, name => {
+  new Function('module', 'exports', 'require', 'process', 'performance', code + '\n' + extra)(mod, mod.exports, name => {
     assert.ok(name in stubs, `Unexpected import ${name} in ${file}`)
     return stubs[name]
-  }, { env })
+  }, { env }, clock)
   return mod.exports
 }
 
-function harness({ enabled = true, count = 1, revoked = false, agent = false } = {}) {
+function harness({ enabled = true, count = 1, revoked = false, agent = false, userId = 6, env = {}, clock = performance, onFlag = () => {} } = {}) {
   const events = []
   const secret = crypto.randomBytes(32).toString('hex')
-  const user = { id: 6, email: 'fixture@example.test', mcpTokensRevokedAt: null }
+  const user = { id: userId, email: 'fixture@example.test', mcpTokensRevokedAt: null }
   const authContext = { user, agentId: null }
   let flagCalls = 0
   let authCalls = 0
   let verifyCalls = 0
   let connections = 0
-  const flags = { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper', isFeatureEnabled: async () => { flagCalls++; return enabled } }
+  const flags = { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper', isFeatureEnabled: async () => { flagCalls++; await onFlag(); return enabled } }
   const context = load('src/lib/mcp/operationContext.ts', { 'node:async_hooks': require('node:async_hooks') })
   const permissions = load('src/lib/mcp/managementPermissions.ts', {})
   const oauth = load('src/lib/mcp/oauthTokenContract.ts', { jsonwebtoken: jwt })
@@ -74,9 +74,9 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false } =
   })
   const auth = { ...session, ...rate, ...errors, validateMcpAuth: async (request, options) => { authCalls++; events.push('auth'); return session.validateMcpAuth(request, options) } }
   const wrapper = load('src/lib/mcp/routeWrapper.ts', {
-    'node:async_hooks': require('node:async_hooks'), jsonwebtoken: jwt, '@/lib/flags': flags, '@/lib/flags/keys': flags,
+    'node:async_hooks': require('node:async_hooks'), 'node:crypto': crypto, jsonwebtoken: jwt, '@/lib/flags': flags, '@/lib/flags/keys': flags,
     './operationContext': context, '@/lib/mcp/auth': auth, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease,
-  }, 'module.exports.__flags = flagDecisions;')
+  }, 'module.exports.__flags = flagDecisions;', env, clock)
   const token = jwt.sign({ userId: user.id, aud: 'mcp-api', iss: 'hypertask', jti: 'fixture', ...(agent ? { agentId: 'agent-fixture' } : {}) }, secret)
   const request = (body = '{}', bearer = token) => new NextRequest('http://mcp.test/api/mcp/tasks/create', {
     method: 'POST', headers: { Authorization: `Bearer ${bearer}`, 'Content-Type': 'application/json' }, body,
@@ -248,7 +248,7 @@ test('flag memo has a 30 second TTL, caches off decisions, bounds entries and ev
 
 test('flag lookup failure falls back without authentication, rate consumption or logging', async () => {
   const wrapper = load('src/lib/mcp/routeWrapper.ts', {
-    'node:async_hooks': require('node:async_hooks'), jsonwebtoken: jwt,
+    'node:async_hooks': require('node:async_hooks'), 'node:crypto': crypto, jsonwebtoken: jwt,
     '@/lib/flags/keys': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper' },
     '@/lib/flags': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper', isFeatureEnabled: async () => { throw new Error('offline') } },
     './operationContext': { getMcpOperationContext: () => undefined }, '@/lib/mcp/auth': { extractBearerToken: header => header?.slice(7) }, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
@@ -426,15 +426,85 @@ test('successful agent-tier requests reuse the authenticated context while legac
   assert.equal(off.events.filter(e => e === 'rate').length, 1)
 }))
 
-test('HTPR-6965 wrapped responses carry a Server-Timing header with phase names and no caller identity', () => quiet(async () => {
-  const h = harness()
+test('wrapped responses carry existing and diagnostic Server-Timing names without caller identity', () => quiet(async () => {
+  const h = harness({ userId: 9876543210 })
   const req = h.request()
   const response = await scaffold(h)(req)
   const header = response.headers.get('Server-Timing')
-  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d$/)
+  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d, wrap_flag;dur=\d+\.\d, total;dur=\d+\.\d, age;dur=\d+\.\d, inst;desc="[0-9a-f]{8}", region;desc="unknown"$/)
   const bearer = req.headers.get('Authorization').slice('Bearer '.length)
-  assert.equal(header.includes(bearer), false)
-  assert.equal(header.includes('fixture'), false)
+  const assertPrivate = value => {
+    assert.equal(value.includes(bearer), false)
+    assert.equal(value.includes(String(h.authContext.user.id)), false)
+    assert.equal(value.includes(h.authContext.user.email), false)
+    assert.equal(value.includes('fixture'), false)
+  }
+  assertPrivate(header)
+  assert.throws(() => assertPrivate(`${header}, token;desc="${bearer}"`), assert.AssertionError)
+  assert.throws(() => assertPrivate(`${header}, user;desc="${h.authContext.user.id}"`), assert.AssertionError)
   const legacy = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(new NextRequest('http://mcp.test/api/mcp/x'))
   assert.equal(legacy.headers.has('Server-Timing'), false)
 }))
+
+test('flag latency is included in total but not handler, and instance age advances across requests', async () => {
+  let now = 100
+  const h = harness({ clock: { now: () => now }, env: { VERCEL_REGION: 'iad1' }, onFlag: () => { now += 1100 } })
+  now = 150
+  const response = NextResponse.json({ unchanged: true }, { status: 201, headers: { 'X-Fixture': 'kept' } })
+  const run = h.wrapper.wrapMcpRoute(async () => { now += 25; return response })
+  assert.equal(await run(h.request()), response)
+  const first = response.headers.get('Server-Timing')
+  const id = first.match(/inst;desc="([0-9a-f]{8})"/)[1]
+  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(response.status, 201)
+  assert.equal(response.headers.get('X-Fixture'), 'kept')
+  assert.deepEqual(await response.json(), { unchanged: true })
+  now += 10
+  const second = await h.wrapper.wrapMcpRoute(async () => { now += 5; return NextResponse.json({}) })(h.request())
+  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(h.counts().flagCalls, 1)
+})
+
+test('instance id is four random bytes generated only once per module load', async () => {
+  let calls = 0
+  const wrapper = load('src/lib/mcp/routeWrapper.ts', {
+    'node:async_hooks': require('node:async_hooks'), jsonwebtoken: jwt,
+    'node:crypto': { randomBytes: size => { assert.equal(size, 4); calls++; return Buffer.from('89abcdef', 'hex') } },
+    '@/lib/flags/keys': { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: 'htpr-6926-mcp-route-wrapper' },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
+    './operationContext': { getMcpOperationContext: () => undefined }, '@/lib/mcp/auth': {}, '@/lib/mcp/readJsonBody': {}, '@/lib/mcp/tasks/agentMutationLeaseAdoption': {},
+  })
+  const request = new NextRequest('http://mcp.test', { headers: { Authorization: `Bearer ${jwt.sign({ userId: 6 }, 'fixture')}` } })
+  for (let i = 0; i < 2; i++) {
+    const response = await wrapper.wrapMcpRoute(async () => NextResponse.json({}))(request)
+    assert.match(response.headers.get('Server-Timing'), /inst;desc="89abcdef"/)
+  }
+  assert.equal(calls, 1)
+})
+
+test('region description escapes quotes and backslashes without injecting timing metrics or invalid headers', async () => {
+  const h = harness({ env: { VERCEL_REGION: 'iad1"\\, injected;dur=9\r\n\u2603' } })
+  const response = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(h.request())
+  const header = response.headers.get('Server-Timing')
+  assert.ok(header.endsWith('region;desc="iad1\\"\\\\, injected;dur=9"'))
+  assert.doesNotMatch(header, /[\r\n\u2603]/)
+})
+
+test('diagnostics preserve flag-off and internal responses, immutable headers, non-responses and thrown errors', async () => {
+  const off = harness({ enabled: false })
+  const legacy = await off.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(off.request())
+  assert.equal(legacy.headers.has('Server-Timing'), false)
+  const h = harness()
+  const internal = h.request()
+  h.context.bindMcpOperationContext(internal, h.authContext, true)
+  const trusted = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(internal)
+  assert.equal(trusted.headers.has('Server-Timing'), false)
+  assert.equal(h.counts().flagCalls, 0)
+  const immutable = Response.redirect('http://mcp.test/redirect')
+  assert.equal(await h.wrapper.wrapMcpRoute(async () => immutable)(h.request()), immutable)
+  assert.equal(immutable.headers.has('Server-Timing'), false)
+  const value = { fixture: true }
+  assert.equal(await h.wrapper.wrapMcpRoute(async () => value)(h.request()), value)
+  const error = new Error('fixture failure')
+  await assert.rejects(h.wrapper.wrapMcpRoute(async () => { throw error })(h.request()), actual => actual === error)
+})

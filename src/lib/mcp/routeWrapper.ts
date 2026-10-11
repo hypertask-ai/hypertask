@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
+import { randomBytes } from 'node:crypto'
 import jwt from 'jsonwebtoken'
 import type { NextRequest } from 'next/server'
 import { HTPR_6926_MCP_ROUTE_WRAPPER_FLAG } from '@/lib/flags/keys'
@@ -11,6 +12,12 @@ import type { McpAuthContext, McpAuthFailureSnapshot, McpAuthTimings, ValidateMc
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
+
+const instanceStarted = performance.now()
+const instanceId = randomBytes(4).toString('hex')
+const instanceRegion = (process.env.VERCEL_REGION || 'unknown')
+  .replace(/[^ -~]/g, '')
+  .replace(/["\\]/g, '\\$&') || 'unknown'
 
 const FLAG_TTL_MS = 30_000
 const FLAG_MAX_ENTRIES = 1_000
@@ -56,20 +63,23 @@ type RouteScope = {
 }
 const routeScopes = new AsyncLocalStorage<RouteScope>()
 
-// HTPR-6965: Server-Timing for the wrapped path only. Phase names and durations, nothing
-// about the caller. ratelimit includes auth when the check resolves the caller's tier.
-function serverTimingHeader(timings: RouteScope['timings'], totalMs: number): string {
-  const handlerMs = Math.max(0, totalMs - (timings.authMs ?? 0) - (timings.rateMs ?? 0))
+// Server-Timing for the wrapped path only, with no caller data. ratelimit includes
+// auth when the check resolves the caller's tier; handler still excludes flag lookup.
+function serverTimingHeader(timings: RouteScope['timings'], started: number, wrappedStarted: number, finished: number): string {
+  const handlerMs = Math.max(0, finished - wrappedStarted - (timings.authMs ?? 0) - (timings.rateMs ?? 0))
   return [
     ['auth', timings.authMs],
     ['auth_jwt', timings.jwtMs],
     ['auth_db', timings.dbMs],
     ['ratelimit', timings.rateMs],
     ['handler', handlerMs],
+    ['wrap_flag', wrappedStarted - started],
+    ['total', finished - started],
+    ['age', finished - instanceStarted],
   ]
     .filter((phase): phase is [string, number] => phase[1] !== undefined)
     .map(([name, ms]) => `${name};dur=${ms.toFixed(1)}`)
-    .join(', ')
+    .join(', ') + `, inst;desc="${instanceId}", region;desc="${instanceRegion}"`
 }
 
 async function timed<T>(record: (ms: number) => void, run: () => Promise<T>): Promise<T> {
@@ -92,8 +102,9 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
   legacy: (request: NextRequest, ...args: Args) => Promise<Result>,
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
   return async (request, ...args) => {
-    if (getMcpOperationContext(request) || !(await shouldUseMcpRouteWrapper(request))) return legacy(request, ...args)
     const started = performance.now()
+    if (getMcpOperationContext(request) || !(await shouldUseMcpRouteWrapper(request))) return legacy(request, ...args)
+    const wrappedStarted = performance.now()
     const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {
       get(target, property) {
@@ -106,7 +117,7 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
     const result = await routeScopes.run(scope, () => legacy(wrappedRequest, ...args))
     try {
       if (result instanceof Response) {
-        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, performance.now() - started))
+        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()))
       }
     } catch {
       // Immutable response headers: skip the measurement, never fail the call.
