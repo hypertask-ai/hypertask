@@ -38,10 +38,15 @@ export type McpAuthFailureSnapshot = {
   agent?: { id: string; mcpTokenJti: string | null; revokedAt: Date | null }
 }
 
+/** Milliseconds spent verifying the JWT and in the auth database reads (HTPR-6965). */
+export type McpAuthTimings = { jwtMs?: number; dbMs?: number }
+
 export type ValidateMcpAuthOptions = {
   /** Opt-in REST wrapper logging and request-local verification reuse. */
   boundedLogging?: boolean
   failureSnapshot?: McpAuthFailureSnapshot
+  /** Measurement only (Server-Timing); never changes the result. */
+  timings?: McpAuthTimings
   /**
    * Return a verified htmk_ context without requiring data scope. The caller
    * must enforce the management permission before performing any action.

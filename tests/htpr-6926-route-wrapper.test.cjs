@@ -85,6 +85,9 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false } =
     setEnabled: value => { enabled = value }, counts: () => ({ flagCalls, authCalls, verifyCalls, connections }) }
 }
 
+// HTPR-6965: Server-Timing carries live durations, so wire comparisons leave it out.
+const withoutTiming = headers => [...headers].filter(([name]) => name !== 'server-timing')
+
 async function quiet(run) {
   const original = { log: console.log, info: console.info, error: console.error }
   console.log = console.info = console.error = () => {}
@@ -171,7 +174,7 @@ test('forged unsigned owner JWT selects the new path but fails full auth with by
   const legacy = await h.errors.mcpUnauthorizedResponse(req)
   assert.equal(response.status, 401)
   assert.equal(await response.text(), await legacy.text())
-  assert.deepEqual([...response.headers], [...legacy.headers])
+  assert.deepEqual(withoutTiming(response.headers), withoutTiming(legacy.headers))
   assert.equal(h.events.includes('user'), false, 'a forged JWT must not probe the claimed user')
 }))
 
@@ -390,7 +393,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
               headers: { Authorization: `Bearer ${jwt.sign({ userId: 6 }, 'fixture')}` },
               ...(method === 'GET' ? {} : { body: scenario === 'scalar' ? 'null' : '{bad' }),
             })
-            return Promise.resolve().then(() => mod.exports[method](request, { params: Promise.resolve({ projectId: '15', taskId: '123', fieldId: 'field', comment_id: '1', draft_id: 'draft', id: '1', roomId: 'room', sessionId: 'session', skill_id: 'skill', viewId: '1', sectionId: '1' }) })).then(async response => ({ status: response.status, headers: [...response.headers], body: await response.text(), events }), error => ({ thrown: error.message, events }))
+            return Promise.resolve().then(() => mod.exports[method](request, { params: Promise.resolve({ projectId: '15', taskId: '123', fieldId: 'field', comment_id: '1', draft_id: 'draft', id: '1', roomId: 'room', sessionId: 'session', skill_id: 'skill', viewId: '1', sectionId: '1' }) })).then(async response => ({ status: response.status, headers: withoutTiming(response.headers), body: await response.text(), events }), error => ({ thrown: error.message, events }))
           }
           const legacy = await execute(original, 'off')
           assert.deepEqual(await execute(current, 'off'), legacy, `${file}:${method}:${scenario}:off`)
@@ -416,9 +419,22 @@ test('successful agent-tier requests reuse the authenticated context while legac
   assert.equal(a.status, 200)
   assert.equal(b.status, 200)
   assert.equal(await a.text(), await b.text())
-  assert.deepEqual([...a.headers], [...b.headers])
+  assert.deepEqual(withoutTiming(a.headers), withoutTiming(b.headers))
   assert.equal(on.counts().authCalls, 1)
   assert.equal(off.counts().authCalls, 2)
   assert.equal(on.events.filter(e => e === 'rate').length, 1)
   assert.equal(off.events.filter(e => e === 'rate').length, 1)
+}))
+
+test('HTPR-6965 wrapped responses carry a Server-Timing header with phase names and no caller identity', () => quiet(async () => {
+  const h = harness()
+  const req = h.request()
+  const response = await scaffold(h)(req)
+  const header = response.headers.get('Server-Timing')
+  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d$/)
+  const bearer = req.headers.get('Authorization').slice('Bearer '.length)
+  assert.equal(header.includes(bearer), false)
+  assert.equal(header.includes('fixture'), false)
+  const legacy = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(new NextRequest('http://mcp.test/api/mcp/x'))
+  assert.equal(legacy.headers.has('Server-Timing'), false)
 }))
