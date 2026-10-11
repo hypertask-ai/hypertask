@@ -25,6 +25,9 @@ fi
 committed_age=$(git show "origin/production:$file" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(Math.floor((Date.now()-Date.parse(JSON.parse(s).capturedAt))/86400000)))')
 if git diff --quiet -I'"capturedAt"' -- "$file" && [ "$committed_age" -lt 7 ]; then
   echo "flag-modes-refresh: live modes unchanged and the copy is $committed_age days old, nothing to do"
+  for n in $(gh pr list --repo hypertask-ai/hypertask --head flag-modes-refresh --state open --json number --jq '.[].number'); do
+    gh pr close "$n" --repo hypertask-ai/hypertask --delete-branch --comment "Live switch settings match production again; closing."
+  done
   exit 0
 fi
 git checkout -q -B flag-modes-refresh

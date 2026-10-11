@@ -55,9 +55,16 @@ export function buildSnapshot(defaults, live, now = new Date()) {
 
 export const serialize = (snapshot) => `${JSON.stringify({ ...snapshot, modes: sorted(snapshot.modes) }, null, 2)}\n`;
 
+// A flag missing from the copy is not an error: readers use its registry default until the refresher adds it.
+export function missingFlags(snapshot, defaults) {
+  return Object.keys(defaults).filter((key) => !(key in (snapshot?.modes ?? {})));
+}
+
+// Adds flags that are new in code with their registry default and drops flags that no longer exist.
 export function addMissingDefaults(snapshot, defaults) {
-  const added = Object.fromEntries(Object.entries(defaults).filter(([key]) => !(key in snapshot.modes)));
-  return { ...snapshot, modes: sorted({ ...added, ...snapshot.modes }) };
+  const kept = Object.fromEntries(Object.entries(snapshot.modes).filter(([key]) => key in defaults));
+  const added = Object.fromEntries(Object.entries(defaults).filter(([key]) => !(key in kept)));
+  return { ...snapshot, modes: sorted({ ...added, ...kept }) };
 }
 
 export function snapshotProblems(snapshot, defaults, now = new Date()) {
@@ -72,9 +79,9 @@ export function snapshotProblems(snapshot, defaults, now = new Date()) {
   for (const [key, mode] of Object.entries(modes)) {
     if (!KEY.test(key) || !MODES.includes(mode)) problems.push(`invalid entry ${key}=${mode}`);
   }
-  const missing = Object.keys(defaults).filter((key) => !(key in modes));
-  if (missing.length) {
-    problems.push(`missing flags: ${missing.join(", ")}. Run node scripts/flags/production-flag-modes.mjs --add-defaults (or --write where live modes can be read)`);
+  const unknown = Object.keys(modes).filter((key) => !(key in defaults));
+  if (unknown.length) {
+    problems.push(`unknown or retired flags: ${unknown.join(", ")}. Run node scripts/flags/production-flag-modes.mjs --add-defaults to drop them`);
   }
   if (JSON.stringify(Object.keys(modes)) !== JSON.stringify(Object.keys(sorted(modes)))) {
     problems.push("modes are not sorted by key (generated file, do not hand edit)");
@@ -122,6 +129,8 @@ async function main(argv, root) {
   } else if (mode === "--check" || mode === "--check-live") {
     const snapshot = read();
     const problems = snapshotProblems(snapshot, defaults);
+    const missing = missingFlags(snapshot, defaults);
+    if (missing.length) console.log(`note: not in the copy yet (readers use the registry default): ${missing.join(", ")}`);
     if (mode === "--check-live") problems.push(...modeDifferences(snapshot, buildSnapshot(defaults, await readLive())));
     if (problems.length) {
       console.error(problems.join("\n"));

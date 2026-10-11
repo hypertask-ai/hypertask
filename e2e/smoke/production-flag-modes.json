@@ -152,10 +152,12 @@
     "htpr-7043-no-empty-board-flash": "EVERYONE",
     "htpr-7044-double-click-to-edit": "EVERYONE",
     "htpr-7045-shortcuts-help-phone": "EVERYONE",
+    "htpr-7046-tldr-open-questions": "EVERYONE",
     "htpr-7048-ctrlj-chat-lease": "EVERYONE",
     "htpr-7049-reload-after-image-chat": "EVERYONE",
     "htpr-7050-ctrl-o-links": "EVERYONE",
     "htpr-7054-ctrlj-due-date": "EVERYONE",
+    "htpr-7055-chat-overlays-ticket": "OWNER_AND_QA",
     "htpr-7056-ctrlj-split-tasks": "OWNER_AND_QA",
     "htpr-7057-writer-heading-language": "EVERYONE",
     "htpr-7058-flags-page-url-filters": "OWNER_AND_QA",
@@ -177,6 +179,8 @@
     "htpr-7088-agent-comment-fanout": "EVERYONE",
     "htpr-7092-decisions": "OWNER_AND_QA",
     "htpr-7095-reaction-webhook": "EVERYONE",
-    "htpr-7096-quiet-owner-inbox": "OWNER_AND_QA"
+    "htpr-7096-quiet-owner-inbox": "OWNER_AND_QA",
+    "htpr-7097-deleted-view-leaves-tabs": "EVERYONE",
+    "htpr-7099-chat-connection-lost": "EVERYONE"
   }
 }

@@ -13,7 +13,7 @@ const fresh = () => ({
   modes: { "htpr-1-a": "OWNER_AND_QA", "htpr-2-b": "EVERYONE", "htpr-3-c": "OWNER_ONLY" },
 });
 
-test("the committed live switch copy lists every flag definition and is fresh", async () => {
+test("the committed live switch copy has only known flags and is fresh", async () => {
   const { definitionDefaults, snapshotProblems, SNAPSHOT_PATH } = await load();
   const snapshot = JSON.parse(readFileSync(path.join(root, SNAPSHOT_PATH), "utf8"));
   assert.deepEqual(snapshotProblems(snapshot, definitionDefaults(root)), []);
@@ -42,22 +42,25 @@ test("output is sorted and stable", async () => {
 });
 
 test("the check fails for a missing flag, a bad mode, a stale date and hand-edited order", async () => {
-  const { snapshotProblems } = await load();
+  const { snapshotProblems, missingFlags } = await load();
   assert.deepEqual(snapshotProblems(fresh(), defaults, now), []);
   const missing = fresh();
   delete missing.modes["htpr-2-b"];
-  assert.match(snapshotProblems(missing, defaults, now).join("\n"), /missing flags: htpr-2-b/);
+  assert.deepEqual(snapshotProblems(missing, defaults, now), [], "a flag missing from the copy never fails the check");
+  assert.deepEqual(missingFlags(missing, defaults), ["htpr-2-b"]);
+  assert.match(snapshotProblems({ ...fresh(), modes: { ...fresh().modes, "htpr-9-gone": "OFF" } }, defaults, now).join("\n"), /unknown or retired flags: htpr-9-gone/);
   assert.match(snapshotProblems({ ...fresh(), modes: { ...fresh().modes, "htpr-1-a": "MAYBE" } }, defaults, now).join("\n"), /invalid entry/);
   assert.match(snapshotProblems({ ...fresh(), capturedAt: "2026-09-01T00:00:00.000Z" }, defaults, now).join("\n"), /older than 14 days.*--write.*systemctl --user status/);
   assert.match(snapshotProblems({ ...fresh(), capturedAt: undefined }, defaults, now).join("\n"), /capturedAt/);
   assert.match(snapshotProblems({ ...fresh(), modes: { "htpr-3-c": "OFF", "htpr-1-a": "OFF", "htpr-2-b": "OFF" } }, defaults, now).join("\n"), /not sorted/);
 });
 
-test("a flag that is new in code can be added with its default without touching the capture date", async () => {
+test("a flag that is new in code is added with its default and a removed flag is dropped, without touching the capture date", async () => {
   const { addMissingDefaults } = await load();
   const old = fresh();
   delete old.modes["htpr-2-b"];
   old.modes["htpr-1-a"] = "EVERYONE";
+  old.modes["htpr-9-gone"] = "OFF";
   const next = addMissingDefaults(old, defaults);
   assert.deepEqual(next.modes, { "htpr-1-a": "EVERYONE", "htpr-2-b": "EVERYONE", "htpr-3-c": "OWNER_ONLY" });
   assert.equal(next.capturedAt, old.capturedAt);
@@ -90,4 +93,15 @@ test("no workflow reads repository secrets to generate the copy", () => {
 test("a missing QA session fails with a clear message", async () => {
   const { readLive } = await load();
   await assert.rejects(readLive({ HOME: "/nonexistent", HYPERTASK_NO_TOKEN: "1" }), /QA session cookie is missing/);
+});
+
+test("the browser smoke seeder gives a flag missing from the copy its registry default", () => {
+  const text = readFileSync(path.join(root, "scripts/seed-browser-smoke.mjs"), "utf8");
+  assert.match(text, /modes\[key\] \?\?= defaultFeatureFlagMode\(key\)/);
+});
+
+test("the refresher closes its open pull request when nothing differs", () => {
+  const text = readFileSync(path.join(root, "scripts/flags/refresh-production-flag-modes.sh"), "utf8");
+  assert.match(text, /gh pr close "\$n".*--delete-branch --comment "Live switch settings match production again; closing\."/);
+  assert.match(text, /pause-until/);
 });

@@ -301,6 +301,11 @@ async function seedSessionFixtures(flags) {
 }
 
 try {
+  {
+    // The generated copy can lag a new flag: a flag missing from it uses its registry default.
+    const { FEATURE_FLAG_KEYS, defaultFeatureFlagMode } = jiti(path.join(root, "src/lib/flags.ts"));
+    for (const key of FEATURE_FLAG_KEYS) modes[key] ??= defaultFeatureFlagMode(key);
+  }
   if (allFlagsOn) {
     const { FEATURE_FLAG_KEYS } = jiti(path.join(root, "src/lib/flags.ts"));
     modes = Object.fromEntries(FEATURE_FLAG_KEYS.map(key => [key, "EVERYONE"]));
