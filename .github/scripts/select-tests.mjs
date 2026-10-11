@@ -156,7 +156,69 @@ function classifyDynamic(text) {
   return { dynamic, loaders };
 }
 
-const LOADER_ARG_OK = new Set(["__dirname", "root"]);
+// Same-length copy of `text` with comments and string contents blanked out so
+// identifier scans ignore them. Code inside template `${...}` is kept.
+function maskNonCode(text) {
+  const out = text.split("");
+  const blank = (a, b) => {
+    for (let k = a; k < b && k < text.length; k++) if (text[k] !== "\n") out[k] = " ";
+  };
+  const stack = [];
+  let cur = 0;
+  let i = 0;
+  let inTemplate = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inTemplate) {
+      if (c === "\\") { blank(i, i + 2); i += 2; continue; }
+      if (c === "`") { inTemplate = false; blank(i, i + 1); i++; continue; }
+      if (c === "$" && text[i + 1] === "{") {
+        blank(i, i + 2);
+        stack.push(cur);
+        cur = 0;
+        inTemplate = false;
+        i += 2;
+        continue;
+      }
+      blank(i, i + 1);
+      i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      const e = text.indexOf("\n", i);
+      const end = e === -1 ? text.length : e;
+      blank(i, end);
+      i = end;
+    } else if (c === "/" && text[i + 1] === "*") {
+      const e = text.indexOf("*/", i + 2);
+      const end = e === -1 ? text.length : e + 2;
+      blank(i, end);
+      i = end;
+    } else if (c === '"' || c === "'") {
+      let k = i + 1;
+      while (k < text.length && text[k] !== c && text[k] !== "\n") k += text[k] === "\\" ? 2 : 1;
+      blank(i, k + 1);
+      i = k + 1;
+    } else if (c === "`") {
+      inTemplate = true;
+      blank(i, i + 1);
+      i++;
+    } else {
+      if (c === "{") cur++;
+      else if (c === "}") {
+        if (cur === 0 && stack.length > 0) {
+          cur = stack.pop();
+          inTemplate = true;
+          blank(i, i + 1);
+        } else cur--;
+      }
+      i++;
+    }
+  }
+  return out.join("");
+}
+
+const LOADER_ARG_OK =new Set(["__dirname", "root"]);
 const callCache = new Map();
 const rangeCache = new Map();
 const rangesOf = (file, text) => {
@@ -169,15 +231,56 @@ const rangesOf = (file, text) => {
 function callsWithUnknownPath(file, text, name, loaders) {
   const key = `${file}\0${name}\0${[...loaders].sort().join(",")}`;
   if (callCache.has(key)) return callCache.get(key);
-  const re = new RegExp(`(?<![\\w$.])${name.replace(/\$/g, "\\$")}\\s*\\(`, "g");
+  const masked = maskNonCode(text);
+  const re = new RegExp(`(?<![\\w$])${name.replace(/\$/g, "\\$")}(?![\\w$])`, "g");
   let bad = false;
   let m;
-  while (!bad && (m = re.exec(text))) {
-    if (/\bfunction\s+$/.test(text.slice(Math.max(0, m.index - 12), m.index))) continue;
+  while (!bad && (m = re.exec(masked))) {
+    const at = m.index;
+    const before = masked.slice(0, at).trimEnd();
+    const next = masked.slice(at + name.length);
+    // The loader's own definition.
+    if (/\bfunction\s*\*?$/.test(before) || /\b(?:const|let|var)$/.test(before)) continue;
+    if (/\bexports\s*\.$/.test(before) && /^\s*=(?!=)/.test(next)) continue;
+    if (/\bimport$/.test(before) && /^\s+from\b/.test(next)) continue;
+    const call = /^\s*\(/.exec(next);
+    if (!call) {
+      // Binding without a rename: `{ name } = require(...)`, `import { name }`,
+      // `export { name }`, `module.exports = { name }`. Everything else is a
+      // reference the picker cannot follow (.map(name), alias, bind, spread).
+      let ok = false;
+      if (/[{,]$/.test(before) && /^\s*[,}]/.test(next)) {
+        let depth = 0;
+        let j = at - 1;
+        for (; j >= 0; j--) {
+          if (masked[j] === "}") depth++;
+          else if (masked[j] === "{") {
+            if (depth === 0) break;
+            depth--;
+          }
+        }
+        const close = j >= 0 ? matchClose(masked, j) : -1;
+        if (close !== -1) {
+          const tail = masked.slice(close + 1);
+          const head = masked.slice(0, j).trimEnd();
+          ok =
+            /^\s*=\s*(?:await\s+)?require\s*\(/.test(tail) ||
+            /^\s*from\b/.test(tail) ||
+            /\bexport$/.test(head) ||
+            /\bexports\s*=$/.test(head);
+        }
+      }
+      if (ok) continue;
+      bad = true;
+      break;
+    }
+    const open = at + name.length + call[0].length - 1;
+    // Method definition `name(params) {`.
+    const closeCall = matchClose(masked, open);
+    if (closeCall !== -1 && /^\s*\{/.test(masked.slice(closeCall + 1)) && !/\.$/.test(before)) continue;
     // A call from inside a loader forwards that loader's own input; its callers
     // are checked instead.
-    if (rangesOf(file, text).some((f) => f.name && loaders.has(f.name) && f.start <= m.index && m.index <= f.end)) continue;
-    const open = m.index + m[0].length - 1;
+    if (rangesOf(file, text).some((f) => f.name && loaders.has(f.name) && f.start <= at && at <= f.end)) continue;
     const rest = text.slice(open + 1);
     if (/^\s*(?:"[^"\n]*"|'[^'\n]*'|`[^`$]*`)\s*[,)]/.test(rest)) continue;
     const j = /^\s*(?:path\.)?(?:join|resolve)\(/.exec(rest);
