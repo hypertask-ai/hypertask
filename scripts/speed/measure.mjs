@@ -6,6 +6,16 @@ import { pathToFileURL } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
 
 export const STATE = path.join(os.homedir(), '.local/state/speed');
+// Real-phone context (2026-10-11): the shared setup only sets viewport, isMobile and hasTouch, which renders the ticket page at
+// innerWidth 780 and document width 834. A mobile user agent and deviceScaleFactor 3 give the real 390 wide layout (iPhone 13).
+export const PHONE_PROFILE = Object.freeze({
+  deviceScaleFactor: 3,
+  userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1',
+});
+export function withPhoneProfile(browser) {
+  return { newContext: options => browser.newContext({ ...options, ...PHONE_PROFILE }) };
+}
+
 export const PATHS = ['board', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
 export const METRICS = ['contentMs', 'requestCount', 'bytes', 'longTaskMs'];
 const BASE = 'https://app.hypertask.ai';
@@ -170,7 +180,7 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
 async function measure(shared, browser, profile, index, run) {
   const mobile = profile === 'phone';
   for (const phase of ['board', 'other']) {
-    const context = await shared.setup(browser, mobile);
+    const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
     const page = await context.newPage();
     page.setDefaultTimeout(60000);
     const cdp = await context.newCDPSession(page);
@@ -199,12 +209,13 @@ async function measure(shared, browser, profile, index, run) {
       await page.waitForTimeout(2000);
       const metrics = await page.evaluate(({ origin, contentAt }) => {
         const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
-        return { contentMs: contentAt - origin, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
+        return { contentMs: contentAt - origin, innerWidth, documentWidth: document.documentElement.scrollWidth, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
       }, { origin, contentAt });
       const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
       delete metrics.actionEpoch;
       const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked] };
       run.samples.push(row);
+      if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
       if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
       console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
     };
