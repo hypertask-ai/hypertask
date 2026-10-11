@@ -23,7 +23,7 @@ test("the description body no longer imports the editor statically", () => {
   assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
   assert.match(body, /DescriptionEditorSlot/);
   assert.match(body, /const staticFirstFlag = useFlag\(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG\);/);
-  assert.match(body, /lazy=\{staticFirstFlag \? instantTicketOpen && !isEditing && isPlainDescriptionHtml\(linkedContent\) : false\}/);
+  assert.match(body, /lazy=\{staticFirstFlag \? instantTicketOpen && !isEditing && \(appSavedStatic/);
 });
 
 test("the slot loads the editor with import() in both flag states", () => {
@@ -176,4 +176,58 @@ test("the static copy sets the rules the editor adds for its root", () => {
 test("the editor panels show the static placeholder only when one is provided", () => {
   const panels = fs.readFileSync(path.join(root, "src/components/RTE/TaskDetailEditorPanels.tsx"), "utf8");
   assert.match(panels, /staticFirst && staticPlaceholder \? staticPlaceholder : <InnerHTMLDescription/);
+});
+
+// HTPR-7110: descriptions saved through the app carry a bare document wrapper.
+const wrap = (inner) => `<html><head></head><body>${inner}</body></html>`;
+
+test("without the HTPR-7110 flag the app's saved format keeps the editor-first path", () => {
+  assert.equal(isPlainDescriptionHtml("<html><head></head><body><p>x</p></body></html>"), false);
+  assert.equal(isPlainDescriptionHtml('<ol class="numbered-list"><li><p>x</p></li></ol>'), false);
+  const body = fs.readFileSync(path.join(dir, "DescriptonBody.tsx"), "utf8");
+  assert.match(body, /appSavedStatic\s*\? isPlainDescriptionHtml\(linkedContent, true\)\s*: isPlainDescriptionHtml\(linkedContent\)/);
+});
+
+test("a bare document wrapper is unwrapped and matches the editor", () => {
+  for (const [name, [raw, expected]] of Object.entries(EDITOR)) {
+    assert.equal(isPlainDescriptionHtml(wrap(raw), true), true, name);
+    assert.equal(toEditorHtml(wrap(raw)), expected, name);
+  }
+  assert.equal(isPlainDescriptionHtml("<html><head>\n</head><body><p>x</p></body></html>", true), true);
+  assert.equal(isPlainDescriptionHtml("<HTML><HEAD></HEAD><BODY><p>x</p></BODY></HTML>", true), true);
+});
+
+test("a description saved by the app (lists with paragraphs, numbered class) is static and matches the editor", () => {
+  const saved = '<p>Intro line</p><ul><li><p>First</p></li><li><p>Second</p></li></ul><ol class="numbered-list"><li><p>One</p></li><li><p>Two</p></li></ol><p></p>';
+  assert.equal(isPlainDescriptionHtml(wrap(saved), true), true);
+  assert.equal(
+    toEditorHtml(wrap(saved)),
+    '<p>Intro line</p><ul><li><p>First</p></li><li><p>Second</p></li></ul><ol class="numbered-list"><li><p>One</p></li><li><p>Two</p></li></ol><p><br class="ProseMirror-trailingBreak"></p>',
+  );
+  assert.equal(isPlainDescriptionHtml('<ol class="other"><li><p>x</p></li></ol>', true), false);
+  assert.equal(isPlainDescriptionHtml('<ol class="numbered-list" id="a"><li><p>x</p></li></ol>', true), false);
+});
+
+test("a wrapper with anything unusual keeps the editor-first path", () => {
+  for (const raw of [
+    "<html><head><style>p{color:red}</style></head><body><p>x</p></body></html>",
+    '<html><head><meta charset="utf-8"></head><body><p>x</p></body></html>',
+    "<html><head><title>t</title></head><body><p>x</p></body></html>",
+    "<html><head><script>1</script></head><body><p>x</p></body></html>",
+    '<html><head></head><body class="a"><p>x</p></body></html>',
+    '<html><head></head><body style="margin:0"><p>x</p></body></html>',
+    '<html lang="en"><head></head><body><p>x</p></body></html>',
+    "<html><head></head><body><p>x</p></body></html>after",
+    "before<html><head></head><body><p>x</p></body></html>",
+    "<html><head></head><body><p>x</p></body>tail</html>",
+    "<html><head></head><body>loose text</body></html>",
+    '<html><head></head><body><p><img src="x" onerror="alert(1)"></p></body></html>',
+    '<html><head></head><body><img src="x" onerror="alert(1)"></body></html>',
+    "<html><head></head><body><p>a < b</p></body></html>",
+    "<html><head></head><body><body><p>x</p></body></body></html>",
+    "<html><head></head><body></body></html>",
+    "<html><head></head><body><p>x</p> <p>y</p></body></html>",
+  ]) {
+    assert.equal(isPlainDescriptionHtml(raw, true), false, raw);
+  }
 });

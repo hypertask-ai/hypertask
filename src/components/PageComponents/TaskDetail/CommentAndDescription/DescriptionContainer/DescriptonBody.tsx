@@ -17,7 +17,11 @@ import BackgroundTaskAttachments from "../BackgroundTaskAttachments";
 import type { IAttachment } from "@/models/model";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
+import {
+  HTPR_6752_INSTANT_TICKET_OPEN_FLAG,
+  HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG,
+  HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG,
+} from "@/lib/flags/keys";
 
 const DescriptonBody = ({ draftTQ }: any) => {
   const isMbl = useContext(MobileViewContext);
@@ -37,6 +41,7 @@ const DescriptonBody = ({ draftTQ }: any) => {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   // HTPR-7091: keep the editor code out of the first load; show the static description meanwhile.
   const staticFirstFlag = useFlag(HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG);
+  const appSavedStatic = useFlag(HTPR_7110_APP_SAVED_STATIC_DESCRIPTION_FLAG);
   const creator = instantTicketOpen ? currentTask?.user : task.user;
   const {
     description,
@@ -78,7 +83,9 @@ const DescriptonBody = ({ draftTQ }: any) => {
       {/* A passive editor swap reflows already-painted cached HTML. Mount it only for editing. */}
       {secondaryPanelsReady !== false && (!cachedLayout || isEditing) ? <DescriptionEditorSlot
         key={task.id}
-        lazy={staticFirstFlag ? instantTicketOpen && !isEditing && isPlainDescriptionHtml(linkedContent) : false}
+        lazy={staticFirstFlag ? instantTicketOpen && !isEditing && (appSavedStatic
+          ? isPlainDescriptionHtml(linkedContent, true)
+          : isPlainDescriptionHtml(linkedContent)) : false}
         allowPerks={allowPerks}
         attachments={descriptionAttachments}
         mode="read-edit-description"

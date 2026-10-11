@@ -20,9 +20,24 @@ const RAW_BRACKET = /[<>]/;
 // sends the description to the editor-first path.
 const LOOSE_WHITESPACE = /[\n\r\t ​]|\s{2}|<(?:p|li|h[1-3])>\s|\s<\/(?:p|li|h[1-3])>|<\/?(?:p|h[1-3]|ul|ol|li)>\s+<|<br\s*\/?>\s|\s<br/i;
 
-export function isPlainDescriptionHtml(raw: string | null | undefined): boolean {
+// HTPR-7110: descriptions saved through the app are stored as a full document
+// (<html><head></head><body>...</body></html>). Unwrap it only when the wrapper
+// is bare: an empty head, no attributes and nothing outside html/body. Any head
+// content (style, meta, title, script) or body attribute keeps the editor path.
+const BARE_DOCUMENT = /^<html><head>\s*<\/head>\s*<body>([\s\S]*)<\/body>\s*<\/html>$/i;
+
+function unwrapBareDocument(html: string): string | null {
+  const match = BARE_DOCUMENT.exec(html);
+  if (!match) return html;
+  // A nested wrapper or a second body means markup this check did not read.
+  return /<\/?(?:html|head|body)\b/i.test(match[1]) ? null : match[1].trim();
+}
+
+/** `appSaved` (HTPR-7110) also accepts the app's saved format: a bare document wrapper and numbered lists. */
+export function isPlainDescriptionHtml(raw: string | null | undefined, appSaved = false): boolean {
   if (!raw || !raw.trim()) return false;
-  const html = raw.trim();
+  const html = appSaved ? unwrapBareDocument(raw.trim()) : raw.trim();
+  if (!html) return false;
   if (LOOSE_WHITESPACE.test(html)) return false;
   const stack: string[] = [];
   let cursor = 0;
@@ -38,7 +53,7 @@ export function isPlainDescriptionHtml(raw: string | null | undefined): boolean 
     if (!BLOCKS.has(tag) && !INLINE.has(tag)) return false;
     if (tag === "a") {
       if (!closing && !LINK_ATTRS.test(attrs)) return false;
-    } else if (attrs.trim()) return false;
+    } else if (attrs.trim() && !(appSaved && tag === "ol" && attrs === ' class="numbered-list"')) return false;
     if (tag === "br") {
       // A break at the end of a paragraph renders differently in the editor.
       if (/^\s*<\/p>/i.test(html.slice(cursor))) return false;
