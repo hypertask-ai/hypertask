@@ -2,10 +2,11 @@ import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
-import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG } from "@/lib/flags";
+import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
 import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
+import { resultKinds } from "@/lib/search/filters";
 import prisma from "@/lib/prisma";
 import type { Prisma } from "@prisma/client";
 import { turbopufferGetDocuments } from "@/utils/controllers/search/document";
@@ -69,9 +70,10 @@ const handler: NextApiHandler = async (
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId);
       const commenterEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, session.userId);
+      const logicEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, session.userId);
       const parsed = chipsEnabled
-        ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled)
-        : operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled) : null;
+        ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled)
+        : operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled) : null;
       if (parsed?.filters.label && chipsEnabled &&
         ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
@@ -88,7 +90,7 @@ const handler: NextApiHandler = async (
         });
       }
       if (parsed && Object.keys(parsed.filters).length) {
-        const { where, rankedIds, descriptionById, commentById, partial } = await rankedSearchWhere(
+        const { where, rankedIds, descriptionById, commentById, partial, commentMode } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
           50, {}, undefined, false, commenterEnabled,
         );
@@ -110,12 +112,12 @@ const handler: NextApiHandler = async (
           : prisma.task.findMany({ where: primaryWhere, select: legacySelect })) : [];
         const rankedPrimary = primary.toSorted((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id));
         const fallbackArgs = { where, orderBy: [{ updatedAt: 'desc' as const }, { id: 'asc' as const }], take: 50 };
-        const fallback: SearchRow[] = !parsed.text && !parsed.filters.commenter?.some((filter) => !filter.negated) ? await (matchHighlightsEnabled
+        const fallback: SearchRow[] = !parsed.text && !commentMode ? await (matchHighlightsEnabled
           ? prisma.task.findMany({ ...fallbackArgs, select })
           : prisma.task.findMany({ ...fallbackArgs, select: legacySelect })) : [];
         const ranked = [...rankedPrimary, ...fallback].map((row) => {
           const match = matchHighlightsEnabled ? row : undefined;
-          const comment = matchHighlightsEnabled || parsed.filters.commenter?.some((filter) => !filter.negated) ? commentById.get(row.id) : undefined;
+          const comment = matchHighlightsEnabled || commentMode || (logicEnabled && resultKinds(parsed).commentOnly) ? commentById.get(row.id) : undefined;
           return {
             taskId: row.id, projectId: row.projectId, ticketNumber: row.ticketNumber,
             taskTitle: row.title, descriptionText: descriptionById.get(row.id) ?? searchPreviewText(row.description_?.content ?? ''),

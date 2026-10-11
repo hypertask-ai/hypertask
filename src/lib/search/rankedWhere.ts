@@ -1,8 +1,8 @@
 import { searchPreviewText } from '@/utils/controllers/turbopuffer/turbopufferHelper'
-import type { Prisma } from '@prisma/client'
+import { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { searchComments, searchTasks } from '@/utils/controllers/turbopuffer/turbopufferHelper'
-import { commenterWhere, searchFilterWhere } from './filters'
+import { commentHasPhrases, commenterWhere, resultKinds, searchFilterWhere } from './filters'
 import type { ParsedSearch } from './operators'
 
 export async function rankedSearchWhere(
@@ -17,13 +17,19 @@ export async function rankedSearchWhere(
   taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
+  // HTPR-6368: type:ticket ranks only tickets, type:comment only comments (negated flips it). Resolved before any branch.
+  const { allowTasks, allowComments, commentOnly, phraseScope } = resultKinds(parsed)
+  const phrases = parsed.filters.phrase ?? []
   const rankedIds: number[] = []
   const descriptionById = new Map<number, string>()
   const commentById = new Map<number, { id: string | number; commentText: string; creatorName: string; createdAt?: Date | string }>()
   const commenters = parsed.filters.commenter?.filter(({ negated }) => !negated) ?? []
-  if (commenters.length) {
-    const matching = commenterWhere(commenters, parsed.text)
-    const taskWhere: Prisma.TaskWhereInput = { AND: [where, extraWhere] }
+  const commentMode = allowComments && (commenters.length > 0 || (commentOnly && !parsed.text))
+  if (commentMode) {
+    const matching = commenterWhere(commenters, parsed.text, phrases)
+    // Comment results: only tickets that have a matching comment can page, count or be returned.
+    const effectiveWhere: Prisma.TaskWhereInput = { ...where, AND: [...((where.AND ?? []) as Prisma.TaskWhereInput[]), { comments: { some: matching } }] }
+    const taskWhere: Prisma.TaskWhereInput = { AND: [effectiveWhere, extraWhere] }
     let cursorValid = true
     let page: { taskId: number }[]
     if (taskOrderBy) {
@@ -60,9 +66,9 @@ export async function rankedSearchWhere(
       const { text, ...rest } = comment
       commentById.set(comment.taskId, { ...rest, commentText: searchPreviewText(comment.commentText || text || ''), creatorName: comment.creator?.displayName || comment.creator?.email || '' })
     }
-    return { where, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid }
+    return { where: effectiveWhere, rankedIds, descriptionById, commentById, partial: false, paged: true, cursorValid, commentMode }
   }
-  if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false }
+  if (!parsed.text) return { where, rankedIds, descriptionById, commentById, partial: false, commentMode }
 
   const maxWindow = 800
   const maxCandidates = 1600
@@ -76,21 +82,22 @@ export async function rankedSearchWhere(
     : rankedIds.length < limit))) {
     iterations++
     const [tasks, comments] = await Promise.all([
-      searchTasks({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, keywordOnly: true }),
-      searchComments({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, limit: window, keywordOnly: true, groupByTask: false }),
+      !allowTasks ? Promise.resolve([]) : searchTasks({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, keywordOnly: true }),
+      !allowComments ? Promise.resolve([]) : searchComments({ searchQuery: parsed.text, projectIds, status: parsed.filters.is ? undefined : status, topK: window, limit: window, keywordOnly: true, groupByTask: false }),
     ])
     const candidates = [...tasks.map((row) => ({ id: Number(row.id), description: row.descriptionText, comment: undefined })),
       ...comments.map((row) => ({ id: Number(row.taskId), description: '', comment: row }))]
     let truncated = false
     const fresh = candidates.filter(({ id, description, comment }) => {
       if (!Number.isInteger(id) || seen.has(id)) return false
+      if (comment && phraseScope === 'comment' && !commentHasPhrases(comment.commentText ?? '', phrases)) return false
       if (seen.size >= maxCandidates) {
         truncated = true
         return false
       }
       seen.add(id)
       if (description) descriptionById.set(id, description)
-      if (comment) commentById.set(id, commenterEnabled
+      if (comment) commentById.set(id, (commenterEnabled || commentOnly)
         ? { id: comment.id, commentText: comment.commentText, creatorName: comment.creatorName, createdAt: comment.createdAt ? new Date(comment.createdAt) : undefined }
         : comment)
       return true
@@ -109,5 +116,5 @@ export async function rankedSearchWhere(
     }
     window = Math.min(window * 2, maxWindow)
   }
-  return { where, rankedIds, descriptionById, commentById, partial: !exhausted }
+  return { where, rankedIds, descriptionById, commentById, partial: !exhausted, commentMode }
 }
