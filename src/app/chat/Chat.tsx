@@ -6,15 +6,14 @@ import { WelcomeScreen } from "@/components/AI_CHAT/WelcomeScreen";
 import { useGetAllTeamsMinimal } from "@/hooks/MultiPages/useGetAllTeamsMinimal";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
-import type { ChatSessionSummary } from "@/utils/api/ai_chat";
-import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
+import { useAiChatContext, type ChatContextType } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context";
 import {
   buildFullScreenChatPath,
   FULL_SCREEN_CHAT_RETURN_PARAM,
   resolveFullScreenChatReturnPath,
 } from "@/lib/aiChatDisplayMode";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
-import { IChatSession, IProject, ITeam } from "@/models/model";
+import { IProject, ITeam } from "@/models/model";
 import {
   aiChatExplicitOpenAtAtom,
   aiChatPinnedSessionIdsAtom,
@@ -50,7 +49,7 @@ function clampFullScreenChatRailWidth(width: number) {
   );
 }
 
-type HistorySession = IChatSession | ChatSessionSummary;
+type HistorySession = ChatContextType["historySessions"][number];
 
 type SessionGroup = {
   title: "Today" | "Previous 7 days" | "Older";
