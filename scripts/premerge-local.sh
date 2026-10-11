@@ -74,7 +74,7 @@ stop() {
   done
   local result=0
   if command -v docker >/dev/null && docker info >/dev/null 2>&1; then
-    for service in postgres redis soketi; do
+    for service in postgres redis soketi minio; do
       if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
         docker rm -f -v "$prefix-$service" >/dev/null || result=1
       fi
@@ -83,7 +83,7 @@ stop() {
     echo 'Docker unavailable. Rerun down when Docker returns to remove containers.' >&2
     result=1
   fi
-  rm -f "$state/server.pid" "$state/search.pid" "$state/run.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
+  rm -f "$state/server.pid" "$state/search.pid" "$state/run.pid" "$state/credentials.env" "$state/postgres.env" "$state/soketi.env" "$state/minio.env" "$state/smoke-state.json" "$state/card-fixture.json" "$state/fixtures.out" "$state/flag-modes.json"
   return "$result"
 }
 if [ "$action" = down ]; then stop; exit $?; fi
@@ -100,7 +100,7 @@ if [ -f "$state/server.pid" ] || [ -f "$state/search.pid" ] || [ -f "$state/cred
   echo 'Environment already exists. Run scripts/premerge-local.sh down first.' >&2
   exit 1
 fi
-for service in postgres redis soketi; do
+for service in postgres redis soketi minio; do
   if docker container inspect "$prefix-$service" >/dev/null 2>&1; then
     echo 'Containers already exist. Run scripts/premerge-local.sh down first.' >&2
     exit 1
@@ -160,9 +160,22 @@ free_port() { node -e "const s=require('node:net').createServer();s.listen(0,'12
 app_port=$(free_port)
 search_port=$(free_port)
 url="http://127.0.0.1:$app_port"
+printf 'MINIO_ROOT_USER=premerge-local\nMINIO_ROOT_PASSWORD=premerge-local-only\nMINIO_API_CORS_ALLOW_ORIGIN=%s\n' "$url" >"$state/minio.env"
+# Attachment bytes are disposable too; tmpfs and rm -v leave no storage behind.
+docker run -d --name "$prefix-minio" -p 127.0.0.1::9000 --env-file "$state/minio.env" \
+  --tmpfs /data:rw,size=128m --entrypoint /opt/bitnami/minio/bin/minio \
+  bitnamilegacy/minio:2025.4.22-debian-12-r1@sha256:d7cd0e172c4cc0870f4bdc3142018e2a37be9acf04d68f386600daad427e0cab \
+  server /data --address :9000
+storage_url="http://127.0.0.1:$(port minio 9000)"
+for ((attempt=0; attempt<60; attempt++)); do
+  if curl -fsS --max-time 2 -o /dev/null "$storage_url/minio/health/ready"; then break; fi
+  sleep 1
+done
+curl -fsS --max-time 2 -o /dev/null "$storage_url/minio/health/ready"
 {
   printf 'DATABASE_URL=postgresql://browser_smoke:%s@127.0.0.1:%s/hypertask_smoke\n' "$pg_secret" "$pg_port"
   printf 'REDIS_URL=redis://127.0.0.1:%s\n' "$redis_port"
+  printf 'R2_ENDPOINT=%s\nR2_UPLOAD_KEY=premerge-local\nR2_UPLOAD_SECRET=premerge-local-only\nR2_UPLOAD_BUCKET=premerge-attachments\nR2_PUBLIC_BASE_URL=%s/premerge-attachments\nAWS_EC2_METADATA_DISABLED=true\n' "$storage_url" "$storage_url"
   printf 'TURBOPUFFER_BASE_URL=http://127.0.0.1:%s\nTURBOPUFFER_API_KEY=disposable-fixture\n' "$search_port"
   printf 'SESSION_SECRET=%s\nJWT_SECRET=%s\nBETTER_AUTH_SECRET=%s\n' "$(secret)" "$(secret)" "$(secret)"
   printf 'BETTER_AUTH_URL=%s\nQSTASH_CALLBACK_BASE_URL=%s\nQSTASH_AUTO_REGISTER_SWEEP=false\n' "$url" "$url"
@@ -178,6 +191,7 @@ source "$state/credentials.env"
 set +a
 export BROWSER_SMOKE_STATE_FILE="$state/smoke-state.json" GITHUB_OUTPUT="$state/fixtures.out" NEXT_TELEMETRY_DISABLED=1 PREMERGE_LOCAL=1
 export HT_PREMERGE_AI_STUB=1 HT_PREMERGE_QUEUE_STUB=1
+node scripts/premerge-local-storage.mjs
 npx --no-install prisma migrate deploy
 node scripts/seed-browser-smoke.mjs "${flag_overrides[@]}"
 setsid node "$root/scripts/premerge-local-search.mjs" "$state/card-fixture.json" "$search_port" >"$state/search.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
