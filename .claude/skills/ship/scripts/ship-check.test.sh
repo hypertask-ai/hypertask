@@ -1132,12 +1132,38 @@ echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener plus URL)" || bad "nochange pass case"
 echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
-for x in merged deployed proof pr cleaned; do
+for x in merged deployed proof pr; do
   N $x YPER4-901 | grep -q "$x ok" && ok "nochange passes $x" || bad "nochange $x"
 done
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
+git -C "$NC/work" push -q origin :refs/heads/r3/yper4-901-fix 2>/dev/null
+git -C "$NC/work" branch -q r3/yper4-901-local 2>/dev/null
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a local branch" || ok "nochange cleaned fails while a local branch exists"
+git -C "$NC/work" worktree add -q "$NC/wt901" -b r3/yper4-901-wt 2>/dev/null
+git -C "$NC/work" branch -q -D r3/yper4-901-local
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a worktree" || ok "nochange cleaned fails while a worktree branch exists"
+git -C "$NC/work" worktree remove --force "$NC/wt901"; git -C "$NC/work" branch -q -D r3/yper4-901-wt
+N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned passes once nothing is left" || bad "nochange cleaned clean case"
+# Number boundary: a branch of YPER4-9010 is not a branch of YPER4-901.
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-9010-other 2>/dev/null; echo 3 > "$NC/ahead"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange ignores a branch of YPER4-9010" || bad "nochange matched yper4-9010"
+N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned ignores a branch of YPER4-9010" || bad "cleaned matched yper4-9010"
+git -C "$NC/work" push -q origin :refs/heads/r3/yper4-9010-other 2>/dev/null; echo 0 > "$NC/ahead"
 echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
   && ok "guard allows Done after nochange" || bad "guard blocks Done after nochange"
 G 2 vcc task move YPER4-902 $DONE
+# The marker is only a record: a PR that appears after the pass blocks Done again.
+echo '[{"number":7,"title":"YPER4-901 [INFRA] late fix"}]' > "$NC/prs"
+echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && bad "guard allowed Done after a PR appeared" || ok "guard blocks Done when a PR appears after nochange"
+echo '[]' > "$NC/prs"
+# Empty evidence does not count.
+for body in '<code></code>' '<pre> </pre>' '<pre><code>&nbsp;</code></pre>'; do
+  jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
+  N nochange YPER4-901 >/dev/null && bad "nochange accepted empty evidence $body" || ok "nochange refuses empty evidence $body"
+done
+jq -n '{success:true,comments:[{text:"<p><strong>Resolved without a change:</strong> done</p><pre><code>ok 3 checks</code></pre>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a pre/code block with output" || bad "nochange refused real output"
 echo 830 > "$E/YPER4-901/pr"
 N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
 

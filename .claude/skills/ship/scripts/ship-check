@@ -120,38 +120,61 @@ dropped_ok() {
 
 # Infra ticket solved with no code change (YPER4-272). The "Resolved without a change:" comment must carry evidence,
 # and no PR may exist for the ticket: no open PR titled with it, no bound PR, no origin branch named for it that is ahead of BASE.
-check_nochange() {
-  local t=${1:-} low cmts open repo=${SHIP_CHECKOUT:-} b ahead heads
-  [[ $t =~ ^(YPER4|HYFA)-[0-9]+$ ]] || fail "nochange is only for infra tickets (YPER4, HYFA); ${t:-<none>} is an app ticket or not a ticket id and needs the normal PR path"
-  [ -z "$(bound_pr "$t")" ] && [ ! -s "$EVID/$t/duplicate-of" ] && [ ! -s "$EVID/$t/dropped" ] \
-    || fail "$t has a bound PR (or a duplicate/dropped record); use the normal path"
-  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || fail "cannot read comments of $t"
-  # Visible text (tags removed, leading space dropped) must open with the phrase; the same comment must carry evidence.
-  jq -e '.comments | any(.[]; (.text // "") as $x
-      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
-      and ($x | test("https://[^ \"<>]+|<pre|<code")))' >/dev/null <<<"$cmts" \
-    || fail "$t has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with command output)"
-  open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
-    || fail "cannot read open PRs of $REPO"
-  jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open" && fail "$t has an open PR; use the normal path"
+# nochange_verify prints the reason and returns 1 instead of exiting, so every consumer re-runs it (the marker is only a record).
+nochange_checkout() {
+  local repo=${SHIP_CHECKOUT:-}
   if [ -z "$repo" ]; then
-    [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
+    [ "$REPO" = hypertask-ai/hypertask ] || { echo "set SHIP_CHECKOUT to the local checkout of $REPO"; return 1; }
     repo=$HOME/projects/hypertask
   fi
-  low=${t,,}
-  heads=$(git -C "$repo" ls-remote --heads origin "*$low*" 2>/dev/null) || fail "cannot list origin branches"
-  while read -r _ b; do
-    [ -n "$b" ] || continue; b=${b#refs/heads/}
-    ahead=$(gh api "repos/$REPO/compare/$BASE...$b" --jq .ahead_by 2>/dev/null) || fail "cannot compare origin branch $b with $BASE"
-    [ "${ahead:-0}" = 0 ] || fail "origin branch $b has $ahead commit(s) not in $BASE; ship it or delete it first"
-  done <<<"$heads"
-  mkdir -p "$EVID/$t" && rm -f "$EVID/$t/branch" && date -u +%FT%TZ > "$EVID/$t/nochange" && echo "nochange ok"
+  echo "$repo"
 }
 
-# Nochange ticket: passes while no PR has been bound since (binding a PR clears the record).
+# Branch names of origin that carry the lowercased ticket id not followed by a digit (yper4-901 does not match yper4-9010).
+nochange_origin_branches() {
+  local low=${1,,} repo heads
+  repo=$(nochange_checkout) || { echo "$repo"; return 1; }
+  heads=$(git -C "$repo" ls-remote --heads origin "*$low*" 2>/dev/null) || { echo "cannot list origin branches"; return 1; }
+  awk '{print $2}' <<<"$heads" | sed 's#^refs/heads/##' | grep -E -- "${low}([^0-9]|\$)" || true
+}
+
+nochange_verify() {
+  local t=${1:-} cmts open b ahead
+  [[ $t =~ ^(YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange is only for infra tickets (YPER4, HYFA); ${t:-<none>} is an app ticket or not a ticket id and needs the normal PR path"; return 1; }
+  if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
+    echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
+  fi
+  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || { echo "cannot read comments of $t"; return 1; }
+  # Visible text (tags removed, leading space dropped) must open with the phrase. The same comment must carry evidence:
+  # an https URL, or a <pre>/<code> block whose visible inner text is not blank.
+  jq -e '.comments | any(.[]; (.text // "") as $x
+      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
+      and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
+        or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
+             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0)))' >/dev/null <<<"$cmts" \
+    || { echo "$t has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"; return 1; }
+  open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
+    || { echo "cannot read open PRs of $REPO"; return 1; }
+  if jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open"; then echo "$t has an open PR; use the normal path"; return 1; fi
+  b=$(nochange_origin_branches "$t") || { echo "$b"; return 1; }
+  while read -r b; do
+    [ -n "$b" ] || continue
+    ahead=$(gh api "repos/$REPO/compare/$BASE...$b" --jq .ahead_by 2>/dev/null) || { echo "cannot compare origin branch $b with $BASE"; return 1; }
+    [ "${ahead:-0}" = 0 ] || { echo "origin branch $b has $ahead commit(s) not in $BASE; ship it or delete it first"; return 1; }
+  done <<<"$(nochange_origin_branches "$t")"
+  return 0
+}
+
+check_nochange() {
+  local out; out=$(nochange_verify "${1:-}") || fail "$out"
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && date -u +%FT%TZ > "$EVID/$1/nochange" && echo "nochange ok"
+}
+
+# Nochange ticket: the marker is only a record. Every use re-runs the full check, so a PR or branch that
+# appears after "nochange ok" (or a comment that went away) stops the pass.
 nochange_ok() {
   [ -s "$EVID/$2/nochange" ] || return 1
-  [ -z "$(bound_pr "$2")" ] || fail "$2 has a bound PR; the nochange record no longer applies"
+  local out; out=$(nochange_verify "$2") || fail "nochange for $2 no longer holds: $out"
   echo "$1 ok (nochange: resolved without a change)"
 }
 
@@ -340,12 +363,34 @@ check_done() {
   echo "done ok"
 }
 
+cleaned_branch_checks() {
+  local repo=$1 b=$2 rc wt
+  wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
+  grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
+  git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
+  [ "$rc" = 0 ] && fail "local branch $b still exists; run /clean-up"
+  [ "$rc" = 1 ] || fail "cannot check local branch $b (git exit $rc)"
+  git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 0 ] && fail "GitHub branch $b still exists; run /clean-up"
+  [ "$rc" = 2 ] || fail "cannot check GitHub branch $b (git exit $rc)"
+}
+
 check_cleaned() {
-  if nochange_ok cleaned "$1" >/dev/null; then echo "cleaned ok (nochange, no branch or PR of this ticket)"; return 0; fi
   local n b rc wt repo=${SHIP_CHECKOUT:-}
   if [ -z "$repo" ]; then
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
+  fi
+  # Nochange ticket: no PR exists, so every origin branch, local branch and worktree branch named for the ticket
+  # (id not followed by a digit) goes through the same checks as a PR branch.
+  if [ -s "$EVID/$1/nochange" ]; then
+    nochange_ok cleaned "$1" >/dev/null
+    local low=${1,,} names
+    names=$( { nochange_origin_branches "$1"
+      git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads
+      git -C "$repo" worktree list --porcelain | sed -n 's#^branch refs/heads/##p'; } | grep -E -- "${low}([^0-9]|\$)" | sort -u)
+    while read -r b; do [ -n "$b" ] && cleaned_branch_checks "$repo" "$b"; done <<<"$names"
+    echo "cleaned ok (nochange, no branch or worktree of this ticket)"; return 0
   fi
   # Normal ticket: the bound PR's own branch. Duplicate (bound to another ticket's PR): the branch it
   # recorded with `ship-check branch` after `ship-check duplicate` (rebinding clears that record).
@@ -358,14 +403,7 @@ check_cleaned() {
     b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
     [ -n "$b" ] || fail "PR $n has no branch name"
   fi
-  wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
-  grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
-  git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
-  [ "$rc" = 0 ] && fail "local branch $b still exists; run /clean-up"
-  [ "$rc" = 1 ] || fail "cannot check local branch $b (git exit $rc)"
-  git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; rc=$?
-  [ "$rc" = 0 ] && fail "GitHub branch $b still exists; run /clean-up"
-  [ "$rc" = 2 ] || fail "cannot check GitHub branch $b (git exit $rc)"
+  cleaned_branch_checks "$repo" "$b"
   echo "cleaned ok"
 }
 
