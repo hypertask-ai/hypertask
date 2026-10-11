@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
 import { currentUserAtom, composeTaskChatIntroAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
@@ -34,9 +34,13 @@ export const useSessionAndChatHistory = (
   // loaded into view yet", never "there is no task" - so the init effect
   // below must wait for it instead of grabbing whatever session was last
   // active on a different ticket (HTPR-6100).
-  isTaskScoped = false
+  isTaskScoped = false,
+  // HTPR-7052: the board the chat is opened on, so a new chat can take its name.
+  boardId?: number
 ) => {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
+  const nameBoardId = chatNames ? boardId : undefined;
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   let composeIntro: typeof pendingComposeIntro = null;
   if (composeEnabled) composeIntro = pendingComposeIntro;
@@ -102,7 +106,7 @@ export const useSessionAndChatHistory = (
     }
 
     try {
-      const res = await AI_Chat_API.createSessionNext(taskId);
+      const res = await AI_Chat_API.createSessionNext(taskId, nameBoardId);
       const body = res.data;
 
       if (!body?.success || !body.session?.id) {
@@ -144,7 +148,7 @@ export const useSessionAndChatHistory = (
     } catch (error) {
       console.log("🚀 ~ useSessionAndChatHistory ~ error:", error);
     }
-  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId]);
+  }, [hasRequiredData, currentUser?.uid, isDemo, queryClient, taskId, nameBoardId]);
 
   const selectSession = useCallback(
     (sessionId: string) => {

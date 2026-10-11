@@ -25,7 +25,7 @@ import type { StreamState } from "./streamState";
 import { generateModelReply } from "./modelReply";
 
 export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest, skillResolution: Awaited<ReturnType<typeof resolveSkillsForAiRequest>>) {
-  const { body, dbUser, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, titleByokApiKey, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn } = state;
+  const { body, dbUser, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, titleByokApiKey, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, chatNameGuardTitle } = state;
 
   const agentPromptAddition = actingAgent
     ? `You are acting as "${actingAgent.displayName}", a native Hypertask agent. ` +
@@ -223,12 +223,12 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
       },
       state.providerAbort.signal,
     );
-    if (generatedTitle) {
+    if (generatedTitle && chatNameGuardTitle !== null) {
       state.send("title", { content: generatedTitle });
       if (body.session_id) {
         try {
           await prisma.chatSession.updateMany({
-            where: { id: body.session_id, userId: dbUser.id },
+            where: { id: body.session_id, userId: dbUser.id, ...(chatNameGuardTitle === undefined ? {} : { title: chatNameGuardTitle }) },
             data: { title: generatedTitle },
           });
         } catch (error) {
