@@ -1,30 +1,31 @@
 #!/usr/bin/env bash
 # ship-claim: the whole claim step, with a race check (YPER4-264).
-#   ship-claim <TICKET> ["<resume command>"]                 claim, re-read the comments, step back if another agent claimed first
-#   ship-claim decide <RESUME_ID> <comments.json> [task.json]   pure decision from a saved comments read (tests use this)
+#   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
+#   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error.
 # Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id.
-# Ownership is the session resume id in the comment text, not the agent name. A competitor counts only
-# if posted within 6 h before ours (the ship stale window) and its agent is still assigned.
+# Ownership is the session resume id in the comment text, not the agent name. Assignment is never
+# consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
+# before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
+# last`); if that read fails the old claim counts. Losing to the same agent identity (another
+# session) never unassigns, because that would remove the winner.
 # Resume command: 2nd argument, else SHIP_CLAIM_RESUME, else CLAUDE_CODE_SESSION_ID, else CODEX_SESSION_ID / CODEX_THREAD_ID.
 # Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
 set -uo pipefail
 
-# decide <resume-id> <comments.json> [task.json]: prints "WIN", "NOOURS" or "LOSE<TAB><other agent name>".
-# Ours = Claimed. comments containing our resume id; every other Claimed. comment is a competitor, even
-# from the same agent name (runners can share an identity). A competitor counts only if it is earlier than
-# ours, within 6 h before ours, not cancelled by a newer "Stepping back" from the same session, and (when
-# task.json is readable) its agent is still assigned.
+# decide <resume-id> <comments.json> [idle-ids-file]
+# Prints "WIN", "NOOURS" or "LOSE<TAB>name<TAB>agent id<TAB>old(0|1)<TAB>same-agent(0|1)".
+# idle-ids-file: agent ids (one per line) with no recent activity; their claims older than 6 h are ignored.
 decide() {
-  local task=${3:-/dev/null}
-  jq -r --arg rid "$1" --slurpfile task "$task" '
+  local idle=${3:-/dev/null}
+  jq -r --arg rid "$1" --rawfile idle "$idle" '
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
     def at: [(.createdAt // ""), ((.id // 0) | tonumber? // 0)];
     def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
     def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
-    (($task[0].tasks[0].assignees? // null) | if . == null then null else [.[] | (.agent.id // empty), (.agent.displayName // empty)] end) as $assigned
+    ($idle | split("\n") | map(select(. != ""))) as $idle
     | [.comments[] | select(key != "")] as $c
     | [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(txt | contains("Claimed."))
@@ -34,21 +35,25 @@ decide() {
       else ($ours | sort_by(at) | first) as $me
         | ([$claims[] | select((txt | contains($rid) | not)
               and at < ($me | at)
-              and (($me | secs) - secs) <= 21600
-              and ($assigned == null or ((key as $k | name as $n | $assigned | any(. == $k or . == $n)))))]
+              and ((($me | secs) - secs) <= 21600 or (key as $k | $idle | index($k) | not)))]
             | sort_by(at) | first // null) as $other
-        | if $other != null then "LOSE\t" + ($other | name) else "WIN" end
+        | if $other == null then "WIN"
+          else "LOSE\t" + ($other | name) + "\t" + ($other | key) + "\t"
+            + (if (($me | secs) - ($other | secs)) > 21600 then "1" else "0" end) + "\t"
+            + (if ($other | key) == ($me | key) then "1" else "0" end)
+          end
       end' "$2"
 }
 
 if [ "${1:-}" = decide ]; then
-  [ $# -ge 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json> [task.json]" >&2; exit 2; }
+  [ $# -ge 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json> [idle-ids-file]" >&2; exit 2; }
   jq -e '.comments | type == "array"' "$3" >/dev/null 2>&1 || { echo "ship-claim: $3 is not readable comments JSON" >&2; exit 2; }
-  decide "$2" "$3" "${4:-}"; exit 0
+  decide "$2" "$3" "${4:-}" || exit 2
+  exit 0
 fi
 
 T=${1:-}
-[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN>" >&2; exit 2; }
+[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
 VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}
 SID=${CLAUDE_CODE_SESSION_ID:-}
 RESUME=${2:-${SHIP_CLAIM_RESUME:-}}
@@ -63,22 +68,43 @@ RID=${RESUME##* }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
-W=$(mktemp); trap 'rm -f "$W"' EXIT
+W=$(mktemp); IDLE=$(mktemp); trap 'rm -f "$W" "$IDLE"' EXIT
 "$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
   && jq -e '.comments | type == "array"' "$W" >/dev/null \
   || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
-TK=$(mktemp); trap 'rm -f "$W" "$TK"' EXIT
-"$HT" tasks get "$T" --json > "$TK" 2>/dev/null || : > "$TK"
-jq -e . "$TK" >/dev/null 2>&1 || : > "$TK"
-res=$(decide "$RID" "$W" "$TK") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
+
+# An old competing claim is ignored only when its agent shows no activity in the last 6 h. Read failure = still active.
+agent_idle() {
+  local line when
+  line=$(VCC_ACTIVITY_AGENT_ID="$1" "$VCC" activity last "$T" 2>/dev/null) || return 1
+  [ -n "$line" ] || return 0
+  when=$(date -d "$(cut -f1 <<< "$line")" +%s 2>/dev/null) || return 1
+  [ $(( $(date +%s) - when )) -gt 21600 ]
+}
+
+res=NOOURS
+for _ in 1 2 3 4 5 6 7 8; do
+  res=$(decide "$RID" "$W" "$IDLE") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
+  case "$res" in
+    LOSE*)
+      IFS=$'\t' read -r _ other oid old same <<< "$res"
+      if [ "$old" = 1 ] && agent_idle "$oid"; then echo "$oid" >> "$IDLE"; continue; fi ;;
+  esac
+  break
+done
 case "$res" in
   WIN) echo "ship-claim: $T claimed, you are first. Start work."; exit 0 ;;
   NOOURS) echo "ship-claim: own claim comment not visible yet on $T; re-run ship-claim read-only check before working" >&2; exit 2 ;;
   LOSE*)
-    other=${res#LOSE$'\t'}
-    "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
+    IFS=$'\t' read -r _ other oid old same <<< "$res"
+    if [ "$same" = 1 ]; then
+      echo "ship-claim: same agent identity won; not unassigning (that would remove the winner)." >&2
+    else
+      "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
+    fi
     "$VCC" comment add "$T" --text "<p><strong>Stepping back: $other claimed this first.</strong></p><p>Next: $other carries on; nothing for you to do. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
       || echo "ship-claim: step-back comment failed" >&2
     echo "ship-claim: STEP BACK, $other claimed $T first. Do NOT start work; pick another ticket."
     exit 3 ;;
+  *) echo "ship-claim: unexpected decision: $res" >&2; exit 2 ;;
 esac

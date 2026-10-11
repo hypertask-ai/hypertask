@@ -11,7 +11,7 @@ c() { jq -n --argjson i "$1" --arg t "$2" --arg a "$3" --arg n "$4" --arg x "$5"
   '{id:$i, createdAt:$t, agent:{id:$a, displayName:$n}, text:$x}'; }
 claim() { echo "<p><strong>Claimed.</strong></p><p>Next: go. Resume this Claude session: claude --resume $1</p>"; }
 mk() { printf '{"success":true,"comments":[%s]}\n' "$(IFS=,; echo "$*")" > "$D/c.json"; }
-decide() { ./ship-claim decide "$ME" "$D/c.json"; }
+decide() { ./ship-claim decide "$ME" "$D/c.json" "${1:-}" | cut -f1,2; }
 
 mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "earlier other claim -> step back" "$(decide)" "$(printf 'LOSE\tRUNNER 7')"
@@ -41,26 +41,29 @@ mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")"
 eq "own claim missing -> NOOURS" "$(decide)" NOOURS
 
 # Review fixes: stale window, assignees, shared identity, malformed input.
-mk "$(c 10 2026-10-11T01:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
-eq "claim older than 6 h before ours is ignored" "$(decide)" WIN
+mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+echo a1 > "$D/idle"
+eq "old claim, claimant has recent activity -> LOSE" "$(decide)" "$(printf 'LOSE\tRUNNER 7')"
+eq "old claim, claimant idle -> WIN" "$(decide "$D/idle")" WIN
 mk "$(c 10 2026-10-11T04:30:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
-eq "claim 5.5 h before ours still counts" "$(decide)" "$(printf 'LOSE\tRUNNER 7')"
-mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
-echo '{"tasks":[{"assignees":[{"agent":{"id":"a2","displayName":"RUNNER 3"}}]}]}' > "$D/t-gone.json"
-echo '{"tasks":[{"assignees":[{"agent":{"id":"a1","displayName":"RUNNER 7"}},{"agent":{"id":"a2","displayName":"RUNNER 3"}}]}]}' > "$D/t-here.json"
-eq "earlier claimant no longer assigned is ignored" "$(./ship-claim decide $ME "$D/c.json" "$D/t-gone.json")" WIN
-eq "earlier claimant still assigned counts" "$(./ship-claim decide $ME "$D/c.json" "$D/t-here.json")" "$(printf 'LOSE\tRUNNER 7')"
+eq "claim 5.5 h before ours counts even if idle listed" "$(decide "$D/idle")" "$(printf 'LOSE\tRUNNER 7')"
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
 eq "shared identity: other session's earlier claim wins" "$(decide)" "$(printf 'LOSE\tRUNNER 3')"
 mk "$(c 10 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")" "$(c 11 2026-10-11T10:00:20.000Z a2 'RUNNER 3' "$(claim other-sess)")"
 eq "shared identity: ours earliest -> proceed" "$(decide)" WIN
 echo 'not json' > "$D/bad.json"; ./ship-claim decide $ME "$D/bad.json" >/dev/null 2>&1; eq "malformed JSON -> exit 2" "$?" 2
 ./ship-claim decide $ME "$D/missing.json" >/dev/null 2>&1; eq "missing file -> exit 2" "$?" 2
+./ship-claim decide $ME "$D/c.json" "$D/no-such-idle" >/dev/null 2>&1; eq "decide failure propagates -> exit 2" "$?" 2
 
 # Full flow with stubs.
 cat > "$D/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$*" >> "$FAKE_LOG"
+if [ "$1 $2" = "activity last" ]; then
+  [ -z "${FAKE_ACTIVITY_FAIL:-}" ] || exit 1
+  [ -z "${FAKE_ACTIVITY:-}" ] || printf '%s\tx\n' "$FAKE_ACTIVITY"
+fi
+exit 0
 EOF
 cat > "$D/hypertask" <<'EOF'
 #!/usr/bin/env bash
@@ -78,6 +81,16 @@ grep -q 'Stepping back: RUNNER 7 claimed this first' "$D/log" && ok "flow posts 
 grep -q '^comment add YPER4-999 .*Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
   && ok "flow claims first (comment, assign, move)" || bad "claim writes missing"
 
+# Old competing claim in the full flow: activity decides.
+mk "$(c 10 2026-10-11T00:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
+FAKE_ACTIVITY=$(date -u -d '-1 hour' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim with recent activity -> step back" "$?" 3
+FAKE_ACTIVITY=$(date -u -d '-9 hours' +%FT%TZ) ./ship-claim YPER4-999 >/dev/null; eq "flow: old claim, idle claimant -> proceed" "$?" 0
+FAKE_ACTIVITY_FAIL=1 ./ship-claim YPER4-999 >/dev/null; eq "flow: activity read failure -> step back" "$?" 3
+# Same agent identity, different session: lose without unassigning.
+mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
+: > "$D/log"; ./ship-claim YPER4-999 >/dev/null 2>&1; eq "flow: same-agent loss exits 3" "$?" 3
+grep -q unassign "$D/log" && bad "same-agent loss called unassign" || ok "same-agent loss does not unassign"
+grep -q 'Stepping back' "$D/log" && ok "same-agent loss still posts the note" || bad "no note"
 mk "$(c 10 2026-10-11T10:00:00.000Z a2 'RUNNER 3' "$(claim $ME)")"
 : > "$D/log"; out=$(./ship-claim YPER4-999); rc=$?
 eq "flow winner exit code" "$rc" 0
