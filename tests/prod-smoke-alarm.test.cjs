@@ -51,7 +51,7 @@ function alarmFetch({ existing = false, stale = false, incidentStatus = 200 } = 
     }
     if (url.endsWith("/api/mcp/projects?limit=100")) {
       return response(200, {
-        projects: [{ id: 15, sections: [{ id: 4311, title: "Valentin Review" }] }],
+        projects: [{ id: 15, sections: [{ id: 54, section_title: "Not yet" }, { id: 4311, section_title: "Valentin Review" }] }],
       });
     }
     if (url.endsWith("/api/mcp/tasks/create")) {
