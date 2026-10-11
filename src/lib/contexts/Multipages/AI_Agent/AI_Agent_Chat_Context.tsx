@@ -73,7 +73,10 @@ export interface ChatContextType {
   };
   sessions: IChatSession[];
   sessionPagingEnabled: boolean;
-  historySessions: Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt">[];
+  historySessions: (Pick<IChatSession, "id" | "title" | "updatedAt" | "createdAt" | "projectId"> & {
+    hasMessages?: boolean;
+    messages?: IChatMessage[];
+  })[];
   hasMoreSessions: boolean;
   isLoadingMoreSessions: boolean;
   pagingError: boolean;
