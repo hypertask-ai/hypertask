@@ -105,3 +105,31 @@ test("the refresher closes its open pull request when nothing differs", () => {
   assert.match(text, /gh pr close "\$n".*--delete-branch --comment "Live switch settings match production again; closing\."/);
   assert.match(text, /pause-until/);
 });
+
+test("with the QA account view, a flag only the owner sees is Off, never its Owner + QA default (YPER4-289)", async () => {
+  const { buildSnapshot } = await load();
+  const plain = { "htpr-1-a": false, "htpr-2-b": false, "htpr-3-c": false };
+  const qa = { "htpr-1-a": false, "htpr-2-b": false, "htpr-3-c": true };
+  const snapshot = buildSnapshot(defaults, { plain, qa }, now);
+  assert.deepEqual(snapshot.modes, { "htpr-1-a": "OFF", "htpr-2-b": "OFF", "htpr-3-c": "OWNER_AND_QA" });
+  const released = buildSnapshot(defaults, { plain: { ...plain, "htpr-1-a": true }, qa }, now);
+  assert.equal(released.modes["htpr-1-a"], "EVERYONE");
+});
+
+test("the drift report names the flag, the file mode and the live mode", async () => {
+  const { buildSnapshot, modeDifferences } = await load();
+  const live = buildSnapshot(defaults, { plain: { "htpr-1-a": false, "htpr-2-b": true, "htpr-3-c": false }, qa: { "htpr-1-a": false, "htpr-3-c": false } }, now);
+  assert.deepEqual(modeDifferences(fresh(), live), ["htpr-1-a: file OWNER_AND_QA, live OFF"]);
+});
+
+test("a flag missing from both live views (not deployed yet) keeps its registry default", async () => {
+  const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
+  const modes = localFlagModes({ "htpr-1-a": "OWNER_AND_QA", "htpr-2-b": "OWNER_AND_QA" }, { "htpr-1-a": false }, [], { "htpr-1-a": false });
+  assert.deepEqual(modes, { "htpr-1-a": "OFF", "htpr-2-b": "OWNER_AND_QA" });
+});
+
+test("local premerge warns loudly when the copy differs from live and reads the QA account view", () => {
+  const text = readFileSync(path.join(root, "scripts/seed-browser-smoke.mjs"), "utf8");
+  assert.match(text, /readPlainQaFlags\(QA_ACCOUNT_STATE\)/);
+  assert.match(text, /WARNING: e2e\/smoke\/production-flag-modes\.json differs from the live flag modes/);
+});
