@@ -10,17 +10,12 @@ import useHypertasksRecoilStates from "@/hooks/RecoilRoot/useHypertasksRecoilSta
 import { useMcpToken } from "@/components/Modals/McpToken/hooks/useMcpToken";
 import { FileItem } from "@/components/Common/AttachmentsUpload/FileUploadHandler";
 import { useAiChatModelPreference } from "./useAiChatModelPreference";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
 import { useQueryClient } from "@tanstack/react-query";
 import { aiOptionsWithoutOpenRouter } from "./aiChatShared";
 
 export function useAiChatState() {
 
   const lastWorkspaceFocusRef = useRef<HTMLElement | null>(null);
-  // HTPR-6278: surfacing real server refusals and silent stream ends instead
-  // of the blanket "Connection lost" message.
-  const turnFailureState = useFlag(HTPR_6278_CHAT_TURN_FAILURE_FLAG);
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -277,7 +272,7 @@ export function useAiChatState() {
     setQueuedMessages((prev) => (prev.length === 0 ? prev : []));
   }, [sessionContextKey]);
   return {
-  lastWorkspaceFocusRef, turnFailureState, queryClient, currentUser, currentProject,
+  lastWorkspaceFocusRef, queryClient, currentUser, currentProject,
   showAiChatInterface, setShowAIChat, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, aiChatExplicitOpenAt,
   aiChatBoardSessionMap, setAiChatBoardSessionMap, setRecentChatBoardIds, setAiChatPinned, isSidebarMode,
   setIsSidebarMode, showMentionList, inViewObject, dockedChatScope, setDockedChatScope,
