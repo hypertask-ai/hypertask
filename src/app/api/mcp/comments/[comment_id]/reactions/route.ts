@@ -9,6 +9,8 @@ import {
   createCommentReactionHandler,
 } from '@/lib/mcp/comments/reactionHandler';
 import { writeCommentReaction, type ReactionAgent } from '@/lib/mcp/comments/reactionStore';
+import { mapMcpCommentReaction, reactionAgentIds } from '@/lib/mcp/comments/reactionResponse';
+import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents';
 import { persistCommentReactionWebhook, prepareCommentReactionWebhook } from '@/lib/agentWebhooks/commentReaction';
 import { publishAgentWebhookDeliveries } from '@/lib/agentWebhooks/outbox';
 import { broadcastTaskComment } from '@/lib/realtime/server';
@@ -65,7 +67,17 @@ async function setReaction(
     // The outbox row is stored; the outbox retry delivers it later.
     console.error('[comment-reaction] agent webhook publish failed', error);
   });
-  return result;
+  // HTPR-7122: the response names only agents the caller may see, like the comment reads.
+  const visibleAgents = await loadVisibleReactionAgents(
+    reactionAgentIds([{ reactions: result.reactions }]),
+    userId,
+    target.projectId
+  );
+  return {
+    changed: result.changed,
+    reaction: result.reaction && mapMcpCommentReaction(result.reaction, visibleAgents),
+    reactions: result.reactions.map((row) => mapMcpCommentReaction(row, visibleAgents)),
+  };
 }
 
 async function notifyReaction(

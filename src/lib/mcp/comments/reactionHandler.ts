@@ -9,13 +9,14 @@ export type CommentReactionTarget = {
   taskUniqueIndex: number;
 };
 
-// HTPR-7122: agentId is set when an agent made the reaction; userId is then its owner.
+// HTPR-7122: isAgent is set when an agent made the reaction; userId is then its owner.
+// agent carries an id and name only when the caller may see that agent.
 type CommentReactionRow = {
   id: string;
   emoji: string;
   userId: number;
-  agentId?: string | null;
-  agentDisplayName?: string | null;
+  isAgent?: true;
+  agent?: { id?: string; displayName: string };
 };
 
 export type CommentReactionResult = {

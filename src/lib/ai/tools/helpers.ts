@@ -398,6 +398,8 @@ export function mapCommentToResponse(comment: any, userId: number, projectId: nu
       id: reaction.id,
       emoji: reaction.emoji,
       userId: reaction.userId,
+      // HTPR-7122: an agent made it, never the owner in userId; it is not their approval.
+      ...(reaction.agentId ? { isAgent: true } : {}),
     })),
   };
 }

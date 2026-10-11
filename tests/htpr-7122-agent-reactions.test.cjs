@@ -123,6 +123,9 @@ test("the MCP route reacts as the calling agent and names it on the inbox notifi
   assert.match(route, /reactorAgentId: agent\?\.id \?\? null/);
   assert.match(route, /fromAgentId: agentId/);
   assert.doesNotMatch(route, /where: \{ commentId: target\.commentId, userId, unified \}/);
+  // The write response names only agents the caller may see, like the comment reads.
+  assert.match(route, /loadVisibleReactionAgents\(\s*reactionAgentIds\(\[\{ reactions: result\.reactions \}\]\)/);
+  assert.match(route, /reactions: result\.reactions\.map\(\(row\) => mapMcpCommentReaction\(row, visibleAgents\)\)/);
 });
 
 test("MCP reads mark an agent reaction and never attach the owner's user", () => {
@@ -166,6 +169,9 @@ test("task detail and shared reaction groups show agents as agents", () => {
   assert.match(load, /\|\| ' \(agent\)'/);
   const shared = fs.readFileSync(path.join(root, "src/utils/controllers/tasks/getSharedTask.ts"), "utf8");
   assert.match(shared, /CASE WHEN r\."agentId" IS NULL THEN TO_JSONB\(u\.\*\) ELSE/);
+  // A public share never names an agent, so a reacting agent reads as "Private agent".
+  assert.match(shared, /'isAgent', true,\s*'displayName', 'Private agent'/);
+  assert.doesNotMatch(shared, /r\."agentDisplayName"/);
   const sheet = fs.readFileSync(
     path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/Common/MobileReactorsSheet.tsx"),
     "utf8",
