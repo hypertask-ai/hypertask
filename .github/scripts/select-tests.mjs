@@ -149,7 +149,9 @@ function classifyDynamic(text, allowLoaders) {
     // loader with no traceable name (module.exports = (p) => require(p)), the
     // file stays unresolvable.
     const names = around.map((f) => f.name).filter((n) => n && n !== "require" && n !== "import");
-    if (!allowLoaders || !arg || !around.some((f) => f.params.has(arg[1])) || names.length === 0) {
+    // Only the first argument of a loader call is validated, so only the first
+    // parameter may flow into a require.
+    if (!allowLoaders || !arg || !around.some((f) => f.first === arg[1]) || names.length === 0) {
       dynamic = true;
       continue;
     }
@@ -487,7 +489,9 @@ function reaches(testFile, changed) {
       if (!file.startsWith("tests/")) continue;
       const { text } = analyze(file);
       for (const name of [...loaders]) {
-        const key = `${file}\0${name}\0${loaders.size}`;
+        let dirCount = 0;
+        for (const set of loaderDirs.values()) dirCount += set.size;
+        const key = `${file}\0${name}\0${loaders.size}\0${dirCount}`;
         if (done.has(key)) continue;
         done.add(key);
         const lits = loaderLiterals(file, text, name, loaders);
@@ -504,6 +508,12 @@ function reaches(testFile, changed) {
           for (const ref of cands) {
             for (const ext of EXTENSIONS) {
               for (const cand of [ref + ext, `${ref}/index${ext}`]) {
+                // A candidate the PR deletes or renames no longer exists but is
+                // still an edge.
+                if (changed.includes(cand)) {
+                  hit.add(cand);
+                  found = true;
+                }
                 if (!isFile(cand)) continue;
                 found = true;
                 if (!seen.has(cand)) {

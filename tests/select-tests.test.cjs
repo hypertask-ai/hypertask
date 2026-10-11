@@ -98,6 +98,21 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
   const relReq = 'const { loadRel } = require("./helpers/loadRel.cjs");\n';
   put("tests/shimRel.test.cjs", relReq + 'loadRel("./relTarget.ts");\n');
   put("tests/shimRelMissing.test.cjs", relReq + 'loadRel("./nope.ts");\n');
+  // Round 3: a deleted helper-relative target, a late loader dir, a non-first parameter.
+  put("tests/gone.ts", "export const gone = 1;\n");
+  put("tests/shimGone.test.cjs", relReq + 'loadRel("./gone.ts");\n');
+  const loadA = "exports.loadA = function loadA(f) { return (r) => require(r); };\n";
+  put("tests/helpers/a/loadA.cjs", loadA);
+  put("tests/helpers/a/t.ts", "export const t = 1;\n");
+  put("tests/helpers/b/h2.cjs", loadA);
+  put(
+    "tests/shimDirs.test.cjs",
+    'const { loadA } = require("./helpers/a/loadA.cjs");\nloadA("../b/h2.cjs");\nloadA("./t.ts");\n',
+  );
+  put(
+    "tests/shimSecond.test.cjs",
+    'function load(file, name) { return require(name); }\nload("src/lib/shimTarget.ts");\n',
+  );
   put("tests/test-inventory.test.cjs", "// guard\n");
   put("tests/demo-smoke.test.cjs", "// guard\n");
   put("tests/file-size-limit.test.cjs", "// guard\n");
@@ -120,6 +135,10 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
     assert.ok(!pick("src/lib/other.ts").includes("tests/shimLiteral.test.cjs"), "shim test is not always-selected");
     assert.ok(!pick("src/lib/other.ts").includes("tests/shimHelper.test.cjs"), "helper shim test is not always-selected");
     const otherPick = pick("src/lib/other.ts");
+    assert.ok(otherPick.includes("tests/shimSecond.test.cjs"), "require of a non-first parameter stays always-selected");
+    assert.ok(!otherPick.includes("tests/shimGone.test.cjs"), "deleted-target test is traced, not always-selected");
+    assert.ok(pick("tests/helpers/gone.ts").includes("tests/shimGone.test.cjs"), "deleted helper-relative target selects the test");
+    assert.ok(pick("tests/helpers/b/t.ts").includes("tests/shimDirs.test.cjs"), "late loader dir re-validates earlier calls");
     assert.ok(otherPick.includes("tests/shimAnon.test.cjs"), "anonymous exported loader stays always-selected");
     assert.ok(otherPick.includes("tests/shimNested.test.cjs"), "unknown nested loader call stays always-selected");
     assert.ok(otherPick.includes("tests/shimRelMissing.test.cjs"), "literal that resolves nowhere stays always-selected");
