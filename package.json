@@ -113,7 +113,7 @@
     "dotenv": "^17.4.2",
     "embla-carousel-react": "^8.6.0",
     "emoji-mart": "^5.6.0",
-    "emoji-regex": "^10.6.0",
+    "emoji-regex": "^11.0.0",
     "eslint": "^10.11.0",
     "eslint-config-next": "^16.3.6",
     "firebase": "^12.18.0",
