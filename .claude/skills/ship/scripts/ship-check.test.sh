@@ -48,9 +48,14 @@ gh() {
     echo 'Invalid PR title'
   elif [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 838 && "$*" == *'--json headRefOid,baseRefName,state'* ]]; then
     command gh pr view 838 -R hypertask-ai/hypertask --json headRefOid --jq .headRefOid # Pin the skills-only fixture as open.
+  elif [[ ${1:-} == api && ${2:-} == */check-runs\?* ]]; then
+    echo '{"check_runs":[{"id":1,"name":"ci-tests","status":"completed","conclusion":"success"}]}'
   else command gh "$@"; fi
 }
 export -f gh
+if gh api 'repos/hypertask-ai/hypertask/commits/fixture/check-runs?per_page=100' --paginate | jq -e '.check_runs[0].conclusion == "success"' >/dev/null; then
+  ok 'merge fixtures have passing ci-tests'
+else bad 'merge fixture CI stub failed'; fi
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
 for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
@@ -550,6 +555,13 @@ if any('/contents/' in a for a in args):
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
+# Keep this suite focused on premerge evidence, with a passing current-head CI check.
+if url.endswith('/pulls/999') and '--jq' in args:
+    print(os.environ.get('FLAG_HEAD', 'a' * 40))
+    sys.exit(0)
+if '/check-runs?' in url:
+    print(json.dumps({'check_runs': [{'id': 1, 'name': 'ci-tests', 'status': 'completed', 'conclusion': 'success'}]}))
+    sys.exit(0)
 if os.environ.get('FLAG_ASSERT_FRESH') and '/pulls/' in url:
     assert urllib.parse.parse_qs(urllib.parse.urlsplit(url).query).get('premerge'), 'mutable PR read must be fresh'
 if os.environ.get('FLAG_ASSERT_LOCK'):
@@ -1233,6 +1245,103 @@ jq -n '{success:true,comments:[{text:"<p><strong>Resolved without a change:</str
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a pre/code block with output" || bad "nochange refused real output"
 echo 830 > "$E/YPER4-901/pr"
 N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
+
+# Current-head ci-tests merge gate. The incident fixture retains its real production SHA.
+export CI_FIXTURE_DIR="$PWD/fixtures/yper4-312" CI_CALL_LOG="$E/ci-calls"
+export CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
+CI_HEAD=$(jq -r '.check_runs[0].head_sha' "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
+CI_PR_RUNS=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.check-runs.json")
+CI_BASE_RUNS=$(jq '.check_runs[0].conclusion = "success"' "$CI_FIXTURE_DIR/production.check-runs.json")
+CI_LOG=$(cat "$CI_FIXTURE_DIR/pr-1392-failure.log")
+gh() {
+  printf '%s\n' "$*" >> "$CI_CALL_LOG"
+  [[ -z ${CI_GH_ERROR:-} || $* != *"$CI_GH_ERROR"* ]] || return 1
+  case "$1:$2" in
+    pr:view)
+      if [[ $* == *'--json title'* ]]; then echo 'HTPR-6971 [FEATURE] Fixture'
+      else echo "$CI_HEAD"; fi ;;
+    api:*/pulls/1392)
+      if [[ $* == *'--jq .head.sha'* ]]; then echo "$CI_HEAD"; else return 1; fi ;;
+    api:*/commits/production/check-runs\?*) printf '%s\n' "$CI_BASE_RUNS" ;;
+    api:*/check-runs\?*)
+      [[ $2 == "repos/"*"/commits/$CI_HEAD/check-runs?per_page=100&filter=all" && $* == *--paginate* ]] || return 1
+      printf '%s\n' "$CI_PR_RUNS" ;;
+    api:*/actions/jobs/114565456089/logs) cat "$CI_FIXTURE_DIR/production.log" ;;
+    api:*/actions/jobs/*/logs) printf '%s\n' "$CI_LOG" ;;
+    api:*/pulls/1392/files\?*) echo '[]' ;;
+    api:*/pulls/1392\?*)
+      jq -n --arg sha "$CI_HEAD" '{head:{sha:$sha},base:{sha:$sha},title:"HTPR-6971 [FEATURE] Fixture",changed_files:0}' ;;
+    api:*/statuses/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+hypertask() { echo '{"success":true,"tasks":[{"id":6971}]}'; }
+export -f gh hypertask
+if [ "$(gh api repos/hypertask-ai/hypertask/pulls/1392 --jq .head.sha)" = "$CI_HEAD" ]; then ok 'CI stub returns recorded head'
+else bad 'CI stub head changed'; fi
+if hypertask tasks get HTPR-6971 --json | jq -e '.success' >/dev/null; then ok 'CI ticket stub passes'
+else bad 'CI ticket stub failed'; fi
+ci_test_path=$(printenv PATH)
+# Python premerge subprocesses also use the exported gh stub, never live APIs.
+mkdir -p "$E/ci-bin"
+printf '#!/usr/bin/env bash\ngh "$@"\n' > "$E/ci-bin/gh"
+chmod +x "$E/ci-bin/gh"
+CI() {
+  local want=$1 expected=$2 out got; shift 2
+  : > "$CI_CALL_LOG"
+  out=$(echo '{"tool_input":{"command":"gh pr merge 1392"}}' | env PATH="$E/ci-bin:$ci_test_path" SHIP_GIT=/bin/true SHIP_GIT_CACHE="$E/ci-cache" "$@" ./ship-check guard 2>&1); got=$?
+  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "ci-tests: $expected"
+  else bad "ci-tests: want $want $expected got $got $out"; fi
+  if [ "$want" = 0 ] && [[ $* != *SHIP_REPO=* ]]; then
+    if grep -q '/statuses/' "$CI_CALL_LOG"; then ok 'passing CI proceeds to premerge status'
+    else bad 'passing CI never reached premerge status'; fi
+  elif [ "$want" = 2 ]; then
+    if grep -q '/statuses/' "$CI_CALL_LOG"; then bad 'nonpassing CI reached premerge status'
+    else ok 'nonpassing CI stops before premerge status'; fi
+  fi
+  if [ "$expected" = 'tests/htpr-6971-chat-history-paging.test.cjs:774:1' ]; then
+    printf '1392 fixture block: %s\n' "$out"
+  fi
+}
+CI 2 'tests/htpr-6971-chat-history-paging.test.cjs:774:1'
+CI 2 'production ci-tests is green, so this PR broke it'
+CI 2 'production ci-tests is also red (Ctrl+J globally opens Compose' CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
+for conclusion in success neutral skipped; do
+  CI 0 '' CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0].conclusion = $c' <<<"$CI_PR_RUNS")"
+done
+# Deliberately reverse page order: the maximum id wins, not API array order.
+rerun=$(jq '.check_runs[0] |= (.id += 1 | .conclusion = "success")' <<<"$CI_PR_RUNS")
+CI 0 '' CI_PR_RUNS="$rerun
+$CI_PR_RUNS"
+for status in queued in_progress; do
+  CI 2 "ci-tests has not finished on head ${CI_HEAD:0:7}" CI_PR_RUNS="$(jq --arg s "$status" '.check_runs[0] |= (.status = $s | .conclusion = null)' <<<"$CI_PR_RUNS")"
+done
+for conclusion in failure cancelled timed_out action_required stale; do
+  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0].conclusion = $c' <<<"$CI_PR_RUNS")"
+done
+for endpoint in /pulls/1392 '/commits/'"$CI_HEAD" /commits/production; do
+  CI 2 'cannot read ci-tests for PR 1392; retry' CI_GH_ERROR="$endpoint"
+done
+CI 2 'cannot read ci-tests for PR 1392; retry' CI_PR_RUNS=invalid
+CI 2 'ci-tests is missing on head' CI_PR_RUNS='{"check_runs":[]}'
+CI 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main CI_PR_RUNS='{"check_runs":[]}'
+CI 0 '' SHIP_REPO=hypertask-ai/verify SHIP_BASE=app-suite CI_PR_RUNS='{"check_runs":[]}'
+CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_GH_ERROR=/logs
+CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_LOG='no test identifiers'
+CI 2 'tests/tap-control.test.cjs:42:1' CI_LOG=$'2026-10-11T21:53:04Z not ok 1 - TAP control\n2026-10-11T21:53:04Z   location: /home/runner/tests/tap-control.test.cjs:42:1\n  error: AssertionError'
+CI 2 'named TAP failure' CI_LOG='not ok 1 - named TAP failure'
+CI 2 'tests/stack-control.test.cjs:12:4' CI_LOG=$'Error: assertion\n    at TestContext.<anonymous> (/home/runner/tests/stack-control.test.cjs:12:4)'
+CI 2 '(one; two; three)' CI_LOG=$'not ok 1 - one\nnot ok 2 - two\nnot ok 3 - three\nnot ok 4 - four'
+CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].name = "other-check"' <<<"$CI_PR_RUNS")
+$rerun"
+out=$(./ship-check ci-tests 1392); got=$?
+if [ "$got" = 1 ] && [[ $out == *tests/htpr-6971-chat-history-paging.test.cjs:774:1* ]]; then ok 'ci-tests subcommand rejects recorded failure'
+else bad "ci-tests subcommand: $got $out"; fi
+out=$(env SHIP_REPO=hypertask-ai/cli CI_PR_RUNS='{"check_runs":[]}' ./ship-check ci-tests 1392); got=$?
+if [ "$got" = 0 ] && [ -z "$out" ]; then ok 'no ci-tests in other repo passes silently'
+else bad "other repo: $got $out"; fi
+unset -f gh hypertask
+unset CI_FIXTURE_DIR CI_CALL_LOG CI_HEAD CI_PR_RUNS CI_BASE_RUNS CI_LOG
 
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
 echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'

@@ -1,0 +1,13 @@
+{
+  "check_runs": [
+    {
+      "id": 114553656721,
+      "name": "ci-tests",
+      "head_sha": "c587e4b7a53a840eed609f371829397c71214ef7",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-10-11T19:22:15Z",
+      "html_url": "https://github.com/hypertask-ai/hypertask/actions/runs/38167719966/job/114553656721"
+    }
+  ]
+}

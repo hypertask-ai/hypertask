@@ -12,6 +12,7 @@
 #   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
+#   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
@@ -41,6 +42,64 @@ check_title() {
   [[ $t =~ $TITLE_RE ]] || fail "PR $1 title \"$t\" must be PREFIX-NNNN [TYPE] description"
   ( check_ticket "${t%% *}" ) >/dev/null || fail "PR $1 names ${t%% *}, which is not on the board"
   echo "title ok"
+}
+
+latest_ci_tests() {
+  local json; json=$(gh api "repos/$REPO/commits/$1/check-runs?per_page=100&filter=all" --paginate 2>/dev/null) || return 1
+  jq -cs 'if length > 0 and all(.[]; (.check_runs | type) == "array") then
+    [.[].check_runs[] | select(.name == "ci-tests")] | max_by([.id, .started_at])
+    else error("cannot read check runs") end' <<<"$json"
+}
+
+ci_test_failures() {
+  local id url log names
+  id=$(jq -r '.id' <<<"$1"); url=$(jq -r '.html_url' <<<"$1")
+  if log=$(gh api "repos/$REPO/actions/jobs/$id/logs" 2>/dev/null); then
+    names=$(python3 -c '
+import re, sys
+log = re.sub(r"\x1b\[[0-9;]*m", "", sys.stdin.read())
+log = re.sub(r"(?m)^\d{4}-\d\d-\d\dT\S+\s?", "", log)
+path = r"tests/[^\s\x27\"():]+\.test\.\w+:\d+(?::\d+)?"
+locations = re.findall(r"(?:test at |location:\s*[\x27\"]?(?:[^\n]*?/)?)(" + path + r")", log)
+stacks = re.findall(r"(?m)^\s+at [^\n]*?(" + path + r")", log)
+names = re.findall(r"(?m)^\s*not ok \d+ - (.+)$|^\s*✖ (.+) \([\d.]+ms\)$", log)
+items = locations or stacks or [a or b for a, b in names]
+unique = {}
+for item in items:
+    unique.setdefault(re.sub(r":\d+(?::\d+)?$", "", item), item[:180])
+print("; ".join(list(unique.values())[:3]))
+' <<<"$log")
+    [ -z "$names" ] || { echo "$names"; return 0; }
+  fi
+  echo "see $url"
+}
+
+check_ci_tests() {
+  local sha run status conclusion reason production details
+  local unreadable="cannot read ci-tests for PR $1; retry"
+  sha=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "$unreadable"
+  [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "$unreadable"
+  run=$(latest_ci_tests "$sha") || fail "$unreadable"
+  if [ "$run" = null ]; then
+    [ "$REPO" != hypertask-ai/hypertask ] && return 0
+    fail "ci-tests is missing on head ${sha:0:7}"
+  fi
+  status=$(jq -r '.status' <<<"$run"); conclusion=$(jq -r '.conclusion' <<<"$run")
+  if [ "$status" != completed ]; then fail "ci-tests has not finished on head ${sha:0:7}"; fi
+  case "$conclusion" in success|neutral|skipped) echo "ci-tests ok"; return 0 ;; esac
+  details=$(ci_test_failures "$run")
+  reason="ci-tests $conclusion on head ${sha:0:7} ($details)"
+  production=$(latest_ci_tests "$BASE") || fail "$unreadable"
+  status=$(jq -r '.status' <<<"$production"); conclusion=$(jq -r '.conclusion' <<<"$production")
+  if [ "$status" = completed ]; then
+    case "$conclusion" in
+      success|neutral|skipped) reason+="; production ci-tests is green, so this PR broke it" ;;
+      failure|cancelled|timed_out|action_required|stale)
+        details=$(ci_test_failures "$production")
+        reason+="; production ci-tests is also red ($details), so check whether your change broke it or it was already broken" ;;
+    esac
+  fi
+  fail "$reason"
 }
 
 # Newest PR for the ticket into BASE, as "number state mergeSha". Exits 1 if GitHub cannot be read.
@@ -770,6 +829,7 @@ guard() {
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
       out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist)." >&2; exit 2; }
+      out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }." >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging." >&2; exit 2; }
     fi
     # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
@@ -793,6 +853,7 @@ case "${1:-}" in
   premerge) check_title "$2"; check_premerge "$2" ;;
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
+  ci-tests) check_ci_tests "$2" ;;
   ticket) check_ticket "$2" ;;
   pr) check_pr "$2" ;;
   merged) check_merged "$2" ;;
@@ -801,5 +862,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,22p' "$0"; exit 1 ;;
+  *) sed -n '2,23p' "$0"; exit 1 ;;
 esac
