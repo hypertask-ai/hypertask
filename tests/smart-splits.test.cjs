@@ -201,7 +201,7 @@ test("generic label and view endpoints reject paired smart-split mutations", () 
     "utf8",
   );
   const viewRoute = require("./refactored-module-source.cjs").readFileSync(
-    path.join(root, "src/pages/api/projects/views/delete-rename-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/delete-rename-view.ts"),
     "utf8",
   );
 

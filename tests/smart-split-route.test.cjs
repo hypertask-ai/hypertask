@@ -7,6 +7,9 @@ let loadId = 0;
 
 const stubbedPaths = [
   "src/pages/api/projects/views/smart-split.ts",
+  "src/lib/api/project-writes/views/smart-split.ts",
+  "src/lib/api/project-writes/views/response.ts",
+  "src/lib/api/task-writes/route.ts",
   "src/lib/prisma.ts",
   "src/lib/ai/labelClassifier.ts",
   "src/lib/auth/getSessionUser.ts",
@@ -67,7 +70,6 @@ const loadHandler = ({
     acquireBoardFilterWriteLock: async (_tx, projectId) => onBoardFilterLock(projectId),
   });
 
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
 
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-route-${++loadId}.cjs`),
@@ -90,6 +92,7 @@ const response = () => {
       result.statusCode = code;
       return this;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return this;

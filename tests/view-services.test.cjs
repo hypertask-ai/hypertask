@@ -151,7 +151,7 @@ test("view services broadcast board changes after create, update, apply, and del
 
 test("browser view switching does not broadcast a user-local applied pointer", () => {
   const source = fs.readFileSync(
-    path.join(root, "src/pages/api/projects/views/switch-view.ts"),
+    path.join(root, "src/lib/api/project-writes/views/switch-view.ts"),
     "utf8",
   );
 

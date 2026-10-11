@@ -60,7 +60,6 @@ const loadRoute = (relativePath, stubs) => {
   for (const [stubPath, exports] of Object.entries(stubs)) {
     stubModule(stubPath, exports);
   }
-  stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
 
   const jiti = require("jiti")(
     path.join(root, `tests/smart-split-generic-route-${++loadId}.cjs`),
@@ -81,6 +80,7 @@ const response = () => {
       result.statusCode = code;
       return this;
     },
+    setHeader() {},
     json(body) {
       result.body = body;
       return this;

@@ -25,13 +25,15 @@ function responseRecorder() {
       this.body = body;
       return this;
     },
+    setHeader() {},
   };
 }
 
 process.env.SESSION_SECRET = "get-first-project-test-secret";
 
-stubModule("src/lib/api/task-writes/route.ts", {
-  withTaskWriteFlag: (handler) => handler,
+// The shared handler authorizes from the signed cookie only; no Better Auth lookup.
+stubModule("src/lib/auth/getSessionUser.ts", {
+  getSessionUser: async () => null,
 });
 
 const controllerCalls = [];
