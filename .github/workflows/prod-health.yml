@@ -106,10 +106,11 @@ jobs:
             # A readable list with no deployment for this commit is NOTFOUND (ignored build step);
             # an unreadable or failed API response stays unknown and keeps waiting (YPER4-307).
             if DEPLOY_JSON=$(api "/v6/deployments?projectId=$PROJECT_ID&teamId=$TEAM_ID&target=production&limit=10" \
-              | jq -c --arg sha "$SHA" '[.deployments[] | select(.meta.githubCommitSha == $sha)]
-                  | (map(select(.state == "READY")) + .) | .[0] // empty'); then
+              | jq -ce --arg sha "$SHA" 'if (.deployments | type) == "array" then
+                    [.deployments[] | select(.meta.githubCommitSha == $sha)]
+                    | (map(select(.state == "READY")) + .) | .[0] // {state: "NOTFOUND"}
+                  else error("no deployments list") end'); then
               STATE=$(echo "$DEPLOY_JSON" | jq -r '.state // "NOTFOUND"') || STATE=""
-              [ -n "$DEPLOY_JSON" ] || STATE="NOTFOUND"
             else
               DEPLOY_JSON=""
               STATE=""

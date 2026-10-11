@@ -356,6 +356,8 @@ test("a commit with no deployment exits clean as an ignored build", async () => 
 
 for (const [name, extraEnv] of [
   ["a non-JSON deployment response", { HC_DEPLOYMENTS_JSON: "<html>unavailable</html>" }],
+  ["an empty deployment response", { HC_DEPLOYMENTS_JSON: " " }],
+  ["a deployment response without a deployments list", { HC_DEPLOYMENTS_JSON: '{"error":{"code":"forbidden"}}' }],
   ["a failed deployment request", { HC_DEPLOYMENTS_EXIT_CODE: "7" }],
 ]) {
   test(`${name} reaches the deployment-wait alert without rollback`, async () => {
