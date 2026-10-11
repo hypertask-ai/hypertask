@@ -23,6 +23,13 @@ install -o root -g aireviewer -m 750 "$source_dir/codex-review" /usr/local/libex
 install -o root -g aireviewer -m 750 "$source_dir/claude-review" /usr/local/libexec/hypertask-claude-subscription-review
 install -m 755 "$source_dir/codex-entrypoint" /usr/local/bin/hypertask-codex-subscription-review
 install -m 755 "$source_dir/claude-entrypoint" /usr/local/bin/hypertask-claude-subscription-review
+# hax review wrapper (HTPR-7115): the prompt arrives on stdin and hax -p reads it from stdin too.
+# Never pass the prompt as an argument: big diffs hit "Argument list too long". Both files are
+# root:root 0755 because the entrypoint runs the libexec wrapper as the valentin user via sudo.
+# The sudoers rule allowing that is NOT in ./sudoers and is not managed here; it already exists
+# on the VPS. This script does not add or change it.
+install -o root -g root -m 755 "$source_dir/hax-review" /usr/local/libexec/hypertask-hax-valentin-review
+install -o root -g root -m 755 "$source_dir/hax-entrypoint" /usr/local/bin/hypertask-hax-subscription-review
 install -o root -g reviewdispatch -m 750 "$source_dir/dispatch-review" /usr/local/libexec/hypertask-dispatch-review
 install -o root -g reviewdispatch -m 750 "$source_dir/dispatch-scan" /usr/local/libexec/hypertask-dispatch-scan
 install -m 644 "$source_dir/hypertask-ai-review-dispatch.service" /etc/systemd/system/hypertask-ai-review-dispatch.service
