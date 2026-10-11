@@ -120,31 +120,32 @@ for (const enabled of [true, false]) {
       const pending = fx.create(kind, extra).then((result) => { finished = true; return result; });
       fx.releaseIndex();
       const result = await pending;
+      await Promise.all(fx.background);
       assert.equal(kind === "core" ? result.task.id : result.status, kind === "core" ? 42 : 200);
       assert.ok(finished);
       assert.deepEqual(fx.indexed, enabled || kind === "global-effects" ? [42] : []);
       assert.deepEqual(fx.flags, kind === "global-effects" ? [] : [[flagKey, 985]]);
-      if (kind === "global-effects") assert.equal(fx.background.length, 1, "existing indexing is protected by waitUntil");
+      assert.ok(fx.background.length >= 1, "indexing is protected by waitUntil");
     });
   }
 }
 
 for (const kind of ["legacy", "core"]) {
-  test(`${kind} awaits indexing before completing creation`, async () => {
+  test(`${kind} hands indexing to waitUntil instead of making creation wait`, async () => {
     const fx = harness(true);
-    let finished = false;
-    const pending = fx.create(kind).then(() => { finished = true; });
-    for (let i = 0; i < 100 && !fx.indexed.length && !finished; i++) await Promise.resolve();
-    assert.deepEqual(fx.indexed, [42]);
-    assert.equal(finished, false, "serverless request must not finish while indexing is pending");
+    await fx.create(kind);
+    assert.ok(fx.background.length >= 1, "indexing keeps the serverless instance alive via waitUntil");
+    for (let i = 0; i < 100 && !fx.indexed.length; i++) await Promise.resolve();
+    assert.deepEqual(fx.indexed, [42], "creation finished while indexing is still pending");
     fx.releaseIndex();
-    await pending;
+    await Promise.all(fx.background);
   });
 
   test(`${kind} search outage does not fail a committed ticket creation`, async () => {
     const fx = harness(true, { failIndex: true });
     fx.releaseIndex();
     const result = await fx.create(kind);
+    await Promise.all(fx.background);
     assert.equal(kind === "core" ? result.task.id : result.status, kind === "core" ? 42 : 200);
   });
 }
@@ -153,6 +154,7 @@ test("denied creation never indexes a task", async () => {
   const fx = harness(true, { denied: true });
   fx.releaseIndex();
   assert.equal((await fx.create("legacy")).status, 404);
+  await Promise.all(fx.background);
   assert.deepEqual(fx.indexed, []);
   assert.deepEqual(fx.flags, []);
 });
