@@ -1237,6 +1237,8 @@ model Task {
   @@index([status, permanentlyDeleteAt])
   @@index([status, permanentlyDeleteAt, hardDeleteProcessingAt])
   @@index([dueDate, dueDateNotifiedAt])
+  // MCP my-tasks orders undated work by updatedAt before applying its row cap.
+  @@index([dueDate, updatedAt(sort: Desc)])
   @@index([waitingOnUserId])
   @@index([agentTaskCreatedPendingAt, agentTaskCreatedReadyAt, agentTaskCreatedEmittedAt])
   // Backs the ticketNumber lookup in linkifyTicketRefs.ts (AI responses linkify
