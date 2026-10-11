@@ -6,6 +6,7 @@ const calls = { tasks: 0, comments: 0, taskWhere: [] }
 const mocks = new Map([
   ['src/lib/prisma.ts', { default: {
     section: { findMany: async () => [] },
+    comment: { groupBy: async () => [{ taskId: 2 }], findFirst: async () => ({ id: 'c', taskId: 2, commentText: 'hi', text: null, createdAt: new Date(), creator: { displayName: 'A', email: 'a@x' } }) },
     task: { findMany: async (args) => { calls.taskWhere.push(args.where); return [{ id: 1 }, { id: 2 }] } },
   } }],
   ['src/utils/controllers/turbopuffer/turbopufferHelper.ts', {
@@ -72,11 +73,10 @@ test('filters turn into server-side conditions', async () => {
   assert.ok(text.includes('"Priority_Value":{"equals":"high","mode":"insensitive"}'))
   assert.ok(text.includes('"contains":"login page"'))
   assert.ok(groups.some((group) => group.NOT && JSON.stringify(group.NOT).includes('"contains":"oauth"')))
-  assert.ok(text.includes('"comments":{"some"'))
   const none = JSON.stringify((await searchFilterWhere(parse('priority:none'), [7], null)).AND)
   assert.ok(none.includes('"is":null') && none.includes('No Priority'))
   assert.deepEqual((await searchFilterWhere(parse('priority:bogus'), [7], null)).AND, [{ OR: [{ id: -1 }] }])
-  assert.deepEqual((await searchFilterWhere(parse('type:bogus'), [7], null)).AND, [{ OR: [{ id: -1 }] }])
+  assert.deepEqual((await searchFilterWhere(parse('type:bogus'), [7], null)).AND, [{ id: -1 }])
 })
 
 test('type: picks which candidates are ranked', async () => {
@@ -87,4 +87,42 @@ test('type: picks which candidates are ranked', async () => {
     assert.deepEqual([calls.tasks > 0 ? 1 : 0, calls.comments > 0 ? 1 : 0], [tasks, comments], query)
     assert.ok(Array.isArray(result.rankedIds))
   }
+})
+
+test('type: never becomes a ticket where-clause, positive or negated', async () => {
+  for (const query of ['type:comment', '-type:ticket', '-type:comment', 'type:ticket']) {
+    assert.deepEqual((await searchFilterWhere(parse(query), [7], 'Normal')).AND, [], query)
+  }
+  assert.deepEqual((await searchFilterWhere(parse('-type:ticket -type:comment'), [7], 'Normal')).AND, [{ id: -1 }])
+})
+
+test('every quoted phrase is required separately and exclusions stay separate', async () => {
+  const and = (await searchFilterWhere(parse('"alpha one" "beta two" -"gamma" -delta'), [7], 'Normal')).AND
+  assert.equal(and.length, 4)
+  assert.ok(JSON.stringify(and[0]).includes('alpha one') && !JSON.stringify(and[0]).includes('beta two'))
+  assert.ok(JSON.stringify(and[1]).includes('beta two') && !and[1].NOT)
+  assert.ok(and[2].NOT && and[3].NOT)
+})
+
+test('type:ticket with commenter: does not return comment results', async () => {
+  const commenterFilters = { commenter: [{ value: 'Ann', negated: false }] }
+  for (const [filters, text, mode] of [
+    [{ ...commenterFilters, type: [{ value: 'ticket', negated: false }] }, 'login', false],
+    [{ ...commenterFilters, type: [{ value: 'ticket', negated: false }] }, '', false],
+    [{ ...commenterFilters, type: [{ value: 'comment', negated: false }] }, '', true],
+    [commenterFilters, '', true],
+  ]) {
+    calls.comments = 0
+    const result = await rankedSearchWhere({ text, filters }, [7], 'Normal', 50, {}, undefined, true, true)
+    assert.equal(result.commentMode, mode)
+    if (!mode) assert.equal(calls.comments, 0)
+  }
+})
+
+test('type:comment without text still takes the comment payload path', async () => {
+  const result = await rankedSearchWhere(parse('type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  assert.equal(result.commentMode, true)
+  const text = await rankedSearchWhere(parse('login type:comment'), [7], 'Normal', 50, {}, undefined, true, false)
+  assert.equal(text.commentById.get(2).createdAt === undefined, true)
+  assert.equal(text.commentById.get(2).commentText, 'hi')
 })

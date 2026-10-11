@@ -27,10 +27,13 @@ export const searchResultType = (value: string) => SEARCH_RESULT_TYPES[value.tri
 const PRIORITY_NAMES = ['urgent', 'high', 'medium', 'low']
 const NO_MATCH: Prisma.TaskWhereInput = { id: -1 }
 
-function typeWhere(name: string): Prisma.TaskWhereInput {
-  const type = searchResultType(name)
-  if (type === 'comment') return { comments: { some: { activity: { equals: Prisma.DbNull } } } }
-  return type === 'ticket' ? { id: { gt: 0 } } : NO_MATCH
+// type: only chooses which kind of hit is returned (tickets or comments); it never filters tickets by their comments.
+export function resultKinds(parsed: ParsedSearch) {
+  const kinds = (parsed.filters.type ?? []).map(({ value, negated }) => ({ kind: searchResultType(value), negated }))
+  const only = kinds.filter(({ kind, negated }) => kind && !negated).map(({ kind }) => kind)
+  const allowTasks = !kinds.some(({ kind, negated }) => kind === 'ticket' && negated) && (!only.length || only.includes('ticket'))
+  const allowComments = !kinds.some(({ kind, negated }) => kind === 'comment' && negated) && (!only.length || only.includes('comment'))
+  return { allowTasks, allowComments, commentOnly: allowComments && !allowTasks, none: !allowTasks && !allowComments, invalid: kinds.some(({ kind, negated }) => !kind && !negated) }
 }
 
 function priorityWhere(name: string): Prisma.TaskWhereInput {
@@ -97,7 +100,7 @@ function filterWhere(operator: SearchFilterKey, { value, userIds }: SearchFilter
         case 'due-date': return { dueDate: { not: null } }
         default: return { id: -1 }
       }
-    case 'type': return typeWhere(name)
+    case 'type': return NO_MATCH // never reached: searchFilterWhere handles type separately
     case 'priority': return priorityWhere(name)
     case 'phrase': return containsPhrase(name)
     case 'before':
@@ -121,9 +124,13 @@ export async function searchFilterWhere(
     .filter((section) => section.isDone ?? isDoneByName(section.section_title))
     .map((section) => ({ projectId: section.projectId, section: section.section_title }))
   const groups: Prisma.TaskWhereInput[] = []
+  const kinds = resultKinds(parsed)
+  if (kinds.none || kinds.invalid) groups.push(NO_MATCH)
   for (const [key, values] of Object.entries(parsed.filters) as [SearchFilterKey, SearchFilter[]][]) {
+    if (key === 'type') continue
     const included = values.filter(({ negated }) => !negated)
-    if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
+    if (key === 'phrase') groups.push(...included.map((filter) => filterWhere(key, filter, done, parsed.text)))
+    else if (included.length) groups.push({ OR: included.map((filter) => filterWhere(key, filter, done, parsed.text)) })
     for (const filter of values.filter(({ negated }) => negated)) {
       groups.push({ NOT: filterWhere(key, filter, done) })
     }

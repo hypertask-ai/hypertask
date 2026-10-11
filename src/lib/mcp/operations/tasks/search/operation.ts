@@ -10,6 +10,7 @@ import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
 import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
+import { resultKinds } from '@/lib/search/filters'
 import { parseSearchWithChipNames, parseSearchWithNames } from '@/lib/search/serverOperators'
 import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
@@ -313,8 +314,8 @@ export async function GET(request: NextRequest) {
         const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
           { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true, commenterEnabled,
           sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
-        if (commenterEnabled) commentById = filtered.commentById
-        const rankedResults = Boolean(parsed.text || parsed.filters.commenter?.some((filter) => !filter.negated))
+        if (commenterEnabled || (logicEnabled && resultKinds(parsed).commentOnly)) commentById = filtered.commentById
+        const rankedResults = Boolean(parsed.text || filtered.commentMode)
         operatorPartial = parsed.text ? filtered.partial : false
         where.AND = filtered.where.AND
         if (parsed.filters.is) where.status = filtered.where.status
