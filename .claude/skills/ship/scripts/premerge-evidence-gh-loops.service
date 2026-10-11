@@ -1,0 +1,5 @@
+[Unit]
+Description=Kill gh polling loops older than two hours
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/premerge-evidence/premerge-evidence.py --kill-stale-gh-loops

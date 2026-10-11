@@ -512,12 +512,13 @@ args = sys.argv[1:]
 if os.environ.get('FLAG_LOG'):
     with open(os.environ['FLAG_LOG'], 'a') as log:
         log.write(json.dumps(args) + '\n')
-if args[:2] == ['pr', 'list']:
+if args[:2] == ['api', '-i'] and '/pulls?' in args[2]:
     if os.environ.get('FLAG_LIST_ERROR'):
         sys.exit(1)
-    print(json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'headRefOid': 'a' * 40,
-                       'statusCheckRollup': [] if os.environ.get('FLAG_MISSING_STATUS') else
-                       [{'context': 'premerge-evidence', 'state': os.environ.get('FLAG_ROLLUP', 'SUCCESS')}]}]))
+    if args[3:] == ['-H', 'If-None-Match: "fixture"']:
+        print('HTTP/2.0 304 Not Modified\r\nEtag: "fixture"\r\n\r\n')
+        sys.exit(1)
+    print('HTTP/2.0 200 OK\r\nEtag: "fixture"\r\n\r\n' + json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'head': {'sha': 'a' * 40}}]))
     sys.exit(0)
 if args[:2] == ['pr', 'view']:
     if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
@@ -945,7 +946,7 @@ W() {
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$posts" <<'PY'
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
-assert sum(c[:2] == ['pr', 'list'] for c in calls) == 1
+assert sum(c[:2] == ['api', '-i'] for c in calls) == 1
 assert sum(c[0] == 'api' and '/statuses/' in c[1] for c in calls) == int(sys.argv[2]), calls
 PY
   then ok "sweep: $posts posts"; else bad "sweep: want $want $posts posts got $got $out"; fi
@@ -957,7 +958,6 @@ W 0 1
 W 0 0 FLAG_ROLLUP=FAILURE
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
 W 0 1 FLAG_ROLLUP=FAILURE
-W 0 1 FLAG_MISSING_STATUS=1
 printf 'changed recording' > "$E/YPER4-999/click.webm"
 W 0 1
 rm "$E/YPER4-999/click.webm"
@@ -970,6 +970,11 @@ json.dump(cache, open(path, 'w'))
 PY
 W 0 1 FLAG_ROLLUP=FAILURE
 W 1 0 FLAG_LIST_ERROR=1
+python3 - "$E/sweep-state/cache.json" <<'PY'
+import json, sys
+path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
+json.dump(cache, open(path, 'w'))
+PY
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
@@ -983,7 +988,7 @@ SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
 [ "$got" = 0 ] && [ ! -s "$E/status-log" ] && ok 'sweep exits with no calls while paused' || bad "sweep ran while paused: $got $(cat "$E/status-log")"
 echo $(( $(date +%s) - 10 )) > "$E/pause-until"
 SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
-[ "$got" = 0 ] && grep -q '"pr", "list"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
+[ "$got" = 0 ] && grep -q '"api", "-i"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
 # An unchanged head is skipped: only the one list call and the rules fetch, no per-PR reads and no contents API.
 SWEEP_LOG FLAG_ROLLUP=FAILURE # warm the cache with the status the record really has
 SWEEP_LOG FLAG_ROLLUP=FAILURE; got=$?
@@ -991,7 +996,7 @@ python3 - "$E/status-log" <<'PY' && [ "$got" = 0 ] && ok 'sweep skips an unchang
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 api = [c for c in calls if c[0] in ('api', 'pr')]
-assert [c[:2] for c in api] == [['pr', 'list']], api
+assert [c[:2] for c in api] == [['api', '-i']], api
 assert not any('/contents/' in a for c in calls for a in c)
 PY
 
