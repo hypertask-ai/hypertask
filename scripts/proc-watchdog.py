@@ -84,6 +84,11 @@ def read_procs():
                 cwd = os.readlink(entry / 'cwd')
             except OSError:
                 cwd = ''
+            try:
+                # premerge-local.sh exports this marker; only its presence is read, never other variables.
+                marked = b'PREMERGE_LOCAL=1' in (entry / 'environ').read_bytes().split(b'\0')
+            except OSError:
+                marked = False
         except (OSError, ValueError):
             continue
         if not raw:
@@ -92,7 +97,7 @@ def read_procs():
         procs[int(entry.name)] = {
             'ppid': int(fields[1]), 'start': start, 'age': uptime - start / clock_ticks(), 'rss_kb': rss,
             'cmd': raw.rstrip(b'\0').replace(b'\0', b' ').decode(errors='replace'), 'name': name, 'cwd': cwd,
-            'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'),
+            'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'), 'marked': marked,
         }
     return procs
 
@@ -106,6 +111,9 @@ def kind_of(proc):
         return None
     if ONLY and ONLY not in proc['cmd']:
         return None
+    # Anything premerge-local.sh started from a worktree (its next start server, seed, build) carries the marker.
+    if proc.get('marked'):
+        return 'premerge'
     for kind, pattern in KINDS:
         if pattern.search(proc['cmd']):
             return kind
@@ -258,22 +266,24 @@ def notify(message):
         print(f'{len(left)} warning(s) not sent, kept in {pending}', file=sys.stderr)
 
 
-def stale_containers():
+def stale_containers(deadline=None):
     """[(id, name, age seconds)] of ht-premerge-* containers older than CONTAINER_MAX_AGE (from premerge-local-sweep)."""
     if not shutil.which(DOCKER):
         return []
     try:
         names = subprocess.run([DOCKER, 'ps', '-a', '--filter', 'name=ht-premerge-', '--format', '{{.Names}}'],
-                               capture_output=True, text=True, timeout=30).stdout.split()
+                               capture_output=True, text=True, timeout=10).stdout.split()
     except (OSError, subprocess.TimeoutExpired):
         return []
     out = []
     for name in names:
+        if deadline and time.time() > deadline:
+            break
         if not re.fullmatch(r'ht-premerge-[0-9a-f]{16}-(postgres|redis|soketi)', name):
             continue
         try:
             r = subprocess.run([DOCKER, 'inspect', '--format', '{{.Id}} {{.Created}}', name],
-                               capture_output=True, text=True, timeout=30)
+                               capture_output=True, text=True, timeout=10)
             cid, created = r.stdout.split()
             # Docker prints nanoseconds; Python reads at most microseconds.
             created = re.sub(r'(\.\d{6})\d*', r'\1', created).replace('Z', '+00:00')
@@ -285,35 +295,38 @@ def stale_containers():
     return out
 
 
+def remove_containers(containers, budget):
+    """docker rm each stale container until the time budget runs out; returns what was removed."""
+    removed = []
+    for cid, name, age in containers:
+        left = budget - time.time()
+        if left <= 1:
+            break
+        try:
+            r = subprocess.run([DOCKER, 'rm', '-f', '-v', cid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=min(30, left))
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if r.returncode == 0:
+            removed.append(f'container {name} ({age / 3600:.1f} h old)')
+            print(f'removed {removed[-1]}')
+    return removed
+
+
 def sweep(dry_run=False):
     hits = over_limit(read_procs())
-    containers = stale_containers()
     if dry_run:
+        containers = stale_containers()
         for h in hits:
             print(f"would stop {h['kind']} pid {h['pid']} ({h['reason']}, {len(h['tree'])} processes): {short(h['argv'], 160)}")
         for _, name, age in containers:
             print(f'would remove container {name} ({age / 3600:.1f} h old)')
         print(f'{len(hits) + len(containers)} over the limits')
         return 0
-    removed = []
-    for cid, name, age in containers:
-        r = subprocess.run([DOCKER, 'rm', '-f', '-v', cid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        if r.returncode == 0:
-            removed.append(f'container {name} ({age / 3600:.1f} h old)')
-            print(f'removed {removed[-1]}')
-    if removed:
-        STATE.mkdir(parents=True, exist_ok=True)
-        with open(STATE / 'kills.log', 'a') as log:
-            ts = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-            for line in removed:
-                log.write(json.dumps({'ts': ts, 'kind': 'container', 'reason': line}) + '\n')
-    if not hits:
-        notify(f'Process watchdog removed {len(removed)} stale premerge container(s): ' + '; '.join(removed)
-               if removed else None)
-        return 0
+    # Processes first: a slow or stuck Docker never delays stopping a runaway.
     STATE.mkdir(parents=True, exist_ok=True)
     now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    stopped = stop_all(hits)
+    stopped = stop_all(hits) if hits else {}
     lines = []
     with open(STATE / 'kills.log', 'a') as log:
         for h in hits:
@@ -323,9 +336,17 @@ def sweep(dry_run=False):
                                   'cmd': short(h['argv'], 400)}) + '\n')
             lines.append(f"{h['kind']} pid {h['pid']} ({h['reason']}) in {h['cwd'] or '?'}: {short(h['argv'], 120)}")
             print(f"stopped {lines[-1]}")
-    lines += removed
-    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB): '
-           + '; '.join(lines[:8]) + ('; and more' if len(lines) > 8 else '')
+        # Then containers, inside a budget that leaves room for the warning within the unit's 2 minutes.
+        budget = time.time() + 45
+        removed = remove_containers(stale_containers(budget), budget)
+        for line in removed:
+            log.write(json.dumps({'ts': now, 'kind': 'container', 'reason': line}) + '\n')
+    if not hits and not removed:
+        notify(None)
+        return 0
+    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB) and removed '
+           f'{len(removed)} stale premerge container(s): ' + '; '.join((lines + removed)[:8])
+           + ('; and more' if len(lines) + len(removed) > 8 else '')
            + f". Log: {STATE / 'kills.log'}. https://app.hypertask.ai/detail/project-4060/278")
     return 0
 
