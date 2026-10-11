@@ -672,6 +672,8 @@ test("data-capable management keys retain the project-scoped route", async () =>
           inputTokens: 80,
           outputTokens: 20,
           totalTokens: 100,
+          cachedInputTokens: 0,
+          cacheWriteInputTokens: 0,
         },
       ],
     });
