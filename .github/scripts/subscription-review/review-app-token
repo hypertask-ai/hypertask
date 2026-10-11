@@ -1,0 +1,76 @@
+#!/usr/bin/env python3
+"""Print the path of a curl config holding a cached installation token of the review GitHub App.
+
+The dispatcher uses it for hypertask-ai/hypertask calls so its traffic has its own rate-limit
+bucket (YPER4-286). Refreshes when under 10 minutes remain; cross-process safe (flock).
+Exit 1 on failure with nothing on stdout, so callers can fall back. Never prints the token."""
+import calendar, fcntl, json, os, pathlib, sys, time, urllib.request
+
+import jwt
+
+ETC = pathlib.Path(os.environ.get("HYPERTASK_REVIEW_APP_ETC", "/etc/hypertask-ai-review"))
+STATE = pathlib.Path(os.environ.get("HYPERTASK_REVIEW_STATE_ROOT", "/var/lib/hypertask-ai-review")) / "app-token"
+API = os.environ.get("HYPERTASK_REVIEW_APP_API", "https://api.github.com")
+meta_file = STATE / "token.json"
+conf_file = STATE / "curl.conf"
+
+
+def fresh():
+    try:
+        meta = json.loads(meta_file.read_text())
+        if meta["expires_at"] - time.time() > 600 and conf_file.is_file():
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def settings():
+    env = {}
+    for line in (ETC / "review-app.env").read_text().splitlines():
+        if "=" in line and not line.lstrip().startswith("#"):
+            k, v = line.split("=", 1)
+            env[k.strip()] = v.strip()
+    return env["APP_ID"], env["INSTALLATION_ID"]
+
+
+def mint():
+    app_id, installation_id = settings()
+    now = int(time.time())
+    assertion = jwt.encode({"iat": now - 60, "exp": now + 540, "iss": app_id},
+                           (ETC / "review-app.pem").read_text(), algorithm="RS256")
+    req = urllib.request.Request(f"{API}/app/installations/{installation_id}/access_tokens", method="POST",
+                                 headers={"Authorization": f"Bearer {assertion}",
+                                          "Accept": "application/vnd.github+json"})
+    data = json.load(urllib.request.urlopen(req, timeout=15))
+    expires = calendar.timegm(time.strptime(data["expires_at"], "%Y-%m-%dT%H:%M:%SZ"))
+    return data["token"], expires
+
+
+def write_private(path, text):
+    tmp = path.with_name(f".{path.name}.{os.getpid()}")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as fh:
+        fh.write(text)
+    os.replace(tmp, path)
+
+
+def main():
+    STATE.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not fresh():
+        with open(STATE / "lock", "a") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            if not fresh():
+                token, expires = mint()
+                write_private(conf_file, f'header = "Authorization: token {token}"\n')
+                write_private(meta_file, json.dumps({"expires_at": expires}))
+    print(conf_file)
+    return 0
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except Exception as exc:
+        print(f"review App token unavailable: {type(exc).__name__}", file=sys.stderr)
+        sys.exit(1)
