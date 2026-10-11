@@ -17,7 +17,7 @@ const research = load(path.join(root, "src/app/api/ai/_lib/taskWriterBoardResear
 const registry = load(path.join(root, "src/lib/ai/prompts/registry.ts"));
 const flag = "htpr-7057-writer-heading-language";
 
-async function prepare({ prompt, enabled = true, boardResearch = true, aiMode = "AiTaskWriter" }) {
+async function prepare({ prompt, enabled = true, aiMode = "AiTaskWriter" }) {
   const filename = path.join(root, "src/app/api/ai/_lib/taskWriterRun.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -26,7 +26,7 @@ async function prepare({ prompt, enabled = true, boardResearch = true, aiMode = 
   const stubs = {
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => {
       checks.push([key, userId]);
-      return key === flag ? enabled : key === research.HTPR_6363_TASK_WRITER_RESEARCH_FLAG && boardResearch;
+      return key === flag ? enabled : false;
     } },
     "@/lib/ai/prompts/registry": registry,
     "@/lib/prisma": { __esModule: true, default: {
@@ -61,7 +61,7 @@ async function prepare({ prompt, enabled = true, boardResearch = true, aiMode = 
   return { run: await loadedModule.exports.prepareTaskWriterRun(body, 1000), checks };
 }
 
-for (const boardResearch of [true, false]) {
+{
   for (const prompt of [
     "Behebe den Fehler beim Speichern. Bitte auf Deutsch schreiben",
     "Behebe den Fehler beim Speichern. Nach dem Speichern bleibt der Inhalt erhalten.",
@@ -69,8 +69,8 @@ for (const boardResearch of [true, false]) {
     "Behebe den Fehler beim Speichern. Bitte auf Französisch schreiben.",
     "保存時に内容が消える不具合を修正してください。",
   ]) {
-    test(`language contract applies to request with research ${boardResearch}: ${prompt}`, async () => {
-      const { run, checks } = await prepare({ prompt, boardResearch });
+    test(`language contract applies to request: ${prompt}`, async () => {
+      const { run, checks } = await prepare({ prompt });
       assert.ok(checks.some(([key, id]) => key === flag && id === 1000));
       assert.ok(run.messages[0].content.endsWith(prompt));
       assert.match(run.instructions, /language the user explicitly asks for/);
@@ -85,12 +85,10 @@ for (const boardResearch of [true, false]) {
       assert.match(run.instructions, /<p id="ai-generated-task-properties">/);
     });
   }
-  test(`flag off preserves today's full prompt with research ${boardResearch}`, async () => {
+  test(`flag off preserves today's full prompt`, async () => {
     const prompt = "Behebe den Fehler beim Speichern. Bitte auf Deutsch schreiben";
-    const { run } = await prepare({ prompt, enabled: false, boardResearch });
-    const expected = boardResearch
-      ? taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`)
-      : editorPrompts.createKanbanSystemPrompt("task_writer");
+    const { run } = await prepare({ prompt, enabled: false });
+    const expected = taskPrompts.createTaskWriterSystemPromptTemplate(`${editorPrompts.TASK_AUTHORING_STYLE}\n\n${research.TASK_WRITER_BOARD_RESEARCH_RULES}`);
     assert.equal(run.instructions, `${expected}\n\nUse the board structure.`);
   });
 }
