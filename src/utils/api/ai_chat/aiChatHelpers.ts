@@ -63,14 +63,15 @@ export const AI_Chat_API = {
   /**
    * Creates a new AI chat session via the Next.js route (cookie auth).
    */
-  createSessionNext: async (taskId?: number): Promise<
+  createSessionNext: async (taskId?: number, projectId?: number): Promise<
     ApiResponse<TCreateChatSessionNextResponse>
   > => {
     return axiosClient.post<
       TCreateChatSessionNextResponse,
-      { taskId?: number }
+      { taskId?: number; projectId?: number }
     >(globalConstants.createAiChatSessionNextRoute, {
       ...(taskId ? { taskId } : {}),
+      ...(projectId ? { projectId } : {}),
     });
   },
 

@@ -12,12 +12,18 @@ import {
   userTeamIds,
 } from "@/lib/agents/chatAccess";
 import { isFeatureEnabled, SHARED_AGENT_CHAT_FLAG, HTPR_6924_REST_COMPAT_FLAG } from "@/lib/flags";
+import { HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { initialChatTitle } from "@/lib/ai/chatNames";
+import { taskAccessWhere } from "@/utils/controllers/tasks/assertTaskAccess";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export const runtime = "nodejs";
 
 const createSessionSchema = z.object({
   taskId: z.coerce.number().int().positive().optional(),
   agentId: z.string().uuid().optional(),
+  // HTPR-7052: only used to name the chat after the board; never stored.
+  projectId: z.coerce.number().int().positive().optional(),
 });
 
 export async function POST(request: NextRequest) {
@@ -155,10 +161,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // HTPR-7052: a chat with no message yet takes the ticket title, else the board name.
+    let initialTitle: string | null = null;
+    try {
+      const chatNames = await isFeatureEnabled(HTPR_7052_CHAT_NAMES_FLAG, userId);
+      if (chatNames) {
+        const [task, project] = await Promise.all([
+          parsed.data.taskId
+            ? prisma.task.findFirst({ where: taskAccessWhere(userId, parsed.data.taskId), select: { title: true } })
+            : null,
+          parsed.data.projectId
+            ? prisma.project.findFirst({ where: { id: parsed.data.projectId, ...getProjectWhere(userId) }, select: { name: true, title: true } })
+            : null,
+        ]);
+        initialTitle = initialChatTitle(true, { taskTitle: task?.title, boardName: project?.title || project?.name });
+      }
+    } catch (error) {
+      console.error("[ai-chat/create-session] chat name lookup failed", error);
+    }
+
     const session = await prisma.chatSession.create({
       data: {
         userId: userId,
         taskId: parsed.data.taskId,
+        ...(initialTitle ? { title: initialTitle } : {}),
       },
       include: {
         messages: {

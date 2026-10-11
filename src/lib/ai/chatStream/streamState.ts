@@ -21,6 +21,10 @@ export type StreamOptions = TurnModel & {
   streamLease: Exclude<Awaited<ReturnType<typeof acquireAiChatStreamLease>>, string>;
   heartbeatExecutionTerminal: boolean;
   firstTurn: boolean;
+  // HTPR-7052: undefined = flag off (legacy). null = flag on but the chat was not auto-named
+  // (manual title), so the generated title must not overwrite it. string = the title just
+  // written, the only one the generated title may replace.
+  chatNameGuardTitle?: string | null;
   turnStartedAtMs: number;
   maxDuration: number;
 };
