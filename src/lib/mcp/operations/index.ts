@@ -64,6 +64,7 @@ const operations: OperationDefinition[] = [
   { pattern: /^\/mcp\/projects$/, params: [], methods: ["GET"], load: () => import('./projects/operation') },
   { pattern: /^\/mcp\/time\/log$/, params: [], methods: ["POST"], load: () => import('./time/log/operation') },
   { pattern: /^\/mcp\/webhooks$/, params: [], methods: ["GET","POST","DELETE"], load: () => import('./webhooks/operation') },
+  { pattern: /^\/mcp\/agents\/create$/, params: [], methods: ["POST"], load: () => import('./agents/create/operation') },
   { pattern: /^\/mcp\/agents$/, params: [], methods: ["GET"], load: () => import('./agents/operation') },
   { pattern: /^\/mcp\/drafts$/, params: [], methods: ["POST","GET"], load: () => import('./drafts/operation') },
   { pattern: /^\/mcp\/skills$/, params: [], methods: ["GET","POST"], load: () => import('./skills/operation') },

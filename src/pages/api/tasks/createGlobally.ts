@@ -1,3 +1,5 @@
+import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { schedulePostCreateWork, persistAssignee, createAssigneeActivityAndNotification, createPriorityActivity, createEstimateAndActivity, getActiveAgentOwnerId, isAgentAssignee, type TaskCreatedGlobally, type NormalizedTaskAssignee } from "@/lib/api/task-writes/create-global-effects";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
@@ -126,7 +128,7 @@ const handler: NextApiHandler = async (
       sectionId,
       priority,
       estimate,
-      dueDate,
+      dueDate: requestedDueDate,
       startDate,
       tags,
       parentTask,
@@ -211,6 +213,10 @@ const handler: NextApiHandler = async (
     if (!authorizedProject) {
       return res.status(403).json({ message: "Forbidden" });
     }
+    const dueDateEnabled = req.body.requestKind === "compose-task" && req.body.writerDueDate != null &&
+      await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+    const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(req.body.writerDueDate, req.body.writerTimeZone) : undefined;
+    const dueDate = writerDueDate ?? requestedDueDate;
     if (req.body.existingTaskId != null) {
       const taskId = Number(req.body.existingTaskId);
       if (!Number.isSafeInteger(taskId) || taskId <= 0) {
@@ -223,13 +229,20 @@ const handler: NextApiHandler = async (
       if (!target) return res.status(403).json({ message: "Forbidden" });
       if (!isEmptyComposeTarget(target)) return res.status(409).json({ message: "This task is no longer empty. Your note is still here." });
       const { updateTaskSingle } = await import("@/utils/controllers/tasks/single");
-      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {
+      const result = await updateTaskSingle({ id: taskId, title, description,
+        ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
+      }, currentUser, agentId, {
         expectedTitle: target.title,
         expectedDescription: target.description_?.content ?? "",
         expectedProjectId: target.projectId,
         expectedStatus: target.status,
       });
       if (result.status !== 200) return res.status(result.status).json(result.json);
+      if (writerDueDate) {
+        const { cancelDueDateJob, scheduleDueDateJob } = await import("../queues/duedateQueue");
+        await cancelDueDateJob(taskId, projectId);
+        await scheduleDueDateJob({ taskId, projectId }, writerDueDate);
+      }
       const { broadcastBoardChange, broadcastTaskChange } = await import("@/lib/realtime/server");
       await Promise.all([broadcastBoardChange(projectId, { originUserId: userId }), broadcastTaskChange(taskId)]);
       return res.status(200).json({ newTask: result.json });

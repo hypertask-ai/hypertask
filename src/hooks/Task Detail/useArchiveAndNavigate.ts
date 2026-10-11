@@ -1,7 +1,7 @@
 import { useTaskContext } from '@/lib/contexts/TaskDetail/TaskProvider';
 import  {useContext, useCallback} from 'react'
 import UpdateKanban from '../MultiPages/useUpdateTaskInBoards';
-import useGlobalFocusHandler from '../Inbox/useGlobalFocusHandler';
+import useGlobalFocusHandler, { type INotificationsFromTQ } from '../Inbox/useGlobalFocusHandler';
 import { useRecoilState } from '@/lib/state';
 import { currentUserAtom, tasksPlayListAtom } from '@/store';
 import toast from 'react-hot-toast';
@@ -11,6 +11,9 @@ import { useUndoContext } from '../General/useUndo';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import useHypertasksNavigate from '../MultiPages/Route/useHypertasksNavigate';
 import { useSearchParams } from 'next/navigation';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG } from '@/lib/flags/keys';
+import { inboxDataQueryKey } from '../Inbox/useGetNotifications';
 import {
   nextRemainingInboxTask,
   resolveTaskPlaylistNavigation,
@@ -19,6 +22,7 @@ import {
 } from '@/lib/taskDetailArchiveNavigation';
 
 const useArchiveAndNavigate = () => {
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const queryClient = useQueryClient();
   const { undoAction} = useUndoContext();
   const _mbl = useContext(MobileViewContext);
@@ -50,8 +54,16 @@ const setNotificationCountNull = (undo?:boolean)=> {
 // --------------------------- navigate to next task handler [j]
 const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean, remindMe?:boolean, force?:"forceNavigate", inboxFlow?:string|null): TaskArchiveNavigationOutcome=>{
   const indexOf = tasksPlayList?.findIndex(obj =>obj.projectId === currentItemInTasksPlaylist.projectId && obj.uniqueIndex === currentItemInTasksPlaylist.uniqueIndex);
-  const inInbox = currentTask?.notifications&&currentTask?.notifications[0]
   const activeInboxFlow = inboxFlow ?? searchParams?.get("inboxFlow")
+  // Cached Inbox rows omit membership until the detail fetch finishes.
+  const earlyInboxMembership = inboxEFirstPress && archiveNotification && activeInboxFlow === "true" &&
+    currentTask?._count?.notifications === undefined
+  const inInbox = earlyInboxMembership
+    ? queryClient.getQueryData<INotificationsFromTQ>(inboxDataQueryKey(currentUser.id))?.notifications.find(notification =>
+        notification.taskId === currentTask?.id && notification.projectId === currentTask?.projectId &&
+        notification.userId === currentUser.id && notification.status === "Normal" &&
+        !notification.waitingOnSynthetic && Number.isSafeInteger(Number(notification.id)) && Number(notification.id) > 0)
+    : currentTask?.notifications&&currentTask?.notifications[0]
   const missingInboxTarget = activeInboxFlow && indexOf === -1 && tasksPlayList
     ? nextRemainingInboxTask(tasksPlayList, currentItemInTasksPlaylist)
     : undefined
@@ -60,7 +72,7 @@ const navigateToNextTask = (archiveNotification?:boolean,shouldNavigate?:boolean
   // =========================== user presses [e] so archive notifications for this task too and update the key. 
   if (archiveNotification && currentTask){
 
-    if (!currentTask._count?.notifications){
+    if (!(earlyInboxMembership ? inInbox : currentTask._count?.notifications)){
       console.log("🚀 ~ navigateToNextTask ~ currentTask:", currentTask)
       if (force==="forceNavigate") moveIdxDown()
       else{

@@ -18,8 +18,11 @@ const mocks = {
   "@/lib/state": { useRecoilValue: () => ({ id: 2343 }) },
   "@/store": { currentUserAtom: {} },
   "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: { commentsStacked: false, scrollSetting: "Bottom" } }) },
-  "@/hooks/useFlag": { useFlag: (key) => { if (key === "htpr-6962-keep-assignee") return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
-  "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee" },
+  "@/hooks/useFlag": { useFlagReady: () => true, useFlag: (key) => { if (["htpr-7009-dedupe-task-detail-reads", "htpr-6962-keep-assignee", "htpr-7004-no-loading-flash"].includes(key)) return false; assert.equal(key, "htpr-6899-stable-layout"); return stableLayoutEnabled; } },
+  "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads", HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
+  "@/lib/taskDetailReads": require("jiti").createJiti(__filename, {
+    alias: { "@": path.join(root, "src") },
+  })(path.join(root, "src/lib/taskDetailReads.ts")),
   "@/lib/constants": { default: { CommentsTQPrefixKey: "comments" } },
   "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
   "@/lib/contexts/TaskDetail/TaskProvider": { TasksProvider: ({ children, parsedTask, _comments, cachedNavigation }) => { providerPayload = { parsedTask, _comments, cachedNavigation }; return children; }, useTaskContext: () => ({}) },
@@ -45,6 +48,9 @@ const source = process.env.CACHED_DETAIL_BASELINE
 const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
 const exportsObject = {};
 new Function("require", "exports", compiled)((name) => {
+  if (name === "@/lib/taskDetailReads") return mocks[name];
+  if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+  if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
   assert.ok(name in mocks, `Unexpected dependency: ${name}`);
   return mocks[name];
 }, exportsObject);
@@ -144,6 +150,7 @@ test("description paints cached content and drafts before constructing the rich 
   const noop = () => null;
   let secondaryPanelsReady = false;
   let editorMounts = 0;
+  const Editor = () => { editorMounts++; return React.createElement("div", null, "Editor ready"); };
   const mocks = {
     "react": React,
     "react/jsx-runtime": require("react/jsx-runtime"),
@@ -157,7 +164,10 @@ test("description paints cached content and drafts before constructing the rich 
     "@/hooks/General/useHasDrafts": { isMeaningfulDescriptionDraft: (draft) => Boolean(draft.content) },
     "../ContextMenu": { HighlightMenu: noop },
     "../ContextMenu/QuoteButton": { __esModule: true, default: noop },
-    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: () => { editorMounts++; return React.createElement("div", null, "Editor ready"); } },
+    "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": { __esModule: true, default: Editor },
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (content) => content },
     "./InnerHtmlDescription": { __esModule: true, default: ({ id, descriptionText }) => React.createElement("div", { id, dangerouslySetInnerHTML: { __html: descriptionText } }) },
@@ -165,6 +175,9 @@ test("description paints cached content and drafts before constructing the rich 
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   const exportsObject = {};
   new Function("require", "exports", compiled)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in mocks)) return {};
+    if (name === "@/hooks/useFlag" && name in mocks) return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
   }, exportsObject);
@@ -182,11 +195,13 @@ test("pending cached details paint property geometry immediately but defer edito
   const panels = fs.readFileSync(path.join(root, "src/app/detail/[...slug]/TaskDetailPanels.tsx"), "utf8");
   const thread = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx"), "utf8");
   assert.match(state, /useState\(!instantTicketOpen \|\| !initialCommentsPayload\.pending\)/);
-  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(\(\) => setSecondaryPanelsReady\(true\)\)/);
+  // HTPR-7116: `reveal` sets the panels ready (in a transition when its flag is on).
+  assert.match(state, /requestAnimationFrame\(\(\) => \{\s*frame = requestAnimationFrame\(reveal\)/);
+  assert.match(state, /: \(\) => setSecondaryPanelsReady\(true\);/);
   assert.match(state, /return \(\) => cancelAnimationFrame\(frame\)/);
   assert.match(panels, /const stableLayoutFlag = useFlag\(HTPR_6899_STABLE_LAYOUT_FLAG\)/);
   assert.match(panels, /!_mbl && \(\(stableLayoutFlag && cachedLayout\) \|\| secondaryPanelsReady !== false\) && \(\s*<TaskInfo/);
-  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(panels, /_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
   assert.match(thread, /taskInfoVirtualIndex && _mbl && \(cachedLayout \|\| secondaryPanelsReady !== false\)/);
-  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(instantTicketOpen \? <Suspense fallback=\{null\}><NewCommentComponent/);
+  assert.match(thread, /!_mbl && secondaryPanelsReady !== false && \(\s*\/\/[^\n]*\n\s*<SettledComposerSlot settled=\{threadSettled\} slotRef=\{composerSlotRef\}><Suspense fallback=\{null\}><NewCommentComponent/);
 });

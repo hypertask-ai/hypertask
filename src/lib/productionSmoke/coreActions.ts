@@ -38,6 +38,7 @@ class SmokeFailure extends Error {
     readonly action: string,
     readonly status: number | undefined,
     readonly detail: string,
+    readonly transportFailure = false,
   ) {
     super(`${action}: ${detail}`);
   }
@@ -223,6 +224,7 @@ export async function runCoreActionsSmoke(options: {
         action,
         undefined,
         error instanceof Error ? error.message : "network request failed",
+        true,
       );
     }
 
@@ -237,6 +239,7 @@ export async function runCoreActionsSmoke(options: {
         error instanceof Error
           ? error.message
           : "response body could not be read",
+        true,
       );
     }
     let data: unknown = null;
@@ -539,15 +542,35 @@ export async function runCoreActionsSmoke(options: {
 
   const deleteOwnedComments = async () => {
     for (const id of [...ownedCommentIds].sort((a, b) => b - a)) {
-      await request(
-        "cleanup comment delete",
-        "/api/comments/deleteCommentById",
-        {
-          method: "POST",
-          body: JSON.stringify({ id }),
-        },
-        [200, 404],
-      );
+      // A timed-out delete may have committed. Retry this owned id once;
+      // 404 is safe, and the final re-read still proves the fixture is clean.
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          await request(
+            "cleanup comment delete",
+            "/api/comments/deleteCommentById",
+            {
+              method: "POST",
+              body: JSON.stringify({ id }),
+            },
+            [200, 404],
+          );
+          break;
+        } catch (error) {
+          const cancelled =
+            options.signal?.aborted &&
+            (!cleaningUp ||
+              !(options.signal.reason instanceof CoreSmokeRunDeadlineError));
+          if (
+            attempt === 1 ||
+            cancelled ||
+            !(error instanceof SmokeFailure) ||
+            !error.transportFailure
+          ) {
+            throw error;
+          }
+        }
+      }
     }
     const remaining = (await getComments("cleanup comments verify")).some(
       (comment: any) => ownedCommentIds.has(Number(comment?.id)),

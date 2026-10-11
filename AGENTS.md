@@ -9,7 +9,7 @@ Valentin's own Claude Code and Codex sessions follow the same workflow:
 - Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
 - The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
 - Read [the CI reference](https://hypertask.app/wiki/deployment) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
-- Helpers are Codex sub-sessions: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. The owning session remains responsible through live verification and close.
+- Helpers follow the token ladder (Valentin, 2026-10-10): CODEX mode `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`, CLAUDE mode the Agent tool (`sonnet` builds, `haiku` lookups) inside the session. The owning session remains responsible through live verification and close. A helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
 
 ## CLI and MCP repositories
 
@@ -126,9 +126,14 @@ This is a Next.js 14 app with both App Router and legacy Pages Router surfaces. 
 
 Before changing a feature, trace the entry point through middleware, route handler, controller/service layer, queue side effects, auth/cookie behavior, and realtime/cache invalidation where relevant.
 
+## AI models
+
+One AI model per class: a new model version replaces the old one in the same change (old one leaves every picker, saved picks move to the new one). Enforced by tests/model-class-unique.test.cjs (Valentin, 2026-10-08).
+
 ## Feature flags for new user-facing behavior
 
 - Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.
+- Add one client-safe file in `src/lib/flags/definitions/`, named `<flag-key>.ts`, exporting its key constant and a default definition (including `releaseRisk` with `risk` and `reason` for flags shipped from 2026-10-11). Add nothing to shared keys, definitions, risk maps or test lists. `npm` entry points generate the gitignored `index.generated.ts`; never commit it. Existing imports from `keys.ts`, `definitions.ts` and `flags.ts` stay unchanged. Put new per-flag tests in their own test file. See [the registry reference](openwiki/feature-flags.md).
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
 - New feature and improvement flags default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a feature flag to Everyone; Valentin changes the mode at `/admin/flags`.
 - When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the INFRA MANAGER session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)

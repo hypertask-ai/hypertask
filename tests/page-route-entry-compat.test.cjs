@@ -23,6 +23,7 @@ const modes = ['ON', 'OFF', 'FLAG_FAILURE', 'USER_FAILURE', 'NO_SESSION'];
 async function run(operation, mode = 'OFF', options = {}) {
   const calls = [];
   const probes = [];
+  const lookups = [];
   const [suffix, method, defaultBody] = operations[operation];
   const userId = options.userId ?? 985;
   const profileId = options.profileId ?? userId;
@@ -70,6 +71,7 @@ async function run(operation, mode = 'OFF', options = {}) {
       task: { findFirst: async (args) => { record('task', args); return options.missing ? null : { id: 50 }; } },
       project: { findMany: async (args) => { record('projects', args); return [{ id: 15 }]; } },
       page: { update: async (args) => { record('title', args); return page; } },
+      user: { findUnique: async (args) => { lookups.push(args); return options.noUserRow ? null : { id: args.where.id, displayName: 'Actor', email: 'actor@fixture.invalid', UserSetting: null, userPicture: null }; } },
     } },
     '@/utils/controllers/projects/getAllIncludes': { getProjectWhere: (...args) => {
       record('scope', args); return { OR: [{ ownerId: args[0] }, { members: { some: { userId: args[0], agentId: null } } }] };
@@ -93,7 +95,7 @@ async function run(operation, mode = 'OFF', options = {}) {
     },
   };
   const response = await route[method](request, { params: Promise.resolve({ publicId: options.publicId ?? page.publicId }) });
-  return { status: response.status, text: await response.text(), headers: [...response.headers], calls, probes, requestHeaders: request.headers };
+  return { status: response.status, text: await response.text(), headers: [...response.headers], calls, probes, lookups, requestHeaders: request.headers };
 }
 
 function contract(result) {
@@ -442,20 +444,37 @@ if (require.main === module) {
         assert.equal(result.probes[0][1], result.requestHeaders);
       }
     });
-    test(`${operation}: missing/invalid profiles keep 401 before parsing and side effects in both modes`, async () => {
-      for (const mode of ['ON', 'OFF']) for (const options of [{ noProfile: true }, { invalidProfile: true }]) {
-        const result = await run(operation, mode, { ...options, raw: '{' });
+    // HTPR-7073: the signed session alone identifies the user when the REST compat flag is on.
+    test(`${operation}: flag OFF keeps 401 for missing/invalid profiles before parsing and side effects`, async () => {
+      for (const options of [{ noProfile: true }, { invalidProfile: true }]) {
+        const result = await run(operation, 'OFF', { ...options, raw: '{' });
         error(result, 401, 'Unauthorized');
         assert.deepEqual(result.calls, []);
-        assert.equal(result.probes.filter(([kind]) => kind === 'flag').length, 0);
+        assert.deepEqual(result.lookups, []);
+        assert.equal(result.probes.filter(([kind]) => kind === 'flag').length, 1);
       }
     });
-    test(`${operation}: unsigned/mismatched profiles cannot enable helpers but keep direct-handler legacy results`, async () => {
-      for (const mode of ['ON', 'OFF', 'NO_SESSION']) {
+    test(`${operation}: flag ON loads the profile of the signed session user when the profile is missing, invalid or mismatched`, async () => {
+      for (const options of [{ noProfile: true }, { invalidProfile: true }, { profileId: 7 }]) {
+        const result = await run(operation, 'ON', options);
+        assert.deepEqual(contract(result), baseline[operation]);
+        assert.deepEqual(result.lookups, [{ where: { id: 985 }, include: { UserSetting: true, userPicture: true } }]);
+      }
+    });
+    test(`${operation}: no session or no user row keeps 401; mismatched profiles stay legacy without the flag`, async () => {
+      for (const options of [{ noProfile: true }, { invalidProfile: true }]) {
+        const noSession = await run(operation, 'NO_SESSION', { ...options, raw: '{' });
+        error(noSession, 401, 'Unauthorized');
+        assert.deepEqual(noSession.lookups, []);
+        const noRow = await run(operation, 'ON', { ...options, noUserRow: true, raw: '{' });
+        error(noRow, 401, 'Unauthorized');
+        assert.deepEqual(noRow.calls, []);
+      }
+      for (const mode of ['OFF', 'NO_SESSION']) {
         const result = await run(operation, mode, { profileId: 7 });
         const legacy = await run(operation, 'OFF', { profileId: 7 });
         assert.deepEqual(contract(result), contract(legacy));
-        assert.equal(result.probes.filter(([kind]) => kind === 'flag').length, 0);
+        assert.deepEqual(result.lookups, []);
       }
     });
   }

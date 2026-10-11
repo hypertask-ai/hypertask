@@ -1,3 +1,4 @@
+import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
 export { NVC_STYLE_RULE, HOUSE_OUTPUT_STYLE, TASK_AUTHORING_STYLE, createPromptForTiptapForwardSlash, createKanbanSystemPrompt, createTaskAndModelContext, createUploadedDocumentsContext, createTaskWriterPromptParts } from "./editorAiPrompts";
@@ -10,19 +11,21 @@ import { wrapLanguageModel, type FilePart, type LanguageModel, type ToolSet, typ
 import { searchComments, searchTasks, type TurbopufferCommentRow, type TurbopufferTaskRow } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { retrieveCustomInstructionFileContext } from "@/app/api/ai/_lib/customInstructions";
 import { configureAiModelUsage, inheritAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
+import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForProvider, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, type ByokProviderFlag } from "@/app/api/ai/_lib/byokKeys";
 import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { previousModelForFailedStream } from "@/app/api/ai/chat/stream/modelFallback";
 import { filterModelOptionForTeam, getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { aiUsageProviderForCredential, isCustomEndpointConfig, isVercelAiGatewayKey, providerOptionsForAiModel, resolveAiModel, type AiModelCredential, type AiGatewayTags, type AiProviderOptions, type AiGatewayFeature } from "@/app/api/ai/_lib/modelProvider";
-import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, type TAiModelOption } from "@/lib/aiModelOptions";
+import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionById, isLunaBlockedForPlan, preferredAiModelOption, resolveHaikuModelId, type TAiModelOption } from "@/lib/aiModelOptions";
+import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
-import { assertModelAllowedForPlan, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { assertModelAllowedForPlan, haiku55ModelEnabled, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
 import prisma from "@/lib/prisma";
+import { HTPR_7038_TASK_WRITER_SONNET_FLAG } from "@/lib/flags/keys";
 
 export const SSE_HEADERS = {
   "Content-Type": "text/event-stream",
@@ -73,6 +76,8 @@ const CLAUDE_MODELS = new Set([
   "claude-opus-5-5",
   "claude-opus-5",
   "claude-haiku-4.5",
+  "claude-haiku-5.5",
+  "claude-haiku-5-5",
 ]);
 const OPENAI_MODELS = new Set([
   "gpt-6-luna",
@@ -86,6 +91,7 @@ const OPENAI_MODELS = new Set([
 const CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES = [
   "claude-opus",
   "claude-sonnet-5",
+  "claude-haiku-5",
 ] as const;
 
 const IMG_TAG_RE = /<img\b[^>]*>/gi;
@@ -306,15 +312,16 @@ export function defaultModelSelection(
   personalModelOptionId?: string | null,
   customEndpointConfigured = true,
   defaultModelOption = defaultAiModelOption,
+  haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
 ) {
   const option = resolveUserFacingModelOption(
     feature,
     settings,
     personalModelOptionId,
-    { customEndpointConfigured, defaultModelOption }
+    { customEndpointConfigured, defaultModelOption, haiku55Enabled }
   );
   if (!option) throw new Error("This AI feature is turned off for your team");
-  return selectionFromModelOption(filterModelOptionForTeam(option, settings));
+  return selectionFromModelOption(filterModelOptionForTeam(option, settings, haiku55Enabled));
 }
 
 function resolveTaskWriterSelection(
@@ -322,6 +329,7 @@ function resolveTaskWriterSelection(
   modelSelected?: string | null,
   modelOptionId?: string | null,
   defaultModelOption = defaultAiModelOption,
+  haiku55Enabled = defaultModelOption.modelKey === "claude-haiku-5-5",
 ): { provider: ProviderId; model: string; modelOption?: TAiModelOption } {
   const provider = normalizeProvider(sourceSelected);
   const requestedModel = modelSelected?.trim();
@@ -335,11 +343,12 @@ function resolveTaskWriterSelection(
           undefined,
           true,
           defaultModelOption,
+          haiku55Enabled,
         );
   }
 
   const modelOption =
-    getAiModelOptionById(modelOptionId) ?? getAiModelOptionById(requestedModel);
+    getAiModelOptionById(modelOptionId, haiku55Enabled) ?? getAiModelOptionById(requestedModel, haiku55Enabled);
   if (modelOption) {
     return selectionFromModelOption(modelOption);
   }
@@ -350,6 +359,7 @@ function resolveTaskWriterSelection(
     undefined,
     true,
     defaultModelOption,
+    haiku55Enabled,
   );
 }
 
@@ -580,6 +590,7 @@ async function getPersonalModelOptionId(
 ) {
   const surface = PERSONAL_MODEL_SURFACES[feature];
   if (!userId || !surface) return null;
+  await ensureHtpr7038ModelReset(userId);
   const userSetting = await prisma.userSetting.findUnique({
     where: { userId },
     select: { aiModelPreferences: true },
@@ -609,7 +620,19 @@ export async function selectTaskWriterModel(args: {
    * (HTPR-5389). Server-derived only, never request input.
    */
   agentId?: string | null;
+  /** Preserve legacy task-writer credential routing when the Sonnet flag is off. */
+  taskWriterAgentId?: string | null;
 }) {
+  let taskWriterSonnet = false;
+  if (args.aiFeature === "taskWriter" && args.userId) {
+    try {
+      const { isFeatureEnabled } = await import("@/lib/flags");
+      taskWriterSonnet = await isFeatureEnabled(HTPR_7038_TASK_WRITER_SONNET_FLAG, args.userId);
+    } catch {
+      // A flag read failure must keep the existing task-writer selection.
+    }
+  }
+  const agentId = args.agentId ?? (taskWriterSonnet ? args.taskWriterAgentId : null);
   const teamContext =
     args.teamContext ??
     (await getProjectTeamProviderContext(args.projectId, args.userId));
@@ -617,13 +640,13 @@ export async function selectTaskWriterModel(args: {
     ? {
         trustedTeamId: teamContext.teamId,
         userId: args.userId,
-        agentId: args.agentId ?? null,
+        agentId: agentId ?? null,
       }
     : {
         teamId: args.teamId,
         projectId: args.projectId,
         userId: args.userId,
-        agentId: args.agentId ?? null,
+        agentId: agentId ?? null,
       };
   const storePlanId = await storePlanIdForProject(
     teamContext.teamId ? undefined : args.projectId,
@@ -644,35 +667,45 @@ export async function selectTaskWriterModel(args: {
       (credential !== null && typeof credential === "object");
   }
   const lunaFree = await lunaFreePlanEnabled(args.userId);
+  const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
+  const defaultContext = haiku55Enabled
+    ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
+    : { hasByok: false, byok: undefined, haikuDefaultEnabled: false, backgroundClaudeEnabled: false };
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
-    hasEligibleByokCredential,
+    haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
     lunaFree,
+    haiku55Enabled,
+    defaultContext.haikuDefaultEnabled,
   );
-  const personalModelOptionId = args.aiFeature
+  const personalModelOptionId = args.aiFeature && !taskWriterSonnet
     ? await getPersonalModelOptionId(
         args.userId,
         teamContext.teamId,
         args.aiFeature
       )
     : null;
-  let selection = args.aiFeature
+  let selection = taskWriterSonnet
+    ? selectionFromModelOption(getAiModelOptionById("claude-sonnet-5-5-thinking")!)
+    : args.aiFeature
     ? defaultModelSelection(
         teamContext.settings,
         args.aiFeature,
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       )
     : resolveTaskWriterSelection(
         args.sourceSelected,
         args.modelSelected,
         args.modelOptionId,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
   if (selection.modelOption) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(selection.modelOption, teamContext.settings)
+      filterModelOptionForTeam(selection.modelOption, teamContext.settings, haiku55Enabled)
     );
   }
   if (
@@ -684,14 +717,19 @@ export async function selectTaskWriterModel(args: {
     )
   ) {
     selection = selectionFromModelOption(
-      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings),
+      filterModelOptionForTeam(requestDefaultModelOption, teamContext.settings, haiku55Enabled),
     );
   }
 
+  const haikuByok = defaultContext.byok?.provider === "openrouter" &&
+    !resolveTeamProviderEnabled(teamContext.settings, "openrouter")
+    ? undefined : defaultContext.byok;
   const getSelectionApiKey = (
     selected: ReturnType<typeof resolveTaskWriterSelection>
   ) =>
-    selected.modelOption
+    selected.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok
+      ? Promise.resolve(haikuByok.credential)
+      : selected.modelOption
       ? getByokOrTeamGatewayApiKeyForModelOption(
           selected.modelOption,
           args.byokProviderFlags,
@@ -713,6 +751,7 @@ export async function selectTaskWriterModel(args: {
       personalModelOptionId,
       false,
       requestDefaultModelOption,
+      haiku55Enabled,
     );
     byokApiKey = await getSelectionApiKey(selection);
   }
@@ -725,6 +764,7 @@ export async function selectTaskWriterModel(args: {
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
     } else if (!byokApiKey) {
       selection = defaultModelSelection(
@@ -733,21 +773,40 @@ export async function selectTaskWriterModel(args: {
         personalModelOptionId,
         true,
         requestDefaultModelOption,
+        haiku55Enabled,
       );
       byokApiKey = await getSelectionApiKey(selection);
     }
   }
 
-  await assertModelAllowedForPlan(
-    args.projectId,
-    selection.modelOption,
-    teamContext.teamId,
-    byokApiKey,
-    lunaFree,
-  );
+  if (selection.modelOption?.modelKey === "claude-haiku-5-5" && haikuByok?.provider === "openrouter") {
+    selection = { ...selection, provider: "openrouter", model: "anthropic/claude-haiku-5.5" };
+  }
+
+  const pinnedSonnet = taskWriterSonnet && selection.modelOption?.modelKey === "claude-sonnet-5-5";
+  if (pinnedSonnet && selection.modelOption) {
+    // Apply after provider filtering, which restores the catalog option by id.
+    selection.modelOption = {
+      ...selection.modelOption,
+      effort: "standard",
+      providerOptions: {
+        anthropic: { thinking: { type: "adaptive" }, effort: "medium" },
+      },
+    };
+  }
+  // Free and keyless BYOK keep their existing capped shared allowance for this pin.
+  if (!(pinnedSonnet && (storePlanId === "Free" || storePlanId === "BYOK"))) {
+    await assertModelAllowedForPlan(
+      args.projectId,
+      selection.modelOption,
+      teamContext.teamId,
+      byokApiKey,
+      lunaFree,
+    );
+  }
 
   const tags = gatewayTagsForLookup({
-    teamId: args.projectId ? teamContext.teamId : args.teamId,
+    teamId: teamContext.teamId ?? args.teamId,
     projectId: args.projectId,
     userId: args.userId,
   });
@@ -765,37 +824,65 @@ export async function selectTaskWriterModel(args: {
   );
   const selected = {
     ...selectedModel,
+    modelId: resolveHaikuModelId(selectedModel.modelId, haiku55Enabled),
     teamId: teamContext.teamId ?? normalizeGatewayTeamId(args.teamId),
   };
+  const sameModelRetry = Boolean(defaultContext.backgroundClaudeEnabled);
   let hasOutput = false;
   let fellBack = false;
-  const fallbackModel = (error: unknown) => {
+  const fallbackModel = async (error: unknown) => {
     if (fellBack) return null;
     const previous = previousModelForFailedStream(
-      selected.modelId, error, hasOutput, false,
+      selected.modelId, error, hasOutput, false, haiku55Enabled, sameModelRetry,
     );
-    if (!previous) return null;
+    if (previous && previous.model === selected.modelId) {
+      // HTPR-7075: retry the same Claude 5.5 model once, then fail visibly.
+      fellBack = true;
+      console.warn(`[ai-model-fallback] ${selected.modelId} retry on the same model: ${previous.status}`);
+      return {
+        model: selectedModel.model as LanguageModelV4,
+        providerOptions: selected.providerOptions,
+        crossProvider: false,
+      };
+    }
+    if (!previous || (previous.model === "gpt-6-luna" && !resolveTeamProviderEnabled(teamContext.settings, "openai"))) return null;
     fellBack = true;
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
     );
+    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
+      ? await getByokOrTeamGatewayApiKeyForModelOption(
+          getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
+        )
+      : byokApiKey;
     const fallback = selectEditorModel(
-      selection.provider,
+      previous.model === "gpt-6-luna" ? "openai" : selection.provider,
       previous.model,
-      byokApiKey,
+      fallbackCredential,
       {
         feature: args.feature ?? "task-writer",
         tags,
-        modelOption: selection.modelOption
-          ? { ...selection.modelOption, directModel: undefined }
-          : undefined,
+        modelOption: previous.model === "gpt-6-luna"
+          ? getAiModelOptionById(previous.model)
+          : selection.modelOption ? { ...selection.modelOption, directModel: undefined } : undefined,
       },
     );
     inheritAiModelUsage(fallback.model, selected.model);
+    if (previous.model === "gpt-6-luna") {
+      configureAiModelUsage(fallback.model, { provider: fallback.usageProvider });
+    }
     selected.modelId = fallback.modelId;
-    return fallback.model as LanguageModelV4;
+    selected.provider = fallback.provider;
+    selected.usageProvider = fallback.usageProvider;
+    selected.providerOptions = fallback.providerOptions;
+    if (fallback.provider !== selection.provider) selected.tools = fallback.tools;
+    return {
+      model: fallback.model as LanguageModelV4,
+      providerOptions: fallback.providerOptions,
+      crossProvider: fallback.provider !== selection.provider,
+    };
   };
-  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false)) {
+  if (!previousModelForFailedStream(selected.modelId, { status: 404 }, false, false, haiku55Enabled, sameModelRetry)) {
     return selected;
   }
   selected.model = wrapLanguageModel({
@@ -808,9 +895,13 @@ export async function selectTaskWriterModel(args: {
           hasOutput = true;
           return result;
         } catch (error) {
-          const fallback = fallbackModel(error);
+          const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          const result = await fallback.doGenerate(params);
+          const result = await fallback.model.doGenerate({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          });
           hasOutput = true;
           return result;
         }
@@ -820,9 +911,13 @@ export async function selectTaskWriterModel(args: {
         try {
           result = await doStream();
         } catch (error) {
-          const fallback = fallbackModel(error);
+          const fallback = await fallbackModel(error);
           if (!fallback) throw error;
-          result = await fallback.doStream(params);
+          result = await fallback.model.doStream({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          });
         }
         let reader = result.stream.getReader();
         let cancelled = false;
@@ -830,8 +925,12 @@ export async function selectTaskWriterModel(args: {
         let finished = false;
         let preamble: Array<Extract<Awaited<ReturnType<typeof reader.read>>, { done: false }>["value"]> = [];
         let pending: typeof preamble = [];
-        const switchReader = async (fallback: LanguageModelV4) => {
-          const next = (await fallback.doStream(params)).stream.getReader();
+        const switchReader = async (fallback: NonNullable<Awaited<ReturnType<typeof fallbackModel>>>) => {
+          const next = (await fallback.model.doStream({
+            ...params,
+            ...(fallback.crossProvider ? { tools: params.tools?.filter((tool) => tool.type !== "provider") } : {}),
+            providerOptions: fallback.providerOptions ?? {},
+          })).stream.getReader();
           reader = next;
           if (cancelled) await next.cancel(cancelReason);
         };
@@ -853,7 +952,7 @@ export async function selectTaskWriterModel(args: {
                   try {
                     item = await reader.read();
                   } catch (error) {
-                    const fallback = fallbackModel(error);
+                    const fallback = await fallbackModel(error);
                     if (!fallback) throw error;
                     await switchReader(fallback);
                     preamble = [];
@@ -871,7 +970,7 @@ export async function selectTaskWriterModel(args: {
                     continue;
                   }
                   if (item.value.type === "error") {
-                    const fallback = fallbackModel(item.value.error);
+                    const fallback = await fallbackModel(item.value.error);
                     if (fallback) {
                       await reader.cancel();
                       await switchReader(fallback);

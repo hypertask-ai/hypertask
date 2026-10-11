@@ -1,3 +1,4 @@
+import { recordAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
@@ -74,6 +75,7 @@ export async function validateMcpAuth(
     }
 
     console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
+    recordAuthenticatedConnection(request, managementCtx.user.id, token)
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
@@ -82,6 +84,7 @@ export async function validateMcpAuth(
     const ctx = await validateApiKey(token)
     if (ctx) {
       console.log('[MCP Auth] API key validated for user:', ctx.user.id)
+      recordAuthenticatedConnection(request, ctx.user.id, token)
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
@@ -90,10 +93,12 @@ export async function validateMcpAuth(
     return null
   }
 
+  const connectedAt = new Date()
   const ctx = await validateJwtToken(token, options)
   if (ctx) {
     const log = options.boundedLogging ? boundedMcpAuthLog : console.log
     log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
+    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt)
     logMcpCliUsage(request, token, ctx, options.boundedLogging ? boundedMcpAuthLog : undefined)
     return ctx
   }

@@ -47,6 +47,7 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
     window.history[method] = (state, title, url) => original({ ...state, __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: ["root"] }, title, url);
   }
   window.scrollTo = () => {};
+  dom.window.HTMLElement.prototype.getClientRects = function () { return this.closest("[hidden]") ? [] : [{}]; };
   window.requestAnimationFrame = () => 1;
   window.cancelAnimationFrame = () => {};
   const client = new QueryClient();
@@ -85,6 +86,8 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: authenticated }) },
     "@/hooks/useFlag": { useFlag: key => key === flags.HTPR_6972_SUBTASK_LINK_FLAG ? enabled : instant },
     "@/lib/flags/keys": flags, "@/lib/navigation/cachedTaskDetail": cache, "@/lib/taskDetailInboxFlow": inbox,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ currentTask, editMode: "", cachedLayout: true }) },
     "@/lib/contexts/deviceContext": { useDeviceContext: () => false },
     "./TaskPagesContext": { useTaskPages: () => ({ loading: false, hasPages: true }) },
@@ -99,8 +102,8 @@ function fixture(t, { enabled = true, direct = false, legacy = false } = {}) {
   const ParentLink = load(parentFile, mocks);
   const Detail = ({ initialTask }) => {
     currentTask = initialTask;
-    return React.createElement("article", null,
-      React.createElement("h1", null, initialTask.title),
+    return React.createElement("article", { "data-task-detail-path": href(initialTask) },
+      React.createElement("h1", { id: "title-input" }, initialTask.title),
       React.createElement("p", null, initialTask.description_.content),
       React.createElement("textarea", { "data-testid": "composer" }),
       React.createElement(Description),

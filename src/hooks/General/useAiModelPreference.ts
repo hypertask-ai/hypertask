@@ -3,17 +3,19 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import axios from "axios";
 import { useRecoilValue } from "@/lib/state";
 import { useFlag } from "@/hooks/useFlag";
-import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import {
   getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
   preferredAiModelOption,
   resolveAiModelOption,
 } from "@/lib/aiModelOptions";
-import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
+import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   getAiModelPreferenceIds,
   mergeAiModelPreferenceUpdates,
+  teamAiFeatureModelsQueryKey,
   type TAiModelPreferenceSurface,
 } from "@/lib/aiModelPreferences";
 import type { TAiModal } from "@/models/AI_Task_writer_model";
@@ -41,7 +43,9 @@ export function useAiModelPreference(
   } = {},
 ) {
   const currentProject = useRecoilValue(currentProjectAtom);
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
   const boardBilling = useCurrentBoardBilling();
   const billing = billingOverride === undefined ? boardBilling : billingOverride;
   const queryClient = useQueryClient();
@@ -55,7 +59,7 @@ export function useAiModelPreference(
   const teamFeatureModels = useQuery<
     Record<string, { model: string | null; effectiveModel: string | null }>
   >({
-    queryKey: ["teamAiFeatureModels", currentTeamId],
+    queryKey: teamAiFeatureModelsQueryKey(currentTeamId, haiku55Enabled, haikuDefaultEnabled),
     enabled: Boolean(currentTeamId),
     queryFn: async () => {
       const { data } = await axios.get("/api/teams/aiFeatureModels", {
@@ -72,14 +76,22 @@ export function useAiModelPreference(
     surface,
     currentTeamId,
   );
-  const planDefault = getDefaultAiModelOptionForPlan(
-    scopedBilling?.storePlanId,
-    isByokProviderEnabledForSource(
-      scopedBilling?.byokProviderFlags,
-      preferredAiModelOption.source,
-    ),
-    lunaFree,
-  );
+  const planDefault = haikuDefaultEnabled || haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(
+        scopedBilling?.storePlanId,
+        hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags),
+        lunaFree,
+        true,
+        haikuDefaultEnabled,
+      )
+    : getDefaultAiModelOptionForPlan(
+        scopedBilling?.storePlanId,
+        isByokProviderEnabledForSource(
+          scopedBilling?.byokProviderFlags,
+          preferredAiModelOption.source,
+        ),
+        lunaFree,
+      );
   const resolveOption = useCallback(
     () =>
       resolveAiModelOption(
@@ -90,8 +102,10 @@ export function useAiModelPreference(
           includeBoardFallback ? boardDefaultId : undefined,
         ],
         planDefault,
+        haiku55Enabled,
       ),
     [
+      haiku55Enabled,
       boardDefaultId,
       includeBoardFallback,
       planDefault,
@@ -109,7 +123,7 @@ export function useAiModelPreference(
 
   const setAiOption = useCallback(
     (option: TAiModal) => {
-      const validOption = getAiModelOptionById(option.id);
+      const validOption = getAiModelOptionById(option.id, haiku55Enabled);
       if (!validOption) return;
 
       setCurrentAiOption(validOption);
@@ -151,7 +165,7 @@ export function useAiModelPreference(
           console.log("useAiModelPreference update error:", error);
         });
     },
-    [currentTeamId, queryClient, surface, userPreferences],
+    [currentTeamId, haiku55Enabled, queryClient, surface, userPreferences],
   );
 
   return { currentAiOption, setAiOption };

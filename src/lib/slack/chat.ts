@@ -1,3 +1,5 @@
+import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
+import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { generateObject } from "ai";
 import { z } from "zod";
@@ -5,7 +7,7 @@ import { z } from "zod";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
   providerOptionsForAiModel,
-  resolveAiModel,
+  aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 import prisma from "@/lib/prisma";
@@ -175,14 +177,16 @@ async function parseSlackIntent(
   actor: NonNullable<Awaited<ReturnType<typeof resolveSlackActor>>>,
   context = "",
 ): Promise<SlackAction | null> {
-  const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings);
+  const defaultContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ trustedTeamId: actor.teamId, userId: actor.user.id }) : { haiku55Enabled: false, byok: undefined };
+  const systemModel = resolveSystemModel("summaries", actor.teamAiProviderSettings, defaultContext.haiku55Enabled, defaultContext);
   if (!systemModel) return null;
   const gatewayApiKey = await getTeamGatewayApiKey({ trustedTeamId: actor.teamId });
-  const model = resolveAiModel("gateway", systemModel.model, gatewayApiKey);
+  const haikuByok = systemModel.model === "anthropic/claude-haiku-5.5" ? defaultContext.byok : undefined;
+  const model = defaultContext.haiku55Enabled ? resolveAutomaticAiModel(haikuByok?.provider === "claude" ? "claude" : haikuByok?.provider === "openrouter" ? "openrouter" : "gateway", haikuByok?.provider === "claude" ? "claude-haiku-5-5" : systemModel.model, haikuByok?.credential ?? gatewayApiKey, { haiku55Enabled: defaultContext.haiku55Enabled, lookup: { trustedTeamId: actor.teamId, userId: actor.user.id }, feature: "chat" }) : resolveLegacyAiModel("gateway", systemModel.model, gatewayApiKey);
   configureAiModelUsage(model, {
     userId: actor.user.id,
     teamId: actor.teamId,
-    provider: systemModel.provider,
+    provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "chat",
   });
   const result = await generateObject({

@@ -22,6 +22,8 @@ mock('src/utils/controllers/notifications/getAll.ts', { __esModule: true, defaul
   calls.push(['notifications', id]); if (fail) throw Error('read failed');
   if (delay) await new Promise(resolve => setTimeout(resolve, delay)); return response;
 } });
+// HTPR-7092: the document reads through the Decisions wrapper, a pass-through while the flag is off.
+mock('src/utils/controllers/notifications/getAllWithDecisions.ts', require.cache[path.join(root, 'src/utils/controllers/notifications/getAll.ts')].exports);
 mock('src/utils/controllers/notifications/getAccessibleProjectIds.ts', { getInboxAccessibleProjectIds: async id => { calls.push(['access', id]); return access; } });
 mock('src/utils/controllers/drafts/getUserDrafts.ts', { __esModule: true, default: async id => { calls.push(['drafts', id]); return drafts; } });
 mock('src/utils/controllers/users/fetch_preferences.ts', { fetchUserPreferenceController: async id => {

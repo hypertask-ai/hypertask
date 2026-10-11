@@ -2,6 +2,8 @@ import { reportError } from "@/lib/errors/reportError";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { IComment } from '@/models/model';
 import { ITaskArchiveActivity, ITaskAssignedActivity, ITaskEstimateActivity, ITaskLabelActivity, ITaskMoveActivity, ITaskPriorityActivity } from '@/models/ActivityModels.ts';
 import { extractTipTapContent } from '@/utils/helperFunctions/multiPages';
@@ -17,9 +19,16 @@ export default async function handler(
 
   try {
 
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+    if (!session) return res.status(401).json({ message: "Unauthorized" });
     const { taskId, commentIds } = req.body;
     if (!taskId) return res.status(400).json({ message: "Missing task id" })
-    const result = await generateCommentsHandler(taskId, commentIds ?? []);
+    const accessibleTask = await prisma.task.findFirst({
+      where: { id: Number(taskId), project: projectContentAccessWhere(session.userId) },
+      select: { id: true },
+    });
+    if (!accessibleTask) return res.status(404).json({ message: "Task not found" });
+    const result = await generateCommentsHandler(accessibleTask.id, commentIds ?? []);
     if (!result) {
       return res.status(404).json({ message: "Task not found" });
     }

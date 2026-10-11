@@ -1,3 +1,5 @@
+import { CLI_INSTALL_COMMAND, CLI_LOGIN_COMMAND, CLI_WINDOWS_NOTE, MCP_ADD_COMMAND } from "@/lib/onboarding/installCommands";
+
 /**
  * The selling-point tasks seeded onto a fresh guest's skeleton board.
  * Shared between the server (provisionGuest seeds them) and the client
@@ -17,18 +19,21 @@ export const GUEST_SEED_TASKS = [
   },
 ] as const;
 
-export const GUEST_SEED_TASKS_IN_PROGRESS = [
+export const getGuestSeedTasksInProgress = (cliInstallCommandEnabled: boolean) => [
   {
     title: "Hypertask CLI",
-    description:
-      '<p>Your <strong>coding agents</strong> and terminal can work this board directly with the Hypertask CLI.</p><pre><code>npm install -g @hypertask/hypertask_cli</code></pre><p>Use it to <strong>create and move tasks</strong>, comment, search, and manage boards from scripts and CI.</p><p>See the <a href="https://docs.hypertask.ai/cli/reference/">CLI reference</a> and <a href="https://docs.hypertask.ai">help center</a>.</p>',
+    description: cliInstallCommandEnabled
+      ? `<p>Your <strong>coding agents</strong> and terminal can work this board directly with the Hypertask CLI.</p><pre><code>${CLI_INSTALL_COMMAND}</code></pre><p>Then sign in:</p><pre><code>${CLI_LOGIN_COMMAND}</code></pre><p>${CLI_WINDOWS_NOTE}</p><p>Use it to <strong>create and move tasks</strong>, comment, search, and manage boards from scripts and CI.</p><p>See the <a href="https://docs.hypertask.ai/cli/reference/">CLI reference</a> and <a href="https://docs.hypertask.ai">help center</a>.</p>`
+      : '<p>Your <strong>coding agents</strong> and terminal can work this board directly with the Hypertask CLI.</p><pre><code>npm install -g @hypertask/hypertask_cli</code></pre><p>Use it to <strong>create and move tasks</strong>, comment, search, and manage boards from scripts and CI.</p><p>See the <a href="https://docs.hypertask.ai/cli/reference/">CLI reference</a> and <a href="https://docs.hypertask.ai">help center</a>.</p>',
   },
   {
     title: "Hypertask MCP",
     description:
-      '<p>Any <strong>MCP client</strong>, including Claude, Cursor, and ChatGPT, can operate this board as an autonomous worker.</p><pre><code>claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp</code></pre><p>Other clients can connect through the <a href="https://mcp.hypertask.ai/sse">SSE endpoint</a>.</p><p>See the <a href="https://docs.hypertask.ai/mcp/overview/">MCP docs</a>.</p>',
+      `<p>Any <strong>MCP client</strong>, including Claude, Cursor, and ChatGPT, can operate this board as an autonomous worker.</p><pre><code>${MCP_ADD_COMMAND}</code></pre><p>Other clients can connect through the <a href="https://mcp.hypertask.ai/sse">SSE endpoint</a>.</p><p>See the <a href="https://docs.hypertask.ai/mcp/overview/">MCP docs</a>.</p>`,
   },
 ] as const;
+
+export const GUEST_SEED_TASKS_IN_PROGRESS = getGuestSeedTasksInProgress(false);
 
 export const GUEST_SEED_TASK_TITLES: readonly string[] = [
   ...GUEST_SEED_TASKS,

@@ -50,6 +50,7 @@ export const AI_Chat_Sidebar = ({
   return (
     <div
       data-ai-chat-panel
+      data-testid="ai-sidebar"
       className={cn(
         "ai-chat-sidebar bg-ai-chat flex sticky top-0 min-h-0 min-w-0 text-white-black shadow-md",
         inOffcanvas

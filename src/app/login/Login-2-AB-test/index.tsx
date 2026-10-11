@@ -5,9 +5,11 @@ import { cn } from '@/utils/undoActions/helperFuncs'
 import LoginButton from '../LoginButton'
 import EmailAuth, { EmailAuthStyleConfig } from '../EmailAuth'
 import UTMCookieHandler from '@/components/analytics/StoreUTM'
+import { useSearchParams } from 'next/navigation'
 
 const LoginMinimal = () => {
     const [showEmailForm, setShowEmailForm] = useState(false)
+    const searchParams = useSearchParams()
 
     // Custom styling for the AB test login page
     const emailAuthStyleConfig: EmailAuthStyleConfig = {
@@ -45,6 +47,12 @@ const LoginMinimal = () => {
                     <span className="text-emphasis  font-medium text-white mb-6">
                         Log in to Hypertask
                     </span>
+
+                    {searchParams?.get('authError') === 'google_signup_disabled' && (
+                        <p className="text-content text-destructive" role="alert">
+                            Google sign-in didn&apos;t work. Please try again, or sign in with your email.
+                        </p>
+                    )}
 
                     {/* Login Options */}
                     {showEmailForm ? (

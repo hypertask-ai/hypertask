@@ -79,14 +79,11 @@ test("an open keyboard removes the extra bottom clearance", () => {
   assert.match(renderSheet(true), /padding-bottom:0/);
 });
 
-test("the reminder selector alone opts into the ticket flag", () => {
+test("the reminder selector always opts into the safe-area floor", () => {
   const source = fs.readFileSync(
     path.join(root, "src/components/Modals/RemindMe/RemindMeComponent.tsx"),
     "utf8",
   );
-  assert.match(
-    source,
-    /useFlag\("htpr-6130-mobile-reminder-safe-area"\)/,
-  );
-  assert.match(source, /bottomSafeAreaFloor=\{mobileSafeAreaEnabled\}/);
+  assert.doesNotMatch(source, /htpr-6130/);
+  assert.match(source, /^\s+bottomSafeAreaFloor$/m);
 });

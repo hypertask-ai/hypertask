@@ -165,7 +165,7 @@ test("task mentions reject a board outside the caller's accessible projects", as
 
   const response = await taskSearchByParam("all", 6, 339);
 
-  assert.equal(response.status, 403);
+  assert.equal(response.status, 404);
   assert.deepEqual(response.json, []);
   assert.equal(state.boardAgentCalls, 0);
 });

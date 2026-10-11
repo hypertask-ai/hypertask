@@ -4,6 +4,7 @@ import prisma from "@/lib/prisma";
 import { Status } from "@prisma/client";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, isFeatureEnabled } from "@/lib/flags";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
@@ -41,12 +42,15 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(403).json({ message: "Forbidden" });
             }
 
+            const restoreInbox = archiveStatus === "Normal" &&
+                await isFeatureEnabled(HTPR_6989_BULK_ARCHIVE_UNDO_FLAG, session.userId);
+
             const result = await prisma.$transaction(async (tx) => {
                 const operations = validEntries.map(({ notificationId, taskId }) => {
                     // HTPR-5640: one batch timestamp shared by the representative and its
                     // siblings, so a later undo (status Normal) can restore exactly what
                     // this archive action hid.
-                    const archivedAt = new Date();
+                    const archivedAt = restoreInbox ? null : new Date();
                     const ops = [
                         tx.notification.updateMany({
                             where: {

@@ -1,6 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
-import { currentUserAtom, composeTaskChatIntroAtom } from "@/store";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { currentUserAtom, composeTaskChatIntroAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
@@ -37,6 +37,7 @@ export const useSessionAndChatHistory = (
   isTaskScoped = false
 ) => {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   let composeIntro: typeof pendingComposeIntro = null;
   if (composeEnabled) composeIntro = pendingComposeIntro;
@@ -44,6 +45,18 @@ export const useSessionAndChatHistory = (
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
+  // HTPR-7052: the board the chat is opened on (same scope rule as useAiChatState), so a new chat can take its name.
+  const currentProject = useRecoilValue(currentProjectAtom);
+  const dockedScope = useRecoilValue(dockedChatScopeAtom);
+  const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);
+  const nameBoardRef = useRef<number | undefined>(undefined);
+  let scopedBoardId: number | undefined = fullScreenScope ?? undefined;
+  if (!(pathname?.startsWith("/chat") ?? false)) {
+    if (dockedScope === null) scopedBoardId = currentProject?.id;
+    else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
+  }
+  if (chatNames) nameBoardRef.current = scopedBoardId;
+  else nameBoardRef.current = undefined;
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);
@@ -102,7 +115,7 @@ export const useSessionAndChatHistory = (
     }
 
     try {
-      const res = await AI_Chat_API.createSessionNext(taskId);
+      const res = await AI_Chat_API.createSessionNext(taskId, nameBoardRef.current);
       const body = res.data;
 
       if (!body?.success || !body.session?.id) {

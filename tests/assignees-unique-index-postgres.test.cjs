@@ -36,7 +36,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 
-const PG_IMAGE = process.env.HTPR_PG_IMAGE || "postgres:16-alpine";
+const PG_IMAGE = process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
 const PG_USER = "ht";
 const PG_PASSWORD = "ht";
 const PG_DB = "ht_test";

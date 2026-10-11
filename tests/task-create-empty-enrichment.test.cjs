@@ -172,6 +172,8 @@ function loadCreateRoute() {
       HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer",
       isFeatureEnabled: async () => { throw new Error("Legacy create must not read the Compose flag"); },
     },
+    "@/lib/flags/keys": { HTPR_7054_CTRLJ_DUE_DATE_FLAG: "htpr-7054-ctrlj-due-date" },
+    "@/lib/ai/taskWriterDueDate": { taskWriterDueDateForSave: () => undefined },
     "@/lib/auth/session": {
       SESSION_COOKIE: "ht_session",
       verifySession: () => null,
@@ -273,6 +275,7 @@ function loadNotificationRoute() {
   return execute(
     compile("src/pages/api/notifications/getAll.ts"),
     {
+      "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
       "@/utils/controllers/notifications/getAll": {
         __esModule: true,
         default: async () => ({ status: 200, json: [] }),

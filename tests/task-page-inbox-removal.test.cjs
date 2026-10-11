@@ -170,6 +170,9 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "@/lib/inboxSync/mutation": mutation,
   }).default();
   const useArchive = loadSource("src/hooks/Task Detail/useArchiveAndNavigate.ts", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": {},
+    "../Inbox/useGetNotifications": { inboxDataQueryKey: () => key },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => context },
     react: { useContext: () => false, useCallback: (callback) => callback },
     "../MultiPages/useUpdateTaskInBoards": { default: () => ({}) },

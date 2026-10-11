@@ -19,7 +19,11 @@ function load(relative, dependencies, exportName = "default") {
     if (dependency && "default" in dependency) dependency.__esModule = true;
   }
   new Function("require", "exports", js)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in dependencies)) return {};
+    if (name === "@/hooks/useFlag" && name in dependencies) return { ...dependencies[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : dependencies[name].useFlag(key) };
     if (name === "react" || name === "react/jsx-runtime") return require(name);
+    if (name === "@/hooks/useFlag" && !(name in dependencies)) return { useFlag: () => false, useFlagReady: () => true };
+    if (name === "@/lib/flags/keys") return { ...dependencies[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in dependencies, `Unexpected dependency ${name}`);
     return dependencies[name];
   }, exports);

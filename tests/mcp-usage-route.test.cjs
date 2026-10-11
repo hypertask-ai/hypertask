@@ -50,10 +50,13 @@ function loadRoute({
   getProjectWhere = () => ({}),
   rateLimitResponse = null,
   authBoundary = false,
+  promptCache = false,
 }) {
   const stubbedModules = [
     "src/app/api/mcp/ai/usage/route.ts",
+    "src/app/api/ai/_lib/planGate.ts",
     "src/lib/mcp/auth.ts",
+    "src/lib/telemetry/activationOccurrences.ts",
     "src/app/api/ai/_lib/byokKeys.ts",
     "src/app/api/settings/ai-usage/gatewayUsage.ts",
     "src/lib/prisma.ts",
@@ -65,6 +68,9 @@ function loadRoute({
   ];
   const originalCache = new Map(Object.entries(require.cache));
   stubbedModules.forEach(clearModule);
+  stubModule("src/lib/telemetry/activationOccurrences.ts", {
+    recordAuthenticatedConnection: () => {},
+  });
 
   if (authBoundary) {
     const authKeyPermissions = {
@@ -129,6 +135,9 @@ function loadRoute({
       onGateway?.({ apiKey, requestPath, ...options });
       return gatewayResponse;
     },
+  });
+  stubModule("src/app/api/ai/_lib/planGate.ts", {
+    promptCacheEnabled: async () => promptCache,
   });
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
@@ -671,6 +680,29 @@ test("data-capable management keys retain the project-scoped route", async () =>
         },
       ],
     });
+  } finally {
+    restore();
+  }
+});
+
+test("HTPR-7076: cache token totals appear only with the prompt cache flag", async () => {
+  const prisma = prismaFixture({ expectedProjectAccess: { accessFor: 6 } });
+  const { route, restore } = loadRoute({
+    funding: null,
+    gatewayResponse: Response.json({ results: [] }),
+    prisma,
+    getProjectWhere: (userId) => ({ accessFor: userId }),
+    authBoundary: true,
+    promptCache: true,
+  });
+
+  try {
+    const response = await route.GET(request("?project_id=1", "htmk_data-test"));
+    const body = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.equal(body.groups[0].cachedInputTokens, 0);
+    assert.equal(body.groups[0].cacheWriteInputTokens, 0);
   } finally {
     restore();
   }

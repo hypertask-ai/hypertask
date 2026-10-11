@@ -12,6 +12,10 @@ import { useQuery } from '@tanstack/react-query';
 import type { CustomFieldType } from '@prisma/client';
 import axios from 'axios';
 import React from 'react'
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7071_AGENT_STATUS_CHIP_FLAG } from '@/lib/flags/keys';
+import { agentStatusIsFresh, agentStatusText, agentStepFor } from '@/lib/agentStatus/chip';
+import { useMinuteClock } from '@/lib/agentStatus/minuteClock';
 import BlockerChip, { BlockerTaskChip, type BlockerUser } from './BlockerChip';
 
 interface ITaskTopRow {
@@ -47,6 +51,18 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
         timers: runningTimers,
         timeTotals,
       } = useBoardRunningTimers(task.projectId, { project })
+      const agentStatusEnabled = useFlag(HTPR_7071_AGENT_STATUS_CHIP_FLAG)
+      const agentMinute = useMinuteClock(Boolean(agentStatusEnabled && task.agentStatus))
+      const agentStatusLine = agentStatusEnabled && task.agentStatus && agentStatusIsFresh(task.agentStatus.at, agentMinute)
+        ? agentStatusText(
+            task.agentStatus.agentName,
+            agentStepFor(
+              project?.sections?.find((section) => section.id === task.sectionId)?.section_title,
+              (taskLabels ?? []).map((taskLabel) => taskLabel.label?.value ?? ""),
+            ),
+            task.agentStatus.at,
+          )
+        : null
       const runningTimer = runningTimers.get(task.id)
       const timeTotal = timeTotals.get(task.id)
       // ponytail: ITask has no customFieldValues in the shared model yet (HTPR-3805 is
@@ -71,8 +87,14 @@ const TaskTagsRow:React.FC<ITaskTopRow>  = ({
 
   return (
 
-    agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
+    agentStatusLine||agents.length>0||blockingUser||(task.blockingTasks?.length ?? 0)>0||runningTimer||(showTimeTotals && (timeTotal?.totalSeconds ?? 0) > 0)||hasDraft||priority||estimate||dueDate||(taskLabels&&taskLabels?.length>0)||hasCustomFieldValues?
     <div className={`basis-full flex gap-1 flex-wrap`}>
+    {agentStatusLine && (
+      <LabelWrapper title={agentStatusLine} className="min-w-0 max-w-full overflow-hidden" data-testid="agent-status-chip">
+        <FaRobot className="h-3 w-3 shrink-0 text-icon-dark-gray" />
+        <span className="min-w-0 truncate">{agentStatusLine}</span>
+      </LabelWrapper>
+    )}
     {agents.map((agent) => (
       <AgentChip
         key={`agent-${agent.id}`}

@@ -3,7 +3,12 @@ import toast from "react-hot-toast";
 import globalAPIHandlers from "@/utils/api/global";
 import taskDetailConfig from "@/lib/configs/taskDetail.config";
 import type { TaskDetailContext } from "./TaskDetailContext";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
+  const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
+  const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
 
 
@@ -21,8 +26,10 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     if (!showPriorityModal && currentTask)
       updateActiveItemAndItemInView(currentTask.id);
     setShowPriorityModal((prev) => !prev);
-    if (refresh)
+    if (refresh) {
+      if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
       queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.priority, activeItem] });
+    }
   };
 
   const toggleRemindMeModal = async (refresh?: boolean) => {
@@ -45,8 +52,10 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     if (!showEstimateModal && currentTask)
       updateActiveItemAndItemInView(currentTask.id);
     setShowEstimateModal((prev) => !prev);
-    if (refresh)
+    if (refresh) {
+      if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
       queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.estimate, activeItem] });
+    }
   };
 
   const setDueDateCallback = (date: Date | undefined) => {
@@ -72,6 +81,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     if (!currentTask || !state) return;
     try {
       const response = await globalAPIHandlers.deleteTaskAPI(currentTask.id);
+      if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { status: taskDetailConfig.taskStatus.deleted });
       console.log("🚀 ~ deleteTask ~ response:", response);
       // @ts-ignore
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
@@ -87,8 +97,12 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   };
 
   // ---------------------- GET TASK
-  const getTask = async () => {
-    navigate(taskDetailConfig.navigation.refresh);
+  const getTask = async (refresh = true) => {
+    // Cached Inbox detail already revalidates via its task query. A mount refresh can replay the source URL after E advances.
+    if (refresh && !(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
+      new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {
+      navigate(taskDetailConfig.navigation.refresh);
+    }
     if (_parsedTask && _parsedTask.id !== taskDetailConfig.taskIds.newTask) {
       setCurrentProject(_parsedTask.project);
       // setCurrentTask(task)
@@ -113,6 +127,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
           })
           .then((response) => {
             if (response.status === taskDetailConfig.httpStatus.ok) {
+              if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
               // getFollowerById();
               queryClient.refetchQueries({
                 queryKey: [followerKeyPrefix, currentTask?.id],

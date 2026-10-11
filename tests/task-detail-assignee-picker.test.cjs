@@ -8,6 +8,7 @@ const React = require("react");
 
 const root = path.resolve(__dirname, "..");
 const noop = () => null;
+const reads = require("jiti")(__filename, { alias: { "@": path.join(root, "src") } })(path.join(root, "src/lib/taskDetailReads.ts"));
 function load(relative, dependencies, exportName = "default") {
   const source = fs.readFileSync(path.join(root, relative), "utf8");
   const js = ts.transpileModule(source, {
@@ -18,7 +19,11 @@ function load(relative, dependencies, exportName = "default") {
     if (dependency && "default" in dependency) dependency.__esModule = true;
   }
   new Function("require", "exports", js)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in dependencies)) return reads;
+    if (name === "@/hooks/useFlag" && name in dependencies) return { ...dependencies[name], useFlagReady: () => true };
     if (name === "react" || name === "react/jsx-runtime") return require(name);
+    if (name === "@/hooks/useFlag" && !(name in dependencies)) return { useFlag: () => false, useFlagReady: () => true };
+    if (name === "@/lib/flags/keys") return { ...dependencies[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in dependencies, `Unexpected dependency ${name}`);
     return dependencies[name];
   }, exports);
@@ -34,8 +39,9 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     Object.defineProperty(global, key, { configurable: true, writable: true, value });
   }
   const originalFetch = global.fetch;
-  let resolveLoad, loadStarted = false, mounted, state, serverRows = initialAssignees;
+  let resolveLoad, loadStarted = false, loadCount = 0, mounted, state, serverRows = initialAssignees;
   global.fetch = () => {
+    loadCount++;
     loadStarted = true;
     return new Promise(resolve => { resolveLoad = resolve; });
   };
@@ -54,12 +60,12 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   const task = { id: 55840, projectId: 6859, uniqueIndex: 61, title: "HTPR-6962 QA", sectionId: 1,
     assignees: initialAssignees, project: { id: 6859 }, description_: { id: 1 } };
   const reactQuery = require("@tanstack/react-query");
-  const cachedQueryKey = ["cached-task-detail", user.id, task.id];
+  const cachedQueryKey = loadPath === "shared" ? reads.taskDetailReadKey(user.id, task.id) : ["cached-task-detail", user.id, task.id];
   const cachedQueryClient = new reactQuery.QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   t.after(() => cachedQueryClient.clear());
   let resolveReaction, pendingReaction, resolveSave;
   const requests = [], handlers = new Map();
-  const queryClient = { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {}, refetchQueries: noop };
+  const queryClient = loadPath === "shared" ? cachedQueryClient : { cancelQueries: async () => {}, setQueryData: noop, invalidateQueries: async () => {}, refetchQueries: noop };
   const shared = { COMMENT_EVENT: "comment:changed", TASK_EVENT: "task:changed", taskChannel: id => `private-task-${id}` };
   const refresh = load("src/lib/realtime/taskDetailRefresh.ts", { "./shared": shared }, null);
   const channel = { subscribed: true, bind: (event, handler) => handlers.set(event, handler), unbind: event => handlers.delete(event) };
@@ -70,6 +76,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     "@/lib/realtime/shared": shared,
     "@/lib/realtime/taskDetailRefresh": refresh,
     "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
+    "@/hooks/useFlag": { useFlag: () => loadPath === "shared" },
   }, "useTaskCommentsRealtime");
   const assignees = load("src/lib/assignees.ts", {}, null);
   const constants = { default: { CommentsTQPrefixKey: "comments" } };
@@ -143,9 +150,9 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     const [currentTask, setCurrentTask] = React.useState(() => parsedTask ? JSON.parse(parsedTask) : task);
     const [showAssignModal, setShowAssignModal] = React.useState(false);
     const lastM_APress = React.useRef(null);
-    useRealtime(loadPath === "realtime" ? task.id : null, { taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
+    useRealtime(loadPath === "initial" ? null : task.id, { currentUserId: user.id, taskProjectId: task.projectId, taskUniqueIndex: task.uniqueIndex,
       currentTaskTitle: currentTask.title, currentTaskAssignees: currentTask.assignees, keepAssignee: enabled,
-      setCurrentTask, hasPullRequests: true });
+      setCurrentTask, hasPullRequests: loadPath !== "shared" });
     state = { currentTask, setCurrentTask, showAssignModal, setShowAssignModal, lastM_APress,
       updateTaskInCache: noop, _setActiveItem: noop, setInViewObject: noop, queryClient, setDescription: noop, parsedTask: JSON.stringify(task), focusOn: noop };
     Object.assign(state, useActions(() => state));
@@ -167,22 +174,28 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
         showAssigneeModal: context.showAssignModal, toggleAssigneeModal: context.toggleModal, showTooltip: false });
     } },
     "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: preferences }) },
-    "@/hooks/useFlag": { useFlag: key => key === "htpr-6962-keep-assignee" && enabled },
-    "@/lib/flags/keys": { HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee" },
+    "@/hooks/useFlag": { useFlag: key => key === "htpr-6962-keep-assignee" ? enabled : loadPath === "shared" && ["htpr-7009-dedupe-task-detail-reads", "htpr-7004-no-loading-flash"].includes(key) },
+    "@/lib/flags/keys": { HTPR_6962_KEEP_ASSIGNEE_FLAG: "htpr-6962-keep-assignee", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
     "@/lib/constants": constants,
     "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
     "@/lib/state": { useRecoilValue: () => user },
     "@/store": {},
     "@/utils/api/Task Detail": { fetchCommentsHelper: async () => [] },
   });
+  if (loadPath === "shared") {
+    cachedQueryClient.setQueryData(cachedQueryKey, task);
+    void cachedQueryClient.prefetchQuery({ queryKey: cachedQueryKey, staleTime: 0,
+      queryFn: ({ signal }) => reads.fetchScopedTaskDetail(task.id, task.projectId, task.uniqueIndex, signal, { cache: "no-store", credentials: "same-origin" }) });
+  }
   const { createRoot } = require("react-dom/client");
   mounted = createRoot(document.getElementById("root"));
-  await React.act(async () => mounted.render(loadPath === "initial"
+  await React.act(async () => mounted.render(loadPath !== "realtime"
     ? React.createElement(reactQuery.QueryClientProvider, { client: cachedQueryClient },
       React.createElement(Embedded, { taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex, initialTask: task, embedded: false }))
     : React.createElement(Provider)));
   return {
     requests, state: () => state, serverRows: () => serverRows,
+    loadCount: () => loadCount, cachedTask: () => cachedQueryClient.getQueryData(cachedQueryKey),
     row: () => document.getElementById("root").firstElementChild.textContent,
     async open() { state.lastM_APress.current = null; await React.act(async () => state.aHandler()); },
     async select() { await React.act(async () => document.getElementById(`task_${user.id}`).click()); },
@@ -191,15 +204,15 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
       assert.equal(document.querySelector("[role=dialog]"), null);
     },
     async completeSave() { await React.act(async () => { assert.ok(resolveSave, "the write is pending"); resolveSave(); }); },
-    async completeLoad(rows = initialAssignees, title = task.title) {
+    async completeLoad(rows = initialAssignees, title = task.title, status = 200) {
       assert.ok(loadStarted, "the task fetch has started");
       await React.act(async () => {
-        const loaded = loadPath === "initial" ? new Promise(resolve => {
+        const loaded = loadPath !== "realtime" ? new Promise(resolve => {
           const unsubscribe = cachedQueryClient.getQueryCache().subscribe(event => {
-            if (event.type === "updated" && event.action.type === "success") { unsubscribe(); resolve(); }
+            if (event.type === "updated" && ["success", "error"].includes(event.action.type)) { unsubscribe(); resolve(); }
           });
         }) : undefined;
-        resolveLoad({ ok: true, status: 200, json: async () => ({ ...task, title, section: "Doing", assignees: rows }) });
+        resolveLoad({ ok: status === 200, status, json: async () => ({ ...task, title, section: "Doing", assignees: rows }) });
         await loaded;
       });
       await React.act(async () => { await new Promise(resolve => setTimeout(resolve, 0)); });
@@ -214,6 +227,42 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
     }); },
   };
 }
+
+test("joined shared prefetch keeps an assignee selected before its stale response resolves", async t => {
+  const picker = await withPicker(t, { loadPath: "shared" });
+  assert.equal(picker.loadCount(), 1, "the observer joins the pending prefetch without running its queryFn");
+  await picker.open();
+  await picker.select();
+  await picker.escape();
+  await picker.completeLoad();
+  assert.equal(picker.row(), "AssigneesQA user");
+  assert.equal(picker.state().currentTask.section, "Doing", "other server fields still refresh");
+  await picker.refresh();
+  await picker.completeLoad([]);
+  assert.equal(picker.row(), "AssigneesThe Assignees", "later remote removals still apply");
+});
+
+test("joined shared prefetch accepts server assignees when no local selection occurred", async t => {
+  const picker = await withPicker(t, { loadPath: "shared" });
+  await picker.completeLoad([{ id: 1, userId: 2343, user: { id: 2343, displayName: "QA user" }, agent: null }]);
+  assert.equal(picker.row(), "AssigneesQA user");
+});
+
+test("realtime 500 keeps the previous shared task rendered and cached", async t => {
+  const picker = await withPicker(t, { loadPath: "shared" });
+  await picker.completeLoad();
+  const previous = picker.cachedTask();
+  const rendered = document.getElementById("root").firstElementChild;
+  const originalWarn = console.warn;
+  console.warn = noop;
+  t.after(() => { console.warn = originalWarn; });
+  await picker.refresh();
+  await picker.completeLoad([], "Must not replace the task", 500);
+  assert.equal(picker.cachedTask(), previous);
+  assert.equal(document.getElementById("root").firstElementChild, rendered, "the cached view remains mounted");
+  assert.equal(picker.state().currentTask.title, previous.title);
+  assert.equal(picker.row(), "AssigneesThe Assignees");
+});
 
 for (const loadPath of ["realtime", "initial"]) for (const enabled of [true, false]) {
   test(`${loadPath}: closing the picker then receiving a pre-selection response ${enabled ? "keeps the assignee" : "retains the flag-off path"}`, async t => {

@@ -1,3 +1,8 @@
+import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
+import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 // hooks/General/useAIResponseHandler.ts
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
@@ -5,6 +10,7 @@ import { useRecoilState } from '@/lib/state';
 import { useGetUserPreferences } from '@/hooks/General/useGetUserPreferences';
 import {
   defaultAiModelOption,
+  getDefaultAiModelOptionForPlan,
   getAiModelOptionById,
 } from '@/lib/aiModelOptions';
 import { getAiModelPreferenceIds } from '@/lib/aiModelPreferences';
@@ -12,6 +18,13 @@ import { getAiModelPreferenceIds } from '@/lib/aiModelPreferences';
 export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
   const [currentProject] = useRecoilState(currentProjectAtom);
   const { data: userPreferences } = useGetUserPreferences();
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const defaultBilling = deriveCurrentBoardBilling(currentProject);
+  const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    : defaultAiModelOption;
   const [isLoading, setLoading] = useState(false);
   const [aiResponse, setAIResponse] = useState("");
   const improveWritingOptionIds = getAiModelPreferenceIds(
@@ -20,16 +33,17 @@ export const useAIResponseHandler = (defaultMode: string, flaskUrl: string) => {
     currentProject?.teamId,
   );
   const improveWritingOption =
-    getAiModelOptionById(improveWritingOptionIds.teamScoped) ??
-    getAiModelOptionById(improveWritingOptionIds.global);
+    getAiModelOptionById(improveWritingOptionIds.teamScoped, haiku55Enabled) ??
+    getAiModelOptionById(improveWritingOptionIds.global, haiku55Enabled) ??
+    (haiku55Enabled ? getAiModelOptionById(currentProject?.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
   const improveWritingModel =
     improveWritingOption?.id ??
     currentProject?.ai_custom_instructions?.[0]?.model_selected ??
-    defaultAiModelOption.id;
+    defaultModelOption.id;
   const improveWritingSource =
     improveWritingOption?.source ??
     currentProject?.ai_custom_instructions?.[0]?.source_selected ??
-    defaultAiModelOption.source;
+    defaultModelOption.source;
 
   const handleAIResponse = useCallback(async (prompt: string, additionalContext: string) => {
     setLoading(true);

@@ -2,7 +2,7 @@ import { renderPrompt } from "@/lib/ai/prompts/registry";
 /**
  * HTPR-6363: board research helpers for the AI task writer.
  * Pure formatting and prompt rules live here so shared TASK_AUTHORING_STYLE
- * stays untouched when the feature flag is off.
+ * stays untouched.
  */
 
 import type {
@@ -11,9 +11,6 @@ import type {
 } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { buildTaskLink } from "@/lib/mcp-server/utils/task-link";
 
-export const HTPR_6363_TASK_WRITER_RESEARCH_FLAG =
-  "htpr-6363-task-writer-research";
-
 export const TASK_WRITER_RELATED_CANDIDATE_LIMIT = 8;
 export const TASK_WRITER_CONTEXT_BUDGET = 50;
 export const TASK_WRITER_MIN_COMMENT_ROWS = 15;
@@ -21,7 +18,7 @@ export const TASK_WRITER_MAX_TASK_CONTEXT_ROWS = 35;
 export const TASK_WRITER_RETRIEVAL_QUERY_LIMIT = 4000;
 export const TASK_WRITER_STYLE_EXAMPLE_LIMIT = 3;
 
-/** Appended only when htpr-6363-task-writer-research is on for the caller. */
+/** Appended for the AI task writer. */
 export const TASK_WRITER_BOARD_RESEARCH_RULES = renderPrompt("task-writer-board-research-rules");
 
 function escapePlain(value: string) {

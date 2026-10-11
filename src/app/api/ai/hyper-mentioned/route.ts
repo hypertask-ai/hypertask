@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
@@ -250,7 +251,7 @@ export async function POST(request: NextRequest) {
     // the system prompt still carries the intent.
     const promptText = skillResolution.cleanedText || sourceMessageText;
     const requestedMentionLabel = body.modelMentionLabel?.trim() || null;
-    const requestedMention = resolveAiModelMention(requestedMentionLabel);
+    const requestedMention = resolveAiModelMention(requestedMentionLabel, await haiku55ModelEnabled(requestUser.id));
     const selectModel = (useDefault = false) => {
       const useFeatureDefault = useDefault || !requestedMention;
       return selectTaskWriterModel({

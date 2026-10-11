@@ -29,6 +29,7 @@ export function createAgentWebhookTool(context: ToolContext) {
                 "comment.created",
                 "task.updated",
                 "task.created",
+                "comment.reaction",
               ]),
             )
             .min(1)

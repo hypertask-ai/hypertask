@@ -1,3 +1,7 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
+import { resolveHaikuModelId } from "@/lib/aiModelOptions";
 import axios from "axios";
 import { useQuery } from "@tanstack/react-query";
 
@@ -33,6 +37,11 @@ export function useTeamCustomEndpoint(teamId: string | null | undefined) {
     },
   });
   const custom = query.data?.keys.find((row) => row.provider === "custom");
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const modelId = haikuDefaultEnabled || haiku55Enabled
+    ? resolveHaikuModelId(custom?.modelId?.trim() || "", true) || null
+    : custom?.modelId?.trim() || null;
 
   return {
     configured: Boolean(
@@ -43,6 +52,6 @@ export function useTeamCustomEndpoint(teamId: string | null | undefined) {
         (!query.data?.gdprSafeMode || custom.gdprCompliant)
     ),
     isLoading: Boolean(teamId) && query.isLoading,
-    modelId: custom?.modelId?.trim() || null,
+    modelId,
   };
 }

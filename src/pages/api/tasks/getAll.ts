@@ -2,6 +2,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksGetAll from "@/utils/controllers/tasks/getAll";
 import { loadCurrentUser } from "@/lib/auth/currentUser";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -75,4 +76,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/getAll")).POST,
+);

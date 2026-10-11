@@ -48,7 +48,6 @@ type Props = Pick<
   | "sessionLoading"
   | "messages"
   | "sending"
-  | "chatStopAndTimeoutEnabled"
   | "queuedMessages"
   | "awaiting"
   | "deliveryNotice"
@@ -81,7 +80,6 @@ type Props = Pick<
   | "tokenCopied"
   | "newAgentName"
   | "createAgentError"
-  | "mobileAgentChatViewportEnabled"
   | "mobileAgentChatViewport"
   | "appShellRailOn"
 > &
@@ -146,7 +144,7 @@ export function AgentChatView({
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
   messagesError, sessionLoading, messages, visibleFeed, activeFeedFilter, projectIdForPrefix,
-  handleProposalAction, sending, chatStopAndTimeoutEnabled, queuedMessages, removeQueuedMessage,
+  handleProposalAction, sending, queuedMessages, removeQueuedMessage,
   awaiting, deliveryNotice, replyTimedOut, handleStop, stopping, reuseAiComposer, mentionOpen,
   mentionLoading, mentionLoadError, mentionResults, mentionQuery, setMentionIndex, pickMention,
   mentionIndex, draft, composerRef, composerEditorRef, handleComposerChange, handleComposerKeyDown,
@@ -154,7 +152,7 @@ export function AgentChatView({
   mobileFullscreenFlag, dictationProjectId, isRecording, handleSend, detailsSheetShown,
   detailsSheetOpen, detailsDialogRef, creatingAgent, setCreateAgentError, setNewAgentName,
   setNewAgentToken, setTokenCopied, newAgentToken, showCreateAgent, tokenCopied, newAgentName,
-  createAgent, createAgentError, mobileAgentChatViewportEnabled, mobileAgentChatViewport,
+  createAgent, createAgentError, mobileAgentChatViewport,
   appShellRailOn,
 }: Props) {
   const rosterPane = (
@@ -216,7 +214,6 @@ export function AgentChatView({
               projectIdForPrefix={projectIdForPrefix}
               handleProposalAction={handleProposalAction}
               sending={sending}
-              chatStopAndTimeoutEnabled={chatStopAndTimeoutEnabled}
               queuedMessages={queuedMessages}
               removeQueuedMessage={removeQueuedMessage}
               awaiting={awaiting}
@@ -301,14 +298,7 @@ export function AgentChatView({
   );
 
   let mobileAgentChatHeight: string | undefined;
-  // 6407 keeps chrome-aware height for the whole mobile Agent Chat page.
-  // 6476 only needs it while an agent thread is open (roster keeps normal shell).
-  const mobileChromeAwareHeight = Boolean(
-    isMbl &&
-      (mobileLayoutEnabled ||
-        mobileAgentChatViewportEnabled ||
-        mobileFullscreenChrome),
-  );
+  const mobileChromeAwareHeight = isMbl;
   if (mobileChromeAwareHeight) {
     // Full visible viewport with top/dock padding inside the same border-box
     // (AI chat pattern). Avoids h-screen oversizing and mid-screen composer gap.

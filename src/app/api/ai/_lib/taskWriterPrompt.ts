@@ -5,6 +5,7 @@ import {
 } from "@/app/api/ai/_lib/boardTemplateContext";
 
 export const TASK_WRITER_CONTEXT_SYNTHESIS_RULES = renderPrompt("task-writer-context-synthesis-rules");
+export const TASK_WRITER_RESEARCH_REQUEST_RULE = renderPrompt("task-writer-research-request-rule");
 
 export function wrapTaskWriterContext(context: string) {
   return `<CONTEXT>${context}</CONTEXT>`;

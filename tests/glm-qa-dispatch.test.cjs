@@ -174,7 +174,16 @@ test("smoke exposes ran/ok and confirmed rollback outputs for exploratory QA", a
   const smokeStart = workflow.indexOf("  smoke:");
   const smokeEnd = workflow.indexOf("\n  glm-qa:", smokeStart);
   const smoke = workflow.slice(smokeStart, smokeEnd);
-  assert.match(smoke, /ran: \$\{\{ steps\.smoke\.outcome != 'skipped'/);
+  const expression = smoke.match(/ran: \$\{\{ (.*?) \}\}/)[1];
+  const vm = require("node:vm");
+  for (const [outcome, confirmed, expected] of [
+    ["success", "", true], ["failure", "true", true],
+    ["failure", "", false], ["skipped", "", false], ["cancelled", "", false],
+  ]) {
+    assert.equal(vm.runInNewContext(expression, {
+      steps: { smoke: { outcome }, decide: { outputs: { confirmed } } },
+    }), expected, `${outcome}, confirmed=${confirmed}`);
+  }
   assert.match(smoke, /ok: \$\{\{ steps\.smoke\.outcome == 'success' \}\}/);
   assert.match(smoke, /rollback: \$\{\{ steps\.alarm\.outputs\.rollback \}\}/);
 });

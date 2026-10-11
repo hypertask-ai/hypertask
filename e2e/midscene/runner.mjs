@@ -50,9 +50,43 @@ function parseArgs(argv) {
 // resolving. Any other failure (a real 404/500 page, a timeout, an assertion
 // failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
+// YPER4-266: a page open that hits a short network blip is tried again, twice at most.
+const TRANSIENT_NETWORK_ERROR = /\bnet::(ERR_NETWORK_CHANGED|ERR_INTERNET_DISCONNECTED|ERR_CONNECTION_RESET|ERR_NAME_NOT_RESOLVED|ERR_TIMED_OUT)\b/;
+const GOTO_EXTRA_TRIES = 2;
+const GOTO_RETRY_WAIT_MS = 2_000;
+
+// HTPR-7063: Midscene's aiInput sometimes loses the start of the text when the chat
+// composer re-renders while typing. Type with the keyboard instead, read the
+// text back, and type again until it matches.
+const normalizeText = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fillVerified(page, selector, value) {
+  let lastSeen = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const handle = await page.waitForSelector(selector, { visible: true, timeout: 30_000 });
+    // Settle: the same DOM node must survive a short pause (no re-mount).
+    await handle.evaluate((el) => { el.dataset.fillMarker = 'settle'; });
+    await pause(750);
+    const stable = await handle.evaluate((el) => el.isConnected && el.dataset.fillMarker === 'settle');
+    if (!stable) continue;
+    await handle.click();
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyA');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(value, { delay: 15 });
+    await pause(300);
+    lastSeen = await page.$eval(selector, (el) => (typeof el.value === 'string' ? el.value : el.textContent) || '');
+    if (normalizeText(lastSeen) === normalizeText(value)) return `typed on attempt ${attempt}`;
+  }
+  throw new Error(`fillVerified: ${selector} did not hold the full text after 3 attempts (last seen: ${JSON.stringify(normalizeText(lastSeen))})`);
+}
 
 async function runStep(page, agent, step, fixture) {
   switch (step.action) {
+    case 'fillVerified':
+      return fillVerified(page, step.arg, step.value);
     case 'click':
       if (step.optional && !(await page.$(step.arg))) return;
       await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
@@ -147,8 +181,9 @@ async function runStep(page, agent, step, fixture) {
           return { resolvedUrl: step.arg };
         } catch (err) {
           const message = err?.message || String(err);
-          if (step.retryNetworkChange && attempt === 0 && /\bnet::ERR_NETWORK_CHANGED\b/.test(message)) {
-            console.warn(`Navigation interrupted by a network change; retrying ${step.arg} once`);
+          if (attempt < GOTO_EXTRA_TRIES && TRANSIENT_NETWORK_ERROR.test(message)) {
+            console.warn(`Navigation to ${step.arg} hit a network error (${message.split('\n')[0]}); retry ${attempt + 1} of ${GOTO_EXTRA_TRIES}`);
+            await pause(step.retryDelayMs ?? GOTO_RETRY_WAIT_MS);
             continue;
           }
           if (!step.fallback || !DNS_OR_CONNECTION_ERROR.test(message)) throw err;

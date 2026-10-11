@@ -35,14 +35,12 @@ export function runProductionMigrations({
   }
 
   const prismaCli = path.join(cwd, "node_modules", "prisma", "build", "index.js");
+  const options = { cwd, env: { ...env, DATABASE_URL: directUrl }, stdio: "inherit" };
+
   const result = spawnSyncImpl(
     process.execPath,
     [prismaCli, "migrate", "deploy"],
-    {
-      cwd,
-      env: { ...env, DATABASE_URL: directUrl },
-      stdio: "inherit",
-    },
+    options,
   );
 
   if (result.error) {

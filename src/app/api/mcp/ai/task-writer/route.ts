@@ -13,7 +13,7 @@ import {
   prepareTaskWriterRun,
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
-import { extractTaskWriterProperties } from "@/app/api/ai/_lib/taskWriterProperties";
+import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
 import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
 
 export const runtime = "nodejs";
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
       allowedImgSrcs,
       skills,
       usageTaskId,
+      validateDraft,
     } = await prepareTaskWriterRun(body, userId, ctx.agentId);
 
     configureAiModelUsage(selected.model, {
@@ -121,6 +122,13 @@ export async function POST(request: NextRequest) {
           })
         : { title: null, description: filtered };
 
+    if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
+      return NextResponse.json(
+        { success: false, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       html: properties.description,
@@ -139,7 +147,12 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
-    if (error instanceof AiFeatureDisabledError) {
+    if (
+      error instanceof AiFeatureDisabledError ||
+      (error instanceof Error &&
+        (error.name === "AiGatewayKeyRequiredError" ||
+          error.name === "AiPlanAccessError"))
+    ) {
       return NextResponse.json(
         { success: false, error: error.message },
         { status: 403 }

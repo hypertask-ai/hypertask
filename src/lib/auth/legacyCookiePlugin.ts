@@ -1,4 +1,7 @@
 // HTPR-4146: reverse of bridgePlugin.ts — mints legacy ht_session/nookies_user cookies after a native Better Auth login, so the 140+ files that still read those cookies directly keep working.
+import { waitUntil } from '@vercel/functions'
+import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
+import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
 import type { GenericEndpointContext } from '@better-auth/core'
 import type { BetterAuthPlugin } from 'better-auth'
 import {
@@ -20,6 +23,14 @@ import authConfig from '@/lib/configs/auth.config'
 import { themeCookieSeedValue } from '@/lib/themePreferences'
 import prisma from '@/lib/prisma'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
+import { resolveLoginBoard } from '@/utils/controllers/demo/resolveLoginBoard'
+import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
+import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
+import { HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, isFeatureEnabled } from '@/lib/flags'
+import type { IUser } from '@/models/model'
+
+// The same Request reaches user.create.after and the new-session hook; no time-window guesses.
+export const newGoogleSignupRequests = new WeakMap<Request, number>()
 
 type LegacyCookieCtx = {
   setCookie: (name: string, value: string, options: Record<string, unknown>) => void
@@ -39,7 +50,7 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     httpOnly: false,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
-    maxAge: 2592000, // 30 days, matches the Better Auth session lifetime
+    maxAge: SESSION_TTL_SECONDS, // same lifetime as the signed session (HTPR-7073)
     path: '/',
   })
   ctx.setCookie(
@@ -64,6 +75,23 @@ async function setLegacyCookiesForUser(ctx: LegacyCookieCtx, userId: number) {
     maxAge: 604800,
     path: '/',
   })
+
+  const previousBoard = ctx.getCookie?.('previousBoard')
+  const loginBoard = previousBoard ? await resolveLoginBoard(userId, previousBoard) : undefined
+  if (loginBoard !== undefined) {
+    const value = loginBoard
+      ? previousBoard?.split('|&|')[0] === `project-${loginBoard.id}`
+        ? previousBoard
+        : `project-${loginBoard.id}|&|`
+      : ''
+    ctx.setCookie('previousBoard', value, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: loginBoard ? 604800 : 0,
+      path: '/',
+    })
+  }
 
   // previousBoard drives the middleware's post-login board restoration. It is
   // normally maintained client-side as the user switches boards, but a fresh
@@ -186,9 +214,45 @@ export function legacyCookiePlugin() {
             // still carries the guest's ht_session when one was signed in from the
             // demo board. Adopt BEFORE minting the new cookies, so previousBoard is
             // seeded from a board list that already includes the adopted board.
+            if (ctx.path === '/callback/google' && ctx.request && newGoogleSignupRequests.get(ctx.request) === userId) {
+              newGoogleSignupRequests.delete(ctx.request)
+              try {
+                if (await isFeatureEnabled(HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG, userId)) {
+                  const user = await prisma.user.findUnique({ where: { id: userId } })
+                  if (!user) throw new Error('New Google signup user not found')
+                  await provisionFirstWorkspace(
+                    user as unknown as IUser,
+                    ctx.getCookie?.(SESSION_COOKIE),
+                    'MyTeam',
+                    'MyBoard',
+                    companySizeOptions[0],
+                    companyRoleOptions[0],
+                    // Google rollout must not depend on the email signup flag.
+                    { keepDemoBoard: true, onlyIfEmpty: true },
+                  )
+                }
+              } catch (error) {
+                console.error('Google signup workspace provisioning failed (non-fatal):', { userId, error })
+              }
+            }
             await adoptGuestBoards(ctx.getCookie?.(SESSION_COOKIE), userId)
 
-            await setLegacyCookiesForUser(ctx, userId)
+            const userData = await setLegacyCookiesForUser(ctx, userId)
+            if (userData && (
+              ctx.path?.startsWith('/callback/') ||
+              ctx.path === '/magic-link/verify' ||
+              ctx.path === '/sign-in/email-otp' ||
+              ctx.path === '/sign-in/email' ||
+              ctx.path === '/sign-in/social' ||
+              ctx.path === '/passkey/verify-authentication'
+            )) {
+              try {
+                waitUntil(maybeSendWelcomeEmail(userId))
+                waitUntil(maybeScheduleAgentNudge(userId))
+              } catch (error) {
+                console.error('[onboarding/welcome] scheduling failed', error)
+              }
+            }
           }),
         },
       ],

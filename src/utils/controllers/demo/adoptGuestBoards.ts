@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";
@@ -132,6 +133,9 @@ export async function adoptGuestBoards(
       });
     });
 
+    for (const projectId of projectIds) {
+      recordActivationOccurrence(targetUserId, "board_created", String(projectId), { source: "adopted_demo" });
+    }
     return projectIds.length;
   } catch (error) {
     console.error("Guest board adoption failed (non-fatal):", error);

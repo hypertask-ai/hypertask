@@ -24,8 +24,6 @@ export const isFavoriteBoardShortcut = (
 export const getKeyboardShortcuts = (
   isApple: boolean,
   appShellRailOn = false,
-  consistentCommentShortcuts = false,
-  keepDirectTaskOpen = false,
   historyToggleLabel = "Toggle history events",
   composeTaskWriter = false,
   newTaskWindow = false,
@@ -152,19 +150,11 @@ export const getKeyboardShortcuts = (
       title: "Task View",
       sub: [
         { shortTitle: "Activate description/comment or reply to comment", pressKey: ["ENTER"] },
-        ...(consistentCommentShortcuts
-          ? [
-              {
-                shortTitle: keepDirectTaskOpen
-                  ? "Send comment and advance in Inbox"
-                  : "Send comment and move to next task",
-                pressKey: [cmdControl, "ENTER"],
-              },
-              { shortTitle: "Send comment and stay on task", pressKey: [cmdControl, "SHIFT", "ENTER"] },
-            ]
-          : [
-              { shortTitle: "Save/edit text entry", pressKey: [cmdControl, "ENTER"] },
-            ]),
+        {
+          shortTitle: "Send comment and advance in Inbox",
+          pressKey: [cmdControl, "ENTER"],
+        },
+        { shortTitle: "Send comment and stay on task", pressKey: [cmdControl, "SHIFT", "ENTER"] },
         ...(composeTaskWriter ? [] : [{ shortTitle: "Write with AI", pressKey: [cmdControl, "J"] }]),
         { shortTitle: "Assign a user", pressKey: ["A"] },
         { shortTitle: "Blocked by person", pressKey: ["SHIFT", "B"] },

@@ -1,5 +1,6 @@
 import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import notificationGetByTask from "@/utils/controllers/notifications/getByTask";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -24,6 +25,12 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(400).json({ message: "Comment ids are required" });
             }
 
+            const task = await prisma.task.findFirst({
+              where: { id: Number(taskId), project: projectContentAccessWhere(userId) },
+              select: { id: true },
+            });
+            if (!task) return res.status(404).json({ message: "Task not found" });
+
             await notificationGetByTask(userId, taskId);
 
             // One UPDATE for the whole task, and only for comments this user has
@@ -32,6 +39,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             await prisma.comment.updateMany({
                 where: {
                     id: { in: commentIds },
+                    taskId: task.id,
                     NOT: { seen: { has: userId } },
                 },
                 data: {

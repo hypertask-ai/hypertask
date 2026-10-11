@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import "server-only";
 
 import prisma from "@/lib/prisma";
@@ -17,10 +18,7 @@ export const getProjectForValidation = cache(async (
     const project = await prisma.project.findFirst({
       where: {
         id: numericProjectId,
-        OR: [
-          { ownerId: userId },
-          { members: { some: { userId } } },
-        ],
+        ...projectContentAccessWhere(userId),
       },
       select: {
         id: true,

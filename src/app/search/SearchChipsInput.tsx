@@ -2,7 +2,7 @@
 
 import UserAvatar from "@/components/Common/UserAvatar";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
 import { activeSearchValue, candidateQuery, chipQuery, searchChipText, splitSearchChips } from "@/lib/search/chips";
 import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type SearchOperator, type SearchToken } from "@/lib/search/operators";
@@ -34,6 +34,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   const labelScopeEnabled = labelScopeFlagEnabled && layoutEnabled;
   const searchEscBackFlagEnabled = useFlag(HTPR_6879_SEARCH_ESC_BACK_FLAG);
   const searchEscBackEnabled = searchEscBackFlagEnabled && layoutEnabled;
+  const escLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const commenterEnabled = commenterFlagEnabled && layoutEnabled;
   const [editing, setEditing] = useState(false);
@@ -108,7 +109,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     };
     // The list stays open when focus leaves, so Escape must still close it from anywhere.
     const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
-      if (event.key !== 'Escape' || document.activeElement === inputRef.current || !openRef.current) return;
+      if (escLeavesEnabled || event.key !== 'Escape' || document.activeElement === inputRef.current || !openRef.current) return;
       // Handled here: stop the search page's Escape-back from also clearing the query.
       event.preventDefault();
       setDismissed(true);
@@ -119,7 +120,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       document.removeEventListener('pointerdown', dismissOutside);
       document.removeEventListener('keydown', dismissOnEscape);
     };
-  }, [layoutEnabled]);
+  }, [layoutEnabled, escLeavesEnabled]);
 
   useEffect(() => {
     setEditing(false);
@@ -287,7 +288,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
 
   function keyDown(event: KeyboardEvent<HTMLInputElement>) {
     if (autocompleteEnabled && (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
-    if (open && event.key === "Escape") {
+    // Escape leaves search in one press, even over tips or suggestions.
+    if (open && event.key === "Escape" && !escLeavesEnabled) {
       event.preventDefault();
       event.stopPropagation();
       setDismissed(true);

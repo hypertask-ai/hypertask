@@ -42,9 +42,6 @@ export async function DELETE(req: NextRequest) {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
 
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
     const currentUser = await loadCurrentUser(req.headers, true).catch(() => null);
     let restCompat = false;
@@ -57,7 +54,7 @@ export async function DELETE(req: NextRequest) {
     }
     const { isValid, user } = restCompat && currentUser
       ? { isValid: true, user: currentUser.user }
-      : isValidUser(userCookie.value);
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

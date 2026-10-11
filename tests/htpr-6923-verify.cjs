@@ -35,7 +35,25 @@ function lifecycleLegacySources() {
   const types = effects.slice(effects.indexOf("type TaskCreatedGlobally"), effects.indexOf("function schedulePostCreateWork("));
   const helpers = effects.slice(effects.indexOf("function schedulePostCreateWork("), effects.indexOf("\nexport {"))
     .replaceAll('"@/pages/api/queues/FAST/generateSummary"', '"../queues/FAST/generateSummary"');
+  // Reconstruct the original oracle without the later, separately tested writer-date feature.
   let global = unwrap("src/pages/api/tasks/createGlobally.ts")
+    .replace('import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";\n', "")
+    .replace('import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";\n', "")
+    .replace("      dueDate: requestedDueDate,", "      dueDate,")
+    .replace(`    const dueDateEnabled = req.body.requestKind === "compose-task" && req.body.writerDueDate != null &&
+      await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+    const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(req.body.writerDueDate, req.body.writerTimeZone) : undefined;
+    const dueDate = writerDueDate ?? requestedDueDate;
+`, "")
+    .replace(`      const result = await updateTaskSingle({ id: taskId, title, description,
+        ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
+      }, currentUser, agentId, {`, "      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {")
+    .replace(`      if (writerDueDate) {
+        const { cancelDueDateJob, scheduleDueDateJob } = await import("../queues/duedateQueue");
+        await cancelDueDateJob(taskId, projectId);
+        await scheduleDueDateJob({ taskId, projectId }, writerDueDate);
+      }
+`, "")
     .replace(/^import \{ schedulePostCreateWork[^\n]+\n/m, "")
     .replace('import { IAgent, ILabel, IUser } from "@/models/model";\n', 'import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";\nimport { waitUntil } from "@vercel/functions";\nimport {\n  ITaskAssignedActivity,\n  ITaskEstimateActivity,\n  ITaskPriorityActivity,\n} from "@/models/ActivityModels.ts";\n')
     .replace('import { getSessionUser }', 'import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";\nimport { getSessionUser }')
@@ -288,10 +306,11 @@ const attachmentRoutes = {
     "method": "POST",
     "hash": "01d48f1d642c0d7a64efc47680bf97795a21c6ebba2712345c89183e252683d8"
   },
+  // HTPR-7018: security fixes replace the unknown/unbound file download contract.
   "downloadAttachment": {
     "module": "download-attachment",
     "method": "GET",
-    "hash": "072e4872015008699263a5de8eac474a9bd205b4db1d5971ec4eca22a4c16ca7"
+    "hash": "5f2cbbcff8c92cec532737ce17dd4dc99d4f1ff9ce872ae69311e3d7b09de2bb"
   }
 };
 function attachmentLegacySources() {
@@ -315,6 +334,35 @@ function attachments() {
   assert.equal(crypto.createHash("sha256").update(read("src/pages/api/tasks/n8nUpload.ts")).digest("hex"), "d314ad36c6533f9386be38b762917c8474bba3ad681a9b475714ab7c0c4d9740", "multipart route stays unchanged");
   assert.ok(read("src/pages/api/tasks/n8nUpload.ts").includes("bodyParser: false"));
   console.log("attachments structural verification passed");
+}
+const slice5cHashes = {
+  "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
+  "src/utils/controllers/tasks/getAll.ts": "b82c469dbf01bdb976e32a93a35cff0e8b3f3139fb39923913d52c2655dbea89",
+  "src/lib/api/task-writes/route.ts": "ede51193ada9ee53a18b8d1b54ab7a6f0a7ac47f0fe98ece94293556cb0faa71",
+  "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
+};
+function slice5cLegacySource() {
+  return read("src/pages/api/tasks/getAll.ts")
+    .replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "")
+    .replace(/export default withTaskWriteFlag\([\s\S]*$/, "export default handler;");
+}
+function slice5c() {
+  const original = JSON.parse(read("tests/fixtures/htpr-6968-slice-5c/getAll.json"));
+  assert.equal(slice5cLegacySource(), original, "getAll fallback is byte-identical to independent fixture");
+  for (const [file, hash] of Object.entries(slice5cHashes)) {
+    const source = file === "src/pages/api/tasks/getAll.ts" ? original : read(file);
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), hash, file + " preserved bytes");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(source + "changed").digest("hex"), hash), "pin mutation control");
+  }
+  const page = read("src/pages/api/tasks/getAll.ts");
+  assert.ok(page.includes('withTaskWriteFlag(handler, "POST", async () =>'));
+  assert.ok(page.includes('(await import("@/lib/api/task-writes/getAll")).POST'));
+  assert.ok(read("src/lib/api/task-writes/getAll.ts").includes("taskWriteRoute"));
+  assert.ok(!fs.existsSync(path.join(root, "src/app/api/tasks/getAll/route.ts")), "no URL twin");
+  const controllerImport = 'import controller from "@/utils/controllers/tasks/getAll";';
+  assert.equal(callerFiles("tasks/getAll", [{ file: "fixture.ts", text: controllerImport }]).length, 0, "controller import is not an HTTP caller");
+  assert.equal(callerFiles("tasks/getAll", [{ file: "fixture.ts", text: controllerImport + 'fetch("/api/tasks/getAll")' }]).length, 1, "controller exclusion retains real caller control");
+  console.log("slice5c structural verification passed; independent fallback, controller and helpers pinned");
 }
 const slice5Routes = {
   single: { module: "single-read-delete", methods: ["GET", "DELETE"], hash: legacyHashes.update },
@@ -341,10 +389,7 @@ function slice5() {
     }
     assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
   }
-  for (const [file, hash] of Object.entries({
-    "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
-    "src/utils/controllers/tasks/getAll.ts": "b82c469dbf01bdb976e32a93a35cff0e8b3f3139fb39923913d52c2655dbea89",
-  })) assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, "compatibility migration remains untouched");
+  slice5c(); // Preserve getAll's independent compatibility policy through slice 5c.
   console.log("slice5 structural verification passed");
 }
 const slice5bRoutes = {
@@ -363,10 +408,11 @@ const slice5bRoutes = {
     "method": "GET",
     "hash": "5c3fe5f24649ad569a849fdef4aea86c70bda630533421e950e100cac5bcb2e9"
   },
+  // HTPR-7017: security fixes intentionally replace the unauthenticated read contract.
   "getTaskMinimal": {
     "module": "minimal-read",
     "method": "READ",
-    "hash": "0b5fa4385e7cbffea28526960e637cd570b688e7b41a86cd1b1fbfcaec0f4bde"
+    "hash": "7a264c49ca54d680ec33f7fbd27ffb3bfa8943ff173314254a7cd2c25a8ba023"
   },
   "getUnscheduled": {
     "module": "unscheduled-read",
@@ -391,7 +437,7 @@ const slice5bRoutes = {
   "searchOrphans": {
     "module": "search-orphans",
     "method": "GET",
-    "hash": "4f23124348d24a0e3c2353b8f4c10a9a38bbf766b9842d5ff1192a9ba75ff1d9"
+    "hash": "5631236d4a484844dd6d15deab0f0ba1644f4e9b0f848dfdc5424206f5632216"
   }
 };
 function slice5bLegacySources() {
@@ -423,7 +469,7 @@ function slice5b() {
     assert.ok(read(`src/lib/api/task-writes/${module}.ts`).includes(`export const ${method}`));
     assert.ok(!fs.existsSync(path.join(root, `src/app/api/tasks/${name}/route.ts`)), "no URL twin");
   }
-  slice5(); // Includes the unchanged getAll route/controller compatibility pins.
+  slice5(); // Includes the getAll fallback/controller compatibility pins.
   console.log("slice5b structural verification passed");
 }
 const projectViewRoutes = {
@@ -431,14 +477,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "5a6c0939ce91e81220e4341f60c7bfb3ed7bfd3b10759b2207ab36eecbcae90b",
+    "hash": "69673c5584356bdd3ff76ae6ed4596bf3c07f9e5e95f7f4b09b77979b5fe0694",
     "export": "export default handler;"
   },
   "update-view": {
     "methods": [
       "POST"
     ],
-    "hash": "2b3b0dbcfa576f5a36b880a840604456d87afbee3de0e32259489f9c21953dd5",
+    "hash": "da790e03d7efa417971370f650e5c1e31e583e1ccc7a87294605cc71f7330947",
     "export": "export default handler;"
   },
   "delete-rename-view": {
@@ -461,14 +507,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "f717f6eaf695114f3debbadf6267b061bd54adb56efcaea9e45627e17bd7de06",
+    "hash": "df9159817d1d9e5f0006c2d1d8ea94c5a28ef61e7915ced04f886881ed7a8a49",
     "export": "export default handler;"
   },
   "reset-to-default": {
     "methods": [
       "POST"
     ],
-    "hash": "b4eded269799550b856001b4ab8a633f0f508a67137b828c4b7bd5866d3dc016",
+    "hash": "394dec4b415609986b7ee23b160aeb4792ae5e15cd8620e606156c8e7a814c2e",
     "export": "export default handler;"
   },
   "update-order": {
@@ -611,7 +657,7 @@ const notificationRoutes = {
     "module": "archive-bulk",
     "method": "POST",
     "path": "src/pages/api/notifications/(un)archiveBulk.ts",
-    "hash": "f891e1628c58b24c5f32fbaa702c5e5c953b905aa2775d511b7c431a1e8f4281"
+    "hash": "a3552ed3b0d610be8ff01133f3839b551d479856d2783469b5a2c266d24818ac"
   },
   "getByTask": {
     "module": "task-seen",
@@ -650,12 +696,13 @@ const notificationRoutes = {
     "path": "src/pages/api/notifications/unArchiveNotificationById.ts",
     "hash": "310f19f6da5f0741cade25d21ee04bd4d3aa9d3acc26888b76609c891830d9a4"
   },
+  // HTPR-7017: require board access and scope comment IDs to the authorized task.
   "updateSeen": {
     "module": "comments-seen",
     "method": "POST",
     "domain": "comments",
     "path": "src/pages/api/comments/updateSeen.ts",
-    "hash": "385eb8048ce8ca63a133c688d5d981c69ee595a4757bcd828186a61ebad93b9d"
+    "hash": "c50eb838fc0f003012674e843229d3e08e1a80b0b00f08d71535d57d85a55568"
   }
 };
 function notificationLegacySources() {
@@ -676,16 +723,6 @@ function notificationLegacySources() {
   }));
 }
 const notificationDeferredHashes = {
-  "src/pages/api/notifications/access.ts": "b8532082d9cf9238eeafbd7b9b6cd0a2198554ce405cbfaed60bb3b0e9b3826d", // gitleaks:allow sha256 file pin, not a secret
-  "src/pages/api/notifications/changePushNotificationStatus.ts": "e4cc04a0aee7e64cbd5469da50b7a117b956f30b52b53207655760d5fe9b447b",
-  "src/pages/api/notifications/getAll.ts": "e19347613818bc0d8fd6192144d9d5a7b8e9d5314b27eb3bed599a9199ca4f25",
-  "src/pages/api/notifications/getAllInbox.ts": "3c33e20ce6a6d661d6853a5d7b3c6f8eace1a80d16af54ce7dcce391e09e753b",
-  "src/pages/api/notifications/getCount.ts": "847e3d8c1c846f7fec053e1f836d31067593727e533778330a9ad4e322c20d2b",
-  "src/pages/api/notifications/getPushNotificationStatus.ts": "a51b85aab4614ab7ba387ffa8c1e65dcd0ad9ceee8f1f110335f0e66179f5ae7",
-  "src/pages/api/notifications/matrix.ts": "6e96da9184fa2ad3b97ad79ea407ee501fea5519596694240d8becb660be0671",
-  "src/pages/api/notifications/mute.ts": "704ecadd1658873dc4d9bcfee7548abda9b3e514a6318623139a20d37f72e2aa",
-  "src/pages/api/notifications/preference.ts": "12912e4816fbcda18ac1d640bee2327b9cfea983c444a729df822e43b0adfaf2",
-  "src/pages/api/notifications/splits.ts": "6ebdac600b1c82f7a44d7581118e2862002828f4eaf23ec82715d306e8d88ebc",
   "src/pages/api/projects/views/sync-view.ts": "451a5e8060edeea344f51e405b890ced8d43fb56d87f88711df41b10aa1cc516",
   "src/pages/api/projects/detail.ts": "ae86b4e8ee6555a57bfb8080c58172b9783b2a875ac6c9df4c124f62def4cf6f",
   "src/pages/api/tasks/getAll.ts": "56e86d106a40a875868233e66ad56474d5701236228f78a9345d427c65761d80",
@@ -697,8 +734,9 @@ const notificationDeferredHashes = {
 function notifications() {
   const sources = notificationLegacySources();
   for (const [file, hash] of Object.entries(notificationDeferredHashes)) {
-    assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, file + " deliberately unchanged");
-    assert.throws(() => assert.equal(crypto.createHash("sha256").update(read(file) + "changed").digest("hex"), hash), "deferred pin mutation control");
+    const source = file === "src/pages/api/tasks/getAll.ts" ? slice5cLegacySource() : read(file);
+    assert.equal(crypto.createHash("sha256").update(source).digest("hex"), hash, file + " deliberately unchanged");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(source + "changed").digest("hex"), hash), "deferred pin mutation control");
   }
   const controllerImport = 'import controller from "@/utils/controllers/notifications/getByTask";';
   assert.equal(callerFiles("notifications/getByTask", [{ file: "fixture.ts", text: controllerImport }]).length, 0);
@@ -715,6 +753,169 @@ function notifications() {
     assert.ok(!fs.existsSync(path.join(root, entry.path.replace("src/pages/api/", "src/app/api/").replace(/\.ts$/, "/route.ts"))), "no URL twin");
   }
   console.log("notification structural verification passed; slice-10 inventory and task-seen companion pinned");
+}
+
+const notificationSettingsRoutes = {
+  "access": {
+    "module": "access",
+    "methods": [
+      "GET"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/access.ts",
+    "hash": "b8532082d9cf9238eeafbd7b9b6cd0a2198554ce405cbfaed60bb3b0e9b3826d"
+  },
+  "changePushNotificationStatus": {
+    "module": "push-status-write",
+    "methods": [
+      "POST"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/changePushNotificationStatus.ts",
+    "hash": "e4cc04a0aee7e64cbd5469da50b7a117b956f30b52b53207655760d5fe9b447b"
+  },
+  "getAll": {
+    "module": "all-read",
+    "methods": [
+      "GET"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/getAll.ts",
+    "hash": "e19347613818bc0d8fd6192144d9d5a7b8e9d5314b27eb3bed599a9199ca4f25"
+  },
+  "getAllInbox": {
+    "module": "archived-read",
+    "methods": [
+      "GET"
+    ],
+    "anyMethod": true,
+    "path": "src/pages/api/notifications/getAllInbox.ts",
+    "hash": "3c33e20ce6a6d661d6853a5d7b3c6f8eace1a80d16af54ce7dcce391e09e753b"
+  },
+  "getCount": {
+    "module": "count-read",
+    "methods": [
+      "GET"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/getCount.ts",
+    "hash": "847e3d8c1c846f7fec053e1f836d31067593727e533778330a9ad4e322c20d2b"
+  },
+  "getPushNotificationStatus": {
+    "module": "push-status-read",
+    "methods": [
+      "GET"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/getPushNotificationStatus.ts",
+    "hash": "a51b85aab4614ab7ba387ffa8c1e65dcd0ad9ceee8f1f110335f0e66179f5ae7"
+  },
+  "matrix": {
+    "module": "matrix",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/matrix.ts",
+    "hash": "6e96da9184fa2ad3b97ad79ea407ee501fea5519596694240d8becb660be0671"
+  },
+  "mute": {
+    "module": "mute",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/mute.ts",
+    "hash": "704ecadd1658873dc4d9bcfee7548abda9b3e514a6318623139a20d37f72e2aa"
+  },
+  "preference": {
+    "module": "preference",
+    "methods": [
+      "POST"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/preference.ts",
+    "hash": "12912e4816fbcda18ac1d640bee2327b9cfea983c444a729df822e43b0adfaf2"
+  },
+  "splits": {
+    "module": "splits",
+    "methods": [
+      "GET",
+      "POST"
+    ],
+    "anyMethod": false,
+    "path": "src/pages/api/notifications/splits.ts",
+    "hash": "6ebdac600b1c82f7a44d7581118e2862002828f4eaf23ec82715d306e8d88ebc"
+  }
+};
+const notificationSettingsProtectedHashes = {
+  "src/pages/api/notifications/(un)archiveBulk.ts": "5231633ec7af300889024826c3db09fd92493766828dfbaa1b7c4239e4cff948",
+  "src/lib/api/notification-writes/archive-bulk.ts": "0983b8f07136fc4628d5d389370d852543d6e76265c8fc6dbe97cf8643e58735",
+  "src/pages/api/notifications/getByTask.ts": "d56c67ba3ebd2f9d88cff42295a574b3748e52ad7cafb7ff917415577ea0db2d",
+  "src/lib/api/notification-writes/task-seen.ts": "e8adc63197620bb1c8eb5be561672b9556e4784a15591aaff6b46b1ccb95da8e",
+  "src/pages/api/notifications/markAsDone.ts": "176b0984cb340de89d2b850d1273a7f62d18582b64a89349cc9174c9cf6f5f9c",
+  "src/lib/api/notification-writes/mark-done.ts": "59825e1732d9fe6bcd5f8c7919044e61c40e50efbe422d4f68cf39f122a589c1",
+  "src/pages/api/notifications/markAsUnseen.ts": "4962f47ea8d22d7202c79e51057506e4055f0a3c8f27cf539c8de93a2e33645f",
+  "src/lib/api/notification-writes/mark-unseen.ts": "576b981ceac1e43716eedf0e8c09bfbf0ef09289eecf4fda61e246fca4d7c338",
+  "src/pages/api/notifications/moveTaskToInbox.ts": "4570f40a5a3c26c070a4e36f430e4ffe343e0b389e10f5f8900a40ecfe0a87e0",
+  "src/lib/api/notification-writes/move-task-to-inbox.ts": "a94d4c241456063c05faef2a59bc0188b3a5ee5a1ef67d16155b06f6238bd9b7",
+  "src/pages/api/notifications/sendEmailToFollower.ts": "70421016d06368d08d68e95a4ec42eadb4b7ebb893e8b485143cc98ac40d3d41",
+  "src/lib/api/notification-writes/follower-email.ts": "b64177bb06505ec5c88c8c8f116180ec5ea9d79b1cd540fd00f0deaeb7868cff",
+  "src/pages/api/notifications/unArchiveNotificationById.ts": "4d5382c27d6dbfa4eb332a51469e49c0b94f3885fb132050690d13621a415766",
+  "src/lib/api/notification-writes/unarchive-by-id.ts": "1ba74c345046ca08e08e4ce6fff2764d232fc968be30d3eb53234211c4231923",
+  "src/pages/api/comments/updateSeen.ts": "b195ce617cfcaafd457fb4d9ca0b5e3144bc5cd2d154e9ae60c612c351614fa6",
+  "src/lib/api/notification-writes/comments-seen.ts": "26fd763a255cd97ee4e0d6376490cba903efe8c2aa2378c7d18235cd8c1ffc20",
+  "src/lib/api/task-writes/route.ts": "ede51193ada9ee53a18b8d1b54ab7a6f0a7ac47f0fe98ece94293556cb0faa71",
+  "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
+  // HTPR-7038: add only the reset backup/completion models; retain all existing schema bytes.
+  // HTPR-7076: add only the two nullable AiUsage cache token columns.
+  "src/prisma/schema.prisma": "b8dd2de4a7d8864752d7b6a632795f6264438cb01d4f58161987227d9cdfb559",
+  "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": "c30396e30d121cac255f7a17d2b72d1efaeb3fef4560e76828b46849cb3ed618",
+  "src/utils/controllers/notifications/projectMute.ts": "16c4dd2964146fccbc160654ee537356ab037524bbb2549ed0a07fa7e26ccd3b",
+  "src/app/api/notifications/project-mute/route.ts": "b1debce26eeb1aeb76f4e0beab91c30749b6c33cc0a8dcabf25b7fe726583ee0",
+  "src/lib/inboxSplitSettings.ts": "06f78aab98f08989a71c86bc821c8a3f42edc9f35249d9ec64d002b9d617adad",
+  // HTPR-7096: getAll only gains the flag-gated quiet-owner-inbox marking call.
+  "src/utils/controllers/notifications/getAll.ts": "1f8630633478fc97729e188d88b47af04e821c87571f136918da4245e57e46e6",
+  "src/utils/controllers/notifications/getCount.ts": "5b342c092bf198dbe6b9b74ce3fff915a14282cc1c1fc2601278939063802c30",
+  "src/utils/controllers/notifications/getAccessibleProjectIds.ts": "5efc0573e9c9fee87d651442e4bf9c32c4a3adb0536ee4d8a5f53972fdf88636" // gitleaks:allow sha256 file pin, not a secret
+};
+function notificationSettingsLegacySources() {
+  return Object.fromEntries(Object.entries(notificationSettingsRoutes).map(([name, entry]) => {
+    const fixture = JSON.parse(read(`tests/fixtures/htpr-6968-slice-11/${name}.legacy.json`));
+    assert.equal(crypto.createHash("sha256").update(fixture).digest("hex"), entry.hash, name + " fixture bytes");
+    let source = read(entry.path).replace('import { withTaskWriteFlag } from "@/lib/api/task-writes/route";\n', "");
+    if (entry.anyMethod) {
+      source = source.replace('async function handler(', 'export default  async function handler(')
+        .replace("import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'", "import type { NextApiRequest, NextApiResponse } from 'next'");
+      source = source.slice(0, source.indexOf('\n\nexport default ((req, res)'));
+    } else source = source.replace(/export default withTaskWriteFlag([\s\S]*?);(?=\n|$)/, "export default handler;");
+    assert.equal(source, fixture, name + " byte-identical legacy fallback");
+    return [name, fixture];
+  }));
+}
+function notificationSettings() {
+  const sources = notificationSettingsLegacySources();
+  const doc = read("docs/htpr-6509-slices.md");
+  const assigned = [...doc.matchAll(/^\| `(src\/pages\/api\/[^`]+)` \| 11 \|/gm)].map(match => match[1]).sort();
+  assert.deepEqual(assigned, Object.values(notificationSettingsRoutes).map(entry => entry.path).sort(), "every slice-11 inventory row migrated");
+  for (const [file, hash] of Object.entries(notificationSettingsProtectedHashes)) {
+    assert.equal(crypto.createHash("sha256").update(read(file)).digest("hex"), hash, file + " unchanged slice-10/shared service/model bytes");
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(read(file) + "changed").digest("hex"), hash), "protected pin mutation control");
+  }
+  for (const [name, entry] of Object.entries(notificationSettingsRoutes)) {
+    assert.throws(() => assert.equal(crypto.createHash("sha256").update(sources[name] + "changed").digest("hex"), entry.hash), "legacy pin mutation control");
+    const page = read(entry.path);
+    for (const method of entry.methods) {
+      assert.ok(page.includes(entry.anyMethod ? 'handler, req.method ?? ""' : `"${method}", async () =>`));
+      assert.ok(page.includes(`(await import("@/lib/api/notification-writes/${entry.module}")).${method}`));
+    }
+    assert.ok(read(`src/lib/api/notification-writes/${entry.module}.ts`).includes("taskWriteRoute"));
+    assert.ok(!fs.existsSync(path.join(root, entry.path.replace("src/pages/api/", "src/app/api/").replace(/\.ts$/, "/route.ts"))), "no URL twin");
+  }
+  notifications();
+  console.log("notification settings structural verification passed; slice-11 inventory, legacy fixtures and protected pins");
 }
 
 const deadCandidates = [
@@ -760,7 +961,7 @@ function callerFiles(endpoint, corpus) {
   const pattern = new RegExp(`/${escaped}(?=[?\\#\\s'\"\x60)]|$)`);
   return corpus.filter(({ file, text }) => {
     // Extracted handlers import controllers, not the matching HTTP URL.
-    if (endpoint.startsWith("section/") || endpoint === "notifications/getByTask") {
+    if (endpoint.startsWith("section/") || endpoint === "notifications/getByTask" || endpoint === "tasks/getAll") {
       for (const quote of ['"', "'"]) text = text.replaceAll(`${quote}@/utils/controllers/${endpoint}${quote}`, "");
     }
     return file !== `src/pages/api/${endpoint}.ts` && pattern.test(text);
@@ -801,7 +1002,7 @@ async function flag() {
       user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? "valentin.yeo@gmail.com" : "valentin@hypertask.ai" }) },
     } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "test" },
+    "@/lib/agentRuns/model": {},
   });
   const key = flags.HTPR_6923_APP_ROUTER_WRITES_FLAG;
   assert.equal(key, "htpr-6923-app-router-writes");
@@ -861,9 +1062,9 @@ function commit() {
   assert.throws(() => assert.ok(allowed.has("src/lib/mcp/auth.ts")), "scope control rejects a sibling file");
   console.log(`local commit verified: ${git("rev-parse", "HEAD")}; ${productionLines} production/doc changed lines; only GATES.md is local`);
 }
-module.exports = { notificationRoutes, notificationLegacySources, notifications, sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
+module.exports = { slice5c, slice5cLegacySource, notificationSettingsRoutes, notificationSettingsLegacySources, notificationSettings, notificationRoutes, notificationLegacySources, notifications, sectionRoutes, sectionLegacySources, projectViewRoutes, projectViewLegacySources, projectCoreRoutes, projectCoreLegacySources, slice5bRoutes, slice5bLegacySources, slice5Routes, slice5LegacySources, attachmentRoutes, attachmentLegacySources, legacyHashes, lifecycleHashes, lifecycleLegacySources, slice3Routes, slice3LegacySources, inventory, callerFiles };
 if (require.main === module) {
-  const commands = { notifications, sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b };
+  const commands = { notifications, sections, "project-views": projectViews, "project-core": projectCore, attachments, plan, flag, regression, quality, commit, lifecycle, slice3, slice5, slice5b, slice5c };
   assert.ok(commands[process.argv[2]], "known verification mode required");
   Promise.resolve(commands[process.argv[2]]()).catch((error) => { console.error(error); process.exitCode = 1; });
 }

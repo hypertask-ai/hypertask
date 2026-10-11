@@ -170,7 +170,13 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
-  assert.match(mountPositioning, /\}, \[_parsedTask\.id\]\);$/);
+  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, instantTicketOpen, cachedLayout\]\);$/);
+  assert.match(mountPositioning, /useEffect\(\(\) => \{/);
+  assert.ok(
+    mountPositioning.indexOf("else if (stableLayout && instantTicketOpen && cachedLayout)") >
+      mountPositioning.indexOf("searchParams?.get(taskDetailConfig.searchParams.audio)"),
+    "automatic scroll suppression must follow all explicit URL actions"
+  );
   assert.match(unreadPositioning, /initialScrollGuard\.allows\(generation\)/);
   assert.notEqual(
     unreadDependencyStart,

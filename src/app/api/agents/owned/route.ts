@@ -1,3 +1,4 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -13,6 +14,7 @@ import {
 import { heartbeatAllowanceNoticeId } from "@/app/api/ai/_lib/heartbeatExecution";
 import { agentMessageMarker } from "@/lib/nativeAgent/agentMessageEnvelope";
 import { HTPR_6512_SEED_TEAM_AGENT_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
 import { ensureDefaultAgentsOnAccessibleTeams } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
@@ -215,11 +217,13 @@ export async function GET(request: NextRequest) {
     }
   }
 
+  const haiku55Enabled = await haiku55ModelEnabled(userId);
   return NextResponse.json({
     success: true,
     agents: agents.map(({ permissions, members, byokApiKeys, ...agent }) => ({
       providerKey: maskAgentProviderKey(byokApiKeys),
       ...agent,
+      modelOptionId: haiku55Enabled ? getAiModelOptionById(agent.modelOptionId, true)?.id ?? agent.modelOptionId : agent.modelOptionId,
       slug: slugs.get(agent.id) ?? agent.id,
       createdAt: agent.createdAt.toISOString(),
       revokedAt: agent.revokedAt?.toISOString() ?? null,

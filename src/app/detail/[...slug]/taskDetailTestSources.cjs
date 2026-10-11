@@ -28,6 +28,7 @@ exports.readTaskDetailSource = () => readSources(__dirname, [
   "useTaskDetailCommentActions.tsx",
   "useTaskDetailModalActions.tsx",
   "useTaskDetailInitialScroll.tsx",
+  "useLinkedCommentScroll.tsx",
   "useTaskDetailReadiness.tsx",
   "TaskDetailPanels.tsx",
 ]);

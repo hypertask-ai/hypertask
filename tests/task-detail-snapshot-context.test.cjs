@@ -44,6 +44,11 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const emptyHook = () => ({});
   const providerInputs = [];
   const provider = load("src/lib/contexts/TaskDetail/TaskProvider.tsx", {
+    "@tanstack/react-query": { useQueryClient: () => queryClient },
+    "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
+    "@/hooks/useFlag": { useFlag: () => subtaskLink },
+    "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
+    "@/lib/taskDetailReads": require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, interopDefault: true })(path.join(__dirname, "..", "src/lib/taskDetailReads.ts")),
     "@/hooks/Task Detail/useTaskDetailGlobalStates": {
       default: (task, comments) => {
         providerInputs.push({ task, comments });
@@ -63,7 +68,8 @@ test("real task detail reads the provider snapshot without duplicate props and r
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
     "@/hooks/useFlag": { useFlag: () => subtaskLink },
-    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
+    "@/lib/flags/keys": { HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link", HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
+    "@/lib/taskDetailReads": { taskDetailReadKey: (accountId, id) => ["cached-task-detail", accountId, id, "read"] },
     "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: (accountId, id) => ["cached-task-detail", accountId, id] },
     "next/navigation": { useRouter: emptyHook, useSearchParams: emptyHook },
     "@/hooks/MultiPages/useGetPriorityForTask": {
@@ -108,7 +114,8 @@ test("real task detail reads the provider snapshot without duplicate props and r
   const comments = JSON.stringify({ comments: [{ id: 1 }], updatedAt: 1234 });
   async function render(task) {
     await React.act(async () => root.render(React.createElement(provider.TasksProvider, {
-      parsedTask: JSON.stringify(task), _comments: comments, _initialStacked: {}, stack: { stack: false },
+      parsedTask: JSON.stringify(task), _comments: comments, _initialStacked: {}, stack: { stack: false }, embedded,
+      serverTaskSeed: { userId: 2343, taskId: task.id, projectId: task.projectId, uniqueIndex: task.uniqueIndex, updatedAt: Date.now() },
       allowPerks: true, scrollSetting: "Bottom",
     }, React.createElement(Consumer))));
   }
@@ -134,18 +141,26 @@ test("real task detail reads the provider snapshot without duplicate props and r
   assert.deepEqual(providerInputs.at(-1).task, nextTask);
   assert.deepEqual(seeds.at(-1).slice(1), [43, 3]);
   assert.equal(dom.window.document.querySelector("span").textContent, nextTask.title);
+  const readKey = [...cachedKey(nextTask.id), "read"];
+  assert.equal(queryClient.getQueryData(readKey), undefined, "embedded snapshots must not seed verified full-detail reads");
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "embedded detail must not publish a native-navigation seed");
   embedded = false;
   subtaskLink = false;
   await render(nextTask);
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "flag-off routes keep the original cache behavior");
+  assert.equal(queryClient.getQueryData(readKey), undefined, "flag-off routes must not seed the new read cache");
   subtaskLink = true;
   authenticatedUserId = 985;
   await render(nextTask);
   assert.equal(queryClient.getQueryData(cachedKey(nextTask.id)), undefined, "an old server account cannot seed the signed-in account's cache");
+  assert.equal(queryClient.getQueryData(readKey), undefined, "an old server account cannot seed the scoped full-detail read");
   authenticatedUserId = 2343;
   await render(nextTask);
   assert.deepEqual(queryClient.getQueryData(cachedKey(nextTask.id)), nextTask, "visited authorized routes remain available while Back/Forward waits for RSC");
+  assert.deepEqual(queryClient.getQueryData(readKey), nextTask, "fresh authorized server data seeds the scoped full-detail read");
+  const serverRefresh = { ...nextTask, title: "Fresh server refresh" };
+  await render(serverRefresh);
+  assert.deepEqual(queryClient.getQueryData(readKey), serverRefresh, "a fresh server refresh must replace an existing read-cache seed");
   const refreshed = { ...nextTask, title: "Newer authorized cache response" };
   queryClient.setQueryData(cachedKey(nextTask.id), refreshed);
   await render({ ...nextTask, title: "Older route snapshot" });

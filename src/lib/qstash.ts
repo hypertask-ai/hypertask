@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { premergeStubEnabled } from "./premergeStubs";
 import { Client } from "@upstash/qstash";
 import { verifySignature } from "@upstash/qstash/nextjs";
 import type { NextApiHandler } from "next";
@@ -68,6 +70,7 @@ function assertQstashSigningEnv() {
 }
 
 export function assertQstashRuntimeEnv() {
+  premergeStubEnabled("queue");
   requireNonEmptyEnv("QSTASH_TOKEN");
   requireHttpUrlEnv("QSTASH_URL");
   qstashCallbackBase();
@@ -122,8 +125,20 @@ function extractMessageId(res: unknown): string | undefined {
   return (res as { messageId?: string })?.messageId;
 }
 
+const premergeJobKey = (path: string, jobId: string) => `premerge:qstash:${path}:${jobId}`;
+
+async function recordPremergeJob(opts: PublishOpts & { jobId?: string }) {
+  const messageId = `premerge-${randomUUID()}`;
+  const job = { path: opts.path, jobId: opts.jobId ?? messageId, notBefore: opts.notBefore ?? null, messageId };
+  const redis = await getRedis();
+  await redis.set(premergeJobKey(job.path, job.jobId), JSON.stringify(job), "EX", MSGID_TTL_SECONDS);
+  console.info("[premerge-queue] scheduled", JSON.stringify(job));
+  return { messageId };
+}
+
 /** Fire-and-forget publish of a delayed/immediate job to an internal queue route. */
 export async function publishJob(opts: PublishOpts) {
+  if (premergeStubEnabled("queue")) return recordPremergeJob(opts);
   const url = `${qstashCallbackBase()}${opts.path}`;
   return getQstashClient().publishJSON({
     url,
@@ -144,6 +159,7 @@ export async function publishJob(opts: PublishOpts) {
  * unchanged. Sequential reschedules still replace as before.
  */
 export async function scheduleJobById(opts: PublishOpts & { jobId: string }) {
+  if (premergeStubEnabled("queue")) return recordPremergeJob(opts);
   const redis = await getRedis();
   const lock = lockKey(opts.path, opts.jobId);
   const gotLock = await redis.set(lock, "1", "EX", SCHEDULE_LOCK_TTL_SECONDS, "NX");
@@ -168,6 +184,12 @@ export async function scheduleJobById(opts: PublishOpts & { jobId: string }) {
 
 /** Cancel a pending job previously scheduled with scheduleJobById (scoped to its queue path). No-op if already delivered. */
 export async function cancelJobById(jobId: string, path: string): Promise<void> {
+  if (premergeStubEnabled("queue")) {
+    const redis = await getRedis();
+    await redis.del(premergeJobKey(path, jobId));
+    console.info("[premerge-queue] cancelled", JSON.stringify({ path, jobId }));
+    return;
+  }
   const redis = await getRedis();
   const key = msgIdKey(path, jobId);
   const messageId = await redis.get(key);

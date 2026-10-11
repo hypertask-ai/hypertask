@@ -24,19 +24,23 @@ test("task detail ignores empty description drafts when choosing displayed conte
   );
 });
 
-test("task detail includes its always-mounted description editor in the route graph", () => {
+test("task detail starts loading its always-mounted description editor right after hydration", () => {
+  // HTPR-6047 put the editor in the route graph so it never waterfalls; HTPR-7091
+  // keeps that promise (the slot imports it as soon as it mounts, and again on any
+  // edit intent) while the static description paints first.
   const body = read(
     "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx",
   );
+  const slot = read(
+    "src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionEditorSlot.tsx",
+  );
 
-  assert.match(
-    body,
-    /import Tiptap from "@\/components\/RTE\/TipTapTaskDetail"/,
-  );
-  assert.doesNotMatch(
-    body,
-    /dynamic\(\(\) => import\("@\/components\/RTE\/TipTapTaskDetail"\)\)/,
-  );
+  assert.match(body, /<DescriptionEditorSlot/);
+  assert.doesNotMatch(body, /from "@\/components\/RTE\/TipTapTaskDetail"/);
+  assert.match(slot, /import\("@\/components\/RTE\/TipTapTaskDetail"\)/);
+  assert.match(slot, /const load = useCallback\(\(\) => \{\s*preloadDescriptionEditor\(\)/);
+  assert.match(slot, /useEffect\(\(\) => \{\s*if \(!lazy\) return;[\s\S]*load\(\);/);
+  assert.match(slot, /onPointerDownCapture: load, onFocusCapture: load, onKeyDownCapture: load/);
 });
 
 test("the meaningful-draft guard rejects the empty formats created for new tasks", () => {

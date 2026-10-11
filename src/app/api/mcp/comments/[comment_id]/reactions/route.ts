@@ -8,6 +8,8 @@ import {
   CommentReactionTarget,
   createCommentReactionHandler,
 } from '@/lib/mcp/comments/reactionHandler';
+import { persistCommentReactionWebhook, prepareCommentReactionWebhook } from '@/lib/agentWebhooks/commentReaction';
+import { publishAgentWebhookDeliveries } from '@/lib/agentWebhooks/outbox';
 import { broadcastTaskComment } from '@/lib/realtime/server';
 import checkReminderAndCreateNotification from '@/utils/controllers/notifications/creation-service/check-reminder_create-notification';
 import { sendDataNewCommentFCM } from '@/utils/controllers/FCM';
@@ -24,9 +26,15 @@ async function setReaction(
   target: CommentReactionTarget,
   userId: number,
   emoji: string,
-  active: boolean
+  active: boolean,
+  reactorIsAgent: boolean
 ): Promise<CommentReactionResult> {
-  return prisma.$transaction(async (tx) => {
+  // HTPR-7095: a newly added reaction and its agent webhook outbox row are written together, then published after commit.
+  const webhookInput = { commentId: target.commentId, reactorUserId: userId, reactorIsAgent, emoji, added: active };
+  // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
+  const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
+  let deliveryIds: string[] = [];
+  const result = await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(${REACTION_LOCK_CLASS}::int, ${target.commentId}::int)
     `;
@@ -82,8 +90,16 @@ async function setReaction(
       select: { id: true, emoji: true, userId: true },
       orderBy: { createdAt: 'asc' },
     });
+    if (preparedWebhook && !wasActive && active) {
+      deliveryIds = await persistCommentReactionWebhook(tx, preparedWebhook, webhookInput);
+    }
     return { changed: wasActive !== active, reaction, reactions };
   });
+  await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
+    // The outbox row is stored; the outbox retry delivers it later.
+    console.error('[comment-reaction] agent webhook publish failed', error);
+  });
+  return result;
 }
 
 async function notifyReaction(
@@ -167,6 +183,8 @@ export const POST = createCommentReactionHandler({
       taskUniqueIndex: comment.task.uniqueIndex,
     };
   },
-  setReaction,
-  afterChange: notifyReaction,
+  setReaction: (target, userId, emoji, active, ctx) =>
+    setReaction(target, userId, emoji, active, Boolean(ctx.agentId)),
+  afterChange: (target, userId, emoji, active, result) =>
+    notifyReaction(target, userId, emoji, active, result),
 });

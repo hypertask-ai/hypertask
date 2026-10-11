@@ -1,0 +1,12 @@
+[Unit]
+Description=Signed Hypertask agent webhooks to the live runner Claude sessions (YPER4-256)
+
+[Service]
+ExecStart=/usr/bin/python3 %h/.local/lib/hypertask/runner-pickup/runner-webhook
+Environment=HOME=%h
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
