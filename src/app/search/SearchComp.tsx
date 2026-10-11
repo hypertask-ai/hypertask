@@ -12,7 +12,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { useRouter, useSearchParams } from "next/navigation";
 import { buildFullScreenChatPath } from "@/lib/aiChatDisplayMode";
 import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG } from "@/lib/flags/keys";
-import { HTPR_6372_SEARCH_RANKING_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags/keys";
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
@@ -49,7 +49,6 @@ const SearchComp = ({
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const rankingEnabled = useFlag(HTPR_6372_SEARCH_RANKING_FLAG);
   const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
@@ -239,7 +238,6 @@ const SearchComp = ({
                       {typedTasks.length > 0 &&
                         typedTasks.map((item, index) => {
                           const showThisBoard =
-                            rankingEnabled &&
                             item.searchGroup === "current-board" &&
                             typedTasks[index - 1]?.searchGroup !==
                               "current-board" &&
@@ -247,7 +245,6 @@ const SearchComp = ({
                               (task) => task.searchGroup === "other"
                             );
                           const showOtherBoards =
-                            rankingEnabled &&
                             item.searchGroup === "other" &&
                             typedTasks[index - 1]?.searchGroup !== "other" &&
                             typedTasks
