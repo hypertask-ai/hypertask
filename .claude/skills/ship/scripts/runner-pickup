@@ -45,9 +45,10 @@ install_units() {
   tmp=$(mktemp "$settings.XXXXXX")
   jq --arg c "$hook_cmd" '
     def addhook(ev; arg; extra): .hooks[ev] = ((.hooks[ev] // []) | if any(.[]?.hooks[]?; .command == ($c + " " + arg)) then . else . + [{hooks:[{type:"command", command:($c + " " + arg)} + extra]}] end);
-    def wake: {asyncRewake: true, timeout: 86400};
+    def wake: {asyncRewake: true, timeout: 604800};
     .hooks = (.hooks // {}) | addhook("Stop"; "stop"; {}) | addhook("UserPromptSubmit"; "prompt"; {}) | addhook("PostToolUse"; "post"; {})
-      | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake) | addhook("UserPromptSubmit"; "wait"; wake)' "$settings" > "$tmp" \
+      | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake) | addhook("UserPromptSubmit"; "wait"; wake)
+      | .hooks |= with_entries(.value |= map(.hooks |= map(if .command == ($c + " wait") then .timeout = 604800 else . end)))' "$settings" > "$tmp" \
     && mv "$tmp" "$settings" || { rm -f "$tmp"; die "cannot update $settings"; }
   systemctl --user daemon-reload && systemctl --user enable --now "runner-pickup@$n.timer" || die "cannot enable runner-pickup@$n.timer"
   echo "runner-pickup: installed for RUNNER $n (timer runner-pickup@$n.timer, hooks in $settings)"
@@ -238,6 +239,9 @@ run_tick() {
   jq -n --argjson items "$merged" --argjson n "$n" --argjson now "$NOW" '{runner: $n, updatedAt: $now, items: $items}' > "$inbox.tmp" \
     && mv "$inbox.tmp" "$inbox"
   log "RUNNER $n: $(jq 'length' <<<"$merged") queued"
+  # Release the ticket lock first: the hook takes the events lock and then this lock, and backstop's delivery takes the
+  # events lock, so holding this one through backstop would invert the order.
+  flock -u 8; exec 8>&-
   backstop "$n" "$inbox_resp"
 }
 

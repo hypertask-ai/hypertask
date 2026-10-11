@@ -346,6 +346,41 @@ session runner "RUNNER 3" "$RUNPID"; echo '*' > "$T/inbox/events-hook.enabled"
 printf '{"ts":1,"text":"from the queue","id":"q-1"}\n{"ts":1,"text":"from the queue","id":"q-1"}\n' > "$T/inbox/runner-3.pending.jsonl"; inbox
 : > "$TMUX_LOG"; RUNNER_PICKUP_NOW=$(( $(date +%s) + 30 )) ./runner-pickup run 3 2>/dev/null
 eq "queued record retried into the inbox once, nothing typed" "$(jq -rs 'map(select(.id=="q-1"))|length' "$T/inbox/runner-3.events.jsonl")|$(sent)" "1|0"
+# ---- YPER4-284 review fixes ----
+# 1. A hooked session whose inbox cannot be written is never typed into: logged, exit 5, nothing typed or queued.
+session runner "RUNNER 3" "$RUNPID"; echo runner-3 > "$T/inbox/events-hook.enabled"; alive runner-3 "$RUNPID"; take 'RUNNER 3' "$RUNPID" >/dev/null
+rm -f "$T/tmux-called" "$T/inbox/runner-3.pending.jsonl"; : > "$TMUX_LOG"; n0=$(evs runner-3)
+rm -f "$T/inbox/runner-3.events.lock"; mkdir "$T/inbox/runner-3.events.lock"
+eq "inbox write fails on a hooked runner: exit 5, no typing, nothing queued" "$(idel 3 ev-fail 'cannot store')|$(cat "$T/tmux-called" 2>/dev/null)|$(sent)|$([ -s "$T/inbox/runner-3.pending.jsonl" ] && echo queued)|$(evs runner-3)" "5||0||$n0"
+grep -q 'could not write to the runner-3 inbox' "$T/inbox/typing-fallback.log" && ok "inbox failure logged" || bad "inbox failure not logged"
+echo "*" > "$T/inbox/events-hook.enabled"; session runner "RUNNER 5" 999999999; alive infra-manager "$INFRA2"; rm -f "$T/inbox/infra-manager.events.lock"; mkdir "$T/inbox/infra-manager.events.lock"
+eq "same on the INFRA MANAGER branch: exit 5, no typing" "$(idel 3 ev-fail2 'cannot store')|$(cat "$T/tmux-called" 2>/dev/null)|$(sent)" "5||0"
+rmdir "$T/inbox/runner-3.events.lock" "$T/inbox/infra-manager.events.lock"; session runner "RUNNER 3" "$RUNPID"
+eq "inbox writable again: delivered" "$(idel 3 ev-fail 'cannot store')|$(evs runner-3)" "0|$((n0 + 1))"
+# 5. Dedupe finds an id that is followed by other records.
+idel 3 ev-d2 'later one' >/dev/null; n1=$(evs runner-3)
+eq "dedupe: first id dropped though later records follow it" "$(idel 3 ev-fail 'cannot store')|$(idel 3 ev-d2 'later one')|$(evs runner-3)" "0|0|$n1"
+# 4. Wait mode keeps events pending when the wake output cannot be written.
+take 'RUNNER 3' "$RUNPID" >/dev/null; idel 3 ev-w1 'wake me' >/dev/null
+rm -f "$T/inbox/runner-3.waiter.$RUNPID.lock"
+SHIP_SESSION_NAME='RUNNER 3' SHIP_SESSION_PID=$RUNPID RUNNER_EVENTS_POLL=0.2 timeout 2 "$HOOK" wait </dev/null >/dev/null 2>/dev/full; rc=$?
+eq "wait mode, stderr write fails: no wake (not exit 2), event still pending" "$([ $rc = 2 ] && echo woke || echo quiet)|$(jq -s 'map(select(.delivered|not))|length' "$T/inbox/runner-3.events.jsonl")" "quiet|1"
+rm -f "$T/inbox/runner-3.waiter.$RUNPID.lock"
+SHIP_SESSION_NAME='RUNNER 3' SHIP_SESSION_PID=$RUNPID RUNNER_EVENTS_POLL=0.2 timeout 5 "$HOOK" wait </dev/null >/dev/null 2>"$T/wait.err"; rc=$?
+eq "wait mode, stderr fine: exit 2 once, event marked delivered" "$rc|$(grep -c 'wake me' "$T/wait.err")|$(jq -s 'map(select(.delivered|not))|length' "$T/inbox/runner-3.events.jsonl")" "2|1|0"
+rm -f "$T/inbox/runner-3.waiter.$RUNPID.lock"
+SHIP_SESSION_NAME='RUNNER 3' SHIP_SESSION_PID=$RUNPID RUNNER_EVENTS_POLL=0.2 RUNNER_EVENTS_WAIT_MAX=1 timeout 5 "$HOOK" wait </dev/null >/dev/null 2>&1; rc=$?
+eq "wait mode, empty inbox: never wakes, leaves at its limit and logs it" "$rc|$(grep -c 'reached its time limit' "$T/inbox/typing-fallback.log")" "0|1"
+# 2. Lock order: the hook (events lock, then ticket lock) and a pickup tick (backstop delivers under the events lock) overlap without a timeout.
+jq -n '{items:[{ticket:"X-1",title:"t",url:"u",delivered:false}]}' > "$T/inbox/runner-3.json"
+for i in 1 2 3 4 5 6; do idel 3 "lock-$i" "order $i" >/dev/null; done
+start=$(date +%s)
+( for i in 1 2 3 4 5 6; do echo '{}' | SHIP_SESSION_NAME='RUNNER 3' SHIP_SESSION_PID=$RUNPID "$HOOK" prompt >/dev/null; done ) &
+HB=$!
+( for i in 1 2 3; do RUNNER_PICKUP_NOW=$(( $(date +%s) + 60 * i )) ./runner-pickup run 3 >/dev/null 2>&1; done ) &
+PB=$!
+wait "$HB" "$PB"
+[ $(( $(date +%s) - start )) -lt 8 ] && ok "hook and pickup tick overlap without lock waits" || bad "lock inversion: overlap took too long"
 bash -n runner-webhook.test.sh 2>/dev/null; python3 -m py_compile runner-webhook && ok "runner-webhook compiles" || bad "py_compile"
 
 echo "$passes passed, $fails failed"

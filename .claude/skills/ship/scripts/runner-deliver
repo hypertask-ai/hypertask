@@ -6,7 +6,8 @@
 # Only a live session without the hook (its slot not listed in $STATE/events-hook.enabled, or no $STATE/<slot>.hook-alive
 # naming its pid) still gets the old tmux typing, and every such use is logged to $STATE/typing-fallback.log.
 # Falls back to the "INFRA MANAGER" session with a "No live Runner <n>:" prefix; if neither is live the message is
-# queued in $STATE/runner-<n>.pending.jsonl for the next runner-pickup tick. Exit 0 delivered, 3 queued, 2 usage.
+# queued in $STATE/runner-<n>.pending.jsonl for the next runner-pickup tick. Exit 0 delivered, 3 queued, 2 usage,
+# 5 a hooked session's inbox could not be written (never typed; the event stays undelivered).
 # $RUNNER_DELIVER_ID names the event: the same id never enters an inbox twice. Without it every call is a new event.
 # A pane whose input box holds Valentin's half-typed text is never typed into: the message is queued and retried (YPER4-274).
 set -uo pipefail
@@ -67,8 +68,16 @@ inbox_add() {
   line=$(jq -nc --arg id "$id" --arg t "$msg" --argjson ts "$(date +%s)" '{id:$id, ts:$ts, text:$t, delivered:false}') || return 1
   mkdir -p "$STATE" || return 1
   ( flock -w 10 9 || exit 1
-    if [ -f "$f" ] && jq -e --arg id "$id" 'select(.id == $id)' "$f" 2>/dev/null | grep -q .; then exit 0; fi
+    if [ -f "$f" ] && jq -s -e --arg id "$id" 'any(.[]; .id == $id)' "$f" >/dev/null 2>&1; then exit 0; fi
     { cat "$f" 2>/dev/null; printf '%s\n' "$line"; } > "$f.tmp.$$" && mv "$f.tmp.$$" "$f" ) 9>"$STATE/$slot.events.lock"
+}
+# inbox_add with a short retry. A hooked session is never typed into: a final failure is logged and ends the run (exit 5).
+inbox_add_or_die() {
+  local _i
+  for _i in 1 2 3; do inbox_add "$1" "$2" && return 0; sleep 0.3; done
+  mkdir -p "$STATE" 2>/dev/null
+  printf '%s could not write to the %s inbox: not typed, left undelivered for the pickup backstop\n' "$(date -Is)" "$1" >> "$FALLBACK_LOG" 2>/dev/null
+  echo "could not write to the $1 inbox" >&2; exit 5
 }
 fallback_log() { mkdir -p "$STATE" 2>/dev/null; printf '%s typed into %s (pane %s): no events hook in that session\n' "$(date -Is)" "$1" "$2" >> "$FALLBACK_LOG" 2>/dev/null; }
 # tmux pane whose pane_pid is the claude pid or one of its ancestors.
@@ -115,7 +124,7 @@ pane=""; prefix=""
 if [ "$session" != "INFRA MANAGER" ]; then
   if pid=$(find_pid "$session"); then
     slot=$(slot_for "$session")
-    if hook_alive "$slot" "$pid"; then inbox_add "$slot" "$text" && { no_waiter_log "$session" "$slot" "$pid"; echo "delivered to the $session inbox"; exit 0; }; fi
+    if hook_alive "$slot" "$pid"; then inbox_add_or_die "$slot" "$text"; no_waiter_log "$session" "$slot" "$pid"; echo "delivered to the $session inbox"; exit 0; fi
     pane=$(find_pane "$pid") || pane=""
   fi
   if [ -n "$pane" ]; then
@@ -127,7 +136,7 @@ if [ "$session" != "INFRA MANAGER" ]; then
 fi
 if [ "$fallback" = 1 ] || [ "$session" = "INFRA MANAGER" ]; then
   if pid=$(find_pid "INFRA MANAGER"); then
-    if hook_alive infra-manager "$pid"; then inbox_add infra-manager "$prefix$text" && { no_waiter_log "INFRA MANAGER" infra-manager "$pid"; echo "delivered to the INFRA MANAGER inbox"; exit 0; }; fi
+    if hook_alive infra-manager "$pid"; then inbox_add_or_die infra-manager "$prefix$text"; no_waiter_log "INFRA MANAGER" infra-manager "$pid"; echo "delivered to the INFRA MANAGER inbox"; exit 0; fi
     pane=$(find_pane "$pid") || pane=""
   fi
   if [ -n "$pane" ] && send "$pane" "$prefix$text"; then fallback_log "INFRA MANAGER" "$pane"; echo "delivered to INFRA MANAGER"; exit 0; fi

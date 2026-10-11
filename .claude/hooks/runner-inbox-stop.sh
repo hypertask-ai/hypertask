@@ -8,7 +8,8 @@
 #   wait   (Stop, SessionStart and UserPromptSubmit, with "asyncRewake": true): waits in the background until a board
 #          event lands in the inbox, prints it on stderr and exits 2, which wakes the idle session
 #          (code.claude.com/docs/en/hooks, asyncRewake). It never exits 2 without a new event, keeps one waiter per
-#          session, leaves quietly before its timeout and removes its lock file once the session is gone. The
+#          session, runs up to 7 days (the installer's hook timeout is
+#          604800 s; any later prompt, session start or turn end starts a new one), leaves quietly before its timeout and removes its lock file once the session is gone. The
 #          UserPromptSubmit entry restarts it after a turn stopped with Esc (no Stop hook runs then).
 # Board events come from runner-deliver through $STATE/<slot>.events.jsonl (slot runner-<n>, infra-manager, speed-runner).
 # Each event is handed over once: the hook writes its output first and only then marks the event delivered, so a crash
@@ -22,7 +23,7 @@ mode=${1:-stop}
 STATE=${RUNNER_INBOX_DIR:-$HOME/.local/state/runner-inbox}
 SESSIONS=${RUNNER_PICKUP_SESSIONS_DIR:-$HOME/.claude/sessions}
 POLL=${RUNNER_EVENTS_POLL:-2}
-WAIT_MAX=${RUNNER_EVENTS_WAIT_MAX:-85800}  # below the 86400 s timeout the installer sets, so the waiter is never cancelled
+WAIT_MAX=${RUNNER_EVENTS_WAIT_MAX:-604000} # below the 604800 s (7 day) timeout the installer sets, so the waiter is never cancelled
 KEEP=300                                   # delivered event ids kept for dedupe
 # Events per hook call stay under this many characters (Claude Code moves additionalContext over 10,000 to a file);
 # 600 are left for the new-ticket line.
@@ -95,11 +96,17 @@ if [ "$mode" = wait ]; then
   start=$(date +%s)
   while :; do
     if [[ $spid =~ ^[0-9]+$ ]] && ! kill -0 "$spid" 2>/dev/null; then rm -f "$STATE/$slot.waiter.$spid.lock"; exit 0; fi
-    [ $(( $(date +%s) - start )) -lt "$WAIT_MAX" ] || exit 0
+    if [ $(( $(date +%s) - start )) -ge "$WAIT_MAX" ]; then
+      # A hook cannot renew itself; the next prompt, session start or turn end starts a new waiter, and until then
+      # runner-deliver logs "no live waiter" for each event. Logged here so the gap is visible.
+      printf '%s waiter for %s (pid %s) reached its time limit: idle session not wakeable until its next activity\n' "$(date -Is)" "$slot" "$spid" >> "$STATE/typing-fallback.log" 2>/dev/null
+      exit 0
+    fi
     if [ -s "$events" ] && grep -q '"delivered":false' "$events" 2>/dev/null; then
       exec 8>"$STATE/$slot.events.lock"; flock -x 8
       events_take
-      if [ -n "$msg" ]; then printf '%s\n' "$msg" >&2; events_mark; exit 2; fi
+      # Mark and wake only when the write succeeded; otherwise the events stay pending.
+      if [ -n "$msg" ] && printf '%s\n' "$msg" >&2; then events_mark; exit 2; fi
       flock -u 8; exec 8>&-
     fi
     sleep "$POLL"

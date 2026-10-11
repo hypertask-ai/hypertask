@@ -182,7 +182,7 @@ mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > 
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
 eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,2,1,1"
-eq "the waiters run with asyncRewake and a day-long timeout (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,86400],[true,86400],[true,86400]]'
+eq "the waiters run with asyncRewake and a 7-day timeout (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,604800],[true,604800],[true,604800]]'
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 
