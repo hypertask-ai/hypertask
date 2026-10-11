@@ -12,7 +12,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG } from "@/lib/flags/keys";
+import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7130_CARD_TAP_NO_RELOAD_FLAG } from "@/lib/flags/keys";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
@@ -25,6 +25,8 @@ import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/clien
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
 import { getServerInboxDocument } from "@/lib/firstScreen/serverInboxDocument";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
+import { buildPendingTaskTapScript } from "@/lib/firstScreen/pendingTaskTap";
+import PendingTaskTapReplay from "@/lib/firstScreen/PendingTaskTapReplay";
 
 export async function generateViewport() {
   const device = await isMobileDevice(); // execute the function
@@ -59,6 +61,8 @@ export default async function RootLayout(
   // round trip solely to identify Apple devices.
   const [device, boardDocument, inboxDocument] = await Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
   const firstScreen = boardDocument ?? inboxDocument;
+  // HTPR-7130: server-painted board cards are links before hydration; hold an early tap instead of reloading.
+  const holdEarlyCardTap = boardDocument?.flags.values[HTPR_7130_CARD_TAP_NO_RELOAD_FLAG] === true;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
@@ -113,6 +117,9 @@ export default async function RootLayout(
             __html: "window.addEventListener('popstate',function(event){window.dispatchEvent(new CustomEvent('cached-task-detail-popstate',{detail:event}));},true);",
           }}
         />
+        {holdEarlyCardTap && (
+          <script id="ht-pending-task-tap" dangerouslySetInnerHTML={{ __html: buildPendingTaskTapScript() }} />
+        )}
         {firstScreen && ["amoled", "graphite", "porcelain"].includes(firstScreen.display.theme) && (
           <link rel="preload" href={IBM_PLEX_SANS_LATIN_FONT_HREF} as="font" type="font/woff2" crossOrigin="anonymous" />
         )}
@@ -183,6 +190,7 @@ export default async function RootLayout(
           authenticatedIsGuest={analyticsIsGuest}
         />
         <DeploySkewGuard />
+        {holdEarlyCardTap && <PendingTaskTapReplay />}
         <SpeedInsights />
         <Provider
           initialIsMobile={firstScreen ? (firstScreen.display as BoardDisplay).isMobile : device.isMobile}
