@@ -68,6 +68,9 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
   put("tests/helper.cjs", 'require("../src/lib/leaf");\n');
   put("tests/viahelper.test.cjs", 'require("./helper.cjs");\n');
   put("tests/dynamic.test.cjs", "const name = process.env.X;\nrequire(name);\n");
+  put("tests/mixed.test.cjs", 'require("./helper.cjs");\nrequire(process.env.X);\n');
+  put("src/lib/loader.ts", "export const load = (n: string) => require(n);\n");
+  put("tests/viaLoader.test.cjs", 'require("../src/lib/loader");\n');
   put("tests/test-inventory.test.cjs", "// guard\n");
   put("tests/demo-smoke.test.cjs", "// guard\n");
   put("tests/file-size-limit.test.cjs", "// guard\n");
@@ -79,6 +82,8 @@ test("the import graph follows aliases, relative hops, path.join and unresolvabl
     assert.ok(leaf.includes("tests/alias.test.cjs"), "alias + relative hop");
     assert.ok(leaf.includes("tests/viahelper.test.cjs"), "through a test helper");
     assert.ok(leaf.includes("tests/dynamic.test.cjs"), "unresolvable require widens");
+    assert.ok(leaf.includes("tests/mixed.test.cjs"), "static helper plus dynamic require");
+    assert.ok(leaf.includes("tests/viaLoader.test.cjs"), "dynamic require reached in src");
     assert.ok(!leaf.includes("tests/join.test.cjs"), "unrelated test is skipped");
     assert.ok(pick("src/lib/dir/index.ts").includes("tests/barrel.test.ts"), "directory index");
     assert.ok(pick("src/lib/other.ts").includes("tests/join.test.cjs"), "path.join with __dirname");

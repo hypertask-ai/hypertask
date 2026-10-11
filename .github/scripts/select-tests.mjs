@@ -151,9 +151,9 @@ function analyze(file) {
     else if (!lit.startsWith("@") && !lit.startsWith("/")) add(clean(lit), prefix);
   }
   for (const { ref, prefix } of joinRefs(text, dir)) add(ref, prefix);
-  // Loader shims call require(request) for a module named by a literal path
-  // elsewhere in the file; only a file with no path at all is unresolvable.
-  result.dynamic = result.refs.length === 0 && DYNAMIC_RE.test(text);
+  // Any non-literal require/import makes the file unresolvable, whatever else
+  // it resolves.
+  result.dynamic = DYNAMIC_RE.test(text);
   return result;
 }
 
@@ -170,7 +170,9 @@ function reaches(testFile, changed) {
   while (queue.length > 0) {
     const file = queue.pop();
     const { edges, refs, dynamic } = analyze(file);
-    if (dynamic && file.startsWith("tests/")) return null;
+    // Reaching any unresolvable file (test, helper, src, script) means the
+    // real dependencies are unknown, so the test always runs.
+    if (dynamic) return null;
     if (changed.includes(file)) hit.add(file);
     for (const ref of refs) {
       for (const c of changed) {
