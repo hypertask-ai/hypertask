@@ -20,6 +20,7 @@ import { getBoardDetail } from "@/lib/api/typedClient";
 import { discardEarlyBoardBootstrap } from "@/lib/boardBootstrap/earlyBoardBootstrap";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { pendingBoardMoves } from "@/utils/api/global/apiHelpers/moveTaskHandler";
 import { getBoardDocument } from "@/lib/firstScreen/boardDocument";
 import { MOBILE_BOARD_SWITCHER_QUERY_KEY } from "@/hooks/MultiPages/useGetAllAccessibleBoardList";
 import {
@@ -32,18 +33,38 @@ export const PROJECTS_ALL_QUERY_KEY = ["projectsAll"] as const;
 // HTPR-7129: a board load aborted by an unmount (the board remounting on its
 // way back from a ticket) reverts to the previous result, which still counts as
 // fresh, so the next mount never loads again and the card stays stale. Mark it
-// stale and reload it, unless a newer load is already running.
+// stale and reload it, unless a newer load is already running. A move or other
+// write may still be on its way to the server (a drag patches the board first),
+// so wait until no mutation or board move is pending and the cache is quiet for
+// RECOVERY_QUIET_MS; reloading earlier could snap a dragged card back.
+const RECOVERY_QUIET_MS = 300;
+const RECOVERY_MAX_CHECKS = 100;
 export const recoverAbortedProjectsAll = (
   queryClient: QueryClient,
-  schedule: (run: () => void) => void = (run) => { setTimeout(run, 0); },
-) =>
-  schedule(() => {
+  schedule: (run: () => void, ms: number) => void = (run, ms) => { setTimeout(run, ms); },
+  pendingMoves: () => number = pendingBoardMoves,
+) => {
+  let lastUpdate = 0;
+  let checks = 0;
+  const check = () => {
     const state = queryClient.getQueryState(PROJECTS_ALL_QUERY_KEY);
     if (!state || state.fetchStatus === "fetching") return;
+    const busy = queryClient.isMutating() > 0 || pendingMoves() > 0 || state.dataUpdatedAt !== lastUpdate;
+    lastUpdate = state.dataUpdatedAt;
+    if (busy) {
+      if (++checks < RECOVERY_MAX_CHECKS) schedule(check, RECOVERY_QUIET_MS);
+      return;
+    }
     void queryClient
       .invalidateQueries({ queryKey: PROJECTS_ALL_QUERY_KEY, exact: true, refetchType: "active" })
       .catch(() => undefined);
-  });
+  };
+  // Start after the cancelling write has patched the cache in the same task.
+  schedule(() => {
+    lastUpdate = queryClient.getQueryState(PROJECTS_ALL_QUERY_KEY)?.dataUpdatedAt ?? 0;
+    schedule(check, RECOVERY_QUIET_MS);
+  }, 0);
+};
 const PROJECTS_ALL_HYDRATING_QUERY_KEY = [
   ...PROJECTS_ALL_QUERY_KEY,
   "hydrating",

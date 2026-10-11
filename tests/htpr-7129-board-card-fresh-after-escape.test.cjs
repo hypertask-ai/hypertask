@@ -22,12 +22,12 @@ const KEY = "htpr-7129-board-card-fresh-after-escape";
 const load = (rel, mocks) => {
   const source = fs.readFileSync(path.join(root, rel), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, esModuleInterop: true } }).outputText;
-  const module = { exports: {} };
+  const loaded = { exports: {} };
   new Function("require", "module", "exports", compiled)((name) => {
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
-  }, module, module.exports);
-  return module.exports;
+  }, loaded, loaded.exports);
+  return loaded.exports;
 };
 
 test("flag is a bugfix, default Everyone, with release risk", () => {
@@ -151,28 +151,96 @@ test("the saved-snapshot hook reads the flag through a ref, so a late flag load 
 });
 
 // ---------------------------------------------------------------- part 2
-test("a board load aborted by a remount is reloaded once, never on top of a newer load", async () => {
+const recoveryHarness = () => {
   const { recoverAbortedProjectsAll, PROJECTS_ALL_QUERY_KEY } = jiti(path.join(root, "src/hooks/Homepage/useGetBoards.ts"));
   const client = new rq.QueryClient({ defaultOptions: { queries: { retry: false } } });
-  let loads = 0;
-  const queryFn = () => { loads++; return new Promise((resolve) => setTimeout(() => resolve({ load: loads }), 5)); };
+  const counter = { loads: 0 };
+  const queryFn = () => { counter.loads++; return new Promise((resolve) => setTimeout(() => resolve({ load: counter.loads }), 5)); };
   client.setQueryData(PROJECTS_ALL_QUERY_KEY, { load: 0 });
   const observer = new rq.QueryObserver(client, { queryKey: PROJECTS_ALL_QUERY_KEY, queryFn, staleTime: 60_000 });
   const unsubscribe = observer.subscribe(() => {});
+  const queue = [];
+  const delays = [];
+  const schedule = (fn, ms) => { queue.push(fn); delays.push(ms); };
+  const step = async () => { queue.shift()(); await new Promise((r) => setTimeout(r, 20)); };
+  const settle = () => new Promise((r) => setTimeout(r, 20));
+  return { recoverAbortedProjectsAll, PROJECTS_ALL_QUERY_KEY, client, counter, observer, queue, delays, schedule, step, settle, done: () => { unsubscribe(); client.clear(); } };
+};
+
+test("a board load aborted by a remount is reloaded once, never on top of a newer load", async () => {
+  const h = recoveryHarness();
   // Fresh data: mounting does not load. The reverted result after an abort looks just like this.
-  assert.equal(loads, 0);
-  let run;
-  recoverAbortedProjectsAll(client, (fn) => { run = fn; });
-  run();
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(loads, 1, "the aborted load is replaced by one reload");
-  assert.equal(client.getQueryData(PROJECTS_ALL_QUERY_KEY).load, 1);
-  void observer.refetch();
-  recoverAbortedProjectsAll(client, (fn) => { run = fn; });
-  run();
-  await new Promise((r) => setTimeout(r, 20));
-  assert.equal(loads, 2, "a load already running is left alone");
-  unsubscribe(); client.clear();
+  assert.equal(h.counter.loads, 0);
+  h.recoverAbortedProjectsAll(h.client, h.schedule, () => 0);
+  await h.step();
+  assert.equal(h.counter.loads, 0, "no reload in the same moment as the cancel");
+  await h.step();
+  assert.equal(h.counter.loads, 1, "the aborted load is replaced by one reload");
+  assert.equal(h.client.getQueryData(h.PROJECTS_ALL_QUERY_KEY).load, 1);
+  assert.deepEqual(h.delays, [0, 300], "the reload waits a 300 ms quiet window");
+  assert.equal(h.queue.length, 0);
+  void h.observer.refetch();
+  h.recoverAbortedProjectsAll(h.client, h.schedule, () => 0);
+  h.queue.shift()();
+  h.queue.shift()();
+  await h.settle();
+  assert.equal(h.counter.loads, 2, "a load already running is left alone");
+  assert.equal(h.queue.length, 0);
+  h.done();
+});
+
+test("a cancelled load while a move mutation is pending does not reload until the mutation settles", async () => {
+  const h = recoveryHarness();
+  let finish;
+  const move = new rq.MutationObserver(h.client, { mutationFn: () => new Promise((resolve) => { finish = resolve; }) });
+  void move.mutate();
+  assert.equal(h.client.isMutating(), 1);
+  h.recoverAbortedProjectsAll(h.client, h.schedule, () => 0);
+  await h.step();
+  await h.step();
+  await h.step();
+  assert.equal(h.counter.loads, 0, "no reload while the move is pending");
+  assert.equal(h.queue.length, 1, "the check is rescheduled");
+  finish({ ok: true });
+  await h.settle();
+  assert.equal(h.client.isMutating(), 0);
+  await h.step();
+  assert.equal(h.counter.loads, 1, "one reload once the move has settled");
+  assert.equal(h.queue.length, 0);
+  h.done();
+});
+
+test("a cancelled load while a board drag write is pending does not reload until it returns", async () => {
+  const h = recoveryHarness();
+  let pending = 1;
+  h.recoverAbortedProjectsAll(h.client, h.schedule, () => pending);
+  await h.step();
+  await h.step();
+  await h.step();
+  assert.equal(h.counter.loads, 0, "no reload while the drag write is pending");
+  pending = 0;
+  await h.step();
+  assert.equal(h.counter.loads, 1);
+  h.done();
+});
+
+test("a board cache write inside the quiet window postpones the reload", async () => {
+  const h = recoveryHarness();
+  h.recoverAbortedProjectsAll(h.client, h.schedule, () => 0);
+  await h.step();
+  await new Promise((r) => setTimeout(r, 2));
+  h.client.setQueryData(h.PROJECTS_ALL_QUERY_KEY, { load: 0, moved: true });
+  await h.step();
+  assert.equal(h.counter.loads, 0, "a fresh drag patch restarts the quiet window");
+  await h.step();
+  assert.equal(h.counter.loads, 1, "reload after a quiet window");
+  h.done();
+});
+
+test("board drag writes are counted while in flight", async () => {
+  const source = fs.readFileSync(path.join(root, "src/utils/api/global/apiHelpers/moveTaskHandler.ts"), "utf8");
+  assert.match(source, /pendingMoves \+= 1;\n  try \{/);
+  assert.match(source, /\} finally \{\n    pendingMoves -= 1;/);
 });
 
 test("only the flagged board query arms the abort recovery", () => {
