@@ -7,8 +7,10 @@ const ts = require('typescript')
 const jwt = require('jsonwebtoken')
 const { NextRequest, NextResponse } = require('next/server')
 const root = path.resolve(__dirname, '..')
+const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
+  stubs = { './dbTiming': dbTiming, ...stubs }
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -431,7 +433,7 @@ test('wrapped responses carry existing and diagnostic Server-Timing names withou
   const req = h.request()
   const response = await scaffold(h)(req)
   const header = response.headers.get('Server-Timing')
-  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d, wrap_flag;dur=\d+\.\d, total;dur=\d+\.\d, age;dur=\d+\.\d, inst;desc="[0-9a-f]{8}", region;desc="unknown"$/)
+  assert.match(header, /^auth;dur=\d+\.\d, auth_jwt;dur=\d+\.\d, auth_db;dur=\d+\.\d, ratelimit;dur=\d+\.\d, handler;dur=\d+\.\d, wrap_flag;dur=\d+\.\d, total;dur=\d+\.\d, age;dur=\d+\.\d, inst;desc="[0-9a-f]{8}", region;desc="unknown", db_q;dur=0\.0;desc="0", db_max;dur=0\.0, db_conn;dur=0\.0;desc="0", db_wait;dur=0\.0$/)
   const bearer = req.headers.get('Authorization').slice('Bearer '.length)
   const assertPrivate = value => {
     assert.equal(value.includes(bearer), false)
@@ -455,13 +457,13 @@ test('flag latency is included in total but not handler, and instance age advanc
   assert.equal(await run(h.request()), response)
   const first = response.headers.get('Server-Timing')
   const id = first.match(/inst;desc="([0-9a-f]{8})"/)[1]
-  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(first, `handler;dur=25.0, wrap_flag;dur=1100.0, total;dur=1125.0, age;dur=1175.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
   assert.equal(response.status, 201)
   assert.equal(response.headers.get('X-Fixture'), 'kept')
   assert.deepEqual(await response.json(), { unchanged: true })
   now += 10
   const second = await h.wrapper.wrapMcpRoute(async () => { now += 5; return NextResponse.json({}) })(h.request())
-  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1"`)
+  assert.equal(second.headers.get('Server-Timing'), `handler;dur=5.0, wrap_flag;dur=0.0, total;dur=5.0, age;dur=1190.0, inst;desc="${id}", region;desc="iad1", db_q;dur=0.0;desc="0", db_max;dur=0.0, db_conn;dur=0.0;desc="0", db_wait;dur=0.0`)
   assert.equal(h.counts().flagCalls, 1)
 })
 
@@ -486,7 +488,7 @@ test('region description escapes quotes and backslashes without injecting timing
   const h = harness({ env: { VERCEL_REGION: 'iad1"\\, injected;dur=9\r\n\u2603' } })
   const response = await h.wrapper.wrapMcpRoute(async () => NextResponse.json({}))(h.request())
   const header = response.headers.get('Server-Timing')
-  assert.ok(header.endsWith('region;desc="iad1\\"\\\\, injected;dur=9"'))
+  assert.ok(header.includes('region;desc="iad1\\"\\\\, injected;dur=9"'))
   assert.doesNotMatch(header, /[\r\n\u2603]/)
 })
 

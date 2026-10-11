@@ -12,6 +12,7 @@ import type { McpAuthContext, McpAuthFailureSnapshot, McpAuthTimings, ValidateMc
 import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
+import { createMcpDbTiming, mcpDbTimings, mcpDbTimingHeader } from './dbTiming'
 
 const instanceStarted = performance.now()
 const instanceId = randomBytes(4).toString('hex')
@@ -114,10 +115,11 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
       },
     })
     scope.request = wrappedRequest
-    const result = await routeScopes.run(scope, () => legacy(wrappedRequest, ...args))
+    const dbTiming = createMcpDbTiming()
+    const result = await mcpDbTimings.run(dbTiming, () => routeScopes.run(scope, () => legacy(wrappedRequest, ...args)))
     try {
       if (result instanceof Response) {
-        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()))
+        result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()) + `, ${mcpDbTimingHeader(dbTiming)}`)
       }
     } catch {
       // Immutable response headers: skip the measurement, never fail the call.
