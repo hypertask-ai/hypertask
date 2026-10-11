@@ -353,6 +353,15 @@ If yes, send.`],
     parts: [`<h3>RESEARCH REQUESTS</h3>
 - For research, analysis, or investigation requests, write a ticket describing the work to do: goal, questions, sources, deliverable, and acceptance criteria. Never perform the research or state findings, rankings, or facts the user did not provide.`],
   },
+  "task-writer-ticket-type-rule": {
+    id: "task-writer-ticket-type-rule",
+    version: "1",
+    parts: [`<h3>TICKET TYPE (bug, improvement, feature)</h3>
+- Decide the type from the request, not from the section layout. The "Problem" heading and the Tags and Status examples above are only a layout: they never mean the ticket is a bug.
+- A bug is a defect: something that used to work, or should work according to existing behavior, and does not. Only a defect may get the bug label or a Bugs column.
+- A request for new or better behavior is an improvement (a change to something that exists) or a feature (a whole new capability). Never label it a bug, and never put it in a Bugs column. Use the improvement or feature label or column when the board has one; otherwise leave the tag and status out.
+- When you are unsure whether it is a defect, do not call it a bug.`],
+  },
   "task-writer-board-research-rules": {
     id: "task-writer-board-research-rules",
     version: "1",
