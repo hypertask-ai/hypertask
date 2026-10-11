@@ -51,8 +51,38 @@ function parseArgs(argv) {
 // failure) must fail the flow, not silently swap in a different page.
 const DNS_OR_CONNECTION_ERROR = /ERR_NAME_NOT_RESOLVED|ERR_CONNECTION_REFUSED/;
 
+// HTPR-7063: Midscene's aiInput sometimes loses the start of the text when the chat
+// composer re-renders while typing. Type with the keyboard instead, read the
+// text back, and type again until it matches.
+const normalizeText = (text) => String(text || '').replace(/\s+/g, ' ').trim();
+const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function fillVerified(page, selector, value) {
+  let lastSeen = '';
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const handle = await page.waitForSelector(selector, { visible: true, timeout: 30_000 });
+    // Settle: the same DOM node must survive a short pause (no re-mount).
+    await handle.evaluate((el) => { el.dataset.fillMarker = 'settle'; });
+    await pause(750);
+    const stable = await handle.evaluate((el) => el.isConnected && el.dataset.fillMarker === 'settle');
+    if (!stable) continue;
+    await handle.click();
+    await page.keyboard.down('Control');
+    await page.keyboard.press('KeyA');
+    await page.keyboard.up('Control');
+    await page.keyboard.press('Backspace');
+    await page.keyboard.type(value, { delay: 15 });
+    await pause(300);
+    lastSeen = await page.$eval(selector, (el) => (typeof el.value === 'string' ? el.value : el.textContent) || '');
+    if (normalizeText(lastSeen) === normalizeText(value)) return `typed on attempt ${attempt}`;
+  }
+  throw new Error(`fillVerified: ${selector} did not hold the full text after 3 attempts (last seen: ${JSON.stringify(normalizeText(lastSeen))})`);
+}
+
 async function runStep(page, agent, step, fixture) {
   switch (step.action) {
+    case 'fillVerified':
+      return fillVerified(page, step.arg, step.value);
     case 'click':
       if (step.optional && !(await page.$(step.arg))) return;
       await page.waitForSelector(step.arg, { visible: true, timeout: 30_000 });
