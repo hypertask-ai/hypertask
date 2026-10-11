@@ -139,15 +139,14 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
         sec.kill()
 
     # 5c. Premerge containers (taken over from premerge-local-sweep): only well-named ones older than 12 h go.
-    young = time.strftime('%Y-%m-%dT%H:%M:%S.123456789Z', time.gmtime())
+    young = time.strftime('%Y-%m-%d %H:%M:%S +0000 UTC', time.gmtime())
     docker = t / 'docker'
+    tab = '\t'
     docker.write_text(f'''#!/bin/sh
 case "$1" in
-  ps) printf '%s\\n' ht-premerge-0123456789abcdef-postgres ht-premerge-fedcba9876543210-redis ht-premerge-bad-postgres ;;
-  inspect) case "$4" in
-    *0123456789abcdef*) echo "id-old 2026-01-01T00:00:00.123456789Z" ;;
-    *fedcba9876543210*) echo "id-young {young}" ;;
-    *) echo "id-bad 2026-01-01T00:00:00Z" ;; esac ;;
+  ps) printf '%s\\n' 'id-old{tab}ht-premerge-0123456789abcdef-postgres{tab}2026-01-01 00:00:00 +0200 CEST' \\
+        'id-young{tab}ht-premerge-fedcba9876543210-redis{tab}{young}' \\
+        'id-bad{tab}ht-premerge-bad-postgres{tab}2026-01-01 00:00:00 +0000 UTC' ;;
   rm) echo "$4" >> {t}/docker.rm ;;
 esac
 ''')

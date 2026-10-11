@@ -266,31 +266,26 @@ def notify(message):
         print(f'{len(left)} warning(s) not sent, kept in {pending}', file=sys.stderr)
 
 
-def stale_containers(deadline=None):
-    """[(id, name, age seconds)] of ht-premerge-* containers older than CONTAINER_MAX_AGE (from premerge-local-sweep)."""
+def stale_containers():
+    """[(id, name, age seconds)] of ht-premerge-* containers older than CONTAINER_MAX_AGE, from one docker ps call."""
     if not shutil.which(DOCKER):
         return []
     try:
-        names = subprocess.run([DOCKER, 'ps', '-a', '--filter', 'name=ht-premerge-', '--format', '{{.Names}}'],
-                               capture_output=True, text=True, timeout=10).stdout.split()
+        rows = subprocess.run([DOCKER, 'ps', '-a', '--filter', 'name=ht-premerge-',
+                               '--format', '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}'],
+                              capture_output=True, text=True, timeout=10).stdout.splitlines()
     except (OSError, subprocess.TimeoutExpired):
         return []
     out = []
-    for name in names:
-        if deadline and time.time() > deadline:
-            break
-        if not re.fullmatch(r'ht-premerge-[0-9a-f]{16}-(postgres|redis|soketi)', name):
-            continue
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for row in rows:
         try:
-            r = subprocess.run([DOCKER, 'inspect', '--format', '{{.Id}} {{.Created}}', name],
-                               capture_output=True, text=True, timeout=10)
-            cid, created = r.stdout.split()
-            # Docker prints nanoseconds; Python reads at most microseconds.
-            created = re.sub(r'(\.\d{6})\d*', r'\1', created).replace('Z', '+00:00')
-            age = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime.fromisoformat(created)).total_seconds()
-        except (OSError, ValueError, subprocess.TimeoutExpired):
+            cid, name, created = row.split('\t')
+            # "2026-10-11 12:03:45 +0200 CEST": the zone name after the offset is dropped.
+            age = (now - datetime.datetime.strptime(' '.join(created.split()[:3]), '%Y-%m-%d %H:%M:%S %z')).total_seconds()
+        except ValueError:
             continue
-        if age > CONTAINER_MAX_AGE:
+        if re.fullmatch(r'ht-premerge-[0-9a-f]{16}-(postgres|redis|soketi)', name) and age > CONTAINER_MAX_AGE:
             out.append((cid, name, age))
     return out
 
@@ -337,8 +332,7 @@ def sweep(dry_run=False):
             lines.append(f"{h['kind']} pid {h['pid']} ({h['reason']}) in {h['cwd'] or '?'}: {short(h['argv'], 120)}")
             print(f"stopped {lines[-1]}")
         # Then containers, inside a budget that leaves room for the warning within the unit's 2 minutes.
-        budget = time.time() + 45
-        removed = remove_containers(stale_containers(budget), budget)
+        removed = remove_containers(stale_containers(), time.time() + 45)
         for line in removed:
             log.write(json.dumps({'ts': now, 'kind': 'container', 'reason': line}) + '\n')
     if not hits and not removed:
