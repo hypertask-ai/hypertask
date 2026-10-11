@@ -160,6 +160,16 @@ start=$(date +%s%N); wait_hook 'RUNNER 3' "$LIVE" 3 >/dev/null 2>&1; rc=$?
 pkill -P "$W1" 2>/dev/null; kill "$W1" 2>/dev/null; wait "$W1" 2>/dev/null  # the hook is a child of the background pipeline
 start=$(date +%s); wait_hook 'RUNNER 3' 999999999 30 >/dev/null 2>&1; rc=$?
 [ "$rc" = 0 ] && [ $(( $(date +%s) - start )) -lt 3 ] && ok "waiter of a dead session leaves without a wake" || bad "dead-session waiter rc=$rc"
+[ ! -e "$RUNNER_INBOX_DIR/runner-3.waiter.999999999.lock" ] && ok "a dead session's waiter removes its lock file" || bad "dead-session waiter lock left behind"
+# A backlog over 9,000 characters goes out in several calls, whole events, each exactly once.
+pad=$(printf 'x%.0s' $(seq 500)); for i in $(seq 1 30); do ev runner-3 "big-$i" "event-$i $pad"; done
+c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx); c3=$(hook 'RUNNER 3' "$pl" post | ctx)
+[ "${#c1}" -le 9000 ] && [ "${#c2}" -le 9000 ] && [ -n "$c2" ] && ok "backlog split: each call under 9,000 characters (${#c1}, ${#c2})" || bad "backlog sizes ${#c1} ${#c2}"
+eq "every backlog event handed over exactly once, in order, nothing left" "$(printf '%s\n%s\n' "$c1" "$c2" | grep -o 'event-[0-9]*' | tr '\n' ' ')|$c3|$(undelivered runner-3)" "$(for i in $(seq 1 30); do printf 'event-%s ' "$i"; done)||0"
+ev runner-3 huge "huge-start $(printf 'y%.0s' $(seq 12000)) huge-end"; ev runner-3 after-huge 'small after huge'
+c1=$(hook 'RUNNER 3' "$pl" post | ctx); c2=$(hook 'RUNNER 3' "$pl" post | ctx)
+case "$c1" in *huge-start*'[cut by the events hook: this event was '*' characters]') [ "${#c1}" -le 9000 ] && ok "one event over the limit is cut with a note (${#c1})" || bad "cut event too long ${#c1}";; *) bad "huge event: ${c1:0:200}";; esac
+eq "the event after it comes on the next call" "$(tail -1 <<<"$c2")|$(undelivered runner-3)" "1) small after huge|0"
 eq "waiter ignores a non-runner session" "$(ev runner-3 w2 x; wait_hook 'HTPR-9' "$LIVE" 2>&1; echo "rc=$?")|$(undelivered runner-3)" "rc=0|1"
 kill "$LIVE" 2>/dev/null
 # The new-ticket handover keeps its gate: one undelivered ticket, an unmet gate, only events are handed over.
@@ -171,8 +181,8 @@ case "$(jq -r .reason <<<"$out")" in *'New ticket'*) bad "ticket handed over des
 mkdir -p "$T/bin"; printf '#!/bin/sh\necho "$@" >> "%s/systemctl.log"\n' "$T" > "$T/bin/systemctl"; chmod +x "$T/bin/systemctl"
 export RUNNER_PICKUP_UNIT_DIR=$T/units RUNNER_PICKUP_SETTINGS=$T/settings.json
 for i in 1 2; do PATH="$T/bin:$PATH" "$SCRIPT" install 3 >/dev/null 2>&1; done
-eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,1,1,1"
-eq "the waiters run with asyncRewake and a day-long timeout" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,86400],[true,86400]]'
+eq "install registers each hook once" "$(jq -r '[(.hooks.Stop|length), (.hooks.UserPromptSubmit|length), (.hooks.PostToolUse|length), (.hooks.SessionStart|length)]|join(",")' "$T/settings.json")" "2,2,1,1"
+eq "the waiters run with asyncRewake and a day-long timeout (Stop, SessionStart, UserPromptSubmit)" "$(jq -c '[.hooks.Stop[], .hooks.SessionStart[], .hooks.UserPromptSubmit[] | .hooks[] | select(.command|endswith(" wait")) | [.asyncRewake, .timeout]]' "$T/settings.json")" '[[true,86400],[true,86400],[true,86400]]'
 [ -f "$T/units/runner-pickup@.timer" ] && [ -x "$HOME/.local/lib/hypertask/runner-pickup/runner-inbox-stop.sh" ] && ok "install copies units and hook" || bad "install files"
 grep -q 'enable --now runner-pickup@3.timer' "$T/systemctl.log" && ok "install enables the timer" || bad "enable"
 

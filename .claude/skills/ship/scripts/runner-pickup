@@ -37,7 +37,8 @@ install_units() {
   install -m 0755 "$repo/hooks/runner-inbox-stop.sh" "$lib/runner-inbox-stop.sh"
   install -m 0644 "$repo/systemd/runner-pickup@.service" "$repo/systemd/runner-pickup@.timer" "$unit_dir/"
   # Register the hooks in the runner checkout's untracked local settings (idempotent). YPER4-284: PostToolUse hands board
-  # events over between tool calls; the "wait" entries run in the background (asyncRewake) and wake an idle session.
+  # events over between tool calls; the "wait" entries run in the background (asyncRewake) and wake an idle session;
+  # the UserPromptSubmit "wait" restarts the waiter after a turn stopped with Esc (no Stop hook runs then).
   # Registering them changes nothing until the session's slot is listed in $STATE/events-hook.enabled.
   hook_cmd="$lib/runner-inbox-stop.sh"
   [ -s "$settings" ] || { mkdir -p "$(dirname "$settings")"; echo '{}' > "$settings"; }
@@ -46,7 +47,7 @@ install_units() {
     def addhook(ev; arg; extra): .hooks[ev] = ((.hooks[ev] // []) | if any(.[]?.hooks[]?; .command == ($c + " " + arg)) then . else . + [{hooks:[{type:"command", command:($c + " " + arg)} + extra]}] end);
     def wake: {asyncRewake: true, timeout: 86400};
     .hooks = (.hooks // {}) | addhook("Stop"; "stop"; {}) | addhook("UserPromptSubmit"; "prompt"; {}) | addhook("PostToolUse"; "post"; {})
-      | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake)' "$settings" > "$tmp" \
+      | addhook("Stop"; "wait"; wake) | addhook("SessionStart"; "wait"; wake) | addhook("UserPromptSubmit"; "wait"; wake)' "$settings" > "$tmp" \
     && mv "$tmp" "$settings" || { rm -f "$tmp"; die "cannot update $settings"; }
   systemctl --user daemon-reload && systemctl --user enable --now "runner-pickup@$n.timer" || die "cannot enable runner-pickup@$n.timer"
   echo "runner-pickup: installed for RUNNER $n (timer runner-pickup@$n.timer, hooks in $settings)"

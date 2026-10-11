@@ -320,11 +320,13 @@ eq "webhook comment accepted" "$(post 3 comment.created d-284a "$(comment 'via t
 for _ in $(seq 50); do [ "$(jq -s 'map(select(.delivered|not))|length' "$T/inbox/runner-3.events.jsonl")" = 1 ] && break; sleep 0.1; done
 eq "webhook event lands in the inbox under its comment id, nothing typed" "$(jq -rs 'map(select(.delivered|not))[0].id' "$T/inbox/runner-3.events.jsonl")|$(sent)" "comment:2840|0"
 case "$(take 'RUNNER 3' "$RUNPID")" in *'1) Board event for Runner 3: Valentin Yeo commented on'*'"via the hook"'*) ok "hook output carries the webhook message";; *) bad "webhook via hook";; esac
-# Hook alive but nothing would hand the event over (no waiter, last hook run long ago): typed and logged, not stranded.
-alive runner-3 "$RUNPID" 1; : > "$TMUX_LOG"; n0=$(evs runner-3)
-eq "stale hook, no waiter: typed, not left in the inbox" "$(printf 'nobody reads' | RUNNER_DELIVER_ID=ev-s1 ./runner-deliver 3 >/dev/null; echo $?)|$(sent)|$(evs runner-3)" "0|1|$n0"
+# Hook installed but no waiter running (a day idle, or a turn stopped with Esc): inbox, never typed, one log line.
+alive runner-3 "$RUNPID" 1; : > "$TMUX_LOG"; rm -f "$T/tmux-called" "$T/inbox/runner-3.waiter.$RUNPID.lock"; n0=$(evs runner-3); l0=$(grep -c 'no live waiter' "$T/inbox/typing-fallback.log" 2>/dev/null || true)
+eq "hook installed, no waiter: inbox, no tmux" "$(printf 'nobody waits' | RUNNER_DELIVER_ID=ev-s1 ./runner-deliver 3 >/dev/null; echo $?)|$(sent)|$(evs runner-3)" "0|0|$((n0 + 1))"
+eq "and the no-waiter case is logged once" "$(grep -c 'queued in the RUNNER 3 inbox with no live waiter' "$T/inbox/typing-fallback.log")" "$((l0 + 1))"
+[ ! -e "$T/inbox/runner-3.waiter.$RUNPID.lock" ] && ok "the probe leaves no lock file behind" || bad "probe created a lock file"
 ( exec 7>>"$T/inbox/runner-3.waiter.$RUNPID.lock"; flock 7; sleep 3 ) & WL=$!; sleep 0.3; : > "$TMUX_LOG"
-eq "stale hook but a waiter holds its lock: inbox, nothing typed" "$(idel 3 ev-s2 'waiter reads')|$(sent)|$(evs runner-3)" "0|0|$((n0 + 1))"
+eq "a waiter holds its lock: inbox, nothing typed, nothing logged" "$(idel 3 ev-s2 'waiter reads')|$(sent)|$(evs runner-3)|$(grep -c 'no live waiter' "$T/inbox/typing-fallback.log")" "0|0|$((n0 + 2))|$((l0 + 1))"
 kill "$WL" 2>/dev/null; wait "$WL" 2>/dev/null
 take 'RUNNER 3' "$RUNPID" >/dev/null; alive runner-3 "$RUNPID"
 # Fallback typing only without the hook, and every use is logged.
@@ -333,7 +335,7 @@ eq "stale marker (other pid): typed as before" "$(printf 'old way' | RUNNER_DELI
 grep -q 'typed into RUNNER 3 (pane %1): no events hook' "$T/inbox/typing-fallback.log" && ok "fallback typing logged with time and target" || bad "fallback log"
 alive runner-3 "$RUNPID"; echo infra-manager > "$T/inbox/events-hook.enabled"; : > "$TMUX_LOG"
 eq "slot not enabled: typed as before" "$(printf 'not enabled' | ./runner-deliver 3 >/dev/null; echo $?)|$(sent)" "0|1"
-eq "three fallback lines logged" "$(grep -c 'RUNNER 3' "$T/inbox/typing-fallback.log")" "3"
+eq "two typed lines logged" "$(grep -c 'typed into RUNNER 3' "$T/inbox/typing-fallback.log")" "2"
 # No live runner: INFRA MANAGER's inbox gets it with the prefix when its hook is alive.
 sleep 300 & INFRA2=$!; PIDS="$PIDS $INFRA2"; session infra "INFRA MANAGER" "$INFRA2"; alive infra-manager "$INFRA2"
 session runner "RUNNER 5" 999999999; rm -f "$T/tmux-called"

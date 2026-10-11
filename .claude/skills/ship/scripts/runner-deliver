@@ -44,19 +44,21 @@ find_pid() {
 }
 # Inbox slot for a session name: RUNNER <n> -> runner-<n>, INFRA MANAGER -> infra-manager, SPEED RUNNER -> speed-runner.
 slot_for() { case "$1" in "RUNNER "*) echo "runner-${1#RUNNER }" ;; *) local s=${1,,}; echo "${s// /-}" ;; esac; }
-# True when the session with pid $2 runs the events hook: its slot is enabled, its hook-alive marker names that pid, and
-# something will hand the event over: a waiter holds its lock (idle session) or the hook ran in the last $FRESH seconds
-# (busy session). Otherwise (waiter gone after a day idle, or a turn stopped with Esc, which runs no Stop hook) the
-# inbox would sit unread, so the caller types instead and logs it.
-FRESH=${RUNNER_DELIVER_HOOK_FRESH:-600}
+# True when the session with pid $2 runs the events hook: its slot is enabled and its hook-alive marker names that pid.
+# Such a session is never typed into, waiter or not.
 hook_alive() {
-  local enabled=$STATE/events-hook.enabled mpid mts
+  local enabled=$STATE/events-hook.enabled mpid
   [ -f "$enabled" ] && grep -qxE "\*|$1" "$enabled" 2>/dev/null || return 1
   mpid=$(jq -r '.pid // empty' "$STATE/$1.hook-alive" 2>/dev/null) || return 1
-  [ -n "$mpid" ] && [ "$mpid" = "$2" ] || return 1
-  ( flock -n 9 ) 9>>"$STATE/$1.waiter.$2.lock" 2>/dev/null || return 0
-  mts=$(jq -r '.ts // 0' "$STATE/$1.hook-alive" 2>/dev/null)
-  [[ $mts =~ ^[0-9]+$ ]] && [ $(( $(date +%s) - mts )) -le "$FRESH" ]
+  [ -n "$mpid" ] && [ "$mpid" = "$2" ]
+}
+# Logs (never types) when an event enters the inbox of session $1 (slot $2, pid $3) while no waiter holds its lock:
+# it is handed over at that session's next prompt, tool call or turn end. The probe holds the lock for an instant only;
+# a starting waiter waits 0.5 s for it.
+no_waiter_log() {
+  local lock=$STATE/$2.waiter.$3.lock
+  if [ -e "$lock" ]; then ( flock -n 9 ) 9<"$lock" 2>/dev/null || return 0; fi
+  printf '%s queued in the %s inbox with no live waiter: handed over at its next activity\n' "$(date -Is)" "$1" >> "$FALLBACK_LOG" 2>/dev/null
 }
 # Append {id, ts, text, delivered:false} to the slot's inbox under its lock unless that id is already there (temp file + rename).
 inbox_add() {
@@ -68,7 +70,7 @@ inbox_add() {
     if [ -f "$f" ] && jq -e --arg id "$id" 'select(.id == $id)' "$f" 2>/dev/null | grep -q .; then exit 0; fi
     { cat "$f" 2>/dev/null; printf '%s\n' "$line"; } > "$f.tmp.$$" && mv "$f.tmp.$$" "$f" ) 9>"$STATE/$slot.events.lock"
 }
-fallback_log() { mkdir -p "$STATE" 2>/dev/null; printf '%s typed into %s (pane %s): no events hook or nothing to hand it over in that session\n' "$(date -Is)" "$1" "$2" >> "$FALLBACK_LOG" 2>/dev/null; }
+fallback_log() { mkdir -p "$STATE" 2>/dev/null; printf '%s typed into %s (pane %s): no events hook in that session\n' "$(date -Is)" "$1" "$2" >> "$FALLBACK_LOG" 2>/dev/null; }
 # tmux pane whose pane_pid is the claude pid or one of its ancestors.
 find_pane() {
   local pid=$1 panes hit
@@ -113,7 +115,7 @@ pane=""; prefix=""
 if [ "$session" != "INFRA MANAGER" ]; then
   if pid=$(find_pid "$session"); then
     slot=$(slot_for "$session")
-    if hook_alive "$slot" "$pid"; then inbox_add "$slot" "$text" && { echo "delivered to the $session inbox"; exit 0; }; fi
+    if hook_alive "$slot" "$pid"; then inbox_add "$slot" "$text" && { no_waiter_log "$session" "$slot" "$pid"; echo "delivered to the $session inbox"; exit 0; }; fi
     pane=$(find_pane "$pid") || pane=""
   fi
   if [ -n "$pane" ]; then
@@ -125,7 +127,7 @@ if [ "$session" != "INFRA MANAGER" ]; then
 fi
 if [ "$fallback" = 1 ] || [ "$session" = "INFRA MANAGER" ]; then
   if pid=$(find_pid "INFRA MANAGER"); then
-    if hook_alive infra-manager "$pid"; then inbox_add infra-manager "$prefix$text" && { echo "delivered to the INFRA MANAGER inbox"; exit 0; }; fi
+    if hook_alive infra-manager "$pid"; then inbox_add infra-manager "$prefix$text" && { no_waiter_log "INFRA MANAGER" infra-manager "$pid"; echo "delivered to the INFRA MANAGER inbox"; exit 0; }; fi
     pane=$(find_pane "$pid") || pane=""
   fi
   if [ -n "$pane" ] && send "$pane" "$prefix$text"; then fallback_log "INFRA MANAGER" "$pane"; echo "delivered to INFRA MANAGER"; exit 0; fi
