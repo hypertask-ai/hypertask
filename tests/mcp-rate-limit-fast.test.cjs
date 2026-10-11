@@ -493,46 +493,30 @@ for (const waitFor of ['connection', 'increment']) {
   })
 }
 
-test('bounded map evicts reservations conservatively and never stores raw tokens', async () => {
+test('a full map never evicts prepaid entries and never stores raw tokens', async () => {
   const h = harness()
   await h.call('fixture-token-0')
   await h.call('fixture-token-0')
-  for (let i = 1; i < 1_001; i++) await h.call(`fixture-token-${i}`)
+  const prepaid = h.rate.__counts.get(h.increments[0].key)
+  assert.deepEqual(prepaid, { count: 11, reserved: 9, leasing: false })
+  for (let i = 1; i < 1_000; i++) await h.call(`fixture-token-${i}`)
   assert.equal(h.rate.__counts.size, 1_000)
   for (const key of h.rate.__counts.keys()) assert.match(key, /^mcp:ratelimit:[a-f0-9]{64}:120$/)
-  h.hold()
-  const evicted = await observe(h.call('fixture-token-0'))
-  assert.equal(evicted.settled, false)
-  assert.equal(h.increments.at(-1).method, 'incr')
-  h.release()
-  await evicted.result
-  assert.equal(h.rate.__counts.size, 1_000)
+  await h.call('fixture-overflow')
+  assert.equal(h.rate.__counts.size, 1_000, 'overflow key is not tracked')
+  assert.equal(h.rate.__counts.get(h.increments[0].key), prepaid, 'prepaid entry kept')
+  const used = h.increments.length
+  assert.equal(await h.call('fixture-token-0'), null)
+  assert.equal(h.increments.length, used, 'kept prepaid slot needs no Redis call')
 })
 
-test('an evicted in-flight lease cannot attach reservations to a replacement entry', async () => {
+test('an untracked key on a full map always counts singly and never leases', async () => {
   const h = harness()
   for (let i = 0; i < 1_000; i++) await h.call(`fixture-token-${i}`)
-  const key = h.increments[0].key
-  const original = h.rate.__counts.get(key)
-  h.hold()
-  const lease = await observe(h.call('fixture-token-0'))
-  assert.equal(original.leasing, true)
-  const overflow = await observe(h.call('fixture-overflow'))
-  h.release(1)
-  assert.equal(await overflow.result, null)
-  assert.equal(h.rate.__counts.has(key), false)
-  const replacement = await observe(h.call('fixture-token-0'))
-  assert.equal(h.increments.at(-1).method, 'incr')
-  h.release(1)
-  assert.equal(await replacement.result, null)
-  const entry = h.rate.__counts.get(key)
-  h.release()
-  assert.equal(await lease.result, null)
-  assert.equal(original.leasing, false)
-  assert.notEqual(entry, original)
-  assert.equal(h.rate.__counts.get(key), entry)
-  assert.deepEqual(entry, { count: 12, reserved: 0, leasing: false })
-  assert.equal(h.rate.__counts.size, 1_000)
+  for (let i = 0; i < 12; i++) assert.equal(await h.call('fixture-overflow'), null)
+  const overflow = h.increments.filter(({ key }) => key === h.increments.at(-1).key)
+  assert.equal(overflow.length, 12)
+  assert.ok(overflow.every(({ method }) => method === 'incr'), 'one plain INCR per admitted overflow call')
 })
 
 test('custom anonymous limit controls whether a ten-slot lease fits below half-limit', async () => {

@@ -98,14 +98,17 @@ export async function checkMcpRateLimit(
     }
     if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
     if (trackCount && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds) {
+      // Never evict: a full map only means new keys count singly until the window clears it,
+      // so no key can lose prepaid slots and lease again.
       let entry = localCounts.get(key)
-      if (!entry) {
-        if (localCounts.size >= MAX_LOCAL_COUNTS) localCounts.delete(localCounts.keys().next().value!)
+      if (!entry && localCounts.size < MAX_LOCAL_COUNTS) {
         entry = { count: 0, reserved: 0, leasing: false }
         localCounts.set(key, entry)
       }
-      entry.count = Math.max(entry.count, count)
-      if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) entry.reserved += LEASE - 1
+      if (entry) {
+        entry.count = Math.max(entry.count, count)
+        if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) entry.reserved += LEASE - 1
+      }
     }
 
     const countOutcome = classifyMcpRateLimitCount(count)
