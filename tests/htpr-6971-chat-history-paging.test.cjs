@@ -1077,3 +1077,15 @@ test('cancelled New chat also resumes initialization if summaries arrived during
     assert.equal(history().getDisplayedSession().id, id(9));
   });
 });
+
+test('refreshHistorySessions keeps one identity across renders so the open history dropdown does not refetch in a loop', async () => {
+  await withHistory({}, async ({ history, render, requests, flush }) => {
+    const first = history().refreshHistorySessions;
+    assert.equal(typeof first, 'function');
+    await render(); await render();
+    assert.equal(history().refreshHistorySessions, first, 'a new function each render re-runs the dropdown effect and refetches');
+    const pages = requests.filter(([type]) => type === 'page').length;
+    await render(); await flush();
+    assert.equal(requests.filter(([type]) => type === 'page').length, pages, 're-rendering alone must not fetch summaries');
+  });
+});

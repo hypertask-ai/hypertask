@@ -342,6 +342,12 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     return session?.id === activeRef.current && session.userId === user.id ? session : undefined;
   }, [identity, ready, queryClient]);
 
+  // Stable so the history dropdown's open effect runs once per open, not on every render.
+  const refreshHistorySessions = useCallback(async () => {
+    if (ready) await queryClient.refetchQueries({ queryKey: summaryKey, type: "active", stale: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, queryClient, user?.uid, user?.id]);
+
   const isSessionPending = ready && !currentSession && !initializationError && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));
   return {
     pagingUnavailable, activeSession, currentSession, setActiveSession, startNewSession, selectSession, addMessageToSessionQuery, updateSessionTitle, deleteSession,
@@ -350,7 +356,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     getDisplayedSession,
     sessions: currentSession ? [currentSession] : [], historySessions,
     hasMoreSessions: summaryQuery.hasNextPage, isLoadingMoreSessions: summaryQuery.isFetchingNextPage, pagingError: summaryQuery.isFetchNextPageError,
-    refreshHistorySessions: async () => { if (ready) await queryClient.refetchQueries({ queryKey: summaryKey, type: "active", stale: true }); },
+    refreshHistorySessions,
     loadMoreSessions: async () => { if (summaryQuery.hasNextPage && !summaryQuery.isFetching) await summaryQuery.fetchNextPage(); }, resolveHistorySession,
     isLoading: isSessionPending, isSessionPending,
     isError: initializationError || summaryQuery.isError || (!currentSession && transcriptQuery.isError),
