@@ -1647,3 +1647,21 @@ test("per-flag wrapper cannot mutate generated data through imports or aliases",
     assert.match(result.reason, /data-only generated registry wrapper/);
   }
 });
+
+test('flags read inside JSX attribute callbacks gate only when the callback is referenced', async (t) => {
+  const cases = [
+    ['onSubmit={send}', 'const send=()=>{if(enabled)doWork();};return <form onSubmit={send}/>;', true],
+    ['inline arrow calls send', 'const send=()=>{if(enabled)doWork();};return <button onClick={()=>send()}/>;', true],
+    ['inline arrow reads flag', 'return <button onClick={()=>{if(enabled)doWork();}}/>;', true],
+    ['useCallback result in attribute', 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form onSubmit={send}/>;', true],
+    ['defined but never referenced', 'const send=()=>{if(enabled)doWork();};return <form/>;', false],
+    ['useCallback never referenced', 'const send=useCallback(()=>{if(enabled)doWork();},[enabled]);return <form/>;', false],
+    ['inline arrow never calls send', 'const send=()=>{if(enabled)doWork();};return <button onClick={()=>doWork()}/>;', false],
+  ];
+  for (const [name, body, expected] of cases) {
+    const fixture = makeRepo(t), base = commit(fixture.git, 'base');
+    writeFile(fixture.dir, 'src/components/Widget.tsx', 'import {useCallback} from "react";\nimport {useFlag} from "@/hooks/useFlag";\nimport {OTHER_FLAG} from "@/lib/flags/keys";\ndeclare function doWork(): void;\nexport function Widget(){const enabled=useFlag(OTHER_FLAG);' + body + '}\n');
+    const head = commit(fixture.git, name);
+    assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget', base, head, fixture.dir)).pass, expected, name);
+  }
+});

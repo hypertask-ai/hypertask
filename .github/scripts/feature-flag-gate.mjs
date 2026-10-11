@@ -201,7 +201,24 @@ function functionBindingName(fn) {
       fn.parent.initializer === fn) {
     return fn.parent.name;
   }
+  // const send = useCallback(() => {...}, [deps]) binds the callback to `send`.
+  const call = fn.parent;
+  if (typescript.isCallExpression(call) && call.arguments[0] === fn &&
+      ((typescript.isIdentifier(call.expression) && call.expression.text === "useCallback") ||
+       (typescript.isPropertyAccessExpression(call.expression) && call.expression.name.text === "useCallback")) &&
+      typescript.isVariableDeclaration(call.parent) && typescript.isIdentifier(call.parent.name) &&
+      call.parent.initializer === call) {
+    return call.parent.name;
+  }
   return null;
+}
+
+// True when `node` is the value of a JSX attribute: onClick={node}.
+function isJsxAttributeValue(node) {
+  let child = node;
+  while (child.parent && typescript.isParenthesizedExpression(child.parent)) child = child.parent;
+  return Boolean(child.parent && typescript.isJsxExpression(child.parent) &&
+    typescript.isJsxAttribute(child.parent.parent));
 }
 
 function isExportedVariableStatement(statement) {
@@ -438,6 +455,13 @@ function collectLiveFunctions(sourceFile, checker) {
       }
       returned(fn);
     }
+    // An inline callback in a JSX attribute (onClick={() => send()}) runs when
+    // the live element it sits in is rendered.
+    for (const fn of functions) {
+      if (live.has(fn) || !isJsxAttributeValue(fn) || !isLiveCallSite(fn, live)) continue;
+      live.add(fn);
+      changed = true;
+    }
     for (const fn of functions) {
       if (live.has(fn) || reboundFunctions.has(fn)) continue;
       const name = functionBindingName(fn);
@@ -451,6 +475,11 @@ function collectLiveFunctions(sourceFile, checker) {
         if (typescript.isCallExpression(node) && typescript.isIdentifier(node.expression) &&
             checker.getSymbolAtLocation(node.expression) === symbol &&
             isLiveCallSite(node, live)) {
+          referenced = true;
+          return;
+        }
+        if (typescript.isIdentifier(node) && isJsxAttributeValue(node) &&
+            checker.getSymbolAtLocation(node) === symbol && isLiveCallSite(node, live)) {
           referenced = true;
           return;
         }
