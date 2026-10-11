@@ -2,6 +2,9 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
 import upsertTaskDescription from "../description/common-description-create";
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { waitUntil } from "@vercel/functions";
+import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7131-index-new-tickets";
 import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -232,6 +235,13 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Description", projectId:projectId, saved:false, content:"" }}),
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Comment", projectId:projectId, saved:false }})
             ])
+            // HTPR-7131: index the new ticket for search. waitUntil keeps the serverless
+            // instance alive without making the create request wait on the embedding call.
+            waitUntil((async () => {
+                if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, currentUser.id)) return;
+                const { upsertTaskToTurbopuffer } = await import("@/utils/controllers/turbopuffer/turbopufferHelper");
+                await upsertTaskToTurbopuffer(task.id);
+            })().catch((error) => console.error("[task-create] search indexing failed", { taskId: task.id, error })));
             scheduleClassifyTaskAiLabels(task.id, projectId)
 
             // The task transaction committed above. Run column auto-assignment

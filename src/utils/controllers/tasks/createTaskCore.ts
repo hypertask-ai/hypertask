@@ -1,4 +1,7 @@
 import prisma from '@/lib/prisma';
+import { isFeatureEnabled } from '@/lib/flags';
+import { waitUntil } from '@vercel/functions';
+import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from '@/lib/flags/definitions/htpr-7131-index-new-tickets';
 import { getUniqueTaskCount } from './create';
 import generateRank from '@/utils/generateRank';
 import upsertTaskDescription from '@/utils/controllers/description/common-description-create';
@@ -202,6 +205,14 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         agentId,
         actingUserId: userId
     });
+
+    // HTPR-7131: index the new ticket for search. waitUntil keeps the serverless
+    // instance alive without making creation wait on the embedding call.
+    waitUntil((async () => {
+        if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, userId)) return;
+        const { upsertTaskToTurbopuffer } = await import('@/utils/controllers/turbopuffer/turbopufferHelper');
+        await upsertTaskToTurbopuffer(newTask.id);
+    })().catch((error) => console.error('[task-create-core] search indexing failed', { taskId: newTask.id, error })));
 
     // Update team activity (fire-and-forget)
     if (updateTeamActivity && newTask.project?.teamId) {

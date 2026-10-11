@@ -24,6 +24,7 @@ const prisma = {
   drafts: { create: async (options) => { calls.drafts.push(options); } },
 };
 stubModule("src/lib/prisma.ts", { __esModule: true, default: prisma });
+stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
 stubModule("src/utils/controllers/tasks/create.ts", { getUniqueTaskCount: async () => 10 });
 stubModule("src/utils/generateRank.ts", { __esModule: true, default: () => "a" });
 stubModule("src/utils/controllers/description/common-description-create.ts", {
