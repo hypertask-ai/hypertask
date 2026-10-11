@@ -48,7 +48,7 @@ test("the check fails for a missing flag, a bad mode, a stale date and hand-edit
   delete missing.modes["htpr-2-b"];
   assert.match(snapshotProblems(missing, defaults, now).join("\n"), /missing flags: htpr-2-b/);
   assert.match(snapshotProblems({ ...fresh(), modes: { ...fresh().modes, "htpr-1-a": "MAYBE" } }, defaults, now).join("\n"), /invalid entry/);
-  assert.match(snapshotProblems({ ...fresh(), capturedAt: "2026-09-01T00:00:00.000Z" }, defaults, now).join("\n"), /older than 14 days/);
+  assert.match(snapshotProblems({ ...fresh(), capturedAt: "2026-09-01T00:00:00.000Z" }, defaults, now).join("\n"), /older than 14 days.*--write.*systemctl --user status/);
   assert.match(snapshotProblems({ ...fresh(), capturedAt: undefined }, defaults, now).join("\n"), /capturedAt/);
   assert.match(snapshotProblems({ ...fresh(), modes: { "htpr-3-c": "OFF", "htpr-1-a": "OFF", "htpr-2-b": "OFF" } }, defaults, now).join("\n"), /not sorted/);
 });
@@ -85,4 +85,9 @@ test("reading live modes sends an agent session header only and rejects bad answ
 test("no workflow reads repository secrets to generate the copy", () => {
   const text = readFileSync(path.join(root, "scripts/flags/production-flag-modes.mjs"), "utf8");
   assert.doesNotMatch(text, /secrets\./);
+});
+
+test("a missing QA session fails with a clear message", async () => {
+  const { readLive } = await load();
+  await assert.rejects(readLive({ HOME: "/nonexistent", HYPERTASK_NO_TOKEN: "1" }), /QA session cookie is missing/);
 });

@@ -66,7 +66,7 @@ export function snapshotProblems(snapshot, defaults, now = new Date()) {
   const captured = Date.parse(snapshot?.capturedAt);
   if (!Number.isFinite(captured)) problems.push("capturedAt is missing or not a date");
   else if (now.getTime() - captured > MAX_AGE_DAYS * 86_400_000) {
-    problems.push(`capturedAt ${snapshot.capturedAt} is older than ${MAX_AGE_DAYS} days: run node scripts/flags/production-flag-modes.mjs --write`);
+    problems.push(`capturedAt ${snapshot.capturedAt} is older than ${MAX_AGE_DAYS} days, so the refresher has stopped. Fix: run node scripts/flags/production-flag-modes.mjs --write with the QA session on the VPS and commit the file, or check the timer with systemctl --user status refresh-production-flag-modes.timer`);
   }
   const modes = snapshot?.modes ?? {};
   for (const [key, mode] of Object.entries(modes)) {
@@ -101,7 +101,11 @@ export async function readLive(env = process.env, fetcher = fetch) {
     }
     return flags;
   }
-  return readPlainQaFlags();
+  try {
+    return await readPlainQaFlags(path.join(env.HOME ?? "", ".config/hypertask-videos/storageState-qa-normal.json"));
+  } catch (error) {
+    throw new Error(`Cannot read live flag modes: the plain QA session cookie is missing or expired, or the read failed (${error.message})`);
+  }
 }
 
 async function main(argv, root) {
