@@ -101,7 +101,9 @@ const Commands = (props: Props) => {
   } = props;
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
-  const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  let composeBoardChipEnabled = false;
+  if (composeTaskWriterEnabled && composeBoardChipFlag) composeBoardChipEnabled = true;
   let newTaskWindow = false;
   if (composeTaskWriterEnabled && newTaskWindowFlag && !props.isDemo && !props.isInteractive) newTaskWindow = true;
   const isApple = useDeviceContext();
