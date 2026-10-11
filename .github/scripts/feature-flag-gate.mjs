@@ -240,6 +240,8 @@ function functionBindingName(fn, checker = null) {
 // True when the JSX holding `node` is consumed: reached through the returned
 // expression, an argument of a call, or a const that is itself consumed.
 function jsxResultIsConsumed(node, checker, live, seen = new Set()) {
+  // A reference or element on a statically dead path (false && x, if (false)) never renders.
+  if (isStaticallyUnreachable(node)) return false;
   let child = node;
   for (let parent = node.parent; parent; child = parent, parent = parent.parent) {
     // A consuming use only counts inside a live function on a reachable path.
