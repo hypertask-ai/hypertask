@@ -10,16 +10,20 @@ import { useTourContext } from '@/lib/tours/context/TourContext';
 import { X } from 'lucide-react';
 import { AudioButton } from '@/components/RTE/Components/AudioButton';
 import { hasDescriptionContent } from '@/lib/ai/autoDescriptionSuggestion';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG } from '@/lib/flags/keys';
 
-const TaskTitleModal = ({ mobileCompact = false }: { mobileCompact?: boolean }) => {
+const TaskTitleModal = ({ mobileCompact = false, mobileTitleVisible = true }: { mobileCompact?: boolean; mobileTitleVisible?: boolean }) => {
     const _mbl = useContext(MobileViewContext);
+    const phoneTitleFix = useFlag(HTPR_6970_PHONE_NEW_TASK_TITLE_FLAG) && _mbl;
     const { dynamicElementRef } = useSetStickyHeight()
     const textAreaRef = useRef<HTMLTextAreaElement>(null);
     const isApple = useDeviceContext()
     const { endTour } = useTourContext();
     const { currentFocusedElement, editMode, setEditMode, formValues, handleChange, appendDictationToTitle, dictationCoordinator, setCurrentFocusedElement, focusOn, isRecording, toggleRecording, closeHandler, isGeneratingTitle, titleGenerationError } = useContextCreateTaskModal()
     const hasSavableContent = formValues.title.trim().length > 0 || hasDescriptionContent(formValues.description);
-    useAutosizeTextArea(textAreaRef.current, formValues.title);
+    // The collapsed phone title mounts hidden, so its height must be measured again on expansion.
+    useAutosizeTextArea(phoneTitleFix ? textAreaRef : textAreaRef.current, formValues.title, undefined, phoneTitleFix ? mobileTitleVisible : undefined);
     const outsideClickHandler = () => {
         if (editMode!=="title") return
         setEditMode(null)

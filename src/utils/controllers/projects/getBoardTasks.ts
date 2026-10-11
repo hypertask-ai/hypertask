@@ -1,6 +1,7 @@
 import prisma from "@/lib/prisma";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7071_AGENT_STATUS_CHIP_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
+import { attachAgentStatus } from "@/utils/controllers/tasks/attachAgentStatus";
 import {
   getBoardTaskInclude,
   getProjectIncludeWithoutTasks,
@@ -67,6 +68,7 @@ const getBoardTasks = async (
     }
 
     const includeCachedDescription = await cachedDescriptionPromise;
+    const agentStatusPromise = isFeatureEnabled(HTPR_7071_AGENT_STATUS_CHIP_FLAG, userId).catch(() => false);
     const tasks = await prisma.task.findMany({
       where: { projectId, ...getTaskWhere() },
       omit: taskBoardOmit,
@@ -82,6 +84,10 @@ const getBoardTasks = async (
     );
     const tasksWithWaitingOnUsers = await attachWaitingOnUsers(tasksWithOpenBlockers);
 
+    const tasksWithAgentStatus = (await agentStatusPromise)
+      ? await attachAgentStatus(tasksWithWaitingOnUsers)
+      : tasksWithWaitingOnUsers;
+
     const sanitizedProject = sanitizeProjectBoardFilters(project);
     const { allViews = [], ...projectView } =
       sanitizedProject.project_view ?? {};
@@ -93,7 +99,7 @@ const getBoardTasks = async (
       status: 200,
       json: {
         project: projectPayload,
-        tasks: tasksWithWaitingOnUsers,
+        tasks: tasksWithAgentStatus,
         allViews,
       },
     };

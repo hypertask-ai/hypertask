@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   DIRECT_UPLOAD_MAX_FILES,
@@ -205,7 +206,7 @@ export async function signUpload(
   );
 }
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -303,3 +304,7 @@ export default async function handler(
     return res.status(500).json({ error: "Could not prepare the upload" });
   }
 }
+
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/upload-url")).POST,
+);

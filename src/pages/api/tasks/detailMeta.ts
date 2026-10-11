@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Opening a task detail used to fire priority, estimate, labels and followers
 // as four separate requests. Each one is a distinct serverless route, so each
 // one could pay its own cold start, and a cold start here costs far more than
@@ -16,7 +17,7 @@ import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
-export default async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -109,4 +110,14 @@ export default async function handler(
     console.log(error);
     return res.status(400).json({ message: JSON.stringify(error) });
   }
+}
+
+const flaggedHandler = withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/task-writes/detail-meta-read")).GET,
+);
+
+export default function handlerWithHeaders(req: NextApiRequest, res: NextApiResponse) {
+  res.setHeader("Cache-Control", "private, no-store");
+  res.setHeader("Vary", "Cookie");
+  return flaggedHandler(req, res);
 }

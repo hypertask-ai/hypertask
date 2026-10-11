@@ -99,11 +99,11 @@ bash -c 'ps -o pgid= -p "$$"'
   } finally { rmSync(f.dir, { recursive: true, force: true }); }
 });
 
-test('stale sweep and opt-in hourly user timer pass isolated Python tests', () => {
-  const result = spawnSync('python3', [path.join(root, 'scripts/premerge-local-sweep.test.py')], { encoding: 'utf8' });
-  assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stderr, /OK/);
-  assert.match(source, /exec python3 "\$root\/scripts\/premerge-local-sweep\.py" "\$action"/);
+test('sweep goes to the one cleaner, the process watchdog, and its isolated Python tests pass (YPER4-280)', () => {
+  const result = spawnSync('python3', [path.join(root, 'scripts/proc-watchdog.test.py')], { encoding: 'utf8', timeout: 120000 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /ALL PASS/);
+  assert.match(source, /exec python3 "\$root\/scripts\/proc-watchdog\.py" "\$action"/);
 });
 
 

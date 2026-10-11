@@ -14,15 +14,26 @@ just skips every write test — see "Write journeys" below.
 
 ## Secrets/vars this job needs
 
-- `SMOKE_SESSION_STATE` (secret): Playwright `storageState` JSON for plain
-  QA user 2343. Owner + QA user 985 is also accepted, never Valentin (6).
-  Refresh before the `ht_session` expires. A missing, invalid or expired
-  login fails the job with `not tested: QA login missing/expired`, without
-  authorizing rollback of a healthy app.
-- `SMOKE_BOARD_PATH` (var): `/project?id=6859&surface=board`, the plain QA
-  account's existing QA Sandbox board.
-- `SMOKE_TASK_PATH` (var): `/detail/project-6859/43`, an existing card on
-  that board. Keep both paths pointing at a card visible to the QA account.
+- `QA_LOGIN_EMAIL` and `QA_LOGIN_PASSWORD` (existing secrets): the server's
+  QA-only `/api/auth/qa-login` credentials. Global setup logs in afresh on
+  every post-deploy run, verifies user 985, then saves all server cookies in
+  a runner-local file with mode `0600`. It cannot sign in as Valentin (6).
+  `SMOKE_SESSION_STATE` is no longer used by this job. Its static cookies and
+  client user state could expire or drift independently; recapturing it was
+  a manual operation, not a renewable login.
+- `AUTOMERGE_TOKEN` (existing secret): reserves daily per-cause notification
+  keys in repository variables. The workflow concurrency lock serializes
+  runs; a dedup-store failure keeps evidence in the summary instead of risking
+  duplicate delivery.
+- `HYPERTASK_MCP_TOKEN` (existing agent ticket mechanism): creates or updates
+  one monitoring ticket per setup cause on board 4060, at most once daily.
+  Failure to record a ticket remains a job annotation and summary.
+- The workflow pins `SMOKE_BOARD_PATH` to `/project?id=6121&surface=board`
+  and `SMOKE_TASK_PATH` to `/detail/project-6121/1`: the existing private
+  "Midscene nightly QA fixture" board and "Midscene persistent browser target"
+  ticket, both owned by QA user 985. These checks only read this fixture.
+  The old repository vars point at QA user 2343's private board, which user
+  985 cannot access, so post-deploy smoke no longer reads those vars.
 
 Post-deploy runs set `SMOKE_POSTDEPLOY=1`. Both paths are required: a missing
 fixture is not a passing test. On desktop and phone, the board check clicks
@@ -64,6 +75,81 @@ hosted realtime even if it adds `?realtime=on`.
 `browser-smoke` is required by the production ruleset, the live-ruleset
 assertion, and automerge. A failed or missing result blocks merging.
 
+## Layout lock matrix (YPER4-252)
+
+`browser-smoke` also runs `e2e/smoke/layout-lock-matrix.spec.ts`, once with live-like flags and once with every flag on. It opens the ticket page (short and long comment thread), board, inbox and search once per sidebar state (AI sidebar open or closed, left sidebar collapsed or expanded) and resizes the window through 1920, 1440, 1280, 1100, 950, 768 and 390 wide. Each main part (title, description, comment list, comment box, properties panel, board columns, left sidebar, AI sidebar) is compared with `e2e/smoke/layout-lock-matrix.baseline.json`. A part that moves more than 8px, changes column, wraps below its neighbour, or leaves the comment box above the last comment fails with `<page> @ <width>px, AI sidebar <open|closed>, left sidebar <collapsed|expanded>: <part> moved <dx>,<dy>px`. Failing runs upload an "after" screenshot with the baseline boxes outlined (artifact `layout-lock-matrix`).
+
+- An intended layout change regenerates the baseline from the `origin/production` build (steps are in the header of `layout-lock-matrix.spec.ts`) and adds the page to the baseline's `approvedIn` map with the full URL of the ticket where Valentin approved it. The PR body needs the line `Layout change approved: <that URL>`.
+- `.github/scripts/layout-lock-approval.mjs` enforces this on every pull request for `layout-lock.baseline.json`, `layout-lock-matrix.baseline.json` and both `*.flag-changes.json` ratchets, and prints the ticket it expects.
+- The /admin/flags page is not in the matrix: only user 6 may open it and the smoke session must never be user 6.
+- First-load jump (CLS under 0.05) is HTPR-7074, not this check.
+
+Run it locally with `scripts/premerge-local.sh`, then `PREMERGE_LOCAL=1 BASE_URL=<build url> SMOKE_BOARD_PATH=... npx playwright test -c playwright.config.smoke.ts e2e/smoke/layout-lock-matrix.spec.ts`. `LAYOUT_LOCK_MATRIX_PAGES=board,inbox` limits the pages.
+
+## CI container images
+
+CI pulls the exact official images from `ghcr.io/hypertask-ai/ci-<image>`:
+PostgreSQL `16-bookworm` and `16-alpine`, Redis `7-alpine`, Node
+`22-bookworm`, and Soketi `1.6-16-alpine`. Tags and immutable digests are
+recorded in `.github/ci-images.json`; the copy preserves the full manifest
+and all architectures without rebuilding or changing labels.
+
+`ci-images.yml` copies the pinned official Docker Hub and Quay sources on
+manual dispatch and every Monday. It publishes with this repo's
+`GITHUB_TOKEN` (`packages: write`), which automatically links new packages
+to the repository and grants its workflows access. Do not replace it with
+a personal token or remove the repository's Actions access in package
+settings. A separate `packages: read` job proves every pinned image can be
+pulled. CI uses that read-only permission with `docker/login-action` for
+command-line pulls and `services.credentials` for services, which start
+before workflow steps. Registry credentials stay on the host and are never
+mounted or passed into the isolated candidate containers.
+
+Bootstrap order: a push trigger restricted to `yper4-231-ghcr-ci-images`
+seeds and verifies the packages before the consumer switch is pushed.
+GitHub cannot dispatch a new workflow until it exists on the default branch;
+after this single PR is merged into `production`, manual dispatch and the
+weekly schedule work normally. Require a successful mirror run, including
+all five read-only pulls, before merging. There is no automatic fallback
+that silently reintroduces anonymous pulls.
+
+Fallback for a GHCR outage: open an explicit recovery PR that restores the CI
+image references to an explicitly approved upstream registry at the same digest.
+In that same PR,
+remove GHCR login steps and service credentials from the fallback consumers
+so a GHCR login outage cannot block recovery. Update the registry-specific
+assertions in `tests/ci-image-sources.test.cjs`, `tests/ci-images.test.cjs`,
+and `tests/browser-smoke-workflow.test.cjs`
+to expect those fallback references;
+otherwise the recovery PR will fail the GHCR-only assertions. Retain exact
+digest checks, required check names, and the mirror workflow, then rerun the
+checks. Do not change production deployment configuration. Both
+Docker Hub and anonymous ECR Public pulls can be throttled, so this is a
+temporary, visible recovery choice, not the normal path. For a missing copy,
+rerun `Mirror CI images` instead of weakening the digest pin. Keep
+`app-smoke`, `browser-smoke`, and `ci-tests` required; production deploy
+configuration is not changed by this image mirror.
+
+### Local Docker fixtures
+
+The transport test, PostgreSQL tests, agent-token backfill verifiers and
+`scripts/premerge-local.sh up` use the same pinned GHCR images. The transport
+test still prefers an installed `redis-server`, which needs no registry login.
+For Docker-backed runs, authenticate once with your own GitHub token with
+`read:packages` access to the `hypertask-ai` CI packages:
+
+```bash
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username "$GITHUB_USER" --password-stdin
+```
+
+If GHCR login is unavailable locally, use an already cached pinned image
+(`docker image ls --digests`) or install `redis-server` for the transport test.
+For PostgreSQL tests and backfill verifiers, `HTPR_PG_IMAGE` can point to an
+explicit local image from the same PostgreSQL 16 variant. Premerge smoke needs
+all three pinned images cached or registry access; it cannot run offline without
+them. There is no automatic fallback to an anonymous registry in CI. See
+`tests/README.md` for targeted test commands.
+
 ## Selectors
 
 Each view in `prod.spec.ts` asserts one route-specific DOM element (a
@@ -82,15 +168,22 @@ One nuance: the inbox marker is `display:none` by design, so it asserts
 presence (`toBeAttached`) instead of visibility; every other view's element
 must actually be visible.
 
-## Re-capturing the session
+## Session renewal and alert policy
 
-Log in as plain QA user 2343 in a real browser, export Playwright storage
-state (`await context.storageState()`) to
-`~/.config/hypertask-videos/storageState-qa-normal.json`, then refresh:
+Post-deploy login is self-renewing through the existing QA-only password flow.
+The server checks the fixed QA identity and the `htpr-6536-qa-login` flag.
+If login is unavailable, check that flag and the existing QA secrets; never
+replace them with Valentin's credentials or extend a signed cookie manually.
+Local post-deploy runs also require these two QA environment variables.
 
-```bash
-gh secret set SMOKE_SESSION_STATE -R hypertask-ai/hypertask < ~/.config/hypertask-videos/storageState-qa-normal.json
-```
+An unrunnable check fails visibly but never sends Telegram or contributes to
+consecutive smoke reds. Confirmed live failures and rollback operations retain
+Telegram, at most once per UTC day for each cause across SHAs and reruns.
+Runner-only challenges, unit-test failures, healthy-site build/drift problems and QA setup failures go
+into infrastructure tickets and job evidence instead. Provider status alone is
+not a confirmed live-site failure. The classifier sends the smoke notification;
+the consecutive alarm records the incident and authorizes guarded rollback,
+without a second Telegram or a recovery message.
 
 Never print, commit or upload the state, and never use Valentin's login.
 Manually prove the browser step on a non-production branch without data

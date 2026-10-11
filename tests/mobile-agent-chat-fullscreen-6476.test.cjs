@@ -7,8 +7,8 @@ const test = require("node:test");
 const root = path.resolve(__dirname, "..");
 
 const chat = readAgentChatSource();
-const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
-const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
+const keys = require("./helpers/flag-files.cjs").source();
+const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
 const store = fs.readFileSync(path.join(root, "src/store/index.ts"), "utf8");
 const shell = fs.readFileSync(
   path.join(root, "src/components/Global/mobileShellVisibility.ts"),
@@ -130,12 +130,9 @@ test("hideDock drops tab-bar pad; keyboard still clears inset", () => {
   assert.match(chat, /hideDock:\s*hideDockInset/);
 });
 
-test("6476 chrome-aware height applies only while an agent is open", () => {
+test("6476 fullscreen chrome applies only while an agent is open", () => {
   assert.match(chat, /mobileFullscreenChrome/);
-  assert.match(
-    chat,
-    /mobileLayoutEnabled \|\|\s*mobileAgentChatViewportEnabled \|\|\s*mobileFullscreenChrome/,
-  );
+  assert.match(chat, /const mobileChromeAwareHeight = isMbl;/);
   assert.match(
     chat,
     /\(mobileLayoutEnabled \|\| mobileFullscreenChrome\) &&\s*\n\s*"mobile-agent-chat/,

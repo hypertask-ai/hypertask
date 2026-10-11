@@ -12,6 +12,7 @@ export default {
     { action: 'verifyCreatedTask', arg: 'new task saved on the QA board' },
     { action: 'goto', arg: '{{boardUrl}}' },
     { action: 'verifyCreatedTask', arg: 'new task persists after reload' },
+    { action: 'waitForTaskCard', arg: '{{taskTitle}}' },
     { action: 'aiAssert', arg: 'a task card titled "{{taskTitle}}" is visible' },
     { action: 'aiKeyboardPress', arg: 'c' },
     { action: 'aiAssert', arg: 'the full new task editor with a title input and Save & close button is visible' },

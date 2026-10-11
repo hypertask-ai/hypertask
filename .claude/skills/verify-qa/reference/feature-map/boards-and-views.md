@@ -35,6 +35,14 @@ check**: after the action, reload the page and confirm the change (filter,
 column state, focused card) survived the reload, not just the live DOM. Most
 of the bugs above only showed up after a refresh or a second board switch.
 
+## First agent connection
+
+https://app.hypertask.ai/detail/project-15/7026 adds a compact Connect your agent card above the columns or table on the user's earliest active owned board (the seeded MyBoard, including after rename). It is behind `htpr-7026-agent-connect-check`, default Owner + QA. Users with any previous CLI or MCP connection, or a server-persisted dismissal, do not see it.
+
+On a disposable new-user fixture, confirm Claude Code, Cursor, Codex appear first. Select a tool and use the shared onboarding CLI or MCP instructions. While the card is in view, the status checks every four seconds; hidden tabs and offscreen cards stop polling. The first connection shows the actual recorded client or the onboarding choice, plus Ask your agent to pick up the top task. Dismiss and reload, then check another device: the card stays hidden. A connection also hides it on the next visit without needing dismissal. Confirm flag-off users cannot read first-run card state or save a dismissal.
+
+Capture waiting and connected states at 1440x900 and 390x844. Confirm only the first connection gets Your agent is connected email, naming the client with one Open your board button. The existing unique `WebhookEvent(userId, eventType)` record, with type `agent_connected_email`, durably claims one send attempt, including concurrent connects. An uncertain or failed delivery retains that claim rather than risking duplicates; it never fails agent authentication. No schema migration is required.
+
 ## Cleanup
 
 None if you only viewed and switched. If you changed a saved filter or view

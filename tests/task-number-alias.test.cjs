@@ -23,6 +23,7 @@ function load(relativePath, stubs) {
   const loaded = new Module(filename);
   loaded.filename = filename;
   loaded.require = (request) => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     if (Object.hasOwn(stubs, request)) return stubs[request];
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected dependency: ${request}`);
@@ -79,6 +80,10 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/projects/getAllIncludes": {
+      projectContentAccessWhere: require("./task-route-loader.cjs").load("src/utils/controllers/projects/getAllIncludes.ts", {
+        "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+        "@/utils/controllers/notifications/visibleInboxScope": {},
+      }).projectContentAccessWhere,
       getProjectWhere: (userId, requestedAgentId) => {
         assert.equal(userId, 6);
         assert.equal(requestedAgentId ?? null, agentId);

@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+# Tool-less hax review on Valentin's ChatGPT subscription (gpt-6.1-sol, high).
+# Reads the full review prompt (instructions + untrusted diff) on stdin and
+# prints the model's review to stdout. --raw: no tools, no AGENTS.md, no
+# skills — the PR content is untrusted data and must stay data.
+set -euo pipefail
+[ "$#" -eq 0 ] || exit 64
+export HOME=/home/valentin
+export PATH="/home/valentin/.local/bin:/usr/local/bin:/usr/bin:/bin"
+exec timeout 1500 hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session --raw -p

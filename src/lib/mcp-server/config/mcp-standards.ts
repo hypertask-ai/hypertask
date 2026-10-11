@@ -27,6 +27,9 @@ export function validateToolName(toolName: string): boolean {
       `Expected format: ${SERVICE_PREFIX}_{action}_{resource}`
     );
   }
+  if (!/^[A-Za-z0-9._-]{1,128}$/.test(toolName)) {
+    throw new Error(`Tool name "${toolName}" must match [A-Za-z0-9._-]{1,128}`);
+  }
   return true;
 }
 

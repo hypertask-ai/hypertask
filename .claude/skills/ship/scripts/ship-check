@@ -4,6 +4,10 @@
 #   ship-check bind <T> <pr>     record this session's PR for the ticket (run right after opening it)
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
+#   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
+#   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
+#                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
+#                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
 #   ship-check premerge <pr>     released-flag browser proof for the current PR head (hookless sessions)
 #   ship-check premerge-status <pr> publish that proof as the required current-head GitHub status
@@ -74,7 +78,7 @@ check_branch() {
 check_bind() {
   local t; t=$(gh pr view "$2" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "PR $2 not found in $REPO"
   [[ $t == "$1 "* ]] || fail "PR $2 is titled \"$t\", not $1"
-  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" && echo "bound $1 to PR $2"
+  mkdir -p "$EVID/$1" && echo "$2" > "$EVID/$1/pr" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/dropped" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "bound $1 to PR $2"
 }
 
 check_duplicate() {
@@ -84,8 +88,95 @@ check_duplicate() {
   ( check_ticket "$1" ) >/dev/null || fail "ticket $1 not found on the board"
   # The fix is already merged, so a deleted original ticket does not block the duplicate path.
   ( check_ticket "$2" ) >/dev/null || echo "note: $2 is no longer on the board; PR $3 is merged, so it still counts"
-  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" "$EVID/$1/dropped" "$EVID/$1/nochange" && echo "$3" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/duplicate-of" \
     && echo "bound $1 as a duplicate of $2 (PR $3)"
+}
+
+# Valentin decided against the ticket: the PR is closed unmerged and a "Decided against:" comment quotes his dated decision.
+check_dropped() {
+  local s; s=$(gh pr view "$2" -R "$REPO" --json title,state,baseRefName --jq '"\(.state) \(.baseRefName) \(.title)"' 2>/dev/null) \
+    || fail "PR $2 not found in $REPO"
+  [[ $s == "CLOSED $BASE $1 "* ]] || fail "PR $2 must be a CLOSED (not merged, not open) PR of $1 into $BASE, got: $s"
+  # The visible text (tags and their attribute quotes removed, quote entities decoded) must open with the record
+  # Decided against: Valentin, 2026-10-10: "his words"   (an optional short note such as ", in chat" may follow the date).
+  hypertask comment list "$1" --limit 100 --json 2>/dev/null | jq -e '.comments | any(.[];
+      (.text // "") | gsub("<[^>]*>"; "") | gsub("&quot;|&#x22;|&#34;"; "\"")
+      | test("^\\s*Decided against:\\s*Valentin,\\s*20[0-9]{2}-[0-9]{2}-[0-9]{2}(,[^:\"“”]{0,40})?:\\s*[\"“][^\"“”]+[\"”]"))' >/dev/null \
+    || fail "$1 has no comment opening with: Decided against: Valentin, <YYYY-MM-DD>: \"<his words>\""
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/duplicate-of" "$EVID/$1/branch" "$EVID/$1/nochange" && echo "$2" > "$EVID/$1/pr" && echo "$2" > "$EVID/$1/dropped" \
+    && echo "recorded $1 as dropped (PR $2 closed unmerged)"
+}
+
+# Dropped ticket: passes only while the bound PR is still closed and unmerged.
+dropped_ok() {
+  [ -s "$EVID/$2/dropped" ] || return 1
+  local n row state sha; n=$(tr -dc '0-9' < "$EVID/$2/dropped")
+  [ "$n" = "$(bound_pr "$2")" ] || fail "dropped PR $n is no longer the bound PR for $2"
+  row=$(pr_row "$2") || fail "${row#FAIL: }"
+  read -r n state sha <<<"$row"
+  [ "$state" = CLOSED ] && [ "$sha" = - ] || fail "dropped PR $n for $2 is $state, not closed unmerged"
+  echo "$1 ok (dropped: PR $n closed unmerged)"
+}
+
+# Ticket (HTPR, YPER4, HYFA) solved with no code change (YPER4-272, YPER4-283). The "Resolved without a change:" comment must carry evidence,
+# and no PR may exist for the ticket: no open PR titled with it, no bound PR, no origin branch named for it that is ahead of BASE.
+# nochange_verify prints the reason and returns 1 instead of exiting, so every consumer re-runs it (the marker is only a record).
+nochange_checkout() {
+  local repo=${SHIP_CHECKOUT:-}
+  if [ -z "$repo" ]; then
+    [ "$REPO" = hypertask-ai/hypertask ] || { echo "set SHIP_CHECKOUT to the local checkout of $REPO"; return 1; }
+    repo=$HOME/projects/hypertask
+  fi
+  echo "$repo"
+}
+
+# Branch names of origin that carry the lowercased ticket id not followed by a digit (yper4-901 does not match yper4-9010).
+nochange_origin_branches() {
+  local low=${1,,} repo heads
+  repo=$(nochange_checkout) || { echo "$repo"; return 1; }
+  heads=$(git -C "$repo" ls-remote --heads origin "*$low*" 2>/dev/null) || { echo "cannot list origin branches"; return 1; }
+  awk '{print $2}' <<<"$heads" | sed 's#^refs/heads/##' | grep -E -- "${low}([^0-9]|\$)" || true
+}
+
+nochange_verify() {
+  local t=${1:-} cmts open b ahead
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
+  if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
+    echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
+  fi
+  cmts=$(hypertask comment list "$t" --limit 100 --json 2>/dev/null) || { echo "cannot read comments of $t"; return 1; }
+  # Visible text (tags removed, leading space dropped) must open with the phrase. The same comment must carry evidence:
+  # an https URL, or a <pre>/<code> block whose visible inner text is not blank.
+  jq -e '.comments | any(.[]; (.text // "") as $x
+      | ($x | gsub("<[^>]*>"; "") | test("^\\s*Resolved without a change:"))
+      and (($x | test("https://[A-Za-z0-9][^\\s\"<>]*"))
+        or ([$x | scan("(?s)<(?:pre|code)[^>]*>(.*?)</(?:pre|code)>") | .[0]
+             | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "") | select(test("\\S"))] | length > 0)))' >/dev/null <<<"$cmts" \
+    || { echo "$t has no comment opening with \"Resolved without a change:\" that also carries evidence (an https URL, or a <pre>/<code> block with non-blank command output)"; return 1; }
+  open=$(gh pr list -R "$REPO" --state open --search "$t in:title" --limit 50 --json number,title 2>/dev/null) \
+    || { echo "cannot read open PRs of $REPO"; return 1; }
+  if jq -e --arg t "$t " 'any(.[]; .title | startswith($t))' >/dev/null <<<"$open"; then echo "$t has an open PR; use the normal path"; return 1; fi
+  b=$(nochange_origin_branches "$t") || { echo "$b"; return 1; }
+  while read -r b; do
+    [ -n "$b" ] || continue
+    ahead=$(gh api "repos/$REPO/compare/$BASE...$b" --jq .ahead_by 2>/dev/null) || { echo "cannot compare origin branch $b with $BASE"; return 1; }
+    [ "${ahead:-0}" = 0 ] || { echo "origin branch $b has $ahead commit(s) not in $BASE; ship it or delete it first"; return 1; }
+  done <<<"$(nochange_origin_branches "$t")"
+  return 0
+}
+
+check_nochange() {
+  local out; out=$(nochange_verify "${1:-}") || fail "$out"
+  mkdir -p "$EVID/$1" && rm -f "$EVID/$1/branch" && date -u +%FT%TZ > "$EVID/$1/nochange" && echo "nochange ok"
+}
+
+# Nochange ticket: the marker is only a record. Every use re-runs the full check, so a PR or branch that
+# appears after "nochange ok" (or a comment that went away) stops the pass.
+nochange_ok() {
+  [ -s "$EVID/$2/nochange" ] || return 1
+  local out; out=$(nochange_verify "$2") || fail "nochange for $2 no longer holds: $out"
+  # The pr gate expects "title ok"; there is no PR title to check, so say why it passes.
+  if [ "$1" = pr ]; then echo "title ok (nochange: resolved without a change, no PR)"; else echo "$1 ok (nochange: resolved without a change)"; fi
 }
 
 merge_sha() {
@@ -98,6 +189,7 @@ merge_sha() {
 }
 
 check_pr() {
+  nochange_ok pr "$1" && return 0
   local row; row=$(pr_row "$1") || fail "${row#FAIL: }"
   [ -n "$row" ] || fail "no PR titled \"$1 [TYPE] ...\""
   # A duplicate's PR was checked at bind time and is merged; its original ticket may since be deleted.
@@ -112,14 +204,82 @@ check_pr() {
   fi
 }
 
-check_merged() { local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
+check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
 check_deployed() {
+  dropped_ok deployed "$1" && return 0
+  nochange_ok deployed "$1" && return 0
   local sha id state
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   if [ "$REPO" != hypertask-ai/hypertask ]; then
     local tag cmp releases runs jobs
     if ! tag=$(gh release view -R "$REPO" --json tagName --jq .tagName 2>/dev/null); then
+      if [ -n "${SHIP_WORKER:-}" ]; then
+        releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+        jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+        [[ ${SHIP_CHECKOUT:-} == /* ]] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
+        [[ $SHIP_WORKER =~ ^[A-Za-z0-9._/\ -]+$ && $SHIP_WORKER != /* && /$SHIP_WORKER/ != *'/../'* ]] \
+          || fail "SHIP_WORKER must be a relative worker directory inside SHIP_CHECKOUT"
+        [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "invalid merge sha for worker deployment: $sha"
+        local deployment version worker="$SHIP_CHECKOUT/$SHIP_WORKER"
+        local name= account_id= line field checkout neutral parent contents
+        local config_re="^[[:space:]]*(name|account_id)[[:space:]]*=[[:space:]]*([\"'])([A-Za-z0-9_-]+)\\2[[:space:]]*(#.*)?$"
+        [ -f "$worker/wrangler.toml" ] && [ -r "$worker/wrangler.toml" ] || fail "could not read worker wrangler.toml"
+        while IFS= read -r line || [ -n "$line" ]; do
+          [[ $line =~ ^[[:space:]]*\[ ]] && break
+          if [[ $line =~ ^[[:space:]]*(name|account_id)[[:space:]]*= ]]; then
+            [[ $line =~ $config_re ]] || fail "invalid worker name or account_id in wrangler.toml"
+            field=${BASH_REMATCH[1]}
+            [ -z "${!field}" ] || fail "duplicate worker $field in wrangler.toml"
+            printf -v "$field" '%s' "${BASH_REMATCH[3]}"
+          fi
+        done < "$worker/wrangler.toml"
+        [[ $name =~ ^[A-Za-z0-9_-]+$ && $account_id =~ ^[0-9a-f]{32}$ ]] \
+          || fail "missing or invalid worker name or account_id in wrangler.toml"
+        checkout=$(cd "$SHIP_CHECKOUT" && pwd -P) || fail "could not read SHIP_CHECKOUT"
+        neutral="${XDG_CACHE_HOME:-$HOME/.cache}/ship-check-wrangler"
+        [[ $neutral == /* && ! -L $neutral ]] || fail "unsafe neutral wrangler directory"
+        mkdir -p "$neutral" || fail "could not create neutral wrangler directory"
+        neutral=$(cd "$neutral" && pwd -P) || fail "could not read neutral wrangler directory"
+        [[ $neutral != "$checkout" && $neutral != "$checkout/"* ]] || fail "neutral wrangler directory must be outside SHIP_CHECKOUT"
+        contents=$(find "$neutral" -mindepth 1 -maxdepth 1 -print -quit) || fail "could not inspect neutral wrangler directory"
+        [ -z "$contents" ] || fail "neutral wrangler directory must be empty"
+        # npx also searches ancestors for local packages and executables.
+        parent=$neutral
+        while :; do
+          [[ ! -e $parent/package.json && ! -e $parent/node_modules && ! -e $parent/.git ]] \
+            || fail "neutral wrangler directory must be outside checkouts and local npm packages"
+          [ "$parent" = / ] && break
+          parent=${parent%/*}; parent=${parent:-/}
+        done
+        local -a wrangler=(npx --yes wrangler@3.114.17)
+        deployment=$(cd "$neutral" && CLOUDFLARE_ACCOUNT_ID="$account_id" "${wrangler[@]}" deployments status --name "$name" --json 2>/dev/null) \
+          || fail "could not read worker deployment in $worker"
+        id=$(jq -er '.versions | select(type == "array" and length == 1) | .[0]
+          | select(.percentage == 100) | .version_id | select(type == "string" and length > 0)' <<<"$deployment" 2>/dev/null) \
+          || fail "worker deployment must have exactly one version at 100%"
+        version=$(cd "$neutral" && CLOUDFLARE_ACCOUNT_ID="$account_id" "${wrangler[@]}" versions view "$id" --name "$name" --json 2>/dev/null) \
+          || fail "could not read worker version $id"
+        jq -e --arg sha "$sha" --arg tag "${sha:0:12}" \
+          '.annotations["workers/message"] == $sha or .annotations["workers/tag"] == $tag' <<<"$version" >/dev/null 2>&1 \
+          || fail "worker version $id does not match merge $sha"
+        echo "deployed ok (worker $id)"; return
+      fi
+      if [[ $REPO == hypertask-ai/docs && $BASE == main ]]; then
+        releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
+        jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
+        runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+          || fail "could not read workflow runs for $sha"
+        id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
+          and .name == "Build and Deploy" and .event == "push" and .head_branch == "main"
+          and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
+          || fail "could not read publishing workflow identity for $sha"
+        [ -n "$id" ] || fail "no successful production publishing push for $sha"
+        jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
+        jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
+          || fail "no successful production deploy job for $sha"
+        echo "deployed ok (workflow)"; return
+      fi
       [[ $REPO == hypertask-ai/analytics && $BASE == master ]] || fail "no release found in $REPO"
       releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
       jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
@@ -174,6 +334,8 @@ newest_successful_production_sha() {
 
 check_proof() {
   local d="$EVID/$1" p="$EVID/$1/proof.md" sha run line f n=0
+  dropped_ok proof "$1" && return 0
+  nochange_ok proof "$1" && return 0
   [ -s "$p" ] || fail "missing $p (verify-qa evidence contract)"
   sha=$(merge_sha "$1") || { echo "$sha"; exit 1; }
   grep -qE '^[[:space:]]*Feature map: \.claude/skills/verify-qa/reference/feature-map/[a-z0-9-]+\.md' "$p" \
@@ -202,11 +364,34 @@ check_done() {
   echo "done ok"
 }
 
+cleaned_branch_checks() {
+  local repo=$1 b=$2 rc wt
+  wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
+  grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
+  git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
+  [ "$rc" = 0 ] && fail "local branch $b still exists; run /clean-up"
+  [ "$rc" = 1 ] || fail "cannot check local branch $b (git exit $rc)"
+  git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; rc=$?
+  [ "$rc" = 0 ] && fail "GitHub branch $b still exists; run /clean-up"
+  [ "$rc" = 2 ] || fail "cannot check GitHub branch $b (git exit $rc)"
+}
+
 check_cleaned() {
   local n b rc wt repo=${SHIP_CHECKOUT:-}
   if [ -z "$repo" ]; then
     [ "$REPO" = hypertask-ai/hypertask ] || fail "set SHIP_CHECKOUT to the local checkout of $REPO"
     repo=$HOME/projects/hypertask
+  fi
+  # Nochange ticket: no PR exists, so every origin branch, local branch and worktree branch named for the ticket
+  # (id not followed by a digit) goes through the same checks as a PR branch.
+  if [ -s "$EVID/$1/nochange" ]; then
+    nochange_ok cleaned "$1" >/dev/null
+    local low=${1,,} names
+    names=$( { nochange_origin_branches "$1"
+      git -C "$repo" for-each-ref --format='%(refname:short)' refs/heads
+      git -C "$repo" worktree list --porcelain | sed -n 's#^branch refs/heads/##p'; } | grep -E -- "${low}([^0-9]|\$)" | sort -u)
+    while read -r b; do [ -n "$b" ] && cleaned_branch_checks "$repo" "$b"; done <<<"$names"
+    echo "cleaned ok (nochange, no branch or worktree of this ticket)"; return 0
   fi
   # Normal ticket: the bound PR's own branch. Duplicate (bound to another ticket's PR): the branch it
   # recorded with `ship-check branch` after `ship-check duplicate` (rebinding clears that record).
@@ -219,21 +404,14 @@ check_cleaned() {
     b=$(gh pr view "$n" -R "$REPO" --json headRefName --jq .headRefName 2>/dev/null) || fail "cannot read PR $n"
     [ -n "$b" ] || fail "PR $n has no branch name"
   fi
-  wt=$(git -C "$repo" worktree list --porcelain) || fail "cannot list worktrees in $repo"
-  grep -qxF "branch refs/heads/$b" <<<"$wt" && fail "a worktree still uses $b; run /clean-up"
-  git -C "$repo" show-ref --verify --quiet "refs/heads/$b"; rc=$?
-  [ "$rc" = 0 ] && fail "local branch $b still exists; run /clean-up"
-  [ "$rc" = 1 ] || fail "cannot check local branch $b (git exit $rc)"
-  git -C "$repo" ls-remote --exit-code --heads origin "$b" >/dev/null 2>&1; rc=$?
-  [ "$rc" = 0 ] && fail "GitHub branch $b still exists; run /clean-up"
-  [ "$rc" = 2 ] || fail "cannot check GitHub branch $b (git exit $rc)"
+  cleaned_branch_checks "$repo" "$b"
   echo "cleaned ok"
 }
 
 check_premerge() {
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
   python3 - "$REPO" "$1" "$EVID" "${2:-}" <<'PY'
-import base64, json, os, re, subprocess, sys, time, urllib.parse, urllib.request
+import json, os, re, subprocess, sys, time, urllib.parse, urllib.request
 from pathlib import Path
 
 repo, pr, evidence, expected_sha = sys.argv[1:]
@@ -250,14 +428,53 @@ def gh(*args):
         text = text[end:].strip()
     return pages
 
+# PR files come from a local bare cache repo: one git fetch per head, then `git show`. No contents API call, ever.
+GIT = os.environ.get('SHIP_GIT', 'git')
+CACHE = Path(os.environ.get('SHIP_GIT_CACHE') or Path.home() / '.cache/premerge-evidence/git')
+REMOTE = os.environ.get('SHIP_GIT_REMOTE', f'https://github.com/{repo}.git')
+GIT_ENV = dict(os.environ, GIT_TERMINAL_PROMPT='0')
+def git(*args, timeout=30, cwd=True):
+    command = [GIT, '-C', str(CACHE), *args] if cwd else [GIT, *args]
+    return subprocess.run(command, capture_output=True, timeout=timeout, env=GIT_ENV)
+
+def have(sha):
+    return git('cat-file', '-e', sha + '^{commit}').returncode == 0
+
+def prepare(pr, *shas):
+    import fcntl
+    CACHE.parent.mkdir(parents=True, exist_ok=True)
+    with open(str(CACHE) + '.lock', 'w') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if not (CACHE / 'HEAD').exists() and git('init', '--bare', '-q', str(CACHE), cwd=False).returncode:
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+        if all(have(s) for s in shas):
+            return
+        git('fetch', '--no-tags', '-q', REMOTE, f'+refs/pull/{pr}/head:refs/premerge/pr-{pr}', timeout=600)
+        for s in shas:
+            if not have(s):
+                git('fetch', '--no-tags', '-q', REMOTE, s, timeout=600)
+        if not all(have(s) for s in shas):
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+
 cache = {}
 def source(path, sha):
     if (path, sha) not in cache:
-        row = gh('api', f'repos/{repo}/contents/{urllib.parse.quote(path, safe="/")}?ref={sha}')
-        if row.get('encoding') != 'base64':
-            raise ValueError('cannot read complete PR source; retry before merging')
-        cache[path, sha] = base64.b64decode(row['content']).decode()
+        result = git('show', f'{sha}:{path}')
+        if result.returncode:
+            raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+        cache[path, sha] = result.stdout.decode()
     return cache[path, sha]
+
+def listdir(path, sha):
+    # One git ls-tree, shaped like the contents API listing (name, path, type), so a directory read costs no API call.
+    result = git('ls-tree', '-z', sha, path.rstrip('/') + '/')
+    if result.returncode:
+        raise ValueError('cannot read the PR diff or source from GitHub; retry before merging')
+    rows = []
+    for entry in filter(None, result.stdout.decode().split('\0')):
+        meta, full = entry.split('\t', 1)
+        rows.append({'name': full.rsplit('/', 1)[-1], 'path': full, 'type': 'file' if meta.split()[1] == 'blob' else 'dir'})
+    return rows
 
 def constants(text):
     return {m[0]: m[2] for m in re.findall(r'\bconst\s+(\w+)(?:\s*:\s*[^=;\n]+)?\s*=\s*([\'\"])(.*?)\2', text)}
@@ -268,6 +485,33 @@ def resolve(arg, keys):
         return arg[1:-1]
     return keys.get(arg)
 
+def read_registry(ref):
+    text = source('src/lib/flags/keys.ts', ref)
+    keys = constants(text)
+    rows = []
+    if 'definitions/index.generated' in text:
+        listing = listdir('src/lib/flags/definitions', ref)
+        if not isinstance(listing, list) or not listing:
+            raise ValueError('cannot resolve per-flag registry; retry before merging')
+        for item in sorted(listing, key=lambda item: item['name']):
+            if item['name'] == 'index.generated.ts':
+                raise ValueError('generated flag index must not be committed')
+            if item.get('type') != 'file' or not re.fullmatch(r'(?:htpr|hyfa|yper4)-\d+-[a-z0-9-]+\.ts', item['name']):
+                raise ValueError('cannot resolve per-flag registry; invalid flag file')
+            flag = source(item['path'], ref)
+            values = constants(flag)
+            if len(values) != 1 or next(iter(values.values())) + '.ts' != item['name']:
+                raise ValueError('cannot resolve per-flag registry; invalid key')
+            keys.update(values)
+            rows.append(flag)
+    return keys, rows
+
+registry_cache = {}
+def flag_registry(ref):
+    if ref not in registry_cache:
+        registry_cache[ref] = read_registry(ref)
+    return registry_cache[ref]
+
 try:
     # Mutable PR endpoints can briefly serve an earlier head after a push.
     freshness = time.time_ns()
@@ -277,6 +521,7 @@ try:
         raise ValueError('cannot read the full PR head sha')
     if expected_sha and sha != expected_sha:
         raise ValueError('PR head changed while checking evidence; retry')
+    prepare(pr, sha, base)
     ticket = row['title'].split()[0]
     pages = gh('api', f'repos/{repo}/pulls/{pr}/files?per_page=100&premerge={freshness}', '--paginate')
     files = [f for page in pages for f in page]
@@ -293,11 +538,18 @@ try:
             if not re.search(r'^src/.*\.(?:[cm]?js|jsx|ts|tsx)$', path):
                 continue
             text = source(path, ref)
+            if path.startswith('src/lib/flags/definitions/'):
+                values = constants(text)
+                if len(values) != 1:
+                    raise ValueError('cannot resolve touched flag definition')
+                touched.update(values.values())
+                if ref == base:
+                    base_touched.update(values.values())
             readers = ['useFlag', 'isFeatureEnabled'] + re.findall(r'\b(?:useFlag|isFeatureEnabled)\s+as\s+(\w+)', text)
             for call in re.finditer(r'\b(?:' + '|'.join(readers) + r')\s*\(\s*([^,)\n]+)', text):
                 if re.search(r'\bfunction\s*$', text[:call.start()]):
                     continue
-                keys = constants(source('src/lib/flags/keys.ts', ref)) | constants(text)
+                keys = flag_registry(ref)[0] | constants(text)
                 key = resolve(call[1], keys)
                 if not key:
                     # Follow one `import { NAME } from "@/..."` hop to the module that defines the key.
@@ -346,25 +598,40 @@ try:
         except Exception:
             pass
     registry = source('src/lib/flags.ts', base)
-    keys = constants(source('src/lib/flags/keys.ts', base))
+    keys, flag_rows = flag_registry(base)
     default = re.search(r'\bDEFAULT_FEATURE_FLAG_MODE[^=]*=\s*[\'\"](\w+)[\'\"]', registry)
-    definitions = re.search(r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const', registry)
-    if not default or not definitions:
+    definitions_pattern = r'\bFEATURE_FLAG_DEFINITIONS\s*=\s*\[([\s\S]*?)\]\s*as const'
+    definitions = re.search(definitions_pattern, registry)
+    if not definitions:
+        definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
+    if not default or not (definitions or flag_rows):
         raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
     defaults = {}
-    for block in re.findall(r'\{([^{}]*)\}', definitions[1]):
+    for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):
         key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
         if key:
-            defaults[resolve(key[1], keys)] = default[1]
+            kind = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
+            explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
+            defaults[resolve(key[1], keys)] = explicit[1] if explicit else ('EVERYONE' if kind else default[1])
     live = modes is not None
     if not live:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
-    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
     base_values = set(keys.values()) | set(defaults)
-    head_values = set(constants(source('src/lib/flags/keys.ts', sha)).values())
+    head_keys, head_rows = flag_registry(sha)
+    head_values = set(head_keys.values())
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
+    for block in head_rows:
+        key = re.search(r'\bkey:\s*(\w+)', block)
+        explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
+        bugfix = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
+        key = key and resolve(key[1], head_keys)
+        # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
+        if key in added and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
+            added.discard(key)
+            modes[key] = 'EVERYONE'
+    released = {key for key in touched if modes.get(key) == 'EVERYONE'}
     unknown = unknown or not live or any(key not in modes and key not in added for key in touched)
     if not released and not unknown:
         print('no released flag touched')
@@ -456,15 +723,42 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg t c pr out checks env='([A-Za-z_][A-Za-z0-9_]*=[^[:space:]]*[[:space:]]+)*'
+  local cmd seg rest t c pr out checks setting v part unquoted
+  local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
+  assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
+  local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
+  local SHIP_CHECKOUT=$checkout SHIP_WORKER=$worker
+  export SHIP_CHECKOUT SHIP_WORKER
+  local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
+  local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
   cmd=$(jq -r '.tool_input.command // empty')
-  # Check every command segment on its own, with its own repo and base overrides.
+  # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
-    [[ $seg =~ SHIP_REPO=([^[:space:]]+) ]] && REPO=${BASH_REMATCH[1]}
-    [[ $seg =~ SHIP_BASE=([^[:space:]]+) ]] && BASE=${BASH_REMATCH[1]}
+    SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
+    [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
+    while [[ $rest =~ $assignment ]]; do
+      setting=${BASH_REMATCH[1]}; v=${BASH_REMATCH[2]}
+      rest=${rest:${#BASH_REMATCH[0]}}
+      unquoted=""
+      while [[ $v =~ ^$fragment ]]; do
+        part=${BASH_REMATCH[0]}; v=${v:${#part}}
+        [[ $part == \"* || $part == \'* ]] && part=${part:1:${#part}-2}
+        unquoted+=$part
+      done
+      case $setting in
+        SHIP_REPO) REPO=$unquoted ;;
+        SHIP_BASE) BASE=$unquoted ;;
+        SHIP_CHECKOUT|SHIP_WORKER) printf -v "$setting" '%s' "$unquoted" ;;
+      esac
+    done
+    # Unparseable assignment prefixes must not hide a protected command.
+    if [[ $seg =~ ^[[:space:]]*[^[:space:]]*= && ! $rest =~ ^$merge && ! $rest =~ ^$done \
+      && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
+      echo "ship-check blocked: cannot parse the leading environment assignments before the protected command." >&2; exit 2
+    fi
     # PR merge: the PR must be named right and its ticket must exist.
-    if [[ $seg =~ ^[[:space:]]*${env}gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$) ]]; then
+    if [[ $rest =~ ^$merge ]]; then
       [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
       [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
@@ -472,8 +766,8 @@ guard() {
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging." >&2; exit 2; }
     fi
     # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
-    if [[ $seg =~ ^[[:space:]]*${env}vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"\']?((HTPR|HYFA|YPER4)-[0-9]+)[\"\']?[[:space:]].*--section[[:space:]=]+[\"\']?Done ]]; then
-      t=${BASH_REMATCH[2]}
+    if [[ $rest =~ ^$done ]]; then
+      [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
       checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
       for c in $checks; do
         out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
@@ -487,6 +781,8 @@ case "${1:-}" in
   bind) check_bind "$2" "$3" ;;
   branch) check_branch "$2" "${3:-}" ;;
   duplicate) check_duplicate "$2" "$3" "$4" ;;
+  dropped) check_dropped "$2" "$3" ;;
+  nochange) check_nochange "${2:-}" ;;
   premerge) check_title "$2"; check_premerge "$2" ;;
   premerge-status) check_premerge_status "$2" ;;
   title) check_title "$2" ;;
@@ -498,5 +794,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,18p' "$0"; exit 1 ;;
+  *) sed -n '2,22p' "$0"; exit 1 ;;
 esac

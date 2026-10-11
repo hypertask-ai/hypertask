@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.1.3 - 2026-10-10
+
+- Tickets assigned to a runner's agent on the board now reach that runner: a
+  3 minute user timer fills a per-runner inbox, a hook hands the next ticket to
+  an idle `RUNNER <n>` session. Installed per runner after merge with
+  `runner-pickup install <n>`. https://app.hypertask.ai/detail/project-4060/244
+
 ## 1.1.2 - 2026-10-06
 
 - Queue heavy local lint, tests, typecheck and disposable webpack builds across

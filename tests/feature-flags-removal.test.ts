@@ -13,6 +13,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 function row(overrides: Partial<FeatureFlagRow>): FeatureFlagRow {
   return {
     key: "htpr-1-some-flag",
+    kind: "feature",
     mode: "EVERYONE",
     updatedAt: null,
     releasedAt: null,

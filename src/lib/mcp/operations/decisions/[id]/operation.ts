@@ -1,7 +1,8 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
@@ -107,6 +108,7 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const params = await props.params
     const loaded = await loadAccessibleDecisionRequest(request, params.id)
@@ -123,12 +125,15 @@ export async function GET(
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ id: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const params = await props.params
     const loaded = await loadAccessibleDecisionRequest(request, params.id)
@@ -274,4 +279,6 @@ export async function PATCH(
       { status: 500 }
     )
   }
+
+  })(request)
 }

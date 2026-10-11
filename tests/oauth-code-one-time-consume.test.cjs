@@ -44,6 +44,7 @@ const calls = {
   ownerClaims: [],
   mintAttempts: [],
   mintedTokens: [],
+  connections: [],
 }
 let authCode = baseAuthCode
 let client = { client_id: baseAuthCode.client_id }
@@ -75,6 +76,7 @@ function resetState(overrides = {}) {
   calls.ownerClaims.length = 0
   calls.mintAttempts.length = 0
   calls.mintedTokens.length = 0
+  calls.connections.length = 0
 }
 
 function holdUntilConcurrentReads(expectedReads = 2) {
@@ -89,6 +91,11 @@ function holdUntilConcurrentReads(expectedReads = 2) {
     await gate
   }
 }
+
+stubModule('src/lib/telemetry/activationOccurrences.ts', {
+  recordAgentConnection: (...args) => calls.connections.push(args),
+  recordAuthenticatedConnection: () => {},
+})
 
 stubModule('src/lib/prisma.ts', {
   default: {
@@ -382,3 +389,16 @@ test('a signing failure rolls back consumption and the code can be redeemed', as
   assert.equal(consumed, true)
   assert.equal(ownerId, owner.id)
 })
+
+for (const native of [true, false]) {
+  test(`authorization-code-only ${native ? 'native' : 'MCP'} client ${native ? 'does not record' : 'records'} an agent connection`, async () => {
+    resetState({
+      redirect_uri: native ? 'hypertask-native://oauth/callback' : baseAuthCode.redirect_uri,
+      client: { client_id: baseAuthCode.client_id, client_name: 'Cursor', grant_types: ['authorization_code'] },
+    })
+    const response = await POST(tokenRequest())
+    assert.equal(response.status, 200)
+    assert.equal((await response.json()).refresh_token, undefined)
+    assert.deepEqual(calls.connections, native ? [] : [[owner.id, 'access-token-1', 'mcp', 'Cursor']])
+  })
+}

@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 
 interface DraftResponse {
@@ -64,6 +65,7 @@ function mapDraftToResponse(draft: any): DraftResponse {
 }
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -163,9 +165,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 export async function DELETE(request: NextRequest, props: { params: Promise<{ draft_id: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -235,4 +240,6 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
       { status: 500 }
     )
   }
+
+  })(request)
 }

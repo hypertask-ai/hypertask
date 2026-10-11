@@ -1,11 +1,13 @@
-import { useFlag } from "@/hooks/useFlag";
-import { LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag, useHaikuDefaultFlagLoaded } from "@/hooks/useHaikuDefaultFlag";
 import type { TeamBillingSnapshot } from "@/lib/deriveCurrentBoardBilling";
 import { useCurrentBoardBilling } from "@/hooks/General/useCurrentBoardBilling";
-import { isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
+import { hasHaikuByokProviderFlags, isByokProviderEnabledForSource } from "@/lib/byokSelectedProviderGate";
 import {
   aiModelDefinitions,
   aiModelOptions,
+  isAiModelOptionVisible,
   defaultAiModelOption,
   getDefaultAiModelOptionForPlan,
   getAiModelDefinition,
@@ -79,6 +81,9 @@ const AIModelDropDownList = ({
   effortLabelClassName,
   mobileQuickPicker = false,
   lunaFree,
+  visibleModelOptions,
+  haiku55Enabled,
+  haikuDefaultEnabled,
 }: {
   aiSelected: TAiModal | undefined;
   optionCallback: (item: TAiModal) => void;
@@ -95,7 +100,17 @@ const AIModelDropDownList = ({
   mobileQuickPicker?: boolean;
   // htpr-6722-latest-models: Luna is included on Free plans.
   lunaFree: boolean;
+  visibleModelOptions: TAiModelOption[];
+  haiku55Enabled: boolean;
+  haikuDefaultEnabled: boolean;
 }) => {
+  const haiku55Loaded = useFlagLoaded(HTPR_7010_HAIKU_5_5_FLAG);
+  const haikuDefaultLoaded = useHaikuDefaultFlagLoaded();
+  const lunaFreeLoaded = useFlagLoaded(LUNA_FREE_PLAN_FLAG);
+  const modelFlagsLoaded = haiku55Loaded && haikuDefaultLoaded && lunaFreeLoaded;
+  const quickModelIds = haiku55Enabled
+    ? ["claude-haiku-5-5", ...MOBILE_AI_CHAT_QUICK_MODEL_IDS]
+    : MOBILE_AI_CHAT_QUICK_MODEL_IDS;
   const [isOpen, setIsOpen] = useState(false);
   const [submenu, setSubmenu] = useState<Submenu | null>(null);
   const [submenuPlacement, setSubmenuPlacement] =
@@ -138,15 +153,15 @@ const AIModelDropDownList = ({
   const listedModelKeys = useMemo(
     () =>
       new Set(
-        aiModelOptions
+        visibleModelOptions
           .filter((option) => listedIds.has(option.id))
           .map((option) => option.modelKey)
       ),
-    [listedIds]
+    [listedIds, visibleModelOptions]
   );
   const availableOptions = useMemo(
     () =>
-      aiModelOptions.filter((option) => {
+      visibleModelOptions.filter((option) => {
         if (!listedIds.has(option.id)) return false;
         // Guests: allowlist is the only availability gate, ignore team providers
         // and custom endpoints.
@@ -164,6 +179,7 @@ const AIModelDropDownList = ({
       customEndpoint.configured,
       enabledProviderSet,
       listedIds,
+      visibleModelOptions,
       respectTeamAvailability,
       isGuest,
     ]
@@ -172,24 +188,25 @@ const AIModelDropDownList = ({
   const lunaFreeOnPlan = lunaFree && scopedBilling?.storePlanId === "Free";
   const planDefaultOption = getDefaultAiModelOptionForPlan(
     scopedBilling?.storePlanId,
-    isByokProviderEnabledForSource(
-      scopedBilling?.byokProviderFlags,
-      preferredAiModelOption.source,
-    ),
+    haiku55Enabled
+      ? hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags)
+      : isByokProviderEnabledForSource(scopedBilling?.byokProviderFlags, preferredAiModelOption.source),
     lunaFree,
+    haiku55Enabled,
+    haikuDefaultEnabled,
   );
   const requestedOption =
-    getAiModelOptionById(aiSelected?.id) ?? planDefaultOption;
+    getAiModelOptionById(aiSelected?.id, haiku55Enabled) ?? planDefaultOption;
   const fallbackOption =
     (isGuest
       ? availableOptions.find((option) => option.id === GUEST_DEFAULT_OPTION_ID)
       : undefined) ??
     availableOptions.find((option) => option.id === planDefaultOption.id) ??
-    pickAutoAiModelOption(availableOptions);
+    pickAutoAiModelOption(availableOptions, haiku55Enabled, { haikuDefaultEnabled, plan: scopedBilling?.storePlanId, hasByok: hasHaikuByokProviderFlags(scopedBilling?.byokProviderFlags) });
   const selectedOption =
     availableOptions.find((option) => option.id === requestedOption.id) ??
     fallbackOption ??
-    defaultAiModelOption;
+    (haiku55Enabled ? planDefaultOption : defaultAiModelOption);
   const selectedModel = getAiModelDefinition(selectedOption.modelKey);
   const selectedModelLabel =
     selectedOption.source === "custom"
@@ -229,6 +246,7 @@ const AIModelDropDownList = ({
 
   useEffect(() => {
     if (
+      !modelFlagsLoaded ||
       (respectTeamAvailability && providerSettingsLoading) ||
       customEndpoint.isLoading ||
       requestedOption.id === selectedOption.id ||
@@ -240,6 +258,7 @@ const AIModelDropDownList = ({
   }, [
     availableOptions.length,
     optionCallback,
+    modelFlagsLoaded,
     providerSettingsLoading,
     customEndpoint.isLoading,
     respectTeamAvailability,
@@ -401,7 +420,7 @@ const AIModelDropDownList = ({
             <div className="px-2.5 pb-1 pt-1.5 text-micro font-semibold uppercase tracking-[0.08em] text-text-light-gray">
               Model
             </div>
-            {MOBILE_AI_CHAT_QUICK_MODEL_IDS.map((quickModelId) => {
+            {quickModelIds.map((quickModelId) => {
               const catalogOption = getAiModelOptionById(quickModelId);
               if (!catalogOption) return null;
               const option = availableOptions.find(
@@ -802,13 +821,20 @@ function SubmenuRow({
 
 type AIModelDropDownButtonProps = Omit<
   Parameters<typeof AIModelDropDownList>[0],
-  "lunaFree"
+  "lunaFree" | "visibleModelOptions" | "haiku55Enabled" | "haikuDefaultEnabled"
 >;
 
 const AIModelDropDownButton = (props: AIModelDropDownButtonProps) => {
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG);
-  if (lunaFree) return <AIModelDropDownList {...props} lunaFree />;
-  return <AIModelDropDownList {...props} lunaFree={false} />;
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
+  const haiku55Enabled = useFlag(
+    HTPR_7010_HAIKU_5_5_FLAG,
+  ) || haikuDefaultEnabled;
+  const visibleModelOptions = haikuDefaultEnabled || haiku55Enabled
+    ? aiModelOptions.filter((option) => isAiModelOptionVisible(option, true))
+    : aiModelOptions.filter((option) => isAiModelOptionVisible(option, false));
+  if (lunaFree) return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} lunaFree />;
+  return <AIModelDropDownList {...props} haikuDefaultEnabled={haikuDefaultEnabled} haiku55Enabled={haiku55Enabled} visibleModelOptions={visibleModelOptions} lunaFree={false} />;
 };
 
 export default AIModelDropDownButton;

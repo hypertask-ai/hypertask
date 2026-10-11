@@ -9,6 +9,7 @@ interface SendEmailOptions {
   text?: string;
   /** Extra RFC headers, e.g. List-Unsubscribe (HTPR-4164). Resend passes these through. */
   headers?: Record<string, string>;
+  idempotencyKey?: string;
 }
 
 export async function sendEmail({
@@ -19,6 +20,7 @@ export async function sendEmail({
   html,
   text,
   headers,
+  idempotencyKey,
 }: SendEmailOptions) {
   try {
     const response = await fetch("https://api.resend.com/emails", {
@@ -26,6 +28,7 @@ export async function sendEmail({
       headers: {
         Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
         "Content-Type": "application/json",
+        ...(idempotencyKey !== undefined ? { "Idempotency-Key": idempotencyKey } : {}),
       },
       body: JSON.stringify({
         to,

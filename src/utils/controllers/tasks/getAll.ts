@@ -5,7 +5,11 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { boardAgentVisibilityWhere } from "@/lib/agents/visibility";
 
 
-const tasksGetAll = async (projectId:number|string|string[], userId:number|string|string[]) => {
+const tasksGetAll = async (
+    projectId:number|string|string[],
+    userId:number|string|string[],
+    contract: "legacy" | "compact" = "legacy"
+) => {
 
         try {
 
@@ -79,9 +83,43 @@ const tasksGetAll = async (projectId:number|string|string[], userId:number|strin
                         },
                         orderBy:{
                             createdAt:'asc'
-                        }
+                        },
+                        ...(contract === "compact" ? {
+                            select: {
+                                id: true,
+                                uniqueIndex: true,
+                                ticketNumber: true,
+                                title: true,
+                                status: true,
+                                projectId: true,
+                                sectionId: true,
+                                createdAt: true,
+                            }
+                        } : {})
                     },
-                    parentTask: {
+                    parentTask: contract === "compact" ? {
+                        select: {
+                            id: true,
+                            uniqueIndex: true,
+                            ticketNumber: true,
+                            title: true,
+                            status: true,
+                            projectId: true,
+                            sectionId: true,
+                            subTasks: {
+                                where: { status: { not: "Deleted" } },
+                                select: {
+                                    id: true,
+                                    uniqueIndex: true,
+                                    ticketNumber: true,
+                                    title: true,
+                                    status: true,
+                                    projectId: true,
+                                    sectionId: true,
+                                }
+                            }
+                        }
+                    } : {
                         include:{
                             subTasks:{where:{status:{not:"Deleted"}}},
                         }

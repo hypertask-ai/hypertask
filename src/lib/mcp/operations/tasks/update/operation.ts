@@ -13,7 +13,7 @@ import {
   executeTaskUpdate,
   type UpdateTaskBody,
   type UpdateTaskResponse,
-} from '@/lib/mcp/tasks/updateTask'
+} from '@/lib/mcp/tasks/updateTaskSelector'
 
 export type { UpdateTaskResponse } from '@/lib/mcp/tasks/updateTask'
 

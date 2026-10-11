@@ -131,6 +131,7 @@ test("UI rename calls the same controller and permission behavior as the API", a
   ]) {
     const h = harness({ members: allowed ? [humanMember()] : [] });
     const ui = loadTs("src/pages/api/projects/update.ts", {
+      "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
       "@/utils/controllers/projects/update": h.controller,
       "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
       "@/lib/auth/sessionUserRecord": h.userRecord,

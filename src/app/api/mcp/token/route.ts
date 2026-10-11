@@ -150,13 +150,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Clear revocation timestamp when generating a new token
-    // This allows new tokens to work after previous revocation
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { mcpTokensRevokedAt: null },
-    })
-
     // Generate new MCP token (30 days expiration)
     const token = createMcpToken(user.id, dbUser.email, '30d')
 

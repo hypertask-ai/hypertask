@@ -2,6 +2,7 @@ import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { getInboxTabs } from "@/utils/helperFunctions/helperFunctions";
+import { markQuietAgentMentions } from "@/utils/controllers/notifications/quietOwnerInbox";
 import { inboxConfig } from "@/lib/configs/inbox.config";
 import { generalConfig } from "@/lib/configs/general.config";
 import type { AgentScopes } from "@/lib/mcp/agents/scopes";
@@ -665,7 +666,8 @@ const notificationGetAll = async (userId: string | string[]) => {
         fromAgentId: null,
       };
     });
-    const inboxRows = [...displayedNotifications, ...blockedByYouRows];
+    const quietRows = await markQuietAgentMentions(prisma, parsedUserId, displayedNotifications);
+    const inboxRows = [...quietRows, ...blockedByYouRows];
 
     // Process the notifications to keep only one notification per task.
     // getInboxTabs recognizes the task-backed synthetic rows and keeps them only

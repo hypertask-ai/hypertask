@@ -28,6 +28,7 @@ test("built-in views have stable ids in their fixed order", () => {
       ["builtin:agents", "Agents"],
       ["builtin:current-cycle", "Current cycle"],
       ["builtin:next-cycle", "Next cycle"],
+      ["builtin:decisions", "Decisions"],
     ],
   );
 });

@@ -53,7 +53,7 @@ export const CommentOptions = ({
 
   return (
     <>
-      <div className={`flex items-center gap-2 ${styles.unstacked_grid_row1}`}>
+      <div data-task-detail-actions className={`flex items-center gap-2 ${styles.unstacked_grid_row1}`}>
         <ReplyToComment
           currentIndex={i}
           onClickHandler={replyToCommentHandler}

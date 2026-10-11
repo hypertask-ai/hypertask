@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -84,7 +85,7 @@ export async function runSerializableViewReset(
               id: projectId,
               OR: [
                 { ownerId: userId },
-                { members: { some: { userId, status: "Accepted" } } },
+                { members: { some: { userId, agentId: null, status: "Accepted" } } },
               ],
             },
             select: { id: true },
@@ -149,4 +150,6 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/reset-to-default")).POST,
+);

@@ -72,16 +72,25 @@ function makeHarness(redis = makeRedis()) {
   }
   const aliases = {
     '@/lib/prisma': prisma,
+    '@/lib/flags': {
+      HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+      HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
+      isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
+    },
     '@/utils/controllers/users/update_or_create_user': updateUser,
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: true, skipOnboarding: true } },
     '@/utils/controllers/users/autoJoinByEmailDomain': { default: async () => {} },
-    '@/utils/controllers/users/completeOnboardingStep': { CompleteOnboardingFirstStep: async () => {} },
+    '@/utils/controllers/users/provisionFirstWorkspace': { provisionFirstWorkspace: async () => {} },
     '@/lib/constants/constants': { companyRoleOptions: ['Founder'], companySizeOptions: ['Just me'] },
     '@/lib/auth/session': loadTs('src/lib/auth/session.ts'),
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },
     '@/utils/controllers/demo/adoptGuestBoards': { adoptGuestBoards: async () => {} },
+    '@/utils/controllers/demo/resolveLoginBoard': { resolveLoginBoard: async () => undefined },
     '@/lib/auth/slimUserCookie': loadTs('src/lib/auth/slimUserCookie.ts'),
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
+    '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
+    '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
+    '@vercel/functions': { waitUntil: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/services/verificationCodeService': { VerificationCodeService: {
       generateCode: () => '123456', isRateLimited: () => ({ limited: false }), storeCode: async () => {},

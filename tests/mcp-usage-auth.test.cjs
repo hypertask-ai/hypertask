@@ -20,6 +20,7 @@ function stubModule(relativePath, exports) {
 const authPath = "src/lib/mcp/auth.ts";
 const stubbedPaths = [
   authPath,
+  "src/lib/telemetry/activationOccurrences.ts",
   "src/lib/prisma.ts",
   "src/lib/auth/betterAuth.ts",
   "src/lib/redis.ts",
@@ -53,6 +54,11 @@ let teamGrant = {
 };
 let storedTeamBinding = "member:membership-a";
 let disabledTeamKeys = 0;
+stubModule('src/lib/telemetry/activationOccurrences.ts', {
+  recordAgentConnection: () => {},
+  recordAuthenticatedConnection: () => {},
+})
+
 stubModule("src/lib/prisma.ts", {
   default: {
     user: {

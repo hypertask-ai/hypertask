@@ -1089,7 +1089,7 @@ test("Calendar integrates cache-first hydration, authoritative reconciliation, r
   assert.match(controller, /attachWaitingOnUsers\(tasksWithOpenBlockers\)/);
   assert.match(
     controller,
-    /members:\s*\{\s*some:\s*\{\s*userId, status: "Accepted"/,
+    /members:\s*\{\s*some:\s*\{\s*userId, agentId: null, status: "Accepted"/,
   );
   assert.match(
     controller,

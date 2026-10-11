@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
+
 import {
   saveAgentRuntimeSnapshot,
 } from "@/lib/agents/runtimeState";
@@ -13,6 +14,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -66,4 +68,6 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  })(request)
 }

@@ -4,6 +4,7 @@ import { HOUSE_OUTPUT_STYLE } from "@/app/api/ai/_lib/editorAiPrompts";
 export const CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES = [
   "claude-opus",
   "claude-sonnet-5",
+  "claude-haiku-5",
 ] as const;
 
 export const COMMENT_TASK_LINK_RULE =

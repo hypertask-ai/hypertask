@@ -9,7 +9,7 @@ const stubModule = (relativePath, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 };
 
-function loadService(storedComment, featureEnabled = true) {
+function loadService(storedComment) {
   const calls = {
     lookup: [],
     transactions: 0,
@@ -89,7 +89,6 @@ function loadService(storedComment, featureEnabled = true) {
     "src/utils/controllers/comments/processMentions.ts",
     "src/utils/controllers/comments/readReceipts.ts",
     "src/lib/ai/hyperAiConfirmation.ts",
-    "src/lib/flags.ts",
   ]) {
     delete require.cache[modulePath(relativePath)];
   }
@@ -114,10 +113,6 @@ function loadService(storedComment, featureEnabled = true) {
     invalidateHyperAiCommentOrigin: async (commentId) =>
       calls.invalidations.push(commentId),
   });
-  stubModule("src/lib/flags.ts", {
-    isFeatureEnabled: async () => featureEnabled,
-  });
-
   const jiti = require("jiti")(
     path.join(root, `tests/update-comment-ownership-${Date.now()}-${Math.random()}.cjs`),
     {
@@ -137,7 +132,9 @@ test("a user cannot update a comment they do not own", async () => {
     updateCommentService({ commentId: 44, text: "changed", userId: 6 }),
     /not owned by user/,
   );
-  assert.deepEqual(calls.lookup[0].where, { id: 44, creatorId: 6 });
+  assert.deepEqual(calls.lookup[0].where, { id: 44, creatorId: 6, task: { project: {
+    OR: [{ ownerId: 6 }, { members: { some: { userId: 6, agentId: null } } }],
+  } } });
   assert.equal(calls.transactions, 0);
   assert.deepEqual(calls.invalidations, []);
 });

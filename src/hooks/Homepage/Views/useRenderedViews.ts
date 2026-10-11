@@ -73,7 +73,7 @@ const useRenderedViews = (project: IProject | null) => {
 
   const viewTaskCounts = useMemo(() => {
     const tasks = project?.tasks ?? []
-    const builtinContext = buildBuiltinViewContext(project, currentUser?.id)
+    const builtinContext = buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName)
     return new Map<string, number>([
       ...savedViewTaskCounts,
       ...BUILTIN_VIEWS.map((view) => [
@@ -81,7 +81,7 @@ const useRenderedViews = (project: IProject | null) => {
         tasks.filter((task) => view.predicate(task, builtinContext)).length,
       ] as const),
     ])
-  }, [currentUser?.id, project, savedViewTaskCounts])
+  }, [currentUser?.id, currentUser?.displayName, project, savedViewTaskCounts])
 
   const renderedViews: BoardView[] = useMemo(() => {
     if (showEmptyViewTabs) return views

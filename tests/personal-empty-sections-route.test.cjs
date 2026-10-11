@@ -65,6 +65,8 @@ stubModule("src/utils/controllers/projects/views/boardFilterWriteLock.ts", {
     operation(prisma),
 });
 
+stubModule("src/lib/api/task-writes/route.ts", { withTaskWriteFlag: (handler) => handler });
+
 const jiti = require("jiti")(path.join(root, "tests/personal-empty-sections-route.test.cjs"), {
   alias: { "@": path.join(root, "src") },
   cache: false,
@@ -175,7 +177,7 @@ test("personal empty-column visibility writes only the authenticated user's view
   ]);
   assert.deepEqual(where.project_view.project.OR, [
     { ownerId: 6 },
-    { members: { some: { userId: 6, status: "Accepted" } } },
+    { members: { some: { userId: 6, agentId: null, status: "Accepted" } } },
   ]);
 });
 

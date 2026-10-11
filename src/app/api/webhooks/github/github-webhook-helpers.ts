@@ -40,11 +40,26 @@ export function extractTicketId(input: {
   // is free-form human text that often references OTHER tickets ("Revert
   // HTPR-1234", "follow-up to INNE-99") — trusting it first would resolve to
   // the wrong ticket, and possibly move a task on an unrelated board.
-  for (const value of [input.headRef, input.title, input.body]) {
+  for (const value of [input.headRef, input.title]) {
     for (const match of value?.matchAll(ticketPattern) ?? []) {
       if (match[1].toUpperCase() === boardPrefix) {
         return `${boardPrefix}-${match[2]}`;
       }
+    }
+  }
+
+  // A title like "YPER4-220 [INFRA] ..." names the PR's own ticket on another
+  // board, so its description must not move a ticket on this board.
+  const titleTicket = input.title?.match(/^\s*([A-Za-z][A-Za-z0-9]{1,9})-\d+\s+\[/);
+  if (titleTicket && titleTicket[1].toUpperCase() !== boardPrefix) return null;
+
+  // Descriptions mention flag keys ("htpr-7010-haiku-5-5", "the htpr-7010
+  // flag"), so only an exact upper-case ticket id that is not part of a
+  // longer key counts there.
+  const bodyPattern = /\b([A-Z][A-Z0-9]{1,9})-(\d+)(?![-\w])/g;
+  for (const match of input.body?.matchAll(bodyPattern) ?? []) {
+    if (match[1] === boardPrefix) {
+      return `${boardPrefix}-${match[2]}`;
     }
   }
 

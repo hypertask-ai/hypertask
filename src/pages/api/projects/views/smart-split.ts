@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -447,7 +448,7 @@ const deleteSmartSplit = async (
     await tx.label.delete({ where: { id: label.id } });
   });
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+async function handler(req: NextApiRequest, res: NextApiResponse) {
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
@@ -502,3 +503,11 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(500).json({ message: "Could not save the smart split" });
   }
 }
+
+export default withTaskWriteFlag(withTaskWriteFlag(withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/smart-split")).POST,
+), "PATCH", async () =>
+  (await import("@/lib/api/project-writes/views/smart-split")).PATCH,
+), "DELETE", async () =>
+  (await import("@/lib/api/project-writes/views/smart-split")).DELETE,
+);

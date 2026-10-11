@@ -10,7 +10,10 @@ process.env.SESSION_SECRET ||= "upload-size-test-secret";
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(__filename, {
   interopDefault: true,
-  alias: { "@": path.join(root, "src") },
+  alias: {
+    "@/lib/api/task-writes/route": path.join(root, "tests/task-write-legacy-stub.cjs"),
+    "@": path.join(root, "src"),
+  },
 });
 
 const limits = jiti(path.join(root, "src/lib/storage/uploadLimits.ts"));

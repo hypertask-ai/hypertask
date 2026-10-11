@@ -1,3 +1,5 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -99,27 +101,16 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/task-writes/unscheduled-read")).GET,
+);
 
 const fetchidlist = async (id: number) => {
   try {
     if (id) {
       const projectid = await prisma.project.findMany({
         where: {
-          OR: [
-            {
-              members: {
-                some: {
-                  userId: id,
-                },
-              },
-            },
-            {
-              ownerId: {
-                in: [id],
-              },
-            },
-          ],
+          ...projectContentAccessWhere(id),
         },
         select: {
           id: true,

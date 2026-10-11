@@ -21,13 +21,18 @@ let rows;
 let memoryState;
 const calls = [];
 class AccessError extends Error {}
+class ProjectAccessError extends Error {
+  constructor() { super("Project not found or access denied"); }
+}
 const mocks = {
+  "@/lib/flags": { isFeatureEnabled: async () => false },
   "@/lib/errors/reportError": { reportError: async () => calls.push(["report"]) },
   "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => user },
   "@/app/api/ai/_lib/customInstructions": {
+    ProjectAccessError,
     assertProjectAccess: async (...args) => {
       calls.push(["access", ...args]);
-      if (denied) throw new Error("Project not found or access denied");
+      if (denied) throw new ProjectAccessError();
     },
   },
   "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => assert.fail("unused GET dependency") },

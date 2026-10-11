@@ -1,6 +1,7 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import type { Prisma } from '@prisma/client'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { parseBoardPlaybook } from '@/lib/mcp/boards/playbook'
@@ -25,6 +26,7 @@ export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const { projectId: rawId } = await props.params
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -57,6 +59,8 @@ export async function GET(
     console.error('[MCP Board Playbook] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
 
 /**
@@ -68,6 +72,7 @@ export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const { projectId: rawId } = await props.params
   try {
     const rateLimited = await checkMcpRateLimit(request)
@@ -113,4 +118,6 @@ export async function PUT(
     console.error('[MCP Board Playbook] PUT Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

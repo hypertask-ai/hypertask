@@ -368,12 +368,20 @@ export const getFilteredSections = (
 ) => {
   const builtinView = getBuiltinView(builtinViewId);
   if (builtinView && (!builtinView.available || builtinView.available(builtinContext))) {
-    return sections.map((section) => ({
+    const builtinSections = (builtinView.sectionPredicate
+      ? sections.filter((section) =>
+          builtinView.sectionPredicate!(section.section_title, builtinContext),
+        )
+      : sections
+    ).map((section) => ({
       ...section,
       items: (section.items ?? []).filter((task) =>
         builtinView.predicate(task, builtinContext),
       ),
     }));
+    return builtinView.hideEmptySections
+      ? builtinSections.filter((section) => section.items.length > 0)
+      : builtinSections;
   }
 
   const localStorageFilters = getActiveFiltersFromProject(project)

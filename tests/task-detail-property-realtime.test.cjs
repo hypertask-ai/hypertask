@@ -66,6 +66,7 @@ const realtimeStubs = (broadcasts) => ({
 });
 
 const sessionStub = {
+  "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
   "@/lib/auth/getSessionUser": {
     getSessionUser: async () => ({ userId: USER_ID, source: "legacy", needsBridge: true }),
   },

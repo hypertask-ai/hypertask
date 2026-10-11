@@ -15,8 +15,29 @@ const TICKET_REF_PATTERN = /\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g;
  * existing <a>...</a>, so ticket refs are only ever matched/replaced in text
  * nodes that aren't already part of a link.
  */
+function splitHtmlTags(html: string): string[] {
+  // Linear equivalent of html.split(/(<[^>]+>)/g); the regex is quadratic on runs of "<".
+  const tokens: string[] = [];
+  let textStart = 0;
+  let i = html.indexOf("<");
+  while (i !== -1) {
+    const close = html.indexOf(">", i + 1);
+    if (close === -1) break;
+    if (close === i + 1) {
+      i = html.indexOf("<", i + 1);
+      continue;
+    }
+    // [^>]+ stops at the first ">", and the leftmost "<" before it starts the match.
+    tokens.push(html.slice(textStart, i), html.slice(i, close + 1));
+    textStart = close + 1;
+    i = html.indexOf("<", textStart);
+  }
+  tokens.push(html.slice(textStart));
+  return tokens;
+}
+
 function tokenizeHtml(html: string) {
-  const tokens = html.split(/(<[^>]+>)/g);
+  const tokens = splitHtmlTags(html);
   const insideAnchor: boolean[] = [];
   let depth = 0;
   for (const token of tokens) {

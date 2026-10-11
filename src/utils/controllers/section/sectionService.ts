@@ -3,7 +3,10 @@
  * Both Pages API and MCP endpoints should use this service.
  * All view updates (default, applied, unsaved) are handled here.
  */
+import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
+import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
+import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
 import {
@@ -251,6 +254,7 @@ export interface DeleteSectionInput {
 
 export interface DeleteSectionResult {
   status: number
+  json?: { message: string; code: string }
   movedTaskCount?: number
   destinationSection?: { id: number; title: string } | null
 }
@@ -286,12 +290,30 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
         status: 'Normal'
       }
     })
-    if (taskCount > 0) return { status: 400 }
+    if (taskCount > 0) {
+      return {
+        status: 400,
+        json: {
+          message: "This is the board's last column. Move or delete its cards first.",
+          code: 'LAST_COLUMN_HAS_CARDS'
+        }
+      }
+    }
   }
 
   let movedTaskCount = 0
   if (firstSection) {
     const moved = await prisma.$transaction(async (tx) => {
+      // Lock the actual pre-move rows, including legacy title matches, so a
+      // concurrent move cannot turn an already-done task into a first completion.
+      const beforeTasks = agentId ? await tx.$queryRaw<Pick<Task, 'id' | 'projectId' | 'uniqueIndex' | 'title' | 'sectionId' | 'section' | 'status'>[]>`
+        SELECT id, "projectId", "uniqueIndex", title, "sectionId", section, status FROM "Task"
+        WHERE "projectId" = ${projectId}
+          AND ("sectionId" = ${sectionId} OR section = ${section.section_title})
+          AND status = 'Normal'
+        ORDER BY id
+        FOR UPDATE
+      ` : []
       const timestamp = new Date()
       const tasks = await tx.task.updateManyAndReturn({
         where: {
@@ -304,7 +326,7 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
           sectionId: firstSection.id,
           sectionChangedAt: timestamp
         },
-        select: { id: true }
+        select: { id: true, projectId: true, uniqueIndex: true, title: true, sectionId: true, section: true, status: true }
       })
       if (tasks.length > 0) {
         await tx.taskSectionEvent.createMany({
@@ -317,9 +339,18 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
           }))
         })
       }
-      return { count: tasks.length }
+      return { tasks, beforeTasks, timestamp }
     })
-    movedTaskCount = moved.count
+    movedTaskCount = moved.tasks.length
+    if (agentId && moved.beforeTasks.length) {
+      const afterTasks = new Map(moved.tasks.map((task) => [task.id, task]))
+      scheduleAgentFirstTaskEmailBatch(moved.beforeTasks.flatMap((before) => {
+        const after = afterTasks.get(before.id)
+        if (!after) return []
+        recordAgentTaskCompletion(before, { ...after, updatedAt: moved.timestamp }, agentId)
+        return [{ before, after }]
+      }), userId, agentId)
+    }
   }
 
   await updateSection({

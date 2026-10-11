@@ -1,14 +1,8 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
-
-const membershipOrOwnership = (userId: number) => ({
-    OR: [
-        { ownerId: parseInt(userId.toString(), 10) },
-        { members: { some: { userId } } },
-    ],
-});
 
 const getFirst = async (userId:number) => {
         try {
@@ -39,7 +33,7 @@ const getFirst = async (userId:number) => {
             // Prefer a fully-linked board (team + calendar account) for integrations.
             let project = await prisma.project.findFirst({
                 where: {
-                    ...membershipOrOwnership(userId),
+                    ...projectContentAccessWhere(userId),
                     status: "Normal",
                     googleAccount: { isNot: null },
                     teamId: { not: null },
@@ -54,7 +48,7 @@ const getFirst = async (userId:number) => {
             if (!project) {
                 project = await prisma.project.findFirst({
                     where: {
-                        ...membershipOrOwnership(userId),
+                        ...projectContentAccessWhere(userId),
                         status: "Normal",
                     },
                     include: projectInclude,

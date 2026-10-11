@@ -11,13 +11,14 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const task = { id: 42, projectId: 15, uniqueIndex: 42, title: "Cached title", description_: { content: "Cached description" } };
 
-test("pages query never fires must not block opening a cached ticket", async (t) => {
+test("disabled pages and comments queries stay pending without blocking an instant cached ticket", async (t) => {
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-15/42" });
   const previous = new Map(["window", "document", "fetch", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
   global.window = dom.window;
   global.document = dom.window.document;
   global.IS_REACT_ACT_ENVIRONMENT = true;
   let pagesRequests = 0;
+  let commentsRequests = 0;
   global.fetch = async (url) => {
     if (url.startsWith("/api/pages/list")) {
       pagesRequests++;
@@ -61,7 +62,7 @@ test("pages query never fires must not block opening a cached ticket", async (t)
     "@/lib/navigation/cachedTaskDetail": { cachedTaskDetailKey: (userId, taskId) => ["cached-task-detail", userId, taskId], TaskAccessDeniedError: class extends Error {} },
     "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false, mergeRealtimeTaskDetail: (_, refreshed) => refreshed },
     "@/app/unauthorized/page": { default: () => React.createElement("div", null, "No access") },
-    "@/utils/api/Task Detail": { fetchCommentsHelper: async () => ({ comments: [] }) },
+    "@/utils/api/Task Detail": { fetchCommentsHelper: async () => { commentsRequests++; return new Promise(() => {}); } },
     "@/app/detail/[...slug]/TaskDetailComp": { default: () => React.createElement("article", null, task.title, " ", task.description_.content) },
   };
   const source = fs.readFileSync(path.join(root, "src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx"), "utf8");
@@ -70,6 +71,9 @@ test("pages query never fires must not block opening a cached ticket", async (t)
   }).outputText;
   const exports = {};
   new Function("require", "exports", compiled)((name) => {
+    if (name === "@/lib/taskDetailReads") return {};
+    if (name === "@/hooks/useFlag") return { ...mocks[name], useFlagReady: () => true, useFlag: key => key !== "htpr-7009-dedupe-task-detail-reads" };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     if (name in mocks) return { __esModule: true, ...mocks[name] };
     assert.ok(["react", "react/jsx-runtime"].includes(name), `Unexpected dependency: ${name}`);
     return require(name);
@@ -80,5 +84,8 @@ test("pages query never fires must not block opening a cached ticket", async (t)
   assert.equal(pagesRequests, 0, "the pages query must never have fired");
   assert.equal(client.getQueryState(pagesKey).status, "pending");
   assert.equal(client.getQueryState(pagesKey).fetchStatus, "idle");
+  assert.equal(commentsRequests, 0);
+  assert.equal(client.getQueryState(["comments", task.id]).status, "pending");
+  assert.equal(client.getQueryState(["comments", task.id]).fetchStatus, "idle");
   assert.match(container.textContent, /Cached title Cached description/, "a never-firing pages query cannot hold the ticket behind its board");
 });

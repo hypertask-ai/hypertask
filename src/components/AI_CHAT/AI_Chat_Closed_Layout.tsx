@@ -1,9 +1,18 @@
-import React, { useContext } from "react";
+import React, { useContext, useLayoutEffect, useState } from "react";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import Tooltip from "@/components/Common/Tooltip";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { cn } from "@/utils/undoActions/helperFuncs";
+
+/**
+ * Narrowest a ticket page can be before its properties panel clips (HTPR-7055): 112 rail and padding
+ * + 500 thread min (BaseCommentAndDescriptionContainer.tsx:24) + 8 gap + 260 properties min
+ * (TaskInfoColumnContainer.tsx:8) + 64 right padding.
+ */
+const DETAIL_PAGE_MIN_WIDTH = 944;
 
 interface AIChatClosedLayoutProps {
   children: React.ReactNode;
@@ -37,6 +46,25 @@ export default function AIChatClosedLayout({
   const pathname = usePathname();
   const isMobile = useContext(MobileViewContext);
   const isDetailPage = pathname?.startsWith("/detail") ?? false;
+  const narrowSidebarWidth = useFlag(HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG);
+  const chatOverlaysTicket = useFlag(HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG);
+  const overlayDetailPage = chatOverlaysTicket && isDetailPage;
+  // Until flags arrive the fix is on (its default), so first paint never squeezes the page; a loaded Off restores the old class.
+  const phoneFlagOn = useFlag(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
+  const phoneFlagKnown = useFlagLoaded(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
+  const phoneWorkspaceWidth = phoneFlagOn || !phoneFlagKnown;
+  const [sidebarOverlays, setSidebarOverlays] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!narrowSidebarWidth || isMobile || sidebarWidthPx <= 0) return;
+    // Match the sidebar's md breakpoint and leave at least 340px for the page.
+    const update = () => setSidebarOverlays(
+      window.innerWidth < Math.max(768, sidebarWidthPx + (overlayDetailPage ? DETAIL_PAGE_MIN_WIDTH : 340))
+    );
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, [narrowSidebarWidth, isMobile, sidebarWidthPx, overlayDetailPage]);
 
   const workspaceClasses = cn(
     "outline-none",
@@ -80,7 +108,16 @@ export default function AIChatClosedLayout({
       {/* Keep the page width stable while the open sidebar's chunks load. */}
       <div
         data-ai-chat-slot
-        className={sidebarWidthPx > 0 && !isMobile ? "shrink-0" : "contents"}
+        className={sidebarWidthPx > 0 && !isMobile
+          ? narrowSidebarWidth
+            ? sidebarOverlays
+              ? "fixed right-0 top-0 z-[51]"
+              : "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
+            : phoneWorkspaceWidth
+              // Below md the reserved space never takes in-flow width, even before the app knows it is on a phone (HTPR-7074).
+              ? "shrink-0 max-md:fixed max-md:right-0 max-md:top-0 max-md:z-[51]"
+              : "shrink-0"
+          : "contents"}
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >
         {panels}

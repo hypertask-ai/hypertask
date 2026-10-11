@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { SortingMode, SortingOrder, SubtaskSetting, EmptySections, ViewVisibility } from '@prisma/client'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -8,7 +9,7 @@ import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { getViewUrl } from '@/utils/controllers/projects/views/viewsHelperAPIfunctions'
 import { isSubtaskSetting } from '@/models/Views/model'
 import { sanitizeBoardFilters } from '@/utils/helperFunctions/Views/BoardFilterSanitizer'
-import { readJsonBody } from '@/lib/mcp/readJsonBody'
+
 
 // The create-view payload as it arrives over the wire. Everything past
 // project_id/title is validated by createView, so it stays at the input type
@@ -93,6 +94,7 @@ export interface CreateViewResponse {
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -250,6 +252,8 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -262,6 +266,7 @@ export async function GET(request: NextRequest) {
  * Was a stub that returned `{ success: true }` and created nothing (HTPR-4218).
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -343,6 +348,8 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     )
   }
+
+  })(request)
 }
 
 

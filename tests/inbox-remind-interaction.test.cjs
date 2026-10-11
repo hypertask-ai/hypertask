@@ -132,7 +132,7 @@ for (const instantTicketOpen of [false, true]) {
           const f = fixture(mobile, false, instantTicketOpen);
           try {
             if (trigger === "mouse") await f.click(document.querySelector("#inbox-1 button"));
-            else act(() => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true })));
+            else await act(async () => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true })));
             assert.ok(document.querySelector('[role="dialog"]'));
             assert.ok(!document.querySelector("#inbox-1 [role=option]"), "picker options live in a DOM portal outside the row");
             const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent.startsWith(label));
@@ -162,7 +162,11 @@ for (const instantTicketOpen of [false, true]) {
 test("H is owned by one visible Remind trigger, even before mobile sheets commit", async () => {
   const f = fixture(true, true);
   try {
-    act(() => document.dispatchEvent(new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true, cancelable: true })));
+    const event = new window.KeyboardEvent("keydown", { key: "h", keyCode: 72, bubbles: true, cancelable: true });
+    await act(async () => {
+      document.dispatchEvent(event);
+      assert.equal(event.defaultPrevented, true, "the shortcut is consumed before the lazy dialog loads");
+    });
     assert.equal(document.querySelectorAll('[role="dialog"]').length, 1, "hidden and already-consumed triggers must not open extra sheets");
     await f.click(document.querySelector('[role="option"]'));
     assert.equal(f.requests.length, 1);

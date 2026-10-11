@@ -226,9 +226,10 @@ const TopLayerTooltip = ({keyCombination,bottom, text,left, groupHoverId="",shou
     </TooltipPortal>
 );
 
-const Tooltip = (props: Props) => {
+const Tooltip = (props: Omit<Props, "keyCombination"> & {keyCombination: any[] | null}) => {
   const topLayer = useFlag(HTPR_6950_TOOLTIP_TOP_LAYER_FLAG);
-  return topLayer ? <TopLayerTooltip {...props} /> : <LegacyTooltip {...props} />;
+  const safeProps = {...props, keyCombination: props.keyCombination ?? []};
+  return topLayer ? <TopLayerTooltip {...safeProps} /> : <LegacyTooltip {...safeProps} />;
 };
 
 export default Tooltip;

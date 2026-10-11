@@ -1,16 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { waitUntil } from '@vercel/functions'
+import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
+import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
 import { IProject, ITaskShare } from '@/models/model'
 import authConfig from '@/lib/configs/auth.config'
 import autoJoinByEmailDomain from '@/utils/controllers/users/autoJoinByEmailDomain'
-import { CompleteOnboardingFirstStep } from '@/utils/controllers/users/completeOnboardingStep'
+import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
 import prisma from '@/lib/prisma'
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, clearBetterAuthSessionCookies, sessionCookieOptions, signSession } from '@/lib/auth/session'
 import { getRequestBaseUrl } from '@/lib/auth/requestBaseUrl'
 import { adoptGuestBoards } from '@/utils/controllers/demo/adoptGuestBoards'
+import { resolveLoginBoard } from '@/utils/controllers/demo/resolveLoginBoard'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { seedResponseThemeCookie } from '@/lib/auth/themeCookie'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
@@ -192,16 +196,19 @@ export async function POST(request: NextRequest) {
 
     // Auto-provision a team/board for brand-new users so they land on a real
     // board instead of the empty state, matching instant-signup's behavior.
+    let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
         console.log('🚀 Completing onboarding step 1 for new email-link user')
-        const onboardingResult = await CompleteOnboardingFirstStep(
+        const onboardingResult = await provisionFirstWorkspace(
           userData as any,
+          request.cookies.get(SESSION_COOKIE)?.value,
           'MyTeam', // Default team title
           'MyBoard', // Default board title
           companySizeOptions[0], // Default: "Just me"
           companyRoleOptions[0] // Default: "Founder or leadership team"
         )
+        welcomeBoardId = onboardingResult?.Project?.id
         console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
         console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
@@ -210,13 +217,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // HTPR-4893: this browser may still be carrying the guest session it signed in
-    // from, so hand that guest's boards over before we read the board list below —
-    // then the adopted board is what prevBoard points the user at.
+    // Returning users and flag-Off signups still need the original adoption hook.
+    // Flag-On signups adopt before provisioning in provisionFirstWorkspace.
     await adoptGuestBoards(request.cookies.get(SESSION_COOKIE)?.value, userData!.id)
 
-    // Get user's projects (EXACTLY like verify-code route)
-    const prevBoard = await getProjects(userData!.id, getRequestBaseUrl(request))
+    const loginBoard = await resolveLoginBoard(userData!.id, request.cookies.get('previousBoard')?.value)
+    const prevBoard = loginBoard === undefined
+      ? await getProjects(userData!.id, getRequestBaseUrl(request))
+      : loginBoard
     console.log('📋 User projects fetched (email link):', prevBoard)
 
     // Create response with redirect URL following useAuth.tsx logic
@@ -225,7 +233,7 @@ export async function POST(request: NextRequest) {
       user: userData, // Pass the full user data from database
       prevBoard: prevBoard, // Pass the project data
       isNewUser: userUpdateResult.res.isNewUser, // Pass the isNewUser flag
-      redirectUrl: getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
+      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
       message: 'Email link verified and signed in successfully!',
       abTestVariant: abTestVariant // Pass through for client-side tracking
     })
@@ -261,6 +269,8 @@ export async function POST(request: NextRequest) {
         console.log('✅ Previous board cookie set (email link):', `project-${prevBoard.id}`)
       }
 
+      if (loginBoard === null) response.cookies.delete('previousBoard')
+
       // Track the source for analytics
       response.cookies.set('signup_source', 'email_link', {
         httpOnly: false,
@@ -269,6 +279,9 @@ export async function POST(request: NextRequest) {
         maxAge: 60 * 60 * 24 * 7, // 7 days
         path: '/'
       })
+
+      waitUntil(maybeSendWelcomeEmail(userData!.id, { boardId: welcomeBoardId }))
+      waitUntil(maybeScheduleAgentNudge(userData!.id))
 
       console.log('✅ Authentication cookies set successfully (email link)')
     } catch (cookieError) {

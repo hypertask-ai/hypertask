@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Live tests for ship-check against real tickets (needs gh and hypertask auth).
-cd "$(dirname "$0")"; fails=0
-ok() { echo "ok   $*"; }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
+cd "$(dirname "$0")"; fails=0; passes=0
+ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 E=$(mktemp -d); export VCC_EVIDENCE_DIR=$E
 trap 'rm -rf "$E"' EXIT
 export PREMERGE_STATUS_STATE="$E/publisher-state"
@@ -12,6 +12,20 @@ chmod +x "$E/read-bin/gh"; export PATH="$E/read-bin:$PATH"
 G() { local want=$1; shift; echo "{\"tool_input\":{\"command\":$(jq -Rn --arg c "$*" '$c')}}" | ./ship-check guard >/dev/null 2>&1; local got=$?; [ "$got" = "$want" ] && ok "$got <- $*" || bad "want $want got $got <- $*"; }
 DONE='--section "Done"'
 M='gh pr merge'
+
+# Concatenated assignment fragments cannot bypass missing Done evidence.
+for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+  G 2 "$prefix vcc task move YPER4-999 $DONE"
+  G 2 "$prefix vcc tasks move 'YPER4-999' $DONE"
+done
+# Unsupported assignment prefixes fail closed, with an actionable message.
+for prefix in 'FOO="unterminated' '1FOO=bad' 'FOO=pre\ fix'; do
+  for protected in "vcc task move YPER4-999 $DONE" "$M 999"; do
+    out=$(jq -Rn --arg c "$prefix $protected" '{tool_input:{command:$c}}' | ./ship-check guard 2>&1); got=$?
+    [ "$got" = 2 ] && [[ $out == *'cannot parse the leading environment assignments'* ]] \
+      && ok "unparseable prefix blocked: $prefix $protected" || bad "prefix bypass: $got $out"
+  done
+done
 
 # Binding is required, and must match the ticket.
 G 2 vcc task move YPER4-118 $DONE
@@ -39,6 +53,11 @@ gh() {
 export -f gh
 G 2 $M 822 -R hypertask-ai/hypertask
 G 2 FOO=1 $M 822 -R hypertask-ai/hypertask
+for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+  G 2 "$prefix $M 822 -R hypertask-ai/hypertask"
+  SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 "$prefix $M 809 -R hypertask-ai/hypertask"
+  G 0 "$prefix $M 838 -R hypertask-ai/hypertask"
+done
 SHIP_CHECK_PLAIN_QA_STATE=/nonexistent AGENT_TOKEN= HYPERTASKS_JWT_TOKEN= G 2 $M 809 -R hypertask-ai/hypertask # No live modes or premerge evidence.
 G 0 $M 838 -R hypertask-ai/hypertask # Skills-only PR, no product flag reads.
 G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
@@ -151,9 +170,290 @@ D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=behind
 D 1 'FAIL: latest release' RELEASE_TAG=v1 COMPARE_FIXTURE=diverged
 D 1 'FAIL: could not compare' RELEASE_TAG=v1 COMPARE_ERROR=1
 
+# Docs/main deploys to Cloudflare Pages without releases.
+cat > "$E/mock-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"ec45678a2"},"baseRefName":"%s"}\n' "$SHIP_BASE" ;;
+  release:view) exit 1 ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/actions/workflows/*)
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    [ "${RUN_ERROR:-0}" = 0 ] || exit 1; echo "$RUNS_FIXTURE" ;;
+  api:*/actions/runs/*)
+    [[ "$2" == 'repos/hypertask-ai/docs/actions/runs/456/jobs?per_page=100' ]] || exit 1
+    [ "${JOBS_ERROR:-0}" = 0 ] || exit 1; echo "$JOBS_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+docs_publish='{"workflow_runs":[{"id":456,"name":"Build and Deploy","path":".github/workflows/deploy.yml","event":"push","head_branch":"main","conclusion":"success","head_sha":"ec45678a2"}]}'
+DD() {
+  local want=$1 expected=$2 out got; shift 2
+  out=$(env PATH="$E/mock-bin:$PATH" SHIP_REPO=hypertask-ai/docs SHIP_BASE=main RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check deployed YPER4-999); got=$?
+  if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "docs: $out"
+  else bad "docs: want $want $expected got $got $out"; fi
+}
+DD 0 'deployed ok (workflow)'
+DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE='{"workflow_runs":[]}'
+for change in \
+  '.name = "Publish hypertask.app"' \
+  '.path = ".github/workflows/preview.yml"' \
+  '.event = "pull_request"' \
+  '.event = "workflow_dispatch"' \
+  '.head_branch = "master"' \
+  '.conclusion = "failure"' \
+  '.conclusion = null' \
+  '.conclusion = "cancelled"' \
+  '.head_sha = "different"'; do
+  runs=$(jq ".workflow_runs[0] |= ($change)" <<<"$docs_publish")
+  DD 1 'FAIL: no successful production publishing push' RUNS_FIXTURE="$runs"
+done
+for jobs in \
+  '{"jobs":[]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"skipped"}]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"failure"}]}' \
+  '{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":null}]}' \
+  '{"jobs":[{"name":"deploy","conclusion":"success"}]}'; do
+  DD 1 'FAIL: no successful production deploy job' JOBS_FIXTURE="$jobs"
+done
+DD 1 'FAIL: could not read publishing jobs' JOBS_ERROR=1
+DD 1 'FAIL: could not read workflow runs' RUN_ERROR=1
+DD 1 'FAIL: could not read publishing workflow identity' RUNS_FIXTURE='invalid'
+DD 1 'FAIL: could not read releases' RELEASE_ERROR=1
+DD 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+DD 1 'FAIL: no release found' SHIP_BASE=master
+DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
+
+# Manual worker deployments must bind the only active version to the full merge SHA.
+mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
+cat > "$E/worker-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
+  release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
+  release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
+  api:*/compare/*) echo identical ;;
+  *) exit 1 ;;
+esac
+MOCK
+export XDG_CACHE_HOME="$E/worker-cache" NPX_LOG="$E/npx-log" FAKE_WRANGLER_MARKER="$E/fake-wrangler-invoked"
+worker_config="$E/worker-checkout/workers/docs-agent/wrangler.toml"
+printf 'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef"\n' > "$worker_config"
+cat > "$E/worker-bin/npx" <<'MOCK'
+#!/usr/bin/env bash
+jq -cn --arg cwd "$PWD" --arg account_id "${CLOUDFLARE_ACCOUNT_ID:-}" \
+  '$ARGS.positional as $args | {cwd: $cwd, args: $args, account_id: $account_id}' --args -- "$@" >> "$NPX_LOG" || exit 1
+# Model npx's vulnerable local executable lookup so the old implementation fails this regression.
+if [[ -x node_modules/.bin/wrangler ]]; then exec node_modules/.bin/wrangler "$@"; fi
+[[ $PWD == "${XDG_CACHE_HOME:-$HOME/.cache}/ship-check-wrangler" && $PWD != "$SHIP_CHECKOUT/"* ]] || exit 1
+[[ ${CLOUDFLARE_ACCOUNT_ID:-} == 0123456789abcdef0123456789abcdef ]] || exit 1
+case "$*" in
+  "--yes wrangler@3.114.17 deployments status --name ${EXPECTED_WORKER_NAME:-docs-agent_fixture} --json")
+    [ "${WRANGLER_ERROR:-0}" = 0 ] || exit 1; echo "$DEPLOYMENT_FIXTURE" ;;
+  "--yes wrangler@3.114.17 versions view worker-version --name ${EXPECTED_WORKER_NAME:-docs-agent_fixture} --json")
+    [ "${VERSION_ERROR:-0}" = 0 ] || exit 1; echo "$VERSION_FIXTURE" ;;
+  *) exit 1 ;;
+esac
+MOCK
+chmod +x "$E/worker-bin/"*
+worker_sha=f2619e33637f2577b609be8b52234910ee61b802
+worker_deployment='{"versions":[{"version_id":"worker-version","percentage":100}]}'
+worker_version="{\"annotations\":{\"workers/message\":\"$worker_sha\"}}"
+W() {
+  local want=$1 expected=$2 out got; shift 2
+  : > "$NPX_LOG"
+  out=$(env PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version" "$@" ./ship-check deployed YPER4-999); got=$?
+  if [ "$got" = "$want" ] && [[ $out == "$expected"* ]]; then ok "worker: $out"
+  else bad "worker: want $want $expected got $got $out"; fi
+}
+W 0 'deployed ok (worker worker-version)'
+jq -se --arg cwd "$XDG_CACHE_HOME/ship-check-wrangler" '
+  length == 2 and all(.[]; .cwd == $cwd and .account_id == "0123456789abcdef0123456789abcdef")
+  and .[0].args == ["--yes", "wrangler@3.114.17", "deployments", "status", "--name", "docs-agent_fixture", "--json"]
+  and .[1].args == ["--yes", "wrangler@3.114.17", "versions", "view", "worker-version", "--name", "docs-agent_fixture", "--json"]
+' "$NPX_LOG" >/dev/null && ok 'worker pinned npx cwd, args and account recorded' || bad 'worker npx invocation not isolated'
+W 0 'deployed ok (worker worker-version)' XDG_CACHE_HOME= HOME="$E/worker-home"
+W 0 'deployed ok (worker worker-version)' VERSION_FIXTURE="{\"annotations\":{\"workers/tag\":\"${worker_sha:0:12}\"}}"
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{"annotations":{"workers/message":"wrong","workers/tag":"wrong"}}'
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE="{\"annotations\":{\"workers/message\":\"${worker_sha:0:12}\",\"workers/tag\":\"$worker_sha\"}}"
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{}'
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='invalid'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":50},{"version_id":"other-version","percentage":50}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":100},{"version_id":"other-version","percentage":0}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[{"version_id":"worker-version","percentage":99}]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='{"versions":[]}'
+W 1 'FAIL: worker deployment must have exactly one version at 100%' DEPLOYMENT_FIXTURE='invalid'
+W 1 'FAIL: could not read worker deployment' WRANGLER_ERROR=1
+W 1 'FAIL: could not read worker version' VERSION_ERROR=1
+W 1 'FAIL: no release found' SHIP_WORKER=
+W 1 'FAIL: could not read releases' RELEASE_ERROR=1
+W 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
+W 1 'FAIL: set SHIP_CHECKOUT' SHIP_CHECKOUT=
+W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=../worker
+W 1 'FAIL: SHIP_WORKER must be a relative worker directory' SHIP_WORKER=/worker
+W 0 'deployed ok (release v1)' RELEASE_TAG=v1 WRANGLER_ERROR=1
+
+# A checkout-local fake would forge matching deployment data, but must never run.
+mkdir -p "$E/worker-checkout/workers/docs-agent/node_modules/.bin"
+cat > "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler" <<'MOCK'
+#!/usr/bin/env bash
+touch "$FAKE_WRANGLER_MARKER"
+if [[ $* == *'deployments status'* ]]; then
+  echo '{"versions":[{"version_id":"worker-version","percentage":100}]}'
+else
+  printf '{"annotations":{"workers/message":"%s"}}\n' "$WORKER_SHA"
+fi
+MOCK
+chmod +x "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler"
+control=$(WORKER_SHA="$worker_sha" "$E/worker-checkout/workers/docs-agent/node_modules/.bin/wrangler" deployments status --json)
+[ -f "$FAKE_WRANGLER_MARKER" ] && [ "$control" = "$worker_deployment" ] \
+  && ok 'fake wrangler positive control forges deployment and touches marker' || bad 'fake wrangler control not effective'
+rm -f "$FAKE_WRANGLER_MARKER"
+W 0 'deployed ok (worker worker-version)'
+W 1 'FAIL: could not read worker deployment' WRANGLER_ERROR=1
+W 1 'FAIL: worker version worker-version does not match merge' VERSION_FIXTURE='{}'
+[ ! -e "$FAKE_WRANGLER_MARKER" ] && ok 'checkout fake never invoked; mock alone decides deployment' || bad 'checkout fake wrangler invoked'
+
+cp "$worker_config" "$E/valid-wrangler.toml"
+W 1 'FAIL: could not read worker wrangler.toml' SHIP_WORKER=missing
+for config in \
+  '' \
+  'account_id = "0123456789abcdef0123456789abcdef"' \
+  'name = "docs-agent_fixture"' \
+  $'name = "bad.name"\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = "bad name"\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = ""\naccount_id = "0123456789abcdef0123456789abcdef"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789ABCDEF0123456789ABCDEF"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcde"' \
+  $'name = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef0"' \
+  $'name = "docs-agent_fixture"\naccount_id = "not-an-account"' \
+  $'[env.production]\nname = "docs-agent_fixture"\naccount_id = "0123456789abcdef0123456789abcdef"'; do
+  printf '%s\n' "$config" > "$worker_config"
+  W 1 'FAIL: '
+  [ ! -s "$NPX_LOG" ] && ok 'invalid worker identity rejected before npx' || bad 'invalid identity reached npx'
+done
+printf 'name = "$(touch %s)"\naccount_id = "0123456789abcdef0123456789abcdef"\n' "$FAKE_WRANGLER_MARKER" > "$worker_config"
+W 1 'FAIL: invalid worker name or account_id'
+[ ! -e "$FAKE_WRANGLER_MARKER" ] && ok 'wrangler.toml parsed only as data' || bad 'wrangler.toml executed'
+cp "$E/valid-wrangler.toml" "$worker_config"
+echo 'name = "duplicate"' >> "$worker_config"
+W 1 'FAIL: duplicate worker name'
+cp "$E/valid-wrangler.toml" "$worker_config"
+echo 'account_id = "0123456789abcdef0123456789abcdef"' >> "$worker_config"
+W 1 'FAIL: duplicate worker account_id'
+printf "  name = 'other_worker-2' # comment\naccount_id = '0123456789abcdef0123456789abcdef' # comment\n[vars]\nname = 'ignored'" > "$worker_config"
+W 0 'deployed ok (worker worker-version)' EXPECTED_WORKER_NAME=other_worker-2
+cp "$E/valid-wrangler.toml" "$worker_config"
+W 1 'FAIL: invalid merge sha' WORKER_SHA=short
+W 1 'FAIL: neutral wrangler directory must be outside SHIP_CHECKOUT' XDG_CACHE_HOME="$E/worker-checkout/cache"
+for entry in package.json node_modules; do
+  touch "$XDG_CACHE_HOME/ship-check-wrangler/$entry"
+  W 1 'FAIL: neutral wrangler directory must be empty'
+  rm -f "$XDG_CACHE_HOME/ship-check-wrangler/$entry"
+done
+for entry in package.json node_modules .git; do
+  touch "$XDG_CACHE_HOME/$entry"
+  W 1 'FAIL: neutral wrangler directory must be outside checkouts and local npm packages'
+  rm -f "$XDG_CACHE_HOME/$entry"
+done
+mkdir -p "$E/linked-cache"
+ln -s "$E/worker-checkout/workers/docs-agent" "$E/linked-cache/ship-check-wrangler"
+W 1 'FAIL: unsafe neutral wrangler directory' XDG_CACHE_HOME="$E/linked-cache"
+W 1 'FAIL: unsafe neutral wrangler directory' XDG_CACHE_HOME=relative-cache
+
+# Done guards use segment worker settings, including ship-gates' quoted paths.
+(
+  export PATH="$E/worker-bin:$PATH" SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2
+  export SHIP_CHECKOUT= SHIP_WORKER= WORKER_SHA="$worker_sha" DEPLOYMENT_FIXTURE="$worker_deployment" VERSION_FIXTURE="$worker_version"
+  worker_env="SHIP_REPO=$SHIP_REPO SHIP_BASE=$SHIP_BASE"
+  worker_cmd="$worker_env SHIP_CHECKOUT=$E/worker-checkout SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  G 0 "$worker_cmd"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE # SHIP_WORKER=workers/docs-agent"
+  G 2 "$worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE SHIP_WORKER=workers/docs-agent"
+  G 2 "$worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE # SHIP_CHECKOUT=$E/worker-checkout"
+  for prefix in 'FOO=pre"fix"' "FOO='a'b\"c\""; do
+    G 0 "$prefix $worker_cmd"
+    VERSION_FIXTURE='{}' G 2 "$prefix $worker_cmd"
+  done
+  G 2 "$worker_cmd && $worker_env SHIP_CHECKOUT=$E/worker-checkout vcc task move YPER4-999 $DONE"
+  G 2 "$worker_cmd && $worker_env SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  mkdir -p "$E/worker checkout/workers/docs agent"
+  cp "$worker_config" "$E/worker checkout/workers/docs agent/wrangler.toml"
+  for quote in "'" '"'; do
+    quoted_cmd="SHIP_REPO=${quote}$SHIP_REPO${quote} SHIP_BASE=${quote}$SHIP_BASE${quote} SHIP_CHECKOUT=${quote}$E/worker checkout${quote} SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+    G 0 "$quoted_cmd"
+    VERSION_FIXTURE='{}' G 2 "$quoted_cmd"
+    G 2 "$quoted_cmd && $worker_env SHIP_CHECKOUT=${quote}$E/worker checkout${quote} vcc task move YPER4-999 $DONE"
+    G 2 "$quoted_cmd && $worker_env SHIP_WORKER=${quote}workers/docs agent${quote} vcc task move YPER4-999 $DONE"
+  done
+  mixed_cmd="SHIP_REPO=valentinyeo/'agent-'\"fleet\" SHIP_BASE=htpr-5009-'mdx-write-'\"guard-v2\" SHIP_CHECKOUT=$E/'worker '\"checkout\" SHIP_WORKER=workers/'docs '\"agent\" vcc task move YPER4-999 $DONE"
+  G 0 "$mixed_cmd"
+  VERSION_FIXTURE='{}' G 2 "$mixed_cmd"
+  G 0 "$worker_env SHIP_CHECKOUT=$E/worker-checkout SHIP_WORKER=wrong SHIP_WORKER=workers/docs-agent vcc task move YPER4-999 $DONE"
+  export SHIP_CHECKOUT="$E/worker-checkout" SHIP_WORKER=workers/docs-agent
+  G 0 vcc task move YPER4-999 $DONE
+  for suffix in SHIP_REPO=hypertask-ai/other SHIP_BASE=wrong SHIP_CHECKOUT=/nonexistent SHIP_WORKER=wrong; do
+    G 0 "vcc task move YPER4-999 $DONE # $suffix"
+    G 0 "vcc task move YPER4-999 $DONE $suffix"
+  done
+  G 2 "$worker_env SHIP_WORKER='' vcc task move YPER4-999 $DONE"
+  G 2 "$worker_env SHIP_CHECKOUT=\"\" vcc task move YPER4-999 $DONE"
+) > "$E/worker-guard-results"
+cat "$E/worker-guard-results"
+passes=$((passes + $(grep -c '^ok   ' "$E/worker-guard-results")))
+fails=$((fails + $(grep -c '^FAIL ' "$E/worker-guard-results")))
+
+# Generated worker CHECKs must carry the settings and remain safe to approve again.
+python3 - "$PWD/ship-gates" "$HOME/.agents/skills/unlazy" "$E" <<'PY'
+import os, pathlib, subprocess, sys
+script, unlazy, tmp = sys.argv[1:]
+p = pathlib.Path(tmp)
+home = p / 'gate-home'
+ship = home / '.agents/skills/ship/scripts'
+ship.mkdir(parents=True)
+(home / '.agents/skills/unlazy').symlink_to(unlazy, target_is_directory=True)
+check = ship / 'ship-check'
+check.write_text('''#!/usr/bin/env python3
+import os, sys
+assert os.environ['SHIP_REPO'] == 'valentinyeo/agent-fleet'
+assert os.environ['SHIP_BASE'] == 'htpr-5009-mdx-write-guard-v2'
+assert os.environ['SHIP_CHECKOUT'] == '/tmp/worker checkout'
+assert os.environ['SHIP_WORKER'] == 'workers/docs agent'
+print(dict(ticket='ticket ok', pr='title ok', merged='merged ok',
+           deployed='deployed ok (worker fixture)', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
+''')
+check.chmod(0o755)
+repo = p / 'gate-repo'
+repo.mkdir()
+approval = p / 'gate-approvals'
+approval.mkdir(mode=0o700)
+env = dict(os.environ, HOME=str(home), UNLAZY_APPROVAL_DIR=str(approval),
+           CLAUDE_CODE_SESSION_ID='worker-gates-fixture', SHIP_REPO='valentinyeo/agent-fleet',
+           SHIP_BASE='htpr-5009-mdx-write-guard-v2', SHIP_CHECKOUT='/tmp/worker checkout',
+           SHIP_WORKER='workers/docs agent')
+for _ in range(2):
+    r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo, env=env, text=True, capture_output=True)
+    assert r.returncode == 0 and 'ALL MET' in r.stderr, r.stdout + r.stderr
+ledger = repo / '.unlazy/s-worker-g/GATES.md'
+text = ledger.read_text()
+prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
+assert text.count('  CHECK: ' + prefix) == 6
+assert text.count('automatic-evidence=v1') == 6
+for worker in ['/absolute', '../outside', "workers/a';touch bad"]:
+    r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo,
+                       env=dict(env, SHIP_WORKER=worker), text=True, capture_output=True)
+    assert r.returncode != 0 and 'SHIP_WORKER must be a relative worker directory' in r.stderr
+    assert ledger.read_text() == text
+print('worker CHECK persistence passed')
+PY
+[ "$?" = 0 ] && ok 'worker CHECK persistence and validation' || bad 'worker CHECK persistence and validation'
+
 # Duplicates: HTPR-6823 was fixed by HTPR-6801's merged PR 837.
 ./ship-check duplicate HTPR-6823 HTPR-6801 830 >/dev/null && bad "duplicate accepted another ticket's PR" || ok "duplicate rejects a PR of another ticket"
+mkdir -p "$E/HTPR-6823" && echo 999 > "$E/HTPR-6823/dropped"
 ./ship-check duplicate HTPR-6823 HTPR-6801 837 >/dev/null && ok "duplicate binds HTPR-6823 to PR 837" || bad "duplicate bind"
+[ ! -e "$E/HTPR-6823/dropped" ] && ok "duplicate clears a stale dropped record" || bad "duplicate kept a dropped record"
 ./ship-check merged HTPR-6823 | grep -q 'merged ok' && ok "duplicate passes the merged gate" || bad "duplicate merged gate"
 ./ship-check deployed HTPR-6823 | grep -q 'deployed ok' && ok "duplicate passes the deployed gate" || bad "duplicate deployed gate"
 G 2 vcc task move HTPR-6823 $DONE
@@ -212,12 +512,13 @@ args = sys.argv[1:]
 if os.environ.get('FLAG_LOG'):
     with open(os.environ['FLAG_LOG'], 'a') as log:
         log.write(json.dumps(args) + '\n')
-if args[:2] == ['pr', 'list']:
+if args[:2] == ['api', '-i'] and '/pulls?' in args[2]:
     if os.environ.get('FLAG_LIST_ERROR'):
         sys.exit(1)
-    print(json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'headRefOid': 'a' * 40,
-                       'statusCheckRollup': [] if os.environ.get('FLAG_MISSING_STATUS') else
-                       [{'context': 'premerge-evidence', 'state': os.environ.get('FLAG_ROLLUP', 'SUCCESS')}]}]))
+    if args[3:] == ['-H', 'If-None-Match: "fixture"']:
+        print('HTTP/2.0 304 Not Modified\r\nEtag: "fixture"\r\n\r\n')
+        sys.exit(1)
+    print('HTTP/2.0 200 OK\r\nEtag: "fixture"\r\n\r\n' + json.dumps([{'number': 999, 'title': 'YPER4-999 [BUGFIX] Fixture', 'head': {'sha': 'a' * 40}}]))
     sys.exit(0)
 if args[:2] == ['pr', 'view']:
     if args[args.index('--json') + 1] == 'headRefOid,baseRefName,state':
@@ -243,10 +544,9 @@ if args[:2] == ['pr', 'view']:
     else:
         print(json.dumps({'number': 999, 'title': title, 'state': os.environ.get('FLAG_PR_STATE', 'OPEN'), 'mergeCommit': {'oid': 'a' * 40}, 'baseRefName': 'production'}))
     sys.exit(0)
-if args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']:
-    with open('ship-check', 'rb') as checker:
-        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(checker.read()).decode()}))
-    sys.exit(0)
+if any('/contents/' in a for a in args):
+    # YPER4-251: the contents API is never called; files come from local git. The call is logged above and fails the run.
+    sys.exit(99)
 if args[0] != 'api':
     sys.exit(1)
 url = args[1]
@@ -270,17 +570,7 @@ if '/statuses/' in url:
     sys.exit(1 if os.environ.get('FLAG_POST_ERROR') else 0)
 if os.environ.get('FLAG_GH_ERROR'):
     sys.exit(1)
-if '/contents/' in url:
-    if os.environ.get('FLAG_SOURCE_ERROR'):
-        sys.exit(1)
-    path = urllib.parse.unquote(url.split('/contents/')[1].split('?')[0])
-    ref = urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)['ref'][0]
-    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
-    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
-        name = 'keys-head'
-    with open(os.environ['FLAG_SOURCE'] + '/' + name) as f:
-        print(json.dumps({'encoding': 'base64', 'content': base64.b64encode(f.read().encode()).decode()}))
-elif '/files?' in url:
+if '/files?' in url:
     file = {'filename': os.environ.get('FLAG_FILE', 'src/card.tsx'), 'status': os.environ.get('FLAG_STATUS', 'modified')}
     if file['status'] == 'renamed':
         file['previous_filename'] = 'src/old-card.tsx'
@@ -288,7 +578,55 @@ elif '/files?' in url:
     if os.environ.get('FLAG_PAGE2'):
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
 else:
-    print(json.dumps({'head': {'sha': 'a' * 40}, 'base': {'sha': 'b' * 40}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
+    print(json.dumps({'head': {'sha': os.environ.get('FLAG_HEAD', 'a' * 40)}, 'base': {'sha': os.environ.get('FLAG_BASE_SHA', 'b' * 40)}, 'title': 'YPER4-999 [BUGFIX] Fixture', 'changed_files': int(os.environ.get('FLAG_COUNT', '1'))}))
+MOCK
+# Fake git for the local PR source cache: `fetch` marks the cache filled, `show <sha>:<path>` serves FLAG_SOURCE files.
+cat > "$E/flag-bin/fakegit" <<'MOCK'
+#!/usr/bin/env python3
+import json, os, sys
+args = sys.argv[1:]
+if os.environ.get('FLAG_LOG'):
+    with open(os.environ['FLAG_LOG'], 'a') as log:
+        log.write(json.dumps(['git'] + args) + '\n')
+if args[:2] == ['init', '--bare']:
+    os.makedirs(args[-1], exist_ok=True)
+    open(args[-1] + '/HEAD', 'w').close()
+    sys.exit(0)
+cache, cmd, rest = args[1], args[2], args[3:]
+marker = cache + '/filled'
+if cmd == 'fetch':
+    if os.environ.get('FLAG_FETCH_ERROR'):
+        sys.exit(1)
+    open(marker, 'w').close()
+    sys.exit(0)
+if cmd == 'cat-file':
+    sys.exit(0 if os.path.exists(marker) else 1)
+if cmd == 'ls-tree':
+    if os.environ.get('FLAG_SOURCE_ERROR'):
+        sys.exit(1)
+    ref, path = rest[-2], rest[-1]
+    if path.rstrip('/') != 'src/lib/flags/definitions':
+        sys.exit(1)
+    folder = os.environ['FLAG_SOURCE'] + '/flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head')
+    sys.stdout.write(''.join('100644 blob %s\t%s/%s\0' % ('0' * 40, path.rstrip('/'), n) for n in sorted(os.listdir(folder))))
+    sys.exit(0)
+if cmd == 'show':
+    if os.environ.get('FLAG_SOURCE_ERROR'):
+        sys.exit(1)
+    ref, path = rest[0].split(':', 1)
+    if ref.startswith('refs/premerge/production'):
+        sys.stdout.write(open('ship-check').read())
+        sys.exit(0)
+    if path.startswith('src/lib/flags/definitions/'):
+        name = 'flags-' + ('base' if ref == os.environ.get('FLAG_BASE_SHA', 'b' * 40) else 'head') + '/' + path.rsplit('/', 1)[1]
+        sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
+        sys.exit(0)
+    name = {'src/lib/flags.ts': 'registry', 'src/lib/flags/definitions.ts': 'definitions', 'src/lib/flags/keys.ts': 'keys'}.get(path, 'base' if ref == 'b' * 40 else 'head')
+    if name == 'keys' and ref == 'a' * 40 and os.path.exists(os.environ['FLAG_SOURCE'] + '/keys-head'):
+        name = 'keys-head'
+    sys.stdout.write(open(os.environ['FLAG_SOURCE'] + '/' + name).read())
+    sys.exit(0)
+sys.exit(1)
 MOCK
 cat > "$E/flag-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
@@ -309,7 +647,8 @@ def live(request, timeout):
     return io.BytesIO(os.environ.get('FLAG_HTTP', '{"flags":[{"key":"htpr-1-released","mode":"EVERYONE"}]}').encode())
 urllib.request.urlopen = live
 MOCK
-chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask"
+chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask" "$E/flag-bin/fakegit"
+export SHIP_GIT="$E/flag-bin/fakegit" SHIP_GIT_CACHE="$E/git-cache" GH_PAUSE_FILE="$E/no-pause"
 printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
 printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
@@ -327,6 +666,17 @@ F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
 F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OFF"}]}'
 F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
 F 2 'registry defaults cannot prove' AGENT_TOKEN=
+# The base registry may keep runtime defaults while definitions live in their own module.
+cp "$E/flag-source/registry" "$E/flag-source/definitions"
+printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+F 2 'record a browser click-through'
+F 2 'registry defaults cannot prove' FLAG_HTTP_ERROR=1
+printf 'export type FeatureFlagKind = "feature";\n' > "$E/flag-source/definitions"
+F 2 'cannot resolve flag registry defaults'
+printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+F 0 '' FLAG_HTTP='{"flags":[{"key":"htpr-1-released","mode":"OWNER_AND_QA"}]}'
+rm "$E/flag-source/definitions"
 # Without the owner-only endpoint, the plain QA account's view decides: on for it means on for Everyone.
 F 2 'record a browser click-through' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":true}}'
 F 0 '' AGENT_TOKEN= FLAG_PUBLIC='{"flags":{"htpr-1-released":false}}'
@@ -402,6 +752,41 @@ fs.writeFileSync(process.argv[2], fs.readFileSync(process.argv[2], 'utf8').repla
 JS
 P 0 premerge 999
 cp "$premerge" "$E/record"
+# The new layout resolves readers and changed definition files without a committed index.
+cp "$E/flag-source/keys" "$E/keys-legacy"; cp "$E/flag-source/registry" "$E/registry-legacy"
+mkdir -p "$E/flag-source/flags-base" "$E/flag-source/flags-head"
+printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
+printf 'export const RELEASED_FLAG = "htpr-1-released";\nexport default { key: RELEASED_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-base/htpr-1-released.ts"
+cp "$E/flag-source/flags-base/htpr-1-released.ts" "$E/flag-source/flags-head/htpr-1-released.ts"
+printf 'const DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
+printf 'export const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n' > "$E/flag-source/definitions"
+F 0 ''
+F 2 'record a browser click-through' FLAG_HTTP_ERROR=1
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+sed 's/Commit:.*/Commit: deadbeef/' "$E/record" > "$premerge"
+F 2 'must name PR head sha' FLAG_FILE=src/lib/flags/definitions/htpr-1-released.ts
+cp "$E/record" "$premerge"
+# A new bugfix flag defaults to Everyone, so it is released on merge and needs its own click state.
+printf 'export const NEW_FIX_FLAG = "htpr-9-newfix";\nexport default { key: NEW_FIX_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-9-newfix.ts"
+F 2 'expected Flags: htpr-9-newfix=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+sed 's/^Flags:.*/&, htpr-9-newfix=EVERYONE/' "$E/record" > "$premerge"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-9-newfix.ts FLAG_STATUS=added
+# YPER4-251: a registry of several per-flag files is listed and read through local git, with 0 contents API calls.
+for d in base head; do printf 'export const OTHER_FLAG = "htpr-2-other";\nexport default { key: OTHER_FLAG, kind: "bugfix", shippedOn: "2026-10-10", description: "Fixture" } as const;\n' > "$E/flag-source/flags-$d/htpr-2-other.ts"; done
+: > "$E/status-log"
+F 0 '' FLAG_LOG="$E/status-log"
+python3 - "$E/status-log" <<'PY' && ok 'per-flag directory: 0 contents calls, listed through git' || bad 'per-flag directory used the contents API or skipped git'
+import json, sys
+calls = [json.loads(l) for l in open(sys.argv[1])]
+assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
+assert any(c[0] == 'git' and 'ls-tree' in c for c in calls), 'directory not listed through git'
+assert sum(c[0] == 'git' and 'show' in c and any('definitions/htpr-' in a for a in c) for c in calls) >= 2, 'per-flag files not read through git'
+PY
+rm "$E/flag-source/flags-base/htpr-2-other.ts" "$E/flag-source/flags-head/htpr-2-other.ts"
+cp "$E/record" "$premerge"; rm "$E/flag-source/flags-head/htpr-9-newfix.ts"
+cp "$E/keys-legacy" "$E/flag-source/keys"; cp "$E/registry-legacy" "$E/flag-source/registry"
+rm "$E/flag-source/definitions"
+
 for change in \
   's/^Commit:.*/Commit: deadbeef/|must name PR head sha' \
   '/^Account:/d|missing Account:' \
@@ -512,6 +897,20 @@ PY
 }
 printf 'const plain = 1;\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 S 0 success 'no released flag touched'
+# YPER4-251: one premerge-status run never touches the contents API and stays within a small fixed API budget.
+API_BUDGET() {
+  python3 - "$E/status-log" "$1" <<'PY' && ok "$2" || bad "$2"
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+api = [c for c in calls if c[0] in ('api', 'pr')]
+assert not any('/contents/' in a for c in calls for a in c), 'contents API called'
+assert len(api) <= int(sys.argv[2]), (len(api), api)
+assert any(c[0] == 'git' and 'show' in c for c in calls), 'source was not read through local git'
+assert sum(c[0] == 'git' and 'fetch' in c for c in calls) <= 1, 'more than one git fetch per run'
+PY
+}
+API_BUDGET 6 'premerge-status: no contents API call, at most 6 API calls per PR'
+S 1 failure 'cannot read the PR diff' FLAG_FETCH_ERROR=1 SHIP_GIT_CACHE="$E/git-cache-cold"
 S 1 failure 'cannot read the PR diff' FLAG_GH_ERROR=1
 S 1 failure 'cannot read the PR diff' FLAG_SOURCE_ERROR=1
 S 1 failure 'complete PR diff' FLAG_COUNT=2
@@ -528,6 +927,7 @@ printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp 
 S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
 S 0 success 'click record ok'
+API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
 sed -i 's/Click: PASS/Click: FAIL/' "$premerge"
 S 1 failure 'missing passing click'
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
@@ -546,7 +946,7 @@ W() {
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$posts" <<'PY'
 import json, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
-assert sum(c[:2] == ['pr', 'list'] for c in calls) == 1
+assert sum(c[:2] == ['api', '-i'] for c in calls) == 1
 assert sum(c[0] == 'api' and '/statuses/' in c[1] for c in calls) == int(sys.argv[2]), calls
 PY
   then ok "sweep: $posts posts"; else bad "sweep: want $want $posts posts got $got $out"; fi
@@ -558,7 +958,6 @@ W 0 1
 W 0 0 FLAG_ROLLUP=FAILURE
 sed -i 's/Click: FAIL/Click: PASS/' "$premerge"
 W 0 1 FLAG_ROLLUP=FAILURE
-W 0 1 FLAG_MISSING_STATUS=1
 printf 'changed recording' > "$E/YPER4-999/click.webm"
 W 0 1
 rm "$E/YPER4-999/click.webm"
@@ -571,8 +970,226 @@ json.dump(cache, open(path, 'w'))
 PY
 W 0 1 FLAG_ROLLUP=FAILURE
 W 1 0 FLAG_LIST_ERROR=1
+python3 - "$E/sweep-state/cache.json" <<'PY'
+import json, sys
+path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
+json.dump(cache, open(path, 'w'))
+PY
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
+# YPER4-251: a sweep makes no GitHub call at all while the shared pause epoch is in the future.
+SWEEP_LOG() {
+  : > "$E/status-log"
+  env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" PREMERGE_STATUS_STATE="$E/sweep-state" AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" python3 ./premerge-evidence.py >/dev/null 2>&1
+}
+echo $(( $(date +%s) + 3600 )) > "$E/pause-until"
+SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
+[ "$got" = 0 ] && [ ! -s "$E/status-log" ] && ok 'sweep exits with no calls while paused' || bad "sweep ran while paused: $got $(cat "$E/status-log")"
+echo $(( $(date +%s) - 10 )) > "$E/pause-until"
+SWEEP_LOG GH_PAUSE_FILE="$E/pause-until"; got=$?
+[ "$got" = 0 ] && grep -q '"api", "-i"' "$E/status-log" && ok 'sweep runs once the pause epoch has passed' || bad "sweep stayed idle after pause: $got"
+# An unchanged head is skipped: only the one list call and the rules fetch, no per-PR reads and no contents API.
+SWEEP_LOG FLAG_ROLLUP=FAILURE # warm the cache with the status the record really has
+SWEEP_LOG FLAG_ROLLUP=FAILURE; got=$?
+python3 - "$E/status-log" <<'PY' && [ "$got" = 0 ] && ok 'sweep skips an unchanged head: one list call, no per-PR calls' || bad 'sweep re-checked an unchanged head'
+import json, sys
+calls = [json.loads(line) for line in open(sys.argv[1])]
+api = [c for c in calls if c[0] in ('api', 'pr')]
+assert [c[:2] for c in api] == [['api', '-i']], api
+assert not any('/contents/' in a for c in calls for a in c)
+PY
+
+# YPER4-251: the real local-git source layer (no fakes): one fetch, git show, missing path, directory listing, offline re-read.
+python3 - ./ship-check <<'PY' && ok 'local git source layer: fetch once, show, ls-tree, missing path' || bad 'local git source layer'
+import json, os, re, subprocess, sys, tempfile
+from pathlib import Path
+text = open(sys.argv[1]).read()
+layer = text[text.index('# PR files come from a local bare cache'):text.index('def constants(text):')]
+root = Path(tempfile.mkdtemp())
+origin = root / 'origin'
+env = dict(os.environ, GIT_AUTHOR_NAME='t', GIT_AUTHOR_EMAIL='t@t', GIT_COMMITTER_NAME='t', GIT_COMMITTER_EMAIL='t@t')
+def run(*args, cwd=origin):
+    return subprocess.run(args, cwd=cwd, env=env, capture_output=True, text=True, check=True).stdout.strip()
+origin.mkdir()
+run('git', 'init', '-q')
+(origin / 'src/lib/flags/definitions').mkdir(parents=True)
+(origin / 'src/lib/flags/keys.ts').write_text('base\n')
+run('git', 'add', '-A'); run('git', 'commit', '-qm', 'base'); base = run('git', 'rev-parse', 'HEAD')
+(origin / 'src/lib/flags/definitions/htpr-1-x.ts').write_text('export const X = "htpr-1-x";\n')
+(origin / 'src/lib/flags/keys.ts').write_text('head\n')
+run('git', 'add', '-A'); run('git', 'commit', '-qm', 'head'); head = run('git', 'rev-parse', 'HEAD')
+run('git', 'update-ref', 'refs/pull/7/head', head)
+os.environ.update(SHIP_GIT='git', SHIP_GIT_CACHE=str(root / 'cache'), SHIP_GIT_REMOTE=str(origin))
+ns = dict(json=json, os=os, re=re, subprocess=subprocess, Path=Path, repo='hypertask-ai/hypertask')
+exec(layer, ns)
+ns['prepare']('7', head, base)
+assert ns['source']('src/lib/flags/keys.ts', head) == 'head\n'
+assert ns['source']('src/lib/flags/keys.ts', base) == 'base\n'
+assert ns['listdir']('src/lib/flags/definitions', head) == [{'name': 'htpr-1-x.ts', 'path': 'src/lib/flags/definitions/htpr-1-x.ts', 'type': 'file'}]
+assert ns['listdir']('src/lib/flags/definitions', base) == []
+try:
+    ns['source']('src/nope.ts', head); raise SystemExit('missing path was served')
+except ValueError:
+    pass
+subprocess.run(['rm', '-rf', str(origin)], check=True)  # cached: a second prepare must not need the network
+ns['prepare']('7', head, base)
+try:
+    ns['prepare']('8', 'c' * 40); raise SystemExit('unknown sha accepted')
+except ValueError:
+    pass
+PY
+
+# Dropped path (YPER4-257): Valentin decided against a ticket, its PR is closed unmerged. Fakes: PR state and comments.
+mkdir -p "$E/drop-bin"
+cat > "$E/drop-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+# pr view <n> ... : state comes from $DROP_DIR/state-<n>; the title names YPER4-777.
+[[ $1 == pr && $2 == view ]] || exit 1
+st=$(cat "$DROP_DIR/state-$3") || exit 1
+case "$*" in
+  *'--json title,state,baseRefName'*) echo "$st production YPER4-777 [INFRA] Dropped fixture" ;;
+  *'--json number,title,state,mergeCommit,baseRefName'*)
+    sha=null; [ "$st" = MERGED ] && sha='{"oid":"abc123"}'
+    echo "{\"number\":$3,\"title\":\"YPER4-777 [INFRA] Dropped fixture\",\"state\":\"$st\",\"mergeCommit\":$sha,\"baseRefName\":\"production\"}" ;;
+  *'--json title'*) echo "YPER4-777 [INFRA] Dropped fixture" ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/drop-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == comment && $2 == list ]]; then cat "$DROP_DIR/comments"
+elif [[ $1 == tasks && $2 == get ]]; then echo '{"success":true,"tasks":[{"section":"Done"}]}'
+else exit 1; fi
+MOCK
+chmod +x "$E/drop-bin/gh" "$E/drop-bin/hypertask"
+export DROP_DIR="$E/drop"; mkdir -p "$DROP_DIR"
+D() { PATH="$E/drop-bin:$PATH" ./ship-check "$@"; }
+echo '{"success":true,"comments":[{"text":"<p>Agent note, no decision here.</p>"}]}' > "$DROP_DIR/comments"
+echo CLOSED > "$DROP_DIR/state-901"; echo OPEN > "$DROP_DIR/state-902"; echo MERGED > "$DROP_DIR/state-903"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted without a decision comment" || ok "dropped refuses a ticket without a quoted dated decision"
+echo '{"success":true,"comments":[{"text":"<p>Valentin decided on 2026-10-10 not to ship this.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unquoted decision" || ok "dropped refuses a decision without a quote"
+echo '{"success":true,"comments":[{"text":"<p>Valentin, 2026-10-10: &quot;ship it&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unrelated quoted decision" || ok "dropped refuses a quoted decision without Decided against:"
+echo '{"success":true,"comments":[{"text":"<p>No &quot;Decided against:&quot; record exists. Valentin, 2026-10-10: &quot;ship it&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted Decided against: mid-comment" || ok "dropped needs the comment to start with Decided against:"
+echo '{"success":true,"comments":[{"text":"<p>Decided against: awaiting Valentin, 2026-10-10, see <a href=\"https://example.com\">link</a>.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted attribute quotes as a quote" || ok "dropped ignores quotes inside HTML attributes"
+echo '{"success":true,"comments":[{"text":"<p>Decided against: awaiting Valentin, 2026-10-10. Button label: &quot;Cancel&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && bad "dropped accepted an unrelated quotation" || ok "dropped needs the quote right after Valentin and the date"
+echo '{"success":true,"comments":[{"text":"<p><strong>Decided against: Valentin, 2026-10-10, in chat: &quot;release them instead&quot;</strong></p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 901 >/dev/null && ok "dropped accepts a short note after the date" || bad "dropped refused a note after the date"
+rm -f "$E/YPER4-777/dropped" "$E/YPER4-777/pr"
+echo '{"success":true,"comments":[{"text":"<p>Decided against: Valentin, 2026-10-10: &quot;drop it, not needed&quot;.</p>"}]}' > "$DROP_DIR/comments"
+D dropped YPER4-777 902 >/dev/null && bad "dropped accepted an open PR" || ok "dropped refuses an open PR"
+D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "dropped refuses a merged PR"
+[ ! -e "$E/YPER4-777/dropped" ] && ok "refused dropped writes no record" || bad "refused dropped wrote a record"
+out=$(D dropped YPER4-777 901); [ "$out" = 'recorded YPER4-777 as dropped (PR 901 closed unmerged)' ] && ok "dropped records a closed unmerged PR" || bad "dropped: $out"
+[ "$(cat "$E/YPER4-777/pr")" = 901 ] && [ "$(cat "$E/YPER4-777/dropped")" = 901 ] && ok "dropped binds the PR" || bad "dropped record"
+for x in merged deployed proof; do
+  D $x YPER4-777 | grep -q "$x ok (dropped: PR 901 closed unmerged)" && ok "dropped passes $x" || bad "dropped $x"
+done
+D pr YPER4-777 | grep -q 'title ok' && ok "dropped passes pr" || bad "dropped pr"
+echo '{"tool_input":{"command":"vcc task move YPER4-777 --section \"Done\""}}' | PATH="$E/drop-bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done for a dropped ticket" || bad "guard blocks Done for a dropped ticket"
+echo MERGED > "$DROP_DIR/state-901"
+D merged YPER4-777 >/dev/null && bad "dropped passed merged after the PR merged" || ok "dropped merged gate fails once the PR is merged"
+echo OPEN > "$DROP_DIR/state-901"
+D deployed YPER4-777 >/dev/null && bad "dropped passed deployed after the PR reopened" || ok "dropped deployed gate fails once the PR reopens"
+echo CLOSED > "$DROP_DIR/state-901"
+D bind YPER4-777 901 >/dev/null && [ ! -e "$E/YPER4-777/dropped" ] && ok "bind clears dropped" || bad "bind did not clear dropped"
+
+# nochange path (YPER4-272): infra ticket solved with no code change. Stubs for gh, hypertask and a local origin.
+NC="$E/nc"; mkdir -p "$NC/bin" "$NC/work"
+git init -q --bare "$NC/origin.git"; git clone -q "$NC/origin.git" "$NC/work" 2>/dev/null
+git -C "$NC/work" -c user.name=t -c user.email=t@t commit -q --allow-empty -m init
+git -C "$NC/work" push -q origin HEAD:refs/heads/production 2>/dev/null
+cat > "$NC/bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+if [[ $1 == pr && $2 == list ]]; then cat "$NC/prs"
+elif [[ $1 == api && $2 == */compare/* ]]; then cat "$NC/ahead"
+else exit 1; fi
+MOCK
+cat > "$NC/bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list ]] && cat "$NC/comments" || exit 1
+MOCK
+chmod +x "$NC/bin/gh" "$NC/bin/hypertask"; export NC
+N() { SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check "$@"; }
+echo '[]' > "$NC/prs"; echo 0 > "$NC/ahead"
+echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted a ticket with no comment" || ok "nochange refuses a ticket with no comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> the setting was already right.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an opener without evidence" || ok "nochange refuses an opener with no evidence"
+echo '{"success":true,"comments":[{"text":"<p>Note: https://example.com/x</p><p><strong>Resolved without a change:</strong> fine.</p>"}]}' > "$NC/comments"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted evidence in another comment" || ok "nochange needs the opener and evidence in one comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+N nochange FOO-901 >/dev/null && bad "nochange accepted a non-ticket id" || ok "nochange refuses a non-ticket id (FOO-901)"
+N nochange HTPR-901x >/dev/null && bad "nochange accepted a malformed id" || ok "nochange refuses a malformed id (HTPR-901x)"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange accepts HTPR with a resolution comment" || bad "nochange HTPR"
+echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR accepted no comment" || ok "nochange HTPR refuses a ticket with no comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+rm -f "$E/HTPR-901/nochange"
+echo '[{"number":5,"title":"YPER4-901 [INFRA] a fix"}]' > "$NC/prs"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "nochange refuses an open PR"
+echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-901-fix 2>/dev/null; echo 2 > "$NC/ahead"
+N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote branch" || ok "nochange refuses an origin branch ahead of base"
+echo 0 > "$NC/ahead"
+G 2 vcc task move YPER4-901 $DONE
+echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener plus URL)" || bad "nochange pass case"
+echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
+# Each must print what its ship-gates EXPECT line matches (pr expects "title ok").
+for x in merged:merged deployed:deployed proof:proof pr:title; do
+  N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
+done
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
+git -C "$NC/work" push -q origin :refs/heads/r3/yper4-901-fix 2>/dev/null
+git -C "$NC/work" branch -q r3/yper4-901-local 2>/dev/null
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a local branch" || ok "nochange cleaned fails while a local branch exists"
+git -C "$NC/work" worktree add -q "$NC/wt901" -b r3/yper4-901-wt 2>/dev/null
+git -C "$NC/work" branch -q -D r3/yper4-901-local
+N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored a worktree" || ok "nochange cleaned fails while a worktree branch exists"
+git -C "$NC/work" worktree remove --force "$NC/wt901"; git -C "$NC/work" branch -q -D r3/yper4-901-wt
+N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned passes once nothing is left" || bad "nochange cleaned clean case"
+# Number boundary: a branch of YPER4-9010 is not a branch of YPER4-901.
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/yper4-9010-other 2>/dev/null; echo 3 > "$NC/ahead"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange ignores a branch of YPER4-9010" || bad "nochange matched yper4-9010"
+N cleaned YPER4-901 | grep -q 'cleaned ok' && ok "nochange cleaned ignores a branch of YPER4-9010" || bad "cleaned matched yper4-9010"
+git -C "$NC/work" push -q origin :refs/heads/r3/yper4-9010-other 2>/dev/null; echo 0 > "$NC/ahead"
+echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done after nochange" || bad "guard blocks Done after nochange"
+G 2 vcc task move YPER4-902 $DONE
+# The marker is only a record: a PR that appears after the pass blocks Done again.
+echo '[{"number":7,"title":"YPER4-901 [INFRA] late fix"}]' > "$NC/prs"
+echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && bad "guard allowed Done after a PR appeared" || ok "guard blocks Done when a PR appears after nochange"
+echo '[]' > "$NC/prs"
+# HTPR guard: Done is blocked without nochange, allowed after it, and the id boundary holds (htpr-901 vs htpr-9010).
+rm -f "$E/HTPR-901/nochange"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && bad "guard allowed Done for HTPR without nochange" || ok "guard blocks Done for HTPR without nochange"
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-9010-other 2>/dev/null; echo 3 > "$NC/ahead"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange ignores a branch of HTPR-9010" || bad "nochange matched htpr-9010"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-9010-other 2>/dev/null
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-901-fix 2>/dev/null
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR ignored its own branch" || ok "nochange HTPR refuses its own branch ahead of base"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-901-fix 2>/dev/null; echo 0 > "$NC/ahead"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done for HTPR after nochange" || bad "guard blocks Done for HTPR after nochange"
+# Empty evidence does not count.
+for body in '<code></code>' '<pre> </pre>' '<pre><code>&nbsp;</code></pre>'; do
+  jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
+  N nochange YPER4-901 >/dev/null && bad "nochange accepted empty evidence $body" || ok "nochange refuses empty evidence $body"
+done
+jq -n '{success:true,comments:[{text:"<p><strong>Resolved without a change:</strong> done</p><pre><code>ok 3 checks</code></pre>"}]}' > "$NC/comments"
+N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange accepts a pre/code block with output" || bad "nochange refused real output"
+echo 830 > "$E/YPER4-901/pr"
+N merged YPER4-901 >/dev/null && bad "nochange survived a bound PR" || ok "a bound PR ends the nochange pass"
+
 python3 ./premerge-evidence.test.py && ok 'poster regressions' || bad 'poster regressions'
-echo "failures: $fails"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'
+echo "$passes passed, $fails failed"; [ "$fails" = 0 ] && echo 'ALL PASS: All ship-check tests passed'

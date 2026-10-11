@@ -6,7 +6,6 @@ import test from "node:test";
 import {
   buildTaskWriterRetrievalQuery,
   formatRelatedTicketCandidates,
-  HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
   mergeTaskWriterContextBudget,
   TASK_WRITER_BOARD_RESEARCH_RULES,
   taskWriterCandidateUrl,
@@ -25,14 +24,6 @@ test("shared source fidelity stays free of board-research exceptions", () => {
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Proposed:/);
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Open questions/);
   assert.match(TASK_WRITER_BOARD_RESEARCH_RULES, /Related tickets/);
-});
-
-test("flag key is registered for Owner+QA rollout", () => {
-  const flagsSource = readFileSync(resolve("src/lib/flags.ts"), "utf8");
-  assert.match(
-    flagsSource,
-    new RegExp(`key:\\s*"${HTPR_6363_TASK_WRITER_RESEARCH_FLAG}"`)
-  );
 });
 
 test("retrieval query prefers cumulative user briefs over the conversation blob", () => {

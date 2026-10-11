@@ -7,7 +7,11 @@ export interface FileItem {
 }
 
 // Hook version for more flexibility
-export const useFileUpload = (initialFiles: FileItem[] = []) => {
+export const useFileUpload = (
+  initialFiles: FileItem[] = [],
+  onFilesSelected?: (files: File[], preparation: Promise<FileItem[]>) => void,
+  onUploadFailed?: (fileName: string) => void,
+) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [fileItems, setFileItems] = useState<FileItem[]>(initialFiles);
 
@@ -30,11 +34,18 @@ export const useFileUpload = (initialFiles: FileItem[] = []) => {
     );
 
     if (uniqueFiles.length > 0) {
-      const newFileItems = await processFiles(
+      const preparation = processFiles(
         uniqueFiles as unknown as FileList,
         startingId
       );
-      setFileItems((prevItems) => [...prevItems, ...newFileItems]);
+      onFilesSelected?.(uniqueFiles, preparation);
+      try {
+        const newFileItems = await preparation;
+        setFileItems((prevItems) => [...prevItems, ...newFileItems]);
+      } catch (error) {
+        if (!onUploadFailed) throw error;
+        uniqueFiles.forEach((file) => onUploadFailed(file.name));
+      }
     }
   };
 
@@ -50,11 +61,18 @@ export const useFileUpload = (initialFiles: FileItem[] = []) => {
     );
 
     if (uniqueFiles.length > 0) {
-      const newFileItems = await processFiles(
+      const preparation = processFiles(
         uniqueFiles as unknown as FileList,
         startingId
       );
-      setFileItems((prevItems) => [...prevItems, ...newFileItems]);
+      onFilesSelected?.(uniqueFiles, preparation);
+      try {
+        const newFileItems = await preparation;
+        setFileItems((prevItems) => [...prevItems, ...newFileItems]);
+      } catch (error) {
+        if (!onUploadFailed) throw error;
+        uniqueFiles.forEach((file) => onUploadFailed(file.name));
+      }
     }
   };
 

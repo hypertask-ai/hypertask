@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // route = "/api/projects/views/switch-view"
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
@@ -106,4 +107,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 };
 
 
-export default handler
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/switch-view")).POST,
+);

@@ -7,7 +7,7 @@ const { join } = require("node:path");
 const yaml = require("js-yaml");
 const vm = require("node:vm");
 
-test("every failed smoke classification alerts immediately without invoking rollback", async () => {
+test("smoke classification routes unrunnable checks to infra and confirmed failures to live alerts without invoking rollback", async () => {
   const workflow = await readFile(".github/workflows/prod-health.yml", "utf8");
   const start = workflow.indexOf("      - name: Classify and report a failed smoke check");
   const runStart = workflow.indexOf("        run: |\n", start) + "        run: |\n".length;
@@ -34,7 +34,7 @@ test("every failed smoke classification alerts immediately without invoking roll
         if (applicationFailure) {
           await writeFile(join(state, "application-failure.json"), '{"view":"inbox"}');
         }
-        await writeFile(join(bin, "node"), '#!/bin/sh\nprintf "invoked\\n" > "$NODE_LOG"\nexit 99\n');
+        await writeFile(join(bin, "node"), '#!/bin/sh\nprintf "%s\\n" "$*" > "$NODE_LOG"\n');
         await writeFile(join(bin, "curl"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$CURL_LOG"\n');
         await chmod(join(bin, "node"), 0o755);
         await chmod(join(bin, "curl"), 0o755);
@@ -53,12 +53,13 @@ test("every failed smoke classification alerts immediately without invoking roll
             SHA: "a".repeat(40),
             TG_TOKEN: "stub",
             TG_CHAT: "stub",
+            GITHUB_OUTPUT: join(directory, "outputs"),
           },
         });
         assert.equal(output.status, 1, output.stdout + output.stderr);
         assert.match(output.stdout, expected);
-        const requests = await readFile(join(directory, "requests"), "utf8");
-        assert.equal(requests.split("\n").filter((line) => /https:\/\/api\.telegram\.org\//.test(line)).length, 1);
+        const requests = await readFile(join(directory, "requests"), "utf8").catch(() => "");
+        assert.equal(requests.split("\n").filter((line) => /https:\/\/api\.telegram\.org\//.test(line)).length, 0);
         assert.doesNotMatch(requests, /api\.vercel\.com|\/git\/|MERGE_FREEZE/);
         if (event === "push" && applicationFailure) {
           assert.match(requests, /prod-health-gate/);
@@ -66,7 +67,8 @@ test("every failed smoke classification alerts immediately without invoking roll
         } else {
           assert.doesNotMatch(requests, /api\.github\.com/);
         }
-        await assert.rejects(readFile(join(directory, "node-invoked")), { code: "ENOENT" });
+        const report = await readFile(join(directory, "node-invoked"), "utf8");
+        assert.match(report, applicationFailure ? /production-alert.mjs live smoke-failure/ : /production-alert.mjs setup smoke-(unrunnable|unconfirmed)/);
       } finally {
         await rm(directory, { recursive: true, force: true });
       }
@@ -109,7 +111,7 @@ test("rollback reports freeze, dropped commits and failures without hiding faile
     try {
       const bin = join(directory, "bin");
       await mkdir(bin);
-      await writeFile(join(bin, "node"), '#!/bin/sh\nprintf "%s\\n" "$ROLLBACK_RESULT"\n');
+      await writeFile(join(bin, "node"), '#!/bin/sh\ncase "$1" in *emergency-rollback*) printf "%s\\n" "$ROLLBACK_RESULT" ;; *) printf "%s\\n" "$*" > "$ALERT_LOG" ;; esac\n');
       await writeFile(join(bin, "curl"), '#!/bin/sh\nprintf "%s\\n" "$*" > "$ALERT_LOG"\n');
       await chmod(join(bin, "node"), 0o755);
       await chmod(join(bin, "curl"), 0o755);
@@ -118,11 +120,11 @@ test("rollback reports freeze, dropped commits and failures without hiding faile
         env: {
           ...process.env, PATH: `${bin}:${process.env.PATH}`,
           ROLLBACK_RESULT: JSON.stringify(result), ALERT_LOG: join(directory, "alert"),
-          GITHUB_SHA: "a".repeat(40), TG_TOKEN: "stub", TG_CHAT: "stub",
+          GITHUB_SHA: "a".repeat(40), TG_TOKEN: "stub", TG_CHAT: "stub", GITHUB_STEP_SUMMARY: join(directory, "summary"),
         },
       });
       assert.equal(output.status, status, output.stdout + output.stderr);
-      const alert = await readFile(join(directory, "alert"), "utf8");
+      const alert = await readFile(join(directory, result.action === "skip" ? "summary" : "alert"), "utf8");
       assert.match(alert, expected);
       assert.match(alert, /Freeze: set/);
     } finally {

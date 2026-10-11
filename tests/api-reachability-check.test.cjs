@@ -60,6 +60,13 @@ async function runProbe(overrides = {}, telegram = true, firewall = null) {
     await mkdir(bin);
     await writeFile(join(bin, "curl"), CURL_STUB);
     await writeFile(join(bin, "sleep"), '#!/bin/sh\nprintf "%s\\n" "$*" >> "$SLEEP_LOG"\n');
+    await writeFile(join(bin, "node"), `#!/bin/sh
+if [ "$1" = ".github/scripts/production-alert.mjs" ]; then
+  exec "$REAL_NODE" -e 'require("node:fs").appendFileSync(process.env.CURL_LOG, JSON.stringify(["report", process.argv[2], process.argv[3], "text=" + process.argv[4]]) + "\\n")' "$@"
+fi
+exec "$REAL_NODE" "$@"
+`);
+    await chmod(join(bin, "node"), 0o755);
     await chmod(join(bin, "curl"), 0o755);
     await chmod(join(bin, "sleep"), 0o755);
     const responses = Object.fromEntries(URLS.map((url, index) => [url, overrides[index] || [HEALTHY[index]]]));
@@ -70,6 +77,7 @@ async function runProbe(overrides = {}, telegram = true, firewall = null) {
       env: {
         ...process.env,
         PATH: `${bin}:${process.env.PATH}`,
+        REAL_NODE: process.execPath,
         CURL_LOG: join(directory, "requests"),
         SLEEP_LOG: join(directory, "sleeps"),
         RESPONSES: JSON.stringify(responses),
@@ -109,7 +117,13 @@ test("API reachability job uses the five-minute schedule, bounded runner and exi
   assert.equal(job.steps[0].uses, workflow.jobs.health.steps[0].uses);
   const step = job.steps.find((item) => item.run);
   assert.equal(step.run, `bash ${SCRIPT}`);
-  assert.deepEqual(step.env, { ...pusher.steps[0].env, VERCEL_TOKEN: workflow.jobs.health.steps.find((item) => item.env?.VERCEL_TOKEN).env.VERCEL_TOKEN });
+  assert.deepEqual(step.env, {
+    ALERT_GITHUB_TOKEN: '${{ secrets.AUTOMERGE_TOKEN }}',
+    HYPERTASK_MCP_TOKEN: '${{ secrets.HYPERTASK_MCP_TOKEN }}',
+    TG_TOKEN: '${{ secrets.TELEGRAM_BOT_TOKEN }}',
+    TG_CHAT: '${{ secrets.TELEGRAM_CHAT_ID }}',
+    VERCEL_TOKEN: '${{ secrets.VERCEL_TOKEN }}',
+  });
   const script = await readFile(SCRIPT, "utf8");
   assert.match(script, /set -euo pipefail/);
   assert.match(script, /x-vercel-mitigated/);
@@ -171,8 +185,9 @@ test("persistent challenges and invalid expectations retry and send exactly one 
     assert.equal(output.status, 1, output.stdout + output.stderr);
     assert.equal(output.calls.filter((call) => call.includes(URLS[index])).length, 3);
     assert.deepEqual(output.sleeps, ["2", "2"]);
-    const alerts = output.calls.filter((call) => call.some((arg) => arg.startsWith("https://api.telegram.org/")));
+    const alerts = output.calls.filter((call) => call[0] === "report");
     assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][1], response.headers?.toLowerCase().includes("x-vercel-mitigated:") ? "setup" : "live");
     const text = alerts[0].find((arg) => arg.startsWith("text="));
     assert.ok(text.includes(URLS[index]));
     assert.ok(text.includes(`status=${response.status}`));
@@ -199,8 +214,9 @@ test("multiple failed URLs share one alert and local failure needs no Telegram s
   for (const telegram of [true, false]) {
     const output = await runProbe(overrides, telegram);
     assert.equal(output.status, 1, output.stdout + output.stderr);
-    const alerts = output.calls.filter((call) => call.some((arg) => arg.startsWith("https://api.telegram.org/")));
-    assert.equal(alerts.length, telegram ? 1 : 0);
+    const alerts = output.calls.filter((call) => call[0] === "report");
+    assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][1], "setup");
     assert.match(output.stdout, /x-vercel-mitigated=\(empty\)/);
     if (telegram) {
       const text = alerts[0].find((arg) => arg.startsWith("text="));
@@ -258,8 +274,9 @@ test("firewall guard rejects missing, IP-scoped, malformed, challenged and faile
     assert.equal(output.status, 1, output.stdout + output.stderr);
     assert.equal(output.calls.filter((call) => call.includes(BYPASS_URL)).length, 3);
     assert.deepEqual(output.sleeps, ["2", "2"]);
-    const alerts = output.calls.filter((call) => call.some((arg) => arg.startsWith("https://api.telegram.org/")));
+    const alerts = output.calls.filter((call) => call[0] === "report");
     assert.equal(alerts.length, 1);
+    assert.equal(alerts[0][1], "setup", "settings alone are not a proven outage");
     const text = alerts[0].find((arg) => arg.startsWith("text="));
     assert.ok(text.includes(`${BYPASS_URL}: status=${response.status}, x-vercel-mitigated=`));
     assert.match(text, /Vercel firewall system bypass.*project hypertasks-prod/);
@@ -283,8 +300,9 @@ test("firewall retries clear stale headers and combined probe and guard failures
   const overrides = Object.fromEntries(URLS.map((_, index) => [index, [{ status: "503", headers: "x-vercel-mitigated: challenge\r\n" }]]));
   const output = await runProbe(overrides, true, [firewallResponse([])]);
   assert.equal(output.status, 1, output.stdout + output.stderr);
-  const alerts = output.calls.filter((call) => call.some((arg) => arg.startsWith("https://api.telegram.org/")));
+  const alerts = output.calls.filter((call) => call[0] === "report");
   assert.equal(alerts.length, 1);
+  assert.equal(alerts[0][1], "setup");
   const text = alerts[0].find((arg) => arg.startsWith("text="));
   for (const url of URLS) assert.ok(text.includes(`${url}: status=503, x-vercel-mitigated=challenge`));
   assert.ok(text.includes(`${BYPASS_URL}: status=200, x-vercel-mitigated=none`));

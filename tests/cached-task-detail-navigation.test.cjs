@@ -28,8 +28,9 @@ function navigateHook(queryClient, router, userId = 2343, authenticatedId = user
     "@/lib/state": { useRecoilValue: () => ({ id: userId }) },
     "@/store": { currentUserAtom: {} },
   "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/hooks/General/useAuth": { useAuth: () => ({ currentUser: null, authenticatedUserId: authenticatedId }) },
+    "@/hooks/Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
     "@/lib/navigation/cachedTaskDetail": cache,
     "@/lib/analytics/taskDetailReadiness": { taskDetailEntryPathForRoute: () => "board", markTaskDetailNavigationStart: () => {} },
   };
@@ -200,7 +201,7 @@ test("card Links defer normal clicks to the cached navigator and preserve modifi
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/link": { __esModule: true, default: "a" },
     "@/hooks/useFlag": { useFlag: () => flagEnabled },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7001_INBOX_NEXT_CACHED_FLAG: "htpr-7001-inbox-next-cached" },
     "@/lib/contexts/mobileContext": { MobileViewContext: {} },
     "@/utils/undoActions/helperFuncs": { cn: (...classes) => classes.filter(Boolean).join(" ") },
   };
@@ -244,16 +245,19 @@ test("background history refreshes preserve the mounted cached detail, but route
   const previousLocation = { current: undefined };
   const Detail = () => null;
   const mocks = {
-    "react": { useRef: () => previousLocation, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
+    "react-dom": { flushSync: callback => callback() },
+    "react": { Suspense: require("react").Suspense, useMemo: (factory) => factory(), useRef: value => value === undefined ? previousLocation : { current: value }, useState: () => [Detail], useEffect: () => {}, useSyncExternalStore: () => pathname },
     "react/jsx-runtime": require("react/jsx-runtime"),
     "next/navigation": { usePathname: () => pathname, useRouter: () => ({}) },
     "@tanstack/react-query": { useQueryClient: () => queryClient },
     "@/lib/state": { useRecoilValue: () => ({ id: currentAccountId }) },
     "@/store": { currentUserAtom: {} },
-  "@/hooks/useFlag": { useFlag: () => flagEnabled },
-  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+  "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6972-subtask-link" ? false : flagEnabled },
+  "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_6972_SUBTASK_LINK_FLAG: "htpr-6972-subtask-link" },
     "@/components/Modals/SwipeUnread/EmbeddedTaskDetail": { __esModule: true, default: Detail },
     "@/lib/navigation/cachedTaskDetail": cache,
+    "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: () => false },
+    "@/lib/constants/constants": { REACT_QUERY_KEYS: { uploadStates: ["Uploading_States"] } },
   };
   const source = fs.readFileSync(path.join(root, "src/components/PageComponents/TaskDetail/CachedTaskDetailNavigation.tsx"), "utf8");
   const compiled = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -266,11 +270,12 @@ test("background history refreshes preserve the mounted cached detail, but route
   queryClient.setQueryData(cache.cachedTaskDetailKey(2343, 42), task);
   history.state.cachedTaskDetail = { accountId: 2343, taskId: 42, projectId: 6859, uniqueIndex: 43 };
   const first = render();
-  assert.equal(first.type, Detail);
+  assert.equal(first.type, require("react").Suspense);
+  assert.equal(first.props.children.type, Detail);
   flagEnabled = false;
   assert.equal(render(), "Original route", "disabled rollout never displays an existing cached marker");
   flagEnabled = true;
-  assert.equal(render().type, Detail);
+  assert.equal(render().props.children.type, Detail);
   delete history.state.cachedTaskDetail;
   assert.equal(render().key, first.key, "a background RSC refresh must not remount editors or lose drafts");
   assert.equal(render(985), "Original route");
@@ -279,7 +284,7 @@ test("background history refreshes preserve the mounted cached detail, but route
   pathname = "/project";
   assert.equal(render(), "Original route");
   pathname = "/detail/project-6859/43";
-  assert.equal(render().type, Detail);
+  assert.equal(render().props.children.type, Detail);
   currentAccountId = 985;
   assert.equal(render(), "Original route", "a stale client account cannot show the signed account's cached task");
 });

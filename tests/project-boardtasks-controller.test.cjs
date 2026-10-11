@@ -20,7 +20,8 @@ function loadController(prisma, calls) {
   }).outputText;
 
   const stubs = {
-    "@/lib/flags": { isFeatureEnabled: async () => false, HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open" },
+    "@/lib/flags": { isFeatureEnabled: async () => false, HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open", HTPR_7071_AGENT_STATUS_CHIP_FLAG: "htpr-7071-agent-status-chip" },
+    "@/utils/controllers/tasks/attachAgentStatus": { attachAgentStatus: async () => assert.fail("agent status must not be queried with the flag off") },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/ai/teamBillingSnapshotSelect": { teamBillingSnapshotSelect: {} },
     "./getAllIncludes": {

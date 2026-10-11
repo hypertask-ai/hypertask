@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import getAllMinimal from "@/utils/controllers/projects/getAllMinimal";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -20,4 +21,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/project-writes/favorites-read")).GET,
+);

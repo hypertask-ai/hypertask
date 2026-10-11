@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import { loadSessionUserRecord } from '@/lib/auth/sessionUserRecord'
 import updateProject from '@/utils/controllers/projects/update'
 import { broadcastBoardChange } from '@/lib/realtime/server'
@@ -9,6 +10,7 @@ export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -50,4 +52,6 @@ export async function PATCH(
       { status: 500 }
     )
   }
+
+  })(request)
 }

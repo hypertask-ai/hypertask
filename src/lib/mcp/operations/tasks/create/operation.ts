@@ -1,19 +1,19 @@
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
+
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCreateTaskBody } from '@/lib/mcp/tasks/validators';
-import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds } from '@/lib/mcp/tasks/services';
+import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds, matchLabelIds } from '@/lib/mcp/tasks/services';
 import { mapTaskToDetail } from '@/lib/mcp/tasks/mappers';
 import { CreateTaskBody, TaskDetail } from '@/lib/mcp/tasks/types';
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
 import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
-import { readJsonBody } from '@/lib/mcp/readJsonBody';
 import { isFeatureEnabled } from '@/lib/flags';
-import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys';
-import { isAcceptedRichTextInput } from '@/utils/helperFunctions/markdownToHtml';
+import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
+import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {
     success: boolean;
@@ -25,6 +25,7 @@ export interface CreateTaskResponse {
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
     const correlationId = request.headers.get('X-Correlation-ID');
 
     try {
@@ -100,24 +101,6 @@ export async function POST(request: NextRequest) {
                 { status: 400 }
             );
         }
-        if (
-            body.description !== undefined &&
-            !isAcceptedRichTextInput(body.description, body.content_type) &&
-            !(await isFeatureEnabled(HTPR_6561_DESCRIPTION_STRUCTURE_FLAG, user.id))
-        ) {
-            return NextResponse.json(
-                {
-                    ...buildFieldError(
-                        'invalid_field',
-                        'description',
-                        'Description must be HTML or structural markdown. Plain text is not enabled.'
-                    ),
-                    ...(dryRun && { valid: false }),
-                    ...(correlationId && { correlationId })
-                },
-                { status: 400 }
-            );
-        }
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
@@ -151,6 +134,29 @@ export async function POST(request: NextRequest) {
                 },
                 { status: sectionCheck.error.status }
             );
+        }
+
+        // HTPR-7121: name unknown labels, and pass label names on as ids
+        let labelIds = labels;
+        if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
+            const projectLabels = await prisma.label.findMany({
+                where: { projectId: project_id },
+                select: { id: true, value: true }
+            });
+            const match = matchLabelIds(projectLabels, labels);
+            const missing = match.unresolved;
+            labelIds = match.ids;
+            if (missing.length > 0) {
+                return NextResponse.json(
+                    {
+                        ...buildFieldError('not_found', 'labels', 'Not found'),
+                        message: `Label(s) not found on board ${project_id}: ${missing.join(', ')}. Available labels: ${projectLabels.map(label => label.value).filter(Boolean).join(', ') || 'none'}.`,
+                        ...(dryRun && { valid: false }),
+                        ...(correlationId && { correlationId })
+                    },
+                    { status: 404 }
+                );
+            }
         }
 
         // Validate parent task exists (a bad client-supplied id must 404, not 500)
@@ -243,7 +249,7 @@ export async function POST(request: NextRequest) {
                     projectUniqueIdentifier: projectCheck.project.uniqueIdentifier,
                     teamId: projectCheck.project.teamId,
                     images: images || [],
-                    labels: labels || [],
+                    labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
                     agentId: ctx.agentId || undefined
@@ -280,4 +286,6 @@ export async function POST(request: NextRequest) {
             { status: 500 }
         );
     }
+
+  })(request)
 }

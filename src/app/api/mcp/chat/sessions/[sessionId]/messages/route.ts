@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import type { Prisma } from '@prisma/client'
 import { AGENT_CHAT_SYSTEM_MESSAGES, isAgentChatSystemMessage } from '@/lib/agentRuns/model'
@@ -39,6 +40,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -125,6 +127,8 @@ export async function GET(
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 type PostChatMessageBody = {
@@ -144,6 +148,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -361,4 +366,6 @@ export async function POST(
       { status: 500 }
     )
   }
+
+  })(request)
 }

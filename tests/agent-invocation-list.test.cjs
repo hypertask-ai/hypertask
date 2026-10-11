@@ -39,6 +39,7 @@ function loadRoute({ agentId = "agent-1", records } = {}) {
   const dependencies = [
     "src/lib/mcp/operations/inbox/list/operation.ts",
     "src/lib/mcp/auth.ts",
+    "src/lib/mcp/routeWrapper.ts",
     "src/lib/mcp/agents.ts",
     "src/utils/controllers/notifications/getAll.ts",
     "src/utils/controllers/notifications/getStructuredInboxForAgent.ts",
