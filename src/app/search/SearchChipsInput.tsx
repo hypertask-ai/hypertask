@@ -1,6 +1,9 @@
 "use client";
 
 import UserAvatar from "@/components/Common/UserAvatar";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { HTPR_6371_MOBILE_SEARCH_FLAG } from "@/lib/flags/keys";
+import { isMobileSearchSubmit, mobileSearchPickerBounds } from "@/lib/search/mobile";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { MentionListRows } from "@/components/AI_CHAT/MentionListComp";
@@ -9,7 +12,7 @@ import { operatorMatches, parseSearchTokens, SEARCH_OPERATORS, type Names, type 
 import { localValueSuggestions, operatorSuggestions, searchCompletion, searchFilterColour, highlightedTitle, SEARCH_TIPS, type SearchCandidate } from "@/lib/search/autocomplete";
 import { searchConfig } from "@/lib/configs/search.config";
 import { Hash, UserRound, X } from "lucide-react";
-import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useEffect, useRef, useState } from "react";
+import React, { type ChangeEvent, type KeyboardEvent, type RefObject, useContext, useEffect, useRef, useState } from "react";
 
 type Candidate = SearchCandidate & { count?: number; byName?: boolean; query?: string; operator?: SearchOperator; kind?: "ai" | "operator" | "value" | "recent" };
 type Props = {
@@ -27,6 +30,12 @@ type Props = {
 };
 
 export default function SearchChipsInput({ value, onChange, onRun, boardId, inputRef, autocompleteEnabled = false, recentSearches = [], layoutEnabled: layoutRequested = false, availableBoards = [], onAskAi, showSuggestions = true }: Props) {
+  const mobileFlagEnabled = useFlag(HTPR_6371_MOBILE_SEARCH_FLAG);
+  const isMobile = useContext(MobileViewContext);
+  const mobileEnabled = mobileFlagEnabled && isMobile;
+  const [composing, setComposing] = useState(false);
+  const composingRef = useRef(false);
+  const [mobileBounds, setMobileBounds] = useState<(ReturnType<typeof mobileSearchPickerBounds> & { left: number; width: number }) | null>(null);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const rowHighlightEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
   const layoutEnabled = layoutFlagEnabled && layoutRequested && autocompleteEnabled;
@@ -82,7 +91,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     ...(localRows ?? []).map((row) => ({ ...row, kind: completion?.kind === 'operator' ? 'operator' as const : 'value' as const })),
     ...((localRows === null || genericPrefix) ? candidates.map((row) => ({ ...row, kind: 'value' as const })) : []),
   ] : localRows ?? candidates;
-  const open = (searchEscBackEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips)));
+  const open = !(mobileEnabled && composing) && ((searchEscBackEnabled && tips) || (!dismissed && (layoutEnabled ? focused && showSuggestions && Boolean(value.trim() || tips) : Boolean(picker || tips))));
   const openRef = useRef(open);
   openRef.current = open;
   const listId = "search-chip-options";
@@ -95,9 +104,80 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       selectedRow.name.toLowerCase().startsWith(completion.value.toLowerCase())
       ? selectedRow.name.slice(completion.value.length) : '';
 
+  const mobileOverlay = mobileEnabled && focused && Boolean(value.trim() || open);
+  const pickerStyle: React.CSSProperties | undefined = mobileOverlay && mobileBounds ? {
+    position: 'fixed', top: mobileBounds.top, left: mobileBounds.left, width: mobileBounds.width,
+    height: mobileBounds.height, marginTop: 0, overflowY: 'auto', overflowX: 'hidden', zIndex: 301,
+  } : undefined;
+
   useEffect(() => {
-    if (autocompleteEnabled && open) pickerRef.current?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
-  }, [autocompleteEnabled, open, selectedIndex]);
+    if (!mobileOverlay) { setMobileBounds(null); return; }
+    const viewport = window.visualViewport;
+    const measure = () => {
+      const container = containerRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const style = getComputedStyle(container);
+      const left = rect.left + parseFloat(style.paddingLeft);
+      const width = rect.width - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+      const viewportTop = viewport?.offsetTop ?? 0;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const dock = document.querySelector<HTMLElement>('nav[aria-label="Primary navigation"]');
+      const dockRect = dock?.getBoundingClientRect();
+      const dockTop = dockRect && dockRect.height && dockRect.top < viewportTop + viewportHeight && dockRect.bottom > viewportTop ? dockRect.top : undefined;
+      const next = { ...mobileSearchPickerBounds(viewportTop, viewportHeight, container.firstElementChild!.getBoundingClientRect().bottom, dockTop), left, width };
+      // Keep the same state object when nothing moved, so the selected-row effect does not rerun.
+      setMobileBounds((previous) => previous && (Object.keys(next) as (keyof typeof next)[]).every((key) => previous[key] === next[key]) ? previous : next);
+    };
+    // Scrolling the suggestion list itself must not re-measure, or the list snaps back to the selected row.
+    const onScroll = (event: Event) => {
+      if (event.target instanceof Node && pickerRef.current?.contains(event.target)) return;
+      measure();
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(containerRef.current!);
+    viewport?.addEventListener('resize', measure);
+    viewport?.addEventListener('scroll', measure);
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      observer.disconnect();
+      viewport?.removeEventListener('resize', measure);
+      viewport?.removeEventListener('scroll', measure);
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [mobileOverlay]);
+
+  useEffect(() => {
+    if (!autocompleteEnabled || !open) return;
+    const list = (mobileEnabled && pickerRef.current?.querySelector<HTMLElement>(`#${listId}`)) || pickerRef.current;
+    const row = list?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`);
+    if (mobileEnabled && list && row) {
+      // Scroll only the list: scrollIntoView can pan the page behind the keyboard.
+      const listRect = list.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+      if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top;
+      else if (rowRect.bottom > listRect.bottom) list.scrollTop += rowRect.bottom - listRect.bottom;
+    } else row?.scrollIntoView({ block: 'nearest' });
+  }, [autocompleteEnabled, open, selectedIndex, rows.length, mobileEnabled, mobileBounds]);
+
+  useEffect(() => {
+    if (!mobileEnabled) return;
+    const input = inputRef.current;
+    const beforeInput = (event: InputEvent) => {
+      if (!isMobileSearchSubmit(event.inputType, composingRef.current || event.isComposing)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditing(false);
+      setDismissed(true);
+      onRun(value);
+    };
+    // React's beforeinput shim does not expose every soft-keyboard inputType.
+    input?.addEventListener('beforeinput', beforeInput);
+    return () => input?.removeEventListener('beforeinput', beforeInput);
+  }, [mobileEnabled, value, onRun, inputRef]);
 
   useEffect(() => {
     if (!layoutEnabled) return;
@@ -211,13 +291,13 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     return () => controller.abort();
   }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled]);
 
-  function change(event: ChangeEvent<HTMLInputElement>) {
+  function change(event: ChangeEvent<HTMLInputElement> | React.CompositionEvent<HTMLInputElement>) {
     // Clearing the draft must not reactivate the last committed chip.
-    setEditing(!autocompleteEnabled || Boolean(event.target.value.trim()));
+    setEditing(!autocompleteEnabled || Boolean(event.currentTarget.value.trim()));
     setDismissed(false);
-    setSelectedIndex(layoutEnabled && event.target.value.trim() ? 1 : 0);
-    setCaretAtEnd(event.target.selectionStart === event.target.value.length);
-    onChange(chipQuery(chips, event.target.value) + (/\s$/.test(event.target.value) ? ' ' : ''));
+    setSelectedIndex(layoutEnabled && event.currentTarget.value.trim() ? 1 : 0);
+    setCaretAtEnd(event.currentTarget.selectionStart === event.currentTarget.value.length);
+    onChange(chipQuery(chips, event.currentTarget.value) + (/\s$/.test(event.currentTarget.value) ? ' ' : ''));
   }
 
   function reopenPicker(event: React.SyntheticEvent<HTMLInputElement>) {
@@ -286,7 +366,21 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     inputRef.current?.focus();
   }
 
+  function runSearch() {
+    setEditing(false);
+    setDismissed(true);
+    onRun(value);
+    if (!mobileEnabled && value.trim().length >= 2) inputRef.current?.blur();
+  }
+
   function keyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (mobileEnabled && (composingRef.current || event.nativeEvent.isComposing)) return;
+    if (mobileEnabled && event.key === 'Enter') {
+      event.preventDefault();
+      event.stopPropagation();
+      runSearch();
+      return;
+    }
     if (autocompleteEnabled && (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
     // Escape leaves search in one press, even over tips or suggestions.
     if (open && event.key === "Escape" && !escLeavesEnabled) {
@@ -319,10 +413,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      setEditing(false);
-      setDismissed(true);
-      onRun(value);
-      if (value.trim().length >= 2) inputRef.current?.blur();
+      runSearch();
     }
   }
 
@@ -335,10 +426,10 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     const recent = row.query !== undefined ? splitSearchChips(row.query, false, names, false, commenterEnabled) : null;
     return (
       <button key={`${row.kind}-${row.operator ?? ''}-${row.id}`} id={`mention-button-${index}`} type="button" role="option"
-        aria-selected={row === selectedRow} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
+        aria-selected={row === selectedRow} onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }} onMouseEnter={() => setSelectedIndex(index)} onClick={() => choose(row)}
         onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') event.stopPropagation(); }}
         data-search-layout-row={rowHighlightEnabled ? '' : undefined}
-        className={`grid w-full min-w-0 grid-cols-1 gap-1 py-2 text-left text-dense text-white-black ${rowHighlightEnabled ? '' : `rounded-sm hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''}`} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
+        className={`grid w-full min-w-0 ${mobileEnabled ? "min-h-[44px] " : ""}grid-cols-1 gap-1 py-2 text-left text-dense text-white-black ${rowHighlightEnabled ? '' : `rounded-sm hover:bg-active-elementBg ${row === selectedRow ? 'bg-active-elementBg' : ''}`} ${row.email ? '@md:grid-cols-2 @md:gap-4' : ''}${labelScopeEnabled && row.count === 0 ? ' opacity-50' : ''}`}>
         {tip ? <span><strong className="block font-semibold">{tip.example}</strong><span className="text-meta text-text-light-gray">{tip.meaning}</span></span>
           : recent ? <span className="flex min-w-0 flex-wrap items-center gap-1 break-words">{recent.chips.map((chip, i) => <span key={i} className={`min-w-0 max-w-full break-all rounded-sm px-2 py-1 text-micro ${searchFilterColour(chip.operator)}`}>{chipText(chip)}</span>)}<span className="min-w-0 break-all">{recent.text}</span></span>
           : row.kind === 'ai' ? <span className="flex min-w-0 gap-2"><span className="shrink-0 font-semibold text-hypertasks-ai-purple">Ask AI</span><span className="min-w-0 break-words">{row.name}</span></span>
@@ -355,14 +446,15 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           <button
             key={`${chip.start}-${index}`}
             type="button"
+            onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}
             onClick={(event) => { event.stopPropagation(); remove(index); }}
             aria-label={`Remove ${chip.operator}:${chipLabels[`${chip.operator}:${chip.value}`] ?? chip.value} filter`}
-            className={`inline-flex ${layoutEnabled ? "min-w-0 max-w-full " : ""}items-center gap-1 rounded-sm px-2 py-1 text-content ${autocompleteEnabled ? `text-white-black border-l-2 ${searchFilterColour(chip.operator)}` : 'text-mention-highlight'}`}
+            className={`inline-flex ${mobileEnabled ? "min-h-[44px] min-w-[44px] max-w-full " : ""}${layoutEnabled ? "min-w-0 max-w-full " : ""}items-center gap-1 rounded-sm px-2 py-1 text-content ${autocompleteEnabled ? `text-white-black border-l-2 ${searchFilterColour(chip.operator)}` : 'text-mention-highlight'}`}
             style={autocompleteEnabled ? undefined : { backgroundColor: "color-mix(in srgb, var(--color-mention-highlight) 12%, var(--bg-mention))" }}
           >
-            {chip.operator === 'from' || chip.operator === 'commenter' || chip.operator === 'assignee' ? <UserRound size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash size={14} aria-hidden="true" /> : null}
-            <span className={layoutEnabled ? "min-w-0 break-all" : undefined}>{chipText(chip)}</span>
-            <X size={14} strokeWidth={1.5} aria-hidden="true" />
+            {chip.operator === 'from' || chip.operator === 'commenter' || chip.operator === 'assignee' ? <UserRound className={mobileEnabled ? "shrink-0" : undefined} size={14} aria-hidden="true" /> : (chip.operator === 'in' || chip.operator === 'board') ? <Hash className={mobileEnabled ? "shrink-0" : undefined} size={14} aria-hidden="true" /> : null}
+            <span className={mobileEnabled ? "min-w-0 max-w-[200px] truncate" : layoutEnabled ? "min-w-0 break-all" : undefined}>{chipText(chip)}</span>
+            <X size={14} strokeWidth={1.5} className={mobileEnabled ? "shrink-0" : undefined} aria-hidden="true" />
           </button>
         ))}
         <div className="relative min-w-[8rem] flex-1 text-subheading font-medium">
@@ -388,6 +480,12 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           className="relative w-full bg-transparent text-subheading font-medium text-white-black outline-none [&::-webkit-search-cancel-button]:appearance-none"
           value={text}
           onChange={change}
+          onCompositionStart={mobileEnabled ? () => { composingRef.current = true; setComposing(true); } : undefined}
+          onCompositionEnd={mobileEnabled ? (event) => {
+            composingRef.current = false;
+            setComposing(false);
+            change(event);
+          } : undefined}
           onKeyDown={keyDown}
           onFocus={(event) => { setFocused(true); if (!layoutEnabled || !open) reopenPicker(event); }}
           onClick={reopenPicker}
@@ -404,7 +502,7 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       </div>
       {open && layoutFlagEnabled && layoutRequested && autocompleteEnabled ? (
         <div ref={pickerRef} id={listId} role="listbox" aria-label="Search suggestions" data-search-layout
-          className="mt-4 w-full min-w-0" onMouseDown={(event) => event.preventDefault()}>
+          style={pickerStyle} className={`w-full min-w-0 ${mobileOverlay ? "bg-containerBackground" : "mt-4"}`} onMouseDown={(event) => event.preventDefault()}>
           {tips ? <>
             <h2 className="mb-2 text-meta font-medium text-text-light-gray">Recent searches</h2>
             {rows.filter((row) => row.kind === 'recent').map((row) => renderRow(row, rows.indexOf(row)))}
@@ -413,16 +511,17 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
           </> : rows.map(renderRow)}
           {!tips && loading && <div role="status" className="py-2 text-meta text-text-light-gray">Loading suggestions...</div>}
           {!tips && error && <div role="alert" className="py-2 text-meta text-text-light-gray">Could not load suggestions. Keep typing to retry.</div>}
-          <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>
+          {!(mobileFlagEnabled && isMobile) && <div className="mt-4 text-meta text-text-light-gray">↑ ↓ to move · Tab / Enter to accept · Esc to close</div>}
         </div>
       ) : open && (
-        <div ref={pickerRef} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}>
-          {autocompleteEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
+        <div ref={pickerRef} style={pickerStyle} className="absolute left-4 top-full z-30 max-w-[calc(100%-2rem)] @md:left-9" onMouseDown={(event) => event.preventDefault()}
+          onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}>
+          {autocompleteEnabled && !mobileEnabled && <div className="rounded-t-sm bg-modalBackground px-3 pt-2 text-meta text-text-light-gray">{tips ? 'Search tips' : 'Suggestions'} · {tips ? '↑ ↓ or j/k' : '↑ ↓'} to move · Tab / Enter to accept · Esc to close</div>}
           {error && localRows === null && !tips ? <div id={listId} role="alert" className="rounded bg-modalBackground p-3 text-white-black">Could not load suggestions. Keep typing to retry.</div> : (
             <MentionListRows
               id={listId}
               loadingLabel="Loading suggestions..."
-              className={autocompleteEnabled ? "max-w-full" : undefined}
+              className={mobileEnabled ? "w-full h-full max-h-full max-w-full [&_button]:min-h-[44px]" : autocompleteEnabled ? "max-w-full" : undefined}
               isLoading={localRows === null && !tips && loading}
               hasItems={rows.length > 0}
               noResults={!rows.length}
@@ -436,7 +535,11 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         </div>
       )}
       {!picker && hydrationStatus && <div role={hydrationStatus === 'error' ? 'alert' : 'status'} className="mt-2 text-content text-text-light-gray">{hydrationStatus === 'error' ? 'Could not rebuild search filters. Reload to retry.' : 'Loading search filters...'}</div>}
-      {summary && !layoutEnabled && <button type="button" className="mt-2 block text-left text-content text-white-black hover:bg-active-elementBg" onKeyDown={(event) => { if (event.key === 'Enter') event.stopPropagation(); }} onClick={() => onRun(value)}>Show results for: {summary}</button>}
+      {summary && (!layoutEnabled || mobileOverlay) && <button type="button"
+        style={mobileOverlay && mobileBounds ? { position: 'fixed', top: mobileBounds.summaryTop, left: mobileBounds.left, width: mobileBounds.width, marginTop: 0, zIndex: 301 } : undefined}
+        className={`block text-left text-content text-white-black hover:bg-active-elementBg ${mobileOverlay ? "min-h-[44px] h-11 truncate bg-containerBackground" : "mt-2"}`}
+        onPointerDown={(event) => { if (mobileEnabled) event.preventDefault(); }}
+        onKeyDown={(event) => { if (event.key === 'Enter') event.stopPropagation(); }} onClick={mobileEnabled ? runSearch : () => onRun(value)}>Show results for: {summary}</button>}
     </div>
   );
 }
