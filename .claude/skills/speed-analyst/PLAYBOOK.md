@@ -64,6 +64,27 @@ Source inventory, read 2026-10-10: `gh pr list --repo hypertask-ai/hypertask --s
 
 **Next probe.** Lazy-load `node-html-parser` on the list and mention branch (HTPR-7091); expected 1.5 to 2 s on cold phone. Then drop TipTap from the first paint, then the enum-import Prisma runtime. Re-run the phone daily read with the corrected profile to set the new phone baseline before claiming any phone gain.
 
+### 2026-10-11 lessons: cold phone ticket open, one blank-ticket bug, measuring fixes
+
+**Cold phone ticket description (HTPR-7091, https://app.hypertask.ai/detail/project-15/7091).**
+- Probe 1, lazy `node-html-parser`: JS down 88 KB, but only about 200 ms faster, inside the noise. Not shipped (no measurable difference; notes in `~/.local/state/vcc-evidence/HTPR-7091/notes.md`).
+- Probe 2, show the static description first and swap in the editor after (PR 1327, flag `htpr-7091-static-description-first`). Local ABAB, N=5, cold phone, description visible: plain 12.7 s to 10.3 s, lists 12.3 s to 10.5 s. Pixel-identical (0 px diff, CLS 0). First-load JS fell only 1.1 KB, so the gain is less main-thread work before paint, not fewer bytes. Live: 14.1 s to 11.8 s for API-written descriptions.
+- AI review caught two real bugs: a failed chunk import was cached forever, and the static HTML guard let raw brackets and `javascript:` hrefs through. Both fixed.
+- Flag gate lesson: a `[SPEED]` change needs the flag to pick a real branch (ternary or `if`); passing it as a prop value is not seen by `feature-flag-gate`. `[BUGFIX]` has a 150 UI line budget.
+
+**App-saved descriptions (HTPR-7110, https://app.hypertask.ai/detail/project-15/7110).** The app stores descriptions wrapped in `<html><head></head><body>` and uses `<ol class="numbered-list">`, so the static path rejected every app-saved description. Fix PR 1341, flag `htpr-7110-app-saved-static-description`. Live cold phone 14.2 s to 11.7 s (N=5, host load 8 to 10). Trailing whitespace deliberately keeps editor-first.
+
+**Blank ticket after open (HTPR-7116, https://app.hypertask.ai/detail/project-15/7116).** Prod smoke caught a phone ticket going blank 1.4 to 6.3 s after open (5 of 30 cold, 2 of 20 warm, live). Cause: the `htpr-6991-back-first-open` Suspense boundary in `CachedTaskDetailNavigation.tsx` re-showed its fallback when the lazily imported description editor (`DescriptionEditorSlot` `EagerEditor`) suspended during an urgent update (`setSecondaryPanelsReady`). Fix: that update runs in `startTransition` (PR 1360, flag `htpr-7116-ticket-stays-open`). Lesson: any new lazy chunk mounted after first paint must mount in a transition or behind its own Suspense, or an outer boundary can hide content the user already saw.
+
+**Measuring lessons.**
+- `speed-measure.timer` ran a stale main checkout (`c830aa601`) that lacked the YPER4-262 phone profile. `~/.local/bin/speed-measure-latest` now fetches `scripts/speed/measure.mjs` from `origin/production` on every run. The shared company-skills `speed-check` got the same phone profile (YPER4-287, release v1.4.17).
+- Host load sat at 19 to 35 most of the day. ABAB alternation kept comparisons valid; keep every slow run, do not trim.
+- Live QA can simulate a flag Off by rewriting the flags API response in the browser (`page.route`), with no deploy and no admin login.
+
+**False lead.** Removing a library from the bundle (`node-html-parser`) is not a speed win unless the main thread gets quieter. Check busy time, not KB.
+
+**Next probe.** Remaining cold phone time is main-thread JS (compile and eval 6.8 s). Candidates not needed for first content: Prisma browser runtime via enum imports 29 KiB gz, framer-motion 53, markdown libs 51, react-day-picker 21. Try one at a time, ABAB, corrected phone profile.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -78,7 +99,10 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/6934 | Phone board cold, flag A/B, QA 985 vs 2343, N=5 | 8120ms (OFF) → 1745ms (ON) | unproven | different accounts, verdict pending; not a saving yet |
 | https://app.hypertask.ai/detail/project-15/7071 | Board tasks TTFB p50, local ABAB | 216ms → 212ms | 4ms, within noise | not slower; no saving claimed |
 | https://app.hypertask.ai/detail/project-15/7074 | Ticket-page CLS (unitless, worst of 5) | phone 0.049 → 0.032, long phone 0.111 → 0.000 | n/a (layout shift, not ms) | shipped PRs 1277, 1299, 1304 |
-| https://app.hypertask.ai/detail/project-15/7091 | Cold phone ticket description | 14.2 to 16.6 s baseline, old phone profile | unproven | investigation only; expected 1.5 to 2 s from the first probe |
+| https://app.hypertask.ai/detail/project-15/7091 | Cold phone ticket description, PR 1327, local ABAB N=5 | plain 12.7 s → 10.3 s, lists 12.3 s → 10.5 s | about 2,400 ms local plain, about 1,800 ms lists | flag `htpr-7091-static-description-first`; lazy `node-html-parser` probe (about 200 ms) not shipped |
+| https://app.hypertask.ai/detail/project-15/7091 | Same, live, API-written descriptions | 14.1 s → 11.8 s | about 2,300 ms | live check, different cohort from local |
+| https://app.hypertask.ai/detail/project-15/7110 | Cold phone, app-saved descriptions, PR 1341, live N=5, load 8 to 10 | 14.2 s → 11.7 s | about 2,500 ms | flag `htpr-7110-app-saved-static-description` |
+| https://app.hypertask.ai/detail/project-15/7116 | Phone ticket blanking after open, PR 1360 | 5 of 30 cold, 2 of 20 warm blank → fix pending live proof | n/a (correctness, not ms) | flag `htpr-7116-ticket-stays-open` |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
@@ -91,7 +115,8 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Realtime event-to-visible network/long-task split | `src/lib/realtime/latencyCanary.ts`, #318 | Read existing telemetry first; do not generate live writes in the daily harness |
 | Query-count correlation | Existing `[n+1-detector]` in `src/lib/queryCountTracker.ts` | Use approved app log access and route/commit correlation. It reports threshold warnings, not exact counts; unavailable means unavailable, never direct DB access |
 | Post-paint loading completion and failed requests | Two-second tail can leave downloads pending | Add bounded completed/pending byte counters and tests; do not extend the tail silently or compare across protocol versions |
-| Lazy-load `node-html-parser` on the list/mention branch | HTPR-7091: 1.5 s single task on cold phone | Cold phone ticket, corrected phone profile, 5 cold samples before and after, ABAB |
+| Lazy-load `node-html-parser` on the list/mention branch | HTPR-7091: tried 2026-10-11, JS -88 KB but only about -200 ms, inside noise. Rejected, do not repeat | none |
+| Drop non-first-content bytes: Prisma enum-import runtime (29 KiB gz), framer-motion (53), markdown libs (51), react-day-picker (21) | Cold phone main thread is compile and eval 6.8 s | One at a time, corrected phone profile, 5 cold samples before and after, ABAB; mount any new lazy chunk in a transition (HTPR-7116) |
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
 
