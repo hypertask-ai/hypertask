@@ -303,7 +303,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
-    user: { id: 985 }, currentProject: board, mounted: { current: true }, viewContextEnabled: true, writerReasonEnabled: false, splitTasksEnabled: true,
+    user: { id: 985 }, currentProject: board, mounted: { current: true }, viewContextEnabled: true, writerReasonEnabled: false, unfurlImageUrls: false, splitTasksEnabled: true,
     createComposedTask: async () => result,
     createTaskGlobally: body => cache.push(body.task), mobile: false, onCreated() {},
     setIntro: value => intros.push(value), composeTaskAssistantMessage: h.composeTaskAssistantMessage,
