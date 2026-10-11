@@ -197,7 +197,8 @@
   "overrides": {
     "isomorphic-dompurify": {
       "jsdom": "26.1.0"
-    }
+    },
+    "jwks-rsa": "3.2.2"
   },
   "workspaces": [
     "packages/*"
