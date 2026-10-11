@@ -120,12 +120,15 @@ test("native move retains fetch status and JSON semantics with deferred diagnost
   assert.equal(checks.length, 0);
 });
 
+const boardCardFlag = "htpr-7129-board-card-fresh-after-escape";
 function hookMocks(flag, calls, data = { body: [] }) {
   const write = async (transport, ...args) => { calls.push([transport, ...args]); return { data }; };
   return {
     react: { useCallback: (fn) => fn },
-    "@/hooks/useFlag": { useFlag: (requested) => { assert.equal(requested, key); return flag; } },
-    "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: key },
+    // HTPR-7129 board-card patch stays off here: these tests pin the transport and refetches.
+    "@/hooks/useFlag": { useFlag: (requested) => { if (requested === boardCardFlag) return false; assert.equal(requested, key); return flag; } },
+    "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: key, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: boardCardFlag },
+    "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ updateTaskInCache: () => assert.fail("flag off must not patch") }) },
     "@/lib/api/typedClient": Object.fromEntries(operations.map(([name]) => [name, (...args) => write(name, ...args)])),
     axios: { default: { post: (...args) => write("legacy", ...args) } },
     "@/lib/state": { useRecoilValue: () => ({ taskId: 12 }) },

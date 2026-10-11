@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6975_TYPED_WRITES_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import { moveTask, readMoveTaskResponse } from "@/lib/api/typedClient";
 import { IComment, ITaskLabel, ISection } from "@/models/model";
@@ -12,6 +12,7 @@ import type { TaskDetailContext } from "./TaskDetailContext";
 export function useTaskDetailNavigationActions(getContext: () => TaskDetailContext) {
   const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
+  const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
   const { updateCommentsActivityQuery, comments, currentTask, setComments, sectionsForProjectTQ, movingItem, setCurrentTask, setMovingItem, removeFromListWithStatus, moveItem, getProjectIdxAndAllData, setTasksPlayList, currentUser, navigate, setEditMode, focusOn, lastGPress, defaultCommentFocus, scrollVirtualize, editModeCheck, markAsDone, copyTaskURL, undoAction, queryClient, navigateToPreviousTask, showCreateLabelModal, setShowCreateLabelModal, _parsedTask, updateTaskInCache, currentProject, lastM_APress, setShowMoveTaskToBoard, currentId } = getContext();
 
 
@@ -198,11 +199,14 @@ export function useTaskDetailNavigationActions(getContext: () => TaskDetailConte
       queryClient.prefetchQuery({ queryKey: [taskDetailConfig.queryKeys.taskLabels, _parsedTask.id] });
 
       const taskToReturn = { taskLabels: taskLabels };
+      // Same board-card patch as the assignee picker: the open task's own
+      // project and column, which stay current after an in-ticket move (HTPR-7129).
+      const boardTask = boardCardFresh && currentTask ? currentTask : _parsedTask;
       updateTaskInCache(
         taskToReturn,
-        _parsedTask.id,
-        _parsedTask.projectId,
-        _parsedTask.sectionId,
+        boardTask.id,
+        boardTask.projectId,
+        boardTask.sectionId,
         currentProject
       );
       queryClient.refetchQueries({

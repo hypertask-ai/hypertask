@@ -139,8 +139,9 @@ for (const flag of [false, undefined, true]) {
     const signal = new AbortController().signal;
     const api = load("src/hooks/Homepage/useGetBoards.ts", {
       react: { useRef: (current) => ({ current }), useEffect: (callback) => effects.push(callback), useLayoutEffect: (callback) => callback() },
-      "@/hooks/useFlag": { useFlag: (requested) => { assert.equal(requested, key); return flag; } },
-      "@/lib/flags/keys": { HTPR_6967_TYPED_TASK_READS_FLAG: key }, "@/lib/api/typedClient": { getBoardDetail: typedRead },
+      // HTPR-7129 abort recovery stays off: these tests pin the reader choice.
+      "@/hooks/useFlag": { useFlag: (requested) => { if (requested === "htpr-7129-board-card-fresh-after-escape") return false; assert.equal(requested, key); return flag; } },
+      "@/lib/flags/keys": { HTPR_6967_TYPED_TASK_READS_FLAG: key, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG: "htpr-7129-board-card-fresh-after-escape" }, "@/lib/api/typedClient": { getBoardDetail: typedRead },
       "@tanstack/react-query": { useQueryClient: () => cache, useQuery: (config) => { query = config; return {}; } },
       "@/hooks/General/useHydrated": { useHydrated: () => true }, "@/lib/firstScreen/SurfaceContext": { useFirstScreenSurface: () => null },
       "@/lib/firstScreen/boardDocument": { getBoardDocument: () => null }, "@/lib/boardBootstrap/earlyBoardBootstrap": {},

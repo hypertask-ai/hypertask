@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6975_TYPED_WRITES_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
+import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { setTaskEstimate } from "@/lib/api/typedClient";
 import { useGetEstimateForTask } from "@/hooks/MultiPages/useGetEstimateForTask";
 import globalConstants from "@/lib/constants";
@@ -19,6 +20,8 @@ export const useEstimateModal = (
   const typedClient = useFlag(HTPR_6975_TYPED_WRITES_FLAG);
   let typedWrite: typeof setTaskEstimate | undefined;
   if (typedClient) typedWrite = setTaskEstimate;
+  const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
+  const { updateTaskInCache } = UpdateKanban();
   const currentProject = useRecoilValue(currentProjectAtom);
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const calendarTaskFilters = useRecoilValue(calendarTaskFiltersAtom)
@@ -38,8 +41,18 @@ export const useEstimateModal = (
           estimate_index: estimate.estimate_index,
           estimate_value: estimate.estimate_value,
         };
-        if (typedWrite) await typedWrite(body);
-        else await axios.post("/api/estimate/setEstimate", body);
+        const response = typedWrite ? await typedWrite(body) : await axios.post("/api/estimate/setEstimate", body);
+        if (boardCardFresh) {
+          // Patch the board card at once, as the assignee picker does, so the
+          // new size shows on Escape (HTPR-7129). A cleared size answers with a
+          // message, not a row.
+          try {
+            const row = response.data && "estimate_index" in response.data ? response.data : undefined;
+            updateTaskInCache({ estimate: row }, inViewObject.taskId, inViewObject.taskProjectId, inViewObject.sectionId);
+          } catch (error) {
+            console.error("HTPR-7129 board card size patch failed", error);
+          }
+        }
         queryClient.refetchQueries({
           queryKey: [globalConstants.CommentsTQPrefixKey, inViewObject.taskId],
         });

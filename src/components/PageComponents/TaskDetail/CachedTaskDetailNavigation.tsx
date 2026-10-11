@@ -9,7 +9,7 @@ import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
 import { currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG, HTPR_7000_INBOX_NEXT_OPEN_FLAG, HTPR_7003_BOARD_BACK_FLAG, HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG } from "@/lib/flags/keys";
 import { cachedTaskDetailKey, cachedTaskDetailLocation, findCachedTaskDetail, openCachedTaskDetail, type CachedTaskDetailLocation } from "@/lib/navigation/cachedTaskDetail";
 
 let loadedTaskDetail: typeof import("@/components/Modals/SwipeUnread/EmbeddedTaskDetail").default | undefined;
@@ -56,6 +56,9 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
   const boardBack = useFlag(HTPR_7003_BOARD_BACK_FLAG);
   const [protectedSource, setProtectedSource] = useState<HTMLDivElement | null>(null);
   const [historyDestination, setHistoryDestination] = useState<{ pathname: string } | null>(null);
+  const boardCardFresh = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
+  // Once a board was revealed after Back, keep rendering it inside the same shell.
+  const [boardShell, setBoardShell] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
   const currentUser = useRecoilValue(currentUserAtom);
@@ -242,6 +245,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
     const revealBoard = () => {
       if (window.location.pathname === historyDestination.pathname &&
           source.querySelector("#kanban-page-container") && !source.querySelector("#title-input")) {
+        // Same render: the board can stay in the shell it was loaded in (HTPR-7129).
+        setBoardShell(true);
         setHistoryDestination(null);
       }
     };
@@ -264,6 +269,17 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
         {historyDestination.pathname !== "/project" && <div role="status" data-task-path={historyDestination.pathname} className="flex min-h-full items-center justify-center px-6 text-content text-text-light-gray">
           Loading task…
         </div>}
+      </>
+    );
+  }
+  if (boardCardFresh && boardShell && !showDetail) {
+    // Revealing the board keeps the exact element tree of the hidden load
+    // above. Returning bare children here remounted the board, which aborted
+    // its own load and could throw away the fresh card (HTPR-7129).
+    return (
+      <>
+        <div style={{ display: "contents" }} ref={setProtectedSource}><Suspense fallback={null}>{children}</Suspense></div>
+        {null}
       </>
     );
   }
