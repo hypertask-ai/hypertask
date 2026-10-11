@@ -5,7 +5,7 @@
 #   ship-check branch <T> <b|none> record the branch this session made (required on the duplicate path)
 #   ship-check duplicate <T> <ORIG> <pr>  T was already fixed by ORIG's merged PR: gates then check that PR
 #   ship-check dropped <T> <pr>  Valentin decided against T: PR is closed unmerged and a comment opens with Decided against: Valentin, <date>: "<words>"
-#   ship-check nochange <T>      infra ticket (YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
+#   ship-check nochange <T>      ticket (HTPR, YPER4, HYFA) solved with no code change: needs a comment opening "Resolved without a change:"
 #                                with evidence (an https URL or a <pre>/<code> block), no open PR titled with T, no bound PR, and no origin
 #                                branch named *<t lowercased>* with commits not in the base branch. Then merged, deployed, proof, pr and cleaned pass.
 #   ship-check pr <T>            the ticket's PR exists and is named right
@@ -118,7 +118,7 @@ dropped_ok() {
   echo "$1 ok (dropped: PR $n closed unmerged)"
 }
 
-# Infra ticket solved with no code change (YPER4-272). The "Resolved without a change:" comment must carry evidence,
+# Ticket (HTPR, YPER4, HYFA) solved with no code change (YPER4-272, YPER4-283). The "Resolved without a change:" comment must carry evidence,
 # and no PR may exist for the ticket: no open PR titled with it, no bound PR, no origin branch named for it that is ahead of BASE.
 # nochange_verify prints the reason and returns 1 instead of exiting, so every consumer re-runs it (the marker is only a record).
 nochange_checkout() {
@@ -140,7 +140,7 @@ nochange_origin_branches() {
 
 nochange_verify() {
   local t=${1:-} cmts open b ahead
-  [[ $t =~ ^(YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange is only for infra tickets (YPER4, HYFA); ${t:-<none>} is an app ticket or not a ticket id and needs the normal PR path"; return 1; }
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || { echo "nochange needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"; return 1; }
   if [ -n "$(bound_pr "$t")" ] || [ -s "$EVID/$t/duplicate-of" ] || [ -s "$EVID/$t/dropped" ]; then
     echo "$t has a bound PR (or a duplicate/dropped record); use the normal path"; return 1
   fi

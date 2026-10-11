@@ -1120,7 +1120,13 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an opener without evid
 echo '{"success":true,"comments":[{"text":"<p>Note: https://example.com/x</p><p><strong>Resolved without a change:</strong> fine.</p>"}]}' > "$NC/comments"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted evidence in another comment" || ok "nochange needs the opener and evidence in one comment"
 echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
-N nochange HTPR-901 >/dev/null && bad "nochange accepted an app ticket" || ok "nochange refuses an app ticket (HTPR)"
+N nochange FOO-901 >/dev/null && bad "nochange accepted a non-ticket id" || ok "nochange refuses a non-ticket id (FOO-901)"
+N nochange HTPR-901x >/dev/null && bad "nochange accepted a malformed id" || ok "nochange refuses a malformed id (HTPR-901x)"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange accepts HTPR with a resolution comment" || bad "nochange HTPR"
+echo '{"success":true,"comments":[{"text":"<p>Looking at it.</p>"}]}' > "$NC/comments"
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR accepted no comment" || ok "nochange HTPR refuses a ticket with no comment"
+echo '{"success":true,"comments":[{"text":"<p><strong>Resolved without a change:</strong> checked https://example.com/run/1 .</p>"}]}' > "$NC/comments"
+rm -f "$E/HTPR-901/nochange"
 echo '[{"number":5,"title":"YPER4-901 [INFRA] a fix"}]' > "$NC/prs"
 N nochange YPER4-901 >/dev/null && bad "nochange accepted an open PR" || ok "nochange refuses an open PR"
 echo '[{"number":6,"title":"YPER4-9010 [INFRA] other ticket"}]' > "$NC/prs"
@@ -1158,6 +1164,18 @@ echo '[{"number":7,"title":"YPER4-901 [INFRA] late fix"}]' > "$NC/prs"
 echo '{"tool_input":{"command":"vcc task move YPER4-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
   && bad "guard allowed Done after a PR appeared" || ok "guard blocks Done when a PR appears after nochange"
 echo '[]' > "$NC/prs"
+# HTPR guard: Done is blocked without nochange, allowed after it, and the id boundary holds (htpr-901 vs htpr-9010).
+rm -f "$E/HTPR-901/nochange"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && bad "guard allowed Done for HTPR without nochange" || ok "guard blocks Done for HTPR without nochange"
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-9010-other 2>/dev/null; echo 3 > "$NC/ahead"
+N nochange HTPR-901 | grep -q 'nochange ok' && ok "nochange ignores a branch of HTPR-9010" || bad "nochange matched htpr-9010"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-9010-other 2>/dev/null
+git -C "$NC/work" push -q origin HEAD:refs/heads/r3/htpr-901-fix 2>/dev/null
+N nochange HTPR-901 >/dev/null && bad "nochange HTPR ignored its own branch" || ok "nochange HTPR refuses its own branch ahead of base"
+git -C "$NC/work" push -q origin :refs/heads/r3/htpr-901-fix 2>/dev/null; echo 0 > "$NC/ahead"
+echo '{"tool_input":{"command":"vcc task move HTPR-901 --section \"Done\""}}' | SHIP_CHECKOUT="$NC/work" PATH="$NC/bin:$PATH" ./ship-check guard >/dev/null 2>&1 \
+  && ok "guard allows Done for HTPR after nochange" || bad "guard blocks Done for HTPR after nochange"
 # Empty evidence does not count.
 for body in '<code></code>' '<pre> </pre>' '<pre><code>&nbsp;</code></pre>'; do
   jq -n --arg b "<p><strong>Resolved without a change:</strong> done</p>$body" '{success:true,comments:[{text:$b}]}' > "$NC/comments"
