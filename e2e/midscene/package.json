@@ -12,7 +12,7 @@
     "test:failure-dry-run": "node failure-dry-run.mjs"
   },
   "dependencies": {
-    "@midscene/web": "^1.13.3",
+    "@midscene/web": "^1.14.0",
     "puppeteer": "^23.0.0"
   }
 }
