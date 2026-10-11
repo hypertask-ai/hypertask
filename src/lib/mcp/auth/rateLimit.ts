@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { HTPR_7133_MCP_RATELIMIT_FAST_FLAG } from '@/lib/flags/keys';
 import { createHash } from 'crypto';
 import { getRedis } from '@/lib/redis';
 import { decideMcpRateLimit, MCP_RATE_LIMIT_WINDOW_SECONDS } from '@/lib/mcp/rateLimitDecision';
@@ -12,6 +13,26 @@ const MCP_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_RATE_LIMIT_PER_MINUTE) 
 // keys get a higher published limit instead of being treated as anonymous scraping
 // traffic (HTPR-4431). Picked as 5x default; tune via env if it's wrong in practice.
 const MCP_AGENT_RATE_LIMIT_PER_MINUTE = Number(process.env.MCP_AGENT_RATE_LIMIT_PER_MINUTE) || 600
+
+const MAX_LOCAL_COUNTS = 1_000
+const LEASE = 10
+const localCounts = new Map<string, { count: number; reserved: number; leasing: boolean }>()
+let localWindowStart: number | undefined
+let fastFlagDecision: { enabled: boolean; expiresAt: number } | undefined
+
+async function shouldUseFastRateLimit(): Promise<boolean> {
+  if (fastFlagDecision && fastFlagDecision.expiresAt > Date.now()) return fastFlagDecision.enabled
+  try {
+    const { featureFlagCandidateUserIds } = await import('@/lib/flags')
+    // No token-derived user: only the global Everyone mode returns null.
+    const enabled = await featureFlagCandidateUserIds(HTPR_7133_MCP_RATELIMIT_FAST_FLAG) === null
+    fastFlagDecision = { enabled, expiresAt: Date.now() + 30_000 }
+    return enabled
+  } catch {
+    fastFlagDecision = { enabled: false, expiresAt: Date.now() + 30_000 }
+    return false
+  }
+}
 
 /**
  * Determines whether the request count alone is enough to allow or block a
@@ -39,16 +60,65 @@ export async function checkMcpRateLimit(
   const token = extractBearerToken(request.headers.get('Authorization'))
   if (!token) return null
 
+  let key: string | undefined
   try {
     const tokenHash = createHash('sha256').update(token).digest('hex')
     const nowSeconds = Math.floor(Date.now() / 1000)
     const windowStartSeconds = Math.floor(nowSeconds / MCP_RATE_LIMIT_WINDOW_SECONDS) * MCP_RATE_LIMIT_WINDOW_SECONDS
-    const key = `mcp:ratelimit:${tokenHash}:${windowStartSeconds}`
+    key = `mcp:ratelimit:${tokenHash}:${windowStartSeconds}`
 
+    if (localWindowStart !== windowStartSeconds) {
+      localCounts.clear()
+      localWindowStart = windowStartSeconds
+    }
+    const fastEnabled = await shouldUseFastRateLimit()
+    if (!fastEnabled) localCounts.clear()
+    // Await the connection first: from the prepaid check to the INCR there is no await,
+    // so a delayed call can never skip a reservation and lease again.
     const redis = await getRedis()
-    const count = await redis.incr(key)
-    if (count === 1) {
-      await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+    const prepaid = fastEnabled && localWindowStart === windowStartSeconds ? localCounts.get(key) : undefined
+    // The shared count includes every admitted call, prepaid, so no limit is exceeded.
+    // Unused slots can only block up to LEASE - 1 calls early per instance, and are reserved
+    // only while the shared count is at most half the lowest limit.
+    if (prepaid && prepaid.reserved > 0) {
+      prepaid.reserved--
+      return null
+    }
+
+    const trackCount = fastEnabled && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds
+    const state = trackCount ? localCounts.get(key) : undefined
+    // One lease in flight per key: concurrent calls count singly, so leases never overwrite each other.
+    const increment = state && !state.leasing && state.count + LEASE <= MCP_RATE_LIMIT_PER_MINUTE / 2 ? LEASE : 1
+    if (state && increment === LEASE) state.leasing = true
+    let count: number
+    try {
+      count = await (increment === LEASE ? redis.incrby(key, LEASE) : redis.incr(key))
+    } finally {
+      if (state && increment === LEASE) state.leasing = false
+    }
+    if (count === increment) await redis.expire(key, MCP_RATE_LIMIT_WINDOW_SECONDS)
+    let keptSlots = false
+    if (trackCount && fastFlagDecision?.enabled && localWindowStart === windowStartSeconds) {
+      // Never evict: a full map only means new keys count singly until the window clears it,
+      // so no key can lose prepaid slots and lease again.
+      let entry = localCounts.get(key)
+      if (!entry && localCounts.size < MAX_LOCAL_COUNTS) {
+        entry = { count: 0, reserved: 0, leasing: false }
+        localCounts.set(key, entry)
+      }
+      if (entry) {
+        entry.count = Math.max(entry.count, count)
+        if (increment === LEASE && entry === state && count <= MCP_RATE_LIMIT_PER_MINUTE / 2) {
+          entry.reserved += LEASE - 1
+          keptSlots = true
+        }
+      }
+    }
+    if (increment === LEASE && !keptSlots) {
+      // Another instance raced the count up: hand the unused slots back and decide this call
+      // on its own position, exactly as a plain INCR would have.
+      count -= LEASE - 1
+      await redis.decrby(key, LEASE - 1)
     }
 
     const countOutcome = classifyMcpRateLimitCount(count)
@@ -69,6 +139,7 @@ export async function checkMcpRateLimit(
       { status: 429, headers: { 'Retry-After': String(decision.retryAfterSeconds) } }
     )
   } catch (err) {
+    if (key) localCounts.delete(key)
     console.warn('[MCP Rate Limit] Redis check failed, failing open:', err)
     return null
   }
