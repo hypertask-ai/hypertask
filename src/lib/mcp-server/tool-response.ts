@@ -45,7 +45,10 @@ export function actionableToolError(error: unknown): string {
     return 'Access denied. Use a credential with the required scope and confirm membership in the target board.'
   }
   if (detail?.code === -32004) {
-    return 'Resource not found. Check the identifier with a targeted list or search using the same credential.'
+    const hint = 'Check the identifier with a targeted list or search using the same credential.'
+    const reason = redactModelFacingMessage(detail?.message ?? '')
+    if (reason && !/^Resource not found\.?$/i.test(reason)) return `${reason.replace(/[.!]$/, '')}. ${hint}`
+    return `Resource not found. ${hint}`
   }
   if (detail?.httpStatus === 429) {
     return 'Rate limit reached. Wait for the retry interval, then make fewer and more targeted calls.'
@@ -56,11 +59,16 @@ export function actionableToolError(error: unknown): string {
   const message = (detail?.message ?? '').replace(/^Error:\s*/i, '').trim()
   if (!message) return 'The tool could not complete this action. Check the action and its required input fields, then retry.'
   // Never echo credentials or an upstream response body in model-facing errors.
-  const safe = message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
+  const safe = redactModelFacingMessage(message)
   if (/unique_index.*project_id|project_id.*unique_index/.test(safe)) {
     return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
   }
   return `${safe.replace(/[.!]$/, '')}. Check the action's required parameters and permissions before retrying.`
+}
+
+function redactModelFacingMessage(raw: string): string {
+  const message = raw.replace(/^Error:\s*/i, '').trim()
+  return message.replace(/(?:Bearer\s+\S+|\b(?:htmk_|htk_)[\w-]+|\beyJ[\w.-]+)/gi, '[redacted]').slice(0, 600)
 }
 
 export function toolErrorResult(error: unknown): CallToolResult {

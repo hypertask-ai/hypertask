@@ -11,6 +11,9 @@ import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
 import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
+import { isFeatureEnabled } from '@/lib/flags';
+import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
+import prisma from '@/lib/prisma';
 
 export interface CreateTaskResponse {
     success: boolean;
@@ -134,6 +137,26 @@ export async function POST(request: NextRequest) {
         }
 
         // Validate parent task exists (a bad client-supplied id must 404, not 500)
+        if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
+            const known = await prisma.label.findMany({
+                where: { projectId: project_id, id: { in: labels.map(String) } },
+                select: { id: true }
+            });
+            const knownIds = new Set(known.map(label => label.id));
+            const missing = labels.map(String).filter(id => !knownIds.has(id));
+            if (missing.length > 0) {
+                return NextResponse.json(
+                    {
+                        ...buildFieldError('not_found', 'labels', 'Not found'),
+                        message: `Label(s) not found on board ${project_id}: ${missing.join(', ')}. Labels are board-specific; list this board's labels and pass their ids.`,
+                        ...(dryRun && { valid: false }),
+                        ...(correlationId && { correlationId })
+                    },
+                    { status: 404 }
+                );
+            }
+        }
+
         const parentCheck = await validateParentTask(project_id, parent_task_id);
         if (parentCheck.error) {
             return NextResponse.json(

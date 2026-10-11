@@ -49,3 +49,19 @@ test('task reference normalization still accepts a Hypertask URL as ticket_numbe
     },
   )
 })
+
+test('HTPR-7121 not-found errors keep the server detail ahead of the generic hint', async () => {
+  const { actionableToolError } = await import('../src/lib/mcp-server/tool-response')
+  assert.equal(
+    actionableToolError({ code: -32004, message: 'Section with ID 99 not found in project 7' }),
+    'Section with ID 99 not found in project 7. Check the identifier with a targeted list or search using the same credential.',
+  )
+  assert.equal(
+    actionableToolError({ code: -32004, message: 'Resource not found' }),
+    'Resource not found. Check the identifier with a targeted list or search using the same credential.',
+  )
+  assert.doesNotMatch(
+    actionableToolError({ code: -32004, message: 'Not found Bearer abc.def and htk_secret123' }),
+    /abc\.def|htk_secret123/,
+  )
+})
