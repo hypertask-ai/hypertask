@@ -49,15 +49,18 @@ function harness({ enabled = true, dueDates = false, tasks = drafts, failAt = []
     "@/lib/ai/composeTaskTarget": { isEmptyComposeTarget: () => true },
     "@/app/api/ai/_lib/editorAi": editor,
     "@/app/api/ai/_lib/currentTaskContext": { loadCurrentTaskContext: async () => "", resolveAiUsageTaskId: async () => null },
-    "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", TASK_WRITER_RESEARCH_REQUEST_RULE: "" },
-    "@/app/api/ai/_lib/taskWriterBoardResearch": { HTPR_6363_TASK_WRITER_RESEARCH_FLAG: "research" },
+    "@/app/api/ai/_lib/taskWriterPrompt": { formatTaskWriterRetrievedContext: () => "", TASK_WRITER_RESEARCH_REQUEST_RULE: "", createTaskWriterSystemPromptTemplate: () => "Return one HTML title and body." },
+    "@/app/api/ai/_lib/taskWriterBoardResearch": {
+      TASK_WRITER_BOARD_RESEARCH_RULES: "", buildTaskWriterRetrievalQuery: ({ prompt }) => prompt,
+      formatRelatedTicketCandidates: () => "", formatBoardVocabulary: () => "",
+    },
     "@/app/api/ai/_lib/skills": { resolveSkills: async text => ({ cleanedText: text, skills: [] }) },
     "@/app/api/ai/_lib/providerGate": { getProjectTeamProviderContext: async () => ({ teamId: "team", settings: {} }) },
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },
-    "@/lib/doneColumns": {},
+    "@/lib/doneColumns": { doneColumnTitles: () => new Set() },
     "@/lib/prisma": { default: { project: { findFirst: async () => board }, task: { findFirst: async () => ({ id: 91 }) }, taskTemplate: { findMany: async () => [] } } },
     "@/app/api/ai/_lib/boardTemplateContext": { BOARD_TEMPLATE_LIMIT: 10 },
-    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+    "@/utils/controllers/turbopuffer/turbopufferHelper": { searchTasks: async () => [] },
     "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => `${args.fixed}${args.suffix ?? ""}` },
   });
   const route = load("src/app/api/ai/task-writer/route.ts", {
