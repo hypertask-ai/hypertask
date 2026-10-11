@@ -26,7 +26,7 @@ test('registry retains three demo flows and adds the five signed-in outcomes, no
   assert.equal(flows.filter((f) => f.signedIn).length, 5);
   assert.equal(new Set(flows.map((f) => f.id)).size, flows.length);
   const actions = new Set(flows.flatMap((f) => f.steps.map((s) => s.action)));
-  for (const action of ['verifyCreatedTask', 'verifyUpload', 'moveToInbox', 'verifyReminder', 'createChat']) assert(actions.has(action));
+  for (const action of ['verifyCreatedTask', 'verifyUpload', 'moveToInbox', 'verifyReminder', 'createChat', 'fillVerified']) assert(actions.has(action));
   const manifest = JSON.parse(fs.readFileSync('e2e/midscene/manifest.json'));
   assert.deepEqual(new Set(manifest.flatMap((area) => area.flowIds)), new Set(flows.map((f) => f.id)));
 });

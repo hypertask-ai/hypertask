@@ -4,6 +4,7 @@ import toast from "react-hot-toast";
 import { mcpAuthorizationHeaders } from "@/lib/mcp/bearerAuth";
 import { extractStreamRefusalMessage } from "@/lib/aiChat/streamRefusal";
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild";
+import { CHAT_TRANSPORT_RETRY_DELAYS_MS, ChatRequestRefusedError, shouldRetryChatTransport } from "@/lib/aiChat/transportRetry";
 
 
 import type { useAiChatSessions } from "./useAiChatSessions";
@@ -13,7 +14,7 @@ import type { useAiChatAttachments } from "./useAiChatAttachments";
 
 type Context = Pick<ReturnType<typeof useAiChatSessions>, "isByokBlocked" | "fileUpload" | "billing" | "isDemo" | "chatRoute" | "drainQueuedMessage" | "handleSendMessageRef"> &
   Pick<ReturnType<typeof useAiChatState>, "isTyping" | "editor" | "messageQueueRef" | "setQueuedMessages" | "sendInFlightRef" | "surface" | "inViewObject" | "currentProject" | "setIsTyping" | "addMessageToSessionQuery" | "scopedProjectId" | "isFullScreenChat" | "taskId" | "dockedProjectId" | "setAiChatBoardSessionMap" | "modelTeamId" | "contextList" | "currentAiOption" | "spansAllBoards" | "boardScopeIsExplicit" | "pathname" | "currentUser" | "streamingSessionRef" | "streamingAssistantMessageRef" | "setCurrentStreamingSession" | "streamingRequestRef" | "token" | "turnFailureState" | "setAgentStatus" | "updateSessionTitle" | "queryClient" | "updateLastMessageInSessionCache" | "appendMessageToSessionCache"> &
-  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean };
+  Pick<ReturnType<typeof useAiChatAttachments>, "waitForChatSession" | "buildGuestBoard" | "processAttachments"> & { reloadTaskAfterChat: boolean; connectionRetry?: boolean };
 
 export function createAiChatSend(context: Context, searchHandoff?: { preserveComposer: true; onSettled: () => void }) {
   const {
@@ -25,7 +26,7 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
   pathname, currentUser, billing, isDemo, streamingSessionRef,
   streamingAssistantMessageRef, setCurrentStreamingSession, streamingRequestRef, chatRoute, token,
   turnFailureState, setAgentStatus, updateSessionTitle, queryClient, updateLastMessageInSessionCache,
-  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat,
+  appendMessageToSessionCache, drainQueuedMessage, handleSendMessageRef, reloadTaskAfterChat, connectionRetry,
   } = context;
 
 
@@ -238,43 +239,73 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     // misleading "Connection lost" text.
     let refusalMessage: string | null = null;
     try {
-      const response = await fetch(chatRoute, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...mcpAuthorizationHeaders(token),
-        },
-        body: JSON.stringify(payload),
-      });
+      // HTPR-7099: under the flag a dropped connection resends the same
+      // reply request (same assistant id) instead of ending at once.
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const response = await fetch(chatRoute, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...mcpAuthorizationHeaders(token),
+            },
+            body: JSON.stringify(payload),
+          });
 
-      if (!response.ok || !response.body) {
-        if (turnFailureState && !response.ok) {
-          refusalMessage =
-            (await extractStreamRefusalMessage(response)) ??
-            "The chat server refused this reply. Wait a moment and try again.";
+          if (!response.ok || !response.body) {
+            if (turnFailureState && !response.ok) {
+              refusalMessage =
+                (await extractStreamRefusalMessage(response)) ??
+                "The chat server refused this reply. Wait a moment and try again.";
+            }
+            throw new ChatRequestRefusedError(
+              "Network response was not ok or body is missing",
+              response.status,
+            );
+          }
+
+          if (!preserveComposer) fileUpload.clearFiles();
+
+          // Create a new assistant message to update incrementally. The same UUID
+          // is sent to the stream route so server persistence is idempotent.
+          if (!assistantPlaceholderAdded) {
+            const initialAssistantMessage: IChatMessage = {
+              id: assistantMessageId,
+              content: "",
+              role: "assistant",
+              createdAt: new Date(),
+              sessionId: session.id,
+              isDelivered: false,
+            };
+
+            addMessageToSessionQuery(session.id, initialAssistantMessage, true);
+            assistantPlaceholderAdded = true;
+          }
+          await consumeAiChatStream({
+            response: { body: response.body }, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
+            updateSessionTitle, setIsTyping, queryClient, streamTaskId, turnFailureState, reloadTaskAfterChat,
+          });
+          refusalMessage = null;
+          break;
+        } catch (attemptError) {
+          // A Stop clears the request ref; never resend a stopped reply.
+          if (
+            !connectionRetry ||
+            streamingRequestRef.current !== payload.stream_id ||
+            !shouldRetryChatTransport(attemptError, attempt)
+          ) {
+            throw attemptError;
+          }
+          refusalMessage = null;
+          await new Promise((resolve) =>
+            setTimeout(resolve, CHAT_TRANSPORT_RETRY_DELAYS_MS[attempt]),
+          );
+          if (streamingRequestRef.current !== payload.stream_id) throw attemptError;
+          // Each network attempt gets its own cancellation identity.
+          payload.stream_id = crypto.randomUUID();
+          streamingRequestRef.current = payload.stream_id;
         }
-        throw new Error("Network response was not ok or body is missing");
       }
-
-      if (!preserveComposer) fileUpload.clearFiles();
-
-      // Create a new assistant message to update incrementally. The same UUID
-      // is sent to the stream route so server persistence is idempotent.
-      const initialAssistantMessage: IChatMessage = {
-        id: assistantMessageId,
-        content: "",
-        role: "assistant",
-        createdAt: new Date(),
-        sessionId: session.id,
-        isDelivered: false,
-      };
-
-      addMessageToSessionQuery(session.id, initialAssistantMessage, true);
-      assistantPlaceholderAdded = true;
-      await consumeAiChatStream({
-        response: { body: response.body }, setAgentStatus, assistantMessageId, session, addMessageToSessionQuery,
-        updateSessionTitle, setIsTyping, queryClient, streamTaskId, turnFailureState, reloadTaskAfterChat,
-      });
     } catch (error) {
       setAgentStatus(undefined);
       console.error("Error generating AI response:", error);

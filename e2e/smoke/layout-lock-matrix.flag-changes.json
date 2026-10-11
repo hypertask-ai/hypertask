@@ -1,1 +1,32 @@
-[]
+[
+  {
+    "flag": "htpr-7055-chat-overlays-ticket",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7055",
+    "page": "ticket-short-thread",
+    "anchors": [
+      "title",
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel",
+      "ai-sidebar"
+    ],
+    "reason": "The ticket asks the docked AI chat to open over the ticket page instead of squeezing it in narrow windows. With the chat open the ticket keeps its chat-closed position and size and the chat covers the right side. Chat-closed states and wide windows are unchanged.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
+  },
+  {
+    "flag": "htpr-7055-chat-overlays-ticket",
+    "ticket": "https://app.hypertask.ai/detail/project-15/7055",
+    "page": "ticket-long-thread",
+    "anchors": [
+      "title",
+      "description",
+      "comment-list",
+      "comment-box",
+      "properties-panel",
+      "ai-sidebar"
+    ],
+    "reason": "The ticket asks the docked AI chat to open over the ticket page instead of squeezing it in narrow windows. With the chat open the ticket keeps its chat-closed position and size and the chat covers the right side. Chat-closed states and wide windows are unchanged.",
+    "approvedIn": "https://app.hypertask.ai/detail/project-15/7055"
+  }
+]

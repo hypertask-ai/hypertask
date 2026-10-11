@@ -12,6 +12,15 @@ import {
 import { convertHtmlToText } from "@/app/api/ai/_lib/taskContent";
 import { resolveSystemModel } from "@/app/api/ai/_lib/systemModelLadder";
 import prisma from "@/lib/prisma";
+import { HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, isFeatureEnabled } from "@/lib/flags";
+
+export const OPEN_QUESTION_SUMMARY_RULES = `
+- Keep open questions open: a question the comment asks but does not answer stays a question in the TL;DR, for example "Open: what evidence would show the check passed?". Never answer it.
+- State only what the comment states. Never add an answer, decision, owner, date, or fact the comment did not state.`;
+
+export function applyOpenQuestionSummaryRules(instructions: string, enabled: boolean) {
+  return enabled ? `${instructions}${OPEN_QUESTION_SUMMARY_RULES}` : instructions;
+}
 
 export function getCommentSummaryTargetLines(wordCount: number) {
   return Math.min(6, Math.max(1, Math.floor(wordCount / 120)));
@@ -82,11 +91,12 @@ export async function generateAndStoreCommentSummary(commentId: number) {
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
     });
+    const openQuestionRules = await isFeatureEnabled(HTPR_7046_TLDR_OPEN_QUESTIONS_FLAG, comment.creatorId ?? comment.task.userId);
     const result = await generateText({
       model,
-      instructions: renderPrompt("comment-summaries-instructions-1", (targetLines === 1
+      instructions: applyOpenQuestionSummaryRules(renderPrompt("comment-summaries-instructions-1", (targetLines === 1
     ? "Output exactly one plain single sentence. Do not add a bullet marker."
-    : `Output exactly ${targetLines} markdown bullets using "- ".`)),
+    : `Output exactly ${targetLines} markdown bullets using "- ".`)), openQuestionRules),
       prompt: `SOURCE DATA:
 <comment>
 ${text}
