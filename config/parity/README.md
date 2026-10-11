@@ -7,9 +7,9 @@ Production CLI upgrades use two small merges so an untrusted pull request cannot
 1. Keep the current runner and contract unchanged. Review and pin the next native release in both workflows, allowing npm latest to equal only the current or exact next version.
 2. Update the runner lock, contract, generated inventory, and report together. Promote the next version to current and remove the transition in the same merge.
 
-No transition is active now: native CLI 2.0.9 (release v0.2.14) is the current version in the runner lock, the contract and both workflows, and npm latest must equal it.
+A transition to native CLI 2.0.10 (release v0.2.15) is active. CLI 2.0.9 (release v0.2.14) remains current in the runner lock, contract and report; npm latest may equal only 2.0.9 or exactly 2.0.10. The production job continues checking the current locked CLI until the atomic promotion merge lands.
 
-The `pull_request_target` check always compares the candidate runner files with the protected base branch and treats candidate source as data only.
+The `pull_request_target` check always uses transition constants from the protected base branch and treats candidate source as data only. Current runner files must match the protected base; next-version runner files must match the exact reviewed package, integrity and lock shape. Only the reviewed next native release may be downloaded and executed after its pinned SHA-256 digest is verified.
 
 Contract policy uses the same two-step rule. Land match or exclusion changes
 without the dependent surface change first. When a new job or surface cannot
