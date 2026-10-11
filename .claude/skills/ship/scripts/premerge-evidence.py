@@ -154,43 +154,9 @@ def record_calls(state, rechecks):
         pass
 
 
-def shell_words(text):
-    # Shell words with operators split off; quoted text stays one word, so echo "gh pr view" is not a gh call.
-    # An eval argument is code that runs, so it is expanded in place.
-    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
-    lexer.whitespace_split = True
-    words = []
-    for word in lexer:
-        words.extend(shell_words(word) if words and words[-1] == 'eval' else [word])
-    return words
-
-
-def starts_command(previous):
-    # True when the word after `previous` is in command position, so echo gh pr view is an argument, not a gh call.
-    return previous in ('while', 'until', 'do', 'then', 'else', '!', '{') or previous.endswith((';', '(', '|', '&'))
-
-
-def is_gh_poll_loop(args):
-    # A poll loop: one while/until ... done span that runs gh pr/run/api as a command and also sleeps.
-    try:
-        words = shell_words(args)
-    except ValueError:
-        return False
-    for start, word in enumerate(words):
-        # The closing done is the keyword after a ';', not a plain argument such as grep -q done.
-        end = next((i for i in range(start + 1, len(words)) if words[i] == 'done' and words[i - 1].endswith(';')), None)
-        if word not in ('while', 'until') or end is None:
-            continue
-        span = words[start:end + 1]
-        commands = [i for i in range(1, len(span)) if starts_command(span[i - 1])]
-        gh = any(span[i] == 'gh' and i + 1 < len(span) and span[i + 1] in ('pr', 'run', 'api') for i in commands)
-        if gh and any(span[i] == 'sleep' for i in commands):
-            return True
-    return False
-
-
 def stale_gh_loops(ps_output, own_pids, min_age=STALE_LOOP_SECONDS):
-    # Only gh watch commands or shell loops that call gh, older than min_age. Never the sweep itself.
+    # Only gh watch commands (gh pr checks --watch, gh run watch), older than min_age. Shell loops are never
+    # guessed at from their text: an unrelated job could look like one and be stopped by mistake.
     found = []
     for line in ps_output.splitlines():
         parts = line.split(None, 2)
@@ -206,10 +172,9 @@ def stale_gh_loops(ps_output, own_pids, min_age=STALE_LOOP_SECONDS):
         if not tokens:
             continue
         exe = os.path.basename(tokens[0])
-        watch = exe == 'gh' and (('pr' in tokens and 'checks' in tokens and '--watch' in tokens)
+        watch = exe == 'gh' and ((tokens[1:3] == ['pr', 'checks'] and '--watch' in tokens)
                                  or tokens[1:3] == ['run', 'watch'])
-        loop = exe in ('sh', 'bash', 'zsh', 'dash') and '-c' in tokens and is_gh_poll_loop(args)
-        if watch or loop:
+        if watch:
             found.append((pid, age, args))
     return found
 

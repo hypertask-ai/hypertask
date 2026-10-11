@@ -185,7 +185,7 @@ print('premerge-evidence: success (fixture)')
             f"116 {old} bash -c while true; do echo sleep; x=1 gh pr view 1; done",
         ])
         found = poster.stale_gh_loops(ps, {110})
-        self.assertEqual([f[0] for f in found], [101, 102, 103, 112, 114])
+        self.assertEqual([f[0] for f in found], [101, 102])
 
     def test_kill_mode_signals_only_matches(self):
         (self.bin / 'ps').write_text('#!/bin/sh\necho "4242 99999 gh run watch 1"\necho "4243 99999 sleep 9"\n')
