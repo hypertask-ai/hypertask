@@ -381,7 +381,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
                     } else setText((previous) => previous + transcript);
                   }} />}
                 {boardChipEnabled && showBoardChip && <div className="min-w-0 max-w-full">
-                  <ChatScopeChip ref={boardChip} compose kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
+                  <ChatScopeChip ref={boardChip} compose mobile={mobile} kind="board" label={targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")} title={targetBoard?.title} isOpen={boardPickerOpen} data-compose-board-chip
                     aria-label={`Change target board: ${targetBoard?.title ?? (targetBoardId ? `Board ${targetBoardId}` : "Choose a board")}`}
                     aria-haspopup="dialog" aria-expanded={boardPickerOpen} aria-keyshortcuts={isApple ? "Meta+Shift+B" : "Control+Shift+B"}
                     disabled={dictating} onClick={openBoardPicker}

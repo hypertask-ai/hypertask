@@ -12,6 +12,9 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
 }>(function ChatScopeChip({ kind, label, mobile = false, isOpen, compose = false, ...props }, ref) {
   const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   if (compose && !composeBoardChipEnabled) return null;
+  // Compose keeps the compact chip; on phones it only grows to a 44px tap target.
+  const chatMobile = mobile && !compose;
+  const iconSize = compose ? 14 : 13;
   return (
     <button
       ref={ref}
@@ -20,21 +23,21 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
       aria-expanded={isOpen}
       {...props}
       className={`inline-flex w-full min-w-0 items-center text-dense leading-normal text-white-black outline-none transition-colors hover:bg-hover-active ${
-        mobile
+        chatMobile
           ? "h-11 max-w-[65vw] rounded-[4px] bg-ai-tiptap px-3"
-          : "rounded-[4px] px-2 py-1"
+          : `rounded-[4px] px-2 py-1${compose && mobile ? " min-h-11" : ""}`
       }${compose && composeBoardChipEnabled ? " focus-visible:bg-hover-active" : ""}`}
     >
-      {mobile && (
+      {chatMobile && (
         <span className="mr-1 flex-none text-text-light-gray">Context:</span>
       )}
       <span className="mr-1 flex-none text-text-light-gray">
         {kind === "task" ? (
-          <ListTodo size={13} strokeWidth={1.75} />
+          <ListTodo size={iconSize} strokeWidth={1.75} />
         ) : kind === "boards" ? (
-          <Layers size={13} strokeWidth={1.75} />
+          <Layers size={iconSize} strokeWidth={1.75} />
         ) : (
-          <SquareKanban size={13} strokeWidth={1.75} />
+          <SquareKanban size={iconSize} strokeWidth={1.75} />
         )}
       </span>
       <span className="min-w-0 truncate font-medium">{label}</span>
