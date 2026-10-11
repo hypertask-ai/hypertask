@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { generalConfig } from "@/lib/configs/general.config";
 import {
   broadcastBoardChange,
@@ -100,6 +101,30 @@ function repositoryParts(fullName: unknown) {
   return owner && repository && extra.length === 0
     ? { owner, repository }
     : null;
+}
+
+// YPER4-299: a merged follow-up PR must not pull a finished ticket back to QA.
+async function isTaskInDoneColumn(task: WebhookTask): Promise<boolean> {
+  if (task.sectionId === null) return false;
+  let current: { section_title: string; isDone: boolean | null } | null;
+  try {
+    current = await prisma.section.findUnique({
+      where: { id: task.sectionId },
+      select: { section_title: true, isDone: true },
+    });
+  } catch (error) {
+    // Fail open: keep today's move-to-QA behaviour rather than retry the delivery.
+    console.warn(
+      `[GitHub webhook] Could not read the section of task ${task.id}.`,
+      error,
+    );
+    return false;
+  }
+  if (!current || columnRoleFor(current) !== "done") return false;
+  console.log(
+    `[GitHub webhook] Task ${task.id} is in Done; merged PR does not move it.`,
+  );
+  return true;
 }
 
 async function moveTaskForPullRequest(
@@ -619,7 +644,9 @@ export async function POST(request: NextRequest) {
         ) {
           targetSectionName = chooseReviewSectionName(task.riskLevel);
         } else if (pullRequest.merged) {
-          targetSectionName = MERGED_PULL_REQUEST_SECTION;
+          targetSectionName = (await isTaskInDoneColumn(task))
+            ? null
+            : MERGED_PULL_REQUEST_SECTION;
         }
         if (await moveTaskForPullRequest(task, targetSectionName)) moved += 1;
         if (pullRequest.merged) {
@@ -707,7 +734,9 @@ export async function POST(request: NextRequest) {
       commentLead = "Pull request opened:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p><p>Linked to <a href="${ticketUrl}">${ticketId}</a>.</p>`;
     } else if (pullRequest.merged) {
-      targetSectionName = MERGED_PULL_REQUEST_SECTION;
+      targetSectionName = (await isTaskInDoneColumn(task))
+        ? null
+        : MERGED_PULL_REQUEST_SECTION;
       commentLead = "Pull request merged:";
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
     } else {

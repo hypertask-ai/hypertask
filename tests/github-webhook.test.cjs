@@ -416,6 +416,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
   async function runScenario({
     legacy = false,
     startingSectionId = 4309,
+    startingSectionTitle = "In Progress",
     moveStatus = 200,
     qaAgentId = "qa-agent",
     assignmentResponse = () => ({ status: 200, json: {} }),
@@ -458,7 +459,7 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
             id: currentSectionId,
             projectId: 15,
             deleted: false,
-            section_title: currentSectionId === 5511 ? "QA" : "In Progress",
+            section_title: currentSectionId === 5511 ? "QA" : startingSectionTitle,
             autoAssignAgentId: currentSectionId === 5511 ? qaAgentId : null,
           };
         },
@@ -751,6 +752,16 @@ test("merged pull requests reconcile QA and developer agent assignments", async 
         assert.equal(result.currentSectionId, 4309);
         assert.equal(result.assignmentChanges.length, 0);
         assert.deepEqual(result.body, { success: false, error: "Internal server error" });
+      });
+    }
+
+    for (const legacy of [false, true]) {
+      await t.test(`merged PR leaves a Done ticket in Done (${legacy ? "legacy" : "linked"})`, async () => {
+        const result = await runScenario({ legacy, startingSectionTitle: "Done" });
+        assert.equal(result.response.status, 200);
+        assert.equal(result.moves.length, 0);
+        assert.equal(result.currentSectionId, 4309);
+        assert.equal(result.assignmentChanges.length, 0);
       });
     }
 
