@@ -218,7 +218,8 @@ def cmdline_paths(proc=Path('/proc')):
         programs.update(Path(head).name for head in heads)
         for arg in args:
             # Also catch --cache=/path, PATH-like lists and rewritten one-string titles.
-            paths.update(Path(piece) for piece in re.split(r'[=:,\s]', arg) if piece.startswith('/'))
+            pieces = [arg, arg.partition('=')[2], *re.split(r'[=:,\s]', arg)]
+            paths.update(Path(piece) for piece in pieces if piece.startswith('/'))
     return paths, programs, complete
 
 
@@ -262,6 +263,7 @@ class Guard:
         self.kept = 0
         self.keep_reasons = {}
         self.gh_cache = {}
+        self.open_cache = {}
         self.trees = set()
         self.failed_repos = {}
         self.process_snapshot = None
@@ -617,14 +619,25 @@ class Guard:
             except (OSError, ValueError):
                 self.log('error', item, 'trash entry from an interrupted run could not be deleted')
 
+    def canonical(self, path):
+        """A link anywhere in the path (for example a linked cache folder) could aim a deletion at a
+        protected folder, so the real path must equal the lexical one. Protections use both forms."""
+        real = Path(os.path.realpath(path))
+        if real != path:
+            raise ValueError('path or an ancestor is a link; real path differs')
+        for kept in NEVER_CACHE:
+            for root in {self.home / kept, Path(os.path.realpath(self.home / kept))}:
+                if inside(real, root) or inside(root, real):
+                    raise ValueError('credential, evidence or transcript folder')
+        return real
+
     def cache_remove(self, category, path, age, reason, guard=None, check=None):
         """guard: the folder whose use keeps the cache (the whole worktree for .next)."""
         stats = self.categories[category]
         try:
             if time.monotonic() > self.deadline:
                 raise ValueError('time budget reached; next run continues')
-            if any(inside(path, self.home / kept) or inside(self.home / kept, path) for kept in NEVER_CACHE):
-                raise ValueError('credential, evidence or transcript folder')
+            self.canonical(path)
             if sensitive_inside(path):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, links=True)
@@ -638,6 +651,7 @@ class Guard:
                 self.log('would remove', path, f'{category}: {reason}', size)
                 return
             # Recheck right before removal with fresh process, command-line and container mount scans.
+            self.canonical(path)
             if sensitive_inside(path):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, refresh=True, links=True)
@@ -656,7 +670,7 @@ class Guard:
             self.log('error', path, f'{category}: filesystem inspection or deletion failed')
 
     def volumes(self):
-        """Unused anonymous volumes older than 7 days and leaked smoke volumes older than 1 day."""
+        """Only volumes positively identified as disposable: leaked smoke volumes older than 1 day."""
         stats = self.categories['docker-volumes']
         if not docker_available():
             return
@@ -680,16 +694,14 @@ class Guard:
                     raise ValueError('time budget reached; next run continues')
                 if str(row.get('Links')) != '0':
                     raise ValueError('volume attached to a container')
-                keys = {part.partition('=')[0] for part in str(row.get('Labels') or '').split(',')}
-                smoke = bool(SMOKE_VOLUME.match(name))
-                if 'com.docker.volume.anonymous' not in keys and not smoke:
-                    raise ValueError('named volume: persistent data, never pruned')
+                if not SMOKE_VOLUME.match(name):
+                    # Anonymous or named: age and attachment do not prove the data is rebuildable.
+                    raise ValueError('not a leaked smoke volume; kept')
                 created = command(['docker', 'volume', 'inspect', '--format', '{{.CreatedAt}}', name])
-                limit = DAY if smoke else 7 * DAY
-                if self.now - datetime.fromisoformat(created).timestamp() <= limit:
-                    raise ValueError(f'created within {limit // DAY} days')
+                if self.now - datetime.fromisoformat(created).timestamp() <= DAY:
+                    raise ValueError('created within 1 day')
                 size = docker_bytes(row.get('Size'))
-                kind = 'leaked smoke volume' if smoke else 'unused anonymous volume'
+                kind = 'leaked smoke volume'
                 if self.dry:
                     stats['would_free'] += size
                     stats['paths'] += 1
@@ -747,11 +759,34 @@ class Guard:
         if not branch:
             return 'detached worktree; open PR cannot be ruled out'
         try:
-            if any(r.get('state') == 'OPEN' for r in self.prs(repo, branch)):
+            if branch in self.open_heads(repo):
                 return 'OPEN PR for branch; worktree never touched'
-        except (ValueError, AttributeError, TypeError) as exc:
+        except (ValueError, OSError, subprocess.SubprocessError, AttributeError, TypeError) as exc:
             return f'open PR check failed: {exc}'
         return None
+
+    def open_heads(self, repo):
+        """Open PR head branches of the repo's GitHub origin: one gh call per repository per run,
+        separate from the per-branch cap of the worktree sweep. A failure is cached and keeps everything."""
+        url = command(['git', 'remote', 'get-url', 'origin'], repo)
+        match = re.search(r'github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$', url)
+        if not match:
+            raise ValueError('origin is not a GitHub repository')
+        slug = match[1]
+        if slug not in self.open_cache:
+            heads = None
+            try:
+                rows = json.loads(command(['gh', 'pr', 'list', '--repo', slug, '--state', 'open',
+                                           '--limit', '500', '--json', 'headRefName']))
+                if isinstance(rows, list) and len(rows) < 500 and all(
+                        isinstance(r, dict) and isinstance(r.get('headRefName'), str) for r in rows):
+                    heads = {r['headRefName'] for r in rows}
+            except (OSError, subprocess.SubprocessError, ValueError):
+                pass
+            self.open_cache[slug] = heads
+        if self.open_cache[slug] is None:
+            raise ValueError('open PR list unavailable, malformed or truncated')
+        return self.open_cache[slug]
 
     def caches(self, repos):
         """Free re-creatable caches, cheapest to rebuild first, until the disk is below CACHE_TARGET."""
@@ -970,7 +1005,7 @@ class Guard:
                       'Per-file deletion stays off; the whole cache goes only when no npm runs (see below).',
                       '', '## Docker unused volumes', '',
                       'Named volumes: keep, persistent data even when dangling. Docker CreatedAt is not last-used. '
-                      'Only unused anonymous volumes older than 7 days and leaked ht-smoke-* volumes older than '
+                      'Only leaked ht-smoke-{build,state,dependencies}-* volumes older than '
                       '1 day are cleaned, from 75% used.'])
         try:
             if not docker_available():
@@ -986,8 +1021,11 @@ class Guard:
             lines.append('keep: Docker inspection unavailable or failed.')
         # Same checks as a real run, in dry mode: nothing is deleted or logged to disk.
         probe = Guard(self.home, self.tmp, dry=True)
-        with contextlib.redirect_stdout(io.StringIO()):
-            probe.caches(probe.discover())
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                probe.caches(probe.discover())
+        except Exception:
+            lines.extend(['', 'Re-creatable caches: preview failed; nothing is deleted by a report.'])
         lines.extend(['', f'## Re-creatable caches (cleaned from {CACHE_AT}% used until below {CACHE_TARGET}%)', '',
                       '| Category | Paths | Would free (allocated bytes) |', '| --- | ---: | ---: |'])
         for name, stats in probe.categories.items():

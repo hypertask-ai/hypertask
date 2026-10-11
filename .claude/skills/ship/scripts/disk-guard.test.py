@@ -43,6 +43,15 @@ class Fixture(unittest.TestCase):
         # Never read real command lines or reach the real Docker daemon from a test.
         self.cmdlines = patch.object(disk, 'cmdline_paths', return_value=(set(), set(), True)).start()
         self.docker = patch.object(disk, 'docker_available', return_value=False).start()
+        # 79%: above the cache line, below the 80% cleanup and 90% alert. Tests override it explicitly.
+        if not os.environ.get('DISK_GUARD_TEST_REAL_USAGE'):
+            self.usage = patch.object(disk.Guard, 'usage', return_value=79).start()
+        host = os.environ.get('DISK_GUARD_TEST_HOST_PERCENT')
+        if host:
+            # Simulate any host fill level to prove no test reads the real disk.
+            used = int(float(host) * 10)
+            fake = SimpleNamespace(f_blocks=1000, f_bfree=1000 - used, f_bavail=1000 - used, f_frsize=4096)
+            patch.object(disk.os, 'statvfs', return_value=fake).start()
         self.addCleanup(patch.stopall)
 
     def old(self, path, days=4):
@@ -64,7 +73,7 @@ class Fixture(unittest.TestCase):
         repo = self.home / 'projects/repo'
         repo.mkdir(parents=True)
         self.git(repo, 'init', '-b', 'production')
-        self.git(repo, 'remote', 'add', 'origin', 'https://example.invalid/fixture.git')
+        self.git(repo, 'remote', 'add', 'origin', 'https://github.com/fixture/repo.git')
         self.git(repo, 'config', 'user.name', 'Fixture')
         self.git(repo, 'config', 'user.email', 'fixture@example.invalid')
         (repo / 'file').write_text('tracked\n')
@@ -79,7 +88,7 @@ class Fixture(unittest.TestCase):
         bin_dir.mkdir()
         gh = bin_dir / 'gh'
         gh.write_text('#!/usr/bin/env python3\nimport os,sys\n'
-                      'open(os.environ["GH_CALLS"],"a").write("call\\n")\n'
+                      'open(os.environ["GH_CALLS"],"a").write("call " + " ".join(sys.argv[1:]) + "\\n")\n'
                       'print(os.environ.get("GH_ROWS", "[]"))\n'
                       'sys.exit(int(os.environ.get("GH_EXIT", "0")))\n')
         gh.chmod(0o755)
@@ -1027,7 +1036,7 @@ class CacheTests(Fixture):
             self.fail(f'unexpected docker command {args}')
         return calls, run
 
-    def test_cache_docker_only_old_unused_anonymous_and_smoke_volumes(self):
+    def test_round2_only_leaked_smoke_volumes_removed(self):
         old = disk.datetime.fromtimestamp(self.guard.now - 8 * disk.DAY, disk.timezone.utc).isoformat()
         day = disk.datetime.fromtimestamp(self.guard.now - 2 * disk.DAY, disk.timezone.utc).isoformat()
         young = disk.datetime.fromtimestamp(self.guard.now - 3600, disk.timezone.utc).isoformat()
@@ -1045,12 +1054,13 @@ class CacheTests(Fixture):
         with patch.object(disk, 'command', side_effect=run):
             self.guard.volumes()
         removed = [c[-1] for c in calls if c[1:3] == ['volume', 'rm']]
-        self.assertEqual(removed, ['a' * 64, 'ht-smoke-build-123-1-abc'])
+        self.assertEqual(removed, ['ht-smoke-build-123-1-abc'])
         self.assertFalse(any('prune' in c for c in calls))
-        self.assertEqual(self.stats('docker-volumes'), {'freed': 355120000, 'would_free': 0, 'paths': 2})
+        self.assertEqual(self.stats('docker-volumes'), {'freed': 300000000, 'would_free': 0, 'paths': 1})
         text = self.output.getvalue()
-        self.assertIn('named volume: persistent data, never pruned', text)
+        self.assertEqual(text.count('not a leaked smoke volume; kept'), 3)  # two anonymous, one named
         self.assertIn('volume attached to a container', text)
+        self.assertIn('created within 1 day', text)
 
     def test_cache_stops_once_below_target(self):
         first = self.output_dir(self.home / '.npm/_npx/a', 8)
@@ -1208,6 +1218,84 @@ class ReviewTests(Fixture):
             exec(disk.PRIVILEGED_PROCESS_SCAN, {})
         self.assertIn('/proc/7/exe', [call.args[0] for call in links.call_args_list])
         self.assertIn('/tmp/cache/bin/tool', json.loads(self.output.getvalue()))
+
+
+class Round2Tests(Fixture):
+    def sweep(self):
+        self.guard.caches(self.guard.discover())
+
+    def test_round2_linked_cache_roots_into_protected_folders_remove_nothing(self):
+        config = self.output_dir(self.home / '.config/tools', 60)
+        go = self.output_dir(config / 'go-build', 60)
+        claude = self.output_dir(self.home / '.claude/projects/npm', 60)
+        npx = self.output_dir(claude / '_npx/abc', 60)
+        cacache = self.output_dir(claude / '_cacache', 60)
+        (self.home / '.cache').symlink_to(config)
+        (self.home / '.npm').symlink_to(claude)
+        self.sweep()
+        self.assertTrue(all((p / 'output').exists() for p in (go, npx, cacache)))
+        self.assertEqual(self.guard.freed + self.guard.planned, 0)
+        # Direct calls on the linked lexical paths are refused too.
+        for path in (self.home / '.cache/go-build', self.home / '.npm/_npx/abc'):
+            self.guard.cache_remove('tool-caches', path, 0, 'fixture')
+        self.assertTrue(go.exists() and npx.exists())
+        self.assertIn('real path differs', self.output.getvalue())
+
+    def test_round2_linked_ancestor_outside_protected_folders_still_kept(self):
+        elsewhere = self.output_dir(self.root / 'elsewhere/_npx/abc', 60)
+        (self.home / '.npm').symlink_to(self.root / 'elsewhere')
+        self.guard.cache_remove('npx-cache', self.home / '.npm/_npx/abc', 0, 'fixture')
+        self.assertTrue(elsewhere.exists())
+        self.assertIn('path or an ancestor is a link', self.output.getvalue())
+
+    def test_round2_command_line_keeps_whole_paths_and_key_values(self):
+        proc = self.root / 'proc'
+        (proc / '41').mkdir(parents=True)
+        (proc / '41/cmdline').write_bytes(b'node\0/home/x/my tree/node_modules/.bin/next\0--dir=/a b/c\0npm exec next\0')
+        (proc / '41/comm').write_text('node\n')
+        paths, programs, complete = REAL_CMDLINE_PATHS(proc)
+        self.assertTrue(complete)
+        self.assertIn(Path('/home/x/my tree/node_modules/.bin/next'), paths)
+        self.assertIn(Path('/a b/c'), paths)
+        self.assertIn(Path('/home/x/my'), paths)  # fragments are still added
+        self.assertIn('node', programs)
+
+    def test_round2_one_open_pr_lookup_per_run_independent_of_sweep_cap(self):
+        repo, tree = self.repo()
+        other = repo.parent / 'other'
+        self.git(repo, 'worktree', 'add', '-b', 'other', str(other))
+        builds = [self.output_dir(t / '.next') for t in (tree, other)]
+        # The worktree sweep's per-branch budget is already spent.
+        self.guard.gh_cache.update({(Path('/fixture'), str(i)): None for i in range(60)})
+        self.sweep()
+        calls = (self.root / 'gh-calls').read_text().splitlines()
+        self.assertEqual(calls, ['call pr list --repo fixture/repo --state open --limit 500 --json headRefName'])
+        self.assertTrue(all(not b.exists() for b in builds))
+
+    def test_round2_open_pr_list_failure_or_truncation_keeps_every_next(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        for rows, code in ((json.dumps([{'headRefName': f'b{i}'} for i in range(500)]), '0'), ('[]', '1'),
+                           ('[{"state": "OPEN"}]', '0')):
+            with self.subTest(code=code, rows=rows[:20]):
+                os.environ['GH_ROWS'], os.environ['GH_EXIT'] = rows, code
+                self.guard.open_cache.clear()
+                self.sweep()
+                self.assertTrue(build.exists())
+        self.assertIn('open PR list unavailable, malformed or truncated', self.output.getvalue())
+
+    def test_round2_open_pr_lookup_needs_a_github_origin(self):
+        repo, tree = self.repo()
+        self.git(repo, 'remote', 'set-url', 'origin', 'https://example.invalid/fixture.git')
+        build = self.output_dir(tree / '.next')
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('origin is not a GitHub repository', self.output.getvalue())
+
+    def test_round2_report_survives_cache_preview_failure(self):
+        with patch.object(disk.Guard, 'caches', side_effect=RuntimeError('fixture bug')):
+            text = self.guard.report().read_text()
+        self.assertIn('Re-creatable caches: preview failed', text)
 
 
 DAY_FIXTURE = 0

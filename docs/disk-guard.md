@@ -31,10 +31,16 @@ in place. Reinstall to update the installed copy. No crontab is used.
   80% line; 70% gives hysteresis so the guard does not run on every tick.
 - Cache categories, cheapest to rebuild first. Every path candidate must be
   owned by us, on the same filesystem, free of mounts and special files, and
-  must not be a link itself. Links inside a cache (such as `node_modules/.bin`)
+  its real path (`os.path.realpath`) must equal its plain path, so neither the
+  candidate nor any parent folder (for example a linked `~/.cache` or
+  `~/.npm`) is a link. Protected-folder and process checks use that real path,
+  and protected folders are compared in both their plain and real form.
+  Links inside a cache (such as `node_modules/.bin`)
   are removed as links and never followed. It must also pass the same process
   scan as below, a command-line scan (no process argument names a path inside
-  it), and a running-container bind-mount check. An unreadable command line or
+  it: each whole absolute argument, the value of `--key=/path`, and the parts
+  of rewritten one-string titles are all compared), and a running-container
+  bind-mount check. An unreadable command line or
   failed Docker mount listing keeps every candidate. Any `.env*` or
   storageState file inside keeps the candidate. Nothing under `~/.config`,
   `~/.ssh`, `~/.claude`, `~/.codex` or `~/.local/state/vcc-evidence` is ever a
@@ -46,12 +52,13 @@ in place. Reinstall to update the installed copy. No crontab is used.
   trash folder that is a link or not ours. An error anywhere in the cache phase
   is logged with keep reason `cache phase failed; remaining caches kept` and
   never stops the 80% cleanup, the critical flag or the status write.
-  1. `docker-volumes`: unused (no container, running or stopped) anonymous
-     volumes created more than 7 days ago, and leaked
-     `ht-smoke-{build,state,dependencies}-*` volumes from
-     `scripts/run-app-smoke-isolated.sh` older than 1 day. Removed one by one
-     with `docker volume rm`. Named volumes are never removed and nothing is
-     pruned with `-a`.
+  1. `docker-volumes`: only volumes positively identified as disposable:
+     leaked `ht-smoke-{build,state,dependencies}-*` volumes from
+     `scripts/run-app-smoke-isolated.sh`, unused by any container (running or
+     stopped) and older than 1 day. Removed one by one with
+     `docker volume rm`. Every other volume, anonymous or named, is kept,
+     because age and attachment do not prove its data is rebuildable.
+     Nothing is pruned.
   2. `playwright-old`: `~/.cache/ms-playwright/<browser>-<revision>` older
      than 7 days. The newest revision of each browser is always kept, as is
      any revision named in a `browsers.json` reached from Playwright's own
@@ -65,9 +72,12 @@ in place. Reinstall to update the installed copy. No crontab is used.
   5. `next-build`: the `.next` folder of a registered worktree (anywhere,
      including `/tmp`) with no write for 2 days, oldest first. Any process,
      command line or container that uses any part of that worktree keeps it.
-     A worktree whose branch has an open PR is never touched, using the same
-     cached `gh` check as worktree removal. A detached worktree, or a failed,
-     malformed or rate-limited check, also keeps the folder.
+     A worktree whose branch has an open PR is never touched. Open PR head
+     branches come from one `gh pr list --repo <owner/name> --state open
+     --limit 500 --json headRefName` call per GitHub repository per run,
+     cached and separate from the worktree sweep's 60-call per-branch budget.
+     A detached worktree, a non-GitHub origin, or a failed, malformed or
+     truncated (500 rows) list keeps the folder.
      The `~/projects/hypertask` main checkout is never touched.
   6. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
      process runs at all and nothing was written to it for one hour. npm is
@@ -136,8 +146,8 @@ in place. Reinstall to update the installed copy. No crontab is used.
   INFRA MANAGER, using the two `TELEGRAM_HYPERTASK_*` variables in
   `~/.config/hypertask-env.sh` or the environment. Attempts are limited to one
   per hour. Credentials and notification errors are never printed or logged.
-- Named Docker volumes are never removed, even when dangling; only the volume
-  rules in cache category 1 apply. Images are pruned without `-a`, so only
+- Docker volumes other than leaked smoke volumes (cache category 1) are never
+  removed, even when dangling. Images are pruned without `-a`, so only
   dangling images are eligible.
 
 ## State and report
@@ -185,5 +195,8 @@ node --test tests/ui-patterns.test.cjs
 ```
 
 Safety tests use temporary fake repositories and mock `gh` through PATH. The
-held-open-file test uses a real child process. They do not lower thresholds or
+held-open-file test uses a real child process. Fixtures pin disk usage at
+79% so results never depend on the host; threshold tests override it.
+`DISK_GUARD_TEST_HOST_PERCENT=10` fakes the host's fill level to prove this,
+and `DISK_GUARD_TEST_REAL_USAGE=1` drops the pin for comparison. They do not lower thresholds or
 operate on the production host's data.
