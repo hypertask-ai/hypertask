@@ -363,6 +363,8 @@ function editorPanels(flag) {
     useSetRecoilState: () => noop,
     showCommandsAtom: "commands",
     createPortal: noop,
+    useContext: React.useContext,
+    StaticDescriptionPlaceholderContext: React.createContext(null),
     TiptapProvider: ({ children }) => children,
     TiptapBubbleMenu: noop,
     TiptapMainContainer: () => React.createElement("div", { "data-editor": true }),

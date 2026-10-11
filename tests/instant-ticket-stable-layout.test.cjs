@@ -290,6 +290,7 @@ test("desktop composer follows the entire virtualized thread with stable layout 
 
 let editMode = null;
 let editorMounts = 0;
+const richEditor = () => { editorMounts++; return React.createElement("div", null, "Rich editor"); };
 const body = load("src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx", {
   ...common,
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ ...context(), parsedTask: JSON.stringify(task), editMode, setCarousalItems: noop }) },
@@ -303,7 +304,10 @@ const body = load("src/components/PageComponents/TaskDetail/CommentAndDescriptio
   } },
   "../ContextMenu": { HighlightMenu: () => null },
   "../ContextMenu/QuoteButton": { default: () => null },
-  "@/components/RTE/TipTapTaskDetail": { default: () => { editorMounts++; return React.createElement("div", null, "Rich editor"); } },
+  "@/components/RTE/TipTapTaskDetail": { default: richEditor },
+  // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+  "./DescriptionEditorSlot": { default: richEditor },
+  "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
   "../BackgroundTaskAttachments": { default: () => null },
   "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: content => content },
 }).default;
