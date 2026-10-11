@@ -32,6 +32,8 @@ import {
   createTaskWriterSystemPromptTemplate,
   formatTaskWriterRetrievedContext,
   TASK_WRITER_RESEARCH_REQUEST_RULE,
+  TASK_WRITER_TICKET_TYPE_RULE,
+  TASK_WRITER_TICKET_TYPE_MARKER,
 } from "@/app/api/ai/_lib/taskWriterPrompt";
 import {
   buildTaskWriterRetrievalQuery,
@@ -45,7 +47,7 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
@@ -367,6 +369,16 @@ export async function prepareTaskWriterRun(
   if (headingLanguageEnabled) {
     suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
+  // HTPR-7123: tell improvements and features apart from bugs, after the cached fixed part.
+  let ticketTypeEnabled = false;
+  if (body.aiMode === "AiTaskWriter" && (await isFeatureEnabled(HTPR_7123_WRITER_TICKET_TYPE_FLAG, userId))) {
+    suffix += `\n\n${TASK_WRITER_TICKET_TYPE_RULE}`;
+    // Ctrl+J creating a new ticket also states the type, so compose can pick the matching column.
+    if (body.requestKind === "compose-task" && body.existingTaskId == null) {
+      ticketTypeEnabled = true;
+      suffix += `\n\n${TASK_WRITER_TICKET_TYPE_MARKER}`;
+    }
+  }
   const instructions = await cachedInstructionsForUser(userId, {
     modelId: selected.modelId,
     fixed: fixedInstructions,
@@ -395,6 +407,7 @@ export async function prepareTaskWriterRun(
     skills: skillResolution.skills,
     usageTaskId,
     dueDateContext,
+    ticketTypeEnabled,
   };
 }
 

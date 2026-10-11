@@ -6,6 +6,8 @@ import {
 
 export const TASK_WRITER_CONTEXT_SYNTHESIS_RULES = renderPrompt("task-writer-context-synthesis-rules");
 export const TASK_WRITER_RESEARCH_REQUEST_RULE = renderPrompt("task-writer-research-request-rule");
+export const TASK_WRITER_TICKET_TYPE_RULE = renderPrompt("task-writer-ticket-type-rule");
+export const TASK_WRITER_TICKET_TYPE_MARKER = renderPrompt("task-writer-ticket-type-marker");
 
 export function wrapTaskWriterContext(context: string) {
   return `<CONTEXT>${context}</CONTEXT>`;

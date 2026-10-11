@@ -57,6 +57,7 @@ function composer() {
   const creates = [], writes = [];
   let helperCalls = 0;
   const api = load("src/lib/ai/composeTask.ts", {
+    "@/lib/ai/taskWriterTicketType": load("src/lib/ai/taskWriterTicketType.ts", {}),
     "@/lib/media/browserRenderableImage": { isBrowserRenderableImage: () => false },
     axios: { default: { get: async () => ({ data: { sectionId: 12, section: "Todo", ranking: "a" } }) } },
     "@/lib/constants/APIRouteConstants": { taskWriterRoute: "/api/ai/task-writer" },

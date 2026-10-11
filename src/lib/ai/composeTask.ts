@@ -11,6 +11,7 @@ import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, ret
 import createNewTaskGloballyAPIHandler from "@/utils/api/global/apiHelpers/createTaskGloballycontroller";
 import { getActiveFiltersFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { getNewTaskViewDefaults } from "@/utils/helperFunctions/Views/NewTaskViewDefaults";
+import { isBugsColumn, readTaskWriterTicketType, ticketTypeSection, TICKET_TYPE_HEADER, type TaskWriterTicketType } from "@/lib/ai/taskWriterTicketType";
 import { describeTaskWriterFailure, describeTaskWriterStreamFailure } from "@/utils/helperFunctions/describeTaskWriterFailure";
 
 export function composeTaskBoardId(
@@ -42,6 +43,12 @@ export function composeTaskAssistantMessage(ticket: string, writerFailed = false
       ? `${greeting}\n\nThe task writer was unavailable: ${writerFailureReason.trim().replace(/[.!?]*$/, ".")} I kept your original text as the title and description.`
       : `${greeting}\n\nThe task writer was unavailable, so I kept your original text as the title and description.`
     : greeting;
+}
+
+function stripWriterMarkers(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => element.remove());
+  return doc.body.innerHTML;
 }
 
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
@@ -85,7 +92,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: { title: string; description: string; writerDueDate?: string }[] = [];
+  let drafts: { title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType }[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -138,6 +145,8 @@ export async function createComposedTask({
     } else {
       html = await response.text();
     }
+    // HTPR-7123: only a server that announced the ticket type is read for it.
+    const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
     // This endpoint streams raw HTML on success, but SSE error frames can arrive
     // after a 200. A partial answer must not be mistaken for a completed ticket.
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
@@ -152,17 +161,21 @@ export async function createComposedTask({
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
         }
-        return { title: draft.title, description: draft.description,
+        const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
+        // Same DOM removal of writer markers that the single-task path does in extractTitleAndDescription.
+        return { title: draft.title, description: typed ? stripWriterMarkers(typed.html) : draft.description,
+          ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const written = extractTitleAndDescription(html);
+      const typed = typedWriter ? readTaskWriterTicketType(html) : null;
+      const written = extractTitleAndDescription(typed ? typed.html : html);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}) }];
+      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
@@ -200,12 +213,26 @@ export async function createComposedTask({
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
   for (const [index, draft] of drafts.entries()) {
+    // HTPR-7123: the ticket type picks the column and the task goes to its top, like the default column.
+    // No view setting chooses a column for a new task, so only an existing task or a missing match keeps the default.
+    let placement = defaults?.data;
+    // Only a board whose default column is the Bugs column is rerouted; any other first column keeps today's behaviour.
+    const typedSection = !existingTaskId && isBugsColumn(defaults?.data, project.section ?? project.sections)
+      ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
+    if (typedSection) {
+      try {
+        const top = await axios.get("/api/tasks/createGlobally", {
+          params: { projectId: project.id, sectionId: typedSection.id, position: "top" },
+        });
+        if (top?.data?.sectionId === typedSection.id && top.data.ranking) placement = { ...top.data, section: typedSection.title };
+      } catch { /* keep the default column */ }
+    }
     try {
       const created = await createNewTaskGloballyAPIHandler({
         userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
         title: draft.title, ...{ description: draft.description },
-        sectionId: defaults?.data.sectionId, section_title: defaults?.data.section,
-        ranking: defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
+        sectionId: placement?.sectionId, section_title: placement?.section,
+        ranking: placement?.ranking, ...taskFields, requestKind: "compose-task",
         ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });

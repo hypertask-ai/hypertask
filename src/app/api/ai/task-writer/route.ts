@@ -1,4 +1,5 @@
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
+import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
 import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
@@ -73,8 +74,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled } =
       await prepareTaskWriterRun(body, userId);
+    const typeHeaders: Record<string, string> = ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {};
     if (splitTasks) {
       configureAiModelUsage(selected.model, {
         userId, teamId: selected.teamId, projectId: body.projectId,
@@ -87,11 +89,14 @@ export async function POST(request: NextRequest) {
       });
       const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
       return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...task }) => {
-        const description = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
+        const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
+        const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
         if (!dueDateContext) return { ...task, description };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
         return { ...task, description, ...(dueDate ? { dueDate } : {}) };
-      }) }, dueDateContext ? { headers: { "X-Task-Writer-Due-Date": "enabled" } } : undefined);
+      }) }, dueDateContext || ticketTypeEnabled
+        ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
+        : undefined);
     }
     const encoder = new TextEncoder();
 
@@ -103,10 +108,20 @@ export async function POST(request: NextRequest) {
         let streamError: unknown;
         let producedText = false;
 
+        // HTPR-7123: with the ticket type on, text still streams as before; only the possible trailing marker is held back.
+        let held = "";
         const enqueueText = (text: string) => {
-          if (validateDraft || dueDateContext) draft += text;
+          if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
           // Compose consumes completed HTML, so a due-date request is validated before it is sent.
-          if (text && !dueDateContext) controller.enqueue(encoder.encode(text));
+          if (!text || dueDateContext) return;
+          if (!ticketTypeEnabled) {
+            controller.enqueue(encoder.encode(text));
+            return;
+          }
+          held += text;
+          const cut = ticketTypeSafeCut(held);
+          if (cut > 0) controller.enqueue(encoder.encode(held.slice(0, cut)));
+          held = held.slice(cut);
         };
         const enqueueError = (status: "error" | "interrupted", content: string, code?: string) => {
           controller.enqueue(
@@ -172,13 +187,18 @@ export async function POST(request: NextRequest) {
             return;
           }
           const description = validateDraft && body.aiMode === "AiTaskWriter"
-            ? extractTaskWriterProperties(draft).description
+            ? extractTaskWriterProperties(ticketTypeEnabled ? readTaskWriterTicketType(draft).html : draft).description
             : draft;
           if (validateDraft && !hasUsableTaskWriterDraft(description)) {
             enqueueError("error", TASK_WRITER_EMPTY_DRAFT_MESSAGE, "empty-task-writer-draft");
             return;
           }
-          if (dueDateContext) controller.enqueue(encoder.encode(applyTaskWriterDueDate(draft, dueDateContext).html));
+          if (dueDateContext) {
+            const dated = applyTaskWriterDueDate(draft, dueDateContext).html;
+            controller.enqueue(encoder.encode(ticketTypeEnabled ? normalizeTaskWriterTicketType(dated) : dated));
+          } else if (ticketTypeEnabled && held) {
+            controller.enqueue(encoder.encode(normalizeTaskWriterTicketType(held)));
+          }
           streamCompleted = true;
         } catch (error) {
           await reportError({
@@ -202,7 +222,9 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    const headers = dueDateContext ? { ...SSE_HEADERS, "X-Task-Writer-Due-Date": "enabled" } : SSE_HEADERS;
+    const headers = dueDateContext || ticketTypeEnabled
+      ? { ...SSE_HEADERS, ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders }
+      : SSE_HEADERS;
     return new Response(stream, { headers });
   } catch (error) {
     if (

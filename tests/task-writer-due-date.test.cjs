@@ -78,6 +78,7 @@ test("composer leaves legacy title and save payload unchanged when the server fl
 });
 
 const dates = load(path.join(root, "src/lib/ai/taskWriterDueDate.ts"));
+const ticketTypes = load(path.join(root, "src/lib/ai/taskWriterTicketType.ts"));
 const keys = load(path.join(root, "src/lib/flags/keys.ts"));
 
 const marker = (date) => `<p>Finish</p><span id="ai-generated-task-due-date" style="display:none">${date}</span>`;
@@ -134,7 +135,7 @@ function writerHarness(enabled, output = html, fail = false) {
   };
   const run = moduleWithStubs("src/app/api/ai/_lib/taskWriterRun.ts", {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
-    "@/lib/ai/taskWriterDueDate": dates, "@/lib/flags/keys": keys,
+    "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
     "@/lib/ai/composeTaskTarget": {},
     "@/lib/doneColumns": {},
     "@/lib/flags": flags,
@@ -153,7 +154,7 @@ function writerHarness(enabled, output = html, fail = false) {
   });
   const calls = [];
   const route = moduleWithStubs("src/app/api/ai/task-writer/route.ts", {
-    "@/lib/ai/taskWriterDueDate": dates,
+    "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": load(path.join(root, "src/utils/htmlEscape.ts")),
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
@@ -214,7 +215,7 @@ function saveHarness(kind, enabled) {
   const effects = { schedulePostCreateWork() {} };
   const stubs = {
     "@/lib/ai/prompts/registry": { renderPrompt: () => "output language rule" },
-    "@/lib/ai/taskWriterDueDate": dates, "@/lib/flags/keys": keys,
+    "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes, "@/lib/flags/keys": keys,
     "@/lib/api/task-writes/route": {
       withTaskWriteFlag: (handler) => handler,
       taskWriteRoute: ({ operation }) => async (request, session) => operation(await request.json(), session, request),
