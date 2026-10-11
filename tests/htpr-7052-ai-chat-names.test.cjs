@@ -77,3 +77,20 @@ test("the flag is a feature flag defaulting to Owner + QA", () => {
   assert.match(source, /kind: "feature"/);
   assert.match(source, /defaultMode: "OWNER_AND_QA"/);
 });
+
+test("Ctrl+J chat keeps the ticket title after the reply; other chats do not", async () => {
+  const withTitle = (sessionTitle, taskTitle) => ({
+    task: { findUnique: async () => ({ title: taskTitle }) },
+    chatSession: { findFirst: async () => ({ title: sessionTitle }) },
+  });
+  assert.equal(await naming.sessionKeepsTicketName(withTitle("Ticket name", "Ticket name"), { sessionId: "s", userId: 1, taskId: 5 }), true);
+  assert.equal(await naming.sessionKeepsTicketName(withTitle("Fix the login bug", "Ticket name"), { sessionId: "s", userId: 1, taskId: 5 }), false);
+  assert.equal(await naming.sessionKeepsTicketName(withTitle("New AI Chat", "Ticket name"), { sessionId: "s", userId: 1, taskId: 5 }), false);
+});
+
+test("post-reply retitle is skipped only behind the flag and a ticket context", () => {
+  const source = read("src/lib/ai/chatStream/modelTurn.ts");
+  assert.match(source, /firstTurn && contextTaskId !== null && body\.session_id/);
+  assert.match(source, /isFeatureEnabled\(HTPR_7052_AI_CHAT_NAMES_FLAG[^]*?sessionKeepsTicketName/);
+  assert.match(source, /if \(firstTurn && !keepTicketName\) \{\s*const generatedTitle = await generateConversationTitle/);
+});

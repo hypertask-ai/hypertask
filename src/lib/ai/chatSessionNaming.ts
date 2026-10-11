@@ -6,7 +6,7 @@ export const MAX_CHAT_NAME_LENGTH = 50;
 type NamingPrisma = {
   task: { findUnique: (args: { where: { id: number }; select: { title: true } }) => Promise<{ title: string | null } | null> };
   project: { findFirst: (args: { where: Record<string, unknown>; select: { title: true; name: true } }) => Promise<{ title: string | null; name: string } | null> };
-  chatSession: { updateMany: (args: { where: Record<string, unknown>; data: { title: string } }) => Promise<unknown> };
+  chatSession: { findFirst?: (args: { where: Record<string, unknown>; select: { title: true } }) => Promise<{ title: string } | null>; updateMany: (args: { where: Record<string, unknown>; data: { title: string } }) => Promise<unknown> };
 };
 
 function clean(text: string | null | undefined): string {
@@ -74,6 +74,21 @@ export async function nameNewChatSession(prisma: NamingPrisma, args: {
     data: { title },
   });
   return title;
+}
+
+/** True when the chat still carries the name of the ticket it was opened on. */
+export async function sessionKeepsTicketName(prisma: NamingPrisma, args: {
+  sessionId: string;
+  userId: number;
+  taskId: number;
+}): Promise<boolean> {
+  if (!prisma.chatSession.findFirst) return false;
+  const [session, task] = await Promise.all([
+    prisma.chatSession.findFirst({ where: { id: args.sessionId, userId: args.userId }, select: { title: true } }),
+    prisma.task.findUnique({ where: { id: args.taskId }, select: { title: true } }),
+  ]);
+  const ticketName = shorten(clean(task?.title));
+  return Boolean(ticketName) && session?.title === ticketName;
 }
 
 /** Title for a session created with no message yet (Ctrl+J on a ticket). */

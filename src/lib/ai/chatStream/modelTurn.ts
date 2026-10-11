@@ -21,6 +21,9 @@ import { writeToolNames } from "@/lib/ai/tools/metadata";
 import { generateConversationTitle } from "@/lib/ai/chatStream/title";
 import { buildTools } from "@/lib/ai/tools";
 import type { StreamState } from "./streamState";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7052_AI_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
+import { sessionKeepsTicketName } from "@/lib/ai/chatSessionNaming";
 
 import { generateModelReply } from "./modelReply";
 
@@ -209,7 +212,18 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
 
   // The completed reply is durable before title enrichment begins. A
   // title-provider or metadata-write failure must never cost the answer.
-  if (firstTurn) {
+  // HTPR-7052: a chat named after its ticket (Ctrl+J) keeps that name.
+  let keepTicketName = false;
+  if (firstTurn && contextTaskId !== null && body.session_id) {
+    try {
+      keepTicketName =
+        (await isFeatureEnabled(HTPR_7052_AI_CHAT_NAMES_FLAG, dbUser.id)) &&
+        (await sessionKeepsTicketName(prisma, { sessionId: body.session_id, userId: dbUser.id, taskId: contextTaskId }));
+    } catch {
+      keepTicketName = false;
+    }
+  }
+  if (firstTurn && !keepTicketName) {
     const generatedTitle = await generateConversationTitle(
       chunks.join(""),
       skillResolution.cleanedText,
