@@ -43,11 +43,14 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     notify.write_text(f'#!/bin/sh\necho "$1" > {t}/notify.target\ncat > {t}/notify.msg\n')
     notify.chmod(0o755)
     env = dict(os.environ, PROC_WATCHDOG_ONLY=tmp, PROC_WATCHDOG_STATE=str(t / 'state'),
-               PROC_WATCHDOG_NOTIFY=str(notify), PROC_WATCHDOG_GRACE='2')
+               PROC_WATCHDOG_NOTIFY=str(notify), PROC_WATCHDOG_GRACE='2',
+               PROC_WATCHDOG_DOCKER=str(t / 'no-docker'))  # never the real docker: it could remove real containers
 
     def run(*args, **extra):
         return subprocess.run([sys.executable, str(HERE / 'proc-watchdog.py'), *args], env=dict(env, **extra),
                               capture_output=True, text=True, timeout=60)
+
+    procs_extra = []
 
     def start_all():
         test = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid')])
@@ -55,6 +58,10 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
         shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'])
         session = subprocess.Popen([str(t / 'claude'), '-c', 'import time; time.sleep(300)', f'{tmp}/tests/x.test.cjs'])
         premerge = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', f'{tmp}/scripts/premerge-local-search.mjs'])
+        # A worktree premerge server: no premerge path, only the PREMERGE_LOCAL=1 marker in its environment.
+        marked = subprocess.Popen(['node', str(t / 'server.js'), f'{tmp}/worktree-next-start'],
+                                  env=dict(os.environ, PREMERGE_LOCAL='1'))
+        procs_extra.append(marked)
         for _ in range(50):
             if (t / 'child.pid').exists() and (t / 'child.pid').read_text():
                 break
@@ -72,7 +79,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     time.sleep(1.2)
     r = run('--dry-run', PROC_WATCHDOG_MAX_AGE='1')
     check('dry run lists the old test and premerge only', 'would stop test' in r.stdout
-          and 'would stop premerge' in r.stdout and '2 over the limits' in r.stdout)
+          and 'would stop premerge' in r.stdout and '3 over the limits' in r.stdout)
     check('dry run stops nothing', all(alive(p) for p in procs[:5]))
 
     # 3. Over the age limit: the test tree and the premerge process stop; the rest stays.
@@ -81,14 +88,15 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('old test stopped', not alive(test))
     check("old test's child process stopped too", not pid_alive(child))
     check('old premerge process stopped', not alive(premerge))
+    check('old worktree premerge server (marker only) stopped', not alive(procs_extra[-1]))
     check('server (no test/build/premerge) left running', alive(server))
     check('shell whose script mentions next build left running', alive(shell))
     check('a claude session is never stopped', alive(session))
     lines = [json.loads(x) for x in (t / 'state/kills.log').read_text().splitlines()]
-    check('log has one line per stopped tree', sorted(x['kind'] for x in lines) == ['premerge', 'test'])
+    check('log has one line per stopped tree', sorted(x['kind'] for x in lines) == ['premerge', 'premerge', 'test'])
     check('log says why', all('running' in x['reason'] for x in lines) and lines[0]['processes'] >= 1)
     check('INFRA MANAGER warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
-          and 'stopped 2 runaway' in (t / 'notify.msg').read_text())
+          and 'stopped 3 runaway' in (t / 'notify.msg').read_text())
     for p in (server, shell, session):
         p.kill()
     for f in ('notify.msg', 'notify.target', 'child.pid'):
@@ -102,7 +110,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     last = json.loads((t / 'state/kills.log').read_text().splitlines()[-1])
     check('memory reason logged', 'GB' in last['reason'])
     check('server still running under the memory rule', alive(procs[1]))
-    for p in procs[:5]:
+    for p in list(procs[:5]) + procs_extra:
         if alive(p):
             p.kill()
 
@@ -129,6 +137,28 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
           and not (t / 'state/unsent.txt').exists())
     if alive(sec):
         sec.kill()
+
+    # 5c. Premerge containers (taken over from premerge-local-sweep): only well-named ones older than 12 h go.
+    young = time.strftime('%Y-%m-%d %H:%M:%S +0000 UTC', time.gmtime())
+    docker = t / 'docker'
+    tab = '\t'
+    docker.write_text(f'''#!/bin/sh
+case "$1" in
+  ps) printf '%s\\n' 'id-old{tab}ht-premerge-0123456789abcdef-postgres{tab}2026-01-01 00:00:00 +0200 CEST' \\
+        'id-young{tab}ht-premerge-fedcba9876543210-redis{tab}{young}' \\
+        'id-bad{tab}ht-premerge-bad-postgres{tab}2026-01-01 00:00:00 +0000 UTC' ;;
+  rm) echo "$4" >> {t}/docker.rm ;;
+esac
+''')
+    docker.chmod(0o755)
+    (t / 'notify.msg').unlink(missing_ok=True)
+    r = run('--dry-run', PROC_WATCHDOG_DOCKER=str(docker))
+    check('dry run lists only the old well-named container', 'would remove container ht-premerge-0123456789abcdef-postgres' in r.stdout
+          and 'fedcba' not in r.stdout and 'bad' not in r.stdout and not (t / 'docker.rm').exists())
+    run('sweep', PROC_WATCHDOG_DOCKER=str(docker))
+    check('old container removed, young and badly named kept', (t / 'docker.rm').read_text().split() == ['id-old'])
+    check('container removal logged and reported', '"kind": "container"' in (t / 'state/kills.log').read_text()
+          and 'removed 1 stale premerge container' in (t / 'notify.msg').read_text())
 
     # 6. Matching: real command lines from the VPS.
     sys.path.insert(0, str(HERE))

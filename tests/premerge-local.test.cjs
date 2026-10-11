@@ -140,6 +140,8 @@ test('background server closes captured output descriptors, with a retained-stde
       }
     }
   } finally {
+    // Backstop: stand-in servers launched from this copy must not outlive the test (YPER4-280: 160 leaked for days).
+    spawnSync('pkill', ['-KILL', '-f', root]);
     rmSync(root, { recursive: true, force: true });
   }
 });

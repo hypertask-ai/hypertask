@@ -1,6 +1,12 @@
 #!/usr/bin/env python3
 """Stop runaway test, build and premerge processes before they freeze the runners (YPER4-278).
 
+The one cleaner for disposable work on the VPS (YPER4-280). Who cleans what:
+- processes (tests, builds, premerge-local servers, including /tmp copies left by tests): this watchdog, 2 h or 6 GB
+- ht-premerge-* Docker containers: this watchdog, older than 12 h
+- premerge state folders live inside worktrees and go with them (clean-up skill); test temp folders remove themselves
+premerge-local-sweep (12 h, marker-only) is retired: --install disables its timer.
+
 A matched process tree is stopped when its root is older than 2 hours or any process in it uses more than 6 GB.
 Only this user's processes are read. Claude, tmux, services and dev servers never match. Every stop is logged to
 ~/.local/state/proc-watchdog/kills.log and INFRA MANAGER gets one warning per sweep through runner-deliver.
@@ -9,6 +15,7 @@ Only this user's processes are read. Claude, tmux, services and dev servers neve
   proc-watchdog.py --dry-run    list what would be stopped, stop nothing
   proc-watchdog.py --install    copy this script and its timer to ~/.local/lib/hypertask/proc-watchdog and enable it
 """
+import datetime
 import json
 import os
 from pathlib import Path
@@ -26,6 +33,8 @@ MAX_RSS_KB = int(os.environ.get('PROC_WATCHDOG_MAX_RSS_KB', 6 * 1024 * 1024))
 STATE = Path(os.environ.get('PROC_WATCHDOG_STATE', Path.home() / '.local/state/proc-watchdog'))
 NOTIFY = os.environ.get('PROC_WATCHDOG_NOTIFY', str(Path.home() / '.local/lib/hypertask/runner-pickup/runner-deliver'))
 GRACE = float(os.environ.get('PROC_WATCHDOG_GRACE', 10))
+CONTAINER_MAX_AGE = int(os.environ.get('PROC_WATCHDOG_CONTAINER_MAX_AGE', 12 * 60 * 60))
+DOCKER = os.environ.get('PROC_WATCHDOG_DOCKER', 'docker')
 ONLY = os.environ.get('PROC_WATCHDOG_ONLY', '')  # tests: only consider command lines containing this text
 
 # First match wins. Patterns read the full command line.
@@ -75,6 +84,11 @@ def read_procs():
                 cwd = os.readlink(entry / 'cwd')
             except OSError:
                 cwd = ''
+            try:
+                # premerge-local.sh exports this marker; only its presence is read, never other variables.
+                marked = b'PREMERGE_LOCAL=1' in (entry / 'environ').read_bytes().split(b'\0')
+            except OSError:
+                marked = False
         except (OSError, ValueError):
             continue
         if not raw:
@@ -83,7 +97,7 @@ def read_procs():
         procs[int(entry.name)] = {
             'ppid': int(fields[1]), 'start': start, 'age': uptime - start / clock_ticks(), 'rss_kb': rss,
             'cmd': raw.rstrip(b'\0').replace(b'\0', b' ').decode(errors='replace'), 'name': name, 'cwd': cwd,
-            'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'),
+            'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'), 'marked': marked,
         }
     return procs
 
@@ -97,6 +111,9 @@ def kind_of(proc):
         return None
     if ONLY and ONLY not in proc['cmd']:
         return None
+    # Anything premerge-local.sh started from a worktree (its next start server, seed, build) carries the marker.
+    if proc.get('marked'):
+        return 'premerge'
     for kind, pattern in KINDS:
         if pattern.search(proc['cmd']):
             return kind
@@ -249,19 +266,62 @@ def notify(message):
         print(f'{len(left)} warning(s) not sent, kept in {pending}', file=sys.stderr)
 
 
+def stale_containers():
+    """[(id, name, age seconds)] of ht-premerge-* containers older than CONTAINER_MAX_AGE, from one docker ps call."""
+    if not shutil.which(DOCKER):
+        return []
+    try:
+        rows = subprocess.run([DOCKER, 'ps', '-a', '--filter', 'name=ht-premerge-',
+                               '--format', '{{.ID}}\t{{.Names}}\t{{.CreatedAt}}'],
+                              capture_output=True, text=True, timeout=10).stdout.splitlines()
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    out = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    for row in rows:
+        try:
+            cid, name, created = row.split('\t')
+            # "2026-10-11 12:03:45 +0200 CEST": the zone name after the offset is dropped.
+            age = (now - datetime.datetime.strptime(' '.join(created.split()[:3]), '%Y-%m-%d %H:%M:%S %z')).total_seconds()
+        except ValueError:
+            continue
+        if re.fullmatch(r'ht-premerge-[0-9a-f]{16}-(postgres|redis|soketi)', name) and age > CONTAINER_MAX_AGE:
+            out.append((cid, name, age))
+    return out
+
+
+def remove_containers(containers, budget):
+    """docker rm each stale container until the time budget runs out; returns what was removed."""
+    removed = []
+    for cid, name, age in containers:
+        left = budget - time.time()
+        if left <= 1:
+            break
+        try:
+            r = subprocess.run([DOCKER, 'rm', '-f', '-v', cid], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=min(30, left))
+        except (OSError, subprocess.TimeoutExpired):
+            continue
+        if r.returncode == 0:
+            removed.append(f'container {name} ({age / 3600:.1f} h old)')
+            print(f'removed {removed[-1]}')
+    return removed
+
+
 def sweep(dry_run=False):
     hits = over_limit(read_procs())
     if dry_run:
+        containers = stale_containers()
         for h in hits:
             print(f"would stop {h['kind']} pid {h['pid']} ({h['reason']}, {len(h['tree'])} processes): {short(h['argv'], 160)}")
-        print(f'{len(hits)} over the limits')
+        for _, name, age in containers:
+            print(f'would remove container {name} ({age / 3600:.1f} h old)')
+        print(f'{len(hits) + len(containers)} over the limits')
         return 0
-    if not hits:
-        notify(None)
-        return 0
+    # Processes first: a slow or stuck Docker never delays stopping a runaway.
     STATE.mkdir(parents=True, exist_ok=True)
     now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
-    stopped = stop_all(hits)
+    stopped = stop_all(hits) if hits else {}
     lines = []
     with open(STATE / 'kills.log', 'a') as log:
         for h in hits:
@@ -271,8 +331,16 @@ def sweep(dry_run=False):
                                   'cmd': short(h['argv'], 400)}) + '\n')
             lines.append(f"{h['kind']} pid {h['pid']} ({h['reason']}) in {h['cwd'] or '?'}: {short(h['argv'], 120)}")
             print(f"stopped {lines[-1]}")
-    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB): '
-           + '; '.join(lines[:8]) + ('; and more' if len(lines) > 8 else '')
+        # Then containers, inside a budget that leaves room for the warning within the unit's 2 minutes.
+        removed = remove_containers(stale_containers(), time.time() + 45)
+        for line in removed:
+            log.write(json.dumps({'ts': now, 'kind': 'container', 'reason': line}) + '\n')
+    if not hits and not removed:
+        notify(None)
+        return 0
+    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB) and removed '
+           f'{len(removed)} stale premerge container(s): ' + '; '.join((lines + removed)[:8])
+           + ('; and more' if len(lines) + len(removed) > 8 else '')
            + f". Log: {STATE / 'kills.log'}. https://app.hypertask.ai/detail/project-4060/278")
     return 0
 
@@ -289,6 +357,13 @@ def install():
         shutil.copy2(target / f'proc-watchdog.{suffix}', units)
     subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
     subprocess.run(['systemctl', '--user', 'enable', '--now', 'proc-watchdog.timer'], check=True)
+    # One cleaner (YPER4-280): retire the old premerge-local-sweep timer if it is still installed.
+    if (units / 'premerge-local-sweep.timer').exists():
+        subprocess.run(['systemctl', '--user', 'disable', '--now', 'premerge-local-sweep.timer'], check=False)
+        for suffix in ('timer', 'service'):
+            (units / f'premerge-local-sweep.{suffix}').unlink(missing_ok=True)
+        shutil.rmtree(Path.home() / '.local/lib/hypertask/premerge-local', ignore_errors=True)
+        subprocess.run(['systemctl', '--user', 'daemon-reload'], check=False)
 
 
 def main():
