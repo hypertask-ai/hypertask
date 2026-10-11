@@ -17,7 +17,7 @@ from datetime import datetime
 HERE = Path(__file__).resolve().parent
 REPO = 'hypertask-ai/hypertask'
 CHECKER_PATH = '.claude/skills/ship/scripts/ship-check'
-REFRESH_SECONDS = 3600  # slow refresh for live flag changes; a new head or changed evidence re-checks at once
+REFRESH_SECONDS = 600  # ten-minute refresh for live flag changes; a new head or changed evidence re-checks at once
 
 
 def install():

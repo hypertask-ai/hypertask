@@ -193,18 +193,18 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(len(self.publications()), 2)
 
-    def test_unchanged_head_is_skipped_and_hourly_refresh_rechecks(self):
+    def test_unchanged_head_is_skipped_and_ten_minute_refresh_rechecks(self):
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(len(self.publications()), 2)
         cache = json.loads((self.state / 'cache.json').read_text())
         for entry in cache.values():
-            entry['checked'] = time.time() - 1800  # inside the hourly window
+            entry['checked'] = time.time() - 300  # inside the ten-minute window
         (self.state / 'cache.json').write_text(json.dumps(cache))
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(len(self.publications()), 2)
         for entry in cache.values():
-            entry['checked'] = time.time() - 3700  # past the hourly window
+            entry['checked'] = time.time() - 700  # past the ten-minute window
         (self.state / 'cache.json').write_text(json.dumps(cache))
         self.assertEqual(self.sweep().returncode, 0)
         self.assertEqual(len(self.publications()), 4)
