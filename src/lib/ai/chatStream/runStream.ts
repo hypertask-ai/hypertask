@@ -19,7 +19,7 @@ import { routeAgentMention } from "./fleetTurn";
 import { runModelTurn } from "./modelTurn";
 
 export async function runChatStream(controller: ReadableStreamDefaultController<Uint8Array>, state: StreamState) {
-  const { body, dbUser, requestMessage, heartbeatExecutionId, turnDeadlineEnabled, contextTaskId, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, turnStartedAtMs, maxDuration, encoder } = state;
+  const { body, dbUser, requestMessage, heartbeatExecutionId, contextTaskId, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, turnStartedAtMs, maxDuration, encoder } = state;
 
   state.doneSent = false;
   state.errorSent = false;
@@ -28,20 +28,18 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   // Single winner: if user Stop already aborted the signal, the deadline
   // must not claim the termination.
   state.turnDeadlineHit = false;
-  state.turnDeadline = turnDeadlineEnabled
-    ? createTurnDeadline(
-      (reason) => {
-        if (state.providerAbort.signal.aborted) return;
-        state.turnDeadlineHit = true;
-        state.providerAbort.abort(reason);
-      },
-      // Remaining budget is computed here, at timer creation, so the
-      // setup work between route entry and stream start is counted.
-      maxDuration -
-      AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
-      (Date.now() - turnStartedAtMs) / 1000,
-    )
-    : null;
+  state.turnDeadline = createTurnDeadline(
+    (reason) => {
+      if (state.providerAbort.signal.aborted) return;
+      state.turnDeadlineHit = true;
+      state.providerAbort.abort(reason);
+    },
+    // Remaining budget is computed here, at timer creation, so the
+    // setup work between route entry and stream start is counted.
+    maxDuration -
+    AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
+    (Date.now() - turnStartedAtMs) / 1000,
+  );
   // Ends the turn when the graceful deadline fired: a real in-band error,
   // a heartbeat failure record, diagnostics, and a durable failure message
   // so reopening the chat shows why the turn ended instead of nothing.

@@ -27,7 +27,7 @@ const DeleteCommentById = (props:any) => {
               // props?.setComments((comments:any) =>
               //          comments?.filter((comment:any) => String(comment.id) !== String(idToDelete))
               //       );
-              toast("Comment deleted succesfully")
+              toast("Comment deleted successfully")
               return
           }
           if(response.status===201){

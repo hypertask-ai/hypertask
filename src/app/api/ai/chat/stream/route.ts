@@ -6,7 +6,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG, HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -93,15 +93,10 @@ export async function POST(request: NextRequest) {
   // HTPR-6278: the platform kills this function at maxDuration with no
   // finally, so the turn ends with nothing persisted, no tool run, no error
   // report, and a stream lease that blocks the next turn for 30 more seconds.
-  // Under the flag, end the turn gracefully just before that kill instead.
+  // End the turn gracefully just before that kill instead.
   // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
   // DB call) can still run into the platform kill; the upgrade path is
   // per-phase timeouts at each trust boundary.
-  const turnDeadlineEnabled = await isFeatureEnabled(
-    HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-    dbUser.id,
-  );
-
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
     try {
@@ -269,5 +264,5 @@ export async function POST(request: NextRequest) {
   }
 
   const firstTurn = !body.chat_history?.length;
-  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, turnDeadlineEnabled, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
+  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
 }
