@@ -154,6 +154,35 @@ def record_calls(state, rechecks):
         pass
 
 
+def shell_words(text):
+    # Shell words with operators split off; quoted text stays one word, so echo "gh pr view" is not a gh call.
+    # An eval argument is code that runs, so it is expanded in place.
+    lexer = shlex.shlex(text, posix=True, punctuation_chars=True)
+    lexer.whitespace_split = True
+    words = []
+    for word in lexer:
+        words.extend(shell_words(word) if words and words[-1] == 'eval' else [word])
+    return words
+
+
+def is_gh_poll_loop(args):
+    # A poll loop: one while/until ... done span that runs gh pr/run/api as a command and also sleeps.
+    try:
+        words = shell_words(args)
+    except ValueError:
+        return False
+    for start, word in enumerate(words):
+        # The closing done is the keyword after a ';', not a plain argument such as grep -q done.
+        end = next((i for i in range(start + 1, len(words)) if words[i] == 'done' and words[i - 1].endswith(';')), None)
+        if word not in ('while', 'until') or end is None:
+            continue
+        span = words[start:end + 1]
+        gh = any(span[i] == 'gh' and span[i + 1] in ('pr', 'run', 'api') for i in range(len(span) - 1))
+        if gh and 'sleep' in span:
+            return True
+    return False
+
+
 def stale_gh_loops(ps_output, own_pids, min_age=STALE_LOOP_SECONDS):
     # Only gh watch commands or shell loops that call gh, older than min_age. Never the sweep itself.
     found = []
@@ -173,10 +202,7 @@ def stale_gh_loops(ps_output, own_pids, min_age=STALE_LOOP_SECONDS):
         exe = os.path.basename(tokens[0])
         watch = exe == 'gh' and (('pr' in tokens and 'checks' in tokens and '--watch' in tokens)
                                  or tokens[1:3] == ['run', 'watch'])
-        # One while/until ... done segment must hold both a gh call and a sleep (a poll loop).
-        loop = (exe in ('sh', 'bash', 'zsh', 'dash') and '-c' in tokens
-                and any(re.search(r'\bgh\s+(pr|run|api)\b', seg) and re.search(r'\bsleep\b', seg)
-                        for seg in re.findall(r'\b(?:while|until)\b.*?\bdone\b', ' '.join(tokens[tokens.index('-c') + 1:]), re.S)))
+        loop = exe in ('sh', 'bash', 'zsh', 'dash') and '-c' in tokens and is_gh_poll_loop(args)
         if watch or loop:
             found.append((pid, age, args))
     return found

@@ -179,9 +179,11 @@ print('premerge-evidence: success (fixture)')
             f'110 {old} gh pr checks 12 --watch',
             f"111 {old} bash -c while read f; do cp $f /bak; sleep 1; done; gh pr view 12",
             f"112 {old} bash -c until s=$(gh pr checks 1); do sleep 60; done",
+            f'113 {old} bash -c while read f; do cp "$f" /bak; echo "gh pr view 12"; sleep 1; done',
+            f"114 {old} /bin/bash -c source x && eval 'until gh run view 5 | grep -q done; do sleep 30; done'",
         ])
         found = poster.stale_gh_loops(ps, {110})
-        self.assertEqual([f[0] for f in found], [101, 102, 103, 112])
+        self.assertEqual([f[0] for f in found], [101, 102, 103, 112, 114])
 
     def test_kill_mode_signals_only_matches(self):
         (self.bin / 'ps').write_text('#!/bin/sh\necho "4242 99999 gh run watch 1"\necho "4243 99999 sleep 9"\n')
