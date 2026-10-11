@@ -31,7 +31,7 @@ function moduleWithStubs(file, stubs, globals = {}) {
   return loadedModule.exports;
 }
 
-function harness({ enabled = true, output = "", finishReason = "stop", mode = "task_writer" } = {}) {
+function harness({ enabled = true, output = "", finishReason = "stop", mode = "task_writer", requestKind } = {}) {
   const checks = [], calls = [];
   const editor = {
     ...moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", {}),
@@ -47,8 +47,9 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
       project: { findFirst: async () => ({ id: 7123, section: [], labels: [] }) },
       taskTemplate: { findMany: async () => [] }, section: { findMany: async () => [] },
     } },
-    "@/lib/flags": { HTPR_7123_WRITER_TICKET_TYPE_FLAG: key, isFeatureEnabled: async (flag, userId) => {
+    "@/lib/flags": { HTPR_7123_WRITER_TICKET_TYPE_FLAG: key, HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "htpr-6929-compose-task-writer",isFeatureEnabled: async (flag, userId) => {
       checks.push([flag, userId]);
+      if (flag === "htpr-6929-compose-task-writer") return true;
       return flag === key ? enabled : false;
     } },
     "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true },
@@ -88,7 +89,7 @@ function harness({ enabled = true, output = "", finishReason = "stop", mode = "t
   async function post(kind) {
     const route = moduleWithStubs(kind === "app" ? "src/app/api/ai/task-writer/route.ts" : "src/app/api/mcp/ai/task-writer/route.ts", stubs);
     const body = kind === "mcp" ? { project_id: 7123, prompt: "Analyze Paperclip", mode }
-      : { projectId: 7123, PROMPT: "Analyze Paperclip", aiMode: mode === "task_writer" ? "AiTaskWriter" : "WriteWithAI" };
+      : { projectId: 7123, PROMPT: "Analyze Paperclip", aiMode: mode === "task_writer" ? "AiTaskWriter" : "WriteWithAI", ...(requestKind ? { requestKind } : {}) };
     const response = await route.POST({ json: async () => body });
     return { status: response.status, content: await response.text() };
   }
@@ -141,6 +142,24 @@ test("a defect stays a bug, while an improvement or feature gets no bug label or
   assert.match(rule, /Only a defect may get the bug label or a Bugs column/);
   assert.match(rule, /never put it in a Bugs column/);
   assert.match(rule, /improvement or feature label or column when the board has one/);
+});
+
+test("Ctrl+J compose path: sends AiTaskWriter with compose-task and gets the rule when the flag is on", async () => {
+  const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
+  assert.match(compose, /aiMode: "AiTaskWriter",\s*requestKind: "compose-task"/);
+  const on = harness({ enabled: true, output: draft, requestKind: "compose-task" });
+  await on.post("app");
+  assert.ok(on.calls[0].instructions.includes(RULE));
+  const off = harness({ enabled: false, output: draft, requestKind: "compose-task" });
+  await off.post("app");
+  assert.ok(!off.calls[0].instructions.includes(RULE));
+});
+
+test("Ctrl+J compose path: the column and labels never come from the model output", () => {
+  const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
+  assert.doesNotMatch(compose, /ai-generated-task-(status|tags)/);
+  assert.match(compose, /sectionId: defaults\?\.data\.sectionId/);
+  assert.match(compose, /\.\.\.taskFields/);
 });
 
 test("flag is a bugfix flag that defaults to Everyone", () => {
