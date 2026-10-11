@@ -61,6 +61,12 @@ updates:
       # together once a matching style release exists, and delete this entry.
       - dependency-name: "@dicebear/core"
         versions: [">= 10.0.0"]
+      # @types/node must match the Node major we run (engines.node 24.x and
+      # the Vercel project); 26.x types describe APIs Node 24 lacks and #1066
+      # failed CI (YPER4-295). Raise this bound in the change that moves the
+      # runtime to a new Node major.
+      - dependency-name: "@types/node"
+        versions: [">= 25.0.0"]
       # isomorphic-dompurify 3+ bundles jsdom 27+, which broke the server
       # sanitizer on Vercel twice on 2026-10-01 (missing jsdom stylesheet,
       # then ERR_REQUIRE_ESM from @exodus/bytes; HTPR-6795, rolled back in
