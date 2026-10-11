@@ -60,6 +60,7 @@ function composer() {
     "./taskWriterBoardContext": { buildTaskWriterRequestScope: board => ({ projectId: board.id }) },
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": { extractTitleAndDescription: () => ({ title: "AI title", description: "<p>AI body</p>" }) },
+    "@/utils/helperFunctions/describeTaskWriterFailure": {},
     "@/utils/htmlEscape": { escapeHtml: value => value },
     "./taskWriterMedia": { extractTaskWriterMedia: html => ({ html, media: [] }), createTaskWriterMediaTokenFactory() {}, restoreTaskWriterMedia: html => html },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads() {} },
@@ -87,7 +88,7 @@ async function send(api, { flag = true, currentProject = project(), destinationP
   const mounted = { current: true };
   const calls = [];
   const context = {
-    enabled: true, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+    enabled: true, writerReasonEnabled: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
     text: "Describe this task", files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,

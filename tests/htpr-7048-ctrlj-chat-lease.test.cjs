@@ -145,6 +145,7 @@ async function composeTask() {
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads: () => {} },
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async () => { calls.push("save"); return { resposne: { newTask: { id: 42 } } }; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => undefined },
+    "@/utils/helperFunctions/describeTaskWriterFailure": {},
     "@/utils/helperFunctions/Views/NewTaskViewDefaults": {},
   }, {
     fetch: async (url, options) => {

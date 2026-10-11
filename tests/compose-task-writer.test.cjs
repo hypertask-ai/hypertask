@@ -496,3 +496,26 @@ test('an error-only stream never claims that the model is writing', async () => 
     assert.deepEqual(stages, ['Reading past tickets', 'Understanding the context', 'Saving the ticket']);
   });
 });
+
+test('HTPR-7085 failed writer shows the server reason when asked, the generic line otherwise, and still saves the note', async () => {
+  const failing = { ok: false, status: 402, json: async () => ({ error: 'Monthly AI allowance used up' }), text: async () => '' };
+  const sse = 'event: error\ndata: {"code":"task-writer-stream-error","content":"Provider is down"}\n\n';
+  const cases = [
+    [{ response: failing }, true, 'Monthly AI allowance used up'],
+    [{ html: sse }, true, 'Provider is down'],
+    [{ response: failing }, false, undefined],
+    [{ html: 'event: error\ndata: {"content":"failed"}\n\n' }, true, undefined],
+    [{ writerThrows: true }, true, undefined],
+  ];
+  for (const [config, explain, reason] of cases) {
+    await withWriter(config, async ({ createComposedTask, composeTaskAssistantMessage, project, creates }) => {
+      const result = await createComposedTask({ text: 'My note', files: [], project, userId: 985, explainWriterFailure: explain });
+      assert.equal(result.writerFailed, true);
+      assert.equal(result.writerFailureReason, reason);
+      assert.equal(creates[0].title, 'My note');
+      const message = composeTaskAssistantMessage('QASA-44', true, false, undefined, result.writerFailureReason);
+      if (reason) assert.match(message, new RegExp(`unavailable: ${reason}\\. I kept your original text`));
+      else assert.match(message, /The task writer was unavailable, so I kept your original text/);
+    });
+  }
+});
