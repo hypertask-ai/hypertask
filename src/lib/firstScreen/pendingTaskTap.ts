@@ -11,7 +11,7 @@ const PENDING_TASK_TAP_KEY = "__htPendingTaskTap";
 type PendingTaskTapWindow = { [PENDING_TASK_TAP_KEY]?: string | null };
 
 // If the app never starts (or takes this long), open the held card the old way.
-export const PENDING_TASK_TAP_FALLBACK_MS = 4000;
+export const PENDING_TASK_TAP_FALLBACK_MS = 250;
 
 export function buildPendingTaskTapScript(fallbackMs = PENDING_TASK_TAP_FALLBACK_MS): string {
   // Window capture runs before React's root listener. When React cannot

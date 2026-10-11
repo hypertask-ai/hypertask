@@ -14,7 +14,7 @@ const pushed = [];
 const load = createRefactoredModuleRequire(ROOT, {
   "next/navigation": { useRouter: () => ({ push: (href) => pushed.push(href) }) },
 });
-const { buildPendingTaskTapScript, consumePendingTaskTap } = load("./src/lib/firstScreen/pendingTaskTap.ts");
+const { buildPendingTaskTapScript, consumePendingTaskTap, PENDING_TASK_TAP_FALLBACK_MS } = load("./src/lib/firstScreen/pendingTaskTap.ts");
 
 function boardDocument(fallbackMs) {
   // jsdom reports location.assign as "not implemented: navigation"; that report is the fallback call.
@@ -38,6 +38,10 @@ const tap = (dom, id, init = {}) => {
 };
 
 const nextTask = (dom) => new Promise((resolve) => dom.window.setTimeout(resolve, 0));
+
+test("the default hold falls back promptly instead of waiting seconds for hydration", () => {
+  assert.ok(PENDING_TASK_TAP_FALLBACK_MS <= 300, "the pending tap must fall back within 300 ms");
+});
 
 test("a tap on a card link React has not hydrated is held instead of reloading the page", async () => {
   const dom = boardDocument();
