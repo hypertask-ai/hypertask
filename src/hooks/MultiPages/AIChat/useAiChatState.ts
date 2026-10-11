@@ -250,7 +250,7 @@ export function useAiChatState() {
     // land a send into a conversation the user has since navigated away
     // from (HTPR-6100).
     taskId ?? "no-task",
-    sessionPagingEnabled ? "htpr-6971-chat-history-paging" : "legacy",
+    ...(sessionPagingEnabled ? ["htpr-6971-chat-history-paging"] : []),
   ].join(":");
   const setupContextRef = useRef(sessionContextKey);
   if (setupContextRef.current !== sessionContextKey) {

@@ -305,7 +305,8 @@ export function useAiChatSessions(context: Context) {
         sessionSetupRef.current = null;
       }
     };
-    void promise.then(clearSetup, clearSetup);
+    if (sessionPagingEnabled) void promise.then(clearSetup, clearSetup);
+    else void promise.finally(clearSetup);
     return promise;
   }, [
     aiChatBoardSessionMap,
@@ -336,8 +337,10 @@ export function useAiChatSessions(context: Context) {
   }, [currentProject?.id, setRecentChatBoardIds]);
 
   useEffect(() => {
-    if (shouldLoadChatHistory) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
-  }, [ensureSessionForCurrentBoard, shouldLoadChatHistory]);
+    if (!shouldLoadChatHistory) return;
+    if (sessionPagingEnabled) void ensureSessionForCurrentBoard().catch((error) => console.error("Error resolving chat session:", error));
+    else void ensureSessionForCurrentBoard();
+  }, [ensureSessionForCurrentBoard, shouldLoadChatHistory, sessionPagingEnabled]);
   return {
   selectSession, startNewSession, deleteSession, fileUpload, handleSendMessageRef,
   removeQueuedMessage, drainQueuedMessage, billing, isApple, isByokBlocked,

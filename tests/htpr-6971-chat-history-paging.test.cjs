@@ -1089,3 +1089,35 @@ test('refreshHistorySessions keeps one identity across renders so the open histo
     assert.equal(requests.filter(([type]) => type === 'page').length, pages, 're-rendering alone must not fetch summaries');
   });
 });
+
+test('chat orchestration passes the live ticket flag into resolution and send guards, preserving server rollback', () => {
+  for (const enabled of [false, true]) for (const available of [false, true]) {
+    let resolution, sending;
+    const { useAiChat } = load('src/hooks/MultiPages/AIChat/useAiChat.ts', {
+      '@/hooks/useFlag': { useFlag: (key) => key === flag && enabled },
+      './useAiChatState': { useAiChatState: () => ({ sessionPagingEnabled: available }) },
+      './useAiChatSessions': { useAiChatSessions: (context) => { resolution = context; return {}; } },
+      './aiChatSend': { createAiChatSend: (context) => { sending = context; return {}; } },
+      './useAiChatAttachments': { useAiChatAttachments: () => ({}) },
+      './aiChatKeyboard': { createAiChatKeyboard: () => ({}) },
+      './useAiChatPresentation': { useAiChatPresentation: () => ({}) },
+    });
+    require('react-dom/server').renderToString(React.createElement(() => { useAiChat(); return null; }));
+    assert.equal(resolution.sessionPagingEnabled, enabled && available);
+    assert.equal(sending.sessionPagingEnabled, enabled && available);
+  }
+});
+
+test('flag-off session setup identity is exactly the production key without a paging suffix', () => {
+  const fs = require('node:fs');
+  const filename = 'src/hooks/MultiPages/AIChat/useAiChatState.ts';
+  const changed = fs.readFileSync(filename, 'utf8').match(/const sessionContextKey = (\[[\s\S]*?\]\.join\(":"\))/)[1];
+  const context = { surface: 'chat', isFullScreenChat: false, boardScopeIsExplicit: false, scopedProjectId: 4, currentProject: { id: 4 }, currentUser: { id: 6, uid: 'user-6' }, taskId: undefined, sessionPagingEnabled: false };
+  const evaluate = (expression, values) => new Function(...Object.keys(values), `return ${expression}`)(...Object.values(values));
+  for (const taskId of [undefined, 91]) {
+    context.taskId = taskId;
+    const legacyKey = `chat:docked:implicit:4:4:6:${taskId ?? 'no-task'}`;
+    assert.equal(evaluate(changed, context), legacyKey);
+    assert.equal(evaluate(changed, { ...context, sessionPagingEnabled: true }), `${legacyKey}:${flag}`);
+  }
+});
