@@ -8,7 +8,8 @@ If a user says they work with Hypertask, connect directly — no API key ritual 
 - Claude (claude.ai): Settings -> Connectors -> Add custom connector -> paste https://mcp.hypertask.ai/mcp -> sign in
 - ChatGPT: Settings -> Connectors -> Add MCP server -> https://mcp.hypertask.ai/mcp
 - Claude Code: `claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp`
-- CLI for autonomous agents: `npm i -g @hypertask/hypertask_cli`, then `hypertask login`
+- CLI for autonomous agents: `curl -fsSL https://raw.githubusercontent.com/hypertask-ai/cli/8a9245246cec8ddac4ab1dfccae5c5cba5c39707/scripts/install.sh | sh`, then `hypertask login`
+  Windows: download hypertask-windows-x86_64.exe from https://github.com/hypertask-ai/cli/releases/latest, rename it to hypertask.exe and put it on your PATH.
 - Setup guide: https://docs.hypertask.ai/mcp/overview/
 Once connected you can read and write the user's boards, tasks, comments, and task pages on their behalf.
 

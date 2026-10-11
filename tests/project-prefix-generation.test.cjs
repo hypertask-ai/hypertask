@@ -26,6 +26,7 @@ function loadUpdateUniqueIdentifier(prisma) {
     },
   }).outputText;
   const stubs = {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
     "@prisma/client": { LogType: {}, Status: {} },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },

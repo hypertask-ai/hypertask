@@ -21,7 +21,11 @@ function loadHook(stubs) {
     fileName: filename,
   }).outputText;
   const loadedModule = { exports: {} };
-  const localRequire = (request) => stubs[request] ?? require(request);
+  const localRequire = (request) => stubs[request] ?? {
+    "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
+    "@/lib/flags/keys": {},
+    "@/lib/taskDetailReads": {},
+  }[request] ?? require(request);
 
   new Function(
     "module",
@@ -125,6 +129,7 @@ test("fallback reconciliation refreshes the task detail without replacing an act
         refreshTaskComments: async () => {},
       },
       "@/lib/realtime/taskDetailRefresh": {
+        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
         mergeRealtimeTaskDetail(current, fetched, includeTaskContent) {
           merges.push(includeTaskContent);
           return {
@@ -219,6 +224,7 @@ test("linked PR tasks reconcile on subscription so a pre-mount GitHub update is 
       },
       "@/lib/realtime/taskCommentsRefresh": { refreshTaskComments: async () => {} },
       "@/lib/realtime/taskDetailRefresh": {
+        preserveTaskAssigneesChangedDuringFetch: (_current, fetched, _snapshot, keepAssignee) => { assert.equal(keepAssignee, false); return fetched; },
         refreshTaskDetailQueryCache: ({ fetchTask }) => fetchTask(),
         mergeRealtimeTaskDetail: (_current, fetched) => fetched,
         shouldApplyRealtimeTaskDetail: () => true,

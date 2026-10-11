@@ -1,3 +1,5 @@
+import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
 /**
@@ -29,13 +31,13 @@ import {
 import {
   createTaskWriterSystemPromptTemplate,
   formatTaskWriterRetrievedContext,
+  TASK_WRITER_RESEARCH_REQUEST_RULE,
 } from "@/app/api/ai/_lib/taskWriterPrompt";
 import {
   buildTaskWriterRetrievalQuery,
   formatBoardVocabulary,
   formatRelatedTicketCandidates,
   formatStyleExamples,
-  HTPR_6363_TASK_WRITER_RESEARCH_FLAG,
   TASK_WRITER_BOARD_RESEARCH_RULES,
   TASK_WRITER_RELATED_CANDIDATE_LIMIT,
   TASK_WRITER_STYLE_EXAMPLE_LIMIT,
@@ -43,12 +45,14 @@ import {
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG } from "@/lib/flags";
+import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { BOARD_TEMPLATE_LIMIT } from "@/app/api/ai/_lib/boardTemplateContext";
 import { searchTasks } from "@/utils/controllers/turbopuffer/turbopufferHelper";
+import { cachedInstructionsForUser } from "@/app/api/ai/_lib/promptCache";
 
 const byokProviderFlagSchema = z
   .object({
@@ -77,6 +81,7 @@ export const taskWriterRequestSchema = z.object({
   sourceSelected: z.string().optional().default("openai"),
   modelSelected: z.string().nullable().optional(),
   modelOptionId: z.string().nullable().optional(),
+  timeZone: z.string().max(64).optional(),
   aiMode: z.string().optional().default("AiTaskWriter"),
   images64: z.array(taskWriterFileSchema).optional().default([]),
   pdfs64: z.array(taskWriterFileSchema).optional().default([]),
@@ -91,6 +96,14 @@ export const taskWriterRequestSchema = z.object({
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
   requestKind: z.enum(["manual", "auto-description", "compose-task"]).optional().default("manual"),
+});
+
+export const tasksOutputSchema = z.object({
+  tasks: z.array(z.object({
+    title: z.string().trim().min(1),
+    description: z.string().trim().min(1),
+    dueDate: z.string().nullish(),
+  })).min(1).max(10),
 });
 
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
@@ -201,6 +214,7 @@ export async function prepareTaskWriterRun(
     feature: "task-writer",
     aiFeature,
     teamContext,
+    taskWriterAgentId: agentId,
   });
   // Bring AI-chat's /skill invocation to the task writer: a prompt like
   // "/minimalist-review draft this" strips the token and appends the board
@@ -212,9 +226,7 @@ export async function prepareTaskWriterRun(
   // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
   // the model query are never blank (the skill body still carries the intent).
   const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
-  const boardResearchEnabled =
-    body.aiMode === "AiTaskWriter" &&
-    (await isFeatureEnabled(HTPR_6363_TASK_WRITER_RESEARCH_FLAG, userId));
+  const boardResearchEnabled = body.aiMode === "AiTaskWriter";
   // Search uses user-authored text only when research is on. The model still
   // receives the full conversation prompt via body.PROMPT / effectivePrompt.
   const retrievalQuery = boardResearchEnabled
@@ -331,9 +343,35 @@ export async function prepareTaskWriterRun(
           `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
         )
       : null;
-  const instructions = skillResolution.systemPromptAddition
-    ? `${researchInstructions ?? baseInstructions}\n\n${skillResolution.systemPromptAddition}`
-    : researchInstructions ?? baseInstructions;
+  const validateDraft = await isFeatureEnabled(HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, userId);
+  const splitTasks = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
+  const fixedInstructions = researchInstructions ?? baseInstructions;
+  // HTPR-7076: everything below varies per call or flag, so it follows the cached fixed part.
+  let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
+  if (splitTasks) {
+    suffix += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
+  }
+  if (validateDraft && body.aiMode === "AiTaskWriter") {
+    suffix += `\n\n${TASK_WRITER_RESEARCH_REQUEST_RULE}`;
+  }
+  const dueDateEnabled = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+  const dueDateContext = dueDateEnabled ? taskWriterDateContext(body.timeZone) : null;
+  if (dueDateContext) {
+    suffix += `\n\n${taskWriterDueDateInstructions(dueDateContext)}`;
+    if (splitTasks) suffix += "\nFor structured tasks, put each task's own date in that task's dueDate field instead of a marker, and leave it null when that task has no deadline.";
+  }
+  const headingLanguageEnabled = body.aiMode === "AiTaskWriter" &&
+    (await isFeatureEnabled(HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, userId));
+  if (headingLanguageEnabled) {
+    suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
+  }
+  const instructions = await cachedInstructionsForUser(userId, {
+    modelId: selected.modelId,
+    fixed: fixedInstructions,
+    suffix,
+  });
   const files = [...body.images64, ...body.pdfs64, ...body.docx64];
   const messages = [
     {
@@ -349,11 +387,14 @@ export async function prepareTaskWriterRun(
   return {
     aiFeature,
     selected,
+    splitTasks,
     instructions,
     messages,
     allowedImgSrcs,
+    validateDraft,
     skills: skillResolution.skills,
     usageTaskId,
+    dueDateContext,
   };
 }
 

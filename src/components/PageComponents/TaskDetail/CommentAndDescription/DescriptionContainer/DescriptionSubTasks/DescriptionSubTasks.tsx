@@ -2,23 +2,33 @@ import Tooltip from "@/components/Common/Tooltip";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { ITask } from "@/models/model";
-import { tasksPlayListAtom } from "@/store";
+import { currentUserAtom, tasksPlayListAtom } from "@/store";
 import Link from "next/link";
 import { useMemo } from "react";
 import { Plus, Check } from "lucide-react";
 
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue } from "@/lib/state";
 import CreateSummaryButton from "../../../TopRow/CreateSummaryButton";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { useTaskPages } from "./TaskPagesContext";
 import { useSearchParams } from "next/navigation";
-import { preserveInboxFlowOnTaskHref } from "@/lib/taskDetailInboxFlow";
+import { preserveInboxFlowOnTaskHref, shouldFollowLinkNatively } from "@/lib/taskDetailInboxFlow";
+import { useQueryClient } from "@tanstack/react-query";
+import { useAuth } from "@/hooks/General/useAuth";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6972_SUBTASK_LINK_FLAG } from "@/lib/flags/keys";
+import { openCachedTaskDetail } from "@/lib/navigation/cachedTaskDetail";
 
 const DescriptionSubTask = () => {
   const { currentTask, editMode, toggleSubtaskLinkingModal, cachedLayout } = useTaskContext();
   const { loading, hasPages, createAndOpenPage } = useTaskPages();
   const inboxFlow = useSearchParams()?.get("inboxFlow");
+  const queryClient = useQueryClient();
+  const { authenticatedUserId } = useAuth();
+  const currentUser = useRecoilValue(currentUserAtom);
+  const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
+  const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const isApple = useDeviceContext();
   var cmdControl = useMemo(
@@ -66,8 +76,14 @@ const DescriptionSubTask = () => {
                     `/detail/project-${currentTask?.projectId}/${task.uniqueIndex}`,
                     inboxFlow,
                   )}
-                  onClick={() => {
+                  onClick={(event) => {
                     setTasksPlayList(subTaskPlaylist);
+                    if (!subtaskLink || !instantTicketOpen || event.defaultPrevented || shouldFollowLinkNatively(event) ||
+                        !currentUser?.id || authenticatedUserId !== currentUser.id) return;
+                    if (openCachedTaskDetail({
+                      queryClient, accountId: currentUser.id, projectId: currentTask.projectId,
+                      uniqueIndex: task.uniqueIndex, task, href: event.currentTarget.getAttribute("href")!,
+                    })) event.preventDefault();
                   }}
                   className="w-full block text-meta text-[#8E9093]  font-medium items-start justify-normal group hover:underline cursor-pointer"
                 >

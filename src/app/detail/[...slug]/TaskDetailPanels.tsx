@@ -5,6 +5,8 @@ import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
+import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 
 import { Suspense } from "react";
@@ -75,6 +77,8 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { secondaryPanelsReady, cachedLayout } = useTaskContext();
+  // HTPR-7074: the phone composer waits for the thread height to stop growing.
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded);
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {
@@ -107,6 +111,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
         <DescriptionAndCommentsProvider>
           <div
             ref={embedded ? scrollElementRef : undefined}
+            data-task-detail-path={`/detail/project-${currentTask.projectId}/${currentTask.uniqueIndex}`}
             className={
               embedded
                 ? "min-h-0 flex-1 overflow-y-auto overscroll-contain"
@@ -143,7 +148,11 @@ export function TaskDetailPanels(context: TaskDetailContext) {
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
                 className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
-                style={{display: "flex",flex: 1,width: "100%",}}
+                style={{
+                  display: "flex",
+                  flex: 1,
+                  width: "100%",
+                }}
               >
                 {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
                 info column in part of virtualizer when on mobile. So I need to pass on the props inside there. */}
@@ -196,7 +205,7 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   />
                 )}
               </div>
-                {_mbl && !embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
+                {_mbl && !embedded && secondaryPanelsReady !== false && <SettledComposerSlot settled={threadSettled} slotRef={composerSlotRef}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>}
               </TaskDetailMainContainer>
             </MobileTaskDetailSwipe>
           </div>

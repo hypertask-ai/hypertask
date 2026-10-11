@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import RenameSection from "@/utils/controllers/section/rename";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
@@ -28,4 +29,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/section-writes/rename")).POST
+);

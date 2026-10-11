@@ -1,3 +1,4 @@
+import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -37,6 +38,11 @@ export async function GET(request: NextRequest) {
       const { isValid, user } = isValidUser(userCookie.value)
       if (!isValid || !user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
       userId = user.id
+    }
+
+    if (restCompat && currentUser) {
+      const limited = await checkRestRateLimit(currentUser.userId, 'read')
+      if (limited) return limited
     }
 
     const taskId = restCompat

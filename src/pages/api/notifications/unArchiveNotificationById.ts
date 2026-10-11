@@ -1,13 +1,14 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
 import { broadcastInboxChange, socketIdFromHeader } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -69,3 +70,9 @@ export default  async function handler(
       return res.status(500).json(error)
   }
 }
+
+
+export default ((req, res) => withTaskWriteFlag(
+  handler, req.method ?? "", async () =>
+    (await import("@/lib/api/notification-writes/unarchive-by-id")).POST,
+)(req, res)) satisfies NextApiHandler;

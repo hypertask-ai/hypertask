@@ -13,7 +13,7 @@ const getNotificationTarget = (
 
   if (!taskId || !projectId) return null;
 
-  return { id: taskId, projectId };
+  return { id: taskId, projectId, uniqueIndex: notification.task?.uniqueIndex };
 };
 
 const getInboxTargets = (

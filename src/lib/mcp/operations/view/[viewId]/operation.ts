@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
-import { validateMcpAuth, checkMcpRateLimit } from "@/lib/mcp/auth";
+
 import { deleteView, updateView } from "@/lib/mcp/views/services";
 import prisma from "@/lib/prisma";
 import {
@@ -39,6 +40,7 @@ export interface GetViewResponse {
  * Authentication: Bearer token (JWT or API key) in Authorization header
  */
 export async function GET(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
   try {
     const rateLimited = await checkMcpRateLimit(request);
@@ -141,6 +143,8 @@ export async function GET(request: NextRequest, props: { params: Promise<{ viewI
       { status: 500 },
     );
   }
+
+  })(request)
 }
 
 function toViewItem(
@@ -204,6 +208,7 @@ function toViewItem(
  * board_empty_sections, set_as_default.
  */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -290,12 +295,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
       { status: 400 }
     )
   }
+
+  })(request)
 }
 
 /**
  * DELETE /api/mcp/view/[viewId] -- delete a saved board view.
  */
 export async function DELETE(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -317,4 +325,6 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ vi
       { status: 400 }
     )
   }
+
+  })(request)
 }

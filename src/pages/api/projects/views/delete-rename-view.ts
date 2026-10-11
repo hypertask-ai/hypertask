@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // route = "/api/projects/views/delete-rename-view"
 import prisma from "@/lib/prisma";
 import { broadcastBoardChange } from "@/lib/realtime/server";
@@ -72,7 +73,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     project_view: { select: { id: true, projectId: true } }
                 }
             })
-            if (!viewToDelete) throw new Error("View does not exist")
+            if (!viewToDelete) return res.status(404).json({ message: "View does not exist" })
             const project_View = viewToDelete.project_view
             const projectId_ = project_View.projectId
             await prisma.$transaction(async (tx) => {
@@ -105,6 +106,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (error instanceof ManagedSmartSplitMutationError) {
                 return res.status(error.status).json({ message: error.message })
             }
+            if ((error as { code?: string })?.code === "P2025") {
+                return res.status(404).json({ message: "View does not exist" })
+            }
             return res.status(500).json(error)
         }
     }
@@ -112,4 +116,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 };
 
 
-export default handler
+export default withTaskWriteFlag(withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/project-writes/views/delete-rename-view")).POST,
+), "DELETE", async () =>
+  (await import("@/lib/api/project-writes/views/delete-rename-view")).DELETE,
+);

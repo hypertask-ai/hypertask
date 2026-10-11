@@ -1,6 +1,7 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiHandler, NextApiRequest, NextApiResponse } from 'next'
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { notificationInboxInclude } from "@/utils/controllers/notifications/getAll";
@@ -146,7 +147,7 @@ const getArchivedInboxMeta = async (
   };
 };
 
-export default  async function handler(
+async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -194,3 +195,9 @@ export default  async function handler(
       return res.status(500).json(error)
   }
 }
+
+
+export default ((req, res) => withTaskWriteFlag(
+  handler, req.method ?? "", async () =>
+    (await import("@/lib/api/notification-writes/archived-read")).GET,
+)(req, res)) satisfies NextApiHandler;

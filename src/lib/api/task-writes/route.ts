@@ -1,4 +1,4 @@
-import type { NextApiHandler } from "next";
+import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
 import { getSessionUser, type SessionUser } from "@/lib/auth/getSessionUser";
@@ -7,18 +7,28 @@ import { HTPR_6923_APP_ROUTER_WRITES_FLAG } from "@/lib/flags/keys";
 
 // Pages has already parsed JSON. This narrow Web-request interface avoids a
 // second parse/serialization and also accepts a real App Router Request.
-export type TaskWriteRequest = Pick<Request, "headers" | "json">;
+export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
+  cookies?: Partial<Record<string, string>>;
+  // Preserve Pages header arrays for acting-tab socket exclusion.
+  rawHeaders?: NextApiRequest["headers"];
+  query?: NextApiRequest["query"];
+  url?: string;
+};
+// Pages view writes retain historical 101 errors, which Web Response rejects.
+export type TaskWriteResponse = Pick<NextResponse, "status" | "headers" | "text" | "json">;
 export type TaskWriteRoute = (
   request: TaskWriteRequest,
   session?: SessionUser,
-) => Promise<NextResponse>;
+) => Promise<TaskWriteResponse | undefined>;
 
 export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   schema: z.ZodType<Body>;
   validationMessage: string;
   validateBeforeAuth?: boolean;
+  // Some legacy handlers catch null-body destructuring with nonstandard JSON.
+  allowNullBody?: boolean;
   prepare?: (session: SessionUser) => Promise<Actor>;
-  operation: (body: Body, actor: Actor) => Promise<NextResponse>;
+  operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
   return async (request, authenticatedSession) => {
     let session = authenticatedSession;
@@ -34,7 +44,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
     try {
       const raw = await request.json();
       // Legacy destructuring of null/undefined throws before required-field checks.
-      if (raw == null) throw new Error("Missing body");
+      if (raw == null && !options.allowNullBody) throw new Error("Missing body");
       const parsed = options.schema.safeParse(raw);
       if (!parsed.success) {
         return NextResponse.json(
@@ -57,7 +67,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
       }
     }
-    return options.operation(body, actor);
+    return options.operation(body, actor, request);
   };
 }
 
@@ -84,7 +94,18 @@ export function withTaskWriteFlag(
     if (!enabled || !session || !headers) return legacy(req, res);
     const route = await loadRoute();
     // Never retry legacy after dispatch: the operation may already have written.
-    const response = await route({ headers, json: async () => req.body }, session);
-    return res.status(response.status).json(await response.json());
+    const response = await route({ headers, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
+    // Creation historically leaves unresolved sections/ranks without a response.
+    if (!response) return;
+    response.headers.forEach((value, name) => {
+      if (name !== "content-type") res.setHeader(name, value);
+    });
+    // Relation failures historically send an empty 200, not JSON null.
+    const text = await response.text();
+    // Download errors use Pages' text send contract, not a JSON string.
+    if (text && !response.headers.get("content-type")?.includes("application/json")) {
+      return res.status(response.status).send(text);
+    }
+    return res.status(response.status).json(text ? JSON.parse(text) : undefined);
   };
 }

@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
+
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
@@ -67,6 +68,7 @@ export interface SearchTasksResponse {
  * Results are limited to boards/projects the user has access to.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
@@ -500,4 +502,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

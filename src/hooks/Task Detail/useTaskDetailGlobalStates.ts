@@ -23,6 +23,7 @@ import {
 } from "@/store";
 
 import {
+  startTransition,
   useCallback,
   useContext,
   useEffect,
@@ -63,7 +64,7 @@ import { mergeTaskThreadFeed } from "@/lib/agentRuns/taskActivityFeed";
 import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG } from "@/lib/flags/keys";
 
 // import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
@@ -93,18 +94,25 @@ const useTaskDetailGlobalStates = (
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
-  const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
+  const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
-  const [cachedLayout] = useState(instantTicketOpen && stableLayoutFlag && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
+  const [cachedLayout] = useState(instantTicketOpen && stableLayout && (cachedNavigation || Boolean(initialCommentsPayload.pending)));
   const [secondaryPanelsReady, setSecondaryPanelsReady] = useState(!instantTicketOpen || !initialCommentsPayload.pending);
+  const ticketStaysOpen = useFlag(HTPR_7116_TICKET_STAYS_OPEN_FLAG);
   useEffect(() => {
     if (secondaryPanelsReady) return;
+    // HTPR-7116: the panels mount lazy chunks (the description editor). An urgent update
+    // that suspends re-hides the shown ticket inside HTPR-6991's Suspense boundary; a
+    // transition keeps the shown ticket on screen until the chunks arrive.
+    const reveal = ticketStaysOpen
+      ? () => startTransition(() => setSecondaryPanelsReady(true))
+      : () => setSecondaryPanelsReady(true);
     // Keep rich editors off the cached first paint; property geometry is already mounted.
     let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => setSecondaryPanelsReady(true));
+      frame = requestAnimationFrame(reveal);
     });
     return () => cancelAnimationFrame(frame);
-  }, [secondaryPanelsReady]);
+  }, [secondaryPanelsReady, ticketStaysOpen]);
   const [comments, setComments] = useState<IComment[]>(
     initialCommentsPayload.comments ?? []
   );
@@ -595,7 +603,10 @@ const useTaskDetailGlobalStates = (
       setReplyQuote(wrapblockquote);
       focusOn("comment-input", false);
       setEditMode("comment");
-      scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
+      // The cached desktop composer scrolls after quote insertion, using its real DOM height.
+      if (!cachedLayout || _mbl) {
+        scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
+      }
       setTimeout(() => {
         setReplyQuote("");
       }, 100);
@@ -791,9 +802,13 @@ const useTaskDetailGlobalStates = (
     end?: boolean,
     withCommentId?: boolean
   ) => {
-    if (type === "new-comment")
-      virtualizer.scrollToIndex(cachedLayout && !_mbl ? virtualizeIndexes.descriptionBottomVirtualIndex : _count - 1, { align: "center" });
-    else if (type === "edit-description")
+    if (type === "new-comment") {
+      if (cachedLayout && !_mbl) {
+        document.getElementById("comment")?.scrollIntoView({ behavior: "auto", block: "center" });
+      } else {
+        virtualizer.scrollToIndex(_count - 1, { align: "center" });
+      }
+    } else if (type === "edit-description")
       virtualizer.scrollToIndex(1, { align: "center" });
     else if (type === "description")
       virtualizer.scrollToIndex(0, { align: "start" });

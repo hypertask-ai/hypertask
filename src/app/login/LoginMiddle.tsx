@@ -232,6 +232,12 @@ export const LoginMiddle = ({ serifClassName }: LoginMiddleProps) => {
           : "AI-driven task management that keeps your team shipping. Free to join, seconds to start."}
       </p>
 
+      {searchParams?.get("authError") === "google_signup_disabled" && (
+        <p className="text-content text-destructive" role="alert">
+          Google sign-in didn&apos;t work. Please try again, or sign in with your email.
+        </p>
+      )}
+
       {showEmailForm ? (
         <div className="w-full">
           <Suspense

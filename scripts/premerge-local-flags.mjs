@@ -3,12 +3,12 @@ import path from "node:path";
 
 const modes = ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"];
 
-export function localFlagModes(keys, live, overrides = []) {
+export function localFlagModes(defaults, live, overrides = []) {
   if (!live || Array.isArray(live) || typeof live !== "object" ||
       !Object.keys(live).length || !Object.values(live).every(value => typeof value === "boolean")) {
     throw new Error("Invalid plain QA flag view");
   }
-  const result = Object.fromEntries(keys.map(key => [key, live[key] === true ? "EVERYONE" : "OWNER_AND_QA"]));
+  const result = Object.fromEntries(Object.entries(defaults).map(([key, mode]) => [key, live[key] === true ? "EVERYONE" : mode]));
   for (const override of overrides) {
     const [key, mode, extra] = override.split("=");
     if (!Object.hasOwn(result, key) || !modes.includes(mode) || extra !== undefined) {

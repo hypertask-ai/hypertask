@@ -1,5 +1,6 @@
 import { markTaskRead } from "@/utils/controllers/tasks/markRead";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const parseBody = (body: unknown) => {
@@ -43,4 +44,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/mark-read")).POST,
+);

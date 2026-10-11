@@ -140,6 +140,17 @@ test('background server closes captured output descriptors, with a retained-stde
       }
     }
   } finally {
+    // Backstop: stand-in servers launched from this copy must not outlive the test (YPER4-280: 160 leaked for days).
+    spawnSync('pkill', ['-KILL', '-f', root]);
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('the disposable build points NEXT_PUBLIC_BASEURL at its own local origin before building (YPER4-282)', () => {
+  const src = readFileSync(script, 'utf8');
+  const setAt = src.indexOf("printf 'NEXT_PUBLIC_BASEURL=%s\\n' \"$url\"");
+  assert.ok(setAt > 0, 'credentials.env must set NEXT_PUBLIC_BASEURL to $url');
+  assert.match(src, /url="http:\/\/127\.0\.0\.1:\$app_port"/);
+  assert.ok(src.indexOf('source "$state/credentials.env"') > setAt);
+  assert.ok(src.indexOf('npx --no-install next build') > src.indexOf('source "$state/credentials.env"'));
 });

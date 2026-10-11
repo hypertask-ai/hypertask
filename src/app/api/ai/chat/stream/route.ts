@@ -6,7 +6,7 @@ import { getCronServiceRequestUser } from "@/app/api/ai/_lib/cronServiceAuth";
 import { decodeHeartbeatTurnMessage } from "@/lib/nativeAgent/heartbeatTurnEnvelope";
 import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6278_CHAT_TURN_FAILURE_FLAG } from "@/lib/flags/keys";
+import { HTPR_7048_CTRLJ_CHAT_LEASE_FLAG } from "@/lib/flags/keys";
 import { ensureNativeChatTurn, findNativeAssistantReplay } from "@/app/api/ai/chat/stream/ensureNativeChatTurn";
 import { resolveAiUsageTaskId } from "@/app/api/ai/_lib/currentTaskContext";
 
@@ -93,15 +93,10 @@ export async function POST(request: NextRequest) {
   // HTPR-6278: the platform kills this function at maxDuration with no
   // finally, so the turn ends with nothing persisted, no tool run, no error
   // report, and a stream lease that blocks the next turn for 30 more seconds.
-  // Under the flag, end the turn gracefully just before that kill instead.
+  // End the turn gracefully just before that kill instead.
   // ponytail: phases that ignore the abort signal (a hung tool, a non-stream
   // DB call) can still run into the platform kill; the upgrade path is
   // per-phase timeouts at each trust boundary.
-  const turnDeadlineEnabled = await isFeatureEnabled(
-    HTPR_6278_CHAT_TURN_FAILURE_FLAG,
-    dbUser.id,
-  );
-
   let userMessagePersisted = false;
   if (body.session_id && body.user_message_id) {
     try {
@@ -203,15 +198,21 @@ export async function POST(request: NextRequest) {
   }
   const turnModel = await loadTurnModel(body, dbUser);
   if (turnModel instanceof Response) return turnModel;
-  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent } = turnModel;
+  const { selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings } = turnModel;
 
   // A retry reuses the assistant UUID for idempotent persistence, while each
   // network attempt gets its own cancellation identity. The server generates
   // one for older clients, which can stream safely but cannot issue exact Stop.
   const streamId = body.stream_id ?? randomUUID();
+  // Always guard the agent across flag toggles; flag Off also guards its owner.
+  // The agent identity is resolved from the owned session, never request input.
+  const isolateAgentLease = !!actingAgent && await isFeatureEnabled(HTPR_7048_CTRLJ_CHAT_LEASE_FLAG, dbUser.id);
   const streamLease = await acquireAiChatStreamLease(
     dbUser.id,
     body.session_id ? { sessionId: body.session_id, streamId } : undefined,
+    undefined,
+    actingAgent?.id,
+    isolateAgentLease,
   );
   if (streamLease === "busy") {
     return createSseErrorResponse(
@@ -263,5 +264,5 @@ export async function POST(request: NextRequest) {
   }
 
   const firstTurn = !body.chat_history?.length;
-  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, turnDeadlineEnabled, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
+  return createChatStream({ body, dbUser, requestMessage, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, selected, titleByokApiKey, streamCredential, streamModelOption, gatewayTags, usageProjectId, actingAgent, teamProviderSettings, streamId, streamLease, firstTurn, turnStartedAtMs, maxDuration, heartbeatExecutionTerminal });
 }

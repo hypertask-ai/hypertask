@@ -10,6 +10,7 @@ const { renderToStaticMarkup } = require("react-dom/server");
 const root = path.resolve(__dirname, "..");
 const read = file => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const filename = path.join(root, file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -17,6 +18,8 @@ function load(file, stubs = {}) {
   const mod = new Module(filename);
   mod.filename = filename;
   mod.require = request => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
+    if (request === "@/lib/api/task-writes/route") return { withTaskWriteFlag: (handler) => handler };
     if (Object.hasOwn(stubs, request)) return stubs[request];
     if (["@prisma/client", "react", "react/jsx-runtime"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);
@@ -30,6 +33,7 @@ const prefix = load("src/lib/projectPrefix.ts", {
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters },
 });
 const flagKey = "htpr-6868-ticket-prefix";
+const subtaskFlagKey = "htpr-6972-subtask-link";
 function matches(row, where) {
   if (!row) return false;
   return Object.entries(where).every(([key, value]) => {
@@ -233,7 +237,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   };
   const base = {
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: access.taskWriteAccessWhere, getProjectWhere: (id, actualAgent) => { assert.equal(actualAgent ?? null, agentId); return { ownerId: id }; } },
   };
   base["@/utils/controllers/projects/findPrefixAliasTasks"] = load("src/utils/controllers/projects/findPrefixAliasTasks.ts", base);
   const resolver = load("src/lib/mcp/tasks/resolveTask.ts", {
@@ -243,7 +247,12 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
   base["@/lib/mcp/tasks/resolveTask"] = resolver;
   const detail = load("src/utils/controllers/taskDetail/load.ts", {
     ...base, "@vercel/functions": {}, "@/lib/realtime/server": {}, "@/lib/cycles": {}, "@/lib/pullRequests/taskPullRequests": {}, "@/lib/agents/publicAgent": {},
-    "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return enabled; } },
+    "@/lib/flags": {
+      HTPR_6868_TICKET_PREFIX_FLAG: flagKey,
+      HTPR_6972_SUBTASK_LINK_FLAG: subtaskFlagKey,
+      HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "htpr-6752-instant-ticket-open",
+      isFeatureEnabled: async (key, id) => { flagCalls.push([key, id]); return key === flagKey && enabled; },
+    },
     "@/lib/agents/visibility": { boardAgentVisibilityWhere: () => ({}), accessibleAgentMembershipWhere: () => ({}) },
     "@/utils/controllers/notifications/visibleInboxScope": { visibleUserInboxWhere: () => ({}) },
   });
@@ -332,6 +341,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     $transaction: async callback => callback(prisma),
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
+    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,
@@ -525,6 +535,7 @@ function detailPage({ enabled = true, task = { id: 101, projectId: 20, uniqueInd
       fetchTaskDetail: async () => null, fetchCommentsForSlug: async () => [], findTaskNumberAlias: async () => null,
     },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: () => { throw new Error("Unexpected metadata access lookup"); } },
     "@/lib/flags": { HTPR_6868_TICKET_PREFIX_FLAG: flagKey, isFeatureEnabled: async (key, id) => { calls.push(["flag", key, id]); return enabled; } },
     "next/navigation": { redirect: url => { throw new Error(`REDIRECT ${url}`); } },
     "@/lib/prisma": {}, "@/lib/contexts/TaskDetail/TaskProvider": {}, "@/lib/contexts/TaskDetail/FollowersProvider": {},
@@ -689,7 +700,7 @@ test("review: shared detail resolver handles move aliases and keeps detail acces
   assert.doesNotMatch(source, /findPrefixAliasTasks/);
   const member = lookups({ sourceOwnerId: 9, members: [{ userId: 6, agentId: "legacy-agent" }] });
   assert.equal(await member.resolver.findTaskByIdentifier({ id: 6 }, { ticket_number: "NEW-123" }), null);
-  assert.equal((await member.detail.findTaskByTicketNumber("NEW-123", 6)).id, 101);
+  assert.equal(await member.detail.findTaskByTicketNumber("NEW-123", 6), null);
   const deleted = lookups({ deletedBoard: true, live: true });
   assert.equal(await deleted.detail.findTaskByTicketNumber("OLD-123", 6), null);
   const lostAccess = lookups();
@@ -781,7 +792,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       f.tasks[0].pullRequests = [];
       const task = await f.detail.fetchTaskDetail("project-15", identifier, 6);
       assert.equal(task?.id ?? null, enabled ? 101 : null);
-      assert.deepEqual(f.flagCalls, [[flagKey, 6]]);
+      assert.deepEqual(f.flagCalls, [[flagKey, 6], ...(enabled ? [[subtaskFlagKey, 6]] : [])]);
       if (!enabled) {
         assert.deepEqual(f.taskQueries, []);
         assert.equal(f.aliasQueries(), 0);
@@ -791,7 +802,7 @@ test("round 2: shared detail loader gates ticket identifiers but preserves numer
       const f = lookups({ enabled });
       f.tasks[0].pullRequests = [];
       assert.equal((await f.detail.fetchTaskDetail("project-15", identifier, 6)).id, 101);
-      assert.deepEqual(f.flagCalls, []);
+      assert.deepEqual(f.flagCalls, [[subtaskFlagKey, 6]]);
       assert.equal(f.taskQueries.length, 1);
       assert.equal(f.aliasQueries(), 0);
     }
@@ -881,7 +892,7 @@ test("round 2: bulk prefix rewrite advances updatedAt in the same parameterized 
 test("registry defines one ticket-specific flag with Owner + QA default", () => {
   const keys = load("src/lib/flags/keys.ts");
   assert.equal(keys.HTPR_6868_TICKET_PREFIX_FLAG, flagKey);
-  const registry = read("src/lib/flags.ts");
+  const registry = (read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source());
   assert.equal((registry.match(/key: HTPR_6868_TICKET_PREFIX_FLAG/g) ?? []).length, 1);
   assert.match(registry, /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });

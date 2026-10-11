@@ -10,6 +10,9 @@ function compile(source, mocks) {
   const exports = {};
   const js = ts.transpileModule(source, { compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS } }).outputText;
   new Function("require", "exports", js)((name) => {
+    if (name === "@/lib/taskDetailReads" && !(name in mocks)) return {};
+    if (name === "@/hooks/useFlag" && name in mocks) return { ...mocks[name], useFlagReady: () => true, useFlag: key => key === "htpr-7009-dedupe-task-detail-reads" ? false : mocks[name].useFlag(key) };
+    if (name === "@/lib/flags/keys") return { ...mocks[name], HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" };
     assert.ok(name in mocks, `Unexpected dependency: ${name}`);
     return mocks[name];
   }, exports);
@@ -40,6 +43,9 @@ test("creator hydration enables description quoting without changing the frozen 
     "../ContextMenu": { HighlightMenu },
     "../ContextMenu/QuoteButton": { __esModule: true, default: QuoteButton },
     "@/components/RTE/TipTapTaskDetail": { __esModule: true, default: Editor },
+    // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+    "./DescriptionEditorSlot": { __esModule: true, default: Editor },
+    "./staticDescriptionHtml": { isPlainDescriptionHtml: () => false },
     "../BackgroundTaskAttachments": { __esModule: true, default: noop },
     "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (content) => content },
     "./InnerHtmlDescription": { __esModule: true, default: noop },
@@ -65,7 +71,7 @@ test("creator hydration enables description quoting without changing the frozen 
   assert.equal(children().find((child) => child?.type === Editor).props.user.id, 99);
 });
 
-test("cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
+test("flag-off cached network and HTTP refresh failures recover through the authorized route, while embedded behavior is unchanged", () => {
   const source = read("src/components/Modals/SwipeUnread/EmbeddedTaskDetail.tsx");
   for (const embedded of [false, true]) {
     for (const error of [new TypeError("Failed to fetch"), new Error("Unable to load task")]) {
@@ -85,8 +91,8 @@ test("cached network and HTTP refresh failures recover through the authorized ro
           "@/lib/realtime/taskDetailRefresh": { shouldPreserveTaskEditorContent: () => false },
           "@/app/detail/[...slug]/TaskDetailComp": { __esModule: true, default: () => null },
           "@/hooks/General/useGetUserPreferences": { useGetUserPreferences: () => ({ data: {} }) },
-          "@/hooks/useFlag": { useFlag: () => true },
-          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout" },
+          "@/hooks/useFlag": { useFlag: key => key !== "htpr-7004-no-loading-flash" },
+          "@/lib/flags/keys": { HTPR_6899_STABLE_LAYOUT_FLAG: "htpr-6899-stable-layout", HTPR_7004_NO_LOADING_FLASH_FLAG: "htpr-7004-no-loading-flash" },
           "@/lib/constants": { __esModule: true, default: { CommentsTQPrefixKey: "comments" } },
           "@/lib/contexts/TaskDetail/FollowersProvider": { FollowersProvider: ({ children }) => children },
           "@/lib/state": { useRecoilValue: () => ({ id: 6 }) },

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import getFirst from "@/utils/controllers/projects/getFirst";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -22,4 +23,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/project-writes/first-read")).GET,
+);

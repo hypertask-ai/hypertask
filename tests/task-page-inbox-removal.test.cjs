@@ -107,6 +107,7 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "./mutation": mutation,
   });
   const route = loadSource("src/pages/api/notifications/markAsDone.ts", {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: handler => handler },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 6 }) },
     "@/lib/realtime/server": {
       socketIdFromHeader: () => null,
@@ -149,6 +150,9 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     client.clear();
   });
   const focus = loadSource("src/hooks/Inbox/useGlobalFocusHandler.tsx", {
+    "@/lib/api/typedClient": {},
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": { HTPR_6979_TYPED_WRITES_FLAG: "htpr-6979-typed-writes-sections-notifications" },
     "@/store": atoms,
     "@/lib/state": state,
     "@tanstack/react-query": query,
@@ -166,6 +170,9 @@ function makeFlow(t, initialTask, currentTask, playlist = [task]) {
     "@/lib/inboxSync/mutation": mutation,
   }).default();
   const useArchive = loadSource("src/hooks/Task Detail/useArchiveAndNavigate.ts", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": {},
+    "../Inbox/useGetNotifications": { inboxDataQueryKey: () => key },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => context },
     react: { useContext: () => false, useCallback: (callback) => callback },
     "../MultiPages/useUpdateTaskInBoards": { default: () => ({}) },

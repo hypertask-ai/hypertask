@@ -1,11 +1,8 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
-import {
-  validateMcpAuth,
-  checkMcpRateLimit,
-  createUnauthorizedResponse,
-} from "@/lib/mcp/auth";
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import {
   assertSkillScopeAccess,
   skillErrorResponse,
@@ -28,6 +25,7 @@ const importSchema = z.object({
 });
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -74,4 +72,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     return skillErrorResponse(error);
   }
+
+  })(request)
 }

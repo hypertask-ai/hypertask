@@ -1,3 +1,6 @@
+import { readJsonBody } from "@/lib/mcp/readJsonBody";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import prisma from "@/lib/prisma";
@@ -17,7 +20,18 @@ async function getCurrentUserFromCookies() {
 // For binding or clearing the agent_id on a pending OAuth authorization code (right before token exchange)
 export async function POST(request: NextRequest) {
   try {
-    const user = await getCurrentUserFromCookies();
+    const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const user = restCompat && currentUser
+      ? currentUser.user
+      : await getCurrentUserFromCookies();
     if (!user?.id) {
       return NextResponse.json(
         { success: false, error: "Unauthorized" },
@@ -25,7 +39,28 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const body = await request.json();
+    let body: Awaited<ReturnType<typeof request.json>>;
+    if (restCompat) {
+      // Capture once: preserve accepted non-objects and the original parse error/fallback.
+      let jsonError: unknown;
+      const result = await readJsonBody<typeof body>({
+        json: async () => {
+          try {
+            body = await request.json();
+            return body;
+          } catch (error) {
+            jsonError = error;
+            throw error;
+          }
+        },
+      } as Request, {
+        invalidJson: () => { throw jsonError },
+        invalidObject: () => NextResponse.json({ error: "Request body must be a JSON object" }, { status: 400 }),
+      });
+      if (result.ok) body = result.body;
+    } else {
+      body = await request.json();
+    }
     const code = body?.code as string | undefined;
     const agentId = body?.agentId as string | null | undefined;
 

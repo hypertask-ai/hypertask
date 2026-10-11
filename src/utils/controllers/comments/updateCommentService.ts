@@ -3,6 +3,7 @@
  * Single source of truth for: DB update, activity, search index, summary scheduling, mentions.
  */
 import prisma from '@/lib/prisma'
+import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { upsertCommentToTurbopuffer } from '@/utils/controllers/turbopuffer/turbopufferHelper'
 import scheduleTaskSummaryGeneration from '@/pages/api/queues/FAST/generateSummary'
 import scheduleCommentSummaryGeneration from '@/pages/api/queues/FAST/generateCommentSummary'
@@ -11,9 +12,6 @@ import { omitCommentSeen } from './readReceipts'
 import { invalidateHyperAiCommentOrigin } from '@/lib/ai/hyperAiConfirmation'
 import { publicAgentSelect } from '@/lib/agents/publicAgent'
 import { normalizeBlockHtml } from '@/lib/mcp/normalizeBlockHtml'
-import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6561_DESCRIPTION_STRUCTURE_FLAG } from '@/lib/flags/keys'
-import { normalizeRichTextStructure } from '@/utils/helperFunctions/normalizeRichTextStructure'
 
 export interface UpdateCommentParams {
   commentId: number
@@ -36,16 +34,10 @@ export interface UpdateCommentParams {
  */
 export async function updateCommentService(params: UpdateCommentParams) {
   const { commentId, text: inputText, userId, agentId, attachments, replaceAttachments } = params
-  const normalizePlainText = await isFeatureEnabled(
-    HTPR_6561_DESCRIPTION_STRUCTURE_FLAG,
-    userId
-  )
-  const text = normalizePlainText
-    ? normalizeBlockHtml(inputText)
-    : normalizeRichTextStructure(inputText)
+  const text = normalizeBlockHtml(inputText)
 
   const comment = await prisma.comment.findFirst({
-    where: { id: commentId, creatorId: userId },
+    where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId) } },
     select: { id: true, taskId: true, task: { select: { projectId: true } } }
   })
 

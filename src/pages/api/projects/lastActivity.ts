@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import getProjectsLastActivity from "@/utils/controllers/projects/lastActivity";
@@ -18,4 +19,6 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
   return res.status(response.status).json(response.json);
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "GET", async () =>
+  (await import("@/lib/api/project-writes/last-activity-read")).GET,
+);

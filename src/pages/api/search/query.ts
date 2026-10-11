@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { turbopufferGetSuggestions } from "@/utils/controllers/search/query";
 import prisma from "@/lib/prisma";
@@ -24,10 +25,7 @@ const handler: NextApiHandler = async (
 
       const projectRows = await prisma.project.findMany({
         where: {
-          OR: [
-            { members: { some: { userId: userId } } },
-            { ownerId: { in: [userId] } },
-          ],
+          ...projectContentAccessWhere(userId),
         },
         select: { id: true },
       });

@@ -3,6 +3,10 @@
 /* eslint-disable @next/next/no-img-element */
 "use client"
 
+import { unarchiveNotification } from "@/lib/api/typedClient";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6979_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
+
 import { useRouter } from 'next/navigation';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useRecoilState } from '@/lib/state';
@@ -47,6 +51,9 @@ const ArchivedNotificationsContainer = ({
             
         }
     }
+    const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
+    let typedWrite: typeof unarchiveNotification | undefined;
+    if (typedWrites) typedWrite = unarchiveNotification;
     const queryClient = useQueryClient();   
     const router = useRouter();
     const { navigateToTask } = useHypertasksNavigate()
@@ -207,7 +214,7 @@ const ArchivedNotificationsContainer = ({
     const markAsUnarchive = async (notification: INotification) => {
    
         try {
-            await axios.post("/api/notifications/unArchiveNotificationById",{notificationId:notification.id})
+            typedWrite ? await typedWrite({ notificationId: notification.id }) : await axios.post("/api/notifications/unArchiveNotificationById",{notificationId:notification.id})
             queryClient.refetchQueries({queryKey:["archivedInbox"]});
             queryClient.refetchQueries({queryKey:["archivedInboxMeta"]});
 

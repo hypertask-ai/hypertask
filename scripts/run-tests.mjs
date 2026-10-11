@@ -7,6 +7,11 @@ import {
 
 const root = process.cwd();
 const testsRoot = path.join(root, "tests");
+// A hung or runaway test file is cancelled after 20 minutes instead of running for hours (YPER4-279).
+const FILE_TIMEOUT = `--test-timeout=${process.env.TEST_FILE_TIMEOUT_MS ?? 20 * 60 * 1000}`;
+
+// Match Next's server alias in plain Node tests, including nested test processes.
+process.env.NODE_OPTIONS = `${process.env.NODE_OPTIONS ?? ""} --require=${path.join(testsRoot, "helpers/register-server-only.cjs")}`.trim();
 
 function relative(absolute) {
   return path.relative(root, absolute).split(path.sep).join("/");
@@ -62,6 +67,7 @@ const isolatedCjsTests = new Set([
   "tests/action-archive-cache.test.cjs",
   "tests/agent-run-activities.test.cjs",
   "tests/feature-flags.test.cjs",
+  "tests/htpr-6478-regressions.test.cjs",
   "tests/management-key-route.test.cjs",
   "tests/management-key-route-wiring.test.cjs",
   "tests/mcp-usage-auth.test.cjs",
@@ -77,12 +83,12 @@ if (cjsTests.length > 0) {
   const isolated = cjsTests.filter((file) => isolatedCjsTests.has(file));
   const shared = cjsTests.filter((file) => !isolatedCjsTests.has(file));
   for (const file of isolated) {
-    run(process.execPath, ["--test", file], `Isolated Node test: ${file}`);
+    run(process.execPath, ["--test", FILE_TIMEOUT, file], `Isolated Node test: ${file}`);
   }
   if (shared.length > 0) {
     // Cap at 4 workers: the default (one per core) put 18+ node processes on
     // the shared box whenever CI and an agent ran the suite (owner, 2026-08-25).
-    run(process.execPath, ["--test", "--test-concurrency=4", ...shared], "Node test suite");
+    run(process.execPath, ["--test", FILE_TIMEOUT, "--test-concurrency=4", ...shared], "Node test suite");
   }
 }
 

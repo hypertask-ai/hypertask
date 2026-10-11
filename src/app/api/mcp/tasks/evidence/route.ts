@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { parseEvidenceInput } from '@/lib/mcp/tasks/evidence'
@@ -27,6 +28,7 @@ const ticketFor = (v: unknown): string | null =>
  * Body: { task_id | ticket_number, project_id?, type?, title?, url?, summary? }.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -86,6 +88,8 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Task Evidence] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
 
 /**
@@ -93,6 +97,7 @@ export async function POST(request: NextRequest) {
  * List the evidence attached to a task, newest first.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -132,4 +137,6 @@ export async function GET(request: NextRequest) {
     console.error('[MCP Task Evidence] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Import PrismaClient from the generated Prisma client
 import sectionGetProjectSections from '@/utils/controllers/section/getProjectSections';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
@@ -31,4 +32,6 @@ if (req.method==="POST"){
 }
 
 // Run the main function
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/section-writes/get-project-sections")).POST
+);

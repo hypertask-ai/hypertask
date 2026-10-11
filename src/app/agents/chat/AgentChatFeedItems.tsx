@@ -6,7 +6,6 @@ import { type AgentChatActivity, type AgentChatActivityGroup, type AgentChatFilt
 import { PROPOSAL_HEADING_CREATED, PROPOSAL_HEADING_PENDING, type SerializedChatTicketProposal, } from "@/lib/agents/chatTicketProposal";
 import { tokenizeMessageLinks, type TProjectIdForPrefix } from "@/lib/agents/messageLinks";
 import { chatRosterStatus, isWorking, statusOf, type TChatRosterStatus } from "@/lib/agents/registerView";
-import { CONFIRMED_PROPOSAL_HEADING_FLAG } from "@/lib/flags/keys";
 import formatDateDifference from "@/utils/generateTime";
 import { markdownToHtml } from "@/utils/helperFunctions/markdownToHtml";
 import { interceptMessageLinkClick, wrapTablesInMessageHtml, } from "@/utils/helperFunctions/messageHtmlLinks";
@@ -109,15 +108,13 @@ export function ProposalCard({
     }
   };
   const open = proposal.status === "PENDING" || proposal.status === "FAILED";
-  const confirmedHeadingEnabled = useFlag(CONFIRMED_PROPOSAL_HEADING_FLAG);
   const confirmLabel = busy === "confirm" ? "Creating…" : "Create ticket";
   return (
     <div className="mt-1 max-w-[80%] rounded-[5px] bg-cardBackground px-3 py-2 text-meta">
       <div className="mb-1 flex items-center gap-1.5 font-medium text-white-black">
         <TicketIcon className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
         <span>
-          {confirmedHeadingEnabled &&
-          proposal.status === "CONFIRMED" &&
+          {proposal.status === "CONFIRMED" &&
           proposal.task
             ? PROPOSAL_HEADING_CREATED
             : PROPOSAL_HEADING_PENDING}

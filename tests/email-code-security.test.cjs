@@ -158,6 +158,12 @@ test('send-email-link never returns authentication secrets', async () => {
     const { POST } = loadTypescriptModule(
       'src/app/api/auth/send-email-link/route.ts',
       {
+        '@/lib/prisma': { user: { findFirst: async () => null } },
+        '@/lib/flags': {
+          HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+          HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
+          isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
+        },
         '@/lib/services/verificationCodeService': {
           VerificationCodeService: {
             generateCode: () => '123456',
@@ -207,6 +213,12 @@ test('send-email-link keeps the stored code when Resend times out', async () => 
     const { POST } = loadTypescriptModule(
       'src/app/api/auth/send-email-link/route.ts',
       {
+        '@/lib/prisma': { user: { findFirst: async () => null } },
+        '@/lib/flags': {
+          HTPR_7032_EMAIL_EXPIRY_COPY_FLAG: 'htpr-7032-email-expiry-copy',
+          HTPR_7032_FIRST_TIME_EMAIL_FLAG: 'htpr-7032-first-time-email',
+          isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
+        },
         '@/lib/services/verificationCodeService': {
           VerificationCodeService: {
             generateCode: () => '123456',
@@ -469,10 +481,13 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
       cookies: { theme: 'theme', defaultTheme: 'system' },
     },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
+    '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
+    '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
+    '@vercel/functions': { waitUntil: () => {} },
     '@/lib/themePreferences': loadTypescriptModule('src/lib/themePreferences.ts'),
     '@/utils/controllers/users/autoJoinByEmailDomain': async () => {},
-    '@/utils/controllers/users/completeOnboardingStep': {
-      CompleteOnboardingFirstStep: async () => {},
+    '@/utils/controllers/users/provisionFirstWorkspace': {
+      provisionFirstWorkspace: async () => {},
     },
     '@/lib/constants/constants': { companyRoleOptions: [], companySizeOptions: [] },
     '@/lib/prisma': {
@@ -489,6 +504,7 @@ test('verify-code requires email, reserves capacity, and verifies the bound pair
       signSession: () => 'session',
     },
     '@/utils/controllers/demo/adoptGuestBoards': { adoptGuestBoards: async () => {} },
+    '@/utils/controllers/demo/resolveLoginBoard': { resolveLoginBoard: async () => undefined },
     '@/lib/auth/slimUserCookie': loadTypescriptModule('src/lib/auth/slimUserCookie.ts'),
     '@/lib/auth/emailCodeRateLimit': {
       getEmailCodeClientIp: () => clientIp,

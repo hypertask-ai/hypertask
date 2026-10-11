@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import tasksSearchAll from "@/utils/controllers/tasks/searchAll";
 import getRecentlyWorkedTasks from "@/utils/controllers/tasks/getRecentlyWorkedTasks";
@@ -62,4 +63,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/search-all")).POST,
+);

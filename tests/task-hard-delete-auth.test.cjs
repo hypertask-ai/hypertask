@@ -1,8 +1,7 @@
 const assert = require("node:assert/strict");
-const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
-const ts = require("typescript");
+const { load } = require("./task-route-loader.cjs");
 
 const root = path.resolve(__dirname, "..");
 const jiti = require("jiti")(
@@ -37,18 +36,10 @@ function projectMatches(project, where) {
 }
 
 function loadRoute({ session = null, task = null, deleteOutcome = "success" } = {}) {
-  const filename = path.join(root, "src/pages/api/tasks/deleteTask.ts");
-  const javascript = ts.transpileModule(fs.readFileSync(filename, "utf8"), {
-    compilerOptions: {
-      esModuleInterop: true,
-      module: ts.ModuleKind.CommonJS,
-      target: ts.ScriptTarget.ES2020,
-    },
-    fileName: filename,
-  }).outputText;
   const calls = { taskLookups: [], deletes: [], broadcasts: [] };
-  const loadedModule = { exports: {} };
   const stubs = {
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/keys": { HTPR_6923_APP_ROUTER_WRITES_FLAG: "htpr-6923-app-router-writes" },
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },
@@ -84,13 +75,7 @@ function loadRoute({ session = null, task = null, deleteOutcome = "success" } = 
     },
   };
 
-  new Function("module", "exports", "require", javascript)(
-    loadedModule,
-    loadedModule.exports,
-    (request) => stubs[request] ?? require(request),
-  );
-
-  return { handler: loadedModule.exports.default, calls };
+  return { handler: load("src/pages/api/tasks/deleteTask.ts", stubs).default, calls };
 }
 
 function responseRecorder() {

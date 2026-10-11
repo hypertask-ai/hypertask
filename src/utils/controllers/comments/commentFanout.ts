@@ -141,6 +141,7 @@ export async function fanOutCommentNotifications(context: CommentFanoutContext) 
       creatorId,
       ownerId,
       agentId ?? null,
+      committedText,
     );
     if (resolvedDirectReplyUserId != null) {
       recipientUserIds.push(resolvedDirectReplyUserId);

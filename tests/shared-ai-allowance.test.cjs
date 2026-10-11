@@ -32,6 +32,13 @@ function useRedis(redis) {
   stubModule("src/lib/redis.ts", redisModule);
 }
 
+// HTPR-7079 flag state for the allowance middleware (no real database here).
+let failedAllowanceFlagOn = true;
+stubModule("src/lib/flags.ts", {
+  isFeatureEnabled: async (key) =>
+    key === "htpr-7079-failed-ai-allowance" ? failedAllowanceFlagOn : false,
+});
+
 function fakeRedis() {
   const values = new Map();
   const reservations = new Map();
@@ -822,7 +829,8 @@ test("expired reservations remain charged and late settlement cannot double-char
   }
 });
 
-test("failed provider calls conservatively consume their reservation", async () => {
+test("failed provider calls conservatively consume their reservation (HTPR-7079 flag off)", async () => {
+  failedAllowanceFlagOn = false;
   const redis = fakeRedis();
   useRedis(redis);
   const previousFetch = global.fetch;
@@ -874,6 +882,7 @@ test("failed provider calls conservatively consume their reservation", async () 
     await assert.rejects(request(), /provider failed after starting/);
     await assert.rejects(request(), /used its included AI allowance/);
   } finally {
+    failedAllowanceFlagOn = true;
     global.fetch = previousFetch;
   }
 });
@@ -1457,4 +1466,228 @@ test("the allowance team stamp round-trips and ignores unmarked content", () => 
   assert.equal(parseAllowanceTeamStamp(content), "team-1");
   assert.equal(parseAllowanceTeamStamp("<p>old notice, no stamp</p>"), null);
   assert.equal(parseAllowanceTeamStamp(null), null);
+});
+
+// HTPR-7079: a call that fails before any output counts only its input.
+const HTPR_7079_PRICING = { input: "0.00001", output: "0.00005" };
+const HTPR_7079_PROMPT = [{ role: "user", content: "hello allowance" }];
+const HTPR_7079_MAX_OUTPUT = 10_000;
+
+function htpr7079Setup(modelSlug = "test/priced") {
+  const redis = fakeRedis();
+  useRedis(redis);
+  const previousFetch = global.fetch;
+  global.fetch = async (url) => {
+    const value = String(url);
+    if (value.endsWith("/models")) {
+      return new Response(JSON.stringify({ data: [{ id: "test/priced", pricing: HTPR_7079_PRICING }] }));
+    }
+    if (value.includes("/report?")) return new Response(JSON.stringify({ results: [] }));
+    throw new Error(`Unexpected fetch ${value}`);
+  };
+  const mod = loadTs("src/app/api/ai/_lib/sharedAllowance.ts");
+  mod.resetGatewayPricingCacheForTests();
+  const middleware = mod.createSharedAllowanceMiddleware({
+    allowanceUsd: 100,
+    gatewayApiKey: "test-gateway-key",
+    modelSlug,
+  });
+  const params = {
+    maxOutputTokens: HTPR_7079_MAX_OUTPUT,
+    prompt: HTPR_7079_PROMPT,
+    providerOptions: { gateway: { tags: ["team:htpr-7079-team"] } },
+  };
+  const inputTokens = Buffer.byteLength(JSON.stringify(HTPR_7079_PROMPT), "utf8");
+  const pricing = { inputUsdPerToken: 0.00001, outputUsdPerToken: 0.00005 };
+  return {
+    middleware,
+    mod,
+    params,
+    redis,
+    restore: () => {
+      global.fetch = previousFetch;
+      failedAllowanceFlagOn = true;
+    },
+    inputOnly: Math.ceil(mod.modelCostUsd(pricing, inputTokens, 0) * 1_000_000),
+    full: mod.estimateReservationMicroUsd({
+      maxOutputTokens: HTPR_7079_MAX_OUTPUT,
+      pricing,
+      prompt: HTPR_7079_PROMPT,
+    }),
+    committed: () => {
+      const entry = [...redis.values.entries()].find(
+        ([key]) => key.endsWith(":committed") && !key.endsWith(":system:committed"),
+      );
+      return entry ? Number(entry[1]) : 0;
+    },
+    open: () => [...redis.reservations.values()].flatMap((entries) => [...entries.keys()]).length,
+  };
+}
+
+const streamOf = (chunks, { close = true } = {}) => async () => ({
+  stream: new ReadableStream({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(chunk);
+      if (close) controller.close();
+    },
+  }),
+});
+
+async function drain(stream) {
+  const seen = [];
+  try {
+    for await (const chunk of stream) seen.push(chunk);
+  } catch {
+    // The wrapped stream may error; settlement has already happened.
+  }
+  return seen;
+}
+
+test("HTPR-7079 generate that throws before output commits only the input", async () => {
+  const t = htpr7079Setup();
+  try {
+    assert.ok(t.inputOnly > 0 && t.inputOnly < t.full);
+    await assert.rejects(
+      t.middleware.wrapGenerate({
+        params: t.params, model: {},
+        doGenerate: async () => { throw new Error("boom"); },
+      }),
+      /boom/,
+    );
+    assert.equal(t.committed(), t.inputOnly);
+    assert.equal(t.open(), 0);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 stream error chunk before output commits only the input", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([
+        { type: "stream-start", warnings: [] },
+        { type: "error", error: new Error("provider exploded") },
+      ]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), t.inputOnly);
+    assert.equal(t.open(), 0);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 doStream that throws commits only the input", async () => {
+  const t = htpr7079Setup();
+  try {
+    await assert.rejects(
+      t.middleware.wrapStream({
+        params: t.params, model: {},
+        doStream: async () => { throw new Error("no stream"); },
+      }),
+      /no stream/,
+    );
+    assert.equal(t.committed(), t.inputOnly);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 stream that ends with no finish and no output commits only the input", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([{ type: "stream-start", warnings: [] }]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), t.inputOnly);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 stream cancelled before any output commits only the input", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([{ type: "stream-start", warnings: [] }], { close: false }),
+    });
+    await result.stream.cancel("user left");
+    assert.equal(t.committed(), t.inputOnly);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 stream with output then an error and no usage keeps the full reservation", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([
+        { type: "text-delta", id: "1", delta: "partial" },
+        { type: "error", error: new Error("died mid answer") },
+      ]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), t.full);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 stream with output that ends with no finish keeps the full reservation", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([{ type: "text-delta", id: "1", delta: "partial" }]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), t.full);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 finish with usage still commits the real cost", async () => {
+  const t = htpr7079Setup();
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([
+        { type: "text-delta", id: "1", delta: "ok" },
+        { type: "finish", usage: { inputTokens: { total: 100 }, outputTokens: { total: 20 } } },
+      ]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), Math.ceil((100 * 0.00001 + 20 * 0.00005) * 1_000_000));
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 unavailable error still releases the reservation to zero", async () => {
+  const t = htpr7079Setup("openai/gpt-6-luna");
+  try {
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([
+        { type: "stream-start", warnings: [] },
+        { type: "error", error: { status: 404 } },
+      ]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), 0);
+    assert.equal(t.open(), 0);
+  } finally { t.restore(); }
+});
+
+test("HTPR-7079 flag off keeps today's full-reservation settlement", async () => {
+  const t = htpr7079Setup();
+  failedAllowanceFlagOn = false;
+  try {
+    await assert.rejects(
+      t.middleware.wrapGenerate({
+        params: t.params, model: {},
+        doGenerate: async () => { throw new Error("boom"); },
+      }),
+      /boom/,
+    );
+    assert.equal(t.committed(), t.full);
+    const result = await t.middleware.wrapStream({
+      params: t.params, model: {},
+      doStream: streamOf([{ type: "stream-start", warnings: [] }]),
+    });
+    await drain(result.stream);
+    assert.equal(t.committed(), t.full * 2);
+  } finally { t.restore(); }
 });

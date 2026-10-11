@@ -1,5 +1,6 @@
+import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { validateMcpAuth, createUnauthorizedResponse, checkMcpRateLimit } from '@/lib/mcp/auth'
+import { createUnauthorizedResponse } from '@/lib/mcp/auth'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import prisma from '@/lib/prisma'
 import type { ProjectListItem } from '@/lib/mcp/operations/projects/operation'
@@ -51,6 +52,7 @@ export interface UserContextResponse {
  * - Database-backed, can track usage
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: {id: number, email: string} | null = null
   try {
     // Validate JWT token or API key and get user
@@ -228,4 +230,6 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

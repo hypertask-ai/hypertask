@@ -1,6 +1,8 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 // Import PrismaClient from the generated Prisma client
 import sectionGetByTask from '@/utils/controllers/section/getByTask';
 import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 // Create an instance of PrismaClient
 
@@ -8,6 +10,10 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from 'next';
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
 if (req.method==="POST"){
 
+    const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+    if (!session) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
     const { taskId } = req.body;
     if (!taskId) {
       return res.status(400).json({ message: "Missing TaskId" });
@@ -24,7 +30,7 @@ if (req.method==="POST"){
     //     }
 
     // });
-    const response = await sectionGetByTask( taskId)
+    const response = await sectionGetByTask(taskId, session.userId)
     return res.status(response.status).json(response.json);
     // Get field names of the "Section" model
     
@@ -35,4 +41,6 @@ if (req.method==="POST"){
 }
 
 // Run the main function
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/section-writes/get-by-task")).POST
+);

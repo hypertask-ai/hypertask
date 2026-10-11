@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { cancelTaskDeleteJob } from '../queues/taskDeleteQueue'
 import prisma from '@/lib/prisma'
@@ -10,7 +11,7 @@ import { taskWriteAccessWhere } from '@/utils/controllers/projects/getAllInclude
 import { AgentMutationLeaseConflictError } from '@/lib/mcp/tasks/agentMutationFence'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 
-export default  async function handler(
+ async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
@@ -87,3 +88,7 @@ export default  async function handler(
       return res.status(500).json(error)
   }
 }
+
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/recover")).POST,
+);

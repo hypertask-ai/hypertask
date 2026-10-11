@@ -1,6 +1,8 @@
 import prisma from "@/lib/prisma";
 import {
   aiModelOptions,
+  isAiModelOptionVisible,
+  getAiModelOptionById,
   getAiModelDefinition,
   pickReplacementAiModelOption,
   type TAiModelOption,
@@ -10,8 +12,10 @@ import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllInclude
 
 export function filterModelOptionForTeam(
   option: TAiModelOption,
-  settings: unknown
+  settings: unknown,
+  haiku55Enabled = false,
 ): TAiModelOption {
+  option = getAiModelOptionById(option.id, haiku55Enabled) ?? option;
   const definition = getAiModelDefinition(option.modelKey);
   if (
     !definition ||
@@ -24,13 +28,13 @@ export function filterModelOptionForTeam(
   const enabled = aiModelOptions.filter((candidate) => {
     const candidateDefinition = getAiModelDefinition(candidate.modelKey);
     return (
-      candidateDefinition &&
+      isAiModelOptionVisible(candidate, haiku55Enabled) && candidateDefinition &&
       candidateDefinition.provider !== "custom" &&
       resolveTeamProviderEnabled(settings, candidateDefinition.provider)
     );
   });
 
-  const fallback = pickReplacementAiModelOption(option.modelKey, enabled);
+  const fallback = pickReplacementAiModelOption(option.modelKey, enabled, haiku55Enabled);
 
   if (!fallback) throw new Error("No AI providers are enabled for this team");
   return fallback;

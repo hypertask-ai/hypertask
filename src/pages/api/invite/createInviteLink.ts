@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -146,7 +147,7 @@ async function sendInviteToNonMember(
       expired: false,
     },
     include: {
-      invitedBy: true,
+      invitedBy: { include: { userPicture: { select: { nameSet: true, displayName: true } } } },
       project: {
         select: {
           project_view: getProjectViewInclude({
@@ -167,11 +168,12 @@ async function sendInviteToNonMember(
   const activeView = getViewFromProject(invite.project);
   viewSlug = setViewSlug(activeView);
 
-  const inviteLink = generateInviteLink(
+  const inviteLink = await generateInviteLink(
     invite.id,
     projectId,
     invite.project.title ?? "",
     viewSlug,
+    userId,
   );
   const createLogBody: CreateLogInput = {
     log: `${invite.invitedBy.displayName} sent an invite to "${email}" for board "${invite.project?.title}"`,
@@ -181,22 +183,35 @@ async function sendInviteToNonMember(
   };
   createLog(createLogBody);
   createNotification(email, inviteLink, userId, invite.id, projectId);
-  await sendEmailNotification("Invite", {
+  const sent = await sendEmailNotification("Invite", {
     sender: invite.invitedBy.displayName ?? "",
+    senderUserId: userId,
+    senderEmail: invite.invitedBy.email,
+    senderName: invite.invitedBy.userPicture?.nameSet
+      ? invite.invitedBy.userPicture.displayName ?? undefined
+      : undefined,
     recipient: email,
     title: invite.project.title ?? "",
     link: inviteLink,
   });
+  if (sent) recordActivationOccurrence(userId, "teammate_invited", invite.id, { method: "email" });
 }
 
-export const generateInviteLink = (
+export const generateInviteLink = async (
   inviteId: string,
   projectId: number,
   projectName: string,
   viewSlug: string | undefined,
+  _userId: number,
 ) => {
   const baseURL = String(process.env.NEXT_PUBLIC_BASEURL);
-  return `${baseURL}/invite?key=${inviteId}&project=${projectName}&projectId=${projectId}${viewSlug ? `&view=${viewSlug}` : ""}`;
+  const params = new URLSearchParams({
+    key: inviteId,
+    project: projectName,
+    projectId: String(projectId),
+  });
+  if (viewSlug) params.set("view", viewSlug);
+  return `${baseURL}/invite?${params}`;
 };
 
 export const setViewSlug = (activeView: IViewType | undefined) =>

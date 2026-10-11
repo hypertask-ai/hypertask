@@ -79,6 +79,9 @@ const handler: NextApiHandler = async (
       return res.status(200).json(toUpdate);
     } catch (error) {
       console.error("Error:", error);
+      if (error instanceof Error && error.message === "Comment not found or not owned by user") {
+        return res.status(404).json({ message: "Comment not found" });
+      }
       res.status(500).json({ message: "Internal server error" });
     }
   } else {

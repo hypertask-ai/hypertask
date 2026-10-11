@@ -1,3 +1,6 @@
+import { checkRestRateLimit } from "@/lib/api/rateLimit";
+import { loadCurrentUser } from "@/lib/auth/currentUser";
+import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 import { deleteTaskAttachmentFromS3 } from "@/lib/storage/uploadTaskAttachmentToS3";
 import { isValidUser } from "@/utils/edgeHelpers";
@@ -39,14 +42,27 @@ export async function DELETE(req: NextRequest) {
     const cookieStore = await cookies();
     const userCookie = cookieStore.get("nookies_user");
 
-    if (!userCookie?.value) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
 
-    const { isValid, user } = isValidUser(userCookie.value);
+    const currentUser = await loadCurrentUser(req.headers, true).catch(() => null);
+    let restCompat = false;
+    if (currentUser) {
+      try {
+        restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
+      } catch {
+        // Flag lookup failure preserves the legacy entry path.
+      }
+    }
+    const { isValid, user } = restCompat && currentUser
+      ? { isValid: true, user: currentUser.user }
+      : isValidUser(userCookie?.value);
 
     if (!isValid || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (restCompat && currentUser) {
+      const limited = await checkRestRateLimit(currentUser.userId, "write");
+      if (limited) return limited;
     }
 
     const { searchParams } = new URL(req.url);

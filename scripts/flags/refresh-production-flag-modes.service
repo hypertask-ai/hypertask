@@ -1,0 +1,7 @@
+[Unit]
+Description=Refresh the live switch settings copy used by browser checks
+[Service]
+Type=oneshot
+Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+ExecStart=%h/.local/bin/refresh-production-flag-modes.sh
+TimeoutStartSec=10min

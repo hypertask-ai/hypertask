@@ -1,3 +1,5 @@
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
 import {
   aiImageModelDefinitions,
@@ -22,12 +24,13 @@ const taskSearchByParam = async (
     // (needs only userid), owner_members (only projectId) and hyperAI (a
     // constant id) are mutually independent, so fetch them concurrently
     // instead of in three sequential round trips.
-    const [projectIds, owner_members, hyperAI, pageMentionsEnabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
           id: projectId,
           status: "Normal",
+          ...projectContentAccessWhere(userid),
         },
         select: {
           owner: true,
@@ -48,10 +51,11 @@ const taskSearchByParam = async (
       // on the flag table before, and a read failure there must not blank the
       // whole @ list (people, agents, tasks, boards) for everyone.
       isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
+      haiku55ModelEnabled(userid),
     ]);
 
     if (!projectIds.includes(projectId)) {
-      return { status: 403, json: [] };
+      return { status: 404, json: [] };
     }
 
     let hyperAIObject = { ...hyperAI, displayName: "HyperAI" };
@@ -68,6 +72,9 @@ const taskSearchByParam = async (
       param === "all" || !normalizedModelQuery
         ? []
         : [...aiModelDefinitions, ...aiImageModelDefinitions]
+            .filter((model) => haiku55Enabled
+              ? model.key !== "claude-haiku-4.5"
+              : model.key !== "claude-haiku-5-5")
             .filter((model) =>
               [model.label, model.key].some((value) =>
                 normalizeModelMentionSearch(value).includes(
@@ -360,20 +367,7 @@ const fetchidlist = async (id: number) => {
     if (id) {
       const projectid = await prisma.project.findMany({
         where: {
-          OR: [
-            {
-              members: {
-                some: {
-                  userId: id,
-                },
-              },
-            },
-            {
-              ownerId: {
-                in: [id],
-              },
-            },
-          ],
+          ...projectContentAccessWhere(id),
         },
         select: {
           id: true,

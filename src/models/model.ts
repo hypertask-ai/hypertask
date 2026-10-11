@@ -548,6 +548,7 @@ export interface ITask {
     displayName: string | null;
     photoURL: string | null;
   } | null;
+  agentStatus?: { agentName: string; at: string } | null;
   waitingOnSetById?: number | null;
   waitingOnSetAt?: string | null;
   blockingTasks?: IBlockingTask[];
@@ -688,10 +689,14 @@ export interface INotification {
   mutedTypes?: string[];
   /** Set when a snooze returned this row; a returned snooze is always addressed to you. */
   returnedFromReminders?: boolean | null;
+  /** HTPR-7092: the task has an unanswered Question comment that @mentions this user. */
+  isDecision?: boolean;
   /** Direct response to this user after they explicitly invoked an agent. */
   directReply?: boolean;
   /** Active event types backed by a direct response on this task. */
   directReplyTypes?: NotificationType[];
+  /** HTPR-7096: server-set; keeps an agent mention out of Important (not a Question, or already answered). */
+  quietImportant?: boolean;
   /** When the display-swapped earning event (mention/comment) happened. */
   earnedAt?: string;
   comment?: IComment;

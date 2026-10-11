@@ -2,8 +2,9 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
 import prisma from "@/lib/prisma";
-import { CompleteOnboardingFirstStep } from "@/utils/controllers/users/completeOnboardingStep";
+import { provisionFirstWorkspace } from "@/utils/controllers/users/provisionFirstWorkspace";
 import { IUser } from "@/models/model";
+import { SESSION_COOKIE } from "@/lib/auth/session";
 
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
@@ -28,8 +29,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         if (!user) return res.status(404).json({message:"User doesn't exist"})
 
 
-        const response = await CompleteOnboardingFirstStep(
+        const response = await provisionFirstWorkspace(
           user as unknown as IUser,
+          req.cookies[SESSION_COOKIE],
           teamTitle,
           boardTitle,
           companySize,

@@ -3,6 +3,7 @@ import { deleteCommentService } from "@/utils/controllers/comments/deleteComment
 import prisma from "@/lib/prisma";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const handler: NextApiHandler = async (
   req: NextApiRequest,
@@ -22,10 +23,11 @@ const handler: NextApiHandler = async (
     }
 
     try {
-      const comment = await prisma.comment.findUnique({
-        where: { id },
+      const comment = await prisma.comment.findFirst({
+        where: { id, task: { project: projectContentAccessWhere(userId) } },
         select: { taskId: true },
       });
+      if (!comment) return res.status(404).json({ message: "Comment not found" });
 
       await deleteCommentService({
         commentId: id

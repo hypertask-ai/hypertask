@@ -120,7 +120,10 @@ test('each legacy route and supported method captures verified identity and requ
 test('transport analytics evaluates the catalog flag through an isolated fixture for the verified user', async () => {
   for (const endpoint of ['/sse', '/message', '/mcp']) {
     await call(endpoint)
-    assert.deepEqual(flagChecks, [{ key: 'htpr-6804-mcp-tools', userId: 2343 }])
+    assert.deepEqual(flagChecks, [
+      { key: 'htpr-6927-mcp-v2', userId: 2343 },
+      { key: 'htpr-6804-mcp-tools', userId: 2343 },
+    ])
   }
   authenticated = false
   try {

@@ -119,9 +119,7 @@ test('spec validates the registry in both modes and applies allowances only to a
   const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
   const screens = Object.fromEntries(Object.entries(committed.viewports).flatMap(([device, viewport]) =>
     Object.entries(viewport.screens).map(([screen, value]) => [`${screen}/${device}`, value])));
-  const keys = require('jiti')(__filename)('../src/lib/flags/keys.ts');
-  const definitions = fs.readFileSync(path.join(__dirname, '../src/lib/flags.ts'), 'utf8').split('const FEATURE_FLAG_DEFINITIONS = [')[1].split('export const FEATURE_FLAG_KEYS')[0];
-  const registry = [...definitions.matchAll(/key: ([A-Z_0-9]+),/g)].map(match => keys[match[1]]).filter(Boolean);
+  const registry = require("./helpers/flag-files.cjs").definitions().map(({ key }) => key);
   assert.deepEqual(validateFlagChanges(entries, registry, screens), []);
 });
 
@@ -152,6 +150,16 @@ test('committed baseline contains measured boxes and complete vertical order for
   }
 });
 
+test('phone title hit-target invariant is independent of allowed landmark drift', () => {
+  const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
+  const invariant = spec.slice(spec.indexOf("test('layout lock: phone New Task title"), spec.indexOf("test('layout lock: desktop New Task"));
+  assert.match(invariant, /#title-input-modal/);
+  assert.match(invariant, /toBeGreaterThanOrEqual\(24\)/);
+  assert.match(invariant, /document\.elementFromPoint[\s\S]*=== field/);
+  assert.match(invariant, /await title\.tap\(\)[\s\S]*toBeFocused\(\)/);
+  assert.doesNotMatch(invariant, /layoutDifferences|flagChanges/);
+});
+
 test('spec covers six screens, updates serially from live-like flags, and never changes the baseline on ordinary runs', () => {
   const spec = fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.spec.ts'), 'utf8');
   assert.match(spec, /\['ticket', 'board', 'inbox', 'my-tasks', 'new-task', 'app-shell'\]/);
@@ -163,4 +171,28 @@ test('spec covers six screens, updates serially from live-like flags, and never 
   assert.match(spec, /sourceCommit = process\.env\.LAYOUT_LOCK_SOURCE_COMMIT/);
   assert.match(spec, /writeFileSync\(baselinePath,[\s\S]*\} else \{[\s\S]*layoutDifferences/);
   assert.match(LAYOUT_CHANGE_MESSAGE, /Only change e2e\/smoke\/layout-lock\.baseline\.json when the ticket asks for this layout change; put Valentin's quote in the PR\./);
+});
+
+
+test('stable cached phone opens allow the intentional unscrolled viewport only with their registered flag on', () => {
+  const committed = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.baseline.json'), 'utf8'));
+  const entries = JSON.parse(fs.readFileSync(path.join(__dirname, '../e2e/smoke/layout-lock.flag-changes.json'), 'utf8'));
+  const expected = committed.viewports.Mobile.screens.ticket;
+  const stable = 'htpr-6899-stable-layout';
+  // PR 1074 browser-smoke failure: the old baseline had already scrolled past properties.
+  const measured = {
+    title: { x: 18, y: 64, width: 274, height: 37 },
+    description: { x: 10, y: 534, width: 370, height: 274 },
+    'first-comment': { x: 10, y: 792, width: 370, height: 88 },
+    'last-comment': { x: 10, y: 880, width: 370, height: 88 },
+    composer: { x: 0, y: 770, width: 390, height: 74 },
+    properties: { x: 10, y: 158, width: 370, height: 360 },
+  };
+  const options = { entries, registry: [stable], flags: { [stable]: true } };
+  assert.deepEqual(layoutDifferences('ticket/Mobile', expected, measured, options), []);
+  for (const control of [undefined, { ...options, flags: { [stable]: false } }, { ...options, registry: [] }]) {
+    assert.ok(layoutDifferences('ticket/Mobile', expected, measured, control).length, 'flag-off/live-like/unregistered drift must remain a failure');
+  }
+  assert.ok(layoutDifferences('ticket/Desktop', expected, measured, options).length, 'phone allowance cannot change desktop layout');
+  assert.deepEqual(entries.filter(entry => entry.flag === stable).map(entry => entry.screen), ['ticket/Mobile']);
 });

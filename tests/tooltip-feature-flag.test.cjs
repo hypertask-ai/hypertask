@@ -10,14 +10,14 @@ const root = path.resolve(__dirname, "..");
 const flag = "htpr-6950-tooltip-top-layer";
 
 test("the tooltip feature is registered with its ship date and Owner + QA default", () => {
-  const definitions = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8");
-  const keys = fs.readFileSync(path.join(root, "src/lib/flags/keys.ts"), "utf8");
+  const definitions = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
+  const keys = require("./helpers/flag-files.cjs").source();
   assert.match(keys, /export const HTPR_6950_TOOLTIP_TOP_LAYER_FLAG = "htpr-6950-tooltip-top-layer"/);
   assert.match(definitions, /key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,\s+shippedOn: "2026-10-05",\s+description: "Keeps hover tooltips above other interface layers without being clipped or covered\."/);
   assert.match(definitions, /const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
 });
 
-test("flag off renders production tooltips and flag on renders the top-layer portal for every moved component", async () => {
+test("flag off renders production tooltips and flag on renders the top-layer portal for every moved component", async (t) => {
   const dom = new JSDOM("<!doctype html><div id='root'></div><button id='external'>External anchor</button>", { url: "https://app.hypertask.ai/project" });
   const globals = new Map();
   const browserGlobals = {
@@ -114,6 +114,22 @@ test("flag off renders production tooltips and flag on renders the top-layer por
         await React.act(async () => trigger.dispatchEvent(new window.MouseEvent("mouseenter")));
       }
     };
+    for (const state of [false, true]) {
+      await t.test(`default Tooltip accepts null shortcuts with flag ${state ? "on" : "off"}`, async () => {
+        enabled = state;
+        await assert.doesNotReject(() => mount(Tooltip, {
+          text: "Set cycle", keyCombination: null, bottom: -40, left: 0,
+        }, `null shortcuts ${state}`, "hover"));
+        const tooltips = state
+          ? [...document.querySelectorAll("[data-hover-tooltip-portal]")]
+          : legacyElements("z-[9999]");
+        assert.equal(tooltips.length, 1);
+        assert.equal(tooltips[0].textContent, "Set cycle");
+        assert.equal(tooltips[0].querySelectorAll("kbd").length, 0);
+        assert.equal(tooltips[0].querySelector("span").parentElement.children.length, 1, "no shortcut container");
+      });
+      await React.act(async () => reactRoot.render(null));
+    }
     for (const [name, Component, props, text, legacyClass, interaction] of cases) {
       for (const state of [false, true, false]) {
         enabled = state;

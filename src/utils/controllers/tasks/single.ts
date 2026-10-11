@@ -1,3 +1,4 @@
+import { recordAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
@@ -18,6 +19,7 @@ import {
 import { autoAssignForSection } from "../assignees/autoAssignForSection";
 import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { sectionIsDone, spawnNextRecurrence } from "./spawnRecurrence";
+import { scheduleAgentFirstTaskEmail } from "../notifications/agentFirstTaskEmail";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   AgentMutationLeaseConflictError,
@@ -609,6 +611,10 @@ export async function updateTaskSingle(
       },
       { timeout: 60_000 },
     );
+    if (!options.trustedCaller) {
+      scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
+    }
+    recordAgentTaskCompletion(taskBeforeWrite, task, agentId);
     const moveNotification =
       moveActivity && options.taskMovedActivity?.sendNotification
         ? sendTaskMoveNotificationIfNeeded(

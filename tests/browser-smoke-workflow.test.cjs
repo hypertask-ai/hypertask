@@ -22,9 +22,9 @@ test("browser smoke exposes no repository or production credentials to PR code",
   assert.doesNotMatch(job, /\$\{\{\s*secrets\./);
   assert.doesNotMatch(job, /\$\{\{\s*vars\./);
   assert.doesNotMatch(job, /SMOKE_PLAIN_SESSION_STATE/);
-  assert.match(job, /postgres:16-bookworm@sha256:[a-f0-9]{64}/);
-  assert.match(job, /redis:7-alpine@sha256:[a-f0-9]{64}/);
-  assert.match(job, /quay\.io\/soketi\/soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
+  assert.match(job, /ghcr\.io\/hypertask-ai\/ci-postgres:16-bookworm@sha256:[a-f0-9]{64}/);
+  assert.match(job, /ghcr\.io\/hypertask-ai\/ci-redis:7-alpine@sha256:[a-f0-9]{64}/);
+  assert.match(job, /ghcr\.io\/hypertask-ai\/ci-soketi:[^@\s]+@sha256:[a-f0-9]{64}/);
   assert.match(job, /health-cmd "wget [^"]+http:\/\/127\.0\.0\.1:6001"/);
   assert.match(job, /session_secret=\$\(openssl rand -hex 32\)/);
   assert.match(job, /printf '::add-mask::%s\\n' "\$session_secret"/);
@@ -116,6 +116,28 @@ test("required browser smoke runs layout lock with live modes and every registry
   assert.match(layout, /composer top must be below the last comment bottom/);
   assert.match(layout, /only the composer area may follow the last comment/);
   assert.match(layout, /toBeLessThanOrEqual\(640\)/);
+});
+
+test("required browser smoke runs the layout lock matrix in both flag runs and checks layout approvals", async () => {
+  const [workflow, config, spec, lib] = await Promise.all([
+    source(".github/workflows/ci-tests.yml"),
+    source("playwright.config.smoke.ts"),
+    source("e2e/smoke/layout-lock-matrix.spec.ts"),
+    source("e2e/smoke/lib/layout-lock-matrix.ts"),
+  ]);
+  const job = workflow.slice(workflow.indexOf("  browser-smoke:"), workflow.indexOf("  production-test-warning:"));
+  const runs = job.match(/npx playwright test[^\n]*e2e\/smoke\/layout-lock-matrix\.spec\.ts/g);
+  assert.equal(runs?.length, 2);
+  assert.ok(job.indexOf(runs[0]) < job.indexOf("--all-flags-on"));
+  assert.ok(job.indexOf(runs[1], job.indexOf("--all-flags-on")) > job.indexOf("--all-flags-on"));
+  assert.match(job, /name: Layout change needs a recorded approval[\s\S]*node \.github\/scripts\/layout-lock-approval\.mjs/);
+  assert.match(job, /BASE_SHA: \$\{\{ github\.event\.pull_request\.base\.sha \}\}/);
+  assert.match(job, /name: Upload layout lock screenshots[\s\S]*test-results\/layout-lock-matrix\//);
+  assert.match(config, /name: 'Matrix', testMatch: \/layout-lock-matrix/);
+  assert.match(lib, /MATRIX_WIDTHS = \[1920, 1440, 1280, 1100, 950, 768, 390\]/);
+  for (const page of ["ticket-short-thread", "ticket-long-thread", "name: 'board'", "name: 'inbox'", "name: 'search'"]) assert.ok(spec.includes(page), page);
+  assert.match(spec, /requestAnimationFrame/);
+  assert.match(spec, /LAYOUT_LOCK_MATRIX_UPDATE/);
 });
 
 test("browser fixture seeding rejects a nonlocal database before any write", () => {

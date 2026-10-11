@@ -21,7 +21,7 @@ test("only ticket page routes count as ticket pages", () => {
 });
 
 test("the bottom bar and its inset hide on ticket pages only behind the HTPR-6860 flag", () => {
-  const keys = read("src/lib/flags/keys.ts");
+  const keys = require("./helpers/flag-files.cjs").source();
   assert.match(keys, /HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG =\s*"htpr-6860-mobile-page-hide-dock"/);
   const shell = read("src/components/ProviderGlobal/GloablProviders.tsx");
   const reservations = read("src/hooks/General/usePageLoadReservations.ts");

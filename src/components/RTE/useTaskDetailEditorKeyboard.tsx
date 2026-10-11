@@ -9,7 +9,7 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorContext) {
-  const { consistentCommentShortcuts, keepDirectTaskOpen, isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
+  const { isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
 
 
   const handleKeydown = (e: any) => {
@@ -121,8 +121,6 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
         key: e.key,
         shiftKey: e.shiftKey,
         altKey: e.altKey,
-        consistentCommentShortcuts,
-        keepDirectTaskOpen,
         isInboxFlow,
         isCommentMode: mode === "create-comment",
         inInbox,

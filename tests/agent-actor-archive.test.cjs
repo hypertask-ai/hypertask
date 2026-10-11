@@ -140,6 +140,7 @@ function loadArchiveHandler({
   };
 
   const stubs = {
+    "@/lib/api/task-writes/route": { withTaskWriteFlag: (handler) => handler },
     "@/lib/prisma": {
       __esModule: true,
       default: {

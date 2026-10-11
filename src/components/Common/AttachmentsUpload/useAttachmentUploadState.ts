@@ -1,6 +1,5 @@
 import { useContext, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
-import { processFiles } from "@/utils/helperFunctions/helperFunctions";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useEditorState } from "@tiptap/react";
 import { mobileEditorTriggerText } from "./mobileCommentComposer";
@@ -74,7 +73,7 @@ export function useAttachmentUploadState(context: Context) {
     clearFiles,
     resetFiles,
     setFileItems,
-  } = useFileUpload(props.filesFromParent);
+  } = useFileUpload(props.filesFromParent, props.onFilesSelected, props.onUploadFailed);
   const removeAttachment = (name: string) => {
     if (backgroundTaskUploads) {
       discardUnboundCreateTaskUploads(
@@ -201,28 +200,7 @@ export function useAttachmentUploadState(context: Context) {
   }, [isRecording, audioProcessing]);
 
   const handleDrop = async (files: File[]) => {
-    const startingId = fileItems.length;
-
-    // Filter out duplicates before processing
-    const uniqueFiles = Array.from(files).filter(
-      (newFile) =>
-        !fileItems.some(
-          (existingFile) =>
-            existingFile.file.name === newFile.name &&
-            existingFile.file.size === newFile.size
-        )
-    );
-
-    if (uniqueFiles.length === 0) {
-      resetDropFiles && resetDropFiles();
-      return;
-    }
-
-    const newFileItems = await processFiles(
-      uniqueFiles as unknown as FileList,
-      startingId
-    );
-    setFileItems((prevItems) => [...prevItems, ...newFileItems]);
+    await handleDroppedFiles(files);
     resetDropFiles && resetDropFiles();
   };
 

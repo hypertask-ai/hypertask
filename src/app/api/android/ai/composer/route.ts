@@ -5,6 +5,7 @@ import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { getTeamAiSettingsForViewer } from "@/utils/controllers/teams/getTeamAiSettingsForViewer";
 import {
   resolveTeamByokApiKey,
+  getAiDefaultModelContext,
   resolveTeamCustomEndpoint,
 } from "@/app/api/ai/_lib/byokKeys";
 import { lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
@@ -57,14 +58,21 @@ export async function GET(request: NextRequest) {
         })),
       ),
     ]);
+    const defaultContext = await getAiDefaultModelContext({ trustedTeamId: project.teamId, userId: ctx.user.id }, undefined, storePlanId);
     const providersWithByok = new Set(
       providerCredentials
         .filter(
           ({ configured }) =>
-            configured || (storePlanId === "BYOK" && Boolean(gatewayCredential)),
+            (!defaultContext.haiku55Enabled || storePlanId !== "Free") &&
+            (configured || (storePlanId === "BYOK" && Boolean(gatewayCredential))),
         )
         .map(({ provider }) => provider),
     );
+    if (defaultContext.byok) {
+      providersWithByok.add(
+        defaultContext.byok.provider === "openrouter" ? "openrouter" : "anthropic",
+      );
+    }
     return NextResponse.json({
       success: true,
       projectId: project.id,
@@ -74,6 +82,8 @@ export async function GET(request: NextRequest) {
         storePlanId,
         providersWithByok,
         lunaFree: await lunaFreePlanEnabled(ctx.user.id),
+        haiku55Enabled: defaultContext.haiku55Enabled,
+        haikuDefaultEnabled: defaultContext.haikuDefaultEnabled,
       }),
     });
   } catch (cause) {

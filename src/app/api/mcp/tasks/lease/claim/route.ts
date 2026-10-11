@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth';
+
 import prisma from '@/lib/prisma';
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
 import {
@@ -20,6 +21,7 @@ type LeaseRow = {
 };
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -271,4 +273,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     );
   }
+
+  })(request)
 }

@@ -6,6 +6,15 @@ function required(name) {
   return value;
 }
 
+// Creating the alert needs write access: prefer the full-access key (YPER4-241).
+export function postHogApiKey(env = process.env) {
+  const full = env.POSTHOG_FULL_API_KEY?.trim();
+  if (full) return full;
+  const personal = env.POSTHOG_PERSONAL_API_KEY?.trim();
+  if (!personal) throw new Error("POSTHOG_FULL_API_KEY or POSTHOG_PERSONAL_API_KEY is required");
+  return personal;
+}
+
 async function request(url, options = {}) {
   const response = await fetch(url, options);
   const body = await response.json().catch(() => ({}));
@@ -53,7 +62,7 @@ export async function configurePostHogErrorAlert() {
   }
   const host = hostUrl.origin;
   const projectId = required("POSTHOG_SERVER_PROJECT_ID");
-  const apiKey = required("POSTHOG_PERSONAL_API_KEY");
+  const apiKey = postHogApiKey();
   const webhookUrlObject = new URL(required("POSTHOG_ERROR_WEBHOOK_URL"));
   if (
     webhookUrlObject.protocol !== "https:" ||

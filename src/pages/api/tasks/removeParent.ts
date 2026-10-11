@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
@@ -40,4 +41,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/remove-parent")).POST,
+);

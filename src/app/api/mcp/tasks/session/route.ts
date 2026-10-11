@@ -1,5 +1,6 @@
+import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
-import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+
 import prisma from '@/lib/prisma'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { normalizeSessionStatus, sessionStatuses } from '@/lib/mcp/tasks/sessionStatus'
@@ -39,6 +40,7 @@ const SESSION_SELECT = {
  * Body: { task_id | ticket_number, project_id?, session_id, resume_command?, status? }.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -198,6 +200,8 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Task Session] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
 
 /**
@@ -205,6 +209,7 @@ export async function POST(request: NextRequest) {
  * List the work-sessions attached to a task, most-recently-seen first.
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -242,4 +247,6 @@ export async function GET(request: NextRequest) {
     console.error('[MCP Task Session] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

@@ -4,7 +4,7 @@
 // helper taking down every task write) without ever persisting anything, and it
 // must be behind the MCP bearer-token auth. These tests run the REAL modules
 // (src/lib/taskCardActions/writeProbe.ts + writeLocks.ts, src/lib/prisma.ts)
-// against a throwaway postgres:16-alpine container — no mocked Prisma client,
+// against a throwaway PostgreSQL 16 Alpine container — no mocked Prisma client,
 // no stubbed $executeRaw, no source-text assertions for the DB behavior.
 //
 // Coverage (all against real PostgreSQL):
@@ -29,7 +29,7 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 
-const PG_IMAGE = process.env.HTPR_PG_IMAGE || "postgres:16-alpine";
+const PG_IMAGE = process.env.HTPR_PG_IMAGE || "ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea";
 const PG_USER = "ht";
 const PG_PASSWORD = "ht";
 const PG_DB = "ht_test";

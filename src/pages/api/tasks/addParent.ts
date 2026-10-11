@@ -1,3 +1,4 @@
+import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import AddParentTask from "@/utils/controllers/tasks/addParent";
 import { updateTaskSingle } from "@/utils/controllers/tasks/single";
@@ -41,4 +42,6 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default withTaskWriteFlag(handler, "POST", async () =>
+  (await import("@/lib/api/task-writes/add-parent")).POST,
+);

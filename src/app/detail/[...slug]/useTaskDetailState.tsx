@@ -27,6 +27,10 @@ import { useTaskRelations } from "@/hooks/Task Detail/useTaskRelations";
 import { useGetSectionsMoveTask } from "@/hooks/MultiPages/useGetSectionsMoveTask";
 import { createTaskDetailInitialScrollGuard } from "@/lib/taskDetailInitialScroll";
 import { markTaskDetailPhase, TASK_DETAIL_COMP_MOUNT_MARK, TASK_DETAIL_SUSPENSE_COMMIT_MARK } from "@/lib/analytics/taskDetailPhaseTimings";
+import { useAuth } from "@/hooks/General/useAuth";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_6972_SUBTASK_LINK_FLAG, HTPR_6991_BACK_FIRST_OPEN_FLAG } from "@/lib/flags/keys";
+import { cachedTaskDetailKey } from "@/lib/navigation/cachedTaskDetail";
 
 export interface TaskDetailProps {
   isMobile: boolean;
@@ -116,6 +120,16 @@ export function useTaskDetailState({
     scrollElementRef,
   } = useTaskContext();
   const _parsedTask = useMemo(() => JSON.parse(_currentTask), [_currentTask]);
+  const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
+  const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
+  const { authenticatedUserId } = useAuth();
+  useEffect(() => {
+    if ((!subtaskLink && !backFirstOpen) || embedded || authenticatedUserId !== currentUser?.id || !(_parsedTask.id > 0)) return;
+    // An authorized Next route must remain available to native Back/Forward,
+    // even when Next later drops its custom history marker or waits for RSC.
+    const key = cachedTaskDetailKey(currentUser.id, _parsedTask.id);
+    if (!queryClient.getQueryState(key)) queryClient.setQueryData(key, _parsedTask);
+  }, [subtaskLink, backFirstOpen, embedded, authenticatedUserId, currentUser?.id, _parsedTask, queryClient]);
   const { markAsDone, navigateToNextTask, navigateToPreviousTask } =
     useArchiveAndNavigate();
   const { callBackHandlerRemoveParent } = useUpdateSubtask();

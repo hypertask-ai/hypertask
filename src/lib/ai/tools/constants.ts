@@ -27,6 +27,8 @@ export const CLAUDE_MODELS = new Set([
   "claude-opus-5.5",
   "claude-opus-5-5",
   "claude-opus-5",
+  "claude-haiku-5.5",
+  "claude-haiku-5-5",
 ]);
 
 export const OPENAI_MODELS = new Set([
