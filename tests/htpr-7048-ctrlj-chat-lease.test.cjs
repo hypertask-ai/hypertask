@@ -141,7 +141,7 @@ async function composeTask() {
     "@/lib/deriveCurrentBoardBilling": { deriveCurrentBoardBilling: () => ({}) },
     "@/utils/aiWriterUtils": { extractTitleAndDescription: () => ({ title: "Saved task", description: "<p>Body</p>" }) },
     "@/utils/htmlEscape": { escapeHtml: (text) => text },
-    "./taskWriterMedia": { extractTaskWriterMedia: (html) => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => {}, restoreTaskWriterMedia: (html) => html },
+    "./taskWriterMedia": { extractTaskWriterMedia: (html) => ({ html, media: [] }), createTaskWriterMediaTokenFactory: () => {}, restoreTaskWriterMedia: (html) => html, stripTaskWriterMediaTokens: (text) => text },
     "@/lib/createTaskAttachmentUploads": { bindCreateTaskUploads: () => {} },
     "@/utils/api/global/apiHelpers/createTaskGloballycontroller": { default: async () => { calls.push("save"); return { resposne: { newTask: { id: 42 } } }; } },
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getActiveFiltersFromProject: () => undefined },
