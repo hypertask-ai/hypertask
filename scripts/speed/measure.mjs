@@ -12,6 +12,8 @@ export const PHONE_PROFILE = Object.freeze({
   deviceScaleFactor: 3,
   userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_4 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.4 Mobile/15E148 Safari/604.1',
 });
+// New label so seven-day comparisons never mix runs from the old desktop-like phone layout.
+export const PHONE_PROFILE_KEY = 'phone-iphone-dpr3-4g-4x-390x844';
 export function withPhoneProfile(browser) {
   return { newContext: options => browser.newContext({ ...options, ...PHONE_PROFILE }) };
 }
@@ -273,7 +275,7 @@ async function main() {
     shared.readPosts.add('/api/search/document');
     shared.readGets.add('/api/search/values');
     browser = await shared.playwright().chromium.launch({ headless: true });
-    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', 'phone-4g-4x-390x844'], observationTailMs: 2000, serviceWorkers: 'blocked' };
+    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked' };
     const doctor = await shared.setup(browser, false);
     try {
       const identity = await doctor.request.post(BASE + '/api/app-shell/bootstrap');

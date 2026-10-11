@@ -247,4 +247,8 @@ test('phone profile is a real phone: mobile user agent and device scale factor 3
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /shared\.setup\(mobile \? withPhoneProfile\(browser\) : browser, mobile\)/);
   assert.match(source, /Phone layout is \$\{row\.innerWidth\} wide, expected 390/);
+  // Old-profile history must not count as the same conditions in seven-day comparisons.
+  const { PHONE_PROFILE_KEY } = await analyst;
+  assert.notEqual(PHONE_PROFILE_KEY, 'phone-4g-4x-390x844');
+  assert.match(source, /profiles: \['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY\]/);
 });
