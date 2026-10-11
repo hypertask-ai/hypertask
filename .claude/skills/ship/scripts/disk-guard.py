@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Conservative disk cleanup for the Agent Kit's shared development host."""
 import argparse
+import contextlib
 from datetime import datetime, timezone
+import errno
 import fcntl
+import io
 import json
 import os
 from pathlib import Path
+import re
 import shlex
 import shutil
 import stat
@@ -19,6 +23,18 @@ DAY = 86400
 SCAN_SKIP = {'.git', 'node_modules', '.next', '.cache', '.venv', 'target', 'dist', '__pycache__'}
 DISPOSABLE = {'node_modules', '.next', 'dist', 'build', 'out', 'coverage', '.turbo', '.cache',
               'target', 'zig-cache', '.zig-cache', 'zig-out', '__pycache__', '.pytest_cache'}
+# Disk thresholds in percent used. Caches go first so the disk never reaches the 80% cleanup line.
+CACHE_AT, CACHE_TARGET, CLEAN_AT, CRITICAL_AT = 75, 70, 80, 90
+# Only caches the owning tool rebuilds on its own. puppeteer, prisma and current
+# Playwright browsers are only fetched by an install step, so they are never listed here.
+TOOL_CACHES = ('go-build', 'node-gyp', 'zig', 'uv')
+CACHE_CATEGORIES = ('docker-volumes', 'playwright-old', 'tool-caches', 'npx-cache', 'next-build', 'npm-cache')
+# Named volumes scripts/run-app-smoke-isolated.sh leaves behind when its cleanup trap is killed.
+SMOKE_VOLUME = re.compile(r'^ht-smoke-(build|state|dependencies)-[a-z0-9_-]+$')
+BROWSER_DIR = re.compile(r'^([a-z][a-z0-9_]*)-([0-9]+)$')
+NPM_PROGRAMS = {'npm', 'npx', 'npm-cli.js', 'npx-cli.js'}
+# Home-relative folders no cache rule may touch, at any depth or as an ancestor.
+NEVER_CACHE = ('.config', '.ssh', '.claude', '.codex', '.local/state/vcc-evidence')
 
 
 def command(args, cwd=None):
@@ -29,7 +45,7 @@ def inside(path, parent):
     return path.anchor == parent.anchor and path.parts[:len(parent.parts)] == parent.parts
 
 
-def inventory(path, exclude=(), owned=False):
+def inventory(path, exclude=(), owned=False, links=False):
     """Do not follow links or cross mounts. Uncertainty must block deletion."""
     root = path.lstat()
     newest, size = root.st_mtime, 0
@@ -42,7 +58,8 @@ def inventory(path, exclude=(), owned=False):
         if owned and info.st_uid != os.getuid():
             raise ValueError('foreign owner')
         if stat.S_ISLNK(info.st_mode):
-            if owned:
+            # links=True: a cache may hold links (node_modules/.bin); they are counted, never followed.
+            if owned and not links:
                 raise ValueError('symlink')
             newest = max(newest, info.st_mtime)
             size += info.st_blocks * 512
@@ -82,7 +99,7 @@ with os.scandir('/proc') as entries:
     processes = [entry.name for entry in entries if entry.name.isdigit()]
 for pid in processes:
     process = '/proc/' + pid
-    links = [process + '/cwd', process + '/root']
+    links = [process + '/cwd', process + '/root', process + '/exe']
     try:
         with os.scandir(process + '/fd') as entries:
             links.extend(entry.path for entry in entries)
@@ -116,7 +133,7 @@ def process_paths(proc=Path('/proc'), processes=None):
         uid, unreadable = None, False
         try:
             uid = process.stat().st_uid
-            links = [process / 'cwd', process / 'root']
+            links = [process / 'cwd', process / 'root', process / 'exe']
             try:
                 links.extend((process / 'fd').iterdir())
             except FileNotFoundError:
@@ -156,6 +173,78 @@ def unreadable_but_harmless(process):
         return False
 
 
+# .env files and Playwright storageState logins (YPER4-228). Wider patterns would match
+# ordinary package files in node_modules and keep every npx cache forever.
+SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
+
+
+def sensitive_inside(path):
+    """Credential-looking files keep a cache candidate. Inspection errors count as found."""
+    pending = [path]
+    try:
+        while pending:
+            item = pending.pop()
+            if SENSITIVE_NAME.search(item.name):
+                return True
+            if stat.S_ISDIR(item.lstat().st_mode):
+                pending.extend(item.iterdir())
+    except OSError:
+        return True
+    return False
+
+
+def cmdline_paths(proc=Path('/proc')):
+    """Absolute paths and program names on every command line; an unreadable one makes the scan incomplete."""
+    paths, programs, complete = set(), set(), True
+    for process in proc.iterdir():
+        if not process.name.isdigit():
+            continue
+        try:
+            raw = (process / 'cmdline').read_bytes()
+        except (FileNotFoundError, ProcessLookupError):
+            continue
+        except OSError:
+            complete = False
+            continue
+        args = [arg for arg in raw.decode(errors='replace').split('\0') if arg]
+        # npm rewrites its title into one string ("npm exec next build"), so take the first word too.
+        heads = [arg.split()[0] for arg in args[:2] if arg.split()]
+        try:
+            heads.extend((process / 'comm').read_text(errors='replace').split()[:1])
+        except (FileNotFoundError, ProcessLookupError):
+            pass
+        except OSError:
+            complete = False
+        programs.update(Path(head).name for head in heads)
+        for arg in args:
+            # Also catch --cache=/path, PATH-like lists and rewritten one-string titles.
+            pieces = [arg, arg.partition('=')[2], *re.split(r'[=:,\s]', arg)]
+            paths.update(Path(piece) for piece in pieces if piece.startswith('/'))
+    return paths, programs, complete
+
+
+def docker_available():
+    return shutil.which('docker') is not None
+
+
+def docker_mounts():
+    """Host paths bind-mounted into running containers; their processes are invisible to /proc paths."""
+    if not docker_available():
+        return set()
+    ids = command(['docker', 'ps', '-q']).split()
+    if not ids:
+        return set()
+    output = command(['docker', 'inspect', '--format', '{{range .Mounts}}{{.Source}}{{"\\n"}}{{end}}', *ids])
+    return {Path(line) for line in output.splitlines() if line.startswith('/')}
+
+
+def docker_bytes(text):
+    match = re.fullmatch(r'([0-9.]+)\s*([kKMGT]?B)', str(text or '').strip())
+    if not match:
+        return 0
+    return int(float(match[1]) * 1000 ** ['B', 'kB', 'MB', 'GB', 'TB'].index(match[2].replace('K', 'k')))
+
+
 class Guard:
     def __init__(self, home=None, tmp=Path('/tmp'), dry=False, verbose=False, budget=12 * 60):
         self.home = Path(home or Path.home()).resolve()
@@ -174,9 +263,13 @@ class Guard:
         self.kept = 0
         self.keep_reasons = {}
         self.gh_cache = {}
+        self.open_cache = {}
         self.trees = set()
         self.failed_repos = {}
         self.process_snapshot = None
+        self.cmdlines = None
+        self.mounts = None
+        self.categories = {name: {'freed': 0, 'would_free': 0, 'paths': 0} for name in CACHE_CATEGORIES}
 
     def log(self, action, path, reason, freed=0):
         if action in {'kept', 'error'}:
@@ -270,12 +363,13 @@ class Guard:
             return 'process scan incomplete (permission or I/O error)'
         return None
 
-    def safety(self, path, age, exclude=(), refresh=False):
+    def safety(self, path, age, exclude=(), refresh=False, links=False):
         if path.is_symlink() or inside(path, self.protected):
             raise ValueError('symlink or protected main checkout')
-        newest, size = inventory(path, exclude, owned=True)
+        newest, size = inventory(path, exclude, owned=True, links=links)
         if self.now - newest <= age:
-            raise ValueError(f'newest mtime is not older than {age // DAY} days')
+            raise ValueError(f'newest mtime is not older than {age // DAY} days' if age >= DAY
+                             else f'newest mtime is not older than {age // 60} minutes')
         reason = self.busy(path, refresh)
         if reason:
             raise ValueError(reason)
@@ -451,6 +545,312 @@ class Guard:
                 except (OSError, subprocess.SubprocessError):
                     self.log('error', path, 'git or filesystem inspection failed')
 
+    # Re-creatable caches (YPER4-236). Every candidate passes safety(): owned, no links,
+    # no mounts, old enough, no process cwd/fd/root inside; plus cache_busy() below.
+    def cache_busy(self, path, refresh=False):
+        reason = self.busy(path)
+        if reason:
+            return reason
+        if refresh or self.cmdlines is None:
+            try:
+                self.cmdlines = cmdline_paths()
+            except OSError:
+                self.cmdlines = None
+                return 'process command-line scan failed'
+        paths, _, complete = self.cmdlines
+        if any(inside(p, path) for p in paths):
+            return 'process command line names a path inside'
+        if not complete:
+            return 'process command-line scan incomplete'
+        if refresh or self.mounts is None:
+            try:
+                self.mounts = docker_mounts()
+            except (OSError, subprocess.SubprocessError):
+                self.mounts = None
+                return 'docker mount scan failed'
+        if any(inside(m, path) or inside(path, m) for m in self.mounts):
+            return 'running container mounts this path'
+        return None
+
+    def below_target(self):
+        return not self.dry and self.usage() < CACHE_TARGET
+
+    def discard(self, path):
+        """Move out of the way first, so a tool starting now sees an empty cache, then delete."""
+        trash = self.state / 'trash'
+        trash.mkdir(parents=True, exist_ok=True)
+        self.check_trash(trash)
+        target = trash / f'{int(self.now)}-{os.getpid()}-{self.removed}-{path.name}'
+        try:
+            path.rename(target)
+        except OSError as exc:
+            if exc.errno != errno.EXDEV:
+                raise ValueError('cannot move cache aside; kept')
+            target = path  # Another filesystem: delete in place after the same checks.
+        if target.is_dir() and not target.is_symlink():
+            shutil.rmtree(target)
+        else:
+            target.unlink()
+
+    def check_trash(self, trash):
+        info = trash.lstat()
+        if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode) or info.st_uid != os.getuid():
+            raise ValueError('trash folder is a link, not a folder, or not ours')
+
+    def empty_trash(self):
+        """Finish deletions an interrupted run moved aside; the trash only ever holds checked caches."""
+        trash = self.state / 'trash'
+        if self.dry or not os.path.lexists(trash):
+            return
+        try:
+            self.check_trash(trash)
+            items = list(trash.iterdir())
+        except (OSError, ValueError) as exc:
+            self.log('error', trash, f'trash not emptied: {exc}' if isinstance(exc, ValueError) else 'trash not readable')
+            return
+        for item in items:
+            try:
+                if item.lstat().st_uid != os.getuid():
+                    raise ValueError('foreign owner')
+                if item.is_dir() and not item.is_symlink():
+                    shutil.rmtree(item)
+                else:
+                    item.unlink()
+            except (OSError, ValueError):
+                self.log('error', item, 'trash entry from an interrupted run could not be deleted')
+
+    def canonical(self, path):
+        """A link anywhere in the path (for example a linked cache folder) could aim a deletion at a
+        protected folder, so the real path must equal the lexical one. Protections use both forms."""
+        real = Path(os.path.realpath(path))
+        if real != path:
+            raise ValueError('path or an ancestor is a link; real path differs')
+        for kept in NEVER_CACHE:
+            for root in {self.home / kept, Path(os.path.realpath(self.home / kept))}:
+                if inside(real, root) or inside(root, real):
+                    raise ValueError('credential, evidence or transcript folder')
+        return real
+
+    def cache_remove(self, category, path, age, reason, guard=None, check=None):
+        """guard: the folder whose use keeps the cache (the whole worktree for .next)."""
+        stats = self.categories[category]
+        try:
+            if time.monotonic() > self.deadline:
+                raise ValueError('time budget reached; next run continues')
+            self.canonical(path)
+            if sensitive_inside(path):
+                raise ValueError('.env or storageState file inside')
+            size = self.safety(path, age, links=True)
+            why = self.cache_busy(guard or path) or (check and check())
+            if why:
+                raise ValueError(why)
+            if self.dry:
+                stats['would_free'] += size
+                stats['paths'] += 1
+                self.planned += size
+                self.log('would remove', path, f'{category}: {reason}', size)
+                return
+            # Recheck right before removal with fresh process, command-line and container mount scans.
+            self.canonical(path)
+            if sensitive_inside(path):
+                raise ValueError('.env or storageState file inside')
+            size = self.safety(path, age, refresh=True, links=True)
+            why = self.cache_busy(guard or path, refresh=True) or (check and check())
+            if why:
+                raise ValueError(why)
+            self.discard(path)
+            stats['freed'] += size
+            stats['paths'] += 1
+            self.freed += size
+            self.removed += 1
+            self.log('removed', path, f'{category}: {reason}', size)
+        except ValueError as exc:
+            self.log('kept', path, f'{category}: {exc}')
+        except OSError:
+            self.log('error', path, f'{category}: filesystem inspection or deletion failed')
+
+    def volumes(self):
+        """Only volumes positively identified as disposable: leaked smoke volumes older than 1 day."""
+        stats = self.categories['docker-volumes']
+        if not docker_available():
+            return
+        try:
+            rows = json.loads(command(['docker', 'system', 'df', '-v', '--format', '{{json .Volumes}}'])) or []
+            if not isinstance(rows, list):
+                raise ValueError('unexpected volume listing')
+        except (OSError, subprocess.SubprocessError, ValueError):
+            self.log('error', 'docker volumes', 'docker-volumes: Docker unavailable or listing failed')
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                self.log('error', 'docker volumes', 'docker-volumes: unexpected volume row')
+                continue
+            name = str(row.get('Name', ''))
+            label = f'docker volume {name}'
+            try:
+                if self.below_target():
+                    return
+                if time.monotonic() > self.deadline:
+                    raise ValueError('time budget reached; next run continues')
+                if str(row.get('Links')) != '0':
+                    raise ValueError('volume attached to a container')
+                if not SMOKE_VOLUME.match(name):
+                    # Anonymous or named: age and attachment do not prove the data is rebuildable.
+                    raise ValueError('not a leaked smoke volume; kept')
+                created = command(['docker', 'volume', 'inspect', '--format', '{{.CreatedAt}}', name])
+                if self.now - datetime.fromisoformat(created).timestamp() <= DAY:
+                    raise ValueError('created within 1 day')
+                size = docker_bytes(row.get('Size'))
+                kind = 'leaked smoke volume'
+                if self.dry:
+                    stats['would_free'] += size
+                    stats['paths'] += 1
+                    self.planned += size
+                    self.log('would remove', label, f'docker-volumes: {kind}', size)
+                    continue
+                # Docker itself refuses to remove a volume any container uses.
+                command(['docker', 'volume', 'rm', name])
+                stats['freed'] += size
+                stats['paths'] += 1
+                self.freed += size
+                self.removed += 1
+                self.log('removed', label, f'docker-volumes: {kind}', size)
+            except ValueError as exc:
+                self.log('kept', label, f'docker-volumes: {exc}')
+            except (OSError, subprocess.SubprocessError, TypeError, AttributeError):
+                self.log('error', label, 'docker-volumes: inspection or removal failed')
+
+    def browsers_in_use(self, repos):
+        """Playwright revisions any install references: its own .links registry, every registered worktree, every npx package."""
+        sources = []
+        links = self.home / '.cache/ms-playwright/.links'
+        if links.is_dir():
+            sources.extend(Path(link.read_text().strip()) for link in links.iterdir())
+        for _, rows in repos:
+            for row in rows:
+                modules = row['path'] / 'node_modules'
+                sources += [modules / 'playwright-core', modules / '@playwright/test/node_modules/playwright-core',
+                            modules / 'playwright/node_modules/playwright-core']
+        npx = self.home / '.npm/_npx'
+        if npx.is_dir():
+            sources.extend(entry / 'node_modules/playwright-core' for entry in npx.iterdir())
+        used = set()
+        for source in sources:
+            spec = source / 'browsers.json'
+            if not spec.is_file():
+                continue
+            for browser in json.loads(spec.read_text())['browsers']:
+                name = browser['name'].replace('-', '_')
+                for revision in [browser['revision'], *(browser.get('revisionOverrides') or {}).values()]:
+                    used.add((name, str(revision)))
+        if not used:
+            raise ValueError('no Playwright install references found')
+        return used
+
+    def npm_running(self):
+        """Reason to keep the npm cache, or None when no npm or npx process runs."""
+        if self.cmdlines is None or NPM_PROGRAMS & self.cmdlines[1]:
+            return 'npm or npx process running'
+        return None
+
+    def open_pr(self, repo, row):
+        """Same open-PR rule as worktree removal; any doubt keeps the worktree untouched."""
+        branch = row.get('branch', '').removeprefix('refs/heads/')
+        if not branch:
+            return 'detached worktree; open PR cannot be ruled out'
+        try:
+            if branch in self.open_heads(repo):
+                return 'OPEN PR for branch; worktree never touched'
+        except (ValueError, OSError, subprocess.SubprocessError, AttributeError, TypeError) as exc:
+            return f'open PR check failed: {exc}'
+        return None
+
+    def open_heads(self, repo):
+        """Open PR head branches of the repo's GitHub origin: one gh call per repository per run,
+        separate from the per-branch cap of the worktree sweep. A failure is cached and keeps everything."""
+        url = command(['git', 'remote', 'get-url', 'origin'], repo)
+        match = re.search(r'github\.com[:/]([\w.-]+/[\w.-]+?)(?:\.git)?/?$', url)
+        if not match:
+            raise ValueError('origin is not a GitHub repository')
+        slug = match[1]
+        if slug not in self.open_cache:
+            heads = None
+            try:
+                rows = json.loads(command(['gh', 'pr', 'list', '--repo', slug, '--state', 'open',
+                                           '--limit', '500', '--json', 'headRefName']))
+                if isinstance(rows, list) and len(rows) < 500 and all(
+                        isinstance(r, dict) and isinstance(r.get('headRefName'), str) for r in rows):
+                    heads = {r['headRefName'] for r in rows}
+            except (OSError, subprocess.SubprocessError, ValueError):
+                pass
+            self.open_cache[slug] = heads
+        if self.open_cache[slug] is None:
+            raise ValueError('open PR list unavailable, malformed or truncated')
+        return self.open_cache[slug]
+
+    def caches(self, repos):
+        """Free re-creatable caches, cheapest to rebuild first, until the disk is below CACHE_TARGET."""
+        self.empty_trash()
+        self.volumes()
+        groups = []
+        browsers = self.home / '.cache/ms-playwright'
+        if browsers.is_dir() and not browsers.is_symlink():
+            try:
+                used = self.browsers_in_use(repos)
+                found = {}
+                for entry in browsers.iterdir():
+                    match = BROWSER_DIR.match(entry.name)
+                    if match and entry.is_dir() and not entry.is_symlink():
+                        found.setdefault(match[1], []).append((int(match[2]), entry))
+                for name, revisions in found.items():
+                    newest = max(revisions)[0]
+                    for revision, entry in sorted(revisions):
+                        if revision != newest and (name, str(revision)) not in used:
+                            groups.append(('playwright-old', entry, 7 * DAY,
+                                           'old browser revision no install references', None, None))
+            except (OSError, ValueError, KeyError, TypeError, AttributeError):
+                self.log('kept', browsers, 'playwright-old: cannot prove which browser revisions are in use')
+        for name in TOOL_CACHES:
+            path = self.home / '.cache' / name
+            if path.is_dir() and not path.is_symlink():
+                groups.append(('tool-caches', path, 2 * DAY, 'tool rebuilds this cache on demand', None, None))
+        npx = self.home / '.npm/_npx'
+        if npx.is_dir() and not npx.is_symlink():
+            try:
+                entries = sorted(npx.iterdir())
+            except OSError:
+                entries = []
+                self.log('error', npx, 'npx-cache: folder not readable')
+            for entry in entries:
+                groups.append(('npx-cache', entry, 7 * DAY, 'npx reinstalls this package on next use', None, None))
+        builds = []
+        for repo, rows in repos:
+            for row in rows:
+                tree = row['path']
+                if tree in self.failed_repos or tree == self.protected or inside(tree, self.protected):
+                    continue
+                build = tree / '.next'
+                try:
+                    if build.is_dir() and not build.is_symlink():
+                        builds.append((build.lstat().st_mtime, str(build), build, tree, repo, row))
+                except OSError:
+                    continue
+        for _, _, build, tree, repo, row in sorted(builds, key=lambda b: b[:2]):
+            # A process or container using any part of the worktree keeps its build folder,
+            # and a worktree with an open PR is never touched at all.
+            groups.append(('next-build', build, 2 * DAY, 'next build output of an idle worktree', tree,
+                           lambda repo=repo, row=row: self.open_pr(repo, row)))
+        cacache = self.home / '.npm/_cacache'
+        if cacache.is_dir() and not cacache.is_symlink():
+            # No npm running at all and one quiet hour since the last cache write.
+            groups.append(('npm-cache', cacache, 3600, 'npm refetches packages on demand', self.home / '.npm',
+                           self.npm_running))
+        for category, path, age, reason, guard, check in groups:
+            if self.below_target():
+                self.log('kept', 'caches', f'disk below {CACHE_TARGET}% target; remaining caches kept')
+                return
+            self.cache_remove(category, path, age, reason, guard, check)
+
     def usage(self):
         info = os.statvfs('/')
         used = info.f_blocks - info.f_bfree
@@ -524,14 +924,25 @@ class Guard:
         self.critical(used)  # Set the safety hold before any potentially slow inspections.
         repos = self.discover()
         self.worktrees(repos)
-        if used >= 80:
+        # A dry run previews every cache at any usage; a real run starts at CACHE_AT.
+        if used >= CACHE_AT or self.dry:
+            try:
+                self.caches(repos)
+            except Exception:
+                # Never let a cache bug stop the 80% cleanup, the critical flag or the status write.
+                self.log('error', 'caches', 'cache phase failed; remaining caches kept')
+        if used >= CLEAN_AT:
             self.temporary()
             self.images()
         after = self.usage()
         self.critical(after)
-        status = {'used_percent': round(after, 2), 'level': 'critical' if after >= 90 else 'clean' if after >= 80 else 'ok',
+        status = {'used_percent': round(after, 2),
+                  'level': 'critical' if after >= CRITICAL_AT else 'clean' if after >= CLEAN_AT else 'ok',
                   'last_run': datetime.now(timezone.utc).isoformat(), 'freed': self.freed,
                   'would_free': self.planned, 'removed': self.removed, 'kept': self.kept,
+                  'thresholds': {'caches_from': CACHE_AT, 'caches_until': CACHE_TARGET,
+                                 'clean_from': CLEAN_AT, 'critical_from': CRITICAL_AT},
+                  'caches': self.categories,
                   'keep_reasons': self.keep_reasons,
                   'failed_repos': {str(path): reason for path, reason in self.failed_repos.items()}}
         if not self.dry:
@@ -591,11 +1002,14 @@ class Guard:
                         old_items += 1
                         old_bytes += info.st_blocks * 512
         lines.extend(['', f'npm _cacache: {old_items} files older than 30 days, {old_bytes} allocated bytes. '
-                      'keep: per-file age is not proof that no active npm process is using the cache.',
+                      'Per-file deletion stays off; the whole cache goes only when no npm runs (see below).',
                       '', '## Docker unused volumes', '',
-                      'keep: persistent data even when dangling. Docker CreatedAt is not last-used; '
-                      'last-used is unavailable unless supplied by the volume driver. Never auto-pruned.'])
+                      'Named volumes: keep, persistent data even when dangling. Docker CreatedAt is not last-used. '
+                      'Only leaked ht-smoke-{build,state,dependencies}-* volumes older than '
+                      '1 day are cleaned, from 75% used.'])
         try:
+            if not docker_available():
+                raise OSError('docker not installed')
             df = command(['docker', 'system', 'df', '-v'])
             dangling = command(['docker', 'volume', 'ls', '--filter', 'dangling=true', '--format', '{{.Name}}'])
             lines.extend(['', '```text', df, '```', '', 'Dangling volumes (keep; last-used unknown):'])
@@ -605,6 +1019,17 @@ class Guard:
                 lines.append(f'- {name}: keep; created {data.get("CreatedAt", "unknown")}; last-used {last_used}.')
         except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError):
             lines.append('keep: Docker inspection unavailable or failed.')
+        # Same checks as a real run, in dry mode: nothing is deleted or logged to disk.
+        probe = Guard(self.home, self.tmp, dry=True)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                probe.caches(probe.discover())
+        except Exception:
+            lines.extend(['', 'Re-creatable caches: preview failed; nothing is deleted by a report.'])
+        lines.extend(['', f'## Re-creatable caches (cleaned from {CACHE_AT}% used until below {CACHE_TARGET}%)', '',
+                      '| Category | Paths | Would free (allocated bytes) |', '| --- | ---: | ---: |'])
+        for name, stats in probe.categories.items():
+            lines.append(f'| {name} | {stats["paths"]} | {stats["would_free"]} |')
         self.state.mkdir(parents=True, exist_ok=True)
         path = self.state / f'report-{datetime.now(timezone.utc):%Y-%m-%d}.md'
         path.write_text('\n'.join(lines) + '\n')

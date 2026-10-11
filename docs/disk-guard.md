@@ -22,7 +22,68 @@ in place. Reinstall to update the installed copy. No crontab is used.
 ## Safety policy
 
 - Disk usage uses available space like `df`, without counting reserved blocks as
-  user-available. Below 80%, only eligible linked worktrees are considered.
+  user-available. Below 75%, only eligible linked worktrees are considered.
+- Thresholds (YPER4-236, https://app.hypertask.ai/detail/project-4060/236):
+  from **75%** the guard frees re-creatable caches and stops as soon as the disk
+  is below **70%**; from **80%** the `/tmp` and Docker image cleanup below also
+  runs; at **90%** the critical hold and alert stay exactly as before. 75% leaves
+  room for a few full builds (about 4 GB each) between 15-minute runs before the
+  80% line; 70% gives hysteresis so the guard does not run on every tick.
+- Cache categories, cheapest to rebuild first. Every path candidate must be
+  owned by us, on the same filesystem, free of mounts and special files, and
+  its real path (`os.path.realpath`) must equal its plain path, so neither the
+  candidate nor any parent folder (for example a linked `~/.cache` or
+  `~/.npm`) is a link. Protected-folder and process checks use that real path,
+  and protected folders are compared in both their plain and real form.
+  Links inside a cache (such as `node_modules/.bin`)
+  are removed as links and never followed. It must also pass the same process
+  scan as below, a command-line scan (no process argument names a path inside
+  it: each whole absolute argument, the value of `--key=/path`, and the parts
+  of rewritten one-string titles are all compared), and a running-container
+  bind-mount check. An unreadable command line or
+  failed Docker mount listing keeps every candidate. Any `.env*` or
+  storageState file inside keeps the candidate. Nothing under `~/.config`,
+  `~/.ssh`, `~/.claude`, `~/.codex` or `~/.local/state/vcc-evidence` is ever a
+  candidate (YPER4-228). The checks rerun right before each deletion. The
+  folder is first renamed into `~/.local/state/disk-guard/trash` so a tool
+  starting at that moment sees an empty cache. Only a cross-filesystem rename
+  (`EXDEV`) falls back to deleting in place; any other rename error keeps the
+  cache. A later run finishes trash left by an interrupted run, and refuses a
+  trash folder that is a link or not ours. An error anywhere in the cache phase
+  is logged with keep reason `cache phase failed; remaining caches kept` and
+  never stops the 80% cleanup, the critical flag or the status write.
+  1. `docker-volumes`: only volumes positively identified as disposable:
+     leaked `ht-smoke-{build,state,dependencies}-*` volumes from
+     `scripts/run-app-smoke-isolated.sh`, unused by any container (running or
+     stopped) and older than 1 day. Removed one by one with
+     `docker volume rm`. Every other volume, anonymous or named, is kept,
+     because age and attachment do not prove its data is rebuildable.
+     Nothing is pruned.
+  2. `playwright-old`: `~/.cache/ms-playwright/<browser>-<revision>` older
+     than 7 days. The newest revision of each browser is always kept, as is
+     any revision named in a `browsers.json` reached from Playwright's own
+     `.links` registry, any registered worktree's `node_modules`, or any npx
+     package. If no reference can be read, or one is malformed, all stay.
+  3. `tool-caches`: `~/.cache/go-build`, `node-gyp`, `zig` and `uv`, with no
+     write for 2 days. `puppeteer`, `prisma` and browser profiles are not
+     caches the tool rebuilds on its own and are never touched.
+  4. `npx-cache`: each `~/.npm/_npx/<hash>` package with no write for 7 days.
+     A running npx server keeps its package through the command-line scan.
+  5. `next-build`: the `.next` folder of a registered worktree (anywhere,
+     including `/tmp`) with no write for 2 days, oldest first. Any process,
+     command line or container that uses any part of that worktree keeps it.
+     A worktree whose branch has an open PR is never touched. Open PR head
+     branches come from one `gh pr list --repo <owner/name> --state open
+     --limit 500 --json headRefName` call per GitHub repository per run,
+     cached and separate from the worktree sweep's 60-call per-branch budget.
+     A detached worktree, a non-GitHub origin, or a failed, malformed or
+     truncated (500 rows) list keeps the folder.
+     The `~/projects/hypertask` main checkout is never touched.
+  6. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
+     process runs at all and nothing was written to it for one hour. npm is
+     found by the first word of each command line and by `/proc/<pid>/comm`,
+     because npm rewrites its title to one string such as `npm ci`.
+     Per-file deletion is not used.
 - At 80%, old user-owned `/tmp` leftovers and dangling Docker images can be
   cleaned. Every descendant's newest mtime must be older than two days. Links,
   mounts, special files, foreign owners, incomplete scans, active process paths,
@@ -34,7 +95,7 @@ in place. Reinstall to update the installed copy. No crontab is used.
 - Process inspection first tries a read-only sudo scan across all UIDs, including
   root: `sudo -n /usr/bin/python3 -I -c <fixed embedded script>`, without a shell
   and with a 60-second timeout. The constant script only lists `/proc` entries
-  and reads `cwd`, `root`, and `fd` symlink targets, strips ` (deleted)`, and
+  and reads `cwd`, `root`, `exe`, and `fd` symlink targets, strips ` (deleted)`, and
   returns absolute paths as JSON. Vanished processes/descriptors are skipped;
   other inspection errors fail the scan. No caller data enters the sudo command,
   nothing is written as root, and no privileged helper is installed.
@@ -85,8 +146,9 @@ in place. Reinstall to update the installed copy. No crontab is used.
   INFRA MANAGER, using the two `TELEGRAM_HYPERTASK_*` variables in
   `~/.config/hypertask-env.sh` or the environment. Attempts are limited to one
   per hour. Credentials and notification errors are never printed or logged.
-- Docker volumes are report-only, even when dangling. Images are pruned without
-  `-a`, so only dangling images are eligible.
+- Docker volumes other than leaked smoke volumes (cache category 1) are never
+  removed, even when dangling. Images are pruned without `-a`, so only
+  dangling images are eligible.
 
 ## State and report
 
@@ -96,13 +158,18 @@ keep reason, failed repository folders, and bytes freed. Per-item keeps are
 printed and logged only with `--verbose`; the default never writes those
 expanded details to disk. The log rotates before reaching 5 MiB, retaining only
 `log.1`. `status.json` records `used_percent`, `level` (`ok`, `clean`, `critical`),
-`last_run`, `freed`, removal/keep counts, `keep_reasons`, and `failed_repos`.
+`last_run`, `freed`, removal/keep counts, `keep_reasons`, `failed_repos`,
+`thresholds`, and `caches`: per category `freed` and `would_free` bytes and the
+number of `paths`. The same object is in the journal summary line, and each
+cache removal line names its category.
 Critical flag, alert marker, status, and log write errors never abort cleanup,
 including `ENOSPC`. If the log cannot be written, its line and a generic warning
 are sent to stderr. Alerts are not sent when their rate-limit marker cannot be
 saved.
 `--dry-run` only prints decisions, never changes state, deletes data, sends
-notifications, or prunes Docker. Its `would_free` is an allocated-size estimate,
+notifications, or prunes Docker. It previews every cache category at any disk
+usage and does not stop at the 70% target. Its `would_free` is an
+allocated-size estimate (Docker volume sizes come from `docker system df`),
 not a Docker image estimate. Actual worktree/image freed bytes are observed
 filesystem usage deltas and may reflect concurrent host activity.
 
@@ -111,8 +178,9 @@ worktrees whose gitdir is missing are listed as "orphan worktree folder, main re
 missing", with allocated size and newest mtime, always keep. Other discovery
 failures are listed with their inspection failure reason. It also lists
 sizes, newest ages and keep/delete recommendations for VCC evidence, br7 runs,
-retired-agent archives and npm caches, plus old `_cacache` file counts and
-Docker volume usage. Evidence is retained as audit proof. Archive paths include
+retired-agent archives and npm caches, plus old `_cacache` file counts,
+Docker volume usage, and a per-category table of what the cache rules would
+free right now. Evidence is retained as audit proof. Archive paths include
 `~/.local/share/retired-agents` and `~/.local/state/retired-agents*`. Docker
 creation time is not treated as last-used, and dangling does not prove data is
 safe to delete. Review the reasons before any future retention change.
@@ -127,5 +195,8 @@ node --test tests/ui-patterns.test.cjs
 ```
 
 Safety tests use temporary fake repositories and mock `gh` through PATH. The
-held-open-file test uses a real child process. They do not lower thresholds or
+held-open-file test uses a real child process. Fixtures pin disk usage at
+79% so results never depend on the host; threshold tests override it.
+`DISK_GUARD_TEST_HOST_PERCENT=10` fakes the host's fill level to prove this,
+and `DISK_GUARD_TEST_REAL_USAGE=1` drops the pin for comparison. They do not lower thresholds or
 operate on the production host's data.
