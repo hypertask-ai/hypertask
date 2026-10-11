@@ -5,7 +5,7 @@ import { firstMessageChatTitle } from "@/lib/ai/chatNames";
 
 /**
  * HTPR-7052: name a new chat from its first user message, before the reply starts.
- * Returns the guard for the later generated title (see StreamOptions.chatNameGuardTitle):
+ * Returns the guard for the later generated title (see runModelTurn):
  * undefined when the flag is off or this is not a first user turn, null when the chat
  * keeps a title the user chose, else the title just written.
  */

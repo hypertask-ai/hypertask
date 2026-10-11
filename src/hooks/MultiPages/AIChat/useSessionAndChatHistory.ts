@@ -1,6 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7052_CHAT_NAMES_FLAG } from "@/lib/flags/keys";
-import { currentUserAtom, composeTaskChatIntroAtom } from "@/store";
+import { currentUserAtom, composeTaskChatIntroAtom, currentProjectAtom, dockedChatScopeAtom, fullScreenChatScopeAtom } from "@/store";
 import type { ApiResponse } from "@/utils/axiosClient";
 import {
   AI_Chat_API,
@@ -34,13 +34,10 @@ export const useSessionAndChatHistory = (
   // loaded into view yet", never "there is no task" - so the init effect
   // below must wait for it instead of grabbing whatever session was last
   // active on a different ticket (HTPR-6100).
-  isTaskScoped = false,
-  // HTPR-7052: the board the chat is opened on, so a new chat can take its name.
-  boardId?: number
+  isTaskScoped = false
 ) => {
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const chatNames = useFlag(HTPR_7052_CHAT_NAMES_FLAG);
-  const nameBoardId = chatNames ? boardId : undefined;
   const [pendingComposeIntro, setComposeIntro] = useRecoilState(composeTaskChatIntroAtom);
   let composeIntro: typeof pendingComposeIntro = null;
   if (composeEnabled) composeIntro = pendingComposeIntro;
@@ -48,6 +45,16 @@ export const useSessionAndChatHistory = (
   const currentUser = useRecoilValue(currentUserAtom);
   const pathname = usePathname();
   const isDemo = pathname?.startsWith("/demo") ?? false;
+  // HTPR-7052: the board the chat is opened on (same scope rule as useAiChatState), so a new chat can take its name.
+  const currentProject = useRecoilValue(currentProjectAtom);
+  const dockedScope = useRecoilValue(dockedChatScopeAtom);
+  const fullScreenScope = useRecoilValue(fullScreenChatScopeAtom);
+  let scopedBoardId: number | undefined = fullScreenScope ?? undefined;
+  if (!(pathname?.startsWith("/chat") ?? false)) {
+    if (dockedScope === null) scopedBoardId = currentProject?.id;
+    else scopedBoardId = dockedScope === "all" ? undefined : dockedScope;
+  }
+  const nameBoardId = chatNames ? scopedBoardId : undefined;
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
   const [demoSessions, setDemoSessions] = useState<IChatSession[]>([]);

@@ -229,7 +229,7 @@ export function useAiChatState() {
     appendMessageToSessionCache,
     updateSessionTitle,
     deleteSession: deleteSessionInHistory,
-  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage, scopedProjectId);
+  } = useSessionAndChatHistory(taskId, shouldLoadChatHistory, isDetailPage);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const chatHistoryReadyRef = useRef(chatHistoryReady);

@@ -23,9 +23,13 @@ import { buildTools } from "@/lib/ai/tools";
 import type { StreamState } from "./streamState";
 
 import { generateModelReply } from "./modelReply";
+import { nameChatFromFirstMessage } from "./chatNames";
 
 export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest, skillResolution: Awaited<ReturnType<typeof resolveSkillsForAiRequest>>) {
-  const { body, dbUser, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, titleByokApiKey, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, chatNameGuardTitle } = state;
+  const { body, dbUser, heartbeatExecutionId, heartbeatTurn, userMessagePersisted, contextTaskId, titleByokApiKey, gatewayTags, usageProjectId, actingAgent, streamId, streamLease, firstTurn, requestMessage } = state;
+
+  // HTPR-7052: undefined = flag off (legacy); null = keep a manual title; string = title just written.
+  const chatNameGuardTitle = await nameChatFromFirstMessage({ enabled: firstTurn && !heartbeatTurn, sessionId: body.session_id, userId: dbUser.id, message: requestMessage });
 
   const agentPromptAddition = actingAgent
     ? `You are acting as "${actingAgent.displayName}", a native Hypertask agent. ` +
