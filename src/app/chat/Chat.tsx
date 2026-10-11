@@ -557,7 +557,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
             }
           }}
         >
-          {paged && pagingError && (
+          {pagingRequested && sessionPagingEnabled && pagingError && (
             <p role="alert" className="px-3 py-2 text-meta text-icon-dark-gray">
               Couldn’t load older chats. Scroll to try again.
             </p>
@@ -639,7 +639,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
               </section>
             ))
           )}
-          {paged && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
+          {pagingRequested && sessionPagingEnabled && hasMoreSessions && <div ref={historyEndRef} className="h-1" aria-hidden />}
         </div>
         <FullScreenChatRailResizeHandle />
       </aside>
