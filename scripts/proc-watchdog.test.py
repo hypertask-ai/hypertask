@@ -43,7 +43,8 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     notify.write_text(f'#!/bin/sh\necho "$1" > {t}/notify.target\ncat > {t}/notify.msg\n')
     notify.chmod(0o755)
     env = dict(os.environ, PROC_WATCHDOG_ONLY=tmp, PROC_WATCHDOG_STATE=str(t / 'state'),
-               PROC_WATCHDOG_NOTIFY=str(notify), PROC_WATCHDOG_GRACE='2')
+               PROC_WATCHDOG_NOTIFY=str(notify), PROC_WATCHDOG_GRACE='2',
+               PROC_WATCHDOG_DOCKER=str(t / 'no-docker'))  # never the real docker: it could remove real containers
 
     def run(*args, **extra):
         return subprocess.run([sys.executable, str(HERE / 'proc-watchdog.py'), *args], env=dict(env, **extra),
@@ -129,6 +130,29 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
           and not (t / 'state/unsent.txt').exists())
     if alive(sec):
         sec.kill()
+
+    # 5c. Premerge containers (taken over from premerge-local-sweep): only well-named ones older than 12 h go.
+    young = time.strftime('%Y-%m-%dT%H:%M:%S.123456789Z', time.gmtime())
+    docker = t / 'docker'
+    docker.write_text(f'''#!/bin/sh
+case "$1" in
+  ps) printf '%s\\n' ht-premerge-0123456789abcdef-postgres ht-premerge-fedcba9876543210-redis ht-premerge-bad-postgres ;;
+  inspect) case "$4" in
+    *0123456789abcdef*) echo "id-old 2026-01-01T00:00:00.123456789Z" ;;
+    *fedcba9876543210*) echo "id-young {young}" ;;
+    *) echo "id-bad 2026-01-01T00:00:00Z" ;; esac ;;
+  rm) echo "$4" >> {t}/docker.rm ;;
+esac
+''')
+    docker.chmod(0o755)
+    (t / 'notify.msg').unlink(missing_ok=True)
+    r = run('--dry-run', PROC_WATCHDOG_DOCKER=str(docker))
+    check('dry run lists only the old well-named container', 'would remove container ht-premerge-0123456789abcdef-postgres' in r.stdout
+          and 'fedcba' not in r.stdout and 'bad' not in r.stdout and not (t / 'docker.rm').exists())
+    run('sweep', PROC_WATCHDOG_DOCKER=str(docker))
+    check('old container removed, young and badly named kept', (t / 'docker.rm').read_text().split() == ['id-old'])
+    check('container removal logged and reported', '"kind": "container"' in (t / 'state/kills.log').read_text()
+          and 'removed 1 stale premerge container' in (t / 'notify.msg').read_text())
 
     # 6. Matching: real command lines from the VPS.
     sys.path.insert(0, str(HERE))

@@ -31,7 +31,7 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
-  exec python3 "$root/scripts/premerge-local-sweep.py" "$action"
+  exec python3 "$root/scripts/proc-watchdog.py" "$action"
 fi
 cd "$root"
 umask 077
