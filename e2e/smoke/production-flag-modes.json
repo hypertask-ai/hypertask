@@ -1,7 +1,7 @@
 {
   "source": "https://app.hypertask.ai/api/admin/flags",
   "view": "plain-qa",
-  "capturedAt": "2026-10-11T00:32:29.970Z",
+  "capturedAt": "2026-10-11T02:03:20.965Z",
   "modes": {
     "htpr-3533-google-calendar": "OWNER_AND_QA",
     "htpr-4228-admin-only-time-reports": "EVERYONE",
@@ -174,7 +174,7 @@
     "htpr-7077-task-writer-real-error": "EVERYONE",
     "htpr-7078-remove-connect-block": "EVERYONE",
     "htpr-7079-failed-ai-allowance": "EVERYONE",
-    "htpr-7085-ctrlj-writer-reason": "OFF",
+    "htpr-7085-ctrlj-writer-reason": "EVERYONE",
     "htpr-7086-skip-allowance-report": "EVERYONE",
     "htpr-7088-agent-comment-fanout": "EVERYONE",
     "htpr-7092-decisions": "OWNER_AND_QA",
