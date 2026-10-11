@@ -1,6 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { timingSafeEqual } from "crypto";
-import { getAuth } from "@/lib/firebase-admin";
 
 function hasOwnerCliCredential(authorization: string): boolean {
   const secret = process.env.ANNOUNCEMENTS_SECRET_KEY;
@@ -37,6 +36,9 @@ export async function requireAnnouncementAdmin(
   }
 
   try {
+    // HTPR-7126: load Firebase Admin only for Firebase tokens, so the owner CLI
+    // and unauthenticated requests never depend on it loading.
+    const { getAuth } = await import("@/lib/firebase-admin");
     const claims = await getAuth().verifyIdToken(match[1], true);
     if (claims.admin !== true) {
       res.status(403).json({ error: "Forbidden" });
