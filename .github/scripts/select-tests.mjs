@@ -53,7 +53,281 @@ const ALWAYS = [
 const EXTENSIONS = ["", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".mts", ".cts", ".json"];
 const LITERAL_RE = /"((?:[^"\\\n]|\\.)*)"|'((?:[^'\\\n]|\\.)*)'|`((?:[^`\\]|\\.)*)`/g;
 const JOIN_RE = /\b(?:path\.)?(?:join|resolve)\(/g;
-const DYNAMIC_RE = /\b(?:require|import)\((?!\s*(?:["'`]|(?:path\.)?(?:join|resolve)\())/;
+const DYNAMIC_RE = /\b(?:require|import)\((?!\s*(?:["'`)]|(?:path\.)?(?:join|resolve)\())/;
+
+const DYNAMIC_G = new RegExp(DYNAMIC_RE.source, "g");
+
+// Loader shims (YPER4-267). Tests load a TypeScript file with a small helper:
+// load("src/lib/x.ts", stubs) transpiles the file and hands it a require hook
+// like `(request) => stubs[request] ?? require(request)`. That inner require
+// forwards a specifier somebody else asked for, so on its own it says nothing
+// about unknown dependencies: the file the loader reads is named by a literal
+// at the call site (already an edge) and its own imports are traced from that
+// file. Such a require is not "dynamic". The loader is dangerous only when it
+// is called with a path the picker cannot read.
+const KEYWORDS = new Set(["if", "for", "while", "switch", "catch", "function", "return", "with", "else", "do", "try"]);
+const FN_RE =
+  /\bfunction\s*([A-Za-z_$][\w$]*)?\s*\(([^()]*)\)\s*\{|\(([^()]*)\)\s*=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*=>|(?<![\w$.])([A-Za-z_$][\w$]*)\s*\(([^()]*)\)\s*\{/g;
+
+// Index of the closer matching the opener at `open`, or -1.
+function matchClose(text, open) {
+  let depth = 0;
+  for (let i = open; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
+}
+
+// End of an expression-bodied arrow that starts at `from`.
+function expressionEnd(text, from) {
+  let depth = 0;
+  for (let i = from; i < text.length; i++) {
+    const c = text[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) return i;
+      depth--;
+    } else if ((c === ";" || c === ",") && depth === 0) return i;
+  }
+  return text.length;
+}
+
+function functionRanges(text) {
+  const fns = [];
+  FN_RE.lastIndex = 0;
+  let m;
+  while ((m = FN_RE.exec(text))) {
+    let name = m[1] ?? "";
+    const params = m[2] ?? m[3] ?? m[4] ?? m[6] ?? "";
+    const after = FN_RE.lastIndex;
+    if (m[5] !== undefined) {
+      if (KEYWORDS.has(m[5])) continue;
+      name = m[5];
+    }
+    let start;
+    let end;
+    if (m[3] !== undefined || m[4] !== undefined) {
+      start = after + text.slice(after).match(/^\s*/)[0].length;
+      end = text[start] === "{" ? matchClose(text, start) : expressionEnd(text, start);
+    } else {
+      start = after - 1;
+      end = matchClose(text, start);
+    }
+    if (end === -1) continue;
+    if (!name) {
+      const before = text.slice(Math.max(0, m.index - 80), m.index);
+      const decl = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?$/.exec(before);
+      if (decl) name = decl[1];
+    }
+    const ids = params
+      .split(",")
+      .map((p) => /^\s*(?:\.\.\.)?([A-Za-z_$][\w$]*)\s*(?:=|$)/.exec(p)?.[1])
+      .filter(Boolean);
+    fns.push({ name, params: new Set(ids), first: ids[0], start, end });
+  }
+  return fns;
+}
+
+// Splits non-literal require/import calls into loader shims (the argument is a
+// parameter of an enclosing function) and genuinely dynamic ones.
+function classifyDynamic(text, allowLoaders) {
+  const loaders = new Set();
+  let dynamic = false;
+  const fns = functionRanges(text);
+  DYNAMIC_G.lastIndex = 0;
+  let m;
+  while ((m = DYNAMIC_G.exec(text))) {
+    const arg = /^\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(text.slice(DYNAMIC_G.lastIndex));
+    const around = fns.filter((f) => f.start <= m.index && m.index <= f.end);
+    // Only test files and test helpers may hide a forwarding require behind a
+    // loader (their callers are validated). In src/ and scripts/, and for a
+    // loader with no traceable name (module.exports = (p) => require(p)), the
+    // file stays unresolvable.
+    const names = around.map((f) => f.name).filter((n) => n && n !== "require" && n !== "import");
+    // Only the first argument of a loader call is validated, so only the first
+    // parameter may flow into a require.
+    if (!allowLoaders || !arg || !around.some((f) => f.first === arg[1]) || names.length === 0) {
+      dynamic = true;
+      continue;
+    }
+    // Every named function around the forwarding require is a loader.
+    for (const n of names) loaders.add(n);
+  }
+  return { dynamic, loaders };
+}
+
+// Same-length copy of `text` with comments and string contents blanked out so
+// identifier scans ignore them. Code inside template `${...}` is kept.
+function maskNonCode(text) {
+  const out = text.split("");
+  const blank = (a, b) => {
+    for (let k = a; k < b && k < text.length; k++) if (text[k] !== "\n") out[k] = " ";
+  };
+  const stack = [];
+  let cur = 0;
+  let i = 0;
+  let inTemplate = false;
+  while (i < text.length) {
+    const c = text[i];
+    if (inTemplate) {
+      if (c === "\\") { blank(i, i + 2); i += 2; continue; }
+      if (c === "`") { inTemplate = false; blank(i, i + 1); i++; continue; }
+      if (c === "$" && text[i + 1] === "{") {
+        blank(i, i + 2);
+        stack.push(cur);
+        cur = 0;
+        inTemplate = false;
+        i += 2;
+        continue;
+      }
+      blank(i, i + 1);
+      i++;
+      continue;
+    }
+    if (c === "/" && text[i + 1] === "/") {
+      const e = text.indexOf("\n", i);
+      const end = e === -1 ? text.length : e;
+      blank(i, end);
+      i = end;
+    } else if (c === "/" && text[i + 1] === "*") {
+      const e = text.indexOf("*/", i + 2);
+      const end = e === -1 ? text.length : e + 2;
+      blank(i, end);
+      i = end;
+    } else if (c === '"' || c === "'") {
+      let k = i + 1;
+      while (k < text.length && text[k] !== c && text[k] !== "\n") k += text[k] === "\\" ? 2 : 1;
+      blank(i, k + 1);
+      i = k + 1;
+    } else if (c === "`") {
+      inTemplate = true;
+      blank(i, i + 1);
+      i++;
+    } else {
+      if (c === "{") cur++;
+      else if (c === "}") {
+        if (cur === 0 && stack.length > 0) {
+          cur = stack.pop();
+          inTemplate = true;
+          blank(i, i + 1);
+        } else cur--;
+      }
+      i++;
+    }
+  }
+  return out.join("");
+}
+
+const LOADER_ARG_OK =new Set(["__dirname", "root"]);
+const callCache = new Map();
+const rangeCache = new Map();
+const rangesOf = (file, text) => {
+  if (!rangeCache.has(file)) rangeCache.set(file, functionRanges(text));
+  return rangeCache.get(file);
+};
+
+// Literal paths `text` passes to `name(...)`, as [{ lit, bases }], or null when
+// any use of the name is not a direct call with a traced argument (a plain string
+// literal or a path.join/resolve of literals and __dirname/root).
+function loaderLiterals(file, text, name, loaders) {
+  const key = `${file}\0${name}\0${[...loaders].sort().join(",")}`;
+  if (callCache.has(key)) return callCache.get(key);
+  const masked = maskNonCode(text);
+  const re = new RegExp(`(?<![\\w$])${name.replace(/[\\^$.*+?()[\]{}|]/g, "\\$&")}(?![\\w$])`, "g");
+  let bad = false;
+  const lits = [];
+  let m;
+  while (!bad && (m = re.exec(masked))) {
+    const at = m.index;
+    const before = masked.slice(0, at).trimEnd();
+    const next = masked.slice(at + name.length);
+    // The loader's own definition.
+    if (/\bfunction\s*\*?$/.test(before) || /\b(?:const|let|var)$/.test(before)) continue;
+    if (/\bexports\s*\.$/.test(before) && /^\s*=(?!=)/.test(next)) continue;
+    if (/\bimport$/.test(before) && /^\s+from\b/.test(next)) continue;
+    const call = /^\s*\(/.exec(next);
+    if (!call) {
+      // Binding without a rename: `{ name } = require(...)`, `import { name }`,
+      // `export { name }`, `module.exports = { name }`. Everything else is a
+      // reference the picker cannot follow (.map(name), alias, bind, spread).
+      let ok = false;
+      if (/[{,]$/.test(before) && /^\s*[,}]/.test(next)) {
+        let depth = 0;
+        let j = at - 1;
+        for (; j >= 0; j--) {
+          if (masked[j] === "}") depth++;
+          else if (masked[j] === "{") {
+            if (depth === 0) break;
+            depth--;
+          }
+        }
+        const close = j >= 0 ? matchClose(masked, j) : -1;
+        if (close !== -1) {
+          const tail = masked.slice(close + 1);
+          const head = masked.slice(0, j).trimEnd();
+          ok =
+            /^\s*=\s*(?:await\s+)?require\s*\(/.test(tail) ||
+            /^\s*from\b/.test(tail) ||
+            /\bexport$/.test(head) ||
+            /\bexports\s*=$/.test(head);
+        }
+      }
+      if (ok) continue;
+      bad = true;
+      break;
+    }
+    const open = at + name.length + call[0].length - 1;
+    // Method definition `name(params) {`.
+    const closeCall = matchClose(masked, open);
+    if (closeCall !== -1 && /^\s*\{/.test(masked.slice(closeCall + 1)) && !/\.$/.test(before)) continue;
+    const rest = text.slice(open + 1);
+    // A nested call that forwards the enclosing loader's own first parameter
+    // unchanged adds nothing; its callers are checked instead. Any other nested
+    // call is validated like a normal call.
+    const fwd = /^\s*([A-Za-z_$][\w$]*)\s*[,)]/.exec(rest);
+    if (
+      fwd &&
+      rangesOf(file, text).some(
+        (f) => f.name && loaders.has(f.name) && f.first === fwd[1] && f.start <= at && at <= f.end,
+      )
+    ) continue;
+    const plain = /^\s*(?:"([^"\n]*)"|'([^'\n]*)'|`([^`$]*)`)\s*[,)]/.exec(rest);
+    if (plain) {
+      lits.push({ lit: plain[1] ?? plain[2] ?? plain[3], bases: ["caller", "loader", "root"] });
+      continue;
+    }
+    const j = /^\s*(?:path\.)?(?:join|resolve)\(/.exec(rest);
+    if (j) {
+      const inner = open + 1 + j[0].length - 1;
+      const close = matchClose(text, inner);
+      if (close !== -1) {
+        const args = text.slice(inner + 1, close).split(",").map((a) => a.trim());
+        if (args.every((a) => LOADER_ARG_OK.has(a) || /^(?:"[^"]*"|'[^']*'|`[^`$]*`)$/.test(a))) {
+          const base = args[0] === "__dirname" ? "caller" : args[0] === "root" ? "root" : "";
+          const segs = args
+            .map((a) => /^(?:"([^"]*)"|'([^']*)'|`([^`$]*)`)$/.exec(a))
+            .filter(Boolean)
+            .map((x) => x[1] ?? x[2] ?? x[3]);
+          if (segs.length === 0) {
+            bad = true;
+            break;
+          }
+          lits.push({ lit: path.posix.join(...segs), bases: base ? [base] : ["caller", "loader", "root"] });
+          continue;
+        }
+      }
+    }
+    bad = true;
+  }
+  const result = bad ? null : lits;
+  callCache.set(key, result);
+  return result;
+}
 
 const analysisCache = new Map();
 const existsCache = new Map();
@@ -114,7 +388,7 @@ function joinRefs(text, dir) {
 
 function analyze(file) {
   if (analysisCache.has(file)) return analysisCache.get(file);
-  const result = { edges: new Set(), refs: [], dynamic: false };
+  const result = { edges: new Set(), refs: [], dynamic: false, loaders: new Set(), text: "" };
   analysisCache.set(file, result);
   let text = "";
   try {
@@ -123,6 +397,7 @@ function analyze(file) {
     return result;
   }
   if (!/\.(?:[cm]?[jt]sx?)$/.test(file)) return result;
+  result.text = text;
   const dir = path.posix.dirname(file);
   // path.join(root, "src") is mostly the "@/" alias shim. A bare top-level
   // directory only counts as a dependency on its whole tree when the file
@@ -153,7 +428,11 @@ function analyze(file) {
   for (const { ref, prefix } of joinRefs(text, dir)) add(ref, prefix);
   // Any non-literal require/import makes the file unresolvable, whatever else
   // it resolves.
-  result.dynamic = DYNAMIC_RE.test(text);
+  if (DYNAMIC_RE.test(text)) {
+    const { dynamic, loaders } = classifyDynamic(text, file.startsWith("tests/"));
+    result.dynamic = dynamic;
+    result.loaders = loaders;
+  }
   return result;
 }
 
@@ -167,12 +446,20 @@ function reaches(testFile, changed) {
   const weak = new Set();
   const seen = new Set([testFile]);
   const queue = [testFile];
-  while (queue.length > 0) {
+  const loaders = new Set();
+  const loaderDirs = new Map();
+  const visit = () => {
+    while (queue.length > 0) {
     const file = queue.pop();
-    const { edges, refs, dynamic } = analyze(file);
+    const { edges, refs, dynamic, loaders: found } = analyze(file);
+    for (const name of found) {
+      loaders.add(name);
+      if (!loaderDirs.has(name)) loaderDirs.set(name, new Set());
+      loaderDirs.get(name).add(path.posix.dirname(file));
+    }
     // Reaching any unresolvable file (test, helper, src, script) means the
     // real dependencies are unknown, so the test always runs.
-    if (dynamic) return null;
+    if (dynamic) return false;
     if (changed.includes(file)) hit.add(file);
     for (const ref of refs) {
       for (const c of changed) {
@@ -186,6 +473,62 @@ function reaches(testFile, changed) {
         queue.push(next);
       }
     }
+  }
+    return true;
+  };
+  if (!visit()) return null;
+  // A loader shim is only safe while every call names its file with a literal
+  // that resolves to a real file. The literal is tried against the caller's
+  // dir, the loader file's dir and the repo root; each match is an edge, and no
+  // match leaves the test untraceable. New edges may add loaders, so repeat.
+  const done = new Set();
+  for (let again = true; again; ) {
+    again = false;
+    for (const file of [...seen]) {
+      if (loaders.size === 0) break;
+      if (!file.startsWith("tests/")) continue;
+      const { text } = analyze(file);
+      for (const name of [...loaders]) {
+        let dirCount = 0;
+        for (const set of loaderDirs.values()) dirCount += set.size;
+        const key = `${file}\0${name}\0${loaders.size}\0${dirCount}`;
+        if (done.has(key)) continue;
+        done.add(key);
+        const lits = loaderLiterals(file, text, name, loaders);
+        if (lits === null) return null;
+        for (const { lit, bases } of lits) {
+          const dirs = { caller: path.posix.dirname(file), root: "" };
+          const cands = new Set();
+          const rels = lit.startsWith("@/") ? [`src/${lit.slice(2)}`] : [lit];
+          for (const b of bases) {
+            const baseDirs = b === "loader" ? [...(loaderDirs.get(name) ?? [])] : [dirs[b]];
+            for (const bd of baseDirs) for (const r of rels) cands.add(clean(path.posix.join(bd, r)));
+          }
+          let found = false;
+          for (const ref of cands) {
+            for (const ext of EXTENSIONS) {
+              for (const cand of [ref + ext, `${ref}/index${ext}`]) {
+                // A candidate the PR deletes or renames no longer exists but is
+                // still an edge.
+                if (changed.includes(cand)) {
+                  hit.add(cand);
+                  found = true;
+                }
+                if (!isFile(cand)) continue;
+                found = true;
+                if (!seen.has(cand)) {
+                  seen.add(cand);
+                  queue.push(cand);
+                  again = true;
+                }
+              }
+            }
+          }
+          if (!found) return null;
+        }
+      }
+    }
+    if (queue.length > 0 && !visit()) return null;
   }
   return { hit, weak };
 }
