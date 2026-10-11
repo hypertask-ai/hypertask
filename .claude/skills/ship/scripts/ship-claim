@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# ship-claim: the whole claim step, with a race check (YPER4-264).
+#   ship-claim <TICKET>                 claim, re-read the comments, step back if another agent claimed first
+#   ship-claim decide <RESUME_ID> <comments.json>   pure decision from a saved comments read (tests use this)
+# Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error.
+# Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id.
+# Same agent claiming twice is one claimant. A claim is ignored when its agent posted a newer
+# "Stepping back" comment. Staleness (6 h) is not applied here: board-check already lists stale
+# claims, and a stale claimant that posted first is rare enough that stepping back is the safe side.
+# Env overrides for tests: SHIP_CLAIM_VCC, SHIP_CLAIM_HYPERTASK, SHIP_CLAIM_RESUME.
+set -uo pipefail
+
+# Prints "WIN" or "LOSE<TAB><other agent name>". Needs ours: a Claimed. comment containing the resume id.
+decide() {
+  jq -r --arg rid "$1" '
+    def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
+    def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
+    def name: (.agent.displayName // .agent_display_name // key | tostring);
+    def at: [(.createdAt // ""), ((.id // 0) | tonumber? // 0)];
+    [.comments[] | select(key != "")] as $c
+    | [$c[] | select(txt | test("Stepping back"))] as $back
+    | [$c[] | select(txt | contains("Claimed."))
+        | . as $k | select(([$back[] | select(key == ($k | key) and at > ($k | at))] | length) == 0)] as $claims
+    | [$claims[] | select(txt | contains($rid))] as $ours
+    | if ($ours | length) == 0 then "NOOURS"
+      else ($ours | sort_by(at) | first) as $me
+        | ([$claims[] | select(key != ($me | key))] | sort_by(at) | first // null) as $other
+        | if $other != null and ($other | at) < ($me | at) then "LOSE\t" + ($other | name) else "WIN" end
+      end' "$2"
+}
+
+if [ "${1:-}" = decide ]; then
+  [ $# = 3 ] || { echo "usage: ship-claim decide <resume-id> <comments.json>" >&2; exit 2; }
+  decide "$2" "$3"; exit 0
+fi
+
+T=${1:-}
+[[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN>" >&2; exit 2; }
+VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}
+SID=${CLAUDE_CODE_SESSION_ID:-}
+RESUME=${SHIP_CLAIM_RESUME:-}
+[ -n "$RESUME" ] || { [ -n "$SID" ] && RESUME="claude --resume $SID"; }
+[ -n "$RESUME" ] || { echo "ship-claim: no session id (CLAUDE_CODE_SESSION_ID); cannot write the resume line" >&2; exit 2; }
+RID=${RESUME##* }
+
+"$VCC" comment add "$T" --text "<p><strong>Claimed.</strong> Session working it now.</p><p>Next: I examine and fix it. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
+  || { echo "ship-claim: claim comment failed" >&2; exit 2; }
+"$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
+"$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
+
+W=$(mktemp); trap 'rm -f "$W"' EXIT
+"$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
+  && jq -e '.comments | type == "array"' "$W" >/dev/null \
+  || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
+res=$(decide "$RID" "$W") || { echo "ship-claim: cannot judge comments on $T" >&2; exit 2; }
+case "$res" in
+  WIN) echo "ship-claim: $T claimed, you are first. Start work."; exit 0 ;;
+  NOOURS) echo "ship-claim: own claim comment not visible yet on $T; re-run ship-claim read-only check before working" >&2; exit 2 ;;
+  LOSE*)
+    other=${res#LOSE$'\t'}
+    "$VCC" task unassign "$T" --self >/dev/null || echo "ship-claim: unassign failed, remove yourself by hand" >&2
+    "$VCC" comment add "$T" --text "<p><strong>Stepping back: $other claimed this first.</strong></p><p>Next: $other carries on; nothing for you to do. Requested by Valentin in a Claude session, $(date +%F). Resume this Claude session: $RESUME</p>" >/dev/null \
+      || echo "ship-claim: step-back comment failed" >&2
+    echo "ship-claim: STEP BACK, $other claimed $T first. Do NOT start work; pick another ticket."
+    exit 3 ;;
+esac
