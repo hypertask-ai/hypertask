@@ -3,7 +3,7 @@
   "schemaVersion": 1,
   "cliPackage": {
     "name": "@hypertask/hypertask_cli",
-    "version": "2.0.9"
+    "version": "2.0.10"
   },
   "surfaces": {
     "api": [
