@@ -110,6 +110,8 @@ function harness() {
     },
   });
   const { default: create } = load("src/utils/controllers/tasks/create.ts", {
+    "@/lib/flags": { isFeatureEnabled: async () => false },
+    "@/lib/flags/definitions/htpr-7131-index-new-tickets": load("src/lib/flags/definitions/htpr-7131-index-new-tickets.ts", {}),
     "../description/common-description-create": { __esModule: true, default: async () => undefined },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: () => undefined },
