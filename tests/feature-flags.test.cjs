@@ -47,8 +47,10 @@ require.cache[authPath] = {
   loaded: true,
   exports: { getSessionUser: async () => ({ userId: sessionUserId }) },
 };
-const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
+const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src"), react: require.resolve("react") } });
 const flags = jiti(path.join(root, "src/lib/flags.ts"));
+const definitions = require("./helpers/flag-files.cjs").definitions();
+const declaredDefault = (definition) => definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA");
 
 test.beforeEach(() => {
   row = null;
@@ -60,6 +62,190 @@ test.beforeEach(() => {
     [6, { email: "valentin.yeo@gmail.com" }],
     [985, { email: "valentin@hypertask.ai" }],
   ]);
+});
+
+test("Flags dropdown filters default to Owner + QA as a feature and respect OFF", async () => {
+  const key = flags.HTPR_7069_FLAGS_DROPDOWN_FILTERS_FLAG;
+  assert.equal(key, "htpr-7069-flags-dropdown-filters");
+  const entry = (await flags.listFeatureFlagModes()).find(flag => flag.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", async () => {
+  const key = flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG;
+  assert.equal(key, "htpr-7056-ctrlj-split-tasks");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("Background Claude 5.5 fix defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7075_BACKGROUND_CLAUDE_FLAG;
+  assert.equal(key, "htpr-7075-background-claude");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7075");
+  assert.deepEqual(await Promise.all([0, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+});
+
+test("task-writer empty draft and research fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG;
+  assert.equal(key, "htpr-7060-task-writer-empty-and-research");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7060");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("agent reaction webhook fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7095_REACTION_WEBHOOK_FLAG;
+  assert.equal(key, "htpr-7095-reaction-webhook");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7095");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("deleted saved view leaves the tabs fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7097_DELETED_VIEW_LEAVES_TABS_FLAG;
+  assert.equal(key, "htpr-7097-deleted-view-leaves-tabs");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-11");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7097");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("task-writer real error fix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG;
+  assert.equal(key, "htpr-7077-task-writer-real-error");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.shippedOn, "2026-10-10");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7077");
+  assert.deepEqual(await Promise.all([985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("Full task tag names default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7020_TAG_FULL_NAME_FLAG;
+  assert.equal(key, "htpr-7020-tag-full-name");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("Ctrl+J deadline extraction defaults Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7054_CTRLJ_DUE_DATE_FLAG;
+  assert.equal(key, "htpr-7054-ctrlj-due-date");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(require("../e2e/smoke/production-flag-modes.json").modes[key], "EVERYONE");
+});
+
+test("Inbox reminder returns default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7064_INBOX_REMIND_RETURNS_FLAG;
+  assert.equal(key, "htpr-7064-inbox-remind-returns");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("Ctrl+O ticket sources default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7050_CTRL_O_LINKS_FLAG;
+  assert.equal(key, "htpr-7050-ctrl-o-links");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  const snapshot = require("../e2e/smoke/production-flag-modes.json");
+  assert.equal(snapshot.modes[key], "EVERYONE");
+});
+
+test("ticket reminders without Inbox items default to Everyone as a bugfix and respect OFF", async () => {
+  const key = flags.HTPR_7061_REMIND_WITHOUT_INBOX_FLAG;
+  assert.equal(key, "htpr-7061-remind-without-inbox");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF" };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("image chat task refresh is an Everyone bugfix and respects OFF", async () => {
+  const { HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG: key } = flags;
+  assert.equal(key, "htpr-7049-reload-after-image-chat");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("phone shortcuts help is an Everyone-default bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7045_SHORTCUTS_HELP_PHONE_FLAG;
+  assert.equal(key, "htpr-7045-shortcuts-help-phone");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/7045");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 2343, 7].map((id) => flags.isFeatureEnabled(key, id))), [true, true, true, true]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 2343, 7].map((id) => flags.isFeatureEnabled(key, id))), [false, false, false, false]);
+});
+
+test("activation analytics defaults Owner + QA and respects OFF", async () => {
+  const key = flags.HTPR_7034_ACTIVATION_ANALYTICS_FLAG;
+  assert.equal(key, "htpr-7034-activation-analytics");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
 test("sign-in expiry copy is an Everyone bugfix including anonymous recipients and respects OFF", async () => {
@@ -92,6 +278,42 @@ test("first-time email defaults to Owner + QA and fails closed for recipients wi
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 0), false);
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("task writer Sonnet pin is an Owner + QA feature and respects OFF", async () => {
+  const key = flags.HTPR_7038_TASK_WRITER_SONNET_FLAG;
+  assert.equal(key, "htpr-7038-task-writer-sonnet");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+});
+
+test("Haiku default is an Owner + QA feature, including system ID zero only after release", async () => {
+  const key = flags.HTPR_7038_HAIKU_DEFAULT_FLAG;
+  assert.equal(key, "htpr-7038-haiku-default");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "EVERYONE", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 0), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 985), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
 });
 
 test("Haiku 5.5 is an Owner + QA feature and respects OFF", async () => {
@@ -165,9 +387,7 @@ test("new-task window view context defaults to Everyone as a bugfix and respects
 test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG;
   assert.equal(key, "htpr-6999-ctrl-j-view-context");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-    .match(/key: HTPR_6999_CTRL_J_VIEW_CONTEXT_FLAG,[\s\S]*?\n  \},/)?.[0];
-  assert.match(definition, /kind: "bugfix",\n  \},$/);
+  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
@@ -183,9 +403,7 @@ test("Ctrl+J view context defaults to Everyone as a bugfix and respects OFF", as
 test("Inbox E first press defaults to Everyone as a bugfix and respects OFF", async () => {
   const key = flags.HTPR_7002_INBOX_E_FIRST_PRESS_FLAG;
   assert.equal(key, "htpr-7002-inbox-e-first-press");
-  const definition = require("node:fs").readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-    .match(/key: HTPR_7002_INBOX_E_FIRST_PRESS_FLAG,[\s\S]*?\n  \},/)?.[0];
-  assert.match(definition, /kind: "bugfix",\n  \},$/);
+  assert.equal(definitions.find((definition) => definition.key === key).kind, "bugfix");
   assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
@@ -226,6 +444,44 @@ test("demo login own-board bugfix defaults to Everyone and respects OFF", async 
 test("Ctrl+K column-delete bugfix defaults to Everyone and respects OFF", async () => {
   const key = flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG;
   assert.equal(key, "htpr-7036-ctrlk-column-delete-keeps-cards");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("double-click editing bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7044_DOUBLE_CLICK_TO_EDIT_FLAG;
+  assert.equal(key, "htpr-7044-double-click-to-edit");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("last-column delete message bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7040_LAST_COLUMN_DELETE_MESSAGE_FLAG;
+  assert.equal(key, "htpr-7040-last-column-delete-message");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("last-column no-empty-board-flash bugfix defaults to Everyone and respects OFF", async () => {
+  const key = flags.HTPR_7043_NO_EMPTY_BOARD_FLASH_FLAG;
+  assert.equal(key, "htpr-7043-no-empty-board-flash");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "bugfix");
   assert.equal(entry.mode, "EVERYONE");
@@ -289,38 +545,12 @@ test("declared flags default to Owner + QA, except Everyone-default bugfix flags
   // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
   // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
-  // Explicit defaults and bugfix defaults are checked separately.
-  const explicit = new Set(["htpr-6926-mcp-route-wrapper", "htpr-6966-skills-access-denial", "htpr-6970-phone-new-task-title", "htpr-6993-quick-add-view-context", "htpr-6997-new-task-window-view-context", "htpr-6999-ctrl-j-view-context", "htpr-7002-inbox-e-first-press", "htpr-7016-phone-board-cold-start"]);
-  for (const key of flags.FEATURE_FLAG_KEYS.filter((k) => !explicit.has(k))) {
+  for (const definition of definitions) {
+    const mode = declaredDefault(definition);
     assert.deepEqual(
-      await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))),
-      [true, true, [
-        flags.HTPR_6962_KEEP_ASSIGNEE_FLAG,
-        flags.HTPR_6972_SUBTASK_LINK_FLAG,
-        flags.HTPR_6978_SIZE_LABEL_CLICK_FLAG,
-        flags.HTPR_6980_INSTANT_COLUMN_DELETE_FLAG,
-        flags.HTPR_6985_DELETE_VIEW_ONCE_FLAG,
-        flags.HTPR_6989_BULK_ARCHIVE_UNDO_FLAG,
-        flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG,
-        flags.HTPR_6991_BACK_FIRST_OPEN_FLAG,
-        flags.HTPR_6994_SEARCH_ESC_LEAVES_FLAG,
-        flags.HTPR_6998_BOARD_SCROLL_RESTORE_FLAG,
-        flags.HTPR_7000_INBOX_NEXT_OPEN_FLAG,
-        flags.HTPR_7001_INBOX_NEXT_CACHED_FLAG,
-        flags.HTPR_7003_BOARD_BACK_FLAG,
-        flags.HTPR_7004_NO_LOADING_FLASH_FLAG,
-        flags.HTPR_7008_PHONE_FIRST_LOAD_JS_FLAG,
-        flags.HTPR_7008_PHONE_FIRST_PAINT_FLAG,
-        flags.HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG,
-        flags.HTPR_7029_KEEP_DEMO_BOARD_ON_EMAIL_SIGNUP_FLAG,
-        flags.HTPR_7030_GOOGLE_SIGNUP_STARTER_BOARD_FLAG,
-        flags.HTPR_7031_INVITE_EMAIL_FLAG,
-        flags.HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
-        flags.HTPR_7033_CLI_INSTALL_COMMAND_FLAG,
-        flags.HTPR_7035_DEMO_LOGIN_OWN_BOARD_FLAG,
-        flags.HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG,
-      ].includes(key)],
-      `${key} should use its declared rollout default`,
+      await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(definition.key, userId))),
+      [6, 985, 7].map((id) => flags.featureFlagModeEnabled(mode, id === 6, id === 985)),
+      `${definition.key} should use its declared rollout default`,
     );
   }
 });
@@ -536,335 +766,7 @@ test("declared flags remain listed with ticket details and can be changed", asyn
   const listed = await flags.listFeatureFlagModes();
   assert.deepEqual(
     listed.map(({ key, mode, updatedAt }) => ({ key, mode, updatedAt })),
-    [
-      { key: "htpr-3533-google-calendar", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-4228-admin-only-time-reports",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-4857-add-to-slack", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-5898-page-mentions", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-5906-shortcut-nudges", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-5908-local-writing-assistance",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-5913-consistent-comment-shortcuts",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-5937-show-column-in-all-views",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-5993-optimistic-task-uploads", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6002-shared-agent-chat", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6006-chat-confirm-ticket", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6059-lazy-emoji-list", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6094-agent-activity-rows", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6112-copy-current-url", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6115-agent-sdk", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6122-agent-run-activities", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6130-mobile-reminder-safe-area", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6141-ai-first-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6154-chat-stop-and-timeout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6155-chat-agent-brief", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6175-quick-entry-cards", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6177-auto-task-descriptions",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6197-confirmed-proposal-heading",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6215-my-tasks-cross-board-priority-sort",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6238-posthog-error-alert",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6243-manager-loop-activity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6278-chat-turn-failure-state",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6283-agent-chat-live-sort",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6284-agent-mention-routing",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6287-agent-chat-roster-status",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6312-my-tasks-priority-filter",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6354-ai-chat-alerts",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6363-task-writer-research",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6369-search-operators",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6370-search-chips",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6372-search-ranking",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6407-mobile-agent-chat-layout",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6421-my-tasks-shortcuts-width",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6422-my-tasks-views",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6427-row-shortcuts",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6444-my-tasks-bulk-selection",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6447-my-tasks-filter-parity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6455-my-tasks-time-group",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6456-my-tasks-table-columns",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6457-my-tasks-scopes",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6458-my-tasks-live-updates",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6459-my-tasks-overdue-badges",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6460-my-tasks-quick-add",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6461-my-tasks-snooze",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6470-project-delete",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6476-mobile-agent-chat-fullscreen",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6512-seed-team-agent",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6516-agent-attribution",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6533-mcp-client-eval",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6536-qa-login",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6542-team-scoped-management-keys",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6551-quiet-run-activity",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6553-agent-chat-polling",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6555-idle-comment-mic",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6556-mobile-description-first",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6557-agent-rooms",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6567-command-scope-picker", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6662-agent-log-name", mode: "OWNER_AND_QA", updatedAt: null },
-      {
-        key: "htpr-6688-search-autocomplete",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      {
-        key: "htpr-6722-latest-models",
-        mode: "OWNER_AND_QA",
-        updatedAt: null,
-      },
-      { key: "htpr-6752-instant-ticket-open", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6804-mcp-tools", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6817-slack-app", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6860-mobile-page-hide-dock", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6861-mobile-page-back-row", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6865-search-layout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6868-ticket-prefix", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6872-page-image-gallery", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6873-quick-entry-grow", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6878-search-label-scope", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6879-search-esc-back", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6880-search-commenter", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6881-search-fuzzy-person", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6882-search-match-highlights", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6885-single-undo-toast", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6892-cmdk-version", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6899-stable-layout", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6902-n-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6909-search-one-board-tabs", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6911-search-row-highlight", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6914-shift-c-quick-add", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6921-slack-marketplace", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6923-app-router-writes", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6924-rest-compat", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6925-typed-api-client", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6926-mcp-route-wrapper", mode: "OFF", updatedAt: null },
-      { key: "htpr-6927-mcp-v2", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6929-compose-task-writer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6930-my-tasks-kanban-reuse", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6934-server-first-screen", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6936-ask-ai-fullscreen", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6937-new-task-window", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6938-my-tasks-icon-controls", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6950-tooltip-top-layer", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6951-task-writing-progress", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6962-keep-assignee", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6964-flags-page-type-search", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6966-skills-access-denial", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6967-typed-task-reads", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6970-phone-new-task-title", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6972-subtask-link", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6975-typed-writes", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6978-size-label-click", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6979-typed-writes-sections-notifications", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-6980-instant-column-delete", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6985-delete-view-once", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6989-bulk-archive-undo", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6990-narrow-sidebar-width", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6991-back-first-open", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6993-quick-add-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6994-search-esc-leaves", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6997-new-task-window-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6998-board-scroll-restore", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-6999-ctrl-j-view-context", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7000-inbox-next-open", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7001-inbox-next-cached", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7002-inbox-e-first-press", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7003-board-back", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7004-no-loading-flash", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7008-phone-first-load-js", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7008-phone-first-paint", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7009-dedupe-task-detail-reads", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7010-haiku-5-5", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7016-phone-board-cold-start", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7025-welcome-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7026-agent-connect-check", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7027-agent-nudge-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7028-first-task-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7029-keep-demo-board-on-email-signup", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7030-google-signup-starter-board", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7031-invite-email", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7032-email-expiry-copy", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7032-first-time-email", mode: "OWNER_AND_QA", updatedAt: null },
-      { key: "htpr-7033-cli-install-command", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7035-demo-login-own-board", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7036-ctrlk-column-delete-keeps-cards", mode: "EVERYONE", updatedAt: null },
-      { key: "htpr-7037-shared-email-layout", mode: "OWNER_AND_QA", updatedAt: null },
-    ],
+    definitions.map((definition) => ({ key: definition.key, mode: declaredDefault(definition), updatedAt: null })),
   );
   listed.forEach(({ key, description, ticketUrl, shippedOn }) => {
     assert.ok(description.length > 20, `${key} needs a useful description`);
@@ -1035,6 +937,54 @@ test("the retired mobile Agent Chat viewport flag is hidden, immutable and enabl
   assert.equal((await flags.featureFlagsForUser(2343))[key], true);
 });
 
+test("the retired lazy emoji list flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-6059-lazy-emoji-list";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
+});
+
+test("the retired comment shortcuts flag is hidden, immutable and enabled for old tabs", async () => {
+  const key = "htpr-5913-consistent-comment-shortcuts";
+  assert.equal(flags.RETIRED_FEATURE_FLAG_KEYS.has(key), true);
+  assert.equal(flags.FEATURE_FLAG_KEYS.includes(key), false);
+  for (const mode of flags.FEATURE_FLAG_MODES) {
+    listedRows = [
+      { key, mode, updatedAt: new Date() },
+      { key: "htpr-6536-qa-login", mode: "OWNER_AND_QA", updatedAt: null },
+    ];
+    row = { mode, updatedAt: new Date() };
+    const listedKeys = new Set((await flags.listFeatureFlagModes()).map((flag) => flag.key));
+    assert.ok(listedKeys.has("htpr-6536-qa-login"), "positive control remains listed");
+    assert.equal(listedKeys.has(key), false);
+    for (const userId of [6, 985, 2343]) {
+      assert.equal((await flags.featureFlagsForUser(userId))[key], true);
+    }
+  }
+  await assert.rejects(flags.setFeatureFlagMode(key, "EVERYONE"), /Unknown feature flag/);
+  await assert.rejects(flags.setFeatureFlagKeep(key, true), /Unknown feature flag/);
+  listedRows = [];
+  row = null;
+  assert.equal((await flags.featureFlagsForUser(2343))[key], true);
+});
+
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
   listedRows = [{ key: "htpr-1111-aaa", mode: "OFF", updatedAt: null }];
   taskRows = [
@@ -1153,8 +1103,9 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
   const fixture = path.join(dir, "flags.ts");
   // Classify one real definition only in this module fixture, not in the production registry.
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === "htpr-6950-tooltip-top-layer" ? { ...definition, kind: "bugfix" } : definition))};`);
   fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-    .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", 'key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix",'));
+    .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
   const bugfixFlags = jiti(fixture);
   const key = "htpr-6950-tooltip-top-layer";
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
@@ -1186,8 +1137,9 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
   const key = "htpr-6950-tooltip-top-layer";
   for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
     const fixture = path.join(dir, `flags-${mode}.ts`);
+    fs.writeFileSync(path.join(dir, `definitions-${mode}.ts`), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(definitions.map((definition) => definition.key === key ? { ...definition, kind: "bugfix", defaultMode: mode } : definition))};`);
     fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-      .replace("key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG,", `key: HTPR_6950_TOOLTIP_TOP_LAYER_FLAG, kind: "bugfix", defaultMode: "${mode}",`));
+      .replaceAll("@/lib/flags/definitions", `./definitions-${mode}.ts`));
     const fixtureFlags = jiti(fixture);
     assert.equal(fixtureFlags.defaultFeatureFlagMode(key), mode);
     assert.equal((await fixtureFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);
@@ -1196,7 +1148,7 @@ test("explicit defaults beat bugfix classification in runtime and local seeds", 
 });
 
 test("historical Bug labels are display-only and preserve Owner + QA defaults and stored modes", async () => {
-  const key = flags.HTPR_6951_TASK_WRITING_PROGRESS_FLAG;
+  const key = flags.HTPR_6516_AGENT_ATTRIBUTION_FLAG;
   assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).kind, "bugfix");
   assert.deepEqual(await flags.featureFlagCandidateUserIds(key), [6, 985]);
   for (const mode of [null, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
@@ -1311,6 +1263,17 @@ test("board scroll restoration is an Everyone-default bugfix and respects OFF", 
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
+test("ticket page CLS fix is an Everyone-default bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7074_TICKET_PAGE_CLS_FLAG;
+  assert.equal(key, "htpr-7074-ticket-page-cls");
+  const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
+});
+
 test("narrow sidebar width is an Everyone-default bugfix and respects OFF", async () => {
   const key = flags.HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG;
   assert.equal(key, "htpr-6990-narrow-sidebar-width");
@@ -1332,4 +1295,44 @@ test("inbox-next-cached bugfix defaults to Everyone for plain QA and respects OF
   assert.equal(await flags.isFeatureEnabled(key, 2343), true);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 2343), false);
+});
+
+test("Ctrl+J chat lease fix defaults to Everyone as a bugfix and respects OFF", async () => {
+  const key = flags.HTPR_7048_CTRLJ_CHAT_LEASE_FLAG;
+  assert.equal(key, "htpr-7048-ctrlj-chat-lease");
+  const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
+  assert.equal(entry.kind, "bugfix");
+  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(await flags.isFeatureEnabled(key, 7), true);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+});
+
+test("flags page URL filters are an Owner + QA feature and respect Off", async () => {
+  const key = flags.HTPR_7058_FLAGS_PAGE_URL_FILTERS_FLAG;
+  assert.equal(key, "htpr-7058-flags-page-url-filters");
+  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("saved-choice reset is an Owner + QA feature and respects OFF", async () => {
+  const key = "htpr-7038-reset-saved-model-choices";
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
+  const entry = (await flags.listFeatureFlagModes()).find((entry) => entry.key === key);
+  assert.equal(entry.kind, "feature");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled(key, 6), true);
+  assert.equal(await flags.isFeatureEnabled(key, 985), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  row = { mode: "OFF", updatedAt: new Date() };
+  assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });

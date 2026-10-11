@@ -12,6 +12,7 @@ const userId = 100
 const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
   }).outputText
@@ -71,7 +72,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
   const aliases = {
     '@/lib/prisma': prisma,
     '@/lib/auth/getSessionUser': {},
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'test-agent-flag' },
+    '@/lib/agentRuns/model': {},
     '@/lib/flags/keys': loadTs('src/lib/flags/keys.ts', {}),
     '@/lib/auth/session': {
       SESSION_COOKIE: 'ht_session', SESSION_TTL_SECONDS: 3600,
@@ -89,7 +90,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/themePreferences': { themeCookieSeedValue: () => undefined },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
-    '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
+    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
@@ -121,6 +122,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/routing/detailWithoutTicket': { detailWithoutTicketRedirect: () => null },
     '@/lib/tutorial/keyboardShortcutTutorial': { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },
   }
+  aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
   aliases['@/lib/flags'] = loadTs('src/lib/flags.ts', aliases)
   aliases['@/lib/onboarding/installCommands'] = loadTs('src/lib/onboarding/installCommands.ts', {})
   aliases['@/utils/controllers/users/completeOnboardingStep'] = loadTs('src/utils/controllers/users/completeOnboardingStep.ts', aliases)

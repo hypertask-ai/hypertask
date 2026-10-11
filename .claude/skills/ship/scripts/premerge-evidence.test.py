@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -25,6 +26,8 @@ class PosterTests(unittest.TestCase):
         self.state = self.root / 'state'
         self.production = self.root / 'production-check'
         self.log = self.root / 'calls'
+        for leaked in ('SHIP_GIT', 'SHIP_GIT_CACHE', 'SHIP_GIT_REMOTE', 'GH_PAUSE_FILE'):
+            os.environ.pop(leaked, None)
         self.env = dict(os.environ, HOME=str(self.root),
                         PATH=f'{self.bin}:{os.environ["PATH"]}',
                         PREMERGE_STATUS_STATE=str(self.state),
@@ -45,23 +48,48 @@ if args[:2] == ['api', 'repos/hypertask-ai/hypertask/statuses/' + 'a' * 40]:
         sys.exit(1)
     with (root / 'statuses').open('a') as log:
         log.write('failure\\n')
+elif args[:2] == ['api', '-i'] and args[2].startswith('repos/hypertask-ai/hypertask/pulls?'):
+    sha = (root / 'head').read_text() if (root / 'head').exists() else 'a' * 40
+    etag = '"' + sha[:8] + '"'
+    if (root / 'two-pages').exists():
+        page = int(args[2].rsplit('page=', 1)[1])
+        link = 'Link: <https://api.github.com/next>; rel="next"\\r\\n' if page == 1 else ''
+        if page == 2 and (root / 'page2-error').exists():
+            sys.exit(1)
+        print('HTTP/2.0 200 OK\\r\\nEtag: ' + etag + '\\r\\n' + link + '\\r\\n'
+              + json.dumps([{'number': 997 + page, 'title': f'YPER4-{997 + page} [INFRA] Fixture', 'head': {'sha': sha}}]))
+        sys.exit(0)
+    if args[3:] == ['-H', 'If-None-Match: ' + etag]:
+        print('HTTP/2.0 304 Not Modified\\r\\nEtag: ' + etag + '\\r\\nX-Ratelimit-Remaining: 4000\\r\\n\\r\\n')
+        sys.exit(1)  # gh exits non-zero on a 304
+    print('HTTP/2.0 200 OK\\r\\nEtag: ' + etag + '\\r\\nX-Ratelimit-Remaining: 4001\\r\\n\\r\\n'
+          + json.dumps([{'number': n, 'title': f'YPER4-{n} [INFRA] Fixture', 'head': {'sha': sha}}
+                        for n in (998, 999)]))
 elif args[:1] == ['api']:
-    assert args == ['api', 'repos/hypertask-ai/hypertask/contents/.claude/skills/ship/scripts/ship-check?ref=production']
-    if (root / 'fetch-error').exists():
-        sys.exit(1)
-    import base64
-    content = base64.encodebytes((root / 'production-check').read_bytes()).decode()
-    print(json.dumps({'name': 'ship-check', 'encoding': 'base64', 'content': content}))
-elif args[:2] == ['pr', 'list']:
-    assert args[args.index('--base') + 1] == 'production'
-    print(json.dumps([{'number': n, 'title': f'YPER4-{n} [INFRA] Fixture',
-                       'headRefOid': 'a' * 40,
-                       'statusCheckRollup': [{'context': 'premerge-evidence', 'state': 'SUCCESS'}]}
-                      for n in (998, 999)]))
+    raise AssertionError('the contents API must not be called: ' + repr(args))
 else:
     raise AssertionError(args)
 ''')
         (self.bin / 'gh').chmod(0o755)
+        (self.bin / 'git').write_text('''#!/usr/bin/env python3
+import json, os, pathlib, sys
+root = pathlib.Path(os.environ['POSTER_TEST_ROOT'])
+args = sys.argv[1:]
+with (root / 'gitcalls').open('a') as log:
+    log.write(json.dumps(args) + '\\n')
+if args[:2] == ['init', '--bare']:
+    os.makedirs(args[-1], exist_ok=True)
+    open(args[-1] + '/HEAD', 'w').close()
+elif args[2:3] == ['fetch']:
+    if (root / 'fetch-error').exists():
+        sys.exit(1)
+elif args[2:3] == ['show']:
+    assert args[3] == 'refs/premerge/production:.claude/skills/ship/scripts/ship-check', args
+    sys.stdout.buffer.write((root / 'production-check').read_bytes())
+else:
+    sys.exit(1)
+''')
+        (self.bin / 'git').chmod(0o755)
         (self.bin / 'systemctl').write_text('''#!/usr/bin/env python3
 import json, os, pathlib, sys
 with (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'systemctl-calls').open('a') as log:
@@ -104,8 +132,121 @@ print('premerge-evidence: success (fixture)')
         self.assertEqual((self.state / 'ship-check').read_bytes(), self.production.read_bytes())
         self.assertEqual((self.state / 'ship-check').stat().st_mode & 0o777, 0o755)
         calls = [json.loads(line) for line in self.log.read_text().splitlines()]
-        self.assertEqual(sum(c[0] == 'api' for c in calls), 3)
-        self.assertEqual(sum(c[:2] == ['pr', 'list'] for c in calls), 3)
+        self.assertEqual(sum(c[0] == 'api' and c[1] != '-i' for c in calls), 0)
+        self.assertEqual(sum(c[:2] == ['api', '-i'] for c in calls), 3)
+        git_calls = [json.loads(line) for line in (self.root / 'gitcalls').read_text().splitlines()]
+        self.assertEqual(sum(c[2:3] == ['fetch'] for c in git_calls), 3)
+
+    def gh_calls(self):
+        return [json.loads(line) for line in self.log.read_text().splitlines()]
+
+    def test_unchanged_head_makes_one_conditional_list_call_and_no_per_pr_calls(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.gh_calls()
+        self.assertEqual(len(calls), 2)  # one list call per sweep, nothing else
+        self.assertEqual(calls[1][3:], ['-H', 'If-None-Match: "aaaaaaaa"'])  # 304 path
+        self.assertEqual(len(self.publications()), 2)
+        self.assertIn('gh-api: list_calls=1 list=304 rechecks=0 ratelimit_remaining=4000', result.stdout)
+        hours = json.loads((self.state / 'api-calls.json').read_text())
+        self.assertEqual(sum(h['calls'] for h in hours.values()), 2)
+        self.assertEqual(sum(h['rechecks'] for h in hours.values()), 2)
+
+    def test_changed_head_rechecks_only_changed_prs(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        (self.root / 'head').write_text('b' * 40)
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([p[1] for p in self.publications()[2:]], ['998', '999'])
+        self.assertIn('list=200 rechecks=2', result.stdout)
+        cached = json.loads((self.state / 'list.json').read_text())
+        self.assertEqual({r['headRefOid'] for r in cached['rows']}, {'b' * 40})
+
+    def test_stale_gh_loop_matcher_picks_only_old_gh_polling(self):
+        old, young = 3 * 3600, 600
+        ps = '\n'.join([
+            f'101 {old} gh pr checks 12 --watch',
+            f'102 {old} gh run watch 55',
+            f"103 {old} bash -c while true; do gh pr checks 12; sleep 30; done",
+            f'104 {young} gh pr checks 12 --watch',
+            f'105 {old} gh pr view 12',
+            f'106 {old} vim notes-about-gh-pr-checks--watch.txt',
+            f'107 {old} python3 /x/premerge-evidence.py',
+            f'108 {old} python3 /x/premerge-evidence.py --kill-stale-gh-loops',
+            f"109 {old} bash -c for i in 1 2; do echo hi; done",
+            f'110 {old} gh pr checks 12 --watch',
+            f"111 {old} bash -c while read f; do cp $f /bak; sleep 1; done; gh pr view 12",
+            f"112 {old} bash -c until s=$(gh pr checks 1); do sleep 60; done",
+            f'113 {old} bash -c while read f; do cp "$f" /bak; echo "gh pr view 12"; sleep 1; done',
+            f"114 {old} /bin/bash -c source x && eval 'until gh run view 5 | grep -q done; do sleep 30; done'",
+            f"115 {old} bash -c while read f; do cp $f /bak; echo gh pr view 12; sleep 1; done",
+            f"116 {old} bash -c while true; do echo sleep; x=1 gh pr view 1; done",
+        ])
+        found = poster.stale_gh_loops(ps, {110})
+        self.assertEqual([f[0] for f in found], [101, 102])
+
+    def test_kill_mode_signals_only_matches(self):
+        (self.bin / 'ps').write_text('#!/bin/sh\necho "4242 99999 gh run watch 1"\necho "4243 99999 sleep 9"\n')
+        (self.bin / 'ps').chmod(0o755)
+        with patch.dict(os.environ, self.env, clear=True), patch.object(os, 'kill') as kill:
+            poster.kill_stale_gh_loops()
+        kill.assert_called_once_with(4242, poster.signal.SIGTERM)
+
+    def test_revocation_covers_a_head_missing_from_the_cache(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        cache = json.loads((self.state / 'cache.json').read_text())
+        del cache['999']
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        (self.root / 'fetch-error').touch()
+        self.assertNotEqual(self.sweep().returncode, 0)
+        self.assertEqual(len((self.root / 'statuses').read_text().splitlines()), 2)
+
+    def test_two_page_list_is_followed_and_stores_no_etag(self):
+        (self.root / 'two-pages').touch()
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(p[1] for p in self.publications()), ['998', '999'])
+        self.assertIsNone(json.loads((self.state / 'list.json').read_text())['etag'])
+        self.assertEqual(self.sweep().returncode, 0)  # refetches both pages, nothing rechecked
+        self.assertEqual(len(self.publications()), 2)
+        self.assertEqual(sum(c[:2] == ['api', '-i'] for c in self.gh_calls()), 4)
+
+    def test_failed_second_page_refuses_the_sweep(self):
+        (self.root / 'two-pages').touch()
+        (self.root / 'page2-error').touch()
+        self.assertNotEqual(self.sweep().returncode, 0)
+        self.assertEqual(self.publications(), [])
+
+    def test_paused_sweep_makes_no_calls(self):
+        pause = self.root / 'pause-until'
+        pause.write_text(str(int(time.time()) + 3600))
+        self.env['GH_PAUSE_FILE'] = str(pause)
+        result = self.sweep()
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout + result.stderr, '')
+        for name in ('calls', 'gitcalls', 'published', 'statuses'):
+            self.assertFalse((self.root / name).exists(), name)
+        pause.write_text(str(int(time.time()) - 5))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+
+    def test_unchanged_head_is_skipped_and_ten_minute_refresh_rechecks(self):
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        cache = json.loads((self.state / 'cache.json').read_text())
+        for entry in cache.values():
+            entry['checked'] = time.time() - 300  # inside the ten-minute window
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 2)
+        for entry in cache.values():
+            entry['checked'] = time.time() - 700  # past the ten-minute window
+        (self.state / 'cache.json').write_text(json.dumps(cache))
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(len(self.publications()), 4)
 
     def test_fetch_failure_after_deleted_evidence_revokes_passing_statuses(self):
         folder = self.root / 'evidence/YPER4-999'
@@ -184,10 +325,12 @@ print('premerge-evidence: success (fixture)')
         for name in ('premerge-evidence.py', 'ship-check'):
             self.assertEqual((target / name).read_bytes(), (HERE / name).read_bytes())
         for suffix in ('service', 'timer'):
-            name = f'premerge-evidence.{suffix}'
-            self.assertEqual((self.root / '.config/systemd/user' / name).read_bytes(), (HERE / name).read_bytes())
+            for base in ('premerge-evidence', 'premerge-evidence-gh-loops'):
+                name = f'{base}.{suffix}'
+                self.assertEqual((self.root / '.config/systemd/user' / name).read_bytes(), (HERE / name).read_bytes())
         calls = [json.loads(line) for line in (self.root / 'systemctl-calls').read_text().splitlines()]
-        self.assertEqual(calls, [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'premerge-evidence.timer']])
+        self.assertEqual(calls, [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'premerge-evidence.timer'],
+                                 ['--user', 'enable', '--now', 'premerge-evidence-gh-loops.timer']])
         (target / 'ship-check').unlink()
         self.assertEqual(self.sweep(target / 'premerge-evidence.py').returncode, 0)
         self.assertEqual(len(self.publications()), 2)

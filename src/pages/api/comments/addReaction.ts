@@ -4,6 +4,8 @@ import { sendDataNewCommentFCM } from "@/utils/controllers/FCM";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
 import { broadcastTaskComment } from "@/lib/realtime/server";
 import { omitCommentSeen } from "@/utils/controllers/comments/readReceipts";
+import { persistCommentReactionWebhook, prepareCommentReactionWebhook } from "@/lib/agentWebhooks/commentReaction";
+import { publishAgentWebhookDeliveries } from "@/lib/agentWebhooks/outbox";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { userCanAccessTaskContent } from "@/utils/controllers/tasks/assertTaskAccess";
@@ -53,20 +55,30 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 },
             })
             if (findReaction.length===0 ){
-                const reaction = await prisma.reaction.create({
-                    data:{
-                        unified:unified,
-                        commentId:commentId,
-                        userId:userId,
-                        taskId:taskId,
-                        names:reactionNames,
-                        emoji:emoji
-                    },
-                    include:{
-                    user:true,
-                    comment:{include:{creator:true}},
-                    task:true
-                    }
+                // HTPR-7095: the reaction and its agent webhook outbox row are written together, then published after commit.
+                const webhookInput = { commentId, reactorUserId: userId, reactorIsAgent: false, emoji, added: true };
+                // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
+                const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
+                const { reaction, deliveryIds } = await prisma.$transaction(async (tx) => {
+                    const reaction = await tx.reaction.create({
+                        data:{
+                            unified:unified,
+                            commentId:commentId,
+                            userId:userId,
+                            taskId:taskId,
+                            names:reactionNames,
+                            emoji:emoji
+                        },
+                        include:{
+                        user:true,
+                        comment:{include:{creator:true}},
+                        task:true
+                        }
+                    })
+                    const deliveryIds = preparedWebhook
+                        ? await persistCommentReactionWebhook(tx, preparedWebhook, webhookInput)
+                        : [];
+                    return { reaction, deliveryIds };
                 })
                 const afterAppDomain=`detail/project-${reaction.task.projectId}/${reaction.task.uniqueIndex}`
 
@@ -78,6 +90,10 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
                      )
                 }
+                await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
+                    // The outbox row is stored; the outbox retry delivers it later.
+                    console.error("[comment-reaction] agent webhook publish failed", error);
+                });
                 void broadcastTaskComment(taskId, { originUserId: userId });
                 return res.status(200).json({
                     ...reaction,

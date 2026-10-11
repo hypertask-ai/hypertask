@@ -52,6 +52,7 @@ function harness() {
   };
   const mocks = {
     "@/lib/prisma": { __esModule: true, default: prisma },
+    "@/lib/telemetry/activationAnalytics": { trackActivation: async () => {} },
     "@/lib/onboarding/agentConnection": { getFirstAgentConnection: async (...args) => { connectionReads.push(args); if (state.failConnection) throw new Error("Connection unavailable"); return state.connection; } },
     "@/lib/redis": { getRedis: async () => redis },
     "@/lib/auth/requestBaseUrl": { fallbackBaseUrl: () => "https://app.hypertask.ai/" },
@@ -464,12 +465,12 @@ test("QA arm reuses endpoint with nudge flag independently of welcome, maintaini
   assert.ok(flags.every(([flag, id]) => flag === key && id === 985));
 });
 
-test("nudge is registered as a feature with Owner + QA default, server-gated with OFF respected and exact follow-up markers", async () => {
+test("nudge is registered as a feature with Owner + QA default, server-gated with OFF respected and successful-delivery analytics", async () => {
   let row = null;
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { __esModule: true, default: { featureFlag: { findUnique: async () => row, findMany: async () => [] }, user: { findUnique: async ({ where }) => ({ email: where.id === 985 ? "valentin@hypertask.ai" : "new@yopmail.com" }) } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7027_AGENT_NUDGE_EMAIL_FLAG, key); assert.equal(registry.defaultFeatureFlagMode(key), "OWNER_AND_QA");
   assert.equal((await registry.listFeatureFlagModes()).find((entry) => entry.key === key).kind, "feature");
@@ -478,7 +479,8 @@ test("nudge is registered as a feature with Owner + QA default, server-gated wit
   const source = read(modulePath);
   assert.match(source, /import \{ getFirstAgentConnection \} from "@\/lib\/onboarding\/agentConnection";/);
   assert.doesNotMatch(source, /function getFirstAgentConnection|HTPR-7026: replace/);
-  assert.equal(source.split('// HTPR-7034: trackActivation(userId, "lifecycle_email_sent", { type: "agent_nudge" })').length, 2);
-  assert.ok(source.indexOf('// HTPR-7034:') > source.indexOf('await sendEmail('));
+  assert.equal(source.split('void trackActivation(userId, "lifecycle_email_sent", { type: "agent_nudge" });').length, 2);
+  assert.match(source, /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/);
+  assert.doesNotMatch(source, /HTPR-7034/);
   assert.equal(load("src/lib/onboarding/emails/welcome.ts", harness().mocks).WELCOME_COHORT_START, "2026-10-09T00:00:00Z");
 });

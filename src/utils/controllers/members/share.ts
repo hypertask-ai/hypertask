@@ -51,6 +51,7 @@ const membersShare = async (userId: number, shareId: string) => {
                 members: {
                   some: {
                     userId: user.id,
+                    agentId: null,
                   },
                 },
               },

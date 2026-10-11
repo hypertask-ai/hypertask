@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { taskWriteRoute, type TaskWriteRoute } from "@/lib/api/task-writes/route";
 import { notificationWriteJson } from "./response";
-import notificationGetAll from "@/utils/controllers/notifications/getAll";
+import notificationGetAll from "@/utils/controllers/notifications/getAllWithDecisions";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const getRoute = taskWriteRoute({

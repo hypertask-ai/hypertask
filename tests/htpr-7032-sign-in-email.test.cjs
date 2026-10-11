@@ -10,6 +10,7 @@ const root = path.resolve(__dirname, '..')
 const testSecret = 'htpr-7032-unit-test-signing-key'
 
 function loadTs(relativePath, aliases = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: {
@@ -66,7 +67,11 @@ function harness(t, { existingUser = null, modes = {} } = {}) {
     '@/lib/prisma': { default: prisma, __esModule: true },
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
     '@/lib/flags/keys': keys,
-    '@/lib/agentRuns/model': { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: 'htpr-6282-agent-chat-stop-timeout' },
+    '@/lib/flags/definitions': loadTs('src/lib/flags/definitions.ts', {
+      '@/lib/flags/keys': keys,
+      '@/lib/agentRuns/model': {},
+    }),
+    '@/lib/agentRuns/model': {},
   })
   const { POST } = loadTs('src/app/api/auth/send-email-link/route.ts', {
     '@/lib/prisma': { default: prisma, __esModule: true },

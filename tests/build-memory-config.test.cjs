@@ -19,6 +19,10 @@ for (const smoke of [false, true]) {
         } : {}),
       };
       const configRequire = (specifier) => {
+        if (specifier === "node:child_process") return { execFileSync: (_node, args, options) => {
+          assert.deepEqual(args, ["scripts/generate-flag-index.mjs"]);
+          assert.equal(options.cwd, path.resolve(__dirname, ".."));
+        } };
         if (["@next/bundle-analyzer", "next-pwa"].includes(specifier)) {
           return () => (config) => config;
         }
@@ -31,8 +35,8 @@ for (const smoke of [false, true]) {
           },
         };
       };
-      new Function("require", "module", "process", source)(
-        configRequire, configModule, { env },
+      new Function("require", "module", "process", "__dirname", source)(
+        configRequire, configModule, { env, execPath: process.execPath }, path.resolve(__dirname, ".."),
       );
       const config = typeof configModule.exports === "function"
         ? await configModule.exports("phase-production-build", { defaultConfig: {} })

@@ -103,6 +103,7 @@ function fixture(options = {}) {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/flags": { HTPR_7028_FIRST_TASK_EMAIL_FLAG: "htpr-7028-first-task-email", HTPR_7037_SHARED_EMAIL_LAYOUT_FLAG: "htpr-7037-shared-email-layout", isFeatureEnabled: async () => true },
     "@/lib/mcp/boards/columnRole": load("src/lib/mcp/boards/columnRole.ts", {}),
+    "@/lib/telemetry/activationAnalytics": { trackActivation: () => {} },
     "@/lib/email/sendEmail": { sendEmail: async (input) => {
       calls.sent.push(input);
       if (options.sendFailure) throw new Error("Provider unavailable");
@@ -115,6 +116,7 @@ function fixture(options = {}) {
   const service = load(serviceFile, {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/agentFirstTaskEmail": scheduler,
+    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actor) => {
       assert.equal(id, userId); assert.equal(actor, agentId); return { ownerId: id };
     } },

@@ -4,6 +4,8 @@ import styles from "@/styles/tiptap.module.scss";
 import { EditorContent } from "@tiptap/react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import DragHandleTiptap from "./DragHandleTiptap";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7124_PHONE_DOUBLE_TAP_DESCRIPTION_FLAG } from "@/lib/flags/keys";
 
 const TiptapEditor = () => {
   const {
@@ -17,6 +19,9 @@ const TiptapEditor = () => {
     isEditable,
   } = useTiptapGlobalContext();
   const isMbl = useContext(MobileViewContext);
+  const phoneDoubleTapDescription = useFlag(HTPR_7124_PHONE_DOUBLE_TAP_DESCRIPTION_FLAG);
+  // HTPR-7124: taps on a read-only description must reach the container's double-tap detector.
+  const passTapsUp = phoneDoubleTapDescription && mode === "read-edit-description" && !isEditable;
   //  const allowedAttachmentModes = ["read-edit-description", "create-comment"]
 
   const addImage = (data: DataTransfer) => {
@@ -90,7 +95,7 @@ const TiptapEditor = () => {
         )}
         {editor ? (
           <EditorContent
-            onClick={(e) => !editor?.isFocused && e.stopPropagation()}
+            onClick={(e) => !passTapsUp && !editor?.isFocused && e.stopPropagation()}
             autoFocus={false}
             onDrop={isEditable ? onDropHandler : undefined}
             className=""

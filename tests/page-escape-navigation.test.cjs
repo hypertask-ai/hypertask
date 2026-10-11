@@ -44,6 +44,7 @@ const mocks = {
 
 // Run the real page component and navigation helpers, mocking only external UI/hooks.
 function load(relativePath) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const target = { exports: {} };
   const compiled = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },

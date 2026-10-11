@@ -421,7 +421,7 @@ test("trusted validation rejects candidate replacement of the canonical policy",
   assert.match(result.stderr, /Trusted parity policy evolution failed/);
 });
 
-test("trusted parity workflows pin a bounded native CLI transition", () => {
+test("trusted parity workflows pin the current native CLI and carry no transition", () => {
   const root = path.resolve(__dirname, "..");
   const runnerPackage = JSON.parse(
     fs.readFileSync(path.join(root, "config/parity/runner/package.json"), "utf8"),
@@ -476,27 +476,28 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
   assert.equal(verifierJob.env.TRUSTED_CLI_PACKAGE, packageName);
   assert.equal(productionJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
   assert.equal(verifierJob.env.TRUSTED_CLI_VERSION, contract.cliPackage.version);
+  for (const job of [productionJob, verifierJob]) {
+    assert.deepEqual(
+      Object.keys(job.env).filter((key) => key.includes("NEXT")),
+      [],
+    );
+    assert.match(job.env.TRUSTED_CLI_VERSION, /^\d+\.\d+\.\d+$/);
+    assert.match(job.env.TRUSTED_CLI_BINARY_VERSION, /^\d+\.\d+\.\d+$/);
+    assert.match(job.env.TRUSTED_CLI_BINARY_SHA256, /^[a-f0-9]{64}$/);
+  }
   assert.equal(
-    productionJob.env.TRUSTED_CLI_NEXT_VERSION,
-    verifierJob.env.TRUSTED_CLI_NEXT_VERSION,
+    productionJob.env.TRUSTED_CLI_BINARY_VERSION,
+    verifierJob.env.TRUSTED_CLI_BINARY_VERSION,
   );
-  assert.notEqual(
-    productionJob.env.TRUSTED_CLI_NEXT_VERSION,
-    productionJob.env.TRUSTED_CLI_VERSION,
-  );
-  assert.match(verifierJob.env.TRUSTED_CLI_NEXT_VERSION, /^\d+\.\d+\.\d+$/);
-  assert.match(
-    verifierJob.env.TRUSTED_CLI_NEXT_BINARY_VERSION,
-    /^\d+\.\d+\.\d+$/,
+  assert.equal(
+    productionJob.env.TRUSTED_CLI_BINARY_SHA256,
+    verifierJob.env.TRUSTED_CLI_BINARY_SHA256,
   );
   assert.match(
-    verifierJob.env.TRUSTED_CLI_NEXT_BINARY_SHA256,
-    /^[a-f0-9]{64}$/,
-  );
-  assert.match(
-    verifierJob.env.TRUSTED_CLI_NEXT_NPM_INTEGRITY,
+    verifierJob.env.TRUSTED_CLI_NPM_INTEGRITY,
     /^sha512-[A-Za-z0-9+/]+={0,2}$/,
   );
+  assert.equal(lockedPackage.integrity, verifierJob.env.TRUSTED_CLI_NPM_INTEGRITY);
   assert.equal(runnerPackage.dependencies[packageName], contract.cliPackage.version);
   assert.equal(lockedPackage.version, contract.cliPackage.version);
   assert.equal(
@@ -523,16 +524,16 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
     .split("\n");
   assert.match(
     productionSource,
-    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   assert.match(
     productionLogicalCommands.join("\n"),
-    /if \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \] && \[ "\$CONTRACT_VERSION:\$LATEST_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION:\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$LATEST_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   const productionGuards = productionLogicalCommands
     .map((line, index) => (/^if\b.*; then$/.test(line) ? index : -1))
     .filter((index) => index >= 0);
-  assert.equal(productionGuards.length, 3);
+  assert.equal(productionGuards.length, 4);
   for (const guard of productionGuards) {
     let depth = 0;
     let guardEnd = -1;
@@ -556,11 +557,9 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
     assert.ok(guardEnd > guard);
     assert.ok(exitsDirectly);
   }
-  assert.match(
-    productionSource,
-    /"\$PARITY_TMP\/node_modules\/\.bin\/hypertask" capabilities/,
-  );
-  assert.doesNotMatch(productionSource, /releases\/download/);
+  assert.match(productionSource, /"\$CLI_BINARY" capabilities/);
+  assert.doesNotMatch(productionSource, /node_modules\/\.bin\/hypertask/);
+  assertNativeBinaryVerified(productionLogicalCommands, "production");
 
   const verifierSteps = verifierJob.steps
     .map((step) => [
@@ -573,7 +572,7 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
     .filter(([, commands]) =>
       commands.some((line) =>
         line.includes(
-          "releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}/hypertask-linux-x86_64",
+          "releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64",
         ),
       ),
     );
@@ -590,62 +589,51 @@ test("trusted parity workflows pin a bounded native CLI transition", () => {
   );
   assert.match(
     verifierSource,
-    /if \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \] && \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_NEXT_VERSION" \]; then/,
+    /if \[ "\$CONTRACT_PACKAGE" != "\$TRUSTED_CLI_PACKAGE" \] \|\| \[ "\$CONTRACT_VERSION" != "\$TRUSTED_CLI_VERSION" \]; then/,
   );
   assert.match(
     verifierSource,
-    /integrity: process\.env\.TRUSTED_CLI_NEXT_NPM_INTEGRITY/,
+    /if \(read\("candidate", name\) !== read\("trusted", name\)\) fail\(\);/,
   );
   assert.match(
     verifierSource,
-    /JSON\.stringify\(candidateLock\) !== JSON\.stringify\(expectedLock\)/,
+    /cli\.integrity !== process\.env\.TRUSTED_CLI_NPM_INTEGRITY/,
   );
   assert.match(
     verifierSource,
-    /--trusted-cli-version "\$CONTRACT_VERSION"/,
+    /--trusted-cli-version "\$TRUSTED_CLI_VERSION"/,
   );
+  assert.doesNotMatch(verifierSource, /NEXT|expectedLock|structuredClone/);
+  assertNativeBinaryVerified(verifierLogicalCommands, "verifier");
+});
 
-  const transition = verifierLogicalCommands.indexOf(
-    'if [ "$CONTRACT_VERSION" = "$TRUSTED_CLI_NEXT_VERSION" ]; then',
-  );
-  const download = verifierLogicalCommands.findIndex((line) =>
+function assertNativeBinaryVerified(logicalCommands, label) {
+  const download = logicalCommands.findIndex((line) =>
     line.includes("releases/download/"),
   );
-  const verify = verifierLogicalCommands.findIndex((line) =>
+  const verify = logicalCommands.findIndex((line) =>
     line.includes(
-      '"$TRUSTED_CLI_NEXT_BINARY_SHA256  $CLI_BINARY" | sha256sum --check',
+      '"$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check',
     ),
   );
-  let transitionDepth = 0;
-  let transitionEnd = -1;
-  for (let index = transition; index < verifierLogicalCommands.length; index += 1) {
-    if (/^if\b.*; then$/.test(verifierLogicalCommands[index])) {
-      transitionDepth += 1;
-    }
-    if (verifierLogicalCommands[index] === "fi") {
-      transitionDepth -= 1;
-      if (transitionDepth === 0) {
-        transitionEnd = index;
-        break;
-      }
-    }
-  }
-  const execution = verifierLogicalCommands.findIndex((line) =>
+  const execution = logicalCommands.findIndex((line) =>
     line.includes('"$CLI_BINARY" capabilities'),
   );
-  assert.ok(transition >= 0 && transition < download && download < verify);
+  assert.ok(download >= 0 && download < verify && verify < execution, label);
   assert.equal(
-    verifierLogicalCommands[download],
-    'curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_NEXT_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"',
+    logicalCommands[download],
+    'curl --fail --location --silent --show-error "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" --output "$CLI_BINARY"',
+    label,
   );
   assert.equal(
-    verifierLogicalCommands[verify],
-    'if ! echo "$TRUSTED_CLI_NEXT_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then',
+    logicalCommands[verify],
+    'if ! echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check; then',
+    label,
   );
-  assert.equal(verifierLogicalCommands[verify + 1], "exit 1");
-  assert.equal(verifierLogicalCommands[verify + 2], "fi");
-  assert.ok(transitionEnd > verify && transitionEnd < execution);
-});
+  assert.equal(logicalCommands[verify + 1], "exit 1", label);
+  assert.equal(logicalCommands[verify + 2], "fi", label);
+  assert.equal(logicalCommands[verify + 3], 'chmod 755 "$CLI_BINARY"', label);
+}
 
 test("trusted validation permits only the CLI package selected by the trusted runner", () => {
   const root = path.resolve(__dirname, "..");

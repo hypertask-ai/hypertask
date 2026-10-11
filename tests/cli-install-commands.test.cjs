@@ -12,6 +12,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const key = "htpr-7033-cli-install-command";
 
 function load(file, mocks = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
@@ -20,7 +21,7 @@ function load(file, mocks = {}) {
     if (Object.hasOwn(mocks, name)) return { __esModule: true, ...mocks[name] };
     if (!name.startsWith("@/") && !name.startsWith(".")) return require(name);
     const target = name.startsWith("@/") ? `src/${name.slice(2)}` : path.join(path.dirname(file), name);
-    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)));
+    const resolved = [target, `${target}.ts`, `${target}.tsx`].find((candidate) => fs.existsSync(path.join(root, candidate)) && fs.statSync(path.join(root, candidate)).isFile());
     assert.ok(resolved, `Missing test import ${name}`);
     return load(resolved, mocks);
   };
@@ -54,6 +55,7 @@ const prisma = {
 const mocks = {
   "@/lib/prisma": { default: prisma },
   "@/lib/flags": flagsMock,
+  "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
   "@/utils/helperFunctions/helperFunctions": { getSequentialLetters: () => "TEST" },
   "@/lib/subscription": { stripe: {} },
   "@/lib/stripeCustomerName": { stripeCustomerName: () => "Test" },
@@ -147,7 +149,7 @@ test("ticket flag defaults to Everyone as a bugfix and respects OFF", async () =
   const registry = load("src/lib/flags.ts", {
     "@/lib/prisma": { default: { featureFlag: { findUnique: async () => row, findMany: async () => [] } } },
     "@/lib/auth/getSessionUser": {},
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "htpr-6406-agent-chat-stop-and-timeout" },
+    "@/lib/agentRuns/model": {},
   });
   assert.equal(registry.HTPR_7033_CLI_INSTALL_COMMAND_FLAG, key);
   assert.equal(registry.defaultFeatureFlagMode(key), "EVERYONE");

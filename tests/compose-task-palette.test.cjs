@@ -843,7 +843,7 @@ test('board quick-add same-task fill updates the mounted header, description edi
       source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/InnerHtmlDescription.tsx', { default: noop });
       const { useTaskDetailEditorFocus } = jiti(path.join(root, 'src/components/RTE/useTaskDetailEditorFocus.tsx'));
       const syncs = [];
-      source('src/components/RTE/TipTapTaskDetail.tsx', { default: (props) => {
+      const EditorStub = (props) => {
         // Keep a separate mounted editor document and exercise its real idle sync hook.
         const [html, setHtml] = React.useState(props.defaultContent ?? '');
         const htmlRef = React.useRef(html);
@@ -859,7 +859,10 @@ test('board quick-add same-task fill updates the mounted header, description edi
           pendingGuestDescriptionFocusTaskRef: React.useRef(null), handledDescriptionFocusNonceRef: React.useRef(null),
         });
         return React.createElement('div', { id: 'description-input', dangerouslySetInnerHTML: { __html: html } });
-      } });
+      };
+      source('src/components/RTE/TipTapTaskDetail.tsx', { default: EditorStub });
+      // HTPR-7091: the slot hands the same props to the editor; the static copy is out of scope here.
+      source('src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptionEditorSlot.tsx', { default: EditorStub });
       const Body = jiti(path.join(root, 'src/components/PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/DescriptonBody.tsx')).default;
       let labels = [];
       await mountProbe(() => {

@@ -22,7 +22,7 @@ const moduleMocks = {
   "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
   "@/utils/undoActions/helperFuncs": { cn: (...parts) => parts.filter(Boolean).join(" ") },
   "@/lib/contexts/Multipages/AI_Agent/chatContext": chatContextModule.exports,
-  "@/hooks/useFlag": { useFlag: () => true },
+  "@/hooks/useFlag": { useFlag: () => true, useFlagLoaded: () => true },
   "@/lib/flags/keys": { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG: "htpr-6990-narrow-sidebar-width" },
 };
 

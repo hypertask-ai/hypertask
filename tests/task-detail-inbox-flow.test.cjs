@@ -28,30 +28,30 @@ const read = (file) => readRefactoredSource(path.join(root, file), "utf8");
 test("Inbox lineage is added to canonical task URLs without losing query or hash", () => {
   assert.equal(
     preserveInboxFlowOnTaskHref(
-      "/detail/project-15/5913?reply=true#comment-1",
+      "/detail/project-15/7021?reply=true#comment-1",
       "true",
     ),
-    "/detail/project-15/5913?reply=true&inboxFlow=true#comment-1",
+    "/detail/project-15/7021?reply=true&inboxFlow=true#comment-1",
   );
   assert.equal(
     preserveInboxFlowOnTaskHref(
-      "https://app.hypertask.ai/detail/project-15/5913?audio=true#comment-2",
+      "https://app.hypertask.ai/detail/project-15/7021?audio=true#comment-2",
       "true",
     ),
-    "https://app.hypertask.ai/detail/project-15/5913?audio=true&inboxFlow=true#comment-2",
+    "https://app.hypertask.ai/detail/project-15/7021?audio=true&inboxFlow=true#comment-2",
   );
 });
 
 test("Inbox lineage propagation is idempotent and limited to internal task details", () => {
   const alreadyMarked =
-    "/detail/project-15/5913?inboxFlow=true&reply=true#comment-1";
+    "/detail/project-15/7021?inboxFlow=true&reply=true#comment-1";
   assert.equal(
     preserveInboxFlowOnTaskHref(alreadyMarked, "true"),
     alreadyMarked,
   );
   assert.equal(
-    preserveInboxFlowOnTaskHref("/detail/project-15/5913", null),
-    "/detail/project-15/5913",
+    preserveInboxFlowOnTaskHref("/detail/project-15/7021", null),
+    "/detail/project-15/7021",
   );
   assert.equal(
     preserveInboxFlowOnTaskHref("/calendar", "true"),
@@ -59,43 +59,43 @@ test("Inbox lineage propagation is idempotent and limited to internal task detai
   );
   assert.equal(
     preserveInboxFlowOnTaskHref(
-      "https://example.com/detail/project-15/5913?reply=true#comment-1",
+      "https://example.com/detail/project-15/7021?reply=true#comment-1",
       "true",
     ),
-    "https://example.com/detail/project-15/5913?reply=true#comment-1",
+    "https://example.com/detail/project-15/7021?reply=true#comment-1",
   );
   assert.equal(preserveInboxFlowOnTaskHref("not a URL", "true"), "not a URL");
 });
 
 test("only canonical internal task-detail URLs use app navigation", () => {
-  const safeRootRelativeHref = "/detail/project-15/5913?reply=true#comment-1";
+  const safeRootRelativeHref = "/detail/project-15/7021?reply=true#comment-1";
   assert.equal(isInternalTaskDetailHref(safeRootRelativeHref), true);
   assert.equal(
     preserveInboxFlowOnTaskHref(safeRootRelativeHref, "true"),
-    "/detail/project-15/5913?reply=true&inboxFlow=true#comment-1",
+    "/detail/project-15/7021?reply=true&inboxFlow=true#comment-1",
   );
   assert.equal(
     isInternalTaskDetailHref(
-      "https://app.hypertask.ai/detail/project-15/5913?reply=true#comment-1",
+      "https://app.hypertask.ai/detail/project-15/7021?reply=true#comment-1",
     ),
     true,
   );
-  assert.equal(isInternalTaskDetailHref("/detail/project-x/5913"), false);
+  assert.equal(isInternalTaskDetailHref("/detail/project-x/7021"), false);
   assert.equal(
     isInternalTaskDetailHref(
-      "https://app.hypertask.ai.evil.example/detail/project-15/5913",
+      "https://app.hypertask.ai.evil.example/detail/project-15/7021",
     ),
     false,
   );
   assert.equal(
     isInternalTaskDetailHref(
-      "https://evil.example/path/app.hypertask.ai/detail/project-15/5913",
+      "https://evil.example/path/app.hypertask.ai/detail/project-15/7021",
     ),
     false,
   );
   assert.equal(
     isInternalTaskDetailHref(
-      "https://app.hypertask.ai@evil.example/detail/project-15/5913",
+      "https://app.hypertask.ai@evil.example/detail/project-15/7021",
     ),
     false,
   );
@@ -133,24 +133,19 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     key: "Enter",
     shiftKey: false,
     altKey: false,
-    consistentCommentShortcuts: false,
     isInboxFlow: true,
     isCommentMode: true,
     inInbox: true,
   };
   const cases = [
-    { name: "ordinary send", changes: {}, expected: "send" },
     {
       name: "consistent send advances through Inbox",
-      changes: {
-        consistentCommentShortcuts: true,
-      },
+      changes: {},
       expected: "send-and-move",
     },
     {
       name: "consistent send stays on directly opened tasks",
       changes: {
-        consistentCommentShortcuts: true,
         isInboxFlow: false,
       },
       expected: "send",
@@ -158,7 +153,6 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     {
       name: "consistent send and stay without Inbox lineage",
       changes: {
-        consistentCommentShortcuts: true,
         shiftKey: true,
         isInboxFlow: false,
         inInbox: false,
@@ -168,7 +162,6 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     {
       name: "consistent shortcuts leave Ctrl Alt Enter unchanged",
       changes: {
-        consistentCommentShortcuts: true,
         altKey: true,
         isInboxFlow: false,
         inInbox: false,
@@ -178,7 +171,6 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
     {
       name: "consistent shortcuts leave description saves unchanged",
       changes: {
-        consistentCommentShortcuts: true,
         isCommentMode: false,
         isInboxFlow: false,
         inInbox: false,
@@ -191,9 +183,9 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
       expected: "send-and-stay",
     },
     {
-      name: "non-Inbox shifted Enter",
+      name: "non-Inbox shifted comment Enter stays",
       changes: { shiftKey: true, isInboxFlow: false },
-      expected: "ignore",
+      expected: "send-and-stay",
     },
     {
       name: "shifted description save in Inbox",
@@ -201,9 +193,13 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
       expected: "send",
     },
     {
+      name: "shifted description save without Inbox lineage is ignored",
+      changes: { shiftKey: true, isCommentMode: false, isInboxFlow: false },
+      expected: "ignore",
+    },
+    {
       name: "Inbox send and complete remains unchanged by consistent shortcuts",
       changes: {
-        consistentCommentShortcuts: true,
         shiftKey: true,
         altKey: true,
       },
@@ -236,24 +232,19 @@ test("comment Enter shortcut modifiers resolve to one action", () => {
   }
 });
 
-test("comment shortcut discovery follows the consistent comment flag", () => {
-  const taskView = (enabled, isApple = false) =>
-    getKeyboardShortcuts(isApple, false, enabled).find(
+test("comment shortcut discovery always shows the send and stay actions", () => {
+  const taskView = (isApple = false) =>
+    getKeyboardShortcuts(isApple).find(
       (group) => group.title === "Task View",
     ).sub;
 
   assert.ok(
-    taskView(false).some(
+    !taskView().some(
       (shortcut) => shortcut.shortTitle === "Save/edit text entry",
     ),
   );
-  assert.ok(
-    !taskView(false).some((shortcut) =>
-      shortcut.shortTitle.startsWith("Send comment"),
-    ),
-  );
   assert.deepEqual(
-    taskView(true, false).filter((shortcut) =>
+    taskView(false).filter((shortcut) =>
       shortcut.shortTitle.startsWith("Send comment"),
     ),
     [
@@ -268,7 +259,7 @@ test("comment shortcut discovery follows the consistent comment flag", () => {
     ],
   );
   assert.deepEqual(
-    taskView(true, true).find(
+    taskView(true).find(
       (shortcut) => shortcut.shortTitle === "Send comment and advance in Inbox",
     ).pressKey,
     ["CMD", "ENTER"],
@@ -279,21 +270,20 @@ test("comment shortcut discovery follows the consistent comment flag", () => {
     "src/components/Modals/Settings/ShortcutsSection.tsx",
   ]) {
     const source = read(file);
-    assert.match(source, /useFlag\(\s*"htpr-5913-consistent-comment-shortcuts"/);
     assert.match(
       source,
-      /getKeyboardShortcuts\([\s\S]*?consistentCommentShortcuts,[\s\S]*?historyToggleLabel/,
+      /getKeyboardShortcuts\(\s*isApple,\s*appShellRailOn,\s*historyToggleLabel,/,
     );
   }
 
   const registry = read("docs/keyboard-shortcuts-registry.md");
   assert.match(
     registry,
-    /`Mod\+ENTER` \| With `htpr-5913-consistent-comment-shortcuts`: post a new comment and stay on the current task unless its URL carries `inboxFlow=true`; Inbox flow still advances\./,
+    /`Mod\+ENTER` \| Post a new comment and stay on the current task unless its URL carries `inboxFlow=true`; Inbox flow still advances\./,
   );
   assert.match(
     registry,
-    /`Mod\+Shift\+ENTER` \| With `htpr-5913-consistent-comment-shortcuts`/,
+    /`Mod\+Shift\+ENTER` \| Post a new comment and stay on the task\./,
   );
 });
 
@@ -336,12 +326,12 @@ test("all nested task links apply the Inbox marker to their navigation target", 
 
 test("Inbox entry generates a marked initial task URL", () => {
   assert.equal(
-    inboxConfig.urls.taskDetail(15, 5913),
-    "/detail/project-15/5913?inboxFlow=true",
+    inboxConfig.urls.taskDetail(15, 7021),
+    "/detail/project-15/7021?inboxFlow=true",
   );
   assert.equal(
-    inboxConfig.urls.taskDetail(15, 5913, "#comment-210855"),
-    "/detail/project-15/5913?inboxFlow=true#comment-210855",
+    inboxConfig.urls.taskDetail(15, 7021, "#comment-210855"),
+    "/detail/project-15/7021?inboxFlow=true#comment-210855",
   );
 });
 

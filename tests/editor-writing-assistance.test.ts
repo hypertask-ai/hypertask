@@ -213,3 +213,108 @@ test("local writing assistance skips code blocks and unfinished keyboard input",
   });
   assert.equal(dispatchTextInput(editor, "w"), false);
 });
+
+function makeUndoEditor(
+  t: { after: (fn: () => void) => void },
+  options: { undo: boolean },
+) {
+  const dom = new JSDOM('<div id="editor"></div>');
+  const restoreGlobals = installBrowserGlobals(dom.window);
+  const editor = new Editor({
+    element: dom.window.document.querySelector("#editor"),
+    extensions: [
+      StarterKit,
+      LocalWritingAssistance.configure({
+        localCapitalizationEnabled: () => true,
+        undoCapitalizationEnabled: () => options.undo,
+      }),
+    ],
+    content: "<p>hello.</p>",
+    editorProps: writingAssistanceEditorProps,
+  });
+  t.after(() => {
+    editor.destroy();
+    restoreGlobals();
+    dom.window.close();
+  });
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  editor.commands.insertContent(" ");
+  return editor;
+}
+
+function pressKey(editor: Editor, init: KeyboardEventInit) {
+  const event = new editor.view.dom.ownerDocument.defaultView!.KeyboardEvent("keydown", init);
+  return Boolean(
+    editor.view.someProp("handleKeyDown", (handler) => handler(editor.view, event)),
+  );
+}
+
+function underlined(editor: Editor) {
+  return editor.view.dom.querySelectorAll("span[style*='underline']").length;
+}
+
+test("HTPR-6906: Backspace right after an auto-capital restores lowercase and it stays lowercase", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  assert.equal(dispatchTextInput(editor, "w"), true);
+  assert.equal(editor.getText(), "hello. W");
+  assert.equal(underlined(editor), 1);
+  assert.equal(pressKey(editor, { key: "Backspace" }), true);
+  assert.equal(editor.getText(), "hello. w");
+  assert.equal(underlined(editor), 0);
+  // Typing on keeps the lowercase letter and nothing re-capitalizes it.
+  assert.equal(dispatchTextInput(editor, "o"), false);
+  editor.commands.insertContent("o");
+  assert.equal(editor.getText(), "hello. wo");
+  // Backspace now deletes normally.
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+});
+
+for (const [name, init] of [
+  ["Ctrl+Z", { ctrlKey: true }],
+  ["Cmd+Z", { metaKey: true }],
+] as const) {
+  test(`HTPR-6906: ${name} right after an auto-capital restores lowercase`, (t) => {
+    const editor = makeUndoEditor(t, { undo: true });
+    dispatchTextInput(editor, "w");
+    assert.equal(pressKey(editor, { key: "z", ...init }), true);
+    assert.equal(editor.getText(), "hello. w");
+  });
+}
+
+test("HTPR-6906: Backspace after more was typed behaves normally", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  dispatchTextInput(editor, "w");
+  editor.commands.insertContent("x");
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+  assert.equal(editor.getText(), "hello. Wx");
+});
+
+test("HTPR-6906: Backspace after the cursor moved away and back behaves normally", (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  dispatchTextInput(editor, "w");
+  editor.commands.setTextSelection(2);
+  editor.commands.setTextSelection(editor.state.doc.content.size - 1);
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+  assert.equal(editor.getText(), "hello. W");
+});
+
+test("HTPR-6906: the underline clears on its own after a moment but undo still works", async (t) => {
+  const editor = makeUndoEditor(t, { undo: true });
+  dispatchTextInput(editor, "w");
+  assert.equal(underlined(editor), 1);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  assert.equal(underlined(editor), 0);
+  assert.equal(pressKey(editor, { key: "Backspace" }), true);
+  assert.equal(editor.getText(), "hello. w");
+});
+
+test("HTPR-6906: with the undo flag off nothing changes", (t) => {
+  const editor = makeUndoEditor(t, { undo: false });
+  assert.equal(dispatchTextInput(editor, "w"), true);
+  assert.equal(editor.getText(), "hello. W");
+  assert.equal(underlined(editor), 0);
+  assert.equal(pressKey(editor, { key: "Backspace" }), false);
+  // Ctrl+Z is plain history undo again: it removes the letter, no lowercase restore.
+  pressKey(editor, { key: "z", ctrlKey: true });
+  assert.equal(editor.getText(), "hello.");
+});

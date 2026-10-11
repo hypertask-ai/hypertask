@@ -98,7 +98,7 @@ const filteredSectionsForActiveView = useMemo(() => {
     sections,
     _currentProject,
     isBuiltinViewId(activeViewId) ? activeViewId : undefined,
-    buildBuiltinViewContext(_currentProject, _currentUser.id),
+    buildBuiltinViewContext(_currentProject, _currentUser.id, undefined, _currentUser.displayName),
     filterRuntimeContext,
   );
   return getFilteredEmptySections(

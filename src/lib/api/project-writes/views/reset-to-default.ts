@@ -86,7 +86,7 @@ export async function runSerializableViewReset(
               id: projectId,
               OR: [
                 { ownerId: userId },
-                { members: { some: { userId, status: "Accepted" } } },
+                { members: { some: { userId, agentId: null, status: "Accepted" } } },
               ],
             },
             select: { id: true },

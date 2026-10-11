@@ -33,6 +33,7 @@ type ComposerConfigInput = {
   // HTPR-6722 flag: Luna is included on Free plans.
   lunaFree?: boolean;
   haiku55Enabled?: boolean;
+  haikuDefaultEnabled?: boolean;
 };
 
 function canUseModelForPlan(
@@ -83,7 +84,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
           ),
       )
     : [];
-  const defaultContext = { plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
+  const defaultContext = { haikuDefaultEnabled: input.haikuDefaultEnabled, plan: input.storePlanId, hasByok: hasHaikuByokProvider(input.providersWithByok) };
   const boardDefault = resolveUserFacingModelOption(
     "aiChat",
     input.settings,
@@ -94,7 +95,7 @@ export function buildComposerConfig(input: ComposerConfigInput) {
       ...defaultContext,
       defaultModelOption:
         input.haiku55Enabled
-          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, lunaFree, true)
+          ? getDefaultAiModelOptionForPlan(input.storePlanId, defaultContext.hasByok, lunaFree, true, input.haikuDefaultEnabled)
           : lunaFree
           ? preferredAiModelOption
           : undefined,

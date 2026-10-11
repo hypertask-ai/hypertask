@@ -15,6 +15,9 @@ function load(file, mocks) {
       ? path.join(root, "src", specifier.slice(2))
       : path.resolve(directory, specifier);
     const filename = [base, `${base}.ts`, `${base}.cjs`].find((candidate) => fs.existsSync(candidate) && fs.statSync(candidate).isFile());
+    if (/src[\\/]lib[\\/]flags[\\/](?:keys|definitions|definitions[\\/]index\.generated)\.ts$/.test(filename ?? "")) {
+      return require("./helpers/flag-files.cjs").load(filename);
+    }
     if (!filename) throw new Error(`Missing module: ${specifier}`);
     if (cache.has(filename)) return cache.get(filename).exports;
     const loadedModule = { exports: {} };

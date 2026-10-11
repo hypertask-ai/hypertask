@@ -1,11 +1,10 @@
 import { withTaskWriteFlag } from "@/lib/api/task-writes/route";
 import { NextApiRequest, NextApiResponse } from "next";
-import prisma from "@/lib/prisma";
+import { getAccessibleAttachmentKey } from "@/utils/controllers/tasks/getAccessibleAttachmentKey";
 
 import {
   getHypertasksS3Client,
   HYPERTASKS_S3_BUCKET,
-  parseHypertasksStorageKeyFromUrl,
 } from "@/lib/storage/hypertasksS3";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 
@@ -38,53 +37,12 @@ async function handler(
     try {
       const fileSourceStr = fileSource.toString();
 
-      // Look up the attachment record to verify project membership
-      const attachment = await prisma.attachment.findFirst({
-        where: { fileSource: fileSourceStr },
-        select: {
-          task: { select: { projectId: true } },
-          description: { select: { task: { select: { projectId: true } } } },
-          comment: { select: { task: { select: { projectId: true } } } },
-          chatMessage: { select: { session: { select: { userId: true } } } },
-        },
-      });
-
-      if (attachment) {
-        // Determine the projectId through whichever relation is populated
-        const projectId =
-          attachment.task?.projectId ??
-          attachment.description?.task?.projectId ??
-          attachment.comment?.task?.projectId;
-
-        if (attachment.chatMessage) {
-          // Chat message attachment: only the session owner may download
-          if (attachment.chatMessage.session.userId !== userId) {
-            res.status(403).send("Forbidden");
-            return;
-          }
-        } else if (projectId != null) {
-          // Task/description/comment attachment: verify project membership
-          const project = await prisma.project.findFirst({
-            where: {
-              id: projectId,
-              OR: [
-                { members: { some: { userId: userId } } },
-                { ownerId: userId },
-              ],
-            },
-            select: { id: true },
-          });
-          if (!project) {
-            res.status(403).send("Forbidden");
-            return;
-          }
-        }
-        // If attachment exists but has no resolvable project/chatMessage (e.g. AI_Custom_Instructions),
-        // allow authenticated users through
+      const key = await getAccessibleAttachmentKey(fileSourceStr, userId);
+      if (!key) {
+        res.status(404).send("File not found");
+        return;
       }
-      // If no attachment record found, allow authenticated users (legacy files)
 
-      const key = getKey(fileSourceStr);
       const params = {
         Bucket: HYPERTASKS_S3_BUCKET,
         Key: key,
@@ -105,14 +63,6 @@ async function handler(
     }
   }
 }
-
-const getKey = (url: string) => {
-  const key = parseHypertasksStorageKeyFromUrl(url);
-  if (!key) {
-    throw "unknown link";
-  }
-  return key;
-};
 
 export default withTaskWriteFlag(handler, "GET", async () =>
   (await import("@/lib/api/task-writes/download-attachment")).GET,

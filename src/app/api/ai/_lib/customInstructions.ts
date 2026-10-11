@@ -275,8 +275,14 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "text", text: `${prompt}\n\nFile: ${fileName}` },
     { type: "file", mediaType, data: new URL(url) },
   ];
-  const defaultContext = isImage ? { haiku55Enabled: false, byok: undefined } : typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
-  const useHaiku = !isImage && defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
+  const loadedContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
+  // HTPR-7075: Haiku 5.5 reads images too, so Claude 5.5 mode covers them.
+  const defaultContext = isImage && !("backgroundClaudeEnabled" in loadedContext && loadedContext.backgroundClaudeEnabled)
+    ? { haiku55Enabled: false, byok: undefined }
+    : loadedContext;
+  // HTPR-7075: a team that disabled Anthropic gets no extraction, not another provider.
+  if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return "";
+  const useHaiku = defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
   const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";
   const modelInput = useHaiku
     ? defaultContext.byok?.credential ?? await getByokOrTeamGatewayApiKeyForProvider(provider, undefined, {

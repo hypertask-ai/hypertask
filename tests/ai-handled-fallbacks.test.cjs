@@ -260,11 +260,15 @@ function loadRoute(relativePath, stubs) {
 function routeStubs(error, reports) {
   return {
     "next/server": { NextResponse: { json: (body, init) => Response.json(body, init) } },
+    "node-html-parser": require("node-html-parser"),
+    "@/utils/htmlEscape": {},
+    "@/lib/ai/taskWriterDueDate": {},
     "ai": { generateText: async () => { throw error; } },
     "@/lib/errors/reportError": { reportError: async (payload) => reports.push(payload) },
     "@/app/api/ai/_lib/requestUser": { getAiRequestUser: async () => ({ id: 7 }) },
     "@/app/api/ai/_lib/aiUsage": {},
     "@/app/api/ai/_lib/modelProvider": { configureAiModelUsage() {} },
+    "@/app/api/ai/_lib/taskWriterProperties": {},
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (value) => value instanceof Error ? value.message : "Sorry, an error occurred while processing your request.",
       getCurrentUserFromCookies: async () => ({ id: 7 }),

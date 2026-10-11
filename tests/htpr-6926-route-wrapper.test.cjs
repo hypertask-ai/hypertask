@@ -47,6 +47,7 @@ function harness({ enabled = true, count = 1, revoked = false, agent = false } =
   }, 'module.exports.__maps = { boundedJwtLogThrottle, boundedConnectionLogThrottle, mcpConnectionLogThrottle };', { JWT_SECRET: secret })
   const telemetry = load('src/lib/mcp/clientTelemetry.ts', { crypto })
   const session = load('src/lib/mcp/auth/session.ts', {
+    '@/lib/telemetry/activationOccurrences': { recordAuthenticatedConnection: () => {} },
     'next/server': { NextRequest }, '@/lib/prisma': db, jsonwebtoken: jwt,
     '@/lib/apiKeys': {}, '@/lib/auth/betterAuth': {}, '@/lib/auth/getSessionUser': {},
     '@/lib/mcp/managementPermissions': permissions, '@/lib/mcp/clientTelemetry': telemetry,

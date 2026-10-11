@@ -2,7 +2,8 @@ import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
 
-import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
+import { getTeamGatewayApiKey, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
+import { haikuDefaultModelEnabled } from "@/app/api/ai/_lib/planGate";
 import {
   gatewayProviderOptionsForModel,
   resolveGatewayModel,
@@ -70,14 +71,21 @@ export async function classifyTaskAgainstLabels(
     return null;
   }
 
-  const model = resolveGatewayModel(MODEL, gatewayApiKey);
+  const haikuDefaultEnabled = await haikuDefaultModelEnabled(tags?.userId);
+  const model = haikuDefaultEnabled
+    ? resolveAutomaticAiModel("gateway", "anthropic/claude-haiku-5.5", gatewayApiKey, {
+        haiku55Enabled: true,
+        lookup: { trustedTeamId: tags.teamId, projectId: tags.projectId, userId: tags.userId ?? 0 },
+        feature: "smart-label",
+      })
+    : resolveGatewayModel(MODEL, gatewayApiKey);
   configureAiModelUsage(model, {
-    userId: tags?.userId ?? generalConfig.hyperAiId,
+    userId: haikuDefaultEnabled ? tags?.userId ?? 0 : tags?.userId ?? generalConfig.hyperAiId,
     teamId: tags?.teamId,
     projectId: tags?.projectId,
     taskId: tags?.taskId,
     agentId: tags?.agentId,
-    provider: "google",
+    provider: haikuDefaultEnabled ? "anthropic" : "google",
     feature: "smart-label",
   });
   const result = await generateText({

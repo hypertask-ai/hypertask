@@ -7,7 +7,7 @@ require('tsx/cjs');
 
 const root = path.resolve(__dirname, '..');
 const phoneFlag = 'htpr-7008-phone-first-paint';
-const keys = require('../src/lib/flags/keys.ts');
+const keys = require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts");
 const user = { id: 2343, displayName: 'Disposable QA', UserSetting: { notification: true } };
 
 function load(relative, mocks) {

@@ -79,11 +79,22 @@ function fixture(name, scenario, mode) {
       discardTaskAttachment: async (...args) => { effects.push(["discard", ...clean(args)]); if (scenario.denied) throw new LinkError(); if (scenario.linkThrows) throw new Error("Discard unavailable"); return !scenario.alreadyLinked; },
     },
     "@/lib/realtime/server": { broadcastTaskChange: async (...args) => record("realtime", undefined, scenario.realtimeThrows)(...args) },
+    "@/lib/agents/publicAgent": {},
+    "@/lib/cycles": {},
+    "@/lib/agents/visibility": {},
+    "@/utils/controllers/notifications/visibleInboxScope": {},
     "@/lib/prisma": { default: {
-      attachment: { findFirst: async (...args) => record("attachment-access", scenario.attachment ?? null, scenario.lookupThrows)(...args) },
+      attachment: { findMany: async (...args) => record("attachment-access", scenario.attachment ? [{ fileSource: `https://files.hypertask.app/${keys[0]}`, ...scenario.attachment }] : [], scenario.lookupThrows)(...args) },
       project: { findFirst: async (...args) => record("project-access", scenario.denied ? null : { id: 15 })(...args) },
+      description: { findMany: async (...args) => record("description-access", [])(...args) },
+      comment: { findMany: async (...args) => record("comment-access", [])(...args) },
+      page: { findMany: async (...args) => record("page-access", [])(...args) },
+      chatSession: { findFirst: async (...args) => record("chat-session-access", null)(...args) },
     } },
   };
+  if (name === "downloadAttachment") {
+    mocks["@/utils/controllers/tasks/getAccessibleAttachmentKey"] = load("src/utils/controllers/tasks/getAccessibleAttachmentKey.ts", mocks);
+  }
   const { module: operation, method } = attachmentRoutes[name];
   const web = load(`src/lib/api/task-writes/${operation}.ts`, mocks)[method];
   mocks[`@/lib/api/task-writes/${operation}`] = { get [method]() { loads.push(operation); if (scenario.loadThrows) throw new Error("Route load unavailable"); return web; } };
@@ -176,18 +187,18 @@ const cases = {
   ],
   downloadAttachment: [
     ["S3 creation failure propagates", { s3FactoryThrows: true }],
-    ["legacy file success", {}], ["missing name", { query: { fileSource: "url" }, status: 400 }],
+    ["unknown legacy file fails closed", { status: 404 }], ["missing name", { query: { fileSource: "url" }, status: 400 }],
     ["missing source", { query: { fileName: "name" }, status: 400 }],
     ["task membership", { attachment: { task: { projectId: 15 } } }],
     ["description membership", { attachment: { description: { task: { projectId: 15 } } } }],
     ["comment membership", { attachment: { comment: { task: { projectId: 15 } } } }],
-    ["project denied", { attachment: { task: { projectId: 15 } }, denied: true, status: 403 }],
+    ["project denied", { attachment: { task: { projectId: 15 } }, denied: true, status: 404 }],
     ["chat owner", { attachment: { chatMessage: { session: { userId: 985 } } } }],
-    ["chat denied", { attachment: { chatMessage: { session: { userId: 2343 } } }, status: 403 }],
-    ["unresolved attachment stays allowed", { attachment: {} }],
-    ["unknown external URL", { query: { fileName: "x.txt", fileSource: "https://unknown.invalid/x" }, status: 500 }],
-    ["lookup outage", { lookupThrows: true, status: 500 }], ["sign outage", { storageThrows: true, status: 500 }],
-    ["query arrays and encoded filename", { query: { fileName: ["a.txt", "b café.txt"], fileSource: [`https://files.hypertask.app/${keys[0]}`] } }],
+    ["chat denied", { attachment: { chatMessage: { session: { userId: 2343 } } }, status: 404 }],
+    ["unresolved attachment fails closed", { attachment: {}, status: 404 }],
+    ["unknown external URL", { query: { fileName: "x.txt", fileSource: "https://unknown.invalid/x" }, status: 404 }],
+    ["lookup outage", { lookupThrows: true, status: 500 }], ["sign outage", { attachment: { task: { projectId: 15 } }, storageThrows: true, status: 500 }],
+    ["query arrays and encoded filename", { attachment: { task: { projectId: 15 } }, query: { fileName: ["a.txt", "b café.txt"], fileSource: [`https://files.hypertask.app/${keys[0]}`] } }],
   ],
 };
 for (const name of Object.keys(attachmentRoutes)) {
@@ -228,8 +239,9 @@ test("signed upload binds exact byte length, MIME, expiry and grant user", async
   assert.equal(fx.effects.find(([label]) => label === "grant-sign")[1].userId, 985);
 });
 test("download preserves 60-second disposition and no-cache headers", async () => {
-  const fx = fixture("downloadAttachment", {}, true);
-  const result = await invoke(fx, "downloadAttachment", {}, "current");
+  const scenario = { attachment: { task: { projectId: 15 } } };
+  const fx = fixture("downloadAttachment", scenario, true);
+  const result = await invoke(fx, "downloadAttachment", scenario, "current");
   assert.deepEqual(result.headers, { "cache-control": "no-store", pragma: "no-cache", expires: "0" });
   assert.deepEqual(fx.effects.find(([label]) => label === "download-sign"), ["download-sign", "getObject", { Bucket: "bucket", Key: keys[0], Expires: 60, ResponseContentDisposition: "attachment; filename=one%20caf%C3%A9.txt" }]);
 });

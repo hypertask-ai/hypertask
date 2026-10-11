@@ -2,6 +2,7 @@
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
+import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import type { CSSProperties } from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -773,8 +774,9 @@ const ApiKeysSectionContent = ({ visibleProviderRows }: { visibleProviderRows: P
 };
 
 const ApiKeysSection = () => {
-  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG);
-  const visibleProviderRows = haiku55Enabled
+  const haikuDefaultEnabled = useHaikuDefaultFlag();
+  const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
+  const visibleProviderRows = haikuDefaultEnabled || haiku55Enabled
     ? providerRows.map((row) => ({ ...row, modelLabels: row.modelLabels.filter((label) => label !== "Haiku 4.5") }))
     : providerRows;
 

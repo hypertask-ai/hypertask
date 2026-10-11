@@ -154,7 +154,7 @@ const applyProjectFilters = (
   project: IProject,
   searchKeyword?: string,
   builtinViewId?: BuiltinViewId,
-  currentUserId?: number,
+  currentUser?: { id?: number; displayName?: string },
   runtimeContext?: IFilterRuntimeContext,
 ) => {
   let filteredSections = getAppliedSubtaskSections(project.sections, project);
@@ -162,7 +162,7 @@ const applyProjectFilters = (
     filteredSections,
     project,
     builtinViewId,
-    buildBuiltinViewContext(project, currentUserId),
+    buildBuiltinViewContext(project, currentUser?.id, undefined, currentUser?.displayName),
     runtimeContext,
   );
 
@@ -274,7 +274,7 @@ const UpdateKanban = () => {
         projectToUpdate,
         searchKeyword,
         isBuiltinViewId(activeBuiltinView) ? activeBuiltinView : undefined,
-        _currentUser?.id,
+        _currentUser,
         filterRuntimeContext,
       )
     );

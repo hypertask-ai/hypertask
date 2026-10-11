@@ -41,6 +41,7 @@ function harness(userId = 42) {
     "@/utils/controllers/tasks/getOrphanTasks": { default: async (...args) => { calls.push(["content", args]); return { status: 200, json: [] }; } },
     "@/utils/controllers/urls/fetchUrls": { default: async (...args) => { calls.push(["content", args]); return { status: 200, json: [] }; } },
     "@/utils/controllers/drafts/getDraftsController": { default: async (...args) => { calls.push(["content", args]); return []; } },
+    "@/lib/flags": { HTPR_7050_CTRL_O_LINKS_FLAG: "htpr-7050-ctrl-o-links", isFeatureEnabled: async () => false },
     "@/lib/errors/reportError": { reportError: async () => {} },
     "@/utils/helperFunctions/multiPages": {},
     "@/utils/controllers/ai/task/generateCommentsController": {},

@@ -44,6 +44,7 @@ function harness({ content = [], finishReason = "length", failure, viewer = { id
       comment: { findMany: async () => [] },
     },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({}) },
+    "@/app/api/ai/_lib/promptCache": { cachedInstructionsForUser: async (_userId, args) => args.fixed },
   };
   const filename = path.resolve(__dirname, "../src/app/api/ai/task-questions/route.ts");
   const code = ts.transpileModule(fs.readFileSync(filename, "utf8"), {

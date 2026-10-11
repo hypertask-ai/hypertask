@@ -1,3 +1,4 @@
+import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -182,7 +183,7 @@ async function sendInviteToNonMember(
   };
   createLog(createLogBody);
   createNotification(email, inviteLink, userId, invite.id, projectId);
-  await sendEmailNotification("Invite", {
+  const sent = await sendEmailNotification("Invite", {
     sender: invite.invitedBy.displayName ?? "",
     senderUserId: userId,
     senderEmail: invite.invitedBy.email,
@@ -193,6 +194,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
+  if (sent) recordActivationOccurrence(userId, "teammate_invited", invite.id, { method: "email" });
 }
 
 export const generateInviteLink = async (

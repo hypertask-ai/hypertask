@@ -36,8 +36,11 @@ Start with `/ship`: Valentin's own Claude Code or Codex session takes one ticket
 ### AI models
 17. One AI model per class: a new model version replaces the old one in the same change (old one leaves every picker, saved picks move to the new one). Enforced by tests/model-class-unique.test.cjs (Valentin, 2026-10-08).
 
+### Credentials
+18. **Before calling a key missing or read-only, check every stored key.** Keys live in the server's key safe (the services folder of the secrets folder). Run `stack-key --list` for the stored key names and `stack-access-check <service>` for access; it must say OK RW. One failing key can sit next to a working full-access key. Never print a key. (Valentin, 2026-10-11: "i am tired of recreating the same keys")
+
 ### Helpers
-Use Codex sub-sessions when helpers are needed: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`. The owning session remains responsible for the ticket through live verification and close.
+Helpers follow the token ladder (Valentin, 2026-10-10). Read the newest "Token ladder:" line (the prompt hook, or `~/projects/token-ladder/bin/token-ladder hook-prompt`). CODEX mode: `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"` in the background. CLAUDE mode: the Agent tool inside the session (`sonnet` builds and summaries, `haiku` lookups), never hax Codex helpers or new `claude` processes. A mode switch is graceful: running helpers finish as started, only new helpers use the new mode. Every helper prompt starts with the mode line plus the unlazy line. The owning session remains responsible for the ticket through live verification and close.
 
 ## Layer 2: read X when Y
 

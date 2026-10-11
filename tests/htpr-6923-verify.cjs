@@ -35,7 +35,25 @@ function lifecycleLegacySources() {
   const types = effects.slice(effects.indexOf("type TaskCreatedGlobally"), effects.indexOf("function schedulePostCreateWork("));
   const helpers = effects.slice(effects.indexOf("function schedulePostCreateWork("), effects.indexOf("\nexport {"))
     .replaceAll('"@/pages/api/queues/FAST/generateSummary"', '"../queues/FAST/generateSummary"');
+  // Reconstruct the original oracle without the later, separately tested writer-date feature.
   let global = unwrap("src/pages/api/tasks/createGlobally.ts")
+    .replace('import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";\n', "")
+    .replace('import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";\n', "")
+    .replace("      dueDate: requestedDueDate,", "      dueDate,")
+    .replace(`    const dueDateEnabled = req.body.requestKind === "compose-task" && req.body.writerDueDate != null &&
+      await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
+    const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(req.body.writerDueDate, req.body.writerTimeZone) : undefined;
+    const dueDate = writerDueDate ?? requestedDueDate;
+`, "")
+    .replace(`      const result = await updateTaskSingle({ id: taskId, title, description,
+        ...(writerDueDate ? { dueDate: writerDueDate, dueDateNotifiedAt: null } : {}),
+      }, currentUser, agentId, {`, "      const result = await updateTaskSingle({ id: taskId, title, description }, currentUser, agentId, {")
+    .replace(`      if (writerDueDate) {
+        const { cancelDueDateJob, scheduleDueDateJob } = await import("../queues/duedateQueue");
+        await cancelDueDateJob(taskId, projectId);
+        await scheduleDueDateJob({ taskId, projectId }, writerDueDate);
+      }
+`, "")
     .replace(/^import \{ schedulePostCreateWork[^\n]+\n/m, "")
     .replace('import { IAgent, ILabel, IUser } from "@/models/model";\n', 'import { IAgent, IEstimate, ILabel, IPriority, ITask, IUser } from "@/models/model";\nimport { waitUntil } from "@vercel/functions";\nimport {\n  ITaskAssignedActivity,\n  ITaskEstimateActivity,\n  ITaskPriorityActivity,\n} from "@/models/ActivityModels.ts";\n')
     .replace('import { getSessionUser }', 'import { assignmentActivityUserSelect } from "@/utils/controllers/activities/createAssignedActivity";\nimport { getSessionUser }')
@@ -288,10 +306,11 @@ const attachmentRoutes = {
     "method": "POST",
     "hash": "01d48f1d642c0d7a64efc47680bf97795a21c6ebba2712345c89183e252683d8"
   },
+  // HTPR-7018: security fixes replace the unknown/unbound file download contract.
   "downloadAttachment": {
     "module": "download-attachment",
     "method": "GET",
-    "hash": "072e4872015008699263a5de8eac474a9bd205b4db1d5971ec4eca22a4c16ca7"
+    "hash": "5f2cbbcff8c92cec532737ce17dd4dc99d4f1ff9ce872ae69311e3d7b09de2bb"
   }
 };
 function attachmentLegacySources() {
@@ -458,14 +477,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "5a6c0939ce91e81220e4341f60c7bfb3ed7bfd3b10759b2207ab36eecbcae90b",
+    "hash": "69673c5584356bdd3ff76ae6ed4596bf3c07f9e5e95f7f4b09b77979b5fe0694",
     "export": "export default handler;"
   },
   "update-view": {
     "methods": [
       "POST"
     ],
-    "hash": "2b3b0dbcfa576f5a36b880a840604456d87afbee3de0e32259489f9c21953dd5",
+    "hash": "da790e03d7efa417971370f650e5c1e31e583e1ccc7a87294605cc71f7330947",
     "export": "export default handler;"
   },
   "delete-rename-view": {
@@ -488,14 +507,14 @@ const projectViewRoutes = {
     "methods": [
       "POST"
     ],
-    "hash": "f717f6eaf695114f3debbadf6267b061bd54adb56efcaea9e45627e17bd7de06",
+    "hash": "df9159817d1d9e5f0006c2d1d8ea94c5a28ef61e7915ced04f886881ed7a8a49",
     "export": "export default handler;"
   },
   "reset-to-default": {
     "methods": [
       "POST"
     ],
-    "hash": "b4eded269799550b856001b4ab8a633f0f508a67137b828c4b7bd5866d3dc016",
+    "hash": "394dec4b415609986b7ee23b160aeb4792ae5e15cd8620e606156c8e7a814c2e",
     "export": "export default handler;"
   },
   "update-order": {
@@ -850,12 +869,15 @@ const notificationSettingsProtectedHashes = {
   "src/lib/api/notification-writes/comments-seen.ts": "26fd763a255cd97ee4e0d6376490cba903efe8c2aa2378c7d18235cd8c1ffc20",
   "src/lib/api/task-writes/route.ts": "ede51193ada9ee53a18b8d1b54ab7a6f0a7ac47f0fe98ece94293556cb0faa71",
   "src/lib/api/task-writes/read-query.ts": "0fe62c1d4921f4c389e3901e9058e4905f96ee962e0000ee528ea66febd54409",
-  "src/prisma/schema.prisma": "a67938af392180ea5f40ee997db680c883a337b30911fc0d44dfebbde48ef603",
+  // HTPR-7038: add only the reset backup/completion models; retain all existing schema bytes.
+  // HTPR-7076: add only the two nullable AiUsage cache token columns.
+  "src/prisma/schema.prisma": "b8dd2de4a7d8864752d7b6a632795f6264438cb01d4f58161987227d9cdfb559",
   "src/utils/controllers/notifications/IdsToSendNotificationsTo.ts": "c30396e30d121cac255f7a17d2b72d1efaeb3fef4560e76828b46849cb3ed618",
   "src/utils/controllers/notifications/projectMute.ts": "16c4dd2964146fccbc160654ee537356ab037524bbb2549ed0a07fa7e26ccd3b",
   "src/app/api/notifications/project-mute/route.ts": "b1debce26eeb1aeb76f4e0beab91c30749b6c33cc0a8dcabf25b7fe726583ee0",
   "src/lib/inboxSplitSettings.ts": "06f78aab98f08989a71c86bc821c8a3f42edc9f35249d9ec64d002b9d617adad",
-  "src/utils/controllers/notifications/getAll.ts": "7e7f1ed5f1ad400d045d561722feac57f1373e33b2a553bd82a067da2a9c658c",
+  // HTPR-7096: getAll only gains the flag-gated quiet-owner-inbox marking call.
+  "src/utils/controllers/notifications/getAll.ts": "1f8630633478fc97729e188d88b47af04e821c87571f136918da4245e57e46e6",
   "src/utils/controllers/notifications/getCount.ts": "5b342c092bf198dbe6b9b74ce3fff915a14282cc1c1fc2601278939063802c30",
   "src/utils/controllers/notifications/getAccessibleProjectIds.ts": "5efc0573e9c9fee87d651442e4bf9c32c4a3adb0536ee4d8a5f53972fdf88636" // gitleaks:allow sha256 file pin, not a secret
 };
@@ -980,7 +1002,7 @@ async function flag() {
       user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? "valentin.yeo@gmail.com" : "valentin@hypertask.ai" }) },
     } },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => null },
-    "@/lib/agentRuns/model": { AGENT_CHAT_STOP_AND_TIMEOUT_FEATURE_FLAG: "test" },
+    "@/lib/agentRuns/model": {},
   });
   const key = flags.HTPR_6923_APP_ROUTER_WRITES_FLAG;
   assert.equal(key, "htpr-6923-app-router-writes");

@@ -130,6 +130,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      packages: read
     steps:
       - name: Check out the production-pinned smoke harness
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -169,6 +170,13 @@ jobs:
       - name: Install production smoke dependencies
         if: steps.restore-node-modules.outputs.cache-hit != 'true'
         run: npm ci --no-audit --no-fund && npx prisma generate
+
+      - name: Authenticate CI image pulls
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
 
       - name: Build and test the candidate in disposable containers
         shell: bash

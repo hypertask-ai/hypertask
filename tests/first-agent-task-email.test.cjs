@@ -13,6 +13,7 @@ const flag = "htpr-7028-first-task-email";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 
 function load(file, stubs = {}) {
+  if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(file)) return require("./helpers/flag-files.cjs").load(file);
   const javascript = ts.transpileModule(read(file), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText;
@@ -114,6 +115,7 @@ function fixture(options = {}) {
         return options.enabled !== false;
       },
     },
+    "@/lib/telemetry/activationAnalytics": { trackActivation: () => {} },
     "@/lib/email/sendEmail": { sendEmail: async (input) => {
       calls.sent.push(input);
       if (options.sendFailure) throw new Error("Provider failed");
@@ -268,11 +270,19 @@ test("integration uses committed fenced task state and excludes trusted backgrou
   assert.match(read("src/lib/api/task-writes/update.ts"), /updateTaskSingle\(newTask, currentUser, actingAgentId\)/);
 });
 
-test("schema stays unchanged and flag defaults to Owner + QA", () => {
+test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
-  assert.equal(execFileSync("git", ["diff", "origin/production", "--", "src/prisma"], { cwd: root, encoding: "utf8" }), "");
-  assert.match(read("src/lib/flags.ts"), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
-  assert.match(read("src/lib/flags/keys.ts"), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
+  const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
+  const schema = read("src/prisma/schema.prisma");
+  // The email reuses existing models; unrelated tickets may add models and migrations.
+  for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
+    const pattern = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, "m");
+    assert.match(baseline, pattern, name);
+    assert.match(schema, pattern, name);
+    assert.equal(schema.match(pattern)[0], baseline.match(pattern)[0], `${name} email model stays unchanged`);
+  }
+  assert.match((read("src/lib/flags.ts") + require("./helpers/flag-files.cjs").source()), /key: HTPR_7028_FIRST_TASK_EMAIL_FLAG,\s*kind: "feature",\s*defaultMode: "OWNER_AND_QA"/);
+  assert.match(require("./helpers/flag-files.cjs").source(), /HTPR_7028_FIRST_TASK_EMAIL_FLAG = "htpr-7028-first-task-email"/);
 });
 
 test("changed-file typecheck has no diagnostics in feature code", { skip: !process.env.HTPR_7028_TYPECHECK }, () => {
@@ -281,7 +291,7 @@ test("changed-file typecheck has no diagnostics in feature code", { skip: !proce
   const parsed = ts.parseJsonConfigFileContent(config.config, ts.sys, root);
   assert.equal(parsed.errors.length, 0);
   const program = ts.createProgram(parsed.fileNames, { ...parsed.options, incremental: false, noEmit: true });
-  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "src/utils/controllers/section/sectionService.ts", "src/lib/ai/tools/section.ts"];
+  const files = [emailFile, templateFile, boardFile, "src/lib/flags.ts", "src/lib/flags/definitions.ts", "src/lib/flags/keys.ts", "src/utils/controllers/tasks/single.ts", "src/utils/controllers/section/sectionService.ts", "src/lib/ai/tools/section.ts"];
   const diagnostics = [...program.getOptionsDiagnostics(), ...program.getGlobalDiagnostics()];
   for (const file of files) {
     const source = program.getSourceFile(path.join(root, file));
