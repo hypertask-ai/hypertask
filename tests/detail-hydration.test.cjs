@@ -31,7 +31,7 @@ let instantTicketOpen;
 const mocks = {
   "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
   "@/hooks/General/useHydrated": hydrated,
-  "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => true },
+  "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => ({ settled: true, slotRef: () => {} }) },
   "./SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
   "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
   "@/lib/flags/keys": {},

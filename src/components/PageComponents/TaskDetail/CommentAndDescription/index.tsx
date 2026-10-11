@@ -95,7 +95,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
     : measuredItems;
   // HTPR-7074: on the uncached path the composer waits for the thread height to stop growing.
-  const threadSettled = useThreadSettled(virtualizer.getTotalSize(), measuredItems.length, !cachedLayout && !_mbl);
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
 
   // ------------------------------------------------------------------
 
@@ -239,7 +239,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
       </div>
       {!cachedLayout && !_mbl && secondaryPanelsReady !== false && (
         // Mounted at once but hidden until the thread settles: it holds its space and cannot shift the thread (HTPR-7074).
-        <SettledComposerSlot settled={threadSettled}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>
+        <SettledComposerSlot settled={threadSettled} slotRef={composerSlotRef}><Suspense fallback={null}><NewCommentComponent /></Suspense></SettledComposerSlot>
       )}
       {cachedLayout && !_mbl && (stableLayout ? (
         <div data-task-composer-slot className="flow-root min-h-[168px]">

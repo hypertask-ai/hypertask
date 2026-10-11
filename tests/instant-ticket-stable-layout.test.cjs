@@ -57,7 +57,7 @@ const lateInfo = marker("late-info");
 const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", {
   ...common,
   "@/hooks/General/useHydrated": { useHydrated: () => true },
-  "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => true },
+  "@/hooks/Task Detail/useThreadSettled": { useThreadSettled: () => ({ settled: true, slotRef: () => {} }) },
   "./SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
   "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot": { SettledComposerSlot: ({ children }) => children },
   "next/dynamic": { default: () => marker("reactions") },
