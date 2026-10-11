@@ -199,18 +199,26 @@ export async function createComposedTask({
   }
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
-  // HTPR-7123: a column the view filters on is the user's choice; otherwise the type picks the column.
-  const viewPicksColumn = !!filters?.addedFilters.some((filter) => filter.type === "Status");
   for (const [index, draft] of drafts.entries()) {
-    const typedSection = !existingTaskId && !viewPicksColumn
+    // HTPR-7123: the ticket type picks the column and the task goes to its top, like the default column.
+    // No view setting chooses a column for a new task, so only an existing task or a missing match keeps the default.
+    let placement = defaults?.data;
+    const typedSection = !existingTaskId
       ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
+    if (typedSection) {
+      try {
+        const top = await axios.get("/api/tasks/createGlobally", {
+          params: { projectId: project.id, sectionId: typedSection.id, position: "top" },
+        });
+        if (top?.data?.sectionId === typedSection.id && top.data.ranking) placement = { ...top.data, section: typedSection.title };
+      } catch { /* keep the default column */ }
+    }
     try {
       const created = await createNewTaskGloballyAPIHandler({
         userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
         title: draft.title, ...{ description: draft.description },
-        sectionId: typedSection ? typedSection.id : defaults?.data.sectionId,
-        section_title: typedSection ? typedSection.title : defaults?.data.section,
-        ranking: typedSection ? undefined : defaults?.data.ranking, ...taskFields, requestKind: "compose-task",
+        sectionId: placement?.sectionId, section_title: placement?.section,
+        ranking: placement?.ranking, ...taskFields, requestKind: "compose-task",
         ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });

@@ -40,7 +40,14 @@ async function withWriter(config, check) {
       if (config.missingTask) return { error: false, resposne: {} };
       return { resposne: { newTask: { id: 91, uniqueIndex: 44, projectId: body.projectId, sectionId: body.sectionId, ticketNumber: 'QASA-44' } } };
     } });
-    const axios = { get: async (_url, options) => { defaults.push(options.params); return { data: config.defaults ?? { sectionId: 12, section: 'Todo', ranking: 'a' } }; } };
+    const axios = { get: async (_url, options) => {
+      defaults.push(options.params);
+      if (options.params.sectionId !== undefined) {
+        if (config.topFails) throw new Error('Defaults unavailable');
+        return { data: { sectionId: options.params.sectionId, section: 'x', ranking: `top-of-${options.params.sectionId}` } };
+      }
+      return { data: config.defaults ?? { sectionId: 12, section: 'Todo', ranking: 'a' } };
+    } };
     const axiosPath = require.resolve('axios');
     require.cache[axiosPath] = { id: axiosPath, filename: axiosPath, loaded: true, exports: { default: axios } };
     const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
@@ -90,11 +97,13 @@ test('column mapping: match, case-insensitive, singular, no match, deleted, miss
 });
 
 test('compose end to end: an improvement lands in the Improvements column, not the default Bugs column', async () => {
-  await withWriter({ response: typed('improvement') }, async ({ createComposedTask, project, creates }) => {
+  await withWriter({ response: typed('improvement') }, async ({ createComposedTask, project, creates, defaults }) => {
     await createComposedTask({ text: 'Agents react with emoji', files: [], project, userId: 985 });
     assert.equal(creates[0].sectionId, 13);
     assert.equal(creates[0].section_title, 'Improvements');
-    assert.equal(creates[0].ranking, undefined);
+    // Same top-of-column ranking lookup the default column uses, for the typed column.
+    assert.deepEqual(defaults, [{ projectId: 7, position: 'top' }, { projectId: 7, sectionId: 13, position: 'top' }]);
+    assert.equal(creates[0].ranking, 'top-of-13');
     assert.equal(creates[0].description, '<p>Agents should react.</p>');
   });
 });
@@ -136,9 +145,17 @@ test('flag off: without the marker header the span is never read and the column 
   });
 });
 
-test('a column the view filters on wins over the type', async () => {
+test('a view Status filter is task state, not a column, so the type still picks the column', async () => {
   await withWriter({ response: typed('improvement') }, async ({ createComposedTask, project, creates }) => {
     await createComposedTask({ text: 'x', files: [], project, userId: 985, viewProject: viewWithStatus });
+    assert.equal(creates[0].sectionId, 13);
+    assert.equal(creates[0].ranking, 'top-of-13');
+  });
+});
+
+test('if the top-of-column lookup fails the ticket is still created in today\'s default column', async () => {
+  await withWriter({ response: typed('improvement'), topFails: true }, async ({ createComposedTask, project, creates }) => {
+    await createComposedTask({ text: 'x', files: [], project, userId: 985 });
     assert.equal(creates[0].sectionId, 12);
     assert.equal(creates[0].ranking, 'a');
   });

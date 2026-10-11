@@ -159,7 +159,8 @@ test("Ctrl+J compose path: sends AiTaskWriter with compose-task and gets the rul
 test("Ctrl+J compose path: only the validated ticket type can move the column, never the model's status or tags", () => {
   const compose = fs.readFileSync(path.join(root, "src/lib/ai/composeTask.ts"), "utf8");
   assert.doesNotMatch(compose, /ai-generated-task-(status|tags)/);
-  assert.match(compose, /typedSection \? typedSection\.id : defaults\?\.data\.sectionId/);
+  assert.match(compose, /sectionId: placement\?\.sectionId/);
+  assert.match(compose, /position: "top"/);
   assert.match(compose, /\.\.\.taskFields/);
 });
 
