@@ -1,0 +1,23 @@
+{
+  "sourceCommit": "27ff5786e10462e420fecd21decfe7085e505d03",
+  "description": "Immutable pre-HTPR-7084 registry snapshot of display-only bugfix flags. Keep removed entries: only surviving definitions are checked.",
+  "defaultModes": {
+    "htpr-5906-shortcut-nudges": "OWNER_AND_QA",
+    "htpr-5908-local-writing-assistance": "OWNER_AND_QA",
+    "htpr-6112-copy-current-url": "OWNER_AND_QA",
+    "htpr-6141-ai-first-task-writer": "OWNER_AND_QA",
+    "htpr-6154-chat-stop-and-timeout": "OWNER_AND_QA",
+    "htpr-6177-auto-task-descriptions": "OWNER_AND_QA",
+    "htpr-6197-confirmed-proposal-heading": "OWNER_AND_QA",
+    "htpr-6278-chat-turn-failure-state": "OWNER_AND_QA",
+    "htpr-6363-task-writer-research": "OWNER_AND_QA",
+    "htpr-6372-search-ranking": "OWNER_AND_QA",
+    "htpr-6407-mobile-agent-chat-layout": "OWNER_AND_QA",
+    "htpr-6421-my-tasks-shortcuts-width": "OWNER_AND_QA",
+    "htpr-6512-seed-team-agent": "OWNER_AND_QA",
+    "htpr-6516-agent-attribution": "OWNER_AND_QA",
+    "htpr-6553-agent-chat-polling": "OWNER_AND_QA",
+    "htpr-6911-search-row-highlight": "OWNER_AND_QA",
+    "htpr-6951-task-writing-progress": "OWNER_AND_QA"
+  }
+}

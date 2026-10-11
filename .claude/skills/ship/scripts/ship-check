@@ -527,7 +527,7 @@ try:
     files = [f for page in pages for f in page]
     if len(files) != row['changed_files']:
         raise ValueError('cannot read the complete PR diff; retry before merging')
-    touched, base_touched, unknown = set(), set(), False
+    touched, base_touched, deleted_definitions, unknown = set(), set(), set(), False
     for f in files:
         versions = []
         if f['status'] != 'added':
@@ -545,6 +545,8 @@ try:
                 touched.update(values.values())
                 if ref == base:
                     base_touched.update(values.values())
+                    if f['status'] == 'removed':
+                        deleted_definitions.update(values.values())
             readers = ['useFlag', 'isFeatureEnabled'] + re.findall(r'\b(?:useFlag|isFeatureEnabled)\s+as\s+(\w+)', text)
             for call in re.finditer(r'\b(?:' + '|'.join(readers) + r')\s*\(\s*([^,)\n]+)', text):
                 if re.search(r'\bfunction\s*$', text[:call.start()]):
@@ -621,6 +623,9 @@ try:
     base_values = set(keys.values()) | set(defaults)
     head_keys, head_rows = flag_registry(sha)
     head_values = set(head_keys.values())
+    # Removed definitions cannot appear in the PR build's flag snapshot. They still require
+    # a current-head click when released; only their recorded mode is exempt, unless the key survives.
+    recorded_flags = touched - (deleted_definitions - head_values)
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
     for block in head_rows:
         key = re.search(r'\bkey:\s*(\w+)', block)
@@ -651,8 +656,10 @@ try:
     if fields.get('Commit') != sha:
         raise ValueError(f'{record} must name PR head sha {sha}; repeat the click-through after each push')
     for field in ('Account', 'Flags', 'Board', 'Build'):
+        if field == 'Flags' and not recorded_flags:
+            continue
         if not fields.get(field):
-            expected = ', '.join(f'{key}=EVERYONE' for key in sorted(released))
+            expected = ', '.join(f'{key}=EVERYONE' for key in sorted(released & recorded_flags))
             hint = f'; expected Flags: {expected}' if field == 'Flags' and expected else ''
             raise ValueError(message + f' (missing {field}:{hint})')
     board = urllib.parse.urlsplit(fields['Board'])
@@ -661,8 +668,8 @@ try:
     legacy_board = re.fullmatch(r'/projects/project-[1-9][0-9]*(?:[/?#]\S*)?', board.path)
     if board.scheme not in ('http', 'https') or not board.netloc or re.search(r'\s', fields['Board']) or not (canonical_board or legacy_board):
         raise ValueError(message + ' (Board: must name a real board URL, not /demo)')
-    states = dict(part.strip().split('=', 1) for part in fields['Flags'].split(','))
-    for key in sorted(touched):
+    states = dict(part.strip().split('=', 1) for part in fields.get('Flags', '').split(',') if part.strip())
+    for key in sorted(recorded_flags):
         mode = modes.get(key)
         if key not in states and key in modes and mode != 'EVERYONE':
             continue
