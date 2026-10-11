@@ -39,6 +39,10 @@ class Fixture(unittest.TestCase):
         self.process = patch.object(disk, 'process_paths', return_value=(set(), False))
         self.paths = self.process.start()
         self.addCleanup(self.process.stop)
+        # Never read real command lines or reach the real Docker daemon from a test.
+        self.cmdlines = patch.object(disk, 'cmdline_paths', return_value=(set(), set(), True)).start()
+        self.docker = patch.object(disk, 'docker_available', return_value=False).start()
+        self.addCleanup(patch.stopall)
 
     def old(self, path, days=4):
         paths = list(path.rglob('*')) if path.is_dir() else []
@@ -805,6 +809,315 @@ class WorktreeTests(Fixture):
         self.assertGreater(self.guard.planned, 0)
 
 
+REAL_CMDLINE_PATHS = disk.cmdline_paths
+
+
+class CacheTests(Fixture):
+    def sweep(self):
+        self.guard.caches(self.guard.discover())
+
+    def stats(self, category):
+        return self.guard.categories[category]
+
+    def test_cache_idle_worktree_next_removed_and_reported(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        self.sweep()
+        self.assertFalse(build.exists())
+        self.assertTrue((tree / 'file').exists())
+        self.assertEqual(self.stats('next-build')['paths'], 1)
+        self.assertGreater(self.stats('next-build')['freed'], 0)
+        self.assertEqual(list((self.guard.state / 'trash').iterdir()), [])
+        self.assertIn('next-build: next build output of an idle worktree', (self.guard.state / 'log').read_text())
+
+    def test_cache_open_pr_worktree_kept_but_its_idle_next_removed(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        ignore = self.root / 'ignore'
+        ignore.write_text('.next/\n')
+        self.git(tree, 'config', 'core.excludesFile', str(ignore))
+        self.old(tree)
+        os.environ['GH_ROWS'] = json.dumps([{'state': 'OPEN', 'headRefName': 'feature'}])
+        repos = self.guard.discover()
+        self.guard.worktrees(repos)
+        self.guard.caches(repos)
+        self.assertTrue((tree / 'file').exists())
+        self.assertIn('OPEN PR', self.output.getvalue())
+        self.assertFalse(build.exists())
+
+    def test_cache_next_kept_when_a_process_uses_the_worktree(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        self.paths.return_value = ({tree / 'src'}, False)  # cwd elsewhere in the worktree, not in .next
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('next-build: process has cwd/fd/root inside', self.output.getvalue())
+
+    def test_cache_next_kept_when_a_command_line_names_the_worktree(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        self.cmdlines.return_value = ({tree}, {'bash'}, True)
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('process command line names a path inside', self.output.getvalue())
+
+    def test_cache_next_kept_when_a_running_container_mounts_the_worktree(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        with patch.object(disk, 'docker_mounts', return_value={tree}), patch.object(self.guard, 'volumes'):
+            self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('running container mounts this path', self.output.getvalue())
+
+    def test_cache_failed_mount_or_command_line_scan_keeps(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        self.cmdlines.return_value = (set(), set(), False)
+        self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('command-line scan incomplete', self.output.getvalue())
+        self.cmdlines.return_value = (set(), set(), True)
+        self.guard.cmdlines = None
+        with patch.object(disk, 'docker_mounts', side_effect=subprocess.CalledProcessError(1, 'docker')):
+            self.sweep()
+        self.assertTrue(build.exists())
+        self.assertIn('docker mount scan failed', self.output.getvalue())
+
+    def test_cache_young_files_keep_every_category(self):
+        _, tree = self.repo()
+        paths = [self.output_dir(tree / '.next', 1), self.output_dir(self.home / '.cache/go-build', 1),
+                 self.output_dir(self.home / '.npm/_npx/abc', 6), self.output_dir(self.home / '.npm/_cacache', 0)]
+        self.sweep()
+        self.assertTrue(all(p.exists() for p in paths))
+        self.assertIn('newest mtime is not older than 60 minutes', self.output.getvalue())
+        self.assertEqual(self.guard.planned + self.guard.freed, 0)
+
+    def test_cache_protected_main_checkout_next_kept(self):
+        build = self.output_dir(self.guard.protected / '.next')
+        self.guard.caches([(self.guard.protected, [{'path': self.guard.protected}])])
+        self.assertTrue(build.exists())
+
+    def test_cache_listed_tool_and_npx_caches_removed_unlisted_kept(self):
+        tools = [self.output_dir(self.home / '.cache' / name) for name in disk.TOOL_CACHES]
+        others = [self.output_dir(self.home / '.cache' / name) for name in ('puppeteer', 'prisma', 'google-chrome')]
+        npx = self.output_dir(self.home / '.npm/_npx/0123abcd', 8)
+        self.sweep()
+        self.assertTrue(all(not p.exists() for p in tools + [npx]))
+        self.assertTrue(all(p.exists() for p in others))
+        self.assertEqual(self.stats('tool-caches')['paths'], len(disk.TOOL_CACHES))
+        self.assertEqual(self.stats('npx-cache')['paths'], 1)
+
+    def test_cache_links_inside_a_cache_are_removed_never_followed(self):
+        valuable = self.output_dir(self.root / 'valuable', 60)
+        npx = self.output_dir(self.home / '.npm/_npx/abc', 8)
+        (npx / 'node_modules/.bin').mkdir(parents=True)
+        (npx / 'node_modules/.bin/tool').symlink_to(valuable / 'output')
+        (npx / 'node_modules/escape').symlink_to(valuable)
+        self.old(npx, 8)
+        for link in (npx / 'node_modules/.bin/tool', npx / 'node_modules/escape'):
+            os.utime(link, (self.guard.now - 8 * disk.DAY,) * 2, follow_symlinks=False)
+        self.sweep()
+        self.assertFalse(npx.exists())
+        self.assertTrue((valuable / 'output').exists())
+
+    def test_cache_never_touches_credentials_evidence_or_transcripts(self):
+        kept = [self.output_dir(self.home / rel, 60) for rel in
+                ('.config/gh', '.config/hypertask-secrets', '.claude/projects/session', '.codex/sessions',
+                 '.local/state/vcc-evidence/YPER4-1')]
+        # A tool cache that is a symlink into ~/.config is never followed.
+        (self.home / '.cache').mkdir(exist_ok=True)
+        (self.home / '.cache/uv').symlink_to(self.home / '.config/gh')
+        self.sweep()
+        for rel in ('.config/gh', '.claude/projects', '.local/state/vcc-evidence'):
+            self.guard.cache_remove('tool-caches', self.home / rel, DAY_FIXTURE, 'fixture')
+        self.assertTrue(all(p.exists() and (p / 'output').exists() for p in kept))
+        self.assertTrue((self.home / '.cache/uv').is_symlink())
+        self.assertIn('credential, evidence or transcript folder', self.output.getvalue())
+
+    def test_cache_env_or_storage_state_inside_keeps_candidate(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        (build / '.env.production').write_text('SECRET=fixture\n')
+        npx = self.output_dir(self.home / '.npm/_npx/abc', 8)
+        (npx / 'qa-storageState.json').write_text('{}')
+        self.old(build)
+        self.old(npx, 8)
+        self.sweep()
+        self.assertTrue((build / '.env.production').exists())
+        self.assertTrue((npx / 'qa-storageState.json').exists())
+        self.assertEqual(self.output.getvalue().count('.env or storageState file inside'), 2)
+
+    def test_cache_npm_cacache_only_when_no_npm_runs(self):
+        cacache = self.output_dir(self.home / '.npm/_cacache')
+        self.cmdlines.return_value = (set(), {'node', 'npm-cli.js'}, True)
+        self.sweep()
+        self.assertTrue(cacache.exists())
+        self.assertIn('npm-cache: npm or npx process running', self.output.getvalue())
+        self.cmdlines.return_value = (set(), {'node', 'next'}, True)
+        self.guard.cmdlines = None
+        self.sweep()
+        self.assertFalse(cacache.exists())
+        self.assertEqual(self.stats('npm-cache')['paths'], 1)
+
+    def test_cache_npm_command_starting_before_delete_keeps(self):
+        cacache = self.output_dir(self.home / '.npm/_cacache')
+        self.cmdlines.side_effect = [(set(), set(), True), (set(), {'npx'}, True)]
+        self.sweep()
+        self.assertTrue(cacache.exists())
+
+    def test_cache_playwright_keeps_newest_and_referenced_revisions(self):
+        root = self.home / '.cache/ms-playwright'
+        old = self.output_dir(root / 'chromium-1217', 8)
+        shell_old = self.output_dir(root / 'chromium_headless_shell-1217', 8)
+        used = self.output_dir(root / 'chromium-1234', 8)
+        shell_used = self.output_dir(root / 'chromium_headless_shell-1234', 8)
+        newest = self.output_dir(root / 'chromium-1243', 8)
+        shell_newest = self.output_dir(root / 'chromium_headless_shell-1243', 8)
+        ffmpeg = self.output_dir(root / 'ffmpeg-1011', 8)
+        core = self.root / 'install/node_modules/playwright-core'
+        core.mkdir(parents=True)
+        (core / 'browsers.json').write_text(json.dumps({'browsers': [
+            {'name': 'chromium', 'revision': '1234'}, {'name': 'chromium-headless-shell', 'revision': '1234'}]}))
+        (root / '.links').mkdir()
+        (root / '.links/hash').write_text(str(core))
+        self.sweep()
+        self.assertFalse(old.exists())
+        self.assertFalse(shell_old.exists())
+        self.assertTrue(all(p.exists() for p in (used, shell_used, newest, shell_newest, ffmpeg)))
+        self.assertEqual(self.stats('playwright-old')['paths'], 2)
+
+    def test_cache_playwright_worktree_reference_keeps_revision(self):
+        _, tree = self.repo()
+        root = self.home / '.cache/ms-playwright'
+        pinned = self.output_dir(root / 'chromium-1217', 8)
+        self.output_dir(root / 'chromium-1243', 8)
+        core = tree / 'node_modules/playwright-core'
+        core.mkdir(parents=True)
+        (core / 'browsers.json').write_text(json.dumps({'browsers': [{'name': 'chromium', 'revision': '1217'}]}))
+        self.sweep()
+        self.assertTrue(pinned.exists())
+
+    def test_cache_playwright_without_references_or_bad_json_keeps_all(self):
+        root = self.home / '.cache/ms-playwright'
+        old = self.output_dir(root / 'chromium-1217', 8)
+        self.output_dir(root / 'chromium-1243', 8)
+        self.sweep()
+        self.assertTrue(old.exists())
+        (root / '.links').mkdir()
+        (root / '.links/hash').write_text(str(self.root / 'install'))
+        (self.root / 'install').mkdir()
+        (self.root / 'install/browsers.json').write_text('not json')
+        self.sweep()
+        self.assertTrue(old.exists())
+        self.assertIn('cannot prove which browser revisions are in use', self.output.getvalue())
+
+    def docker_cli(self, rows, created):
+        calls = []
+        def run(args, cwd=None):
+            calls.append(args)
+            if args[1:3] == ['system', 'df']:
+                return json.dumps(rows)
+            if args[1:3] == ['volume', 'inspect']:
+                return created[args[-1]]
+            if args[1:3] == ['volume', 'rm']:
+                return args[-1]
+            self.fail(f'unexpected docker command {args}')
+        return calls, run
+
+    def test_cache_docker_only_old_unused_anonymous_and_smoke_volumes(self):
+        old = disk.datetime.fromtimestamp(self.guard.now - 8 * disk.DAY, disk.timezone.utc).isoformat()
+        day = disk.datetime.fromtimestamp(self.guard.now - 2 * disk.DAY, disk.timezone.utc).isoformat()
+        young = disk.datetime.fromtimestamp(self.guard.now - 3600, disk.timezone.utc).isoformat()
+        anonymous = 'com.docker.volume.anonymous='
+        rows = [{'Name': 'a' * 64, 'Links': '0', 'Labels': anonymous, 'Size': '55.12MB'},
+                {'Name': 'b' * 64, 'Links': '0', 'Labels': anonymous, 'Size': '1GB'},
+                {'Name': 'c' * 64, 'Links': '1', 'Labels': anonymous, 'Size': '1GB'},
+                {'Name': 'postgres-data', 'Links': '0', 'Labels': '', 'Size': '2GB'},
+                {'Name': 'ht-smoke-build-123-1-abc', 'Links': '0', 'Labels': '', 'Size': '300MB'},
+                {'Name': 'ht-smoke-state-456-1-def', 'Links': '0', 'Labels': '', 'Size': '1MB'}]
+        created = {'a' * 64: old, 'b' * 64: day, 'c' * 64: old, 'postgres-data': old,
+                   'ht-smoke-build-123-1-abc': day, 'ht-smoke-state-456-1-def': young}
+        calls, run = self.docker_cli(rows, created)
+        self.docker.return_value = True
+        with patch.object(disk, 'command', side_effect=run):
+            self.guard.volumes()
+        removed = [c[-1] for c in calls if c[1:3] == ['volume', 'rm']]
+        self.assertEqual(removed, ['a' * 64, 'ht-smoke-build-123-1-abc'])
+        self.assertFalse(any('prune' in c for c in calls))
+        self.assertEqual(self.stats('docker-volumes'), {'freed': 355120000, 'would_free': 0, 'paths': 2})
+        text = self.output.getvalue()
+        self.assertIn('named volume: persistent data, never pruned', text)
+        self.assertIn('volume attached to a container', text)
+
+    def test_cache_stops_once_below_target(self):
+        first = self.output_dir(self.home / '.npm/_npx/a', 8)
+        second = self.output_dir(self.home / '.npm/_npx/b', 8)
+        with patch.object(self.guard, 'usage', side_effect=[76] + [69] * 10):
+            self.sweep()
+        self.assertFalse(first.exists())
+        self.assertTrue(second.exists())
+        self.assertIn(f'disk below {disk.CACHE_TARGET}% target', self.output.getvalue())
+
+    def test_cache_dry_run_reports_without_deleting(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        npx = self.output_dir(self.home / '.npm/_npx/a', 8)
+        self.guard.dry = True
+        with patch.object(self.guard, 'usage', return_value=50):
+            self.guard.run()
+        self.assertTrue(build.exists() and npx.exists())
+        self.assertFalse((self.guard.state / 'log').exists())
+        summary = json.loads(self.output.getvalue().split("summary: '/' reason=")[1].rsplit(' bytes_freed', 1)[0].strip("'"))
+        self.assertGreater(summary['caches']['next-build']['would_free'], 0)
+        self.assertEqual(summary['caches']['npx-cache']['paths'], 1)
+        self.assertEqual(summary['thresholds']['caches_from'], 75)
+
+    def test_cache_thresholds(self):
+        for percent, expected in [(74.99, 0), (75, 1), (80, 1)]:
+            with patch.object(self.guard, 'usage', return_value=percent), \
+                 patch.object(self.guard, 'caches') as caches, patch.object(self.guard, 'temporary') as temporary, \
+                 patch.object(self.guard, 'images'), patch.object(self.guard, 'critical'):
+                self.guard.run()
+            self.assertEqual(caches.call_count, expected, percent)
+            self.assertEqual(temporary.call_count, int(percent >= 80), percent)
+        self.assertLess(disk.CACHE_TARGET, disk.CACHE_AT)
+        self.assertLess(disk.CACHE_AT, disk.CLEAN_AT)
+
+    def test_cache_interrupted_trash_is_emptied_next_run(self):
+        leftover = self.output_dir(self.guard.state / 'trash/123-.next', 0)
+        self.sweep()
+        self.assertFalse(leftover.exists())
+
+    def test_cache_report_lists_categories_without_deleting(self):
+        _, tree = self.repo()
+        build = self.output_dir(tree / '.next')
+        text = self.guard.report().read_text()
+        self.assertIn('## Re-creatable caches', text)
+        row = next(line for line in text.splitlines() if line.startswith('| next-build |'))
+        self.assertIn('| 1 |', row)
+        self.assertTrue(build.exists())
+
+    def test_cache_cmdline_scan_reads_a_real_process(self):
+        target = self.output_dir(self.tmp / 'argument')
+        child = subprocess.Popen([sys.executable, '-c', 'import sys; sys.stdin.read()', f'--dir={target}'],
+                                 stdin=subprocess.PIPE, text=True)
+        try:
+            paths, programs, _ = REAL_CMDLINE_PATHS()
+            self.assertIn(target, paths)
+            self.assertIn(Path(sys.executable).name, programs)
+        finally:
+            child.communicate('', timeout=10)
+
+    def test_cache_docker_sizes_parse(self):
+        self.assertEqual(disk.docker_bytes('55.12MB'), 55120000)
+        self.assertEqual(disk.docker_bytes('1.5GB'), 1500000000)
+        self.assertEqual(disk.docker_bytes('0B'), 0)
+        self.assertEqual(disk.docker_bytes('N/A'), 0)
+
+
+DAY_FIXTURE = 0
+
+
 class OperationTests(Fixture):
     def test_component_containment_matches_parent_boundaries(self):
         for child, parent in [('/tmp/cache/output', '/tmp/cache'), ('/tmp/cache', '/tmp/cache'),
@@ -938,7 +1251,10 @@ class OperationTests(Fixture):
                 return 'persistent-volume'
             if args[1:3] == ['volume', 'inspect']:
                 return '[{"CreatedAt":"2020-01-01"}]'
+            if args[1:3] == ['ps', '-q']:
+                return ''
             self.fail(f'unexpected command {args}')
+        self.docker.return_value = True
         with patch.object(disk, 'command', side_effect=docker):
             path = self.guard.report()
         text = path.read_text()
