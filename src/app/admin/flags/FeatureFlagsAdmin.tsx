@@ -510,6 +510,16 @@ export default function FeatureFlagsAdmin({
                     ))}
                   </p>
                 )}
+                {flag.lastChange && (
+                  <div className="mt-2">
+                    <span className="text-dense text-text-light-gray">
+                      Last change: {OPTIONS.find(({ mode }) => mode === flag.lastChange?.oldMode)?.label ?? "Default"} → {OPTIONS.find(({ mode }) => mode === flag.lastChange?.newMode)?.label} by {flag.lastChange.actorName}, {new Date(flag.lastChange.createdAt).toLocaleString(undefined, { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      {flag.lastChange.reason && (
+                        <> <a href={flag.lastChange.reason} target="_blank" rel="noreferrer" className="text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline">reason</a></>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {(() => {
                     const removal = featureFlagRemovalState(flag);
                     if (!removal) return null;

@@ -149,6 +149,33 @@ for (const [key, project, number] of [["htpr-6752-instant-ticket-open", 15, 6752
   });
 }
 
+test("audit metadata uses one existing label line and a safe styled reason link", async () => {
+  rows[0].lastChange = {
+    oldMode: "OWNER_AND_QA", newMode: "OFF", actorName: "Runner 3",
+    reason: "https://app.hypertask.ai/detail/project-4060/215#comment-123", createdAt: "2026-10-12T14:05:00Z",
+  };
+  for (const props of [{}, { flagKey: rows[0].key }]) {
+    await withAdmin(props, { flags: rows, detailsEnabled: true }, async ({ document }) => {
+      const labels = [...document.querySelectorAll("span.text-dense.text-text-light-gray")].filter((node) => node.textContent.startsWith("Last change:"));
+      assert.equal(labels.length, 1);
+      assert.match(labels[0].textContent, /Last change: Owner \+ QA → Off by Runner 3,/);
+      const link = labels[0].querySelector("a");
+      assert.equal(link.textContent, "reason");
+      assert.equal(link.getAttribute("href"), rows[0].lastChange.reason);
+      assert.equal(link.getAttribute("target"), "_blank");
+      assert.equal(link.getAttribute("rel"), "noreferrer");
+      assert.equal(link.className, "text-content font-medium text-white-black underline-offset-2 hover:underline focus-visible:underline");
+    });
+  }
+  rows[0].lastChange.oldMode = null;
+  rows[0].lastChange.reason = null;
+  await withAdmin({}, { flags: rows, detailsEnabled: true }, async ({ document }) => {
+    const label = [...document.querySelectorAll("span")].find((node) => node.textContent.startsWith("Last change:"));
+    assert.match(label.textContent, /Default → Off/);
+    assert.equal(label.querySelector("a"), null);
+  });
+});
+
 test("legacy detail has no invented ticket or shipped date; missing client row has a plain not-found state", async () => {
   await withAdmin({ flagKey: "legacy-rollout" }, { flags: [fixture("legacy-rollout", { shippedOn: null })], detailsEnabled: true }, async ({ document }) => {
     assert.match(document.body.textContent, /Shipped: Not recorded/);

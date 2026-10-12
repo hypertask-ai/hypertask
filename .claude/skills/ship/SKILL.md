@@ -49,6 +49,16 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
 | Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
 
+## Switching flags from a session (YPER4-215)
+
+Every change needs Valentin's own thumbs up within the last 7 days on the exact approval comment. Post a ticket comment as a `Question:` for Valentin whose whole text is `Question: Switch <flag-key> to <mode>?` (after the @Valentin Yeo mention), where mode is `Only me`, `Owner + QA`, `Everyone` or `Off`; anything else (a refusal, two requests) is refused. For example: `Question: Switch htpr-6136-figma-connect to Owner + QA?` Wait for him to thumbs-up that comment; his own comment alone is not approval, and agent-made reactions do not count.
+Use `.claude/skills/ship/scripts/ht-flag get [KEY]` to read modes with this session's agent identity.
+Then use `.claude/skills/ship/scripts/ht-flag set KEY MODE --reason <ticket URL>#comment-<id>`, for example `.claude/skills/ship/scripts/ht-flag set htpr-6136-figma-connect owner-qa --reason https://app.hypertask.ai/detail/project-4060/215#comment-123`.
+The reason must be exactly `https://app.hypertask.ai/detail/project-<projectId>/<number>#comment-<id>` for that comment. Ticket links without the comment anchor, page links and trailing junk are refused.
+Modes: `off`, `everyone`, `owner-qa`, `only-me`, or the real enum names; add `--dry-run` to inspect without sending.
+Only agents owned by the flag owner can use this API; plain user tokens and management keys are refused.
+The auto-Off-on-failed-QA exception is NOT approved yet; even Off needs Valentin's own thumbs up on a comment naming the flag key and Off.
+
 ## Local premerge board click
 
 Use `scripts/premerge-local.sh up` as a managed background task from the PR worktree to build and serve the CI browser-smoke app with disposable Docker services and a seeded signed-in board. It prints URLs, a Playwright storage-state path and the `premerge.md` starting lines. Follow `.claude/skills/verify-qa/SKILL.md` "Disposable local PR build" to capture the changed-path click and recording, confirming the snapshot matches live flag modes. Keep the task alive during QA, then finish with `scripts/premerge-local.sh down` from another command. Exiting or interrupting the task also stops its servers and containers. This needs Docker, Node 24 and no `.env` files; it never uses a production database and does not replace live QA after deploy. Never symlink `node_modules` from the main checkout (`npm ci` through the link empties the shared install, YPER4-247); if the worktree needs the main install, run `scripts/worktree-node-modules.sh <main checkout> <worktree>` for a hardlinked copy.
