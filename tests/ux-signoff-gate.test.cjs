@@ -597,3 +597,11 @@ test('a Hypertask outage turns an earlier green to pending; budget exhaustion ke
 test("Valentin's yes that quotes the wireframe link still approves it", async () => {
   assert.equal((await decision({ comments: [wireframe(), yes({ text: '<p>yes https://hypertask.app/wireframes/htpr-1</p>' })] })).state, 'success');
 });
+
+test('an agent-edited verdict is not Valentin\'s: a "no" turned "yes" by an agent fails', async () => {
+  const edited = { text: '<p>yes go</p>', editedAt: '2026-10-10T12:05:00Z' };
+  for (const editedBy of [{ userId: 6, agentId: 'agent-1', isAgent: true }, { userId: 6, agentId: null, isAgent: true }, null, undefined]) {
+    assert.equal((await decision({ comments: [wireframe(), yes({ ...edited, editedBy })] })).state, 'failure');
+  }
+  assert.equal((await decision({ comments: [wireframe(), yes({ ...edited, editedBy: { userId: 6, agentId: null } })] })).state, 'success');
+});
