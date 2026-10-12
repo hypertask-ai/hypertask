@@ -41,17 +41,23 @@ function pageFor(savedResponse, checkPredicate = () => {}) {
   };
 }
 
-test('saveTask watches only the inline POST for the exact title and QA board before clicking', async () => {
+test('saveTask watches only the quick add POST for the exact title and QA board before clicking', async () => {
   const saved = response();
   await runStep(pageFor(saved, (matches) => {
     assert.equal(matches(saved), true);
-    assert.equal(matches(response({ route: '/api/tasks/createGlobally' })), false);
+    assert.equal(matches(response({ route: '/api/tasks/createGlobally' })), true, 'filtered views save through createGlobally');
     assert.equal(matches(response({ route: '/api/tasks/create/other' })), false);
     assert.equal(matches(response({ method: 'GET' })), false);
     assert.equal(matches(response({ title: 'another task' })), false);
     assert.equal(matches(response({ projectId: 99 })), false);
     assert.equal(matches(response({ status: 500 })), true, 'failed saves must surface immediately');
   }), {}, step, fixture);
+});
+
+test('saveTask reads the task inside the createGlobally body', async () => {
+  const task = { id: 123, title: step.value };
+  await runStep(pageFor(response({ route: '/api/tasks/createGlobally', task: { newTask: task } })), {}, step, fixture);
+  await assert.rejects(runStep(pageFor(response({ task: { newTask: { id: 1, title: 'wrong' } } })), {}, step, fixture), /no matching task/);
 });
 
 test('demo save matches the entered title without requiring a signed-in fixture', async () => {
