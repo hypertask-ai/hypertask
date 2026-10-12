@@ -410,7 +410,7 @@ function queuedFlow(t, { enabled = true, noRAF = false, deferQueue = false, ...o
 }
 
 for (const enabled of [false, true]) {
-  test(`phone route commit ${enabled ? "on" : "off"}: early E survives the real workspace frame remount only behind the flag`, t => {
+  test(`phone route commit ${enabled ? "on" : "off"}: early E survives the real workspace frame route change only behind the flag`, t => {
     const React = require("react");
     const { createRoot } = require("react-dom/client");
     const { JSDOM } = require("jsdom");
@@ -475,7 +475,8 @@ for (const enabled of [false, true]) {
     flow.press();
     pathname = window.location.pathname;
     act(() => renderer.render(React.createElement(Provider)));
-    assert.equal(mounts, 2, "the phone Inbox-to-detail wrapper change really remounts navigation");
+    // YPER4-293: the phone Inbox-to-detail switch keeps the same workspace ancestors, so navigation is not remounted.
+    assert.equal(mounts, 1, "the phone Inbox-to-detail switch keeps navigation mounted");
     flow.context.currentTask = { ...task, _count: { notifications: 1 }, notifications: [notification] };
     flow.mountKeyboard(); flow.poll();
     assert.deepEqual(flow.archived, enabled ? [{ item: notification, mode: "Notification" }] : []);
