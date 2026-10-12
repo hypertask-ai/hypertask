@@ -3,7 +3,7 @@
 import { connectRealtimeClient, releaseRealtimeClientIfIdle, } from "@/lib/realtime/client";
 import { AGENT_CHAT_EVENT, userChannel } from "@/lib/realtime/shared";
 import { useEffect } from "react";
-import { ACTIVITY_POLL_MS, AWAITING_POLL_MAX_MS, AWAITING_POLL_MS, CHAT_AVAILABILITY_POLL_MS, LEGACY_AWAITING_POLL_MAX_MS } from "./agentChatTypes";
+import { ACTIVITY_POLL_MS, AWAITING_POLL_MAX_MS, AWAITING_POLL_MS, CHAT_AVAILABILITY_POLL_MS } from "./agentChatTypes";
 import { bumpRosterChatRecency } from "./rosterSort";
 import type { useAgentChatRoster } from "./useAgentChatRoster";
 import type { useAgentChatSession } from "./useAgentChatSession";
@@ -18,7 +18,6 @@ type Props = Pick<
   | "messages"
   | "deliveryNotice"
   | "awaitingSince"
-  | "pollingChatEnabled"
   | "activityRowsEnabled"
   | "currentUser"
   | "sessionIdRef"
@@ -38,7 +37,7 @@ type Props = Pick<
 
 export function useAgentChatStream({
   awaiting, session, setAwaitingSince, setReplyTimedOut, messages, deliveryNotice, awaitingSince,
-  pollingChatEnabled, loadMessages, activityRowsEnabled, currentUser, sessionIdRef, selectedIdRef,
+  loadMessages, activityRowsEnabled, currentUser, sessionIdRef, selectedIdRef,
   setAgents, rosterGenRef, loadAgents, liveSortEnabled,
 }: Props) {
   // Record when the current wait began so the poll below can time out; a new
@@ -68,12 +67,8 @@ export function useAgentChatStream({
     if (deliveryNotice) return;
     const sinceAt =
       awaitingSince?.sessionId === session.id ? awaitingSince.at : Date.now();
-    const maxWait = pollingChatEnabled
-      ? AWAITING_POLL_MAX_MS
-      : LEGACY_AWAITING_POLL_MAX_MS;
-    const remaining = sinceAt + maxWait - Date.now();
+    const remaining = sinceAt + AWAITING_POLL_MAX_MS - Date.now();
     const markTimedOut = () => {
-      if (!pollingChatEnabled) return;
       console.error("[agent-chat] no reply after three minutes");
       setReplyTimedOut(true);
     };
@@ -99,7 +94,6 @@ export function useAgentChatStream({
     deliveryNotice,
     awaitingSince,
     loadMessages,
-    pollingChatEnabled,
   ]);
 
   // Activity rows arrive without a chat reply, so they are not covered by the
@@ -136,7 +130,7 @@ export function useAgentChatStream({
   // Poll delivery availability while an idle chat has no faster reply or
   // activity poll, including a catch-up as soon as a hidden tab returns.
   useEffect(() => {
-    if (!session || !pollingChatEnabled || awaiting || activityRowsEnabled) return;
+    if (!session || awaiting || activityRowsEnabled) return;
     let id: ReturnType<typeof setInterval> | undefined;
     const start = () => {
       if (id === undefined) {
@@ -165,7 +159,6 @@ export function useAgentChatStream({
     activityRowsEnabled,
     awaiting,
     loadMessages,
-    pollingChatEnabled,
     session,
   ]);
 

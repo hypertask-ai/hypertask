@@ -14,7 +14,6 @@ export const CHAT_AVAILABILITY_POLL_MS = 30_000;
 // Realtime still refetches when the reply lands; the interval is only a
 // fallback. Polling chat surfaces a generic failure after this bound.
 export const AWAITING_POLL_MAX_MS = 3 * 60 * 1000;
-export const LEGACY_AWAITING_POLL_MAX_MS = 15 * 60 * 1000;
 export const MAX_MESSAGE_LENGTH = 8000;
 export const DETAILS_COLLAPSED_KEY = "agentChat.detailsCollapsed";
 

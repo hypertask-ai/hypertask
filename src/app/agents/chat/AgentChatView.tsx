@@ -32,7 +32,6 @@ type Props = Pick<
   | "selectedId"
   | "rosterNow"
   | "currentUser"
-  | "pollingChatEnabled"
   | "deliveryMode"
   | "detailsCollapsed"
   | "setDetailsSheetOpen"
@@ -139,7 +138,7 @@ type Props = Pick<
 export function AgentChatView({
   isNarrow, setShowCreateAgent, roomsEnabled, router, search, setSearch, teams, teamId,
   setTeamFilter, rosterError, agents, roster, selectedId, selectAgent, rosterNow, selectedAgent,
-  currentUser, backToRoster, mobileFullscreenChrome, pollingChatEnabled, deliveryMode,
+  currentUser, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
@@ -189,7 +188,6 @@ export function AgentChatView({
               isNarrow={isNarrow}
               backToRoster={backToRoster}
               mobileFullscreenChrome={mobileFullscreenChrome}
-              pollingChatEnabled={pollingChatEnabled}
               deliveryMode={deliveryMode}
               toggleDetails={toggleDetails}
               detailsCollapsed={detailsCollapsed}

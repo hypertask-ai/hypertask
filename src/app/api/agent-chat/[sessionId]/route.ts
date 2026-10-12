@@ -19,7 +19,6 @@ import {
 } from "@/lib/agentRuns/model";
 import { readAgentChatTurn } from "@/lib/agentRuns/service";
 import { agentChatDeliveryMode } from "@/lib/agents/chatAvailability";
-import { HTPR_6553_AGENT_CHAT_POLLING_FLAG } from "@/lib/flags/keys";
 
 export const runtime = "nodejs";
 
@@ -122,10 +121,6 @@ export async function GET(
       AGENT_CHAT_TICKET_CONFIRM_FLAG,
       userId,
     );
-    const pollingChatEnabledForUser = await isFeatureEnabled(
-      HTPR_6553_AGENT_CHAT_POLLING_FLAG,
-      userId,
-    );
     // Reconciling the turn is a side effect of reading it; if it fails the
     // transcript still has to load.
     await readAgentChatTurn(
@@ -203,9 +198,7 @@ export async function GET(
       ? { draft: participant.draft, unreadCount: unreadCount ?? 0 }
       : null;
     const deliveryMode = agentChatDeliveryMode({
-      heartbeatAt: pollingChatEnabledForUser
-        ? session.agent?.heartbeatAt ?? null
-        : null,
+      heartbeatAt: session.agent?.heartbeatAt ?? null,
       subscription,
     });
 
