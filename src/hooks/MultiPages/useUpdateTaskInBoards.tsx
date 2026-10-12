@@ -39,6 +39,7 @@ type UpdateOptions = {
 
 type RemoveFromListOptions = {
   undoRedirectPath?: string;
+  suppressUndo?: boolean;
 }
 
 const getSectionCacheKey = (section: ISection) => section.sectionId ?? section.id;
@@ -510,7 +511,7 @@ const UpdateKanban = () => {
         return response;
       } else if (status !== "Move") {
         const response = await globalAPIHandlers.archiveTask(taskId, status);
-        if (!hasSubtasks) {
+        if (!hasSubtasks && !options.suppressUndo) {
           deleteTodo("Undo task archive", {
             id: taskId,
             projectId,
@@ -734,9 +735,21 @@ const UpdateKanban = () => {
   const undoHandler = async (data: any, toastId: string) => {
     //  first you need to bring the item back in its place.
     // then you need to run the api call so there is no render blocking. 
-    await undoAction("UNDO_REMOVE", data)
-    toast.dismiss(toastId);  // Dismiss the toast here
-    await reconcileActiveBoardTasks(queryClient, data.projectId, _currentUser.id)
+    if (Array.isArray(data.taskIds)) {
+      const taskIds: number[] = data.taskIds;
+      const results = await Promise.allSettled(
+        taskIds.map((id) => globalAPIHandlers.archiveTask(id, "Normal")),
+      );
+      // Keep only failed restores so the existing Undo retry does not repeat successes.
+      data.taskIds = taskIds.filter((_, index) => results[index].status === "rejected");
+      await reconcileActiveBoardTasks(queryClient, data.projectId, _currentUser.id);
+      if (data.taskIds.length > 0) throw new Error(`Unable to restore ${data.taskIds.length} archived tasks`);
+      toast.dismiss(toastId);
+    } else {
+      await undoAction("UNDO_REMOVE", data)
+      toast.dismiss(toastId);  // Dismiss the toast here
+      await reconcileActiveBoardTasks(queryClient, data.projectId, _currentUser.id)
+    }
     if (typeof data.undoRedirectPath === "string") {
       router.replace(data.undoRedirectPath)
     }
@@ -785,7 +798,7 @@ const UpdateKanban = () => {
   return {
     updateTaskInCache, mutationHandler,
     allDataExists, renameBoard,
-    removeFromListWithStatus, updateActiveItemAndItemInView,
+    removeFromListWithStatus, updateActiveItemAndItemInView, deleteTodo,
     moveItem, getProjectIdxAndAllData, updateCache,
     updateProjectView,
     updateProject,
