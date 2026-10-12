@@ -57,6 +57,7 @@ jobs:
           code=$?
           set -e
           grep -o '"DetectorName":"[^"]*"\|"file":"[^"]*"\|"commit":"[^"]*"' found.json || true
+          grep -o '"chunks":[0-9]*\|"bytes":[0-9]*\|"verified_secrets":[0-9]*' trufflehog.err | tr '\n' ' ' || true
           rm -f found.json
           if [ "$code" = 183 ]; then
             echo "::error::trufflehog found a key that still works. Roll it, then remove it."
