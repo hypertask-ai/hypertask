@@ -5,6 +5,10 @@ const test = require("node:test");
 const { Prisma, PrismaClient } = require("@prisma/client");
 const { ColumnTypeEnum } = require("@prisma/driver-adapter-utils");
 const { load } = require("./task-route-loader.cjs");
+const { projectContentAccessWhere } = load("src/utils/controllers/projects/getAllIncludes.ts", {
+  "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+  "@/utils/controllers/notifications/visibleInboxScope": {},
+});
 
 const models = new Map(Prisma.dmmf.datamodel.models.map((model) => [model.name, model]));
 const contractFile = path.join(__dirname, "htpr-6509-query-contracts.json");
@@ -132,6 +136,7 @@ async function run(name, strategy, empty = false) {
   const profile = { id: 7, displayName: "Fixture User", email: "fixture@example.invalid", UserSetting: {} };
   const mocks = {
     "@/lib/prisma": { default: database },
+    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
     "next/headers": { cookies: async () => ({ get: () => ({ value: JSON.stringify(profile) }) }) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
@@ -148,7 +153,7 @@ async function run(name, strategy, empty = false) {
     } else if (name === "favorites") result = await load("src/utils/controllers/favorites/getAll.ts", mocks).getFavoritesForUser(7);
     else if (name === "user") result = await load("src/utils/controllers/users/getById.ts", mocks).default(7);
     else if (name === "page") result = await load("src/utils/controllers/pages/pageService.ts", mocks).getPage({ publicId: "fixture-page" });
-    else result = await load("src/utils/controllers/projects/detail.ts", mocks).default(15);
+    else result = await load("src/utils/controllers/projects/detail.ts", mocks).default(15, 7);
     if (!empty && name === "user") {
       assert.equal(result.status, 200);
       assert.equal(result.res.id, 7, "query errors must not pass as the controller fallback");
@@ -169,8 +174,16 @@ for (const name of ["sessions", "favorites", "user", "page", "project"]) {
   test(`${name}: exact baseline selection and JSON survive relation batching`, async () => {
     const before = await run(name, "query");
     const after = await run(name);
-    assert.deepEqual(before.args, contracts[name].args);
-    assert.deepEqual(after.args, contracts[name].args);
+    if (name === "project") {
+      for (const result of [before, after]) {
+        assert.deepEqual(result.args.where, { id: 15, status: "Normal", ...projectContentAccessWhere(7) });
+        assert.deepEqual(result.args.include, contracts.project.args.include);
+        assert.deepEqual(Object.keys(result.args).sort(), ["include", "where"]);
+      }
+    } else {
+      assert.deepEqual(before.args, contracts[name].args);
+      assert.deepEqual(after.args, contracts[name].args);
+    }
     assert.deepEqual(before.json, contracts[name].json);
     assert.deepEqual(after.json, contracts[name].json);
     assert.equal(before.queries.length, contracts[name].queryCount);

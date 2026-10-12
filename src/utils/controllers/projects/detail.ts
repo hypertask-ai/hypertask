@@ -2,9 +2,10 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
 import prisma from "@/lib/prisma";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
-const projectDetail = async (projectId:number) => {
+const projectDetail = async (projectId:number, userId:number, agentId?:string) => {
         try {
             if (!projectId) {
                 return({
@@ -17,7 +18,8 @@ const projectDetail = async (projectId:number) => {
                 relationLoadStrategy: "join",
                 where: {
                     id: projectId,
-                    status:"Normal"
+                    status:"Normal",
+                    ...projectContentAccessWhere(userId, agentId)
                 },
                 include: {
                     tasks: {
