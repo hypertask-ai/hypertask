@@ -1,4 +1,4 @@
-import React, { useContext, useLayoutEffect, useState } from "react";
+import React, { useContext, useLayoutEffect, useRef, useState } from "react";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
 import { HTPR_6990_NARROW_SIDEBAR_WIDTH_FLAG, HTPR_7055_CHAT_OVERLAYS_TICKET_FLAG, HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG } from "@/lib/flags/keys";
 import { usePathname } from "next/navigation";
@@ -54,6 +54,17 @@ export default function AIChatClosedLayout({
   const phoneFlagKnown = useFlagLoaded(HTPR_7074_PHONE_WORKSPACE_WIDTH_FLAG);
   const phoneWorkspaceWidth = phoneFlagOn || !phoneFlagKnown;
   const [sidebarOverlays, setSidebarOverlays] = useState(false);
+  const previousIsMobile = useRef(isMobile);
+  const [viewportKey, setViewportKey] = useState(0);
+
+  useLayoutEffect(() => {
+    // The old phone-detail branch reinitialized thread scrolling on breakpoint
+    // changes. Preserve that lifecycle, but never restart it for a late pathname.
+    if (previousIsMobile.current !== isMobile && isDetailPage && !chatOpen) {
+      setViewportKey((key) => key + 1);
+    }
+    previousIsMobile.current = isMobile;
+  }, [isMobile, isDetailPage, chatOpen]);
 
   useLayoutEffect(() => {
     if (!narrowSidebarWidth || isMobile || sidebarWidthPx <= 0) return;
@@ -89,7 +100,7 @@ export default function AIChatClosedLayout({
   const phoneDetailWithoutChat = isDetailPage && isMobile && !chatOpen;
 
   return (
-    <div className={cn(phoneDetailWithoutChat ? "contents" : "flex", !isDetailPage && "h-screen")}>
+    <div key={viewportKey} className={cn(phoneDetailWithoutChat ? "contents" : "flex", !isDetailPage && "h-screen")}>
       <div
         data-ai-workspace
         tabIndex={-1}

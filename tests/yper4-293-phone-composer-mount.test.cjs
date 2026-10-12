@@ -10,6 +10,7 @@ const noop = () => null;
 
 test("phone cached composer keeps its draft and focus when Next publishes the detail pathname", async () => {
   let pathname = "/project";
+  let isMobile = true;
   const MobileViewContext = React.createContext(true);
   const dependencies = {
     react: React,
@@ -53,10 +54,11 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
     });
   }
   const reactRoot = createRoot(document.getElementById("root"));
-  const render = (chatOpen = false) => reactRoot.render(React.createElement(Frame, {
-    onOpenAIChat: noop, chatOpen, mobileTopBarVisible: true,
-    panels: React.createElement("aside", { "data-testid": "chat-panels" }),
-  }, React.createElement(Composer)));
+  const render = (chatOpen = false) => reactRoot.render(React.createElement(MobileViewContext.Provider, { value: isMobile },
+    React.createElement(Frame, {
+      onOpenAIChat: noop, chatOpen, mobileTopBarVisible: isMobile,
+      panels: React.createElement("aside", { "data-testid": "chat-panels" }),
+    }, React.createElement(Composer))));
   try {
     // Native history exposes the cached ticket while Next still holds the board pathname.
     await React.act(async () => render());
@@ -82,6 +84,22 @@ test("phone cached composer keeps its draft and focus when Next publishes the de
       assert.equal(document.activeElement, composer);
       assert.equal(Boolean(document.querySelector('[data-testid="chat-panels"]')), chatOpen);
     }
+    for (const mobile of [false, true]) {
+      const previousComposer = document.querySelector('[data-testid="comment-composer"]');
+      isMobile = mobile;
+      await React.act(async () => render());
+      assert.notEqual(document.querySelector('[data-testid="comment-composer"]'), previousComposer, "a ticket breakpoint change retains production's scroll-initialization lifecycle");
+    }
+    assert.equal(mounts, 3, "only actual ticket breakpoint changes restart the thread");
+    pathname = "/project";
+    await React.act(async () => render());
+    const boardComposer = document.querySelector('[data-testid="comment-composer"]');
+    for (const mobile of [false, true]) {
+      isMobile = mobile;
+      await React.act(async () => render());
+      assert.equal(document.querySelector('[data-testid="comment-composer"]'), boardComposer, "board breakpoint changes still keep their subtree mounted");
+    }
+    assert.equal(mounts, 3);
   } finally {
     await React.act(async () => reactRoot.unmount());
     global.window = previous.window;
