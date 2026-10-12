@@ -65,8 +65,8 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
   let hits = 1;
   const fetchImpl = async (url, options = {}) => {
     const body = options.body ? JSON.parse(options.body) : undefined;
-    if (url.includes("posthog.com") && url.includes("/issues/")) return response({ id: ISSUE, name: "Error" });
-    if (url.includes("posthog.com") && url.includes("/query/")) return response({ results: [[hits, 1, new Date().toISOString(), new Date().toISOString(), [{ value: "No output generated." }], "handled", "/api/ai/task-writer", 0]] });
+    if (new URL(url).hostname === "eu.posthog.com" && url.includes("/issues/")) return response({ id: ISSUE, name: "Error" });
+    if (new URL(url).hostname === "eu.posthog.com" && url.includes("/query/")) return response({ results: [[hits, 1, new Date().toISOString(), new Date().toISOString(), [{ value: "No output generated." }], "handled", "/api/ai/task-writer", 0]] });
     if (url.endsWith("/labels")) return response({ labels: ["P1", "P2", "P3"].map((name) => ({ name, id: name })) });
     if (url.includes("/tasks?")) return response({ tasks: tasks.filter((task) => new URL(url).searchParams.has("task_id") ? task.id === Number(new URL(url).searchParams.get("task_id")) : task.status === new URL(url).searchParams.get("status")) });
     if (url.endsWith("/tasks/create")) { const task = { ...body, id: 100, ticketNumber: "HTPR-7001", status: "Normal", labels: body.labels.map((id) => ({ name: id, id })) }; tasks.push(task); return response({ task }); }

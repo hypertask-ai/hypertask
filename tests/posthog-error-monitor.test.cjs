@@ -83,12 +83,12 @@ test("canary refuses mismatched issues, failed resolution and late alert deliver
   const { runCanary } = await import(script);
   const state = canaryFetch(1);
   const options = { token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123" };
-  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("posthog.com") ? response({ id: ISSUE_ID, description: "another error" }) : state.fetchImpl(url, opts) }), /does not match the nightly canary/);
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => new URL(url).hostname === "eu.posthog.com" ? response({ id: ISSUE_ID, description: "another error" }) : state.fetchImpl(url, opts) }), /does not match the nightly canary/);
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/update")).length, 0);
   await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => opts.method === "PATCH" ? response({}, 403) : state.fetchImpl(url, opts) }), /resolution failed/);
   let clock = 0;
   await assert.rejects(runCanary({ ...options, now: () => clock, fetchImpl: async (url, opts) => {
-    if (url.includes("posthog.com")) clock = 15 * 60_000;
+    if (new URL(url).hostname === "eu.posthog.com") clock = 15 * 60_000;
     return state.fetchImpl(url, opts);
   } }), /arrived after fifteen minutes/);
 });
@@ -112,7 +112,7 @@ test("watchdog directly creates one infra ticket and comments on it for subseque
   assert.equal(tasks[0].title, FAILURE_TITLE);
   assert.equal(calls.filter((call) => call.url.endsWith("/comments")).length, 2);
   assert.equal(JSON.parse(calls.at(-1).options.body).task_id, 100);
-  assert.ok(calls.every((call) => !/posthog.com|integrations\/posthog|api.github.com/.test(call.url)));
+  assert.ok(calls.every((call) => !["eu.posthog.com", "api.github.com"].includes(new URL(call.url).hostname) && !call.url.includes("integrations/posthog")));
 });
 
 test("watchdog reuses archived incidents and rejects untrusted run links", async () => {

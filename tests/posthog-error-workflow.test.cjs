@@ -21,7 +21,7 @@ function liveFetch(age = 5 * 60_000, sha = RELEASE) {
   const calls = [];
   return { calls, fetchImpl: async (url, options) => {
     calls.push({ url, options });
-    assert.match(url, /api.vercel.com\/v9\/projects/);
+    assert.match(url, /^https:\/\/api\.vercel\.com\/v9\/projects/);
     return response(200, { targets: { production: { id: "dpl_live", createdAt: NOW - age, meta: { githubCommitSha: sha } } } });
   } };
 }

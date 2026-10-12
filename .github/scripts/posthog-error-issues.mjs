@@ -140,7 +140,7 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
   if (!existing) throw new Error("Issue ticket refresh returned no task");
   if (existing.status === "Deleted") return { action: "skip", reason: "PostHog issue ticket was deleted" };
   issue = { ...issue, ...rateIssue(issue.message, issue.users, issue.source) };
-  const key = `posthog-alert-${process.env.GITHUB_RUN_ID || issue.event_id || `${issue.issue_id}-${issue.count}-${issue.users}`}`;
+  const key = `posthog-alert-${process.env.GITHUB_RUN_ID || "local"}-${issue.event_id || `${issue.issue_id}-${issue.count}-${issue.users}`}`;
   const oldLabels = (existing.labels || []).filter((label) => ["P1", "P2", "P3"].includes(label.name));
   const severityChanged = oldLabels.length !== 1 || oldLabels[0].id !== config.severityLabels[issue.severity];
   let reopen = {};
