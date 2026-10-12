@@ -1,0 +1,53 @@
+name: UX Signoff Gate
+
+# https://app.hypertask.ai/detail/project-15/7072 shipped new decision inbox UI
+# in PR 1271 without Valentin's design yes. Visible UI needs ticket signoff
+# on a clickable wireframe; new component names need his explicit approval too.
+# Run trusted production code only, and reread reactions every ten minutes.
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
+    branches: [production]
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: ux-signoff-gate-${{ github.event.pull_request.number || 'all' }}
+  cancel-in-progress: false
+
+jobs:
+  ux-signoff-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+
+      - name: Reconcile UX signoff from ticket comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          MCP_BASE_URL: https://app.hypertask.ai
+          REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "pull_request_target" ]; then
+            node .github/scripts/ux-signoff-gate.mjs --reconcile --pr "$PR_NUMBER"
+          else
+            node .github/scripts/ux-signoff-gate.mjs --reconcile
+          fi

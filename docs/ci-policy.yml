@@ -69,6 +69,13 @@ premerge_evidence:
   production_enforcement: production-required-checks-ruleset
   activation_prerequisite: statuses_seeded_on_all_open_production_pull_requests
 
+ux_signoff:
+  context: ux-signoff
+  workflow: .github/workflows/ux-signoff-gate.yml
+  script: .github/scripts/ux-signoff-gate.mjs
+  # Infra Manager flips this after statuses are seeded on all open PRs.
+  required: false
+
 feature_flag_gate:
   workflow: .github/workflows/feature-flag-gate.yml
   decision_script: .github/scripts/feature-flag-gate.mjs
