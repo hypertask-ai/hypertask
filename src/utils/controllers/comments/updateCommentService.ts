@@ -47,6 +47,11 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
   await invalidateHyperAiCommentOrigin(commentId)
   const updatedComment = await prisma.$transaction(async (transaction) => {
+    const storedComment = await transaction.comment.findUniqueOrThrow({
+      where: { id: commentId },
+      select: { text: true }
+    })
+    const textChanged = text !== normalizeBlockHtml(storedComment.text)
     if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
         where: { commentId },
@@ -120,7 +125,11 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
     return transaction.comment.update({
       where: { id: commentId },
-      data: { text, summary: null, editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null },
+      data: {
+        text,
+        summary: null,
+        ...(textChanged ? { editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null } : {})
+      },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
         agent: { select: publicAgentSelect },

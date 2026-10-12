@@ -129,6 +129,7 @@ function loadCommentsRoute({
   ]
   const resolveTask = taskResolver ?? (async () => task)
   const prisma = {
+    agent: { findMany: async () => [] },
     comment: {
       findUnique: async () => commentsFixture[0],
       count: async (query) => {
@@ -369,7 +370,7 @@ test('MCP comments response includes mapped active reactions', async () => {
   assert.equal(response.body.comments[0].editedAt, null)
   assert.equal(response.body.comments[1].editedAt, '2026-08-21T00:30:00.000Z')
   assert.equal(response.body.comments[0].editedBy, null)
-  assert.deepEqual(response.body.comments[1].editedBy, { userId: 9, agentId: 'agent-editor' })
+  assert.deepEqual(response.body.comments[1].editedBy, { userId: 9, agentId: null, isAgent: true })
   assert.deepEqual(response.body.comments[0].reactions, [{
     id: 'reaction-7001',
     createdAt: '2026-08-21T01:00:00.000Z',

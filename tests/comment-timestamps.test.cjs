@@ -25,6 +25,8 @@ function load(relativePath, modules = {}) {
   return loadedModule.exports
 }
 
+const { normalizeBlockHtml } = require('jiti')(__filename, { interopDefault: true })(path.join(root, 'src/lib/mcp/normalizeBlockHtml.ts'))
+
 function serviceFixture() {
   const stored = { id: 44, text: 'original', creatorId: 6, agentId: null, taskId: 91, createdAt, editedAt: null, editedByUserId: null, editedByAgentId: null, task: { projectId: 15 } }
   const writes = []
@@ -33,9 +35,18 @@ function serviceFixture() {
     Object.assign(stored, data)
     return stored
   }
+  const textReads = []
+  const findUniqueOrThrow = async (query) => {
+    textReads.push(query)
+    return { text: stored.text }
+  }
+  const attachmentWrites = []
   const prisma = {
-    comment: { findFirst: async () => stored, update },
-    $transaction: async (run) => run({ comment: { update } }),
+    comment: { findFirst: async () => stored, findUniqueOrThrow, update },
+    $transaction: async (run) => run({
+      comment: { findUniqueOrThrow, update },
+      attachment: { findMany: async () => [], createMany: async (query) => attachmentWrites.push(query) },
+    }),
   }
   const service = load('src/utils/controllers/comments/updateCommentService.ts', {
     '@/lib/prisma': { default: prisma, __esModule: true },
@@ -47,9 +58,9 @@ function serviceFixture() {
     './readReceipts': { omitCommentSeen: (comment) => comment },
     '@/lib/ai/hyperAiConfirmation': { invalidateHyperAiCommentOrigin: async () => {} },
     '@/lib/agents/publicAgent': { publicAgentSelect: {} },
-    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
+    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
   })
-  return { stored, writes, prisma, ...service }
+  return { stored, writes, textReads, attachmentWrites, prisma, ...service }
 }
 
 test('comment migration adds nullable edit timestamp and editor IDs without a default or backfill', () => {
@@ -67,21 +78,22 @@ test('comment migration adds nullable edit timestamp and editor IDs without a de
   assert.match('UPDATE "Comment" SET "editedAt" = NOW();', forbidden)
 })
 
-test('shared app, MCP, CLI and AI comment edit service persists the edit time without changing creation time', async () => {
+test('shared app, MCP, CLI and AI text change persists the edit time without changing creation time', async () => {
   const fixture = serviceFixture()
   assert.equal(fixture.stored.editedAt, null)
   const result = await fixture.updateCommentService({ commentId: 44, text: 'edited', userId: 6 })
-  assert.deepEqual(fixture.writes, [{ text: 'edited', summary: null, editedAt: new FixedDate(), editedByUserId: 6, editedByAgentId: null }])
+  assert.deepEqual(fixture.writes, [{ text: '<p>edited</p>', summary: null, editedAt: new FixedDate(), editedByUserId: 6, editedByAgentId: null }])
   assert.equal(result.createdAt, createdAt)
   assert.equal(result.editedAt.toISOString(), editedAt.toISOString())
 })
 
-test('legacy comment edit controller also persists an edit time', async () => {
+test('legacy controller text change also persists an edit time', async () => {
   const fixture = serviceFixture()
   const { default: handler } = load('src/utils/controllers/comments/updateComment.ts', {
     '@/lib/prisma': { default: fixture.prisma, __esModule: true },
     '@/lib/ai/hyperAiConfirmation': { invalidateHyperAiCommentOrigin: async () => {} },
     '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 9 }) },
+    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
   })
   const res = { status(code) { this.code = code; return this }, json(body) { return json(body, { status: this.code }) } }
   const result = await handler({ method: 'PUT', body: { updatedComment: { text: 'legacy edit', creatorId: 6, taskId: 91, commentId: 44 } } }, res)
@@ -90,8 +102,8 @@ test('legacy comment edit controller also persists an edit time', async () => {
   assert.equal(result.body.editedAt, editedAt.toISOString())
 })
 
-for (const agentId of [null, 'agent-editor']) {
-test(`MCP PATCH records and serializes the ${agentId ? 'owner-agent' : 'human'} editor without changing authorship`, async () => {
+for (const agentId of [null, 'agent-editor', 'hidden-editor']) {
+test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human'} editor without changing authorship`, async () => {
   const fixture = serviceFixture()
   fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, members: [] } }
   fixture.prisma.comment.findUnique = async () => fixture.stored
@@ -103,6 +115,12 @@ test(`MCP PATCH records and serializes the ${agentId ? 'owner-agent' : 'human'} 
       validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId }),
     },
     '@/lib/mcp/agents': { mapVisibleMcpAgent: () => undefined, mcpVisibleAgentSelect: () => ({}) },
+    '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async (ids, userId, projectId) => {
+      assert.deepEqual(ids, agentId ? [agentId] : [])
+      assert.equal(userId, 6)
+      assert.equal(projectId, 15)
+      return new Map([['agent-editor', 'Visible editor']])
+    } },
     '@/lib/agents/publicAgent': {},
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/prisma': { default: fixture.prisma, __esModule: true },
@@ -123,7 +141,7 @@ test(`MCP PATCH records and serializes the ${agentId ? 'owner-agent' : 'human'} 
   assert.equal(response.status, 200)
   assert.deepEqual(response.body, {
     success: true,
-    comment: { id: 44, text: 'edited', createdAt: createdAt.toISOString(), editedAt: editedAt.toISOString(), editedBy: { userId: 6, agentId }, creatorId: 6 },
+    comment: { id: 44, text: '<p>edited</p>', createdAt: createdAt.toISOString(), editedAt: editedAt.toISOString(), editedBy: { userId: 6, agentId: agentId === 'hidden-editor' ? null : agentId, ...(agentId ? { isAgent: true } : {}) }, creatorId: 6 },
   })
   assert.equal(fixture.writes.length, 1)
   assert.equal(fixture.stored.agentId, null)
@@ -223,3 +241,134 @@ test('reaction writes select original creation times and the HTTP handler return
   assert.equal(agent.reaction.createdAt, createdAt.toISOString())
   assert.equal(agent.reaction.agent.displayName, 'Private agent')
 })
+
+for (const previousEdit of [false, true]) {
+  test(`attachment-only update preserves ${previousEdit ? 'existing' : 'null'} edit fields`, async () => {
+    const fixture = serviceFixture()
+    fixture.stored.text = '<p>original</p>'
+    const metadata = previousEdit
+      ? { editedAt: createdAt, editedByUserId: 9, editedByAgentId: 'previous-editor' }
+      : { editedAt: null, editedByUserId: null, editedByAgentId: null }
+    Object.assign(fixture.stored, metadata)
+    const result = await fixture.updateCommentService({
+      commentId: 44, text: '<p>original</p>', userId: 6, agentId: 'new-editor',
+      replaceAttachments: true,
+      attachments: [{ fileType: 'image/png', fileSource: 'https://files.test/new.png', fileName: 'new.png' }],
+    })
+    assert.equal(fixture.attachmentWrites.length, 1)
+    for (const [key, value] of Object.entries(metadata)) {
+      assert.equal(result[key], value)
+      assert.equal(Object.hasOwn(fixture.writes[0], key), false)
+    }
+    assert.deepEqual(fixture.textReads, [{ where: { id: 44 }, select: { text: true } }])
+  })
+}
+
+test('normalized-equivalent text does not count as a text change', async () => {
+  const fixture = serviceFixture()
+  fixture.stored.text = '<p>original</p>'
+  await fixture.updateCommentService({ commentId: 44, text: 'original', userId: 6 })
+  assert.equal(fixture.stored.editedAt, null)
+  assert.equal(fixture.stored.editedByUserId, null)
+  assert.equal(fixture.stored.editedByAgentId, null)
+})
+
+for (const previousEdit of [false, true]) {
+  test(`legacy normalized-equivalent text preserves ${previousEdit ? 'existing' : 'null'} edit fields`, async () => {
+    const fixture = serviceFixture()
+    fixture.stored.text = '<p>original</p>'
+    const metadata = previousEdit
+      ? { editedAt: createdAt, editedByUserId: 9, editedByAgentId: 'previous-editor' }
+      : { editedAt: null, editedByUserId: null, editedByAgentId: null }
+    Object.assign(fixture.stored, metadata)
+    const { default: handler } = load('src/utils/controllers/comments/updateComment.ts', {
+      '@/lib/prisma': { default: fixture.prisma, __esModule: true },
+      '@/lib/ai/hyperAiConfirmation': { invalidateHyperAiCommentOrigin: async () => {} },
+      '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
+      '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
+    })
+    const res = { status(code) { this.code = code; return this }, json(body) { return json(body, { status: this.code }) } }
+    const response = await handler({ method: 'PUT', headers: {}, body: { updatedComment: { text: 'original', creatorId: 6, taskId: 91, commentId: 44 } } }, res)
+    assert.equal(response.status, 200)
+    for (const [key, value] of Object.entries(metadata)) {
+      assert.equal(fixture.stored[key], value)
+      assert.equal(Object.hasOwn(fixture.writes[0], key), false)
+    }
+    assert.deepEqual(fixture.textReads, [{ where: { id: 44 }, select: { text: true } }])
+  })
+}
+
+function commentsRouteFixture(editorId, refetch = true) {
+  const stored = { id: 44, text: '<p>original</p>', creatorId: 6, createdAt, editedAt, editedByUserId: 9, editedByAgentId: editorId, attachments: [], reactions: [] }
+  const lookups = []
+  const agentRows = [
+    { id: 'hidden-editor', userId: 9, visibility: 'PRIVATE', members: [], displayName: 'Secret name', photoURL: null },
+    { id: 'visible-editor', userId: 9, visibility: 'TEAM', members: [{ projectId: 15 }], displayName: 'Team editor', photoURL: null },
+  ]
+  const prisma = {
+    comment: { findMany: async () => [stored], count: async () => 1, findUnique: async () => refetch ? stored : null },
+    task: { findUnique: async () => ({ userId: 6, projectId: 15, uniqueIndex: 321 }) },
+    user: { findUnique: async () => ({ id: 6 }) },
+    agent: { findMany: async (query) => { lookups.push(query); return agentRows.filter((row) => query.where.id.in.includes(row.id)) } },
+  }
+  const visibility = load('src/lib/agents/visibility.ts', { '@/lib/prisma': { default: prisma, __esModule: true } })
+  const agents = load('src/lib/mcp/agents.ts', {
+    '@/lib/prisma': { default: prisma, __esModule: true },
+    '@/lib/agents/visibility': visibility,
+  })
+  const visibleAgents = load('src/lib/mcp/comments/visibleReactionAgents.ts', {
+    '@/lib/prisma': { default: prisma, __esModule: true },
+    '@/lib/mcp/agents': agents,
+  })
+  const route = load('src/lib/mcp/operations/comments/operation.ts', {
+    'next/server': { NextResponse: { json } },
+    '@prisma/client': { Prisma: { DbNull: null } },
+    '@/lib/mcp/routeWrapper': { wrapMcpRoute: (handler) => handler, checkMcpRouteRateLimit: async () => null, validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId: null }), readMcpRouteJsonBody: async (request) => ({ ok: true, body: await request.json() }) },
+    '@/lib/mcp/agents': agents,
+    '@/lib/prisma': { default: prisma, __esModule: true },
+    '@/utils/controllers/urls/extractUrlsFromContent': { persistUrlsForComment: async () => {} },
+    '@/utils/controllers/comments/processMentions': { resolveTextMentions: async (text) => text },
+    '@/utils/controllers/comments/createCommentService': { createCommentService: async () => stored },
+    '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
+    '@/lib/mcp/tasks/resolveTask': { validateTaskIdentifier: () => ({ valid: true }), findTaskByIdentifier: async () => ({ id: 91, projectId: 15 }) },
+    '@/lib/mcp/tasks/services': {},
+    '@/lib/realtime/server': { broadcastTaskComment: async () => {} },
+    '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
+    '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
+    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
+    '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => text },
+    '@/lib/mcp/fieldError': {},
+    '@/lib/mcp/tasks/validators': {},
+    '@/lib/mcp/comments/activityMetadata': {},
+    '@/lib/mcp/agents/scopes': { requireRole: () => null },
+    '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_operation, _userId, _key, _body, run) => run() },
+    '@/lib/mcp/boards/links': { buildMcpTaskUrl: () => 'https://app.hypertask.ai/detail/project-15/321' },
+    '@/lib/mcp/comments/reactionResponse': load('src/lib/mcp/comments/reactionResponse.ts'),
+    '@/lib/mcp/comments/visibleReactionAgents': visibleAgents,
+    '@/lib/agents/publicAgent': { overlayDurableAgentDisplayName: (mapped) => mapped },
+    '@/lib/flags': { isFeatureEnabled: async () => false },
+    '@/lib/flags/keys': {},
+    '@/lib/mcp/listQuery': {},
+    '@/lib/mcp/readListQuery': { readListQuery: () => ({ listQuery: null }) },
+  })
+  return { ...route, lookups }
+}
+
+for (const editorId of [null, 'hidden-editor', 'visible-editor', 'deleted-editor']) {
+  for (const method of ['GET', 'POST', 'POST fallback']) {
+    test(`MCP ${method} editor visibility for ${editorId || 'human'}`, async () => {
+      const fixture = commentsRouteFixture(editorId, method !== 'POST fallback')
+      const request = { nextUrl: new URL('https://app.hypertask.ai/api/mcp/comments?task_id=91'), headers: new Headers(), json: async () => ({ task_id: 91, text: 'original' }) }
+      const response = await fixture[method === 'GET' ? 'GET' : 'POST'](request)
+      assert.equal(response.status, method === 'GET' ? 200 : 201)
+      const comment = method === 'GET' ? response.body.comments[0] : response.body.comment
+      assert.deepEqual(comment.editedBy, {
+        userId: 9, agentId: editorId === 'visible-editor' ? editorId : null,
+        ...(editorId ? { isAgent: true } : {}),
+      })
+      assert.equal(comment.editedAt, editedAt.toISOString())
+      if (editorId) assert.ok(fixture.lookups.some((query) => query.where.id.in.includes(editorId)))
+      if (editorId === 'hidden-editor') assert.equal(JSON.stringify(response.body).includes(editorId), false)
+    })
+  }
+}

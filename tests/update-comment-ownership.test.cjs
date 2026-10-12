@@ -47,6 +47,7 @@ function loadService(storedComment) {
       update: async (args) => calls.attachmentUpdates.push(args),
     },
     comment: {
+      findUniqueOrThrow: async () => ({ text: storedComment?.text ?? "" }),
       update: async (args) => {
         calls.commentUpdates.push(args);
         return {

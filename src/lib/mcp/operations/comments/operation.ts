@@ -54,7 +54,7 @@ export interface CommentItem {
   commentText: string
   createdAt: string
   editedAt: string | null
-  editedBy: { userId: number; agentId: string | null } | null
+  editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
   /** Present only when include_activity=true so callers can distinguish row kinds. */
   type?: 'comment' | 'activity'
   /** Raw activity payload, matching the app comment endpoint. Present only when include_activity=true. */
@@ -124,7 +124,7 @@ export interface AddCommentResponse {
     text: string
     createdAt: string
     editedAt: string | null
-    editedBy: { userId: number; agentId: string | null } | null
+    editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
@@ -183,7 +183,11 @@ function mapCommentToResponse(
     createdAt: comment.createdAt.toISOString(),
     editedAt: comment.editedAt?.toISOString() ?? null,
     editedBy: comment.editedByUserId != null
-      ? { userId: comment.editedByUserId, agentId: comment.editedByAgentId ?? null }
+      ? {
+          userId: comment.editedByUserId,
+          agentId: comment.editedByAgentId && reactionAgents.has(comment.editedByAgentId) ? comment.editedByAgentId : null,
+          ...(comment.editedByAgentId ? { isAgent: true as const } : {})
+        }
       : null,
     creatorId: comment.creatorId || undefined,
     creator: comment.creator ? {
@@ -372,7 +376,10 @@ export async function GET(request: NextRequest) {
     )
 
     const reactionAgents = await loadVisibleReactionAgents(
-      reactionAgentIds(comments),
+      [...new Set([
+        ...reactionAgentIds(comments),
+        ...comments.flatMap((comment) => comment.editedByAgentId ? [comment.editedByAgentId] : [])
+      ])],
       user.id,
       task.projectId
     )
@@ -904,8 +911,13 @@ export async function POST(request: NextRequest) {
           HTPR_6516_AGENT_ATTRIBUTION_FLAG,
           user.id
         )
+        const editorAgents = await loadVisibleReactionAgents(
+          comment.editedByAgentId ? [comment.editedByAgentId] : [],
+          user.id,
+          task.projectId
+        )
         const mappedComment = commentWithAttachments
-          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId)
+          ? mapCommentToResponse(commentWithAttachments, user.id, task.projectId, false, editorAgents)
           : null
         const attributedComment = mappedComment
           ? applyDurableCommentAttribution(
@@ -929,7 +941,11 @@ export async function POST(request: NextRequest) {
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),
             editedAt: comment.editedAt?.toISOString() ?? null,
             editedBy: comment.editedByUserId != null
-              ? { userId: comment.editedByUserId, agentId: comment.editedByAgentId ?? null }
+              ? {
+                  userId: comment.editedByUserId,
+                  agentId: comment.editedByAgentId && editorAgents.has(comment.editedByAgentId) ? comment.editedByAgentId : null,
+                  ...(comment.editedByAgentId ? { isAgent: true as const } : {})
+                }
               : null,
             creatorId: comment.creatorId || user.id,
             ...(attributedComment?.agent ? { agent: attributedComment.agent } : {}),

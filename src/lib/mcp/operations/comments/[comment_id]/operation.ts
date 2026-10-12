@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 
 import type { McpAgentSummary } from '@/lib/mcp/agents'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
+import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent'
 import {
   HTPR_6516_AGENT_ATTRIBUTION_FLAG,
@@ -40,7 +41,7 @@ export interface UpdateCommentResponse {
     text: string
     createdAt: string
     editedAt: string | null
-    editedBy: { userId: number; agentId: string | null } | null
+    editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
@@ -323,6 +324,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
       user.id
     )
 
+    const editorAgents = await loadVisibleReactionAgents(
+      updatedComment.editedByAgentId ? [updatedComment.editedByAgentId] : [],
+      user.id,
+      comment.task.projectId
+    )
     const response: UpdateCommentResponse = {
       success: true,
       comment: {
@@ -331,7 +337,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         createdAt: updatedComment.createdAt.toISOString(),
         editedAt: updatedComment.editedAt?.toISOString() ?? null,
         editedBy: updatedComment.editedByUserId != null
-          ? { userId: updatedComment.editedByUserId, agentId: updatedComment.editedByAgentId ?? null }
+          ? {
+              userId: updatedComment.editedByUserId,
+              agentId: updatedComment.editedByAgentId && editorAgents.has(updatedComment.editedByAgentId) ? updatedComment.editedByAgentId : null,
+              ...(updatedComment.editedByAgentId ? { isAgent: true as const } : {})
+            }
           : null,
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),

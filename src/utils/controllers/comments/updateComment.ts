@@ -3,6 +3,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { invalidateHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { normalizeBlockHtml } from "@/lib/mcp/normalizeBlockHtml";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method==="PUT"){
@@ -18,16 +19,25 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
       try {
         await invalidateHyperAiCommentOrigin(commentId);
 
-        const toUpdate = await prisma.comment.update({
-            where:{
-                id:commentId
-            },
-            data:{
-                text:text,
-                editedAt:new Date(),
-                editedByUserId:session.userId,
-                editedByAgentId:null
-            }
+        const toUpdate = await prisma.$transaction(async (transaction) => {
+          const storedComment = await transaction.comment.findUniqueOrThrow({
+              where:{ id:commentId },
+              select:{ text:true }
+          });
+          const textChanged = normalizeBlockHtml(text) !== normalizeBlockHtml(storedComment.text);
+          return transaction.comment.update({
+              where:{
+                  id:commentId
+              },
+              data:{
+                  text:text,
+                  ...(textChanged ? {
+                      editedAt:new Date(),
+                      editedByUserId:session.userId,
+                      editedByAgentId:null
+                  } : {})
+              }
+          });
         });
         // console.log("🚀 ~ file: updateComment.ts:24 ~ consthandler:NextApiHandler= ~ toUpdate:", toUpdate)
 
