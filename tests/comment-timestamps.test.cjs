@@ -41,10 +41,13 @@ function serviceFixture() {
     comment: { findFirst: async (query) => {
       ownershipReads.push(query)
       assert.equal(query.select.text, true)
-      return stored
+      return { ...stored }
     } },
     $transaction: async (run) => run({
-      comment: { update },
+      comment: {
+        update,
+        updateMany: async ({ where }) => ({ count: stored.text === where.text ? 1 : 0 }),
+      },
       attachment: { findMany: async () => [], createMany: async (query) => attachmentWrites.push(query) },
     }),
   }
@@ -251,6 +254,22 @@ for (const previousEdit of [false, true]) {
     }])
   })
 }
+
+test('a same-text save after a concurrent edit still records this editor', async () => {
+  const fixture = serviceFixture()
+  fixture.stored.text = '<p>original</p>'
+  const read = fixture.prisma.comment.findFirst
+  fixture.prisma.comment.findFirst = async (query) => {
+    const snapshot = await read(query)
+    Object.assign(fixture.stored, { text: '<p>other</p>', editedAt: createdAt, editedByUserId: 9, editedByAgentId: null })
+    return snapshot
+  }
+  await fixture.updateCommentService({ commentId: 44, text: '<p>original</p>', userId: 6, agentId: 'new-editor' })
+  assert.equal(fixture.stored.text, '<p>original</p>')
+  assert.equal(fixture.stored.editedByUserId, 6)
+  assert.equal(fixture.stored.editedByAgentId, 'new-editor')
+  assert.notEqual(fixture.stored.editedAt, createdAt)
+})
 
 test('normalized-equivalent text does not count as a text change', async () => {
   const fixture = serviceFixture()

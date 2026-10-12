@@ -119,12 +119,18 @@ export async function updateCommentService(params: UpdateCommentParams) {
       }
     }
 
+    // Same text as read: lock the row only if it still holds that text, else a concurrent edit landed and this write is an edit too.
+    const markEdited = textChanged || (await transaction.comment.updateMany({
+      where: { id: commentId, text: comment.text },
+      data: { summary: null }
+    })).count === 0
+
     return transaction.comment.update({
       where: { id: commentId },
       data: {
         text,
         summary: null,
-        ...(textChanged ? { editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null } : {})
+        ...(markEdited ? { editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null } : {})
       },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
