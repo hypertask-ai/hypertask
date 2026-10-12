@@ -84,29 +84,25 @@ export default function AIChatClosedLayout({
     return <>{children}</>;
   }
 
-  if (isDetailPage && isMobile && !chatOpen) {
-    return (
-      <div data-ai-workspace tabIndex={-1} className={workspaceClasses}>
-        {children}
-      </div>
-    );
-  }
+  // Cached tickets render before Next publishes their pathname. Keep the same
+  // ancestors when it catches up so the phone composer retains its draft and focus.
+  const phoneDetailWithoutChat = isDetailPage && isMobile && !chatOpen;
 
   return (
-    <div className={cn("flex", !isDetailPage && "h-screen")}>
+    <div className={cn(phoneDetailWithoutChat ? "contents" : "flex", !isDetailPage && "h-screen")}>
       <div
         data-ai-workspace
         tabIndex={-1}
         className={cn(
           workspaceClasses,
-          "@container min-w-0 flex-1",
+          !phoneDetailWithoutChat && "@container min-w-0 flex-1",
           !isDetailPage && "overflow-x-auto"
         )}
       >
         {children}
       </div>
       {/* Keep the page width stable while the open sidebar's chunks load. */}
-      <div
+      {!phoneDetailWithoutChat && <div
         data-ai-chat-slot
         className={sidebarWidthPx > 0 && !isMobile
           ? narrowSidebarWidth
@@ -121,7 +117,7 @@ export default function AIChatClosedLayout({
         style={sidebarWidthPx > 0 && !isMobile ? { width: sidebarWidthPx } : undefined}
       >
         {panels}
-      </div>
+      </div>}
       {/* /agents/chat has its own details-pane chevron; keep this one off there. */}
       {panels === undefined && !isMobile && !pathname?.startsWith("/agents/chat") && (
         <button
