@@ -90,7 +90,14 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                     return({status:101, json:[]})
 
                 }
-            
+
+                // HTPR-7162: an invite only opens the board it was made for, and only before it expires.
+                // Spent personal invites are already marked expired; public links count uses below zero.
+                if (fetchedInvite.projectId !== Number(projectId)
+                    || (fetchedInvite.expiresAt && fetchedInvite.expiresAt <= new Date())) {
+                    return({status:403, json:{message:"Invite not valid for this board"}})
+                }
+
 
                 // before we create a new instance of member_team, we must confirm that a user with same team id doesn't exist.
                 const member_teamCheck = await prisma.member_Team.findFirst({

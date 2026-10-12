@@ -305,6 +305,38 @@ test("invite acceptance emits for the inviter, includes invitee id and ignores r
   save(h);
 });
 
+test("HTPR-7162: an invite for one board cannot be used to join a different board", async () => {
+  const h = activationHarness();
+  h.users.set(234, { id: 234, uid: "outsider", email: "outsider@example.test" });
+  h.projects.set(16, { id: 16, ownerId: 789, title: "Private", teamId: "other_team", team: { id: "other_team", title: "Other", stripe_customer_id: "cus_other", subscriptionPlan: [] } });
+  h.invites.push({ id: "own-invite", userId: 234, projectId: 15, expired: false, uses: 1, project: h.projects.get(15) });
+  const accept = h.load("src/utils/controllers/members/invite.ts").default;
+  const result = await accept(234, 16, "own-invite");
+  assert.equal(result.status, 403);
+  assert.equal(h.members.some((member) => member.userId === 234), false);
+  assert.equal(h.invites[0].uses, 1);
+});
+
+test("HTPR-7162: expired invites do not let anyone join; public links with negative uses still do", async () => {
+  const h = activationHarness();
+  h.users.set(234, { id: 234, uid: "late", email: "late@example.test" });
+  h.projects.get(15).ownerId = 789;
+  h.invites.push({ id: "old", userId: 123, projectId: 15, expired: false, uses: 1, expiresAt: new Date(Date.now() - 1000), project: h.projects.get(15) });
+  h.invites.push({ id: "public", key: "public", userId: 123, projectId: 15, expired: false, uses: -3, project: h.projects.get(15) });
+  const accept = h.load("src/utils/controllers/members/invite.ts").default;
+  assert.equal((await accept(234, 15, "old")).status, 403);
+  assert.equal(h.members.some((member) => member.userId === 234), false);
+  assert.equal((await accept(234, 15, "public")).status, 200);
+  assert.equal(h.members.some((member) => member.userId === 234 && member.projectId === 15), true);
+});
+
+test("HTPR-7162: the invite route joins the signed-in user, never a userId from the request body", () => {
+  const route = fs.readFileSync(path.join(__dirname, "..", "src/pages/api/members/invite.ts"), "utf8");
+  assert.match(route, /getSessionUser\(/);
+  assert.match(route, /membersInvite\(session\.userId,/);
+  assert.doesNotMatch(route, /const \{[^}]*\buserId\b[^}]*\} = req\.body/);
+});
+
 function bulkSectionController(h: ReturnType<typeof activationHarness>, rollback = false) {
   const noop = async () => undefined;
   const source = { ...h.sections[0], projectId: 15 };
