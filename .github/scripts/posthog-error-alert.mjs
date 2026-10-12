@@ -58,33 +58,39 @@ export function validatePostHogPayload(value, now = Date.now()) {
   if (environment !== "production" && environment !== "preview") {
     throw new Error("PostHog alert environment is invalid");
   }
-  if (alertKind !== "new_server_error" && alertKind !== "server_error_spike") {
+  const issueAlert = ["issue_created", "issue_reopened", "issue_spiking"].includes(alertKind);
+  if (!issueAlert && alertKind !== "new_server_error" && alertKind !== "server_error_spike") {
     throw new Error("PostHog alert kind is invalid");
   }
-  if (typeof value.release !== "string" || !/^[0-9a-f]{40}$/i.test(value.release)) {
+  if (!issueAlert && (typeof value.release !== "string" || !/^[0-9a-f]{40}$/i.test(value.release))) {
     throw new Error("PostHog alert release is invalid");
   }
   if (typeof value.event_id !== "string" || !/^[0-9a-f-]{32,64}$/i.test(value.event_id)) {
     throw new Error("PostHog alert event id is invalid");
   }
-  if (typeof value.fingerprint !== "string" || !/^[0-9a-f]{64}$/i.test(value.fingerprint)) {
+  if (!issueAlert && (typeof value.fingerprint !== "string" || !/^[0-9a-f]{64}$/i.test(value.fingerprint))) {
     throw new Error("PostHog alert fingerprint is invalid");
   }
-  if (!Number.isInteger(value.count) || value.count < 1 || value.count > 100_000) {
-    throw new Error("PostHog alert count is invalid");
-  }
-  if (typeof value.name !== "string" || value.name.length < 1 || value.name.length > 120) {
-    throw new Error("PostHog alert name is invalid");
-  }
-  if (typeof value.message !== "string" || value.message.length < 1 || value.message.length > 1000) {
-    throw new Error("PostHog alert message is invalid");
-  }
-  if (typeof value.issue_url !== "string") {
-    throw new Error("PostHog issue URL is invalid");
-  }
-  const issueUrl = new URL(value.issue_url);
-  if (issueUrl.protocol !== "https:" || !["eu.posthog.com", "us.posthog.com"].includes(issueUrl.hostname)) {
-    throw new Error("PostHog issue URL host is invalid");
+  if (issueAlert) {
+    if (typeof value.issue_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.issue_id)) throw new Error("PostHog issue ID is invalid");
+    if (alertKind === "issue_spiking" && (!Number.isSafeInteger(value.spike_count) || value.spike_count < 1 || !Number.isFinite(value.spike_baseline) || value.spike_baseline < 0)) throw new Error("PostHog spike counts are invalid");
+  } else {
+    if (!Number.isInteger(value.count) || value.count < 1 || value.count > 100_000) {
+      throw new Error("PostHog alert count is invalid");
+    }
+    if (typeof value.name !== "string" || value.name.length < 1 || value.name.length > 120) {
+      throw new Error("PostHog alert name is invalid");
+    }
+    if (typeof value.message !== "string" || value.message.length < 1 || value.message.length > 1000) {
+      throw new Error("PostHog alert message is invalid");
+    }
+    if (typeof value.issue_url !== "string") {
+      throw new Error("PostHog issue URL is invalid");
+    }
+    const issueUrl = new URL(value.issue_url);
+    if (issueUrl.protocol !== "https:" || !["eu.posthog.com", "us.posthog.com"].includes(issueUrl.hostname)) {
+      throw new Error("PostHog issue URL host is invalid");
+    }
   }
   const dispatchedAt = Date.parse(value.dispatched_at);
   if (
@@ -101,8 +107,7 @@ export function validatePostHogPayload(value, now = Date.now()) {
   return {
     ...value,
     dispatched_at: new Date(dispatchedAt).toISOString(),
-    release: value.release.toLowerCase(),
-    fingerprint: value.fingerprint.toLowerCase(),
+    ...(!issueAlert ? { release: value.release.toLowerCase(), fingerprint: value.fingerprint.toLowerCase() } : { issue_id: value.issue_id.toLowerCase() }),
     timestamp: new Date(timestamp).toISOString(),
   };
 }
@@ -170,12 +175,14 @@ export function incidentDescription(alert) {
     `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
     `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
-    `<li>Production hits since monitoring began: ${alert.count}. Known users: ${alert.users}; ${alert.unidentified_hits} hits without a user identity.</li>` +
+    `<li>Production hits: ${alert.count}. Known users: ${alert.users}; ${alert.unidentified_hits} hits without a user identity.</li>` +
     `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen)}.</li>` +
     `<li>PostHog issue ID: <code>${escapeHtml(alert.issue_id)}</code></li>` +
     `<li>Error: <code>${escapeHtml(alert.name)}</code>. ${escapeHtml(alert.message)}</li>` +
     `<li><a href="${escapeHtml(alert.issue_url)}">Open the issue in PostHog</a></li>` +
     `</ul>` +
+    (alert.alert_kind === "issue_spiking" ? `<p>PostHog detected a spike: ${alert.spike_count} hits in its detection window, baseline ${alert.spike_baseline}.</p>` : "") +
+    (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "") +
     `<p>posthog-count:${alert.count}; posthog-users:${alert.users}</p>`
   );
 }
@@ -218,6 +225,9 @@ export async function handlePostHogAlert(
     now = Date.now(),
     vercelToken = process.env.VERCEL_TOKEN || "",
     dispatchSecret = process.env.POSTHOG_ALERT_DISPATCH_SECRET?.trim() || "",
+    mcpToken = process.env.HYPERTASK_MCP_TOKEN || "",
+    apiKey = process.env.POSTHOG_FULL_API_KEY || "",
+    wait,
   } = {},
 ) {
   if (!verifyPostHogPayloadSignature(rawPayload, dispatchSecret)) {
@@ -227,7 +237,15 @@ export async function handlePostHogAlert(
   if (alert.environment === "preview") {
     return { action: "preview_verified", release: alert.release };
   }
-  if (alert.alert_kind === "new_server_error") return { action: "awaiting_issue_poll" };
+  if (alert.alert_kind.startsWith("issue_")) {
+    if (!apiKey || !mcpToken) throw new Error("PostHog issue writer credentials are missing");
+    const { readProductionIssue, severityLabels, upsertIssue } = await import("./posthog-error-issues.mjs");
+    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait });
+    if (!issue) return { action: "skip", reason: "issue has no production exceptions" };
+    const config = productionConfig();
+    return upsertIssue(fetchImpl, mcpToken, { ...config, severityLabels: await severityLabels(fetchImpl, mcpToken, config) }, { ...alert, ...issue });
+  }
+  if (alert.alert_kind === "new_server_error") return { action: "rollback_not_needed" };
   if (!vercelToken) throw new Error("VERCEL_TOKEN is not configured");
   const config = productionConfig();
 
@@ -254,14 +272,12 @@ export async function handlePostHogAlert(
           : "No rollback ran because the current deployment is older than 15 minutes.",
     };
   }
-  // The issue poll is the sole ticket writer, including first errors and repeats.
-  // Keeping the event relay rollback-only avoids a second fingerprint-based ticket.
+  // Only native issue alerts write tickets. Keep the signed exception path rollback-only.
   const rollback = rollbackEligible
     ? await rollbackImpl(alert.release, vercelToken, fetchImpl)
     : initialRollback;
   if (rollback?.action === "failed") throw new Error("PostHog emergency rollback failed");
-  return { action: "awaiting_issue_poll", rollback };
-
+  return { action: "rollback_checked", rollback };
 }
 
 async function main() {

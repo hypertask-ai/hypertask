@@ -41,8 +41,8 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   return { action: existing ? "updated" : "created", workflow };
 }
 
-export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
-  if (!token || !testToken || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
+export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTASK_MCP_TOKEN, testToken = process.env.POSTHOG_ERROR_TEST_TOKEN, apiKey = process.env.POSTHOG_FULL_API_KEY, runId = process.env.GITHUB_RUN_ID, attempt = process.env.GITHUB_RUN_ATTEMPT || "1", now = Date.now, wait = setTimeout, timeoutMs = 15 * 60 * 1000 } = {}) {
+  if (!token || !testToken || !apiKey || !/^\d{1,20}$/.test(String(runId)) || !/^\d{1,3}$/.test(String(attempt))) {
     throw new Error("Nightly canary credentials or run identity are missing");
   }
   const marker = `yper4-331-${runId}-${attempt}`;
@@ -56,13 +56,26 @@ export async function runCanary({ fetchImpl = fetch, token = process.env.HYPERTA
     const page = await api(fetchImpl, token, `/tasks?project_id=15&status=Normal&search=${marker}&limit=100`);
     if (!Array.isArray(page.tasks)) throw new Error("Nightly canary lookup returned no tasks");
     // A legacy error reporter's ticket is not proof of PostHog issue ingestion.
-    const ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>"));
+    const ticket = page.tasks.find((task) => task.description?.includes(marker) && task.description.includes("PostHog issue ID: <code>") && /posthog-alert:issue_(?:created|reopened):/.test(task.description));
     if (ticket) {
+      const issueId = /PostHog issue ID: <code>([0-9a-f-]{36})<\/code>/.exec(ticket.description)?.[1];
+      if (!issueId || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(issueId)) throw new Error("Canary ticket has no valid PostHog issue ID");
+      const issueUrl = `https://eu.posthog.com/api/projects/236160/error_tracking/issues/${issueId}/`;
+      const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
+      const found = await fetchImpl(issueUrl, { headers, signal: AbortSignal.timeout(30_000) });
+      if (!found.ok) throw new Error(`Canary PostHog lookup returned HTTP ${found.status}`);
+      const issue = await found.json();
+      if (issue.id !== issueId || !issue.description?.includes(marker)) throw new Error("PostHog issue does not match the nightly canary");
+      if (now() >= deadline) throw new Error("Canary alert ticket arrived after fifteen minutes");
       const projects = await api(fetchImpl, token, "/projects?limit=100");
       const project = projects.projects?.find((item) => Number(item.id) === 15);
       const done = project?.sections?.find((item) => (item.section_title ?? item.title) === "Done");
       if (!done?.id) throw new Error("Board 15 Done section is unavailable");
       await api(fetchImpl, token, "/tasks/update", { task_id: ticket.id, sectionId: Number(done.id) }, `posthog-canary-close-${marker}`);
+      const resolved = await fetchImpl(issueUrl, {
+        method: "PATCH", headers, signal: AbortSignal.timeout(30_000), body: JSON.stringify({ status: "resolved" }),
+      });
+      if (!resolved.ok || (await resolved.json()).status !== "resolved") throw new Error("Canary PostHog issue resolution failed");
       console.log(`Nightly PostHog canary passed and closed its ticket: ${marker}`);
       return { action: "verified", ticketId: ticket.id, marker };
     }

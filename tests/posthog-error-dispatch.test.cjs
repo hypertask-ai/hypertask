@@ -28,6 +28,7 @@ stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => true });
 stubModule("src/lib/redis.ts", { getRedis: async () => ({}) });
 stubModule("src/lib/telemetry/posthogErrorAlert.ts", {
   parsePostHogExceptionAlert: () => alert,
+  parsePostHogIssueAlert: () => undefined,
   claimPostHogAlert: async () => ({ accepted: true, firstFingerprint: true, count: 1 }),
   commitPostHogAlertClaim: async () => claims.push("commit"),
   releasePostHogAlertClaim: async () => claims.push("release"),

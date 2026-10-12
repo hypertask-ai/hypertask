@@ -155,6 +155,35 @@ export function parsePostHogExceptionAlert(
   };
 }
 
+export function parsePostHogIssueAlert(payload: unknown) {
+  const event = record(record(payload)?.event);
+  const kinds: Record<string, string> = {
+    $error_tracking_issue_created: "issue_created",
+    $error_tracking_issue_reopened: "issue_reopened",
+    $error_tracking_issue_spiking: "issue_spiking",
+  };
+  const kind = typeof event?.event === "string" ? kinds[event.event] : undefined;
+  const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (typeof kind !== "string" || typeof event?.distinct_id !== "string" || !uuid.test(event.distinct_id) || typeof event.uuid !== "string" || !uuid.test(event.uuid)) return undefined;
+  const timestamp = typeof event.timestamp === "string" ? Date.parse(event.timestamp) : NaN;
+  if (!Number.isFinite(timestamp) || timestamp > Date.now() + MAX_FUTURE_SKEW_MILLISECONDS) return undefined;
+  const properties = record(event.properties);
+  const environment = properties?.ht_environment;
+  const currentUrl = properties?.$current_url;
+  const production = environment === "production" || (environment === undefined && (currentUrl === undefined || (typeof currentUrl === "string" && currentUrl.startsWith("https://app.hypertask.ai/"))));
+  const spikeCount = properties?.current_bucket_value;
+  const baseline = properties?.computed_baseline;
+  if (kind === "issue_spiking" && (typeof spikeCount !== "number" || !Number.isSafeInteger(spikeCount) || spikeCount < 1 || typeof baseline !== "number" || !Number.isFinite(baseline) || baseline < 0)) return undefined;
+  return {
+    alert_kind: kind,
+    issue_id: event.distinct_id.toLowerCase(),
+    event_id: event.uuid.toLowerCase(),
+    environment: production ? "production" : "preview",
+    timestamp: new Date(timestamp).toISOString(),
+    ...(kind === "issue_spiking" ? { spike_count: spikeCount, spike_baseline: baseline } : {}),
+  };
+}
+
 // KEYS are the event dedupe key, rolling-window sorted set, first-fingerprint
 // claim, and one-spike-per-release claim. ARGV are receive time, claim TTL,
 // event nonce, window length, window TTL, and threshold. One Lua call keeps the

@@ -73,12 +73,12 @@ test("rejects unsigned, modified, stale dispatches and untrusted issue hosts", a
   assert.equal(validatePostHogPayload(payload({ timestamp: new Date(NOW - 30 * 60_000).toISOString() }), NOW).count, 21);
 });
 
-test("fresh spike rolls back but leaves ticket creation to the sole issue writer", async () => {
+test("fresh server spike retains rollback-only safety without a second ticket writer", async () => {
   const { handlePostHogAlert } = await import(script);
   const { fetchImpl, calls } = liveFetch();
   let rolledBack = 0;
   const result = await handlePostHogAlert(payload(), options({ fetchImpl, rollbackImpl: async () => { rolledBack++; return { action: "requested" }; } }));
-  assert.equal(result.action, "awaiting_issue_poll");
+  assert.equal(result.action, "rollback_checked");
   assert.equal(result.rollback.action, "requested");
   assert.equal(rolledBack, 1);
   assert.equal(calls.length, 1);

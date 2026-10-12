@@ -2,7 +2,7 @@ name: PostHog Error Pipeline Watchdog
 
 on:
   workflow_run:
-    workflows: [PostHog Error Alert, PostHog Error Issues, PostHog Error Nightly Canary]
+    workflows: [PostHog Error Alert, PostHog Error Nightly Canary]
     types: [completed]
     branches: [production]
 

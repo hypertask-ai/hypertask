@@ -2,12 +2,12 @@ const test = require("node:test");
 const assert = require("node:assert/strict");
 const { readFileSync } = require("node:fs");
 const yaml = require("js-yaml");
-const script = new URL("../.github/scripts/posthog-error-poll.mjs", `file://${__filename}`);
+const script = new URL("../.github/scripts/posthog-error-issues.mjs", `file://${__filename}`);
 const ID = "01a128a7-88f1-7753-b94b-4f8ec8f7cbdf";
 const SINCE = "2026-10-10T00:00:00Z";
 const config = { appUrl: "https://app.hypertask.ai", boardId: 15, bugsSectionId: 4389, severityLabels: { P1: "label-p1", P2: "label-p2", P3: "label-p3" } };
 function response(body, status = 200) { return { ok: status >= 200 && status < 300, status, text: async () => JSON.stringify(body) }; }
-function row(id = ID, count = 12, users = 2, message = "No output generated.") { return [id, count, users, "2026-10-11T00:00:00Z", "2026-10-12T00:00:00Z", JSON.stringify([{ value: message }]), "handled", "/api/ai/task-writer", 0]; }
+function row(count = 12, users = 2, message = "No output generated.") { return [count, users, "2026-10-11T00:00:00Z", "2026-10-12T00:00:00Z", JSON.stringify([{ value: message }]), "handled", "/api/ai/task-writer", 0]; }
 function issue(overrides = {}) { return { issue_id: ID, count: 12, users: 2, unidentified_hits: 0, severity: "P2", severity_reason: "Feature failed", name: "Error", message: "No output generated.", timestamp: "2026-10-11T00:00:00Z", last_seen: "2026-10-12T00:00:00Z", issue_url: `https://eu.posthog.com/project/236160/error_tracking/${ID}`, ...overrides }; }
 
 function board() {
@@ -74,38 +74,40 @@ test("ambiguous successful create is recovered from its saved issue marker witho
   assert.equal(state.tasks.length, 1);
 });
 
-test("all new production issues are read with paging, old known issues excluded and counts attached", async () => {
-  const { readProductionIssues } = await import(script);
-  const old = "01a11c15-dcdc-7c01-baaf-34a5fb318228";
+test("native alerts read only their issue, with production counts and ingestion-lag retries", async () => {
+  const { readProductionIssue } = await import(script);
   const calls = [];
-  const fetchImpl = async (url, options) => {
+  const waits = [];
+  let queries = 0;
+  const result = await readProductionIssue(async (url, options) => {
     calls.push({ url, options });
-    if (url.includes("offset=100")) return response({ next: null, results: [{ id: ID, name: "Error", first_seen: "2026-10-11T00:00:00Z" }] });
-    if (url.includes("/issues/")) return response({ next: "?limit=100&offset=100", results: [{ id: old, first_seen: "2026-10-01T00:00:00Z" }] });
-    return response({ results: [row(), row(old)], hasMore: false });
-  };
-  const result = await readProductionIssues(fetchImpl, "fixture", SINCE);
-  assert.equal(result.length, 1);
-  assert.equal(result[0].issue_id, ID);
-  assert.equal(result[0].count, 12);
-  assert.equal(result[0].users, 2);
-  assert.equal(result[0].severity, "P2");
+    if (url.includes("/issues/")) return response({ id: ID, name: "Error" });
+    return response({ results: [++queries === 1 ? [0, 0, null, null, null, null, null, 0] : row()] });
+  }, "fixture", ID, { wait: async (ms) => waits.push(ms) });
+  assert.equal(result.issue_id, ID);
+  assert.equal(result.count, 12);
+  assert.equal(result.users, 2);
+  assert.equal(result.severity, "P2");
+  assert.deepEqual(waits, [10_000]);
   assert.equal(calls.length, 3);
-  const query = JSON.parse(calls[2].options.body).query.query;
+  assert.match(calls[0].url, new RegExp(`/issues/${ID}/$`));
+  const query = JSON.parse(calls[1].options.body).query.query;
+  assert.match(query, new RegExp(ID));
   assert.match(query, /ht_environment = 'production'/);
   assert.match(query, /https:\/\/app.hypertask.ai\/%/);
   assert.match(query, /ht_environment IS NULL/);
   assert.doesNotMatch(query, /ht_release|ht_source = 'server'/);
   assert.match(query, /distinct_id != 'hypertask-app'/);
-  assert.match(result[0].issue_url, new RegExp(ID));
 });
 
-test("malformed, truncated and credential-redirecting PostHog responses fail closed", async () => {
-  const { readProductionIssues, issueQuery } = await import(script);
-  assert.throws(() => issueQuery("' OR 1=1"), /ISO timestamp/);
-  await assert.rejects(readProductionIssues(async () => response({ next: "https://attacker.test/", results: [] }), "fixture", SINCE), /pagination is invalid/);
-  await assert.rejects(readProductionIssues(async (url) => response(url.includes("/query/") ? { results: [row()], hasMore: true } : { results: [], next: null }), "fixture", SINCE), /truncated/);
-  await assert.rejects(readProductionIssues(async (url) => response(url.includes("/query/") ? { results: [row(ID, -1)] } : { results: [{ id: ID, first_seen: SINCE }], next: null }), "fixture", SINCE), /counts are invalid/);
+test("malformed counts, wrong issues, unsafe IDs and missing production hits cannot create tickets", async () => {
+  const { readProductionIssue, issueQuery } = await import(script);
+  assert.throws(() => issueQuery("' OR 1=1"), /issue ID is invalid/);
+  await assert.rejects(readProductionIssue(async () => response({ id: "wrong" }), "fixture", ID), /different issue/);
+  for (const bad of [{ results: [row()], hasMore: true }, { results: [row(-1)] }, { results: [] }]) {
+    await assert.rejects(readProductionIssue(async (url) => response(url.includes("/issues/") ? { id: ID } : bad), "fixture", ID), /missing or truncated|counts are invalid/);
+  }
+  assert.equal(await readProductionIssue(async (url) => response(url.includes("/issues/") ? { id: ID } : { results: [[0, 0, null, null, null, null, null, 0]] }), "fixture", ID, { wait: async () => {} }), undefined);
 });
 
 test("severity separates crashes, durable data failures, broad impact, feature failures and expected limits", async () => {
@@ -143,39 +145,33 @@ test("deleted issue tickets receive field counts without a forbidden comment or 
   assert.match(state.tasks[0].description, /posthog-count:30/);
 });
 
-test("whole poll continues after one failed issue and retries without duplicating successful issues", async () => {
-  const { pollIssues } = await import(script);
+test("native reopen updates the same Done or archived ticket even when counts have not increased", async () => {
+  const { upsertIssue } = await import(script);
   const state = board();
-  const second = "01a11c15-dcdc-7c01-baaf-34a5fb318228";
-  let fail = true;
-  const labels = [];
-  const fetchImpl = async (url, options = {}) => {
-    if (url.includes("posthog.com") && url.includes("/issues/")) return response({ results: [{ id: ID, first_seen: SINCE }, { id: second, first_seen: SINCE }], next: null });
-    if (url.includes("posthog.com") && url.includes("/query/")) return response({ results: [row(), row(second)] });
-    if (url.endsWith("/labels")) {
-      if (!options.method) return response({ labels });
-      const name = JSON.parse(options.body).name;
-      const label = { name, id: `label-${name.toLowerCase()}` };
-      labels.push(label); return response({ label });
-    }
-    if (fail && url.endsWith("/tasks/create") && JSON.parse(options.body).description.includes(ID)) return response({}, 503);
-    return state.fetchImpl(url, options);
-  };
-  await assert.rejects(pollIssues({ fetchImpl, apiKey: "fixture", token: "fixture", since: SINCE, config }), /1 PostHog issue ticket writes failed/);
+  await upsertIssue(state.fetchImpl, "fixture", config, issue());
+  state.tasks[0].sectionId = 999;
+  state.tasks[0].status = "Archive";
+  const fetchImpl = async (url, options) => url.includes("/projects?") ? response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] }) : state.fetchImpl(url, options);
+  const reopened = issue({ alert_kind: "issue_reopened", event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318228" });
+  assert.equal((await upsertIssue(fetchImpl, "fixture", config, reopened)).action, "updated");
+  assert.equal((await upsertIssue(fetchImpl, "fixture", config, reopened)).action, "unchanged");
   assert.equal(state.tasks.length, 1);
-  fail = false;
-  const result = await pollIssues({ fetchImpl, apiKey: "fixture", token: "fixture", since: SINCE, config });
-  assert.equal(state.tasks.length, 2);
-  assert.equal(result.created, 1);
-  assert.equal(labels.length, 3);
-  await assert.rejects(pollIssues({ fetchImpl, apiKey: "fixture", token: "fixture", since: "", config }), /activation timestamp/);
+  assert.equal(state.tasks[0].status, "Normal");
+  assert.equal(state.tasks[0].sectionId, 4389);
+  assert.equal(state.comments.size, 1);
+  assert.match([...state.comments.values()][0].text, /reopened/);
 });
 
-test("poll is scheduled every five minutes on trusted production with one writer", () => {
-  const workflow = yaml.load(readFileSync(new URL("../.github/workflows/posthog-error-poll.yml", `file://${__filename}`), "utf8"));
-  assert.equal(workflow.on.schedule[0].cron, "*/5 * * * *");
-  assert.equal(workflow.concurrency["cancel-in-progress"], false);
-  assert.equal(workflow.jobs.issues.if, "github.ref == 'refs/heads/production'");
-  assert.equal(workflow.jobs.issues.steps[0].with.ref, "production");
-  assert.equal(workflow.jobs.issues.steps[1].env.POSTHOG_ISSUES_SINCE, "${{ vars.POSTHOG_ISSUES_SINCE }}");
+test("spikes add their native count and baseline once, or create the same issue-rated ticket", async () => {
+  const { upsertIssue } = await import(script);
+  const state = board();
+  const spike = issue({ alert_kind: "issue_spiking", event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318228", spike_count: 51, spike_baseline: 2 });
+  await upsertIssue(state.fetchImpl, "fixture", config, spike);
+  assert.match(state.tasks[0].description, /spike: 51 hits.*baseline 2/);
+  const nextSpike = { ...spike, event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318229" };
+  await upsertIssue(state.fetchImpl, "fixture", config, nextSpike);
+  await upsertIssue(state.fetchImpl, "fixture", config, nextSpike);
+  assert.equal(state.tasks.length, 1);
+  assert.equal(state.comments.size, 1);
+  assert.match([...state.comments.values()][0].text, /spike: 51 hits.*baseline 2/);
 });

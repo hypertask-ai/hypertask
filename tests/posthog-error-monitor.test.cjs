@@ -5,6 +5,8 @@ const yaml = require("js-yaml");
 const script = new URL("../.github/scripts/posthog-error-monitor.mjs", `file://${__filename}`);
 function response(body, status = 200) { return { ok: status >= 200 && status < 300, status, json: async () => body }; }
 
+const ISSUE_ID = "01a128a7-88f1-7753-b94b-4f8ec8f7cbdf";
+
 function canaryFetch(ticketAt = 2) {
   const calls = [];
   let searches = 0;
@@ -13,10 +15,12 @@ function canaryFetch(ticketAt = 2) {
     if (url.endsWith("/error-test")) return response({}, 500);
     if (url.includes("/tasks?")) return response({ tasks: ++searches < ticketAt ? [] : [
       { id: 99, description: "legacy reporter yper4-331-123-1" },
-      { id: 100, description: "PostHog issue ID: <code>issue-id</code> PostHog pipeline canary yper4-331-123-1" },
+      { id: 98, description: `Former poll yper4-331-123-1 PostHog issue ID: <code>${ISSUE_ID}</code>` },
+      { id: 100, description: `PostHog issue ID: <code>${ISSUE_ID}</code> PostHog pipeline canary yper4-331-123-1 posthog-alert:issue_created:alert-id` },
     ] });
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 777, section_title: "Done" }] }] });
     if (url.endsWith("/tasks/update")) return response({ success: true });
+    if (url.includes("posthog.com/api/projects/236160/error_tracking/issues/")) return response({ id: ISSUE_ID, description: "PostHog pipeline canary yper4-331-123-1", status: options.method === "PATCH" ? "resolved" : "active" });
     assert.fail(url);
   } };
 }
@@ -25,13 +29,13 @@ test("nightly canary throws on production, polls for the PostHog ticket, then mo
   const { runCanary } = await import(script);
   const state = canaryFetch();
   let clock = 0;
-  const result = await runCanary({ ...state, token: "mcp-fixture", testToken: "test-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
+  const result = await runCanary({ ...state, token: "mcp-fixture", testToken: "test-fixture", apiKey: "ph-fixture", runId: "123", attempt: "1", now: () => clock, wait: async (ms) => { clock += ms; } });
   assert.equal(result.action, "verified");
   assert.equal(result.ticketId, 100);
   assert.equal(clock, 30_000);
   assert.equal(state.calls[0].options.headers["x-error-test-token"], "test-fixture");
   assert.equal(state.calls[0].options.headers["x-posthog-canary"], "yper4-331-123-1");
-  const closeBody = JSON.parse(state.calls.at(-1).options.body);
+  const closeBody = JSON.parse(state.calls.find((call) => call.url.endsWith("/tasks/update")).options.body);
   assert.deepEqual(closeBody, { task_id: 100, sectionId: 777 });
   const ts = require("typescript");
   const vm = require("node:vm");
@@ -52,14 +56,16 @@ test("nightly canary throws on production, polls for the PostHog ticket, then mo
   assert.equal(valid instanceof Response, false);
   const invalid = await mod.exports.validateTaskUpdateFields({ task_id: 100, section_id: 777 }, false);
   assert.equal(invalid.status, 400);
-  assert.equal(state.calls.at(-1).options.headers["Idempotency-Key"], "posthog-canary-close-yper4-331-123-1");
+  assert.equal(state.calls.at(-1).options.method, "PATCH");
+  assert.deepEqual(JSON.parse(state.calls.at(-1).options.body), { status: "resolved" });
+  assert.equal(state.calls.find((call) => call.url.endsWith("/tasks/update")).options.headers["Idempotency-Key"], "posthog-canary-close-yper4-331-123-1");
 });
 
 test("missing ticket reaches exactly the fifteen-minute deadline and fails loudly", async () => {
   const { runCanary } = await import(script);
   const state = canaryFetch(Infinity);
   let clock = 0;
-  await assert.rejects(runCanary({ ...state, token: "fixture", testToken: "fixture", runId: "123", now: () => clock, wait: async (ms) => { clock += ms; } }), /No matching board 15 PostHog ticket within 15 minutes/);
+  await assert.rejects(runCanary({ ...state, token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", now: () => clock, wait: async (ms) => { clock += ms; } }), /No matching board 15 PostHog ticket within 15 minutes/);
   assert.equal(clock, 15 * 60_000);
   assert.equal(state.calls.filter((call) => call.url.includes("/tasks?")).length, 30);
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/update")).length, 0);
@@ -67,10 +73,24 @@ test("missing ticket reaches exactly the fifteen-minute deadline and fails loudl
 
 test("authentication, API and close failures cannot look like a passed canary", async () => {
   const { runCanary } = await import(script);
-  await assert.rejects(runCanary({ token: "", testToken: "fixture", runId: "123" }), /credentials/);
-  await assert.rejects(runCanary({ token: "fixture", testToken: "fixture", runId: "123", fetchImpl: async () => response({}, 401) }), /error-test returned HTTP 401/);
+  await assert.rejects(runCanary({ token: "", testToken: "fixture", apiKey: "ph-fixture", runId: "123" }), /credentials/);
+  await assert.rejects(runCanary({ token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", fetchImpl: async () => response({}, 401) }), /error-test returned HTTP 401/);
   const state = canaryFetch(1);
-  await assert.rejects(runCanary({ token: "fixture", testToken: "fixture", runId: "123", fetchImpl: async (url, options) => url.endsWith("/tasks/update") ? response({}, 403) : state.fetchImpl(url, options) }), /HTTP 403/);
+  await assert.rejects(runCanary({ token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123", fetchImpl: async (url, options) => url.endsWith("/tasks/update") ? response({}, 403) : state.fetchImpl(url, options) }), /HTTP 403/);
+});
+
+test("canary refuses mismatched issues, failed resolution and late alert delivery", async () => {
+  const { runCanary } = await import(script);
+  const state = canaryFetch(1);
+  const options = { token: "fixture", testToken: "fixture", apiKey: "ph-fixture", runId: "123" };
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => url.includes("posthog.com") ? response({ id: ISSUE_ID, description: "another error" }) : state.fetchImpl(url, opts) }), /does not match the nightly canary/);
+  assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/update")).length, 0);
+  await assert.rejects(runCanary({ ...options, fetchImpl: async (url, opts) => opts.method === "PATCH" ? response({}, 403) : state.fetchImpl(url, opts) }), /resolution failed/);
+  let clock = 0;
+  await assert.rejects(runCanary({ ...options, now: () => clock, fetchImpl: async (url, opts) => {
+    if (url.includes("posthog.com")) clock = 15 * 60_000;
+    return state.fetchImpl(url, opts);
+  } }), /arrived after fifteen minutes/);
 });
 
 test("watchdog directly creates one infra ticket and comments on it for subsequent failing runs", async () => {
@@ -113,7 +133,7 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   const watcher = yaml.load(readFileSync(new URL("../.github/workflows/posthog-error-watchdog.yml", `file://${__filename}`), "utf8"));
   assert.equal(nightly.on.schedule[0].cron, "17 2 * * *");
   assert.equal(nightly.jobs.canary["timeout-minutes"], 20);
-  assert.deepEqual(watcher.on.workflow_run.workflows, ["PostHog Error Alert", "PostHog Error Issues", "PostHog Error Nightly Canary"]);
+  assert.deepEqual(watcher.on.workflow_run.workflows, ["PostHog Error Alert", "PostHog Error Nightly Canary"]);
   assert.deepEqual(watcher.on.workflow_run.types, ["completed"]);
   assert.deepEqual(watcher.on.workflow_run.branches, ["production"]);
   assert.match(watcher.jobs.report.if, /failure.*timed_out/);
