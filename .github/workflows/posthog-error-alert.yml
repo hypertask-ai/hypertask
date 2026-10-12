@@ -9,9 +9,9 @@ on:
         default: ""
 
 concurrency:
-  # Alerts must not queue behind health checks or unrelated error alerts.
-  # The receiver's Redis claim stops duplicate dispatches for the same alert.
-  group: ${{ format('posthog-error-{0}', fromJSON(inputs.posthog_payload || '{}').issue_id || github.run_id) }}
+  # A shared issue group drops intermediate pending lifecycle alerts.
+  # The writer reconciles racing creates by issue ID instead.
+  group: ${{ format('posthog-error-{0}', github.run_id) }}
   cancel-in-progress: false
 
 env:

@@ -68,7 +68,7 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
     if (url.includes("posthog.com") && url.includes("/issues/")) return response({ id: ISSUE, name: "Error" });
     if (url.includes("posthog.com") && url.includes("/query/")) return response({ results: [[hits, 1, new Date().toISOString(), new Date().toISOString(), [{ value: "No output generated." }], "handled", "/api/ai/task-writer", 0]] });
     if (url.endsWith("/labels")) return response({ labels: ["P1", "P2", "P3"].map((name) => ({ name, id: name })) });
-    if (url.includes("/tasks?")) return response({ tasks: tasks.filter((task) => task.status === new URL(url).searchParams.get("status")) });
+    if (url.includes("/tasks?")) return response({ tasks: tasks.filter((task) => new URL(url).searchParams.has("task_id") ? task.id === Number(new URL(url).searchParams.get("task_id")) : task.status === new URL(url).searchParams.get("status")) });
     if (url.endsWith("/tasks/create")) { const task = { ...body, id: 100, ticketNumber: "HTPR-7001", status: "Normal", labels: body.labels.map((id) => ({ name: id, id })) }; tasks.push(task); return response({ task }); }
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] });
     if (url.endsWith("/comments")) { comments.push(body); return response({ success: true }); }

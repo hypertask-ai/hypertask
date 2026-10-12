@@ -172,18 +172,18 @@ function incidentTitle(alert) {
 
 export function incidentDescription(alert) {
   return (
-    `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
+    `<p class="posthog-issue-start"><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
     `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
-    `<li>Production hits: ${alert.count}. Known users: ${alert.users}; ${alert.unidentified_hits} hits without a user identity.</li>` +
-    `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen)}.</li>` +
+    `<li>Production hits: ${alert.count ?? "unknown"}. Known users: ${alert.users ?? "unknown"}; ${alert.unidentified_hits ?? "unknown"} hits without a user identity.</li>` +
+    `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen ?? "unknown")}.</li>` +
     `<li>PostHog issue ID: <code>${escapeHtml(alert.issue_id)}</code></li>` +
     `<li>Error: <code>${escapeHtml(alert.name)}</code>. ${escapeHtml(alert.message)}</li>` +
     `<li><a href="${escapeHtml(alert.issue_url)}">Open the issue in PostHog</a></li>` +
     `</ul>` +
     (alert.alert_kind === "issue_spiking" ? `<p>PostHog detected a spike: ${alert.spike_count} hits in its detection window, baseline ${alert.spike_baseline}.</p>` : "") +
     (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "") +
-    `<p>posthog-count:${alert.count}; posthog-users:${alert.users}</p>`
+    `<p class="posthog-issue-end">posthog-count:${alert.count ?? "unknown"}; posthog-users:${alert.users ?? "unknown"}</p>`
   );
 }
 
@@ -240,8 +240,7 @@ export async function handlePostHogAlert(
   if (alert.alert_kind.startsWith("issue_")) {
     if (!apiKey || !mcpToken) throw new Error("PostHog issue writer credentials are missing");
     const { readProductionIssue, severityLabels, upsertIssue } = await import("./posthog-error-issues.mjs");
-    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait });
-    if (!issue) return { action: "skip", reason: "issue has no production exceptions" };
+    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait, alert });
     const config = productionConfig();
     return upsertIssue(fetchImpl, mcpToken, { ...config, severityLabels: await severityLabels(fetchImpl, mcpToken, config) }, { ...alert, ...issue });
   }

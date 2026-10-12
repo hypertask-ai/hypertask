@@ -102,6 +102,7 @@ test("watchdog directly creates one infra ticket and comments on it for subseque
     const body = options.body ? JSON.parse(options.body) : undefined;
     if (url.includes("/tasks?")) return response({ tasks });
     if (url.endsWith("/tasks/create")) { tasks.push({ ...body, id: 100, status: "Normal" }); return response({ task: { id: 100, ticketNumber: "YPER4-999" } }); }
+    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     if (url.endsWith("/comments")) return response({ success: true });
     assert.fail(url);
   };
@@ -120,6 +121,7 @@ test("watchdog reuses archived incidents and rejects untrusted run links", async
   const fetchImpl = async (url, options) => {
     if (url.includes("status=Normal")) return response({ tasks: [] });
     if (url.includes("status=Archive")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Archive" }] });
+    if (url.includes("/projects?")) return response({ projects: [{ id: 4060, sections: [{ id: 10, title: "Backlog" }, { id: 20, title: "Done" }] }] });
     writes.push(JSON.parse(options.body)); return response({ success: true });
   };
   await reportFailure({ fetchImpl, token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001" });
@@ -145,4 +147,26 @@ test("nightly and independent workflow_run watchdog use trusted production code 
   }
   const source = readFileSync(new URL("../.github/scripts/posthog-error-monitor.mjs", `file://${__filename}`), "utf8");
   assert.doesNotMatch(source, /posthog-error-alert\.mjs|posthog-error-poll\.mjs/);
+});
+
+
+test("review watchdog reopen returns Normal Done tickets to board 4060 active sections", async () => {
+  const { reportFailure, FAILURE_TITLE } = await import(script);
+  for (const sections of [
+    [{ id: 11, section_title: "In Progress" }, { id: 20, section_title: "Done" }, { id: 10, section_title: "Backlog" }],
+    [{ id: 20, title: "Done" }, { id: 11, title: "Todo" }],
+  ]) {
+    const writes = [];
+    const fetchImpl = async (url, options) => {
+      if (url.includes("/tasks?")) return response({ tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] });
+      if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 99, title: "Backlog" }] }, { id: 4060, sections }] });
+      writes.push({ url, body: JSON.parse(options.body) });
+      return response({ success: true });
+    };
+    assert.equal((await reportFailure({ fetchImpl, token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001" })).action, "updated");
+    assert.deepEqual(writes[0].body, { task_id: 100, status: "Normal", sectionId: sections.length === 3 ? 10 : 11 });
+    assert.match(writes[0].url, /tasks\/update$/);
+    assert.match(writes[1].url, /comments$/);
+  }
+  await assert.rejects(reportFailure({ token: "fixture", runId: "10001", runUrl: "https://github.com/hypertask-ai/hypertask/actions/runs/10001", fetchImpl: async (url) => response(url.includes("/tasks?") ? { tasks: [{ title: FAILURE_TITLE, id: 100, status: "Normal", sectionId: 20 }] } : { projects: [{ id: 4060, sections: [{ id: 20, title: "Done" }] }] }) }), /active section is unavailable/);
 });

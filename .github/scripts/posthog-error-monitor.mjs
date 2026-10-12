@@ -30,8 +30,13 @@ export async function reportFailure({ fetchImpl = fetch, token = process.env.HYP
   }
   const text = `<p><strong>The PostHog error-to-ticket safety net failed.</strong> New production errors may not reach the Bugs board. Check the workflow log and restore the pipeline.</p><p><a href="${runUrl}">Failed workflow run ${runId}</a></p>`;
   if (existing) {
-    if (existing.status === "Archive" || existing.status === "Deleted") {
-      await api(fetchImpl, token, "/tasks/update", { task_id: existing.id, status: "Normal" });
+    const projects = await api(fetchImpl, token, "/projects?limit=100");
+    const sections = projects.projects?.find((item) => Number(item.id) === 4060)?.sections;
+    const done = sections?.find((item) => (item.section_title ?? item.title) === "Done");
+    if (existing.status === "Archive" || existing.status === "Deleted" || Number(existing.sectionId ?? existing.section_id) === Number(done?.id)) {
+      const active = sections?.find((item) => (item.section_title ?? item.title) === "Backlog") || sections?.find((item) => (item.section_title ?? item.title) !== "Done");
+      if (!active?.id) throw new Error("Board 4060 active section is unavailable");
+      await api(fetchImpl, token, "/tasks/update", { task_id: existing.id, status: "Normal", sectionId: Number(active.id) });
     }
     await api(fetchImpl, token, "/comments", { task_id: existing.id, text, content_type: "html" }, `posthog-monitor-failure-${runId}`);
   } else {
