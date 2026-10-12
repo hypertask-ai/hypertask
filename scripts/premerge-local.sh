@@ -30,9 +30,9 @@ if [ "${PREMERGE_CLEAN_ENV:-}" != "$root" ]; then
   if [ "$action" = up ]; then launcher=(setsid --wait); fi
   exec "${launcher[@]}" env -i PATH="$PATH" HOME="$HOME" XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-}" HT_HEAVY_SLOTS="${HT_HEAVY_SLOTS:-}" PREMERGE_NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:-}" CI="${CI:-}" ${GITHUB_ACTIONS+GITHUB_ACTIONS="$GITHUB_ACTIONS"} PREMERGE_CLEAN_ENV="$root" bash "$root/scripts/premerge-local.sh" "$action" "${flag_overrides[@]}"
 fi
-# A 3 GB Node heap keeps next build and next start under the 6 GB watchdog limit (YPER4-302);
-# set PREMERGE_NODE_OPTIONS to override.
-export NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:---max-old-space-size=3072}"
+# A 4 GiB heap completed earlier builds; the build-only watchdog limit is 8 GiB (YPER4-318).
+# Set PREMERGE_NODE_OPTIONS to override.
+export NODE_OPTIONS="${PREMERGE_NODE_OPTIONS:---max-old-space-size=4096}"
 if [ "$action" = sweep ] || [ "$action" = --install ]; then
   exec python3 "$root/scripts/proc-watchdog.py" "$action"
 fi
@@ -203,7 +203,7 @@ for ((attempt=0; attempt<30; attempt++)); do
   sleep 1
 done
 curl -fsS --max-time 2 -o /dev/null "$TURBOPUFFER_BASE_URL/health"
-HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" npx --no-install next build --webpack
+PREMERGE_NEXT_BUILD=1 HT_HEAVY_WAIT_FD=4 bash "$root/scripts/heavy-job.sh" npx --no-install next build --webpack
 setsid node "$root/node_modules/next/dist/bin/next" start -H 127.0.0.1 -p "$app_port" >"$state/server.log" 2>&1 9>&- 3>&- 4>&- < /dev/null &
 pid=$!
 printf '%s %s\n' "$pid" "$(sed 's/.*) //' "/proc/$pid/stat" | awk '{print $20}')" >"$state/server.pid"

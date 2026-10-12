@@ -2,12 +2,13 @@
 """Stop runaway test, build and premerge processes before they freeze the runners (YPER4-278).
 
 The one cleaner for disposable work on the VPS (YPER4-280). Who cleans what:
-- processes (tests, builds, premerge-local servers, including /tmp copies left by tests): this watchdog, 2 h or 6 GB
+- processes (tests, builds, premerge-local servers, including /tmp copies left by tests): this watchdog, 2 h or 6 GiB (8 GiB for marked premerge build trees)
 - ht-premerge-* Docker containers: this watchdog, older than 12 h
 - premerge state folders live inside worktrees and go with them (clean-up skill); test temp folders remove themselves
 premerge-local-sweep (12 h, marker-only) is retired: --install disables its timer.
 
-A matched process tree is stopped when its root is older than 2 hours or any process in it uses more than 6 GB.
+A matched tree stops when its root is older than 2 hours or any member exceeds 6 GiB,
+except premerge build roots marked PREMERGE_NEXT_BUILD=1, whose members may use up to 8 GiB.
 Only this user's processes are read. Claude, tmux, services and dev servers never match. Every stop is logged to
 ~/.local/state/proc-watchdog/kills.log and INFRA MANAGER gets one warning per sweep through runner-deliver.
 
@@ -30,6 +31,7 @@ HERE = Path(__file__).resolve().parent
 PROC = Path(os.environ.get('PROC_WATCHDOG_PROC', '/proc'))
 MAX_AGE = int(os.environ.get('PROC_WATCHDOG_MAX_AGE', 2 * 60 * 60))
 MAX_RSS_KB = int(os.environ.get('PROC_WATCHDOG_MAX_RSS_KB', 6 * 1024 * 1024))
+MAX_RSS_KB_PREMERGE = 8 * 1024 * 1024
 STATE = Path(os.environ.get('PROC_WATCHDOG_STATE', Path.home() / '.local/state/proc-watchdog'))
 NOTIFY = os.environ.get('PROC_WATCHDOG_NOTIFY', str(Path.home() / '.local/lib/hypertask/runner-pickup/runner-deliver'))
 GRACE = float(os.environ.get('PROC_WATCHDOG_GRACE', 10))
@@ -85,10 +87,12 @@ def read_procs():
             except OSError:
                 cwd = ''
             try:
-                # premerge-local.sh exports this marker; only its presence is read, never other variables.
-                marked = b'PREMERGE_LOCAL=1' in (entry / 'environ').read_bytes().split(b'\0')
+                # Read only marker presence, never log environment values.
+                env = (entry / 'environ').read_bytes().split(b'\0')
+                marked = b'PREMERGE_LOCAL=1' in env
+                premerge_build = b'PREMERGE_NEXT_BUILD=1' in env
             except OSError:
-                marked = False
+                marked = premerge_build = False
         except (OSError, ValueError):
             continue
         if not raw:
@@ -98,6 +102,7 @@ def read_procs():
             'ppid': int(fields[1]), 'start': start, 'age': uptime - start / clock_ticks(), 'rss_kb': rss,
             'cmd': raw.rstrip(b'\0').replace(b'\0', b' ').decode(errors='replace'), 'name': name, 'cwd': cwd,
             'argv': raw.rstrip(b'\0').decode(errors='replace').split('\0'), 'marked': marked,
+            'premerge_build': premerge_build,
         }
     return procs
 
@@ -111,6 +116,9 @@ def kind_of(proc):
         return None
     if ONLY and ONLY not in proc['cmd']:
         return None
+    # Only the premerge build command sets this marker; descendants inherit it across exec.
+    if proc.get('premerge_build'):
+        return 'build'
     # Anything premerge-local.sh started from a worktree (its next start server, seed, build) carries the marker.
     if proc.get('marked'):
         return 'premerge'
@@ -157,7 +165,8 @@ def over_limit(procs):
         reasons = []
         if age > MAX_AGE:
             reasons.append(f'running {age / 3600:.1f} h')
-        if rss > MAX_RSS_KB:
+        rss_limit = MAX_RSS_KB_PREMERGE if procs[pid].get('premerge_build') else MAX_RSS_KB
+        if rss > rss_limit:
             reasons.append(f'using {rss / 1048576:.1f} GB')
         if reasons:
             hits.append({'pid': pid, 'kind': kind, 'reason': ' and '.join(reasons), 'age': age, 'rss_kb': rss,
@@ -338,7 +347,7 @@ def sweep(dry_run=False):
     if not hits and not removed:
         notify(None)
         return 0
-    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GB) and removed '
+    notify(f'Process watchdog stopped {len(hits)} runaway process tree(s) (limits: 2 h or 6 GiB; marked premerge builds 8 GiB) and removed '
            f'{len(removed)} stale premerge container(s): ' + '; '.join((lines + removed)[:8])
            + ('; and more' if len(lines) + len(removed) > 8 else '')
            + f". Log: {STATE / 'kills.log'}. https://app.hypertask.ai/detail/project-4060/278")

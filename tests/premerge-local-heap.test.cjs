@@ -5,8 +5,9 @@ const path = require("node:path");
 
 const script = readFileSync(path.join(__dirname, "..", "scripts", "premerge-local.sh"), "utf8");
 
-test("premerge-local caps the Node heap at 3 GB by default so builds stay under the 6 GB watchdog (YPER4-302)", () => {
-  assert.match(script, /export NODE_OPTIONS="\$\{PREMERGE_NODE_OPTIONS:---max-old-space-size=3072\}"/);
+test("premerge-local sets a 4 GiB Node heap by default; its build runs under the 8 GiB premerge watchdog limit (YPER4-302, YPER4-318)", () => {
+  assert.match(script, /export NODE_OPTIONS="\$\{PREMERGE_NODE_OPTIONS:---max-old-space-size=4096\}"/);
+  assert.match(script, /PREMERGE_NEXT_BUILD=1 [^\n]*npx --no-install next build/);
 });
 
 test("the clean environment passes PREMERGE_NODE_OPTIONS through so callers can override the heap", () => {

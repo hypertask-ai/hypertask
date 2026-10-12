@@ -8,6 +8,17 @@ const path = require('node:path');
 
 const script = path.resolve(__dirname, '../scripts/premerge-local.sh');
 
+test('premerge uses a 4096 MiB heap with an explicit override (YPER4-318)', () => {
+  const src = readFileSync(script, 'utf8');
+  assert.match(src, /export NODE_OPTIONS="\$\{PREMERGE_NODE_OPTIONS:---max-old-space-size=4096\}"/);
+  const heap = src.split('\n').find(line => line.startsWith('export NODE_OPTIONS='));
+  const override = spawnSync('bash', ['-c', `${heap}\nprintf '%s' "$NODE_OPTIONS"`], {
+    encoding: 'utf8', env: { PATH: process.env.PATH, PREMERGE_NODE_OPTIONS: '--max-old-space-size=2048' },
+  });
+  assert.equal(override.status, 0);
+  assert.equal(override.stdout, '--max-old-space-size=2048');
+});
+
 test('premerge-local rejects unknown arguments and extra arguments before touching Docker', () => {
   for (const args of [['help'], ['--help'], ['UP'], ['up', 'down'], ['down', 'extra'], ['down', '--flag', 'key=OFF'], ['up', '--flag'], ['up', '--flag', 'key=INVALID'], ['up', '--flag', 'key=OFF=EVERYONE']]) {
     const result = spawnSync('bash', [script, ...args], { encoding: 'utf8' });
@@ -27,8 +38,9 @@ test('premerge-local defaults to up, clears inherited secrets and refuses env fi
     writeFileSync(path.join(root, '.env'), 'DATABASE_URL=must-not-be-read\n');
     writeFileSync(path.join(root, 'bin/docker'), `#!/bin/sh
 [ -z "\$DATABASE_URL\$SESSION_SECRET\$VERCEL_TOKEN\$R2_ENDPOINT\$R2_UPLOAD_SECRET\$S3_UPLOAD_SECRET\$AWS_ACCESS_KEY_ID" ] || exit 19
+[ -z "\$POSTHOG_PERSONAL_API_KEY\$POSTHOG_SERVER_PROJECT_ID\$PREMERGE_NEXT_BUILD" ] || exit 19
 # Only the script's own heap default may reach child tools, never the inherited value (YPER4-302).
-[ "\$NODE_OPTIONS" = "--max-old-space-size=3072" ] || exit 19
+[ "\$NODE_OPTIONS" = "--max-old-space-size=4096" ] || exit 19
 [ "$1" = info ] && exit 0
 exit 20
 `, { mode: 0o755 });
@@ -44,6 +56,9 @@ exit 20
         R2_UPLOAD_SECRET: 'must-not-reach-docker',
         S3_UPLOAD_SECRET: 'must-not-reach-docker',
         AWS_ACCESS_KEY_ID: 'must-not-reach-docker',
+        POSTHOG_PERSONAL_API_KEY: 'must-not-reach-docker',
+        POSTHOG_SERVER_PROJECT_ID: 'must-not-reach-docker',
+        PREMERGE_NEXT_BUILD: '1',
         NODE_OPTIONS: '--invalid-inherited-option',
       },
     });
