@@ -15,7 +15,8 @@ bad() { echo "not ok - $1"; fail=1; }
 # A random AWS-shaped id; ids ending in EXAMPLE are allowlisted by gitleaks.
 fake="AKIA$(LC_ALL=C tr -dc 'A-Z2-7' </dev/urandom | head -c 16)"
 
-mkdir -p "$XDG_CONFIG_HOME/husky"; echo 'export CUSTOM_INIT=1' > "$XDG_CONFIG_HOME/husky/init.sh"
+# An existing init.sh whose last line is a comment without a newline.
+mkdir -p "$XDG_CONFIG_HOME/husky"; printf 'export CUSTOM_INIT=1\n# last line' > "$XDG_CONFIG_HOME/husky/init.sh"
 sh "$src/install" >/dev/null || bad "install runs"
 [ "$(git config --global core.hooksPath)" = "$XDG_CONFIG_HOME/git/hooks" ] && ok "global hooks path set" || bad "global hooks path set"
 sh "$src/install" >/dev/null && ok "install is rerunnable" || bad "install is rerunnable"

@@ -25,8 +25,9 @@ done
 # Husky v9 repos set their own hooks path; husky sources init.sh before each of their hooks.
 line='. "${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks/husky-init.sh" # YPER4-324 key scan'
 init="$config/husky/init.sh"
-if ! grep -qF "$line" "$init" 2>/dev/null; then
-  printf '%s\n' "$line" >> "$init"
+if ! grep -qxF "$line" "$init" 2>/dev/null; then
+  # The leading newline keeps the line out of a last line that has none (a comment, say).
+  printf '\n%s\n' "$line" >> "$init"
 fi
 git config --global core.hooksPath "$hooks"
 echo "install: key scan active for every commit (hooks in $hooks)."
