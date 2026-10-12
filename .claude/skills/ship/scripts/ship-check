@@ -77,16 +77,18 @@ print("; ".join(list(unique.values())[:3]))
 check_ci_tests() {
   local sha run status conclusion reason production details
   local unreadable="cannot read ci-tests for PR $1; retry"
+  # Only the app repo has ci-tests; other repos must not depend on these API reads.
+  [ "$REPO" = hypertask-ai/hypertask ] || return 0
   sha=$(gh api "repos/$REPO/pulls/$1" --jq .head.sha 2>/dev/null) || fail "$unreadable"
   [[ $sha =~ ^[0-9a-f]{40}$ ]] || fail "$unreadable"
   run=$(latest_ci_tests "$sha") || fail "$unreadable"
   if [ "$run" = null ]; then
-    [ "$REPO" != hypertask-ai/hypertask ] && return 0
-    fail "ci-tests is missing on head ${sha:0:7}"
+    fail "ci-tests is missing on head ${sha:0:7}; wait for the current-head run, or retrigger it (gh workflow run, or push the branch again)"
   fi
   status=$(jq -r '.status' <<<"$run"); conclusion=$(jq -r '.conclusion' <<<"$run")
   if [ "$status" != completed ]; then fail "ci-tests has not finished on head ${sha:0:7}"; fi
-  case "$conclusion" in success|neutral|skipped)
+  # Only a real green run counts: a newer skipped or neutral run must not hide a failed one (ci-tests.yml).
+  case "$conclusion" in success)
     # A green run on an older base can hide a test that fails on today's red production (PR 1392).
     production=$(latest_ci_tests "$BASE") || fail "$unreadable"
     if [ "$(jq -r '.status' <<<"$production")" = completed ] \
@@ -102,7 +104,7 @@ check_ci_tests() {
   status=$(jq -r '.status' <<<"$production"); conclusion=$(jq -r '.conclusion' <<<"$production")
   if [ "$status" = completed ]; then
     case "$conclusion" in
-      success|neutral|skipped) reason+="; production ci-tests is green, so this PR broke it" ;;
+      success) reason+="; production ci-tests is green, so this PR broke it" ;;
       failure|cancelled|timed_out|action_required|stale)
         details=$(ci_test_failures "$production")
         reason+="; production ci-tests is also red ($details), so check whether your change broke it or it was already broken" ;;

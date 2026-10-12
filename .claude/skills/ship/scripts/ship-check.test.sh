@@ -1306,8 +1306,11 @@ CI() {
 CI 2 'tests/htpr-6971-chat-history-paging.test.cjs:774:1'
 CI 2 'production ci-tests is green, so this PR broke it'
 CI 2 'production ci-tests is also red (Ctrl+J globally opens Compose' CI_BASE_RUNS="$(cat "$CI_FIXTURE_DIR/production.check-runs.json")"
-for conclusion in success neutral skipped; do
-  CI 0 '' CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0].conclusion = $c' <<<"$CI_PR_RUNS")"
+CI 0 '' CI_PR_RUNS="$(jq '.check_runs[0].conclusion = "success"' <<<"$CI_PR_RUNS")"
+# A newer skipped or neutral run never hides the failed one (ci-tests.yml warns about this bypass).
+for conclusion in neutral skipped; do
+  CI 2 "ci-tests $conclusion on head" CI_PR_RUNS="$(jq --arg c "$conclusion" '.check_runs[0] |= (.id += 1 | .conclusion = $c)' <<<"$CI_PR_RUNS")
+$CI_PR_RUNS"
 done
 # Deliberately reverse page order: the maximum id wins, not API array order.
 rerun=$(jq '.check_runs[0] |= (.id += 1 | .conclusion = "success")' <<<"$CI_PR_RUNS")
@@ -1332,9 +1335,14 @@ for endpoint in /pulls/1392 '/commits/'"$CI_HEAD" /commits/production; do
   CI 2 'cannot read ci-tests for PR 1392; retry' CI_GH_ERROR="$endpoint"
 done
 CI 2 'cannot read ci-tests for PR 1392; retry' CI_PR_RUNS=invalid
-CI 2 'ci-tests is missing on head' CI_PR_RUNS='{"check_runs":[]}'
+CI 2 'ci-tests is missing on head c587e4b; wait for the current-head run, or retrigger it' CI_HEAD=c587e4b7a53a840eed609f371829397c71214ef7 CI_PR_RUNS='{"check_runs":[]}'
 CI 0 '' SHIP_REPO=hypertask-ai/cli SHIP_BASE=main CI_PR_RUNS='{"check_runs":[]}'
 CI 0 '' SHIP_REPO=hypertask-ai/verify SHIP_BASE=app-suite CI_PR_RUNS='{"check_runs":[]}'
+# Another repo never reads ci-tests, so a GitHub API error there cannot block its merge.
+: > "$CI_CALL_LOG"
+out=$(env SHIP_REPO=hypertask-ai/cli CI_GH_ERROR=check-runs ./ship-check ci-tests 1392); got=$?
+if [ "$got" = 0 ] && [ -z "$out" ] && ! grep -q 'check-runs\|/pulls/' "$CI_CALL_LOG"; then ok 'other repo skips ci-tests API reads'
+else bad "other repo API error: $got $out"; fi
 CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_GH_ERROR=/logs
 CI 2 'see https://github.com/hypertask-ai/hypertask/actions/runs/38176733942/job/114581508375' CI_LOG='no test identifiers'
 CI 2 'tests/tap-control.test.cjs:42:1' CI_LOG=$'2026-10-11T21:53:04Z not ok 1 - TAP control\n2026-10-11T21:53:04Z   location: /home/runner/tests/tap-control.test.cjs:42:1\n  error: AssertionError'
