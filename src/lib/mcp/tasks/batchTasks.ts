@@ -161,13 +161,13 @@ async function handleBatchGet(
       id: { in: taskIds },
       project: getProjectWhere(ctx.user.id, ctx.agentId),
     },
-    include: taskMcpGetInclude(ctx.user.id),
+    include: taskMcpGetInclude(ctx.user.id, ctx.agentId),
   })
 
   const tasksById = new Map(
     tasks.map((task) => [
       task.id,
-      mapTaskToMcpGetResponse(task, ctx.user.id),
+      mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId),
     ])
   )
 

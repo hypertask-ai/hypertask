@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
@@ -167,7 +168,7 @@ export function taskDetailInclude(userId: number) {
 }
 
 /** GET /api/mcp/tasks single-task lookup (includes hierarchy fields). */
-export function taskMcpGetInclude(userId: number) {
+export function taskMcpGetInclude(userId: number, agentId?: string | null) {
     return {
     ...taskDetailInclude(userId),
     attachments: {
@@ -179,6 +180,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     subTasks: {
+        ...(agentId ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -187,6 +189,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     parentTask: {
+        ...(agentId ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -208,7 +211,7 @@ export function taskMcpGetInclude(userId: number) {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number) {
+export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null) {
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
               (st: {
@@ -238,7 +241,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: agentId && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
             ? {
                   id: task.parentTask.id,

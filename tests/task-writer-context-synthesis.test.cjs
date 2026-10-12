@@ -27,7 +27,7 @@ const { projectContentAccessWhere } = jiti(
   path.join(root, "src/utils/controllers/projects/getAllIncludes.ts")
 );
 
-test("full-context access supports teamless boards and delegate scope", () => {
+test("full-context access supports teamless boards and accepted agent membership", () => {
   assert.deepEqual(projectContentAccessWhere(6), {
     OR: [
       { ownerId: 6 },
@@ -35,37 +35,15 @@ test("full-context access supports teamless boards and delegate scope", () => {
     ],
   });
   assert.deepEqual(projectContentAccessWhere(6, "agent-1"), {
-    OR: [
-      {
-        owner: {
-          id: 6,
-          agents: {
-            some: { id: "agent-1", userId: 6, revokedAt: null },
-          },
+    OR: [{
+      members: {
+        some: {
+          agentId: "agent-1",
+          status: "Accepted",
+          agent: { userId: 6, revokedAt: null },
         },
       },
-      {
-        members: {
-          some: {
-            userId: 6,
-            agentId: null,
-            user: {
-              agents: {
-                some: { id: "agent-1", userId: 6, revokedAt: null },
-              },
-            },
-          },
-        },
-      },
-      {
-        members: {
-          some: {
-            agentId: "agent-1",
-            agent: { userId: 6, revokedAt: null },
-          },
-        },
-      },
-    ],
+    }],
   });
 });
 

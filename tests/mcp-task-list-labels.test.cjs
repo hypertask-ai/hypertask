@@ -23,6 +23,7 @@ function loadMappers() {
   }).outputText;
 
   const stubs = {
+    "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&

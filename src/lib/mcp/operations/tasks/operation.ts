@@ -293,7 +293,7 @@ export async function GET(request: NextRequest) {
         }
 
         const include = {
-          ...taskMcpGetInclude(user.id),
+          ...taskMcpGetInclude(user.id, ctx.agentId),
           savedContent: {
             where: { userId: ctx.agentId ? -1 : user.id, commentId: null, type: 'Private' as const },
             select: { id: true, type: true },
@@ -337,13 +337,13 @@ export async function GET(request: NextRequest) {
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
-            task: mapTaskToMcpGetResponse(tasks[0], user.id)
+            task: mapTaskToMcpGetResponse(tasks[0], user.id, ctx.agentId)
           })
         }
 
         return NextResponse.json({
           success: true,
-          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id))
+          tasks: tasks.map((task) => mapTaskToMcpGetResponse(task, user.id, ctx.agentId))
         })
       }
     }
@@ -639,6 +639,7 @@ export async function GET(request: NextRequest) {
           }
         },
         parentTask: {
+          ...(ctx.agentId ? { where: { project: getProjectWhere(user.id, ctx.agentId) } } : {}),
           select: {
             id: true,
             ticketNumber: true,
@@ -699,6 +700,7 @@ export async function GET(request: NextRequest) {
         },
         subTasks: {
           where: {
+            ...(ctx.agentId ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
             status: {
               not: "Deleted",
             },
@@ -742,7 +744,7 @@ export async function GET(request: NextRequest) {
         sectionId: task.sectionId || undefined,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: ctx.agentId && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
           ? {
               id: task.parentTask.id,

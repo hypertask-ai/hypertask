@@ -11,119 +11,40 @@ export type GetAllIncludesOptions = {
   includeCachedDescription?: boolean;
 };
 
-const humanProjectAccessBranches = (
+const projectAccessBranches = (
   userId: number,
   agentId?: string | null,
-): Prisma.ProjectWhereInput[] => {
-  if (!agentId) {
-    return [
-      { ownerId: userId },
-      { members: { some: { userId, agentId: null } } },
-    ];
-  }
+): Prisma.ProjectWhereInput[] =>
+  agentId
+    ? [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }]
+    : [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null } } },
+      ];
 
-  const activeAgent = { id: agentId, userId, revokedAt: null };
-  return [
-    {
-      owner: {
-        id: userId,
-        agents: { some: activeAgent },
-      },
-    },
-    {
-      members: {
-        some: {
-          userId,
-          agentId: null,
-          user: { agents: { some: activeAgent } },
-        },
-      },
-    },
-  ];
-};
-
-// Authorization for reading task content from a specific board. Unlike
-// getProjectWhere this intentionally permits legacy teamless boards. A
-// delegate keeps its connecting human's owner/member scope and may additionally
-// access boards where that owned, active agent is a member.
+// Content and writes intentionally permit legacy teamless boards.
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
-});
+): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
 
-// HTPR-4982: who may write to a board. Deliberately not getProjectWhere: this
-// is authorization, not listing, so it does not care about team scoping (an
-// old teamless board still belongs to its owner). An agent counts only when
-// the caller owns it and it has not been revoked.
 export const taskWriteAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
-});
+): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
 
 export const getProjectWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput => ({
   teamId: { not: null },
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            // HTPR-4982: the agent must also belong to the caller. Matching on
-            // the agent id alone lets anyone who knows it borrow board access.
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
+  OR: projectAccessBranches(userId, agentId),
 });
 
-// Board discovery is deliberately narrower than delegate authorization. An
-// agent may act as its connecting human on routes that target a known board,
-// but board pickers and bootstrap payloads must expose only boards where that
-// agent was explicitly added. Otherwise a single-board token enumerates every
-// board its owner can access (HTPR-5208).
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput =>
-  agentId
-    ? {
-        teamId: { not: null },
-        members: {
-          some: { agentId, agent: { userId, revokedAt: null } },
-        },
-      }
-    : getProjectWhere(userId);
+): Prisma.ProjectWhereInput => getProjectWhere(userId, agentId);
 
 export const getTaskWhere = (): Prisma.TaskWhereInput => ({
   status: "Normal",
