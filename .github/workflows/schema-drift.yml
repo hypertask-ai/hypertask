@@ -9,6 +9,7 @@ on:
 
 permissions:
   contents: read
+  packages: read
 
 concurrency:
   group: production-schema-drift
@@ -26,7 +27,10 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:16-alpine
+        image: ghcr.io/hypertask-ai/ci-postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
         env:
           POSTGRES_USER: drift
           POSTGRES_PASSWORD: drift
