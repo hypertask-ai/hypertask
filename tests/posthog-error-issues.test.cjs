@@ -29,7 +29,17 @@ function board() {
       tasks.push(task); return response({ success: true, task });
     }
     if (parsed.pathname === "/api/mcp/comments") { comments.set(options.headers["Idempotency-Key"], body); return response({ success: true }); }
-    if (parsed.pathname === "/api/mcp/tasks/update") { Object.assign(tasks.find((task) => task.id === body.task_id), body, body.labels ? { labels: body.labels.map((id) => ({ id, name: Object.keys(config.severityLabels).find((key) => config.severityLabels[key] === id) || "human-label" })) } : {}); return response({ success: true }); }
+    if (parsed.pathname === "/api/mcp/tasks/update") {
+      assert.equal(Object.hasOwn(body, "description"), false, "repeat must not write the description");
+      assert.equal(Object.hasOwn(body, "labels"), false, "severity must use per-label mutations");
+      const task = tasks.find((task) => task.id === body.task_id);
+      Object.assign(task, body);
+      task.labels = task.labels.filter((label) => !body.remove_labels?.includes(label.id));
+      for (const id of body.add_labels || []) {
+        if (!task.labels.some((label) => label.id === id)) task.labels.push({ id, name: Object.keys(config.severityLabels).find((key) => config.severityLabels[key] === id) });
+      }
+      return response({ success: true });
+    }
     throw new Error(`unexpected request ${url}`);
   };
   return { tasks, calls, comments, fetchImpl };
@@ -39,7 +49,7 @@ test("issue-id dedupe persists through repeated polls, releases and archived tic
   const { upsertIssue } = await import(script);
   const state = board();
   assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue())).action, "created");
-  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue())).action, "unchanged");
+  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue())).action, "updated");
   const task = state.tasks[0];
   task.title = "Human edited title";
   task.description += "<p>Human investigation</p>";
@@ -47,11 +57,11 @@ test("issue-id dedupe persists through repeated polls, releases and archived tic
   task.status = "Archive";
   task.assignees = ["human"];
   assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30, users: 10, severity: "P1" }))).action, "updated");
-  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30, users: 10, severity: "P1" }))).action, "unchanged");
+  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30, users: 10, severity: "P1" }))).action, "updated");
   assert.equal(state.tasks.length, 1);
-  assert.equal(state.comments.size, 1);
-  assert.match([...state.comments.values()][0].text, /30 production hits, 10 known users/);
-  assert.match(task.description, /posthog-count:30/);
+  assert.equal(state.comments.size, 2);
+  assert.match([...state.comments.values()][1].text, /30 production hits, 10 known users/);
+  assert.match(task.description, /Production hits: 12/);
   assert.match(task.description, /Human investigation/);
   assert.equal(task.title, "Human edited title");
   assert.equal(task.status, "Archive");
@@ -75,7 +85,7 @@ test("ambiguous successful create is recovered from its saved issue marker witho
     return url.endsWith("/tasks/create") ? response({ task: { id: 1000 } }) : result;
   };
   await assert.rejects(upsertIssue(fetchImpl, "fixture", config, issue()), /no valid ticket number/);
-  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue())).action, "unchanged");
+  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue())).action, "updated");
   assert.equal(state.tasks.length, 1);
 });
 
@@ -135,18 +145,17 @@ test("missing severity labels are created once through the supported project API
   assert.equal(calls.length, 3);
 });
 
-test("deleted issue tickets receive field counts without a forbidden comment or a replacement ticket", async () => {
+test("deleted issue tickets are left untouched without comments or a replacement ticket", async () => {
   const { upsertIssue } = await import(script);
   const state = board();
   await upsertIssue(state.fetchImpl, "fixture", config, issue());
-  state.tasks[0].status = "Deleted";
-  state.tasks[0].description = state.tasks[0].description.replace(/posthog-count:\d+; posthog-users:\d+/, "");
-  await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30 }));
-  await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30 }));
+  const task = state.tasks[0];
+  task.status = "Deleted";
+  const before = JSON.stringify(task);
+  assert.equal((await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 30, users: 15 }))).action, "skip");
   assert.equal(state.comments.size, 0);
   assert.equal(state.tasks.length, 1);
-  assert.equal(state.tasks[0].status, "Deleted");
-  assert.match(state.tasks[0].description, /posthog-count:30/);
+  assert.equal(JSON.stringify(task), before);
 });
 
 test("native reopen updates the same Done or archived ticket even when counts have not increased", async () => {
@@ -158,7 +167,7 @@ test("native reopen updates the same Done or archived ticket even when counts ha
   const fetchImpl = async (url, options) => url.includes("/projects?") ? response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] }) : state.fetchImpl(url, options);
   const reopened = issue({ alert_kind: "issue_reopened", event_id: "01a11c15-dcdc-7c01-baaf-34a5fb318228" });
   assert.equal((await upsertIssue(fetchImpl, "fixture", config, reopened)).action, "updated");
-  assert.equal((await upsertIssue(fetchImpl, "fixture", config, reopened)).action, "unchanged");
+  assert.equal((await upsertIssue(fetchImpl, "fixture", config, reopened)).action, "updated");
   assert.equal(state.tasks.length, 1);
   assert.equal(state.tasks[0].status, "Normal");
   assert.equal(state.tasks[0].sectionId, 4389);
@@ -181,86 +190,182 @@ test("spikes add their native count and baseline once, or create the same issue-
 });
 
 
-test("review ingestion lag creates a provisional ticket and later fills unknown counts", async () => {
-  const { handlePostHogAlert } = await import("../.github/scripts/posthog-error-alert.mjs");
+function signedPayload() {
   const { createHmac } = require("node:crypto");
-  const state = board();
-  const waits = [];
-  let ingested = false;
-  let queries = 0;
-  const env = { ERROR_ALERT_APP_URL: config.appUrl, ERROR_ALERT_BOARD_ID: "15", ERROR_ALERT_BUGS_SECTION_ID: "4389", ERROR_ALERT_VERCEL_PROJECT: "hypertasks-prod" };
-  const previous = Object.fromEntries(Object.keys(env).map((key) => [key, process.env[key]]));
-  Object.assign(process.env, env);
-  const now = Date.parse(SINCE);
-  const payload = { alert_kind: "issue_created", issue_id: ID, event_id: ID, environment: "production", timestamp: SINCE, dispatched_at: SINCE, name: "PayloadError", message: "Payload feature failed" };
+  const payload = { alert_kind: "issue_created", issue_id: ID, event_id: ID, environment: "production", timestamp: SINCE, dispatched_at: SINCE };
   payload.dispatch_signature = createHmac("sha256", "fixture-secret").update(JSON.stringify(Object.entries(payload).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest("hex");
-  const fetchImpl = async (url, options) => {
+  return payload;
+}
+
+function lagOptions(extra = {}) {
+  return { now: Date.parse(SINCE), dispatchSecret: "fixture-secret", apiKey: "fixture", mcpToken: "fixture", githubToken: "fixture-github", githubRepository: "hypertask-ai/hypertask", githubRef: "production", ...extra };
+}
+
+const emptyRow = [0, 0, null, null, null, null, null, 0];
+
+function issueFetch({ all = emptyRow, finalProduction = emptyRow, dispatchStatus = 204 } = {}, calls = []) {
+  let productionReads = 0;
+  return async (url, options = {}) => {
+    calls.push({ url, options });
     if (url.includes("/issues/")) return response({ id: ID });
-    if (url.includes("/query/")) { queries++; return response({ results: [ingested ? row() : [0, 0, null, null, null, null, null, 0]] }); }
-    if (url.endsWith("/labels")) return response({ labels: Object.entries(config.severityLabels).map(([name, id]) => ({ name, id })) });
+    if (url.includes("/query/")) {
+      const production = JSON.parse(options.body).query.query.includes("ht_environment = 'production'");
+      return response({ results: [production ? (++productionReads > 5 ? finalProduction : emptyRow) : all] });
+    }
+    assert.match(url, /api\.github\.com\/repos\/hypertask-ai\/hypertask\/actions\/workflows\/posthog-error-alert.yml\/dispatches$/);
+    return response({}, dispatchStatus);
+  };
+}
+
+test("non-production-only issues skip after the full retry window without board writes", async () => {
+  const { handlePostHogAlert } = await import("../.github/scripts/posthog-error-alert.mjs");
+  const calls = [], waits = [];
+  const result = await handlePostHogAlert(signedPayload(), lagOptions({ fetchImpl: issueFetch({ all: row() }, calls), wait: async (ms) => waits.push(ms) }));
+  assert.equal(result.action, "skip");
+  assert.match(result.reason, /only non-production/);
+  assert.deepEqual(waits, [10000, 20000, 30000, 60000]);
+  assert.equal(calls.length, 8);
+  assert.doesNotMatch(JSON.parse(calls[6].options.body).query.query, /ht_environment|app\.hypertask\.ai/);
+  assert.match(JSON.parse(calls[7].options.body).query.query, /ht_environment = 'production'/);
+});
+
+test("lag dispatches attempts 2 and 3 with the unchanged signed payload and no ticket", async () => {
+  const { handlePostHogAlert, verifyPostHogPayloadSignature } = await import("../.github/scripts/posthog-error-alert.mjs");
+  const payload = signedPayload();
+  for (const attempt of [1, 2]) {
+    const calls = [], waits = [];
+    const result = await handlePostHogAlert(payload, lagOptions({ attempt, fetchImpl: issueFetch({}, calls), wait: async (ms) => waits.push(ms) }));
+    assert.equal(result.action, "retry_dispatched");
+    assert.equal(result.attempt, attempt + 1);
+    assert.deepEqual(waits, [10000, 20000, 30000, 60000]);
+    const dispatch = calls.at(-1);
+    const body = JSON.parse(dispatch.options.body);
+    assert.equal(body.ref, "production");
+    assert.equal(body.inputs.attempt, String(attempt + 1));
+    assert.deepEqual(JSON.parse(body.inputs.posthog_payload), payload);
+    assert.equal(verifyPostHogPayloadSignature(JSON.parse(body.inputs.posthog_payload), "fixture-secret"), true);
+    assert.equal(dispatch.options.headers.Authorization, "Bearer fixture-github");
+    assert.equal(calls.length, 8);
+  }
+});
+
+test("production rows arriving at the final all-environment check are handled normally", async () => {
+  const { readProductionIssue } = await import(script);
+  const result = await readProductionIssue(issueFetch({ all: row(50, 20), finalProduction: row(12, 2) }), "fixture", ID, { wait: async () => {} });
+  assert.equal(result.count, 12);
+  assert.equal(result.users, 2);
+  assert.equal(result.severity, "P2");
+});
+
+test("final lag attempt fails instead of dispatching again or creating a ticket", async () => {
+  const { handlePostHogAlert } = await import("../.github/scripts/posthog-error-alert.mjs");
+  const calls = [], waits = [];
+  await assert.rejects(handlePostHogAlert(signedPayload(), lagOptions({ attempt: 3, fetchImpl: issueFetch({}, calls), wait: async (ms) => waits.push(ms) })), /no exceptions in any environment after 3 attempts.*watchdog/);
+  assert.equal(calls.length, 7);
+  assert.deepEqual(waits, [10000, 20000, 30000, 60000]);
+});
+
+test("final lag attempt CLI exits non-zero so the watchdog observes failure", () => {
+  const { spawnSync } = require("node:child_process");
+  const preload = `
+    import timers from 'node:timers/promises';
+    import { syncBuiltinESMExports } from 'node:module';
+    timers.setTimeout = async () => {};
+    syncBuiltinESMExports();
+    globalThis.fetch = async (url) => {
+      const body = url.includes('/issues/') ? { id: '${ID}' } : { results: [[0, 0, null, null, null, null, null, 0]] };
+      if (!url.includes('posthog.com')) throw new Error('unexpected non-PostHog request');
+      return { ok: true, status: 200, text: async () => JSON.stringify(body) };
+    };
+  `;
+  const payload = signedPayload();
+  payload.dispatched_at = new Date().toISOString();
+  const { createHmac } = require("node:crypto");
+  payload.dispatch_signature = createHmac("sha256", "fixture-secret").update(JSON.stringify(Object.entries(payload).filter(([key]) => key !== "dispatch_signature").sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0))).digest("hex");
+  const result = spawnSync(process.execPath, ["--import", `data:text/javascript,${encodeURIComponent(preload)}`, new URL("../.github/scripts/posthog-error-alert.mjs", `file://${__filename}`).pathname], {
+    env: { ...process.env, POSTHOG_ALERT_PAYLOAD: JSON.stringify(payload), POSTHOG_ALERT_ATTEMPT: "3", POSTHOG_ALERT_DISPATCH_SECRET: "fixture-secret", POSTHOG_FULL_API_KEY: "fixture", HYPERTASK_MCP_TOKEN: "fixture" },
+    encoding: "utf8", timeout: 10000,
+  });
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /::error::PostHog alert failed:.*after 3 attempts.*watchdog/);
+  assert.equal(result.stdout, "");
+});
+
+test("failed lag dispatch and invalid attempts fail closed", async () => {
+  const { handlePostHogAlert } = await import("../.github/scripts/posthog-error-alert.mjs");
+  await assert.rejects(handlePostHogAlert(signedPayload(), lagOptions({ fetchImpl: issueFetch({ dispatchStatus: 403 }), wait: async () => {} })), /HTTP 403/);
+  for (const attempt of [0, 4, 1.5, NaN]) {
+    await assert.rejects(handlePostHogAlert(signedPayload(), lagOptions({ attempt, fetchImpl: async () => assert.fail("invalid attempt fetched") })), /attempt must be between 1 and 3/);
+  }
+});
+
+test("repeat alerts leave descriptions byte-for-byte intact and produce one short HTML comment", async () => {
+  const { upsertIssue } = await import(script);
+  const state = board();
+  await upsertIssue(state.fetchImpl, "fixture", config, issue());
+  const task = state.tasks[0];
+  task.description = task.description.replace("</ul>", "<li>Human note inside the original summary</li></ul>") + "<p>Human footer</p>";
+  const description = task.description;
+  const before = state.calls.length;
+  await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 20, users: 3 }));
+  assert.equal(task.description, description);
+  assert.equal(state.comments.size, 1);
+  const comment = [...state.comments.values()][0];
+  assert.equal(comment.content_type, "html");
+  assert.match(comment.text, /^<p><strong>[^<]+<\/strong><\/p>/);
+  assert.match(comment.text, /20 production hits, 3 known users/);
+  assert.match(comment.text, /<p>Next: [^<]+<\/p>$/);
+  assert.equal(state.calls.slice(before).filter((call) => call.url.endsWith("/comments")).length, 1);
+  assert.equal(state.calls.slice(before).some((call) => call.url.endsWith("/tasks/update")), false);
+  assert.doesNotMatch(description, /posthog-count|posthog-users|posthog-issue-(?:start|end)/);
+});
+
+test("each later Actions alert run gets one comment even when counts are unchanged", async () => {
+  const { upsertIssue } = await import(script);
+  const state = board();
+  await upsertIssue(state.fetchImpl, "fixture", config, issue());
+  const previous = process.env.GITHUB_RUN_ID;
+  try {
+    for (const id of ["fixture-run-1", "fixture-run-2"]) {
+      process.env.GITHUB_RUN_ID = id;
+      await upsertIssue(state.fetchImpl, "fixture", config, issue({ event_id: ID, alert_kind: "issue_created" }));
+    }
+    assert.equal(state.comments.size, 2);
+    assert.equal(state.calls.filter((call) => call.url.endsWith("/comments")).length, 2);
+  } finally {
+    if (previous === undefined) delete process.env.GITHUB_RUN_ID;
+    else process.env.GITHUB_RUN_ID = previous;
+  }
+});
+
+test("later alerts recompute severity in either direction with per-label updates and a comment", async () => {
+  const { upsertIssue } = await import(script);
+  const state = board();
+  await upsertIssue(state.fetchImpl, "fixture", config, issue());
+  const task = state.tasks[0];
+  const description = task.description;
+  task.labels.push({ id: "human-label", name: "Investigation" });
+  for (const [users, old, next] of [[12, "P2", "P1"], [1, "P1", "P2"]]) {
+    await upsertIssue(state.fetchImpl, "fixture", config, issue({ users }));
+    assert.deepEqual(task.labels.map((label) => label.id), ["human-label", config.severityLabels[next]]);
+    assert.match([...state.comments.values()].at(-1).text, new RegExp(`Severity changed from ${old} to ${next}`));
+    const update = JSON.parse(state.calls.findLast((call) => call.url.endsWith("/tasks/update")).options.body);
+    assert.deepEqual(update.remove_labels, [config.severityLabels[old]]);
+    assert.deepEqual(update.add_labels, [config.severityLabels[next]]);
+    assert.equal(task.description, description);
+  }
+});
+
+test("a concurrent human label added after the refresh survives the severity mutation", async () => {
+  const { upsertIssue } = await import(script);
+  const state = board();
+  await upsertIssue(state.fetchImpl, "fixture", config, issue());
+  const fetchImpl = async (url, options) => {
+    if (url.endsWith("/tasks/update")) state.tasks[0].labels.push({ id: "fresh-human-label", name: "Human investigation" });
     return state.fetchImpl(url, options);
   };
-  const options = { fetchImpl, now, dispatchSecret: "fixture-secret", apiKey: "fixture", mcpToken: "fixture", wait: async (ms) => waits.push(ms) };
-  try {
-    assert.equal((await handlePostHogAlert(payload, options)).action, "created");
-    assert.equal(queries, 5);
-    assert.deepEqual(waits, [10000, 20000, 30000, 60000]);
-    const task = state.tasks[0];
-    assert.match(task.description, /Production hits: unknown\. Known users: unknown/);
-    assert.match(task.description, /Provisional/);
-    assert.match(task.description, /PayloadError.*Payload feature failed/);
-    assert.match(task.description, new RegExp(`error_tracking/${ID}`));
-    assert.deepEqual(task.labels.map((label) => label.id), ["label-p2"]);
-    ingested = true;
-    assert.equal((await handlePostHogAlert(payload, options)).action, "updated");
-    assert.equal(state.tasks.length, 1);
-    assert.match(task.description, /Production hits: 12\. Known users: 2/);
-    assert.doesNotMatch(task.description, /unknown|Provisional/);
-    assert.equal((await handlePostHogAlert(payload, options)).action, "unchanged");
-  } finally {
-    for (const [key, value] of Object.entries(previous)) { if (value === undefined) delete process.env[key]; else process.env[key] = value; }
-  }
-});
-
-test("review preserved severity uses merged counts and keeps expected-error P3", async () => {
-  const { upsertIssue } = await import(script);
-  for (const [message, expected] of [["No output generated.", "P1"], ["This team has used its included AI allowance for this month", "P3"]]) {
-    const state = board();
-    await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 50, users: 12, message }));
-    await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 51, users: 1, message, alert_kind: "issue_created", event_id: ID }));
-    assert.deepEqual(state.tasks[0].labels.map((label) => label.id), [config.severityLabels[expected]]);
-    assert.match(state.tasks[0].description, /posthog-count:51; posthog-users:12/);
-    assert.match([...state.comments.values()][0].text, new RegExp(`${expected}: 51 production hits, 12 known users`));
-  }
-});
-
-test("review fresh merge preserves human edits and newer generated counts after search", async () => {
-  const { upsertIssue } = await import(script);
-  for (const legacy of [false, true]) {
-    const state = board();
-    await upsertIssue(state.fetchImpl, "fixture", config, issue());
-    const task = state.tasks[0];
-    if (legacy) task.description = task.description.replace(/ class="posthog-issue-(?:start|end)"/g, "");
-    const fetchImpl = async (url, options) => {
-      if (url.endsWith("/comments")) {
-        task.description = `<p>Human preface with posthog-count:7</p>${task.description}<p>New human investigation</p>`;
-        task.description = task.description.replace("posthog-count:12", "posthog-count:80").replace("posthog-users:2", "posthog-users:15");
-        task.labels.push({ id: "fresh-human-label", name: "Investigation" });
-        task.title = "New human title";
-        task.assignees = ["human"];
-      }
-      return state.fetchImpl(url, options);
-    };
-    await upsertIssue(fetchImpl, "fixture", config, issue({ count: 20, users: 3 }));
-    assert.match(task.description, /Human preface with posthog-count:7/);
-    assert.match(task.description, /New human investigation/);
-    assert.match(task.description, /posthog-count:80; posthog-users:15/);
-    assert.deepEqual(task.labels.map((label) => label.id), ["fresh-human-label", "label-p1"]);
-    assert.equal(task.title, "New human title");
-    assert.deepEqual(task.assignees, ["human"]);
-    const update = state.calls.findLastIndex((call) => call.url.endsWith("/tasks/update"));
-    assert.match(state.calls[update - 1].url, /tasks\?task_id=1000$/);
-  }
+  await upsertIssue(fetchImpl, "fixture", config, issue({ users: 12 }));
+  assert.deepEqual(state.tasks[0].labels.map((label) => label.id), ["fresh-human-label", "label-p1"]);
 });
 
 test("review lifecycle concurrency keeps every lifecycle run independent", () => {
@@ -296,25 +401,16 @@ test("review racing creation rechecks before create and converges duplicates on 
   const active = state.tasks.filter((task) => task.status === "Normal");
   assert.equal(active.length, 1);
   assert.equal(active[0].id, 1000);
-  assert.match(active[0].description, /posthog-count:60; posthog-users:12/);
+  assert.match([...state.comments.values()].at(-1).text, /60 production hits, 12 known users/);
   assert.deepEqual(active[0].labels.map((label) => label.id), ["label-p1"]);
   assert.equal(state.tasks[1].status, "Archive");
   await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: 61, users: 12 }));
   assert.equal(state.tasks.length, 2);
-  assert.match(active[0].description, /posthog-count:61/);
+  assert.match([...state.comments.values()].at(-1).text, /61 production hits/);
   const beforeCreate = state.calls.slice(0, state.calls.findIndex((call) => call.url.endsWith("/tasks/create")));
   assert.equal(beforeCreate.filter((call) => call.url.includes("status=Deleted")).length, 4);
 });
 
-
-test("review ingestion lag preserves a previously confirmed zero-user count", async () => {
-  const { upsertIssue } = await import(script);
-  const state = board();
-  await upsertIssue(state.fetchImpl, "fixture", config, issue({ users: 0 }));
-  await upsertIssue(state.fetchImpl, "fixture", config, issue({ count: null, users: null, unidentified_hits: null, alert_kind: "issue_created", event_id: ID }));
-  assert.match(state.tasks[0].description, /Production hits: 12\. Known users: 0/);
-  assert.match(state.tasks[0].description, /posthog-count:12; posthog-users:0/);
-});
 
 test("review racing creation avoids creating when the immediate recheck finds a ticket", async () => {
   const { upsertIssue } = await import(script);
@@ -330,5 +426,5 @@ test("review racing creation avoids creating when the immediate recheck finds a 
   assert.equal((await upsertIssue(fetchImpl, "fixture", config, issue({ count: 20 }))).action, "updated");
   assert.equal(state.tasks.length, 1);
   assert.equal(state.calls.filter((call) => call.url.endsWith("/tasks/create")).length, 1);
-  assert.match(state.tasks[0].description, /posthog-count:20/);
+  assert.match([...state.comments.values()].at(-1).text, /20 production hits/);
 });

@@ -105,4 +105,9 @@ test("relay remains a separate dispatch-only hosted workflow", () => {
   assert.equal(workflow.jobs["posthog-error-alert"]["runs-on"], "ubuntu-latest");
   assert.equal(workflow.jobs["posthog-error-alert"].steps[1].run, "node .github/scripts/posthog-error-alert.mjs");
   assert.equal(workflow.jobs["posthog-error-alert"].steps[1].env.POSTHOG_ALERT_DISPATCH_SECRET, "${{ secrets.POSTHOG_ALERT_DISPATCH_SECRET }}");
+  assert.equal(workflow.on.workflow_dispatch.inputs.attempt.default, "1");
+  assert.equal(workflow.permissions, undefined);
+  assert.deepEqual(workflow.jobs["posthog-error-alert"].permissions, { contents: "read", actions: "write" });
+  assert.equal(workflow.jobs["posthog-error-alert"].steps[1].env.POSTHOG_ALERT_ATTEMPT, "${{ inputs.attempt }}");
+  assert.equal(workflow.jobs["posthog-error-alert"].steps[1].env.GITHUB_TOKEN, "${{ github.token }}");
 });

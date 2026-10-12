@@ -72,7 +72,14 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
     if (url.endsWith("/tasks/create")) { const task = { ...body, id: 100, ticketNumber: "HTPR-7001", status: "Normal", labels: body.labels.map((id) => ({ name: id, id })) }; tasks.push(task); return response({ task }); }
     if (url.includes("/projects?")) return response({ projects: [{ id: 15, sections: [{ id: 999, section_title: "Done" }] }] });
     if (url.endsWith("/comments")) { comments.push(body); return response({ success: true }); }
-    if (url.endsWith("/tasks/update")) { Object.assign(tasks[0], body, { labels: body.labels.map((id) => ({ id, name: id })) }); return response({ success: true }); }
+    if (url.endsWith("/tasks/update")) {
+      assert.equal(Object.hasOwn(body, "description"), false);
+      assert.equal(Object.hasOwn(body, "labels"), false);
+      Object.assign(tasks[0], body);
+      tasks[0].labels = tasks[0].labels.filter((label) => !body.remove_labels?.includes(label.id));
+      for (const id of body.add_labels || []) if (!tasks[0].labels.some((label) => label.id === id)) tasks[0].labels.push({ id, name: id });
+      return response({ success: true });
+    }
     assert.fail(`unexpected API ${url}`);
   };
   global.fetch = async (url, options) => { assert.match(url, /posthog-error-alert.yml\/dispatches$/); payload = JSON.parse(JSON.parse(options.body).inputs.posthog_payload); return { status: 204 }; };
@@ -93,7 +100,8 @@ test("signed native created, reopened and spiking alerts relay into one rated ti
   assert.deepEqual(tasks[0].labels.map((l) => l.name), ["P2"]);
   assert.match(tasks[0].description, /Human notes/);
   assert.match(tasks[0].description, /requested AI reply or draft is empty/);
-  assert.match(tasks[0].description, /posthog-count:600/);
+  assert.match(tasks[0].description, /Production hits: 1/);
+  assert.match(comments[1].text, /600 production hits/);
   assert.equal(comments.length, 2);
   assert.match(comments[1].text, /spike: 550 hits.*baseline 10/);
 }));

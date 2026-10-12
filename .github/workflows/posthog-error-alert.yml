@@ -7,6 +7,10 @@ on:
         description: Signed PostHog error payload relayed by the app
         required: false
         default: ""
+      attempt:
+        description: Ingestion retry attempt (maximum 3)
+        required: false
+        default: "1"
 
 concurrency:
   # A shared issue group drops intermediate pending lifecycle alerts.
@@ -23,6 +27,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.posthog_payload != ''
     permissions:
       contents: read
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -38,5 +43,7 @@ jobs:
           POSTHOG_FULL_API_KEY: ${{ secrets.POSTHOG_FULL_API_KEY }}
           POSTHOG_ALERT_DISPATCH_SECRET: ${{ secrets.POSTHOG_ALERT_DISPATCH_SECRET }}
           POSTHOG_ALERT_PAYLOAD: ${{ inputs.posthog_payload }}
+          POSTHOG_ALERT_ATTEMPT: ${{ inputs.attempt }}
+          GITHUB_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: node .github/scripts/posthog-error-alert.mjs

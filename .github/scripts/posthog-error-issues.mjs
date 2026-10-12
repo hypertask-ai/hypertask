@@ -1,5 +1,5 @@
 import { setTimeout } from "node:timers/promises";
-import { createIncident, escapeHtml, incidentDescription, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
+import { createIncident, escapeHtml, jsonRequest, mcpHeaders } from "./posthog-error-alert.mjs";
 
 const POSTHOG = "https://eu.posthog.com";
 const PROJECT = "236160";
@@ -28,32 +28,44 @@ export function rateIssue(message, users, source) {
   };
 }
 
-export function issueQuery(issueId) {
+export function issueQuery(issueId, productionOnly = true) {
   if (!UUID.test(issueId)) throw new Error("PostHog issue ID is invalid");
   return `SELECT count(), uniqExactIf(coalesce(toString(properties.userId), toString(properties.user_id), distinct_id), distinct_id != 'hypertask-app' OR properties.userId IS NOT NULL OR properties.user_id IS NOT NULL), min(timestamp), max(timestamp), argMax(properties.$exception_list, timestamp), argMax(properties.ht_source, timestamp), argMax(coalesce(properties.ht_url, properties.$current_url), timestamp), countIf(distinct_id = 'hypertask-app' AND properties.userId IS NULL AND properties.user_id IS NULL)
 FROM events WHERE event = '$exception' AND toString(properties.$exception_issue_id) = '${issueId}'
-AND (properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))`;
+${productionOnly ? "AND (properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))" : ""}`;
 }
 
-export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = setTimeout, alert = {} } = {}) {
+export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = setTimeout } = {}) {
   const query = issueQuery(issueId);
   const headers = { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" };
   const issue = await jsonRequest(fetchImpl, `${POSTHOG}/api/projects/${PROJECT}/error_tracking/issues/${issueId}/`, { headers });
   if (issue.id !== issueId) throw new Error("PostHog returned a different issue");
-  // Lifecycle events can arrive before the exception is visible in ClickHouse.
-  for (const delay of [0, 10_000, 20_000, 30_000, 60_000]) {
-    if (delay) await wait(delay);
+  const readStats = async (query) => {
     const stats = await jsonRequest(fetchImpl, `${POSTHOG}/api/projects/${PROJECT}/query/`, {
       method: "POST", headers, body: JSON.stringify({ query: { kind: "HogQLQuery", query }, refresh: "force_blocking" }),
     });
     if (!Array.isArray(stats.results) || stats.results.length !== 1 || stats.hasMore || stats.error) {
       throw new Error("PostHog issue counts are missing or truncated");
     }
-    const [count, users, first, last, rawExceptions, source, url, unidentifiedHits] = stats.results[0];
+    const [count, users, , , , , , unidentifiedHits] = stats.results[0];
     if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(users) || users < 0 || !Number.isSafeInteger(unidentifiedHits) || unidentifiedHits < 0) {
       throw new Error("PostHog issue counts are invalid");
     }
-    if (!count) continue;
+    return stats.results[0];
+  };
+  // Lifecycle events can arrive before the exception is visible in ClickHouse.
+  const delays = [0, 10_000, 20_000, 30_000, 60_000, 0];
+  for (const [attempt, delay] of delays.entries()) {
+    if (delay) await wait(delay);
+    const finalRead = attempt === delays.length - 1;
+    if (finalRead && !(await readStats(issueQuery(issueId, false)))[0]) {
+      return { action: "retry", reason: "PostHog issue has no exceptions in any environment yet" };
+    }
+    const [count, users, first, last, rawExceptions, source, url, unidentifiedHits] = await readStats(query);
+    if (!count) {
+      if (finalRead) return { action: "skip", reason: "PostHog issue has only non-production exceptions" };
+      continue;
+    }
     if (!Number.isFinite(Date.parse(first)) || !Number.isFinite(Date.parse(last))) throw new Error("PostHog issue timestamps are invalid");
     const exceptions = typeof rawExceptions === "string" ? JSON.parse(rawExceptions) : rawExceptions;
     const message = String(exceptions?.[0]?.value || issue.description || "Unknown production error").slice(0, 1000);
@@ -64,15 +76,6 @@ export async function readProductionIssue(fetchImpl, apiKey, issueId, { wait = s
       ...rateIssue(message, users, source),
     };
   }
-  // Zero visible rows cannot distinguish ingestion lag from a non-production issue.
-  const message = String(issue.description || alert.message || "Unknown production error").slice(0, 1000);
-  const rating = rateIssue(message, null, alert.source);
-  return {
-    issue_id: issueId, name: String(issue.name || alert.name || "Error").slice(0, 120), message,
-    count: null, users: null, unidentified_hits: null, last_seen: null,
-    issue_url: `${POSTHOG}/project/${PROJECT}/error_tracking/${issueId}`,
-    ...rating, severity_reason: `${rating.severity_reason} Provisional: production counts are not yet available.`,
-  };
 }
 
 export async function findIssueTicket(fetchImpl, token, config, issueId) {
@@ -132,59 +135,42 @@ export async function upsertIssue(fetchImpl, token, config, issue) {
       return { action: "created", incident };
     }
   }
-  const oldCount = Number(/<p(?: class="posthog-issue-end")?>posthog-count:(\d+)/.exec(existing.description)?.[1] || 0);
-  const oldUsers = /(?:<p(?: class="posthog-issue-end")?>posthog-count:(?:\d+|unknown); |<p>)posthog-users:(\d+)/.exec(existing.description)?.[1];
-  const previousEvent = /<p>posthog-alert:([^<]+)/.exec(existing.description)?.[1];
-  const lifecycleEvent = issue.event_id && `${issue.alert_kind}:${issue.event_id}`;
-  if (lifecycleEvent && previousEvent === lifecycleEvent && issue.count <= oldCount && issue.users <= (oldUsers ?? 0)) return { action: "unchanged" };
-  if (!lifecycleEvent && issue.count <= oldCount && issue.users <= (oldUsers ?? 0)) return { action: "unchanged" };
-  issue = { ...issue, count: issue.count == null && !oldCount ? null : Math.max(oldCount, issue.count), users: issue.users == null && oldUsers === undefined ? null : Math.max(oldUsers ?? 0, issue.users) };
-  issue = { ...issue, ...rateIssue(issue.message, issue.users, issue.source) };
-  // Preserve human content and assignees; a resolved issue returning reopens its ticket.
-  const key = lifecycleEvent ? `posthog-alert-${issue.event_id}` : `posthog-count-${issue.issue_id}-${issue.count}-${issue.users}`;
-  const note = issue.alert_kind === "issue_spiking"
-    ? `PostHog detected a spike: ${issue.spike_count} hits in its detection window, baseline ${issue.spike_baseline}.`
-    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue.";
-  const text = `<p>${escapeHtml(note)}</p><p><strong>${escapeHtml(issue.severity)}: ${issue.count ?? "unknown"} production hits, ${issue.users ?? "unknown"} known users in the issue's production history (${issue.unidentified_hits ?? "unknown"} hits without a user identity).</strong></p><p>Last seen ${escapeHtml(issue.last_seen ?? "unknown")}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p>`;
-  if (existing.status !== "Deleted") {
-    await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-      method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
-    });
-  }
-  let done;
-  if (issue.alert_kind === "issue_reopened") {
-    const projects = await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/projects?limit=100`, { headers: mcpHeaders(token) });
-    const project = projects.projects?.find((item) => Number(item.id) === config.boardId);
-    done = project?.sections?.find((item) => (item.section_title ?? item.title) === "Done");
-  }
   const fresh = await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/tasks?task_id=${existing.id}`, { headers: mcpHeaders(token) });
   existing = fresh.tasks?.find((task) => Number(task.id) === Number(existing.id));
   if (!existing) throw new Error("Issue ticket refresh returned no task");
-  const freshCount = Number(/<p(?: class="posthog-issue-end")?>posthog-count:(\d+)/.exec(existing.description)?.[1] || 0);
-  const freshUsers = /(?:<p(?: class="posthog-issue-end")?>posthog-count:(?:\d+|unknown); |<p>)posthog-users:(\d+)/.exec(existing.description)?.[1];
-  issue = { ...issue, count: issue.count == null && !freshCount ? null : Math.max(freshCount, issue.count), users: issue.users == null && freshUsers === undefined ? null : Math.max(freshUsers ?? 0, issue.users) };
+  if (existing.status === "Deleted") return { action: "skip", reason: "PostHog issue ticket was deleted" };
   issue = { ...issue, ...rateIssue(issue.message, issue.users, issue.source) };
-  if (issue.count == null) issue.severity_reason += " Provisional: production counts are not yet available.";
-  let description = existing.description || "";
-  if (description.includes('<p class="posthog-issue-start">') && description.includes('<p class="posthog-issue-end">')) {
-    description = description.replace(/<p class="posthog-issue-start">[\s\S]*?<p class="posthog-issue-end">[^<]*<\/p>/, () => incidentDescription(issue));
-  } else {
-    // Older tickets have no generated-section boundary. Only replace their state paragraphs.
-    description = description.replace(/<p(?: class="posthog-issue-end")?>posthog-count:(?:\d+|unknown)(?:; posthog-users:(?:\d+|unknown))?<\/p>|<p>posthog-users:(?:\d+|unknown)<\/p>/g, "");
-    description += `<p>posthog-count:${issue.count ?? "unknown"}; posthog-users:${issue.users ?? "unknown"}</p>`;
-    if (lifecycleEvent) {
-      description = description.replace(/<p>posthog-alert:[^<]*<\/p>/g, "");
-      description += `<p>posthog-alert:${escapeHtml(lifecycleEvent)}</p>`;
+  const key = `posthog-alert-${process.env.GITHUB_RUN_ID || issue.event_id || `${issue.issue_id}-${issue.count}-${issue.users}`}`;
+  const oldLabels = (existing.labels || []).filter((label) => ["P1", "P2", "P3"].includes(label.name));
+  const severityChanged = oldLabels.length !== 1 || oldLabels[0].id !== config.severityLabels[issue.severity];
+  let reopen = {};
+  if (issue.alert_kind === "issue_reopened") {
+    const projects = await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/projects?limit=100`, { headers: mcpHeaders(token) });
+    const project = projects.projects?.find((item) => Number(item.id) === config.boardId);
+    const done = project?.sections?.find((item) => (item.section_title ?? item.title) === "Done");
+    if (existing.status === "Archive" || Number(existing.sectionId ?? existing.section_id) === Number(done?.id)) {
+      reopen = { status: "Normal", sectionId: config.bugsSectionId };
     }
   }
-  let reopen = {};
-  if (issue.alert_kind === "issue_reopened" && existing.status !== "Deleted" && (existing.status === "Archive" || Number(existing.sectionId ?? existing.section_id) === Number(done?.id))) {
-    reopen = { status: "Normal", sectionId: config.bugsSectionId };
+  if (severityChanged || reopen.status) {
+    await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/tasks/update`, {
+      method: "POST", headers: mcpHeaders(token, `${key}-state`),
+      body: JSON.stringify({
+        task_id: existing.id, ...reopen,
+        ...(severityChanged ? {
+          remove_labels: oldLabels.filter((label) => label.id !== config.severityLabels[issue.severity]).map((label) => label.id),
+          add_labels: [config.severityLabels[issue.severity]],
+        } : {}),
+      }),
+    });
   }
-  const labels = (existing.labels || []).filter((label) => !["P1", "P2", "P3"].includes(label.name)).map((label) => label.id);
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/tasks/update`, {
-    method: "POST", headers: mcpHeaders(token, `${key}-state`),
-    body: JSON.stringify({ task_id: existing.id, ...reopen, description, labels: [...labels, config.severityLabels[issue.severity]], content_type: "html" }),
+  const note = issue.alert_kind === "issue_spiking"
+    ? `PostHog detected a spike: ${issue.spike_count} hits in its detection window, baseline ${issue.spike_baseline}.`
+    : issue.alert_kind === "issue_reopened" ? "PostHog reopened this issue after it was resolved." : "PostHog reported this issue again.";
+  const severityNote = severityChanged ? `<p>Severity changed from ${escapeHtml(oldLabels.map((label) => label.name).join(" + ") || "unrated")} to ${escapeHtml(issue.severity)}. ${escapeHtml(issue.severity_reason)}</p>` : "";
+  const text = `<p><strong>${escapeHtml(note)}</strong></p><p>${escapeHtml(issue.severity)}: ${issue.count} production hits, ${issue.users} known users in the issue's production history (${issue.unidentified_hits} hits without a user identity).</p>${severityNote}<p>Last seen ${escapeHtml(issue.last_seen)}. <a href="${escapeHtml(issue.issue_url)}">PostHog issue</a></p><p>Next: Investigate the latest production errors in PostHog and record findings here.</p>`;
+  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
+    method: "POST", headers: mcpHeaders(token, key), body: JSON.stringify({ task_id: existing.id, text, content_type: "html" }),
   });
   return { action: "updated" };
 }

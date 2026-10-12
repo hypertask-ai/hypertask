@@ -172,7 +172,7 @@ function incidentTitle(alert) {
 
 export function incidentDescription(alert) {
   return (
-    `<p class="posthog-issue-start"><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
+    `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
     `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
     `<li>Production hits: ${alert.count ?? "unknown"}. Known users: ${alert.users ?? "unknown"}; ${alert.unidentified_hits ?? "unknown"} hits without a user identity.</li>` +
@@ -182,8 +182,7 @@ export function incidentDescription(alert) {
     `<li><a href="${escapeHtml(alert.issue_url)}">Open the issue in PostHog</a></li>` +
     `</ul>` +
     (alert.alert_kind === "issue_spiking" ? `<p>PostHog detected a spike: ${alert.spike_count} hits in its detection window, baseline ${alert.spike_baseline}.</p>` : "") +
-    (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "") +
-    `<p class="posthog-issue-end">posthog-count:${alert.count ?? "unknown"}; posthog-users:${alert.users ?? "unknown"}</p>`
+    (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "")
   );
 }
 
@@ -227,6 +226,10 @@ export async function handlePostHogAlert(
     dispatchSecret = process.env.POSTHOG_ALERT_DISPATCH_SECRET?.trim() || "",
     mcpToken = process.env.HYPERTASK_MCP_TOKEN || "",
     apiKey = process.env.POSTHOG_FULL_API_KEY || "",
+    attempt = Number(process.env.POSTHOG_ALERT_ATTEMPT || "1"),
+    githubToken = process.env.GITHUB_TOKEN || "",
+    githubRepository = process.env.GITHUB_REPOSITORY || "",
+    githubRef = process.env.GITHUB_REF_NAME || "",
     wait,
   } = {},
 ) {
@@ -239,8 +242,21 @@ export async function handlePostHogAlert(
   }
   if (alert.alert_kind.startsWith("issue_")) {
     if (!apiKey || !mcpToken) throw new Error("PostHog issue writer credentials are missing");
+    if (!Number.isInteger(attempt) || attempt < 1 || attempt > 3) throw new Error("PostHog alert attempt must be between 1 and 3");
     const { readProductionIssue, severityLabels, upsertIssue } = await import("./posthog-error-issues.mjs");
-    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait, alert });
+    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait });
+    if (issue.action === "skip") return issue;
+    if (issue.action === "retry") {
+      if (attempt === 3) throw new Error("PostHog issue has no exceptions in any environment after 3 attempts; pipeline watchdog must investigate ingestion lag");
+      if (!githubToken || !/^[\w.-]+\/[\w.-]+$/.test(githubRepository) || !githubRef) throw new Error("PostHog delayed retry GitHub configuration is missing or invalid");
+      await jsonRequest(fetchImpl, `https://api.github.com/repos/${githubRepository}/actions/workflows/posthog-error-alert.yml/dispatches`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${githubToken}`, "Content-Type": "application/json", Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+        // Relay the original signed object, not the timestamp-normalized alert.
+        body: JSON.stringify({ ref: githubRef, inputs: { posthog_payload: JSON.stringify(rawPayload), attempt: String(attempt + 1) } }),
+      });
+      return { action: "retry_dispatched", attempt: attempt + 1, reason: issue.reason };
+    }
     const config = productionConfig();
     return upsertIssue(fetchImpl, mcpToken, { ...config, severityLabels: await severityLabels(fetchImpl, mcpToken, config) }, { ...alert, ...issue });
   }
