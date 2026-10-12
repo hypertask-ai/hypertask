@@ -1,0 +1,22 @@
+#!/bin/sh
+# Stops a commit when its staged changes contain a key (YPER4-324).
+# Called by the global git hooks and by husky's init.sh; bypass once with git commit --no-verify.
+leaks=$(command -v gitleaks || echo "$HOME/.local/bin/gitleaks")
+if [ ! -x "$leaks" ]; then
+  echo "secret-scan: gitleaks is not installed, so this commit cannot be checked for keys." >&2
+  echo "secret-scan: install it to ~/.local/bin/gitleaks, or commit with --no-verify if you are sure." >&2
+  exit 1
+fi
+top=$(git rev-parse --show-toplevel) || exit 1
+set -- git --pre-commit --staged --redact --no-banner --log-level=warn
+# The repo's own rules win; otherwise the base rules installed next to this script.
+if [ -f "$top/.gitleaks.toml" ]; then
+  set -- "$@" "--config=$top/.gitleaks.toml"
+elif [ -f "$(dirname "$0")/gitleaks.toml" ]; then
+  set -- "$@" "--config=$(dirname "$0")/gitleaks.toml"
+fi
+if ! "$leaks" "$@" "$top"; then
+  echo "secret-scan: commit blocked, a staged change looks like a key (value hidden above)." >&2
+  echo "secret-scan: remove it and keep keys in the key safe (stack-key)." >&2
+  exit 1
+fi
