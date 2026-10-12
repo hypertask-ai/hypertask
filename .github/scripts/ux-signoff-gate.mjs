@@ -43,8 +43,8 @@ function humanValentin(item, idField) {
 
 function commentVerdict(comment) {
   if (!humanValentin(comment, 'creatorId')) return null;
-  // Agents for the same owner keep his attribution, so an edit counts only when Valentin made it himself.
-  if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return null;
+  // Agents for the same owner keep his attribution: any edit he did not make himself blocks until a fresh yes.
+  if (comment.editedAt != null && !(comment.editedBy && humanValentin(comment.editedBy, 'userId'))) return 'reject';
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
   if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
   return /^(?:(?:yes|yep|yeah|go|ok|okay|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;

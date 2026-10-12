@@ -605,3 +605,10 @@ test('an agent-edited verdict is not Valentin\'s: a "no" turned "yes" by an agen
   }
   assert.equal((await decision({ comments: [wireframe(), yes({ ...edited, editedBy: { userId: 6, agentId: null } })] })).state, 'success');
 });
+
+test('an agent-edited refusal still blocks an earlier yes or thumbs up until a fresh yes', async () => {
+  const agentEditedNo = yes({ id: 3, text: '<p>no</p>', createdAt: '2026-10-10T12:02:00Z', editedAt: '2026-10-10T12:03:00Z', editedBy: { userId: 6, agentId: 'agent-1', isAgent: true } });
+  assert.equal((await decision({ comments: [wireframe(), yes(), agentEditedNo] })).state, 'failure');
+  assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] }), agentEditedNo] })).state, 'failure');
+  assert.equal((await decision({ comments: [wireframe(), yes(), agentEditedNo, yes({ id: 4, createdAt: '2026-10-10T12:04:00Z' })] })).state, 'success');
+});
