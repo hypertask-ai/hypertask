@@ -15,8 +15,8 @@ Use with `verify-on-phone` (before the PR), `simplify-before-pr` and `design-com
 4. **Register the flag** by adding only `src/lib/flags/definitions/<flag-key>.ts`, with its exported key constant, default definition and `releaseRisk: { risk, reason }`. Do not edit shared registry files or test lists; never commit the generated index. Add flag-specific tests in their own test file. `DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"` in `src/lib/flags.ts` remains the repo default: Valentin and the QA account see it, nobody else. Only Valentin widens a feature flag's release, at `/admin/flags`. Never release to Everyone yourself.
 5. **Gate the change** on that flag with `useFlag(...)` at the point the new UI or behaviour renders or runs, **and gate the protected behaviour on the server too**. `useFlag` only hides client UI; it never replaces API authorization.
 6. **Take the phone screenshot** with `verify-on-phone`, before the PR. Pass `--state ~/.config/hypertask-videos/storageState-qa.json` (user 985) so the flag is on, or you will screenshot the old UI and not notice. Keep the PNG path in this session's notes.
-7. **Run `update-docs`** — a flagged feature is, by definition, a user-visible behaviour change.
-8. **Run `simplify-before-pr`.** The feature works and the tests pass — now simplify the diff before anyone reviews it.
+7. **Run `update-docs`**: a flagged feature is, by definition, a user-visible behaviour change.
+8. **Run `simplify-before-pr`.** The feature works and the tests pass: now simplify the diff before anyone reviews it.
 9. **Run `design-compliance`.** The diff is final. Now prove the new UI matches the style guide and that `node scripts/design-lint.mjs` is clean, before `design-gate` says so on the PR.
 10. **Write the PR body** into a file (Summary for non-engineers first, plus the five sections `open-pr.sh` checks), then open the PR:
    ```
@@ -36,4 +36,4 @@ Use with `verify-on-phone` (before the PR), `simplify-before-pr` and `design-com
 ## Notes
 
 - Features stay behind the Owner+QA flag. They do not get the "bug fixes may deploy directly to production" exception that `fix-bug` has.
-- UX and design decisions inside the feature never park a ticket in `Valentin Review`. He judges the real thing behind the flag in the app, not a wireframe.
+- New or changed visible UI needs his yes on the ticket's clickable wireframe before code: load `wireframe` and move to **UX Sign-off**. UX decisions inside an approved wireframe are yours (Valentin, 2026-10-10).
