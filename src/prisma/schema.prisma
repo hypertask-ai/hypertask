@@ -283,6 +283,7 @@ model User {
   updatedAt          DateTime       @default(now()) @updatedAt
   googleCalendarGeneration Int @default(0)
   mcpTokensRevokedAt DateTime?     // Timestamp when all MCP tokens were revoked for this user
+  featureFlagChanges FeatureFlagChange[]
   tasks              Task[]
   comments           Comment[]
   assignees          Assignees[]    @relation("assignees")
@@ -526,6 +527,22 @@ model FeatureFlag {
   // Deliberately a soft reference, not a relation: deleting the ticket must not delete the flag,
   // and the sweep only ever filters on it being null.
   removalTaskId Int?
+}
+
+model FeatureFlagChange {
+  id        String          @id @default(uuid())
+  key       String
+  oldMode   FeatureFlagMode?
+  newMode   FeatureFlagMode
+  userId    Int
+  user      User            @relation(fields: [userId], references: [id])
+  agentId   String?
+  agentName String?
+  reason    String?
+  source    String
+  createdAt DateTime        @default(now())
+
+  @@index([key, createdAt])
 }
 
 model FigmaConnection {

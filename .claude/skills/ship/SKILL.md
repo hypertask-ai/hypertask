@@ -49,6 +49,15 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
 | Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
 
+## Switching flags from a session (YPER4-215)
+
+Every change needs Valentin's recorded yes; the reason URL must link to the ticket comment recording it.
+Use `.claude/skills/ship/scripts/ht-flag get [KEY]` to read modes with this session's agent identity.
+Use `.claude/skills/ship/scripts/ht-flag set KEY owner-qa --reason https://app.hypertask.ai/detail/project-4060/215#comment-ID` after approval.
+Modes: `off`, `everyone`, `owner-qa`, `only-me`, or the real enum names; add `--dry-run` to inspect without sending.
+Only agents owned by the flag owner can use this API; plain user tokens and management keys are refused.
+The auto-Off-on-failed-QA exception is NOT approved yet; even Off needs Valentin's recorded yes.
+
 ## Local premerge board click
 
 Use `scripts/premerge-local.sh up` as a managed background task from the PR worktree to build and serve the CI browser-smoke app with disposable Docker services and a seeded signed-in board. It prints URLs, a Playwright storage-state path and the `premerge.md` starting lines. Follow `.claude/skills/verify-qa/SKILL.md` "Disposable local PR build" to capture the changed-path click and recording, confirming the snapshot matches live flag modes. Keep the task alive during QA, then finish with `scripts/premerge-local.sh down` from another command. Exiting or interrupting the task also stops its servers and containers. This needs Docker, Node 24 and no `.env` files; it never uses a production database and does not replace live QA after deploy. Never symlink `node_modules` from the main checkout (`npm ci` through the link empties the shared install, YPER4-247); if the worktree needs the main install, run `scripts/worktree-node-modules.sh <main checkout> <worktree>` for a hardlinked copy.

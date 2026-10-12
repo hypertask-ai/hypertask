@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 
 const root = path.resolve(__dirname, "..");
 for (const [relative, exports] of [
-  ["src/lib/prisma.ts", { __esModule: true, default: { featureFlag: { findMany: async () => [] } } }],
+  ["src/lib/prisma.ts", { __esModule: true, default: { featureFlag: { findMany: async () => [] }, featureFlagChange: { findMany: async () => [] } } }],
   ["src/lib/auth/getSessionUser.ts", { getSessionUser: async () => null }],
 ]) {
   const filename = path.join(root, relative);

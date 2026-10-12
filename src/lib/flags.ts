@@ -147,6 +147,8 @@ const isFeatureFlagQaUser = (
   db: FeatureFlagDatabase = prisma,
 ) => matchesFeatureFlagIdentity(userId, FEATURE_FLAG_QA_USER, db);
 
+export const isFeatureFlagOwnerUserId = isFeatureFlagOwnerUser;
+
 export async function isFeatureFlagOwner(headers: Headers): Promise<boolean> {
   const { getSessionUser } = await import("@/lib/auth/getSessionUser");
   const session = await getSessionUser(headers);
@@ -168,6 +170,13 @@ export type FeatureFlagRow = {
   ticketId: string | null;
   ticketUrl: string | null;
   ticketTitle: string | null;
+  lastChange?: {
+    oldMode: FeatureFlagMode | null;
+    newMode: FeatureFlagMode;
+    actorName: string;
+    reason: string | null;
+    createdAt: Date;
+  } | null;
 };
 
 const FEATURE_FLAG_ROW_SELECT = {
@@ -359,7 +368,21 @@ export async function listFeatureFlagModes(
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));
-  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+  const changes = await prisma.featureFlagChange.findMany({
+    where: { key: { in: [...byKey.keys()] } },
+    distinct: ["key"],
+    orderBy: [{ key: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+    select: {
+      key: true, oldMode: true, newMode: true, agentName: true, reason: true, createdAt: true,
+      user: { select: { displayName: true, email: true } },
+    },
+  });
+  const lastChangeByKey = new Map(changes.map(({ key, agentName, user, ...change }) => [
+    key, { ...change, actorName: agentName ?? user.displayName ?? user.email },
+  ]));
+  return [...byKey.values()]
+    .map((row) => ({ ...row, lastChange: lastChangeByKey.get(row.key) ?? null }))
+    .sort((a, b) => a.key.localeCompare(b.key));
 }
 
 export async function featureFlagsForUser(
@@ -398,6 +421,7 @@ export function validFeatureFlagKey(key: string): boolean {
 export async function setFeatureFlagMode(
   key: string,
   mode: FeatureFlagMode,
+  actor?: { userId: number; agentId?: string; agentName?: string; reason?: string; source: "page" | "api" },
 ): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key) || !FEATURE_FLAG_MODES.includes(mode)) {
     throw new FeatureFlagInputError("Invalid feature flag");
@@ -419,6 +443,15 @@ export async function setFeatureFlagMode(
       select: { key: true, mode: true, releasedAt: true },
     });
     if (!declared && !stored) throw new FeatureFlagInputError("Unknown feature flag");
+    const change = actor && stored?.mode !== mode
+      ? await tx.featureFlagChange.create({
+          data: { key, oldMode: stored?.mode ?? null, newMode: mode, ...actor },
+          select: {
+            oldMode: true, newMode: true, reason: true, createdAt: true,
+            user: { select: { displayName: true, email: true } },
+          },
+        })
+      : null;
 
     // HTPR-6193: entering EVERYONE restarts the 14-day removal countdown and unlinks the ticket
     // filed for the previous release. Re-filing is still suppressed while the old ticket is open
@@ -427,12 +460,22 @@ export async function setFeatureFlagMode(
     const entersEveryone = mode === "EVERYONE" && (stored?.mode !== "EVERYONE" || !stored.releasedAt);
     const release = entersEveryone ? { releasedAt: new Date(), removalTaskId: null } : {};
 
-    return tx.featureFlag.upsert({
+    const row = await tx.featureFlag.upsert({
       where: { key },
       create: { key, mode, ...release },
       update: { mode, ...release },
       select: FEATURE_FLAG_ROW_SELECT,
     });
+    return {
+      ...row,
+      lastChange: change ? {
+        oldMode: change.oldMode,
+        newMode: change.newMode,
+        reason: change.reason,
+        createdAt: change.createdAt,
+        actorName: actor?.agentName ?? change.user.displayName ?? change.user.email,
+      } : null,
+    };
   }));
   return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key]));
 }

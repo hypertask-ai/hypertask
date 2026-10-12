@@ -12,6 +12,7 @@ const stubModule = (relativePath, exports) => {
 let userId = 7;
 let reads = 0;
 let writes = 0;
+let lastActor = null;
 let keepWrites = 0;
 let broadcasts = 0;
 let broadcastFails = false;
@@ -38,8 +39,9 @@ stubModule("src/lib/flags.ts", {
       },
     ];
   },
-  setFeatureFlagMode: async (key, mode) => {
+  setFeatureFlagMode: async (key, mode, actor) => {
     writes += 1;
+    lastActor = actor;
     return {
       key,
       mode,
@@ -102,6 +104,7 @@ test.beforeEach(() => {
   userId = 7;
   reads = 0;
   writes = 0;
+  lastActor = null;
   keepWrites = 0;
   broadcasts = 0;
   broadcastFails = false;
@@ -162,6 +165,7 @@ test("the owner can list and change a declared flag with server-owned metadata",
   assert.equal(result.body.flag.mode, "OWNER_AND_QA");
   assert.equal(result.body.flag.description, "Connects Figma files to boards.");
   assert.equal(result.body.flag.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
+  assert.deepEqual(lastActor, { userId: 6, source: "page" });
   assert.equal(writes, 1);
   assert.equal(broadcasts, 1);
 });

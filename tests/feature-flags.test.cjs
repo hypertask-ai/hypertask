@@ -10,9 +10,31 @@ let readError = null;
 let sessionUserId = 6;
 let usersById = new Map();
 let taskRows = [];
+let changes = [];
+let changeQueries = [];
+let auditFails = false;
 const prisma = {
   user: { findUnique: async ({ where }) => usersById.get(where.id) ?? null },
   task: { findMany: async ({ where }) => taskRows.filter(({ uniqueIndex }) => where.uniqueIndex.in.includes(uniqueIndex)) },
+  featureFlagChange: {
+    create: async ({ data }) => {
+      if (auditFails) throw new Error("audit unavailable");
+      const change = { id: String(changes.length), createdAt: new Date(), reason: null, ...data };
+      changes.push(change);
+      return { ...change, user: usersById.get(data.userId) };
+    },
+    findMany: async (query) => {
+      changeQueries.push(query);
+      const byKey = new Map();
+      for (const change of [...changes].sort((a, b) => b.createdAt - a.createdAt)) {
+        if (query.where.key.in.includes(change.key) && !byKey.has(change.key)) {
+          const { key, oldMode, newMode, agentName, reason, createdAt, userId } = change;
+          byKey.set(key, { key, oldMode, newMode, agentName, reason, createdAt, user: usersById.get(userId) });
+        }
+      }
+      return [...byKey.values()];
+    },
+  },
   featureFlag: {
     findUnique: async () => {
       if (readError) throw readError;
@@ -58,6 +80,9 @@ test.beforeEach(() => {
   readError = null;
   sessionUserId = 6;
   taskRows = [];
+  changes = [];
+  changeQueries = [];
+  auditFails = false;
   usersById = new Map([
     [6, { email: "valentin.yeo@gmail.com" }],
     [985, { email: "valentin@hypertask.ai" }],
@@ -1324,4 +1349,84 @@ test("saved-choice reset is an Owner + QA feature and respects OFF", async () =>
   assert.equal(await flags.isFeatureEnabled(key, 7), false);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
+});
+
+test("owner userId check requires both the owner id and registered email", async () => {
+  assert.equal(await flags.isFeatureFlagOwnerUserId(6), true);
+  assert.equal(await flags.isFeatureFlagOwnerUserId(7), false);
+  usersById.set(6, { email: "other@example.test" });
+  assert.equal(await flags.isFeatureFlagOwnerUserId(6), false);
+});
+
+test("actor mode changes are audited inside the locked transaction, including an unstored default", async () => {
+  const key = "htpr-6136-figma-connect";
+  const actor = { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: "https://app.hypertask.ai/page/approval", source: "api" };
+  const order = [];
+  const originalLock = prisma.$executeRaw;
+  const originalCreate = prisma.featureFlagChange.create;
+  prisma.$executeRaw = async () => { order.push("lock"); return 0; };
+  prisma.featureFlagChange.create = async (args) => { order.push("audit"); return originalCreate(args); };
+  try {
+    const changed = await flags.setFeatureFlagMode(key, "OWNER_AND_QA", actor);
+    assert.deepEqual(order, ["lock", "audit"]);
+    assert.deepEqual(changes.map(({ id, createdAt, ...data }) => data), [{ key, oldMode: null, newMode: "OWNER_AND_QA", ...actor }]);
+    assert.equal(changed.lastChange.oldMode, null);
+    assert.equal(changed.lastChange.actorName, "Runner 3");
+    await flags.setFeatureFlagMode(key, "OWNER_AND_QA", actor);
+    assert.equal(changes.length, 1);
+    await flags.setFeatureFlagMode(key, "OFF", actor);
+    assert.equal(changes[1].oldMode, "OWNER_AND_QA");
+    assert.equal(changes[1].newMode, "OFF");
+    await flags.setFeatureFlagMode(key, "OWNER_ONLY");
+    assert.equal(changes.length, 2);
+  } finally {
+    prisma.$executeRaw = originalLock;
+    prisma.featureFlagChange.create = originalCreate;
+  }
+});
+
+test("page audits use the user display name and retain the release countdown semantics", async () => {
+  usersById.set(6, { displayName: "Valentin", email: "valentin.yeo@gmail.com" });
+  const actor = { userId: 6, source: "page" };
+  const key = "htpr-6136-figma-connect";
+  const released = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(released.lastChange.actorName, "Valentin");
+  row.removalTaskId = 123;
+  const again = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(changes.length, 1);
+  assert.equal(again.releasedAt.getTime(), released.releasedAt.getTime());
+  assert.equal(again.removalTaskId, 123);
+  await flags.setFeatureFlagMode(key, "OFF", actor);
+  const rereleased = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
+  assert.equal(rereleased.removalTaskId, null);
+  assert.equal(changes.length, 3);
+});
+
+test("audit failure prevents the mode write", async () => {
+  row = { mode: "OFF" };
+  auditFails = true;
+  await assert.rejects(flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE", { userId: 6, source: "page" }), /audit unavailable/);
+  assert.equal(row.mode, "OFF");
+});
+
+test("listing uses one latest-per-key audit query with agent, display name and email fallback", async () => {
+  const keys = ["htpr-6136-figma-connect", "legacy-second", "legacy-third"];
+  listedRows = keys.map((key) => ({ key, mode: "OFF" }));
+  usersById.set(7, { displayName: "Page owner", email: "page@example.test" });
+  changes = [
+    { key: keys[0], oldMode: "EVERYONE", newMode: "OFF", userId: 6, agentName: "Runner 3", reason: "https://app.hypertask.ai/page/approval", createdAt: new Date("2026-10-12T14:05:00Z") },
+    { key: keys[0], oldMode: null, newMode: "EVERYONE", userId: 6, agentName: "Old runner", reason: null, createdAt: new Date("2026-10-11T14:05:00Z") },
+    { key: keys[1], oldMode: null, newMode: "OFF", userId: 7, agentName: null, reason: null, createdAt: new Date() },
+    { key: keys[2], oldMode: "OWNER_ONLY", newMode: "OFF", userId: 6, agentName: null, reason: null, createdAt: new Date() },
+  ];
+  const listed = await flags.listFeatureFlagModes();
+  assert.equal(changeQueries.length, 1);
+  assert.deepEqual(changeQueries[0].distinct, ["key"]);
+  assert.deepEqual(changeQueries[0].orderBy, [{ key: "asc" }, { createdAt: "desc" }, { id: "desc" }]);
+  assert.deepEqual(listed.find(({ key }) => key === keys[0]).lastChange, {
+    oldMode: "EVERYONE", newMode: "OFF", actorName: "Runner 3", reason: changes[0].reason, createdAt: changes[0].createdAt,
+  });
+  assert.equal(listed.find(({ key }) => key === keys[1]).lastChange.actorName, "Page owner");
+  assert.equal(listed.find(({ key }) => key === keys[2]).lastChange.actorName, "valentin.yeo@gmail.com");
+  assert.equal(listed.find(({ key }) => !keys.includes(key)).lastChange, null);
 });

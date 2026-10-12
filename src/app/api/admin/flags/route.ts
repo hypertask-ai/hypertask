@@ -9,6 +9,7 @@ import {
   type FeatureFlagMode,
 } from "@/lib/flags";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -70,8 +71,10 @@ export async function PATCH(request: NextRequest) {
     if (setsKeep && typeof body.keep !== "boolean") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
+    const session = await getSessionUser(request.headers);
+    if (!session) return noStore({ error: "Not found" }, 404);
     const flag = setsMode
-      ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode)
+      ? await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, { userId: session.userId, source: "page" })
       : await setFeatureFlagKeep(body.key, body.keep as boolean);
     await broadcastFeatureFlagsChange().catch((error) =>
       console.warn("[feature-flags] realtime broadcast failed", error),
