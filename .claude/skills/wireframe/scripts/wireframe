@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""wireframe - make and publish clickable wireframes on hypertask.app/wireframes.
+
+  wireframe new <TICKET>      copy the full-app base kit (fetched from /wireframes/base if missing)
+                              to <home>/<TICKET>/index.html
+  wireframe publish <TICKET> --question "Build this?"
+                              upload as waiting, verify, capture PNG, comment and request UX sign-off
+  wireframe publish <TICKET> --no-comment
+                              upload only as waiting (also the default for BASE)
+  wireframe status <TICKET> waiting|approved|rejected
+                              re-upload the published wireframe with its new status
+  wireframe base <file>       install a new base kit
+  wireframe list             print the list URL
+  wireframe remove <TICKET>   delete a published wireframe
+
+Home: $WIREFRAME_HOME or ~/.local/share/hypertask-wireframes.
+Screenshots: ~/.local/state/vcc-evidence/<TICKET>/wireframe/ at 1440x900.
+"""
+import argparse, html, importlib.machinery, importlib.util, json, os, shutil, subprocess, sys
+from datetime import date
+from pathlib import Path
+
+HOME = Path(os.environ.get("WIREFRAME_HOME") or "~/.local/share/hypertask-wireframes").expanduser()
+BASE = HOME / "base"
+
+
+def share():
+    p = Path("~/.local/bin/htmlshare").expanduser()
+    loader = importlib.machinery.SourceFileLoader("htmlshare", str(p))
+    mod = importlib.util.module_from_spec(importlib.util.spec_from_loader("htmlshare", loader))
+    loader.exec_module(mod)
+    return mod
+
+
+def run(args):
+    return subprocess.run(args, capture_output=True, text=True, check=True)
+
+
+def ticket_info(ticket):
+    try:
+        t = json.loads(run(["hypertask", "tasks", "get", ticket]).stdout)["tasks"][0]
+        return t["title"], f"https://app.hypertask.ai/detail/project-{t['projectId']}/{t['uniqueIndex']}", int(t["projectId"])
+    except (subprocess.CalledProcessError, ValueError, KeyError, IndexError, TypeError):
+        raise SystemExit(f"cannot read ticket {ticket}")
+
+
+def ux_signoff(project_id):
+    try:
+        data = json.loads(run(["hypertask", "sections", "list", "--project", str(project_id), "--json"]).stdout)
+        sections = data["sections"]
+        if data.get("success") is False or not isinstance(sections, list):
+            raise ValueError("cannot read sections")
+        return any(s["section_title"] == "UX Sign-off" for s in sections)
+    except (subprocess.CalledProcessError, ValueError, KeyError, TypeError):
+        return project_id == 15
+
+
+def screenshot(ticket, file):
+    dst = Path("~/.local/state/vcc-evidence").expanduser() / ticket / "wireframe" / "desktop.png"
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    dst.unlink(missing_ok=True)
+    try:
+        from playwright.sync_api import sync_playwright
+    except ImportError:
+        run(["npx", "-y", "playwright", "screenshot", "--viewport-size=1440,900", file.resolve().as_uri(), str(dst)])
+    else:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page(viewport={"width": 1440, "height": 900})
+            page.goto(file.resolve().as_uri())
+            page.screenshot(path=str(dst))
+            browser.close()
+    if not dst.is_file() or dst.stat().st_size == 0:
+        raise SystemExit("screenshot failed: no PNG captured")
+    return dst
+
+
+def put(sh, ticket, body, title, turl, status, verify=False):
+    """PUT to /wireframes/<ticket-lowercase> (same auth as explorations)."""
+    import urllib.request
+    url = f"{sh.BASE}/wireframes/{ticket.lower()}"
+    h = {"Content-Type": "text/html; charset=utf-8", "User-Agent": sh.UA, "X-Title": title.encode("ascii", "replace").decode(),
+         "X-Ticket-Url": turl, "X-Status": status, "Authorization": "Bearer " + sh._CREDS["HYPERTASK_APP_SHARE_TOKEN"],
+         "CF-Access-Client-Id": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_ID", ""),
+         "CF-Access-Client-Secret": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_SECRET", "")}
+    with urllib.request.urlopen(urllib.request.Request(url, data=body, method="PUT", headers=h), timeout=30):
+        pass
+    if verify:
+        with urllib.request.urlopen(urllib.request.Request(url, headers=h), timeout=30) as response:
+            if response.read() != body:
+                raise SystemExit(f"upload verification failed: {url} differs from the local file")
+    return url
+
+
+def fetch(sh, slug):
+    """GET the published /wireframes/<slug> bytes."""
+    import urllib.request
+    h = {"User-Agent": sh.UA, "CF-Access-Client-Id": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_ID", ""),
+         "CF-Access-Client-Secret": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_SECRET", "")}
+    with urllib.request.urlopen(urllib.request.Request(f"{sh.BASE}/wireframes/{slug.lower()}", headers=h), timeout=30) as response:
+        return response.read()
+
+
+def main():
+    a = sys.argv[1:]
+    if not a or a[0] in ("-h", "--help"):
+        sys.exit(__doc__)
+    cmd, arg = a[0], (a[1] if len(a) > 1 else "")
+    HOME.mkdir(parents=True, exist_ok=True)
+    if cmd == "list":
+        print(f"{share().BASE}/wireframes")
+    elif cmd == "base":
+        src = Path(arg).expanduser()
+        if not src.is_file():
+            raise SystemExit(f"not a file: {src}")
+        BASE.mkdir(parents=True, exist_ok=True)
+        shutil.copy(src, BASE / "base-kit.html")
+        print(BASE / "base-kit.html")
+    elif cmd == "new":
+        kit = BASE / "base-kit.html"
+        if not arg:
+            raise SystemExit("usage: wireframe new <TICKET>")
+        if not kit.is_file():
+            BASE.mkdir(parents=True, exist_ok=True)
+            kit.write_bytes(fetch(share(), "base"))
+        dst = HOME / arg.upper() / "index.html"
+        if dst.exists():
+            raise SystemExit(f"already exists, edit it in place: {dst}")
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(kit, dst)
+        print(dst)
+    elif cmd in ("publish", "status"):
+        parser = argparse.ArgumentParser(prog=f"wireframe {cmd}")
+        parser.add_argument("ticket")
+        if cmd == "publish":
+            parser.add_argument("--no-comment", action="store_true")
+            parser.add_argument("--question")
+        else:
+            parser.add_argument("status", choices=("waiting", "approved", "rejected"))
+        opts = parser.parse_args(a[1:])
+        t = opts.ticket.upper()
+        base = t == "BASE"
+        comment = cmd == "publish" and not base and not opts.no_comment
+        if cmd == "publish":
+            if comment and not opts.question:
+                parser.error("--question is required unless --no-comment is used")
+            if opts.question is not None and not opts.question.strip().endswith("?"):
+                parser.error("--question must end with '?' before uploading")
+        f = BASE / "base-kit.html" if base else HOME / t / "index.html"
+        if cmd == "publish" and not f.is_file():
+            raise SystemExit(f"local file missing: {f}; run: wireframe new {t}")
+        title, turl, project_id = ("Base kit: full app", "https://app.hypertask.ai/detail/project-4060/255", 4060) if base else ticket_info(t)
+        sh = share()
+        # status keeps the published bytes, so an answer never ships unreviewed local edits
+        body = fetch(sh, t) if cmd == "status" else f.read_bytes()
+        url = put(sh, t, body, title, turl, opts.status if cmd == "status" else "waiting", verify=comment)
+        if comment:
+            png = screenshot(t, f)
+            text = (f"<p><strong>Wireframe ready for {html.escape(title)}.</strong></p>"
+                    f'<p><a href="{html.escape(url, quote=True)}">{html.escape(url)}</a></p>'
+                    f"<p>Requested by Valentin in a Claude session, {date.today().isoformat()}."
+                    + (f" claude --resume {html.escape(os.environ['CLAUDE_CODE_SESSION_ID'])}" if os.environ.get("CLAUDE_CODE_SESSION_ID") else "")
+                    + "</p>"
+                    '<p>Question: <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span> '
+                    f"{html.escape(opts.question.strip())}</p>")
+            run(["vcc", "comment", "add", t, "--text", text, "--attach", str(png)])
+            if ux_signoff(project_id):
+                run(["vcc", "task", "move", t, "--section", "UX Sign-off"])
+        print(url)
+        print(f"{sh.BASE}/wireframes")
+    elif cmd == "remove":
+        sh = share()
+        import urllib.request
+        h = {"Content-Type": "text/html", "User-Agent": sh.UA, "Authorization": "Bearer " + sh._CREDS["HYPERTASK_APP_SHARE_TOKEN"],
+             "CF-Access-Client-Id": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_ID", ""),
+             "CF-Access-Client-Secret": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_SECRET", "")}
+        urllib.request.urlopen(urllib.request.Request(f"{sh.BASE}/wireframes/{arg.lower()}", data=b"", method="PUT", headers=h), timeout=30)
+        print("removed", arg)
+    else:
+        sys.exit(__doc__)
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except subprocess.CalledProcessError as e:
+        raise SystemExit(f"{e.cmd[0]} failed: {e.stderr.strip() or e}")
