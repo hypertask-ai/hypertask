@@ -50,6 +50,8 @@ export default defineConfig([
       "src/app/add-to-slack/page.tsx",
       // HTPR-6921: server component; gates the public Slack support page.
       "src/app/slack/support/page.tsx",
+      // HTPR-7141: server component; resolves the public demo retry flag.
+      "src/app/(tutorial space)/demo/page.tsx",
       // HTPR-6536: server component; gates the public /qa/login page.
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.

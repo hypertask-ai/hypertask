@@ -1,5 +1,5 @@
 {
-  "src/app/(tutorial space)/demo/page.tsx": {
+  "src/app/(tutorial space)/demo/DemoBoardPage.tsx": {
     "hypertask-style/no-raw-tailwind-colors": {
       "count": 1
     }
