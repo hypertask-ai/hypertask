@@ -251,8 +251,9 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
         } catch (error) {
           if (error.deferred) {
             log(JSON.stringify({ pr: pr.number, state: 'deferred', description: error.message }));
-            // A head never evaluated gets pending; an evaluated head keeps its verdict until its turn comes.
-            deferred = true;
+            // Out of read budget: an evaluated head keeps its verdict until its turn comes, a new head gets pending.
+            // Hypertask failing (429/5xx): every unread head goes pending, so a withdrawn yes never stays green.
+            deferred = !options.budget.stopped;
             verdict = { state: 'pending', description: DEFERRED, details: [] };
           } else verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
         }

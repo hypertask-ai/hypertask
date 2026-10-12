@@ -536,6 +536,18 @@ test('status cursor: every PR is read within ceil(reads / budget) sweeps and sta
   }
 });
 
+test('a Hypertask outage turns an earlier green to pending; budget exhaustion keeps it', async () => {
+  const { run } = await gate;
+  const green = [{ context: 'ux-signoff', state: 'success', description: 'Wireframe and new elements have UX signoff', updated_at: new Date().toISOString() }];
+  const outage = apiFixture({ prs: [pr(1, { title: 'HTPR-2 [FEATURE] UI' })], statuses: green });
+  await run(['--reconcile'], { env, github: outage.github, fetchImpl: async () => response({}, 503), log: () => {} });
+  assert.deepEqual(outage.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
+  const prs = Array.from({ length: 121 }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI`, head: { sha: (i + 1).toString(16).padStart(40, '0') } }));
+  const busy = apiFixture({ prs, statuses: green });
+  await run(['--reconcile'], { env, github: busy.github, fetchImpl: commentsFetch, log: () => {} });
+  assert.equal(busy.calls.filter((call) => call.method === 'POST').length, 120);
+});
+
 test("Valentin's yes that quotes the wireframe link still approves it", async () => {
   assert.equal((await decision({ comments: [wireframe(), yes({ text: '<p>yes https://hypertask.app/wireframes/htpr-1</p>' })] })).state, 'success');
 });
