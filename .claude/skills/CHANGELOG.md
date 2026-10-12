@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4 - 2026-10-12
+
+- Add a weekly scriptify scan of repeated Claude and Codex shell routines.
+  Reports contain only redacted patterns and counts; one locked Codex helper
+  builds tested scripts in a fresh worktree for a runner to ship. Includes
+  an opt-in user timer and routine scoreboard.
+  https://app.hypertask.ai/detail/project-4060/233
+
 ## 1.1.3 - 2026-10-10
 
 - Tickets assigned to a runner's agent on the board now reach that runner: a
