@@ -301,6 +301,7 @@ const TaskContent = ({
   };
 
   const handleKeyDown = useCallback(async (e: any) => {
+    if (e.defaultPrevented) return;
     const {
       isActive,
       isApple,
@@ -385,6 +386,9 @@ const TaskContent = ({
         Boolean(lastgPress.current),
       )
     ) {
+      // Bulk actions can advance focus before this event reaches document.
+      e.preventDefault();
+      e.stopPropagation();
       return;
     }
 
