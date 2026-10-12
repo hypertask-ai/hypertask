@@ -48,7 +48,7 @@ const defaults = {
 function fixture(name, scenario) {
   const effects = [], loads = [];
   let authCalls = 0;
-  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth" };
+  const session = scenario.noAuth ? null : { userId: 985, source: "better-auth", ...(name === "setDueDate" && scenario.body?.agentId === "owned" ? { agentId: "owned" } : {}) };
   const failure = kind => {
     if (kind === "lease") return new LeaseError("Task lease conflict");
     if (kind === "delete") return new DeleteError("Hard deletion in progress");

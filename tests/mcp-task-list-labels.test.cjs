@@ -24,6 +24,7 @@ function loadMappers() {
 
   const stubs = {
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
+    "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&

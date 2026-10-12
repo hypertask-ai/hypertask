@@ -109,7 +109,13 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
   return {
     id,
     ...(principal.agentId
-      ? { agentId: principal.agentId }
+      ? {
+          agentId: principal.agentId,
+          OR: [
+            { taskId: null },
+            { task: { project: projectContentAccessWhere(principal.userId, principal.agentId) } },
+          ],
+        }
       : { agent: { userId: principal.userId } }),
   };
 }

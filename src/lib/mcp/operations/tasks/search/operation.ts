@@ -179,6 +179,7 @@ export async function GET(request: NextRequest) {
 
     const where: any = {
       projectId: { in: accessibleProjectIds },
+      ...(ctx.agentId ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
       status
     }
 

@@ -1,4 +1,5 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -124,7 +125,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ dra
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -211,7 +214,9 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ dr
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(

@@ -103,7 +103,7 @@ for (const agentId of [null, "agent-1"]) {
       assert.equal(response.status, 200);
       assert.equal((await response.json()).success, true);
       assert.deepEqual(flagCalls, [[slimFlag, 985]]);
-      assert.deepEqual(inboxCalls, [["985", { withCachedDescription: state !== true }]]);
+      assert.deepEqual(inboxCalls, [["985", { withCachedDescription: state !== true }, ...(agentId ? [agentId] : [])]]);
     });
   }
 }

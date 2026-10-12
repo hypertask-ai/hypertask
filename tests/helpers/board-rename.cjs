@@ -101,6 +101,7 @@ const humanMember = (role = "Member", overrides = {}) => ({ userId: 6, agentId: 
 const agentMember = (overrides = {}) => ({
   userId: 6,
   agentId: "agent-owned",
+  status: "Accepted",
   role: "Member",
   agent: { userId: 6, revokedAt: null },
   ...overrides,

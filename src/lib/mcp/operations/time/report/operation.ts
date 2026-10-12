@@ -64,6 +64,7 @@ export async function GET(request: NextRequest) {
   }
 
   const entries = await listReport(ctx.user.id, {
+    agentId: ctx.agentId,
     teamId: params.get("team")?.trim() || undefined,
     boardId: parsePositiveInteger(params.get("board")),
     taskId,

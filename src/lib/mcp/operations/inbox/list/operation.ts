@@ -93,10 +93,11 @@ export async function GET(request: NextRequest) {
 
         if (ctx.agentId) {
             const [userInboxResult, agentInbox] = await Promise.all([
-                notificationGetAll(user.id.toString(), { withCachedDescription }),
+                notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId),
                 getStructuredInboxForAgent({
                     userId: user.id,
                     agentId: ctx.agentId,
+                    scopeToAgentBoards: true,
                 }),
             ])
 

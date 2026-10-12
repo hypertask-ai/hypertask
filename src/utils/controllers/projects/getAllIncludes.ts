@@ -11,104 +11,39 @@ export type GetAllIncludesOptions = {
   includeCachedDescription?: boolean;
 };
 
-const humanProjectAccessBranches = (
+const projectAccessBranches = (
   userId: number,
   agentId?: string | null,
-): Prisma.ProjectWhereInput[] => {
-  if (!agentId) {
-    return [
-      { ownerId: userId },
-      { members: { some: { userId, agentId: null } } },
-    ];
-  }
-
-  const activeAgent = { id: agentId, userId, revokedAt: null };
-  return [
-    {
-      owner: {
-        id: userId,
-        agents: { some: activeAgent },
-      },
-    },
-    {
-      members: {
-        some: {
-          userId,
-          agentId: null,
-          user: { agents: { some: activeAgent } },
-        },
-      },
-    },
-  ];
-};
+): Prisma.ProjectWhereInput[] =>
+  agentId
+    ? [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }]
+    : [
+        { ownerId: userId },
+        { members: { some: { userId, agentId: null } } },
+      ];
 
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
-});
+): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
 
 export const taskWriteAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
-});
+): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
 
 export const getProjectWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput => ({
   teamId: { not: null },
-  OR: [
-    ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
-      ? [
-          {
-            members: {
-              some: { agentId, agent: { userId, revokedAt: null } },
-            },
-          },
-        ]
-      : []),
-  ],
+  OR: projectAccessBranches(userId, agentId),
 });
 
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput =>
-  agentId
-    ? {
-        teamId: { not: null },
-        members: {
-          some: { agentId, agent: { userId, revokedAt: null } },
-        },
-      }
-    : getProjectWhere(userId);
+): Prisma.ProjectWhereInput => getProjectWhere(userId, agentId);
 
 export const getTaskWhere = (): Prisma.TaskWhereInput => ({
   status: "Normal",
@@ -360,21 +295,13 @@ export const savedViewBoardAccessWhere = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput => {
-  const activeAgent = { id: agentId!, userId, revokedAt: null };
   return {
-    OR: [
-      agentId
-        ? { owner: { id: userId, agents: { some: activeAgent } } }
-        : { ownerId: userId },
-      { members: { some: {
-        userId, agentId: null, status: "Accepted",
-        ...(agentId ? { user: { agents: { some: activeAgent } } } : {}),
-      } } },
-      ...(agentId ? [{ members: { some: {
-        agentId, status: "Accepted" as const,
-        agent: { userId, revokedAt: null },
-      } } }] : []),
-    ],
+    OR: agentId
+      ? [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }]
+      : [
+          { ownerId: userId },
+          { members: { some: { userId, agentId: null, status: "Accepted" } } },
+        ],
   };
 };
 

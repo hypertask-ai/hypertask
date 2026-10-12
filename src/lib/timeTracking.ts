@@ -277,7 +277,7 @@ export async function createManualEntry(
   return entry;
 }
 
-export async function listRunning(userId: number) {
+export async function listRunning(userId: number, agentId?: string | null) {
   const entries = await prisma.timeEntry.findMany({
     where: {
       userId,
@@ -285,7 +285,7 @@ export async function listRunning(userId: number) {
       task: {
         status: { not: "Deleted" },
         project: {
-          ...getProjectWhere(userId),
+          ...getProjectWhere(userId, agentId),
           status: { in: ["Normal", "Archive"] },
         },
       },
@@ -348,6 +348,7 @@ export async function listEntries(userId: number, taskId: number) {
 export async function listReport(
   userId: number,
   options: {
+    agentId?: string | null;
     teamId?: string;
     boardId?: number;
     boardIds?: number[];
@@ -406,7 +407,7 @@ export async function listReport(
             ? { projectId: options.boardId }
             : {}),
         project: {
-          ...getProjectWhere(userId),
+          ...getProjectWhere(userId, options.agentId),
           status: { in: ["Normal", "Archive"] },
           ...(options.teamId ? { teamId: options.teamId } : {}),
         },

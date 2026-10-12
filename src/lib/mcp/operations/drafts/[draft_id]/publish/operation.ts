@@ -1,4 +1,5 @@
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -74,7 +75,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
     }
 
     const project = draft.task.project
-    const hasAccess = project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
+    const hasAccess = ctx.agentId
+      ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
+      : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -150,7 +153,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         displayName: userObj.displayName,
         photoURL: userObj.photoURL ?? undefined
       }))
-      const sessionToken = signSession({ id: userObj.id, email: userObj.email })
+      const sessionToken = signSession({ id: userObj.id, email: userObj.email, ...(ctx.agentId ? { agentId: ctx.agentId } : {}) })
       const authCookieHeader = `nookies_user=${encodeURIComponent(userCookie)}; ${SESSION_COOKIE}=${sessionToken}`
 
       const singleResponse = await fetch(`${baseUrl}/api/tasks/single`, {
