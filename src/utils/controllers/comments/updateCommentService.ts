@@ -120,7 +120,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
     return transaction.comment.update({
       where: { id: commentId },
-      data: { text, summary: null },
+      data: { text, summary: null, editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
         agent: { select: publicAgentSelect },

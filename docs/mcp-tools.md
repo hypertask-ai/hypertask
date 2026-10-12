@@ -28,6 +28,12 @@ For the new catalog, invalid arguments, unsupported actions, authorization failu
 
 HTTP and existing legacy SSE share catalog selection and the flagged output/error behavior. Already-open SSE sessions evaluate the current server flag and relayed credential scope for every tool list or call; switching the flag Off restores the original SDK handlers without reconnecting. Invocation identity retains the SSE session id. Only the response bindings change; transport, OAuth, annotations and Directory work belong to https://app.hypertask.ai/detail/project-15/6478. The eval harness and CI integration belong to https://app.hypertask.ai/detail/project-15/6505; `tests/fixtures/mcp-6804/golden-tasks.json` contains 25 seeded, realistic tasks as data only. Run mutating tasks only against an isolated fixture environment, never production or shared previews. Chat tool extraction belongs to https://app.hypertask.ai/detail/project-15/6506 and can consume this catalog later; it is not changed here.
 
+## Comment timestamps
+
+`GET /api/mcp/comments`, `POST /api/mcp/comments` and `PATCH /api/mcp/comments/:comment_id` include `editedAt` on each returned comment: an ISO timestamp of its latest text edit, or `null` if it has never been edited. Existing comments are not backfilled. Reactions and other non-text changes do not mark a comment edited. `editedBy` is `{ userId, agentId }` for the latest editor, or `null` when never edited; `agentId` is `null` for a human edit. An agent editing its owner's comment is recorded as the editor without changing the comment's original author. Editor names are not included because there is no existing editor-agent relation to select.
+
+Each reaction in the comments list includes its `createdAt` ISO timestamp. `POST /api/mcp/comments/:comment_id/reactions` includes the same field in both `reaction` (when present) and `reactions`. This is the stored reaction's original creation time; reviving a removed reaction preserves it. Existing reactor attribution is unchanged: `userId` identifies the human or agent owner, and agent reactions also carry `isAgent: true` and the visibility-filtered `agent` object.
+
 ## Complete resource inventory
 
 | Advertised tool | Actions | Existing implementation names |

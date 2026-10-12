@@ -39,6 +39,8 @@ export interface UpdateCommentResponse {
     id: number
     text: string
     createdAt: string
+    editedAt: string | null
+    editedBy: { userId: number; agentId: string | null } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
@@ -327,6 +329,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         id: updatedComment.id,
         text: updatedComment.text,
         createdAt: updatedComment.createdAt.toISOString(),
+        editedAt: updatedComment.editedAt?.toISOString() ?? null,
+        editedBy: updatedComment.editedByUserId != null
+          ? { userId: updatedComment.editedByUserId, agentId: updatedComment.editedByAgentId ?? null }
+          : null,
         creatorId: updatedComment.creatorId ?? undefined,
         ...(agent ? { agent } : {}),
         ...(hasAgentAttribution

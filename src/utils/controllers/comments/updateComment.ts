@@ -2,9 +2,12 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { invalidateHyperAiCommentOrigin } from "@/lib/ai/hyperAiConfirmation";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method==="PUT"){
+      const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+      if (!session) return res.status(401).json({ message: "Unauthorized" });
       const {updatedComment}=req.body
       // console.log("🚀 ~ file: updateComment.ts:7 ~ consthandler:NextApiHandler= ~ updatedComment:", updatedComment)
       const { text, creatorId,taskId, commentId  } = updatedComment;
@@ -20,7 +23,10 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 id:commentId
             },
             data:{
-                text:text
+                text:text,
+                editedAt:new Date(),
+                editedByUserId:session.userId,
+                editedByAgentId:null
             }
         });
         // console.log("🚀 ~ file: updateComment.ts:24 ~ consthandler:NextApiHandler= ~ toUpdate:", toUpdate)

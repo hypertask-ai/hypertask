@@ -179,7 +179,11 @@ test("editing an agent comment preserves its creator and agent attribution", asy
   assert.deepEqual(calls.commentUpdates[0].data, {
     text: "<p>edited by the owner</p>",
     summary: null,
+    editedAt: calls.commentUpdates[0].data.editedAt,
+    editedByUserId: creator.id,
+    editedByAgentId: null,
   });
+  assert.ok(calls.commentUpdates[0].data.editedAt instanceof Date);
   assert.ok(calls.commentUpdates[0].include.agent);
 });
 

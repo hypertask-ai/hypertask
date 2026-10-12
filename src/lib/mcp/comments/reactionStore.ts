@@ -5,6 +5,7 @@ export type ReactionAgent = { id: string; displayName: string | null };
 
 export type StoredCommentReaction = {
   id: string;
+  createdAt: Date;
   emoji: string;
   userId: number;
   agentId: string | null;
@@ -13,6 +14,7 @@ export type StoredCommentReaction = {
 
 const REACTION_SELECT = {
   id: true,
+  createdAt: true,
   emoji: true,
   userId: true,
   agentId: true,

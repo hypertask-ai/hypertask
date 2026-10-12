@@ -1752,6 +1752,9 @@ model Comment {
   agentDisplayName    String?
 
   createdAt     DateTime       @default(now())
+  editedAt      DateTime?
+  editedByUserId Int?
+  editedByAgentId String?
   notifications Notification[]
   commentText   String         @default("") // just text no html
   seen          Int[]          @default([])

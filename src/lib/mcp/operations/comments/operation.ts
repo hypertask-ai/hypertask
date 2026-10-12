@@ -53,6 +53,8 @@ export interface CommentItem {
   text: string
   commentText: string
   createdAt: string
+  editedAt: string | null
+  editedBy: { userId: number; agentId: string | null } | null
   /** Present only when include_activity=true so callers can distinguish row kinds. */
   type?: 'comment' | 'activity'
   /** Raw activity payload, matching the app comment endpoint. Present only when include_activity=true. */
@@ -121,6 +123,8 @@ export interface AddCommentResponse {
     id: number
     text: string
     createdAt: string
+    editedAt: string | null
+    editedBy: { userId: number; agentId: string | null } | null
     creatorId?: number
     agent?: McpAgentSummary
     agent_display_name?: string
@@ -177,6 +181,10 @@ function mapCommentToResponse(
     text: comment.text,
     commentText: comment.commentText || comment.text,
     createdAt: comment.createdAt.toISOString(),
+    editedAt: comment.editedAt?.toISOString() ?? null,
+    editedBy: comment.editedByUserId != null
+      ? { userId: comment.editedByUserId, agentId: comment.editedByAgentId ?? null }
+      : null,
     creatorId: comment.creatorId || undefined,
     creator: comment.creator ? {
       id: comment.creator.id,
@@ -919,6 +927,10 @@ export async function POST(request: NextRequest) {
             id: comment.id,
             text: comment.text || sanitizedText,
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),
+            editedAt: comment.editedAt?.toISOString() ?? null,
+            editedBy: comment.editedByUserId != null
+              ? { userId: comment.editedByUserId, agentId: comment.editedByAgentId ?? null }
+              : null,
             creatorId: comment.creatorId || user.id,
             ...(attributedComment?.agent ? { agent: attributedComment.agent } : {}),
             ...(attributedComment?.agent_display_name
