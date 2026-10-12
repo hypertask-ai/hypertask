@@ -14,15 +14,15 @@ import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
-// The approval comment holds exactly one request "Switch <flag-key> to <mode label>?",
-// with the mode labels the flags page shows.
+// The whole approval comment is "Question: Switch <flag-key> to <mode label>?", optionally after
+// the @Valentin Yeo mention, so a negated, quoted or second request never matches.
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
   OWNER_AND_QA: "Owner + QA",
   EVERYONE: "Everyone",
   OFF: "Off",
 };
-const SWITCH_REQUEST = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
+const SWITCH_REQUEST = /^(?:@Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -94,11 +94,11 @@ export async function PATCH(request: NextRequest) {
       select: { commentText: true, text: true },
     });
     const words = comment?.commentText || comment?.text || "";
-    const requests = [...words.matchAll(SWITCH_REQUEST)];
-    if (!comment || requests.length !== 1 || requests[0][1] !== body.key
-      || requests[0][2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+    const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
+    if (!comment || !ask || ask[1] !== body.key
+      || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
       return noStore({
-        error: "Valentin must thumbs-up that comment within 7 days, and it must hold exactly one request: Switch <flag-key> to <mode>?",
+        error: "Valentin must thumbs-up that comment within 7 days, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
       }, 403);
     }
     const agent = await prisma.agent.findUniqueOrThrow({
