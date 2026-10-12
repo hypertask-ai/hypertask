@@ -52,7 +52,8 @@ import { AiChatComposerActionRow } from "./AiChatComposerActionRow";
 import { AttachmentButton } from "./AttachmentButton";
 import { AiComposerTextarea } from "./AiComposerTextarea";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG } from "@/lib/flags/keys";
+import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from "@/lib/flags/keys";
+import { ChatScopeChip } from "./ChatScopeChip";
 import { SendMessageButton } from "./SendMessageButton";
 export { SendMessageButton } from "./SendMessageButton";
 import { QueuedMessagesStrip } from "@/components/Common/QueuedMessagesStrip";
@@ -95,6 +96,9 @@ export function AI_Tiptap_Container({
   controlledComposer?: ControlledComposer;
 } = {}) {
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
+  const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+  let composeBoardChipEnabled = false;
+  if (composeBoardChipFlag) composeBoardChipEnabled = true;
   const ComposerTextarea = composeTaskWriterEnabled ? AiComposerTextarea : "textarea";
   const pathname = usePathname();
   const isMbl = useContext(MobileViewContext);
@@ -277,7 +281,7 @@ export function AI_Tiptap_Container({
           data-ai-chat-mobile-context-row
           className="mb-2 flex min-w-0 items-center gap-2"
         >
-          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile />}
+          {!pathname?.startsWith("/chat") && <ChatScopeDropdown mobile reuseChip={composeBoardChipEnabled} />}
           <div
             data-ai-chat-mobile-context-scroll
             className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto scrollbar-none"
@@ -390,7 +394,7 @@ export function AI_Tiptap_Container({
                     pathname?.startsWith("/chat") ? undefined : "hidden"
                   }
                 />
-                {!pathname?.startsWith("/chat") && <ChatScopeDropdown />}
+                {!pathname?.startsWith("/chat") && <ChatScopeDropdown reuseChip={composeBoardChipEnabled} />}
               </>
             )
           }
@@ -531,7 +535,7 @@ export function AI_Tiptap_Container({
   );
 }
 
-function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
+function ChatScopeDropdown({ mobile = false, reuseChip = false }: { mobile?: boolean; reuseChip?: boolean }) {
   const pathname = usePathname();
   const currentUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -613,7 +617,10 @@ function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
       data-ai-chat-mobile-scope={mobile || undefined}
       className="relative inline-block min-w-0 max-w-full shrink-0 text-left"
     >
-      <button
+      {reuseChip ? (
+        <ChatScopeChip kind={scopeChip.kind} label={scopeChip.label} title={scopeChip.title}
+          mobile={mobile} isOpen={isOpen} onClick={() => setIsOpen((open) => !open)} />
+      ) : <button
         type="button"
         aria-haspopup="menu"
         aria-expanded={isOpen}
@@ -647,7 +654,7 @@ function ChatScopeDropdown({ mobile = false }: { mobile?: boolean }) {
           }`}
           strokeWidth={1.75}
         />
-      </button>
+      </button>}
 
       {isOpen && (
         <div

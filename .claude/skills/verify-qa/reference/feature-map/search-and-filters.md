@@ -20,6 +20,22 @@ holds.
 - Board filters not applying immediately, requiring a reload to take effect
   ([HTPR-6595](https://app.hypertask.ai/detail/project-15/6595)).
 
+## Phone search operators
+
+With `htpr-6371-mobile-search` enabled (Owner + QA), use the same `/search`
+input as desktop. At widths below 768px, check `@` and `#` using input events,
+including composition and keyboard prediction replacements. Pick from-person,
+commenter, assignee, in/board, label, is, before/after/on and has suggestions.
+The existing list follows `visualViewport` above the keyboard and clears the
+bottom navigation. Its preselected row is visible, rows and chip-wide remove
+buttons are at least 44px tall, and long names truncate without hiding icons.
+The existing Show results row is available above the keyboard; the keyboard
+Search key runs the query rather than choosing an autocomplete suggestion.
+Check wrapping, tap the existing x to remove a filter, and compare the URL and
+results with desktop. Verify 390x844, 375x667 and landscape, all four themes,
+then confirm flag-off and desktop retain the current layout. Simulated viewport
+checks do not replace a physical iOS Safari and Android Chrome check after deploy.
+
 ## What proof to collect
 
 Screenshot the search results for the exact query from the ticket, in the

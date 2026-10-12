@@ -82,6 +82,8 @@ test('unbound REST requests still perform their existing authentication pass', a
 let increments = 0
 const rate = load('src/lib/mcp/auth/rateLimit.ts', {
   'next/server': require('next/server'), crypto: require('node:crypto'),
+  '@/lib/flags/keys': { HTPR_7133_MCP_RATELIMIT_FAST_FLAG: 'htpr-7133-mcp-ratelimit-fast' },
+  '@/lib/flags': { featureFlagCandidateUserIds: async () => [] },
   '@/lib/redis': { getRedis: async () => ({ incr: async () => ++increments, expire: async () => {} }) },
   '@/lib/mcp/rateLimitDecision': jiti(path.join(root, 'src/lib/mcp/rateLimitDecision.ts')),
   './session': session, '../operationContext': context,

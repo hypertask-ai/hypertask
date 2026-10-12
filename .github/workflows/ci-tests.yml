@@ -562,9 +562,9 @@ jobs:
       contents: read
     env:
       TRUSTED_CLI_PACKAGE: "@hypertask/hypertask_cli"
-      TRUSTED_CLI_VERSION: "2.0.9"
-      TRUSTED_CLI_BINARY_VERSION: "0.2.14"
-      TRUSTED_CLI_BINARY_SHA256: "3b4286ff78d66042b9a564150c548d3a6fc0cdc1e02bbda13128f7a39cab683f"
+      TRUSTED_CLI_VERSION: "2.0.10"
+      TRUSTED_CLI_BINARY_VERSION: "0.2.15"
+      TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
