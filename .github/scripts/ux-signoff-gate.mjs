@@ -4,6 +4,8 @@ import { pathToFileURL } from 'node:url';
 
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
+const READ_BUDGET = 120;
+const DEFERRED = 'Ticket not read this sweep; rechecked within 10 minutes';
 const TICKET_TITLE = /^(HTPR|HYFA|YPER4)-(\d+) \[([^\]]+)\] \S/;
 const WIREFRAME = /https:\/\/hypertask\.app\/(?:wireframes|explorations)\/[A-Za-z0-9_-]+/;
 
@@ -67,7 +69,8 @@ export function evaluate({ title, author, files, comments = [] }) {
     return { state: 'failure', description, details: [description] };
   }
 
-  const wireframe = newest(comments.filter((comment) => WIREFRAME.test(comment.text)));
+  // Valentin's own comments are verdicts, even when they quote the wireframe link.
+  const wireframe = newest(comments.filter((comment) => WIREFRAME.test(comment.text) && !humanValentin(comment, 'creatorId')));
   const created = wireframe ? Date.parse(wireframe.createdAt) : -Infinity;
   const edits = wireframe ? [wireframe.updatedAt, wireframe.editedAt].filter((value) => value != null) : [];
   const revision = Math.max(created, ...edits.map((value) => Date.parse(value)));
@@ -203,7 +206,7 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, bud
   return evaluate({ ...input, comments: await commentCache.get(ticket.key) });
 }
 
-export async function run(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log } = {}) {
+export async function run(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log, now = Date.now } = {}) {
   let reconcile = false;
   let number;
   for (let index = 0; index < args.length; index++) {
@@ -214,7 +217,7 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   if (!reconcile && number == null) throw new Error('Read-only mode requires --pr <number>');
   const repo = env.REPO || env.GITHUB_REPOSITORY || 'hypertask-ai/hypertask';
   const runUrl = env.RUN_URL || `https://github.com/${repo}/actions${env.GITHUB_RUN_ID ? `/runs/${env.GITHUB_RUN_ID}` : ''}`;
-  const options = { github, repo, env, fetchImpl, commentCache: new Map(), budget: { remaining: 120, stopped: false } };
+  const options = { github, repo, env, fetchImpl, commentCache: new Map(), budget: { remaining: READ_BUDGET, stopped: false } };
   if (!reconcile) {
     const pr = await github(`repos/${repo}/pulls/${number}`);
     const verdict = await readVerdict(pr, options);
@@ -223,7 +226,9 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   }
 
   const openPrs = await githubPages(github, `repos/${repo}/pulls?state=open&base=production`);
-  const prs = number == null ? openPrs : openPrs.filter((pr) => pr.number === number);
+  // Each 10-minute sweep starts one read budget further along, so a long PR list is covered within a few sweeps.
+  const start = openPrs.length ? (Math.floor(now() / 600000) * READ_BUDGET) % openPrs.length : 0;
+  const prs = number == null ? [...openPrs.slice(start), ...openPrs.slice(0, start)] : openPrs.filter((pr) => pr.number === number);
   let errors = false;
   for (const listed of prs) {
     try {
@@ -236,9 +241,9 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
         } catch (error) {
           if (error.deferred) {
             log(JSON.stringify({ pr: pr.number, state: 'deferred', description: error.message }));
-            break;
-          }
-          verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
+            // Never leave an older green standing on a head whose ticket went unread.
+            verdict = { state: 'pending', description: DEFERRED, details: [] };
+          } else verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
         }
         if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
         const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);

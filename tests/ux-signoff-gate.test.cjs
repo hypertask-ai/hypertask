@@ -249,7 +249,7 @@ test('missing secret only affects gated PRs and metadata errors leave heads unto
   assert.match(posted.body.description, /HYPERTASK_MCP_TOKEN.*configure/);
   const readFailure = apiFixture({ prs: [pr(1, { title })] });
   assert.equal(await run(['--reconcile'], { env, github: readFailure.github, fetchImpl: async () => response({}, 503), log: () => {} }), 0);
-  assert.ok(readFailure.calls.every((call) => call.method !== 'POST'));
+  assert.deepEqual(readFailure.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['pending']);
 });
 
 test('single-PR reconciliation never publishes an unvalidated head on metadata read error', async () => {
@@ -410,26 +410,28 @@ test('item 7: reconciliation caches, caps reads including pages and stops after 
   let reads = 0;
   const capped = await execute(async () => { reads++; return response({ comments: [], nextCursor: null }); });
   assert.equal(reads, 120);
-  assert.equal(capped.posts.length, 121);
+  assert.equal(capped.posts.length, 124);
+  assert.equal(capped.posts.filter((post) => post.body.state === 'pending').length, 3);
   assert.equal(capped.logs.filter((line) => line.state === 'deferred').length, 3);
   for (const status of [429, 500, 503]) {
     reads = 0;
     const stopped = await execute(async () => ++reads === 1 ? response({ comments: [] }) : response({}, status));
     assert.equal(reads, 2, `HTTP ${status}`);
-    assert.equal(stopped.posts.length, 2);
+    assert.equal(stopped.posts.length, 124);
     assert.ok(stopped.posts.every((post) => post.body.state !== 'error'));
     assert.ok(stopped.logs.some((line) => line.state === 'deferred' && line.description.includes(`HTTP ${status}`)));
   }
   reads = 0;
   const paged = await execute(async () => response({ comments: [], nextCursor: String(++reads) }));
   assert.equal(reads, 120);
-  assert.equal(paged.posts.length, 0);
-  assert.ok(paged.logs.every((line) => line.state === 'deferred'));
+  assert.equal(paged.posts.length, 124);
+  assert.deepEqual([...new Set(paged.posts.map((post) => post.body.state))], ["pending"]);
+  assert.equal(paged.logs.filter((line) => line.state === 'deferred').length, 124);
   const mixed = apiFixture({ prs: [pr(1, { title }), pr(2, { title: 'HTPR-2 [FEATURE] UI' }), pr(3)] });
   reads = 0;
   assert.equal(await run(['--reconcile'], { env, github: mixed.github, fetchImpl: async () => { reads++; return response({}, 429); }, log: () => {} }), 0);
   assert.equal(reads, 1);
-  assert.deepEqual(mixed.calls.filter((call) => call.method === 'POST').map((call) => [call.endpoint, call.body.state]), [[`repos/fixture/repo/statuses/${pr(3).head.sha}`, 'success']]);
+  assert.deepEqual(mixed.calls.filter((call) => call.method === 'POST').map((call) => [call.endpoint, call.body.state]), [[`repos/fixture/repo/statuses/${pr(1).head.sha}`, 'pending'], [`repos/fixture/repo/statuses/${pr(2).head.sha}`, 'pending'], [`repos/fixture/repo/statuses/${pr(3).head.sha}`, 'success']]);
 });
 
 test('item 8: re-read immediately before posting and evaluate changed heads with fresh files', async () => {
@@ -490,4 +492,23 @@ test('CI policy records ux-signoff without making it required', () => {
   assert.match(section, /required: false/);
   assert.match(section, /Infra Manager.*statuses.*seeded.*all open PRs/);
   for (const line of policy.split('\n').filter((line) => /contexts:|required_status_checks:/.test(line))) assert.ok(!line.includes('ux-signoff'));
+});
+
+test('fair sweeps: consecutive runs reach every gated PR beyond the read budget', async () => {
+  const { run } = await gate;
+  const prs = Array.from({ length: 130 }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI` }));
+  const seen = new Set();
+  for (const now of [0, 600000]) {
+    const fixture = apiFixture({ prs });
+    const fetchImpl = async (url) => {
+      seen.add(new URL(String(url)).searchParams.get('ticket_number'));
+      return response({ comments: [], nextCursor: null });
+    };
+    await run(['--reconcile'], { env, github: fixture.github, fetchImpl, log: () => {}, now: () => now });
+  }
+  assert.equal(seen.size, 130);
+});
+
+test("Valentin's yes that quotes the wireframe link still approves it", async () => {
+  assert.equal((await decision({ comments: [wireframe(), yes({ text: '<p>yes https://hypertask.app/wireframes/htpr-1</p>' })] })).state, 'success');
 });
