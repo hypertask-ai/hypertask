@@ -100,7 +100,7 @@ test("catalog snapshot retains FKs backed by unique indexes and skips only docum
 test("workflow is production-only, least-privilege monitoring, not a required check", () => {
   const workflow = yaml.load(readFileSync(path.join(root, ".github/workflows/schema-drift.yml"), "utf8"));
   assert.ok(workflow.on.schedule[0].cron && "workflow_dispatch" in workflow.on && "deployment_status" in workflow.on);
-  assert.deepEqual(workflow.permissions, { contents: "read" });
+  assert.deepEqual(workflow.permissions, { contents: "read", packages: "read" });
   assert.equal(workflow.jobs.drift["runs-on"], "ubuntu-latest");
   assert.match(workflow.jobs.drift.if, /deployment_status.state == 'success'/);
   assert.match(workflow.jobs.drift.if, /deployment.environment == 'Production'/);
