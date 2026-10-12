@@ -235,11 +235,15 @@ test("PATCH accepts thumbs up with a skin tone and falls back to text", async ()
   assert.equal(approvalQueries.length, 1);
 });
 
-for (const rejected of ["missing key", "wrong mode", "empty comment", "text overridden by commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
+for (const rejected of ["missing key", "wrong mode", "refusal naming both modes", "two requests", "prefix key", "no question mark", "empty comment", "text overridden by commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
   test(`PATCH refuses approval from ${rejected}`, async () => {
     const reaction = approvalComment.reactions[0];
     if (rejected === "missing key") approvalComment.commentText = "Question: Switch another-flag to Off?";
     if (rejected === "wrong mode") approvalComment.commentText = `Question: Switch ${key} to Everyone?`;
+    if (rejected === "refusal naming both modes") approvalComment.commentText = `Keep ${key} Off, not Everyone`;
+    if (rejected === "two requests") approvalComment.commentText = `Question: Switch ${key} to Off? Or Switch ${key} to Everyone?`;
+    if (rejected === "prefix key") approvalComment.commentText = `Question: Switch ${key}-extra to Off?`;
+    if (rejected === "no question mark") approvalComment.commentText = `Switch ${key} to Off`;
     if (rejected === "empty comment") approvalComment.commentText = null;
     if (rejected === "text overridden by commentText") {
       approvalComment.text = approvalComment.commentText;
@@ -258,7 +262,7 @@ for (const rejected of ["missing key", "wrong mode", "empty comment", "text over
     if (rejected === "deleted ticket") approvalComment.task.status = "Deleted";
     if (rejected === "unknown comment") approvalComment = null;
     assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
-      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, and it must name the flag key and the target mode" },
+      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, and it must hold exactly one request: Switch <flag-key> to <mode>?" },
     });
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);

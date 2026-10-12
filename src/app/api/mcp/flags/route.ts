@@ -14,13 +14,15 @@ import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
-// The words an approval comment must contain for each target mode, as the flags page labels them.
+// The approval comment holds exactly one request "Switch <flag-key> to <mode label>?",
+// with the mode labels the flags page shows.
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
   OWNER_AND_QA: "Owner + QA",
   EVERYONE: "Everyone",
   OFF: "Off",
 };
+const SWITCH_REQUEST = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -92,9 +94,11 @@ export async function PATCH(request: NextRequest) {
       select: { commentText: true, text: true },
     });
     const words = comment?.commentText || comment?.text || "";
-    if (!comment || !words.includes(body.key) || !words.includes(MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode])) {
+    const requests = [...words.matchAll(SWITCH_REQUEST)];
+    if (!comment || requests.length !== 1 || requests[0][1] !== body.key
+      || requests[0][2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
       return noStore({
-        error: "Valentin must thumbs-up that comment within 7 days, and it must name the flag key and the target mode",
+        error: "Valentin must thumbs-up that comment within 7 days, and it must hold exactly one request: Switch <flag-key> to <mode>?",
       }, 403);
     }
     const agent = await prisma.agent.findUniqueOrThrow({

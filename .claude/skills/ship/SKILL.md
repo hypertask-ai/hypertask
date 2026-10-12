@@ -51,7 +51,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 
 ## Switching flags from a session (YPER4-215)
 
-Every change needs Valentin's own thumbs up within the last 7 days on the exact approval comment. Post a ticket comment as a `Question:` for Valentin naming the flag key and target mode word: `Only me`, `Owner + QA`, `Everyone` or `Off`. For example: `Question: Switch htpr-6136-figma-connect to Owner + QA?` Wait for him to thumbs-up that comment; his own comment alone is not approval, and agent-made reactions do not count.
+Every change needs Valentin's own thumbs up within the last 7 days on the exact approval comment. Post a ticket comment as a `Question:` for Valentin holding exactly one request `Switch <flag-key> to <mode>?`, where mode is `Only me`, `Owner + QA`, `Everyone` or `Off`; anything else (a refusal, two requests) is refused. For example: `Question: Switch htpr-6136-figma-connect to Owner + QA?` Wait for him to thumbs-up that comment; his own comment alone is not approval, and agent-made reactions do not count.
 Use `.claude/skills/ship/scripts/ht-flag get [KEY]` to read modes with this session's agent identity.
 Then use `.claude/skills/ship/scripts/ht-flag set KEY MODE --reason <ticket URL>#comment-<id>`, for example `.claude/skills/ship/scripts/ht-flag set htpr-6136-figma-connect owner-qa --reason https://app.hypertask.ai/detail/project-4060/215#comment-123`.
 The reason must be exactly `https://app.hypertask.ai/detail/project-<projectId>/<number>#comment-<id>` for that comment. Ticket links without the comment anchor, page links and trailing junk are refused.
