@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
+import { requireRole } from '@/lib/mcp/agents/scopes'
 import { buildFieldError } from '@/lib/mcp/fieldError'
 import {
   archivePage,
@@ -24,6 +25,10 @@ export async function POST(request: NextRequest) {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (ctx.agentId) {
+      const scopeError = await requireRole(ctx, 'write')
+      if (scopeError) return scopeError
     }
 
     const rateLimited = await checkMcpRateLimit(request)

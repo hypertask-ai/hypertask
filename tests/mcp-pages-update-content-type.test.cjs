@@ -73,6 +73,7 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
       validateMcpAuth: async () => authorized ? { user: { id: 99 }, agentId: "test-agent" } : null,
       checkMcpRateLimit: async () => null,
     },
+    "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/utils/controllers/pages/pageService": service,
     "@/utils/controllers/pages/htmlCanvas": canvas,
     "@/utils/controllers/pages/htmlToMarkdown": jiti(path.join(root, "src/utils/controllers/pages/htmlToMarkdown.ts")),
