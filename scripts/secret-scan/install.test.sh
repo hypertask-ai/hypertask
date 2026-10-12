@@ -43,6 +43,11 @@ chmod +x "$tmp/stub/trufflehog"; echo "harmless text" > live.txt; git add live.t
 if PATH="$tmp/stub:$PATH" git commit -qm live 2>"$tmp/err"; then bad "working key blocked"; else
   grep -q Cloudflare "$tmp/err" && ok "working key blocked, type named" || bad "working key blocked, type named"; fi
 git reset -q --hard
+# A symlink replaced by a regular file (a type change) is scanned too.
+ln -s a.txt link; git add link; git commit -qm link
+rm link; echo "harmless text" > link; git add link
+if PATH="$tmp/stub:$PATH" git commit -qm typechange 2>/dev/null; then bad "type-changed file scanned"; else ok "type-changed file scanned"; fi
+git reset -q --hard
 start=$(date +%s); echo three >> a.txt; git commit -qam timing
 echo "# one commit took $(( $(date +%s) - start ))s"
 
