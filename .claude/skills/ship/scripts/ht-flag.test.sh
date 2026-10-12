@@ -37,6 +37,21 @@ reject set "$key" on --reason "$reason"
 reject set "$key" off
 reject set '' off --reason "$reason"
 reject set "$key" off --reason ''
+for bad_reason in \
+  'https://app.hypertask.ai/detail/project-4060/215' \
+  'https://app.hypertask.ai/page/approval#comment-123' \
+  'https://evil.test/detail/project-4060/215#comment-123' \
+  'https://app.hypertask.ai.evil.test/detail/project-4060/215#comment-123' \
+  'https://app.hypertask.ai@evil.test/detail/project-4060/215#comment-123' \
+  'https://app.hypertask.ai/detail/project-4060/215?extra=1#comment-123' \
+  'https://app.hypertask.ai/detail/project-4060/215#comment-0' \
+  'https://app.hypertask.ai/detail/project-4060/215#comment-1000000000' \
+  'https://app.hypertask.ai/detail/project-1000000000/215#comment-123' \
+  'https://app.hypertask.ai/detail/project-4060/1000000000#comment-123' \
+  "${reason}junk" "${reason}?extra=1" "${reason}/extra" "${reason}#extra"; do
+  reject set "$key" off --reason "$bad_reason"
+  rg -q 'Question comment.*flag key and target mode.*#comment-<id>' "$tmp/output"
+done
 reject set "$key" off --reason 'https://app.hypertask.ai/page/approval'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/215/extra'
 reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/2147483648'

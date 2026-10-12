@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must be the ticket link where Valentin approved with his own comment or thumbs up within 7 days'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
 
 dry_run=false
 args=()
@@ -38,13 +38,8 @@ case "$command" in
     reason=$4
     node -e '
       const value = process.argv[1];
-      try {
-        const url = new URL(value);
-        if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d*)\/([1-9]\d*)(?:[?#].*)?$/.test(value)
-          || url.origin !== "https://app.hypertask.ai"
-          || url.pathname.split("/").slice(-2).some(part => Number(part.replace("project-", "")) > 2147483647)) process.exit(1);
-      } catch { process.exit(1); }
-    ' "$reason" || fail 'reason must be the ticket link where Valentin approved with his own comment or thumbs up within 7 days (max 500 characters)'
+      if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.test(value)) process.exit(1);
+    ' "$reason" || fail 'reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>) (max 500 characters)'
     body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
     ;;
   *) usage ;;

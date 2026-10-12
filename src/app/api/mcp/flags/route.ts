@@ -14,6 +14,14 @@ import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
+// The words an approval comment must contain for each target mode, as the flags page labels them.
+const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
+  OWNER_ONLY: "Only me",
+  OWNER_AND_QA: "Owner + QA",
+  EVERYONE: "Everyone",
+  OFF: "Off",
+};
+
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
@@ -62,32 +70,32 @@ export async function PATCH(request: NextRequest) {
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    const ticket = typeof body.reason === "string" && body.reason.length <= 500
-      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d*)\/([1-9]\d*)(?:[?#].*)?$/.exec(body.reason)
+    // The reason names one comment: the ticket link plus #comment-<id>.
+    const link = typeof body.reason === "string" && body.reason.length <= 500
+      ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
       : null;
-    if (typeof body.reason !== "string" || !ticket
-      || [ticket[1], ticket[2]].some((value) => Number(value) > 2147483647)) {
-      return noStore({ error: "Reason must link to a Hypertask ticket" }, 400);
+    if (!link) {
+      return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
     }
-    const now = new Date();
-    const createdAt = { gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000), lte: now };
-    const approved = await prisma.task.findFirst({
+    // Approval is Valentin's own thumbs up, within 7 days, on that comment, and the comment names
+    // this flag key and the target mode, so a refusal or an unrelated yes never counts.
+    const comment = await prisma.comment.findFirst({
       where: {
-        projectId: Number(ticket[1]), uniqueIndex: Number(ticket[2]), status: { not: "Deleted" },
-        OR: [
-          { comments: { some: {
-            creatorId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, createdAt,
-          } } },
-          { reactions: { some: {
-            userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null,
-            isDeleted: false, createdAt, comment: { is: {} },
-          } } },
-        ],
+        id: Number(link[3]),
+        task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
+        reactions: { some: {
+          userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
+          unified: { startsWith: "1f44d" },
+          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+        } },
       },
-      select: { id: true },
+      select: { commentText: true, text: true },
     });
-    if (!approved) {
-      return noStore({ error: "Reason must link to a ticket where Valentin approved this in the last 7 days" }, 403);
+    const words = comment?.commentText || comment?.text || "";
+    if (!comment || !words.includes(body.key) || !words.includes(MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode])) {
+      return noStore({
+        error: "Valentin must thumbs-up that comment within 7 days, and it must name the flag key and the target mode",
+      }, 403);
     }
     const agent = await prisma.agent.findUniqueOrThrow({
       where: { id: ctx.agentId as string },
@@ -97,7 +105,7 @@ export async function PATCH(request: NextRequest) {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
       agentName: agent.displayName,
-      reason: body.reason,
+      reason: body.reason as string,
       source: "api",
     });
     // The locked write supplies the previous mode, not a read that can race another session.
