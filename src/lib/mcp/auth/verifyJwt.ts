@@ -372,6 +372,9 @@ export async function validateJwtToken(token: string, options: ValidateMcpAuthOp
     let agentId: string | null = null
     let agentRuntimeGeneration: number | null = null
     const rawAgentId = decoded.agentId
+    if (Object.hasOwn(decoded, "agentId") && (typeof rawAgentId !== "string" || rawAgentId.trim().length === 0)) {
+      return null
+    }
     const rawAgentTeamId = decoded[AGENT_TEAM_ID_CLAIM]
     const rawAgentTeamAccessBinding = decoded[AGENT_TEAM_ACCESS_BINDING_CLAIM]
     const hasAgentTeamScope =

@@ -144,7 +144,7 @@ export async function GET(request: NextRequest) {
             status: { not: 'Deleted' },
           },
           include: {
-            ...taskMcpGetInclude(ctx.user.id),
+            ...taskMcpGetInclude(ctx.user.id, ctx.agentId),
             pullRequests: {
               orderBy: { createdAt: 'asc' },
               select: {
@@ -229,7 +229,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id);
+    const mappedTask = mapTaskToMcpGetResponse(task, ctx.user.id, ctx.agentId);
     const attributionEnabled = await isFeatureEnabled(
       HTPR_6516_AGENT_ATTRIBUTION_FLAG,
       ctx.user.id

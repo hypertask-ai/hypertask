@@ -8,6 +8,7 @@ import { broadcastBoardChange, broadcastTaskChange } from "@/lib/realtime/server
 import { extractTaskReferencesFromCommentText } from "@/utils/controllers/comments/extractTaskReferences";
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
 // Preserve legacy truthiness checks and all unknown task fields, not a new API policy.
 const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
@@ -28,10 +29,11 @@ export const PUT = taskWriteRoute({
   validateBeforeAuth: true,
   operation: async ({ newTask, agentId }, session) => {
     try {
-      const actingAgentId = typeof agentId === "string" && agentId.length > 0 ? agentId : null;
-      if (agentId != null && !actingAgentId) {
-        return NextResponse.json({ message: "Invalid agent id" }, { status: 400 });
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: agentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
       }
+      const actingAgentId = actingAgent.agentId;
       const [taskToUpdate, sessionUser, ownedAgent] = await Promise.all([
         prisma.task.findUnique({ where: { id: newTask.id }, select: { projectId: true } }),
         prisma.user.findUnique({

@@ -1,3 +1,5 @@
+import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -127,8 +129,17 @@ const visibleInboxSql = (userId: number) => {
 export async function getInboxNotifications(
   userId: number,
   client: typeof prisma = prisma,
+  agentId?: string | null,
 ) {
   const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
+  if (agentId) {
+    return client.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
+      include: notificationInboxInclude(userId, await cachedDescriptionPromise),
+      distinct: ["taskId", "notification_inviteId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
     SELECT selected.id
     FROM (
@@ -171,7 +182,15 @@ export async function getInboxNotifications(
  * DISTINCT ON keeps newest-row selection in PostgreSQL and returns the compact
  * actor/type shape directly.
  */
-const getRecentInboxActorActivity = (userId: number) => {
+const getRecentInboxActorActivity = (userId: number, agentId?: string | null) => {
+  if (agentId) {
+    return prisma.notification.findMany({
+      where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
+      select: { taskId: true, type: true, fromAgentId: true, fromUserId: true, createdAt: true },
+      distinct: ["taskId", "type", "fromAgentId", "fromUserId"],
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+  }
   return prisma.$queryRaw<InboxActorActivityRow[]>(Prisma.sql`
     SELECT DISTINCT ON (n."taskId", n."type", n."fromAgentId", n."fromUserId")
       n."taskId" AS "taskId",
@@ -192,10 +211,12 @@ const getRecentInboxActorActivity = (userId: number) => {
   `);
 };
 
-const notificationGetAll = async (userId: string | string[]) => {
+const notificationGetAll = async (userId: string | string[], agentId?: string | null) => {
   const parsedUserId = parseInt(userId as string);
   try {
-    const inboxWhere = visibleUserInboxWhere(parsedUserId);
+    const inboxWhere: Prisma.NotificationWhereInput = agentId
+      ? { AND: [visibleUserInboxWhere(parsedUserId), notificationBoardAccessWhere(parsedUserId, agentId)] }
+      : visibleUserInboxWhere(parsedUserId);
     const [
       notifications,
       actorActivityRows,
@@ -204,8 +225,8 @@ const notificationGetAll = async (userId: string | string[]) => {
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma),
-      getRecentInboxActorActivity(parsedUserId),
+      getInboxNotifications(parsedUserId, prisma, agentId),
+      getRecentInboxActorActivity(parsedUserId, agentId),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
         select: { taskId: true, type: true, fromAgentId: true },
@@ -219,6 +240,7 @@ const notificationGetAll = async (userId: string | string[]) => {
           fromUserId: parsedUserId,
           type: "Mentioned",
           taskId: { not: null },
+          ...(agentId ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId)] } : {}),
         },
         select: { taskId: true },
         distinct: ["taskId"],
@@ -226,6 +248,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       prisma.task.findMany({
         where: {
           waitingOnUserId: parsedUserId,
+          ...(agentId ? { project: projectContentAccessWhere(parsedUserId, agentId) } : {}),
           status: "Normal",
         },
         orderBy: { waitingOnSetAt: "asc" },
@@ -552,7 +575,8 @@ const notificationGetAll = async (userId: string | string[]) => {
                     seen: false,
                     taskId: { in: taskIdsWithoutReadState },
                     // Rows hidden from the inbox must not show up in its unread count.
-                    NOT: inboxWhere.NOT,
+                    NOT: visibleUserInboxWhere(parsedUserId).NOT,
+                    ...(agentId ? { AND: [notificationBoardAccessWhere(parsedUserId, agentId)] } : {}),
                   },
                   _count: { _all: true },
                 })

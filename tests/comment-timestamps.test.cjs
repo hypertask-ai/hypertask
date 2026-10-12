@@ -93,7 +93,9 @@ test('shared app, MCP, CLI and AI text change persists the edit time without cha
 for (const agentId of [null, 'agent-editor', 'hidden-editor']) {
 test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human'} editor without changing authorship`, async () => {
   const fixture = serviceFixture()
-  fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, members: [] } }
+  fixture.stored.task = { id: 91, projectId: 15, project: { ownerId: 6, teamId: 'team', members: agentId ? [{ agentId, status: 'Accepted', agent: { userId: 6, revokedAt: null } }] : [] } }
+  const { access, matches } = require('./helpers/agent-board-scope.cjs')
+  fixture.prisma.task = { findFirst: async ({ where }) => matches(fixture.stored.task, where) ? { id: 91 } : null }
   fixture.prisma.comment.findUnique = async () => fixture.stored
   const { PATCH } = load('src/lib/mcp/operations/comments/[comment_id]/operation.ts', {
     'next/server': { NextResponse: { json } },
@@ -102,6 +104,7 @@ test(`MCP PATCH editor visibility records and serializes the ${agentId || 'human
       checkMcpRouteRateLimit: async () => null,
       validateMcpRouteAuth: async () => ({ user: { id: 6 }, agentId }),
     },
+    '@/utils/controllers/tasks/assertTaskAccess': require('./task-route-loader.cjs').load('src/utils/controllers/tasks/assertTaskAccess.ts', { '@/lib/prisma': { default: fixture.prisma }, '@/utils/controllers/projects/getAllIncludes': access }),
     '@/lib/mcp/agents': { mapVisibleMcpAgent: () => undefined, mcpVisibleAgentSelect: () => ({}) },
     '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async (ids, userId, projectId) => {
       assert.deepEqual(ids, agentId ? [agentId] : [])

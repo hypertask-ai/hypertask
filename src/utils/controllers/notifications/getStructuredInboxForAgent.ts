@@ -1,3 +1,4 @@
+import { notificationBoardAccessWhere } from "./boardAccess";
 import type { INotification } from "@/models/model";
 import { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -55,6 +56,7 @@ export async function getStructuredInboxForAgent(params: {
   userId: number;
   agentId: string;
   window?: { after: Date | null; through: Date };
+  scopeToAgentBoards?: boolean;
 }): Promise<GetStructuredInboxForAgentResult> {
   const { userId, agentId, window } = params;
 
@@ -65,7 +67,9 @@ export async function getStructuredInboxForAgent(params: {
         notificationsToAgent: {
           // Without this the agent inbox returned archived notifications, and an archived
           // row could shadow a live one because distinct runs after the filter (HTPR-4090).
-          where: agentInboxVisibilityWhere(userId, window),
+          where: params.scopeToAgentBoards
+            ? { AND: [agentInboxVisibilityWhere(userId, window), notificationBoardAccessWhere(userId, agentId)] }
+            : agentInboxVisibilityWhere(userId, window),
           include: notificationInboxInclude(userId),
           orderBy: {
             createdAt: "desc",

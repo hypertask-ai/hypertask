@@ -1,3 +1,4 @@
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -54,6 +55,13 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (ctx.agentId && !(await prisma.project.findFirst({
+      where: { id: projectId, ...taskWriteAccessWhere(ctx.user.id, ctx.agentId) },
+      select: { id: true },
+    }))) {
+      return NextResponse.json({ success: false, error: 'Board not found' }, { status: 404 })
+    }
+
     if (status === 'Deleted') {
       if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })
@@ -65,7 +73,7 @@ export async function POST(request: NextRequest) {
     // Owner only. A member archiving a shared board would take it away from
     // everyone else on it.
     const project = await prisma.project.findFirst({
-      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' } },
+      where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' }, ...(ctx.agentId ? taskWriteAccessWhere(ctx.user.id, ctx.agentId) : {}) },
       select: { id: true, name: true, title: true, status: true },
     })
 

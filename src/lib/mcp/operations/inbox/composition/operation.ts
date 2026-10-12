@@ -1,3 +1,4 @@
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -7,7 +8,7 @@ import { generalConfig } from '@/lib/configs/general.config'
 import {
     evaluateInboxZero,
     inboxZeroDoneNameFallback,
-    loadActiveInboxZeroNotifications,
+    loadActiveInboxZeroNotifications, // trufflehog:ignore - imported function name, not a credential
     loadDoneTitlesByProject,
 } from '@/utils/controllers/notifications/inboxZero'
 import { DEFAULT_INBOX_ZERO_RULES } from '@/lib/inboxZero'
@@ -76,18 +77,15 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        // Team-internal stat: you have to be on the board to see its shape.
-        if (project.ownerId !== ctx.user.id) {
-            const membership = await prisma.member.findFirst({
-                where: { projectId, userId: ctx.user.id, agentId: null },
-                select: { id: true },
-            })
-            if (!membership) {
-                return NextResponse.json(
-                    { success: false, error: 'You are not a member of this project' },
-                    { status: 403 }
-                )
-            }
+        const access = await prisma.project.findFirst({
+            where: { id: projectId, ...projectContentAccessWhere(ctx.user.id, ctx.agentId) },
+            select: { id: true },
+        })
+        if (!access) {
+            return NextResponse.json(
+                { success: false, error: 'You are not a member of this project' },
+                { status: 403 }
+            )
         }
 
         const rows = await prisma.notification.groupBy({
@@ -96,7 +94,10 @@ export async function GET(request: NextRequest) {
                 projectId,
                 status: 'Normal',
                 agentId: null,
-                task: { status: 'Normal' },
+                task: {
+                    status: 'Normal',
+                    ...(ctx.agentId ? { project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } : {}),
+                },
             },
             _count: { _all: true },
         })

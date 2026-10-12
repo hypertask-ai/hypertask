@@ -3,8 +3,8 @@ import { parseCookies } from 'better-auth/cookies'
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
 
 export type SessionUser =
-  | { userId: number; source: 'better-auth' }
-  | { userId: number; source: 'legacy'; needsBridge: true }
+  | { userId: number; agentId?: string; source: 'better-auth' }
+  | { userId: number; agentId?: string; source: 'legacy'; needsBridge: true }
 
 // Resolves the enabled Better Auth session first, then falls back to ht_session.
 export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
@@ -28,8 +28,9 @@ export async function getSessionUser(headers: Headers): Promise<SessionUser | nu
   // Auth would have agreed and reported source:'better-auth'. Confirmed via
   // repo-wide grep that nothing reads SessionUser.source or .needsBridge
   // today, so this is inert. Revisit before enabling if that ever changes.
-  if (process.env.AUTH_LEGACY_FAST_PATH === '1' && legacySession) {
-    return { userId: legacySession.id, source: 'legacy', needsBridge: true }
+  // Internal MCP bridges must not become human sessions via ambient Better Auth cookies.
+  if (legacySession?.agentId || (process.env.AUTH_LEGACY_FAST_PATH === '1' && legacySession)) {
+    return { userId: legacySession.id, ...(legacySession.agentId ? { agentId: legacySession.agentId } : {}), source: 'legacy', needsBridge: true }
   }
 
   if (process.env.BETTER_AUTH_ENABLED === '1') {
