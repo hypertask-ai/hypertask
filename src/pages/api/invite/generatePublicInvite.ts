@@ -24,6 +24,7 @@ export default  async function handler(
 
         const {projectId:projectIdFromParam} = req.query
         const projectId = parseInt(projectIdFromParam as string)
+        if (!projectId) return res.status(400).json({message:"Missing required information"})
         const project = await prisma.project.findUnique({
             where:{
                 id:projectId
@@ -42,6 +43,7 @@ export default  async function handler(
         if (!session) return res.status(401).json({message:"Unauthorized"})
 
         const {projectId} = req.body
+        if (!projectId) return res.status(400).json({message:"Missing required information"})
         const project = await prisma.project.findUnique({
             where:{
                 id:projectId
