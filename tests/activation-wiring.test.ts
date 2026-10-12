@@ -317,16 +317,17 @@ test("HTPR-7162: an invite for one board cannot be used to join a different boar
   assert.equal(h.invites[0].uses, 1);
 });
 
-test("HTPR-7162: used-up or expired invites do not let anyone join", async () => {
+test("HTPR-7162: expired invites do not let anyone join; public links with negative uses still do", async () => {
   const h = activationHarness();
   h.users.set(234, { id: 234, uid: "late", email: "late@example.test" });
   h.projects.get(15).ownerId = 789;
-  h.invites.push({ id: "spent", userId: 123, projectId: 15, expired: false, uses: 0, project: h.projects.get(15) });
   h.invites.push({ id: "old", userId: 123, projectId: 15, expired: false, uses: 1, expiresAt: new Date(Date.now() - 1000), project: h.projects.get(15) });
+  h.invites.push({ id: "public", key: "public", userId: 123, projectId: 15, expired: false, uses: -3, project: h.projects.get(15) });
   const accept = h.load("src/utils/controllers/members/invite.ts").default;
-  assert.equal((await accept(234, 15, "spent")).status, 403);
   assert.equal((await accept(234, 15, "old")).status, 403);
   assert.equal(h.members.some((member) => member.userId === 234), false);
+  assert.equal((await accept(234, 15, "public")).status, 200);
+  assert.equal(h.members.some((member) => member.userId === 234 && member.projectId === 15), true);
 });
 
 test("HTPR-7162: the invite route joins the signed-in user, never a userId from the request body", () => {

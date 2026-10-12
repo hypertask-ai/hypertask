@@ -91,8 +91,9 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
 
                 }
 
-                // HTPR-7162: an invite only opens the board it was made for, while unused and unexpired.
-                if (fetchedInvite.projectId !== Number(projectId) || fetchedInvite.uses < 1
+                // HTPR-7162: an invite only opens the board it was made for, and only before it expires.
+                // Spent personal invites are already marked expired; public links count uses below zero.
+                if (fetchedInvite.projectId !== Number(projectId)
                     || (fetchedInvite.expiresAt && fetchedInvite.expiresAt <= new Date())) {
                     return({status:403, json:{message:"Invite not valid for this board"}})
                 }
