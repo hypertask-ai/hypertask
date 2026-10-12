@@ -39,7 +39,6 @@ const handler: NextApiHandler = async (
     const task = await prisma.task.findFirst({
       where: {
         id: requestedTaskId,
-        status: { not: "Deleted" },
         project: projectContentAccessWhere(userId),
       },
       select: { id: true, projectId: true },
