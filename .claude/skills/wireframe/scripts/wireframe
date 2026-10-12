@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """wireframe - make and publish clickable wireframes on hypertask.app/wireframes.
 
-  wireframe new <TICKET>      copy the full-app base kit to <home>/<TICKET>/index.html
+  wireframe new <TICKET>      copy the full-app base kit (fetched from /wireframes/base if missing)
+                              to <home>/<TICKET>/index.html
   wireframe publish <TICKET> --question "Build this?"
                               upload as waiting, verify, capture PNG, comment and request UX sign-off
   wireframe publish <TICKET> --no-comment
                               upload only as waiting (also the default for BASE)
   wireframe status <TICKET> waiting|approved|rejected
-                              re-upload the local file with its new status
+                              re-upload the published wireframe with its new status
   wireframe base <file>       install a new base kit
   wireframe list             print the list URL
   wireframe remove <TICKET>   delete a published wireframe
@@ -91,6 +92,15 @@ def put(sh, ticket, body, title, turl, status, verify=False):
     return url
 
 
+def fetch(sh, slug):
+    """GET the published /wireframes/<slug> bytes."""
+    import urllib.request
+    h = {"User-Agent": sh.UA, "CF-Access-Client-Id": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_ID", ""),
+         "CF-Access-Client-Secret": sh._CREDS.get("HYPERTASK_APP_CF_CLIENT_SECRET", "")}
+    with urllib.request.urlopen(urllib.request.Request(f"{sh.BASE}/wireframes/{slug.lower()}", headers=h), timeout=30) as response:
+        return response.read()
+
+
 def main():
     a = sys.argv[1:]
     if not a or a[0] in ("-h", "--help"):
@@ -108,8 +118,11 @@ def main():
         print(BASE / "base-kit.html")
     elif cmd == "new":
         kit = BASE / "base-kit.html"
-        if not (arg and kit.is_file()):
-            raise SystemExit("usage: wireframe new <TICKET> (and install a base kit first)")
+        if not arg:
+            raise SystemExit("usage: wireframe new <TICKET>")
+        if not kit.is_file():
+            BASE.mkdir(parents=True, exist_ok=True)
+            kit.write_bytes(fetch(share(), "base"))
         dst = HOME / arg.upper() / "index.html"
         if dst.exists():
             raise SystemExit(f"already exists, edit it in place: {dst}")
@@ -134,11 +147,13 @@ def main():
             if opts.question is not None and not opts.question.strip().endswith("?"):
                 parser.error("--question must end with '?' before uploading")
         f = BASE / "base-kit.html" if base else HOME / t / "index.html"
-        if not f.is_file():
+        if cmd == "publish" and not f.is_file():
             raise SystemExit(f"local file missing: {f}; run: wireframe new {t}")
         title, turl, project_id = ("Base kit: full app", "https://app.hypertask.ai/detail/project-4060/255", 4060) if base else ticket_info(t)
         sh = share()
-        url = put(sh, t, f.read_bytes(), title, turl, opts.status if cmd == "status" else "waiting", verify=comment)
+        # status keeps the published bytes, so an answer never ships unreviewed local edits
+        body = fetch(sh, t) if cmd == "status" else f.read_bytes()
+        url = put(sh, t, body, title, turl, opts.status if cmd == "status" else "waiting", verify=comment)
         if comment:
             png = screenshot(t, f)
             text = (f"<p><strong>Wireframe ready for {html.escape(title)}.</strong></p>"

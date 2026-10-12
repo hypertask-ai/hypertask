@@ -160,6 +160,11 @@ def full_publish(ticket="HTPR-255", move=True, **env):
 
 kit = D / "kit.html"
 kit.write_text('<!doctype html><html><head><title>Local kit</title></head><body><a href="#option">Today</a><button onclick="document.getElementById(\'option\').textContent=\'Approved\'">Option</button><p id="option">Wireframe</p></body></html>')
+(D / "uploaded").write_bytes(b"remote kit")
+p, log = invoke("new", "HTPR-300")
+assert [(e["method"], e["url"]) for e in events(log, "http")] == [("GET", "https://hypertask.app/wireframes/base")]
+assert (home / "base/base-kit.html").read_bytes() == b"remote kit" == (home / "HTPR-300/index.html").read_bytes()
+ok("new downloads the published base kit when none is installed")
 invoke("base", str(kit))
 p, _ = invoke("new", "htpr-255")
 assert Path(p.stdout.strip()) == home / "HTPR-255/index.html"
@@ -191,15 +196,21 @@ full_publish(FAIL_SECTIONS="1")
 full_publish("YPER4-255", move=False, PROJECT_ID="4060", FAIL_SECTIONS="1")
 ok("unknown sections fall back to a move only on board 15")
 
+(home / "HTPR-255/index.html").write_text("unreviewed local edit")
 for status in ("waiting", "approved", "rejected"):
+    (D / "uploaded").write_bytes(b"published reviewed bytes")
     p, log = invoke("status", "HTPR-255", status)
-    assert len(uploaded(log, status)) == 1 and not events(log, "vcc") and not events(log, "npx")
-ok("status re-uploads all three statuses with original ticket headers")
-p, log = invoke("status", "HTPR-999", "approved", fail=True)
-assert "local file missing" in p.stderr and not log
+    calls = events(log, "http")
+    assert [c["method"] for c in calls] == ["GET", "PUT"] and not events(log, "vcc") and not events(log, "npx")
+    h = {k.lower(): v for k, v in calls[1]["headers"].items()}
+    assert h["x-status"] == status and h["x-ticket-url"] == "https://app.hypertask.ai/detail/project-15/255"
+    assert (D / "uploaded").read_bytes() == b"published reviewed bytes"
+ok("status re-uploads the published bytes, never the local file, with original ticket headers")
+p, log = invoke("status", "HTPR-999", "approved", fail=True, FAIL_HTTP="GET")
+assert "stub HTTP failure" in p.stderr and [e["method"] for e in events(log, "http")] == ["GET"]
 p, log = invoke("status", "HTPR-255", "invalid", fail=True)
 assert "invalid choice" in p.stderr and not log
-ok("status rejects missing files and invalid states before upload")
+ok("status of an unpublished wireframe or an invalid state never uploads")
 
 p, log = invoke("publish", "BASE")
 assert len(uploaded(log, "waiting", "BASE", 4060)) == 1
