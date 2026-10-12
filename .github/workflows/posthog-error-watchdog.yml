@@ -1,0 +1,30 @@
+name: PostHog Error Pipeline Watchdog
+
+on:
+  workflow_run:
+    workflows: [PostHog Error Alert, PostHog Error Nightly Canary]
+    types: [completed]
+    branches: [production]
+
+concurrency:
+  group: posthog-pipeline-failure-ticket
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  report:
+    if: contains(fromJSON('["failure","timed_out"]'), github.event.workflow_run.conclusion)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Never execute the failed run's branch code with CI's board token.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+      - name: Record failure directly on the Agents and Infra board
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_FAILED_RUN: ${{ toJSON(github.event.workflow_run) }}
+        run: node .github/scripts/posthog-error-monitor.mjs

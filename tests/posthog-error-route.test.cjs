@@ -117,6 +117,28 @@ test("production trigger without an owner session is a 404 before token checks",
   }
 });
 
+test("production CI canary needs the test secret, accepts only a bounded marker, and does not need owner cookies", async () => {
+  flagEnabled = true;
+  ownerSession = false;
+  try {
+    await withTestToken("operator-token", () => withEnvironment("production", async () => {
+      const headers = new Headers({ "x-posthog-canary": "yper4-331-123-1" });
+      assert.equal((await testPost({ headers })).status, 401);
+      headers.set("x-error-test-token", "wrong");
+      assert.equal((await testPost({ headers })).status, 401);
+      headers.set("x-error-test-token", "operator-token");
+      await assert.rejects(testPost({ headers }), /PostHog pipeline canary yper4-331-123-1/);
+      headers.set("x-posthog-canary", "arbitrary error message");
+      assert.equal((await testPost({ headers })).status, 400);
+    }));
+    await withTestToken("operator-token", () => withEnvironment("preview", async () => {
+      assert.equal((await testPost({ headers: new Headers({ "x-posthog-canary": "yper4-331-123-1", "x-error-test-token": "operator-token" }) })).status, 404);
+    }));
+  } finally {
+    flagEnabled = false;
+  }
+});
+
 test("production trigger with an owner session still needs the operator token", async () => {
   flagEnabled = true;
   ownerSession = true;

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { Webhook } from "svix";
 
 import {
@@ -12,6 +12,7 @@ import {
   claimPostHogAlert,
   commitPostHogAlertClaim,
   parsePostHogExceptionAlert,
+  parsePostHogIssueAlert,
   releasePostHogAlertClaim,
 } from "@/lib/telemetry/posthogErrorAlert";
 
@@ -165,6 +166,37 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.warn("[posthog-error-alert] rejected webhook", error);
     return NextResponse.json({ error: "Invalid webhook" }, { status: 401 });
+  }
+
+  // Native lifecycle alerts are signed by PostHog, not by the originating SDK.
+  const issueAlert = parsePostHogIssueAlert(verified);
+  if (issueAlert) {
+    const configuration = dispatchConfiguration();
+    const redis = await getRedis();
+    const key = `posthog:issue-alert:event:${issueAlert.event_id}`;
+    const owner = randomUUID();
+    if (!(await redis.set(key, owner, "EX", 300, "NX"))) {
+      return (await redis.ttl(key)) <= 300
+        ? NextResponse.json({ error: "Alert is still processing" }, { status: 503 })
+        : new NextResponse(null, { status: 204 });
+    }
+    const payload = { ...issueAlert, dispatched_at: new Date().toISOString() };
+    try {
+      await dispatchWorkflow(configuration.githubWorkflowUrl, {
+        ...payload,
+        dispatch_signature: signWorkflowPayload(payload, requiredEnv("POSTHOG_ALERT_DISPATCH_SECRET")),
+      }, configuration.ref, configuration.githubToken);
+    } catch (error) {
+      await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", 1, key, owner);
+      console.error("[posthog-error-alert] issue dispatch failed", error);
+      return NextResponse.json({ error: "Dispatch failed" }, { status: 503 });
+    }
+    try {
+      await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('EXPIRE', KEYS[1], ARGV[2]) end return 0", 1, key, owner, 7 * 24 * 60 * 60);
+    } catch (error) {
+      console.error("[posthog-error-alert] issue claim commit failed", error);
+    }
+    return new NextResponse(null, { status: 204 });
   }
 
   const alert = parsePostHogExceptionAlert(

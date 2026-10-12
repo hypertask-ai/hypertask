@@ -65,9 +65,9 @@ test("reportError filer uses the plain title and keeps its fingerprint dedupe", 
   assert.match(source, /<h3>Technical details<\/h3>/);
 });
 
-test("incident filer keeps its idempotency key and puts raw details last", () => {
+test("incident filer deduplicates by PostHog issue id and puts plain impact before raw details", () => {
   const source = fs.readFileSync(path.join(__dirname, "../.github/scripts/posthog-error-alert.mjs"), "utf8");
-  assert.match(source, /posthog-incident-\$\{alert\.event_id\}/);
+  assert.match(source, /posthog-issue-\$\{alert\.issue_id\}/);
   assert.doesNotMatch(source, /\[incident\]/);
-  assert.ok(source.indexOf("plainSummary(") < source.indexOf("Technical details"));
+  assert.ok(source.indexOf("plainSummary(") < source.indexOf("Error: <code>"));
 });

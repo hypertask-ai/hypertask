@@ -24,7 +24,7 @@ function appUrlConfig() {
   return parsed.origin;
 }
 
-function productionConfig() {
+export function productionConfig() {
   const projectSlug = requiredConfig("ERROR_ALERT_VERCEL_PROJECT");
   if (!/^[a-z0-9][a-z0-9._-]{0,99}$/i.test(projectSlug)) {
     throw new Error("ERROR_ALERT_VERCEL_PROJECT is invalid");
@@ -40,7 +40,7 @@ const VERCEL_API = "https://api.vercel.com";
 const ROLLBACK_WINDOW_MS = 15 * 60 * 1000;
 const DISPATCH_MAX_AGE_MS = 15 * 60 * 1000;
 
-function escapeHtml(value) {
+export function escapeHtml(value) {
   return String(value)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
@@ -58,33 +58,39 @@ export function validatePostHogPayload(value, now = Date.now()) {
   if (environment !== "production" && environment !== "preview") {
     throw new Error("PostHog alert environment is invalid");
   }
-  if (alertKind !== "new_server_error" && alertKind !== "server_error_spike") {
+  const issueAlert = ["issue_created", "issue_reopened", "issue_spiking"].includes(alertKind);
+  if (!issueAlert && alertKind !== "new_server_error" && alertKind !== "server_error_spike") {
     throw new Error("PostHog alert kind is invalid");
   }
-  if (typeof value.release !== "string" || !/^[0-9a-f]{40}$/i.test(value.release)) {
+  if (!issueAlert && (typeof value.release !== "string" || !/^[0-9a-f]{40}$/i.test(value.release))) {
     throw new Error("PostHog alert release is invalid");
   }
   if (typeof value.event_id !== "string" || !/^[0-9a-f-]{32,64}$/i.test(value.event_id)) {
     throw new Error("PostHog alert event id is invalid");
   }
-  if (typeof value.fingerprint !== "string" || !/^[0-9a-f]{64}$/i.test(value.fingerprint)) {
+  if (!issueAlert && (typeof value.fingerprint !== "string" || !/^[0-9a-f]{64}$/i.test(value.fingerprint))) {
     throw new Error("PostHog alert fingerprint is invalid");
   }
-  if (!Number.isInteger(value.count) || value.count < 1 || value.count > 100_000) {
-    throw new Error("PostHog alert count is invalid");
-  }
-  if (typeof value.name !== "string" || value.name.length < 1 || value.name.length > 120) {
-    throw new Error("PostHog alert name is invalid");
-  }
-  if (typeof value.message !== "string" || value.message.length < 1 || value.message.length > 1000) {
-    throw new Error("PostHog alert message is invalid");
-  }
-  if (typeof value.issue_url !== "string") {
-    throw new Error("PostHog issue URL is invalid");
-  }
-  const issueUrl = new URL(value.issue_url);
-  if (issueUrl.protocol !== "https:" || !["eu.posthog.com", "us.posthog.com"].includes(issueUrl.hostname)) {
-    throw new Error("PostHog issue URL host is invalid");
+  if (issueAlert) {
+    if (typeof value.issue_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value.issue_id)) throw new Error("PostHog issue ID is invalid");
+    if (alertKind === "issue_spiking" && (!Number.isSafeInteger(value.spike_count) || value.spike_count < 1 || !Number.isFinite(value.spike_baseline) || value.spike_baseline < 0)) throw new Error("PostHog spike counts are invalid");
+  } else {
+    if (!Number.isInteger(value.count) || value.count < 1 || value.count > 100_000) {
+      throw new Error("PostHog alert count is invalid");
+    }
+    if (typeof value.name !== "string" || value.name.length < 1 || value.name.length > 120) {
+      throw new Error("PostHog alert name is invalid");
+    }
+    if (typeof value.message !== "string" || value.message.length < 1 || value.message.length > 1000) {
+      throw new Error("PostHog alert message is invalid");
+    }
+    if (typeof value.issue_url !== "string") {
+      throw new Error("PostHog issue URL is invalid");
+    }
+    const issueUrl = new URL(value.issue_url);
+    if (issueUrl.protocol !== "https:" || !["eu.posthog.com", "us.posthog.com"].includes(issueUrl.hostname)) {
+      throw new Error("PostHog issue URL host is invalid");
+    }
   }
   const dispatchedAt = Date.parse(value.dispatched_at);
   if (
@@ -101,8 +107,7 @@ export function validatePostHogPayload(value, now = Date.now()) {
   return {
     ...value,
     dispatched_at: new Date(dispatchedAt).toISOString(),
-    release: value.release.toLowerCase(),
-    fingerprint: value.fingerprint.toLowerCase(),
+    ...(!issueAlert ? { release: value.release.toLowerCase(), fingerprint: value.fingerprint.toLowerCase() } : { issue_id: value.issue_id.toLowerCase() }),
     timestamp: new Date(timestamp).toISOString(),
   };
 }
@@ -121,8 +126,8 @@ export function verifyPostHogPayloadSignature(value, secret) {
   return timingSafeEqual(expected, Buffer.from(signature, "hex"));
 }
 
-async function jsonRequest(fetchImpl, url, options = {}) {
-  const response = await fetchImpl(url, options);
+export async function jsonRequest(fetchImpl, url, options = {}) {
+  const response = await fetchImpl(url, { signal: AbortSignal.timeout(30_000), ...options });
   const text = await response.text();
   let body;
   try {
@@ -153,7 +158,7 @@ async function liveProduction(fetchImpl, token, config) {
   };
 }
 
-function mcpHeaders(token, idempotencyKey) {
+export function mcpHeaders(token, idempotencyKey) {
   return {
     Authorization: `Bearer ${token}`,
     "Content-Type": "application/json",
@@ -162,66 +167,41 @@ function mcpHeaders(token, idempotencyKey) {
 }
 
 function incidentTitle(alert) {
-  const kind = alert.alert_kind === "server_error_spike" ? "spike" : "error";
-  return plainTitle({ kind, url: alert.url, message: alert.message });
+  return plainTitle({ url: alert.url, message: alert.message, source: alert.source });
 }
 
-function rollbackMessage(alert, rollback) {
-  if (!rollback) {
-    if (alert.alert_kind === "server_error_spike") {
-      return "No rollback ran because the current deployment is older than 15 minutes.";
-    }
-    return "No rollback ran because this is the first occurrence.";
-  }
-  if (rollback.action === "not_eligible") {
-    return rollback.reason;
-  }
-  if (rollback.action === "pending") {
-    return "Automatic rollback is running because the spike followed a deployment.";
-  }
-  if (rollback.action === "requested") {
-    return "Production now runs the previous ready release.";
-  }
-  if (rollback.action === "failed") {
-    return `Automatic rollback failed: ${rollback.reason || "unknown failure"}.`;
-  }
-  return `Automatic rollback stopped without changing production: ${rollback.reason || rollback.action}.`;
-}
-
-function incidentDescription(alert, rollback) {
-  const action = rollbackMessage(alert, rollback);
+export function incidentDescription(alert) {
   return (
-    `<p><strong>${escapeHtml(plainSummary({ url: alert.url, message: alert.message }))}</strong></p>` +
+    `<p><strong>${escapeHtml(alert.user_impact || plainSummary({ url: alert.url, message: alert.message, source: alert.source }))}</strong></p>` +
     `<ul>` +
-    `<li>How often: ${alert.count} in five minutes, first seen ${escapeHtml(alert.timestamp)}.</li>` +
-    `<li>How bad: users affected unknown, check PostHog.</li>` +
-    `<li>What to do next: a runner finds the cause, fixes it and rewrites this ticket with specifics.</li>` +
-    `<li>${escapeHtml(action)}</li>` +
+    `<li>Severity: ${escapeHtml(alert.severity)}. ${escapeHtml(alert.severity_reason)}</li>` +
+    `<li>Production hits: ${alert.count ?? "unknown"}. Known users: ${alert.users ?? "unknown"}; ${alert.unidentified_hits ?? "unknown"} hits without a user identity.</li>` +
+    `<li>First seen: ${escapeHtml(alert.timestamp)}. Last seen: ${escapeHtml(alert.last_seen ?? "unknown")}.</li>` +
+    `<li>PostHog issue ID: <code>${escapeHtml(alert.issue_id)}</code></li>` +
+    `<li>Error: <code>${escapeHtml(alert.name)}</code>. ${escapeHtml(alert.message)}</li>` +
+    `<li><a href="${escapeHtml(alert.issue_url)}">Open the issue in PostHog</a></li>` +
     `</ul>` +
-    `<h3>Technical details</h3>` +
-    `<ul>` +
-    `<li>Error: <code>${escapeHtml(alert.name)}</code></li>` +
-    `<li>Message: ${escapeHtml(alert.message)}</li>` +
-    `<li>Release: <code>${escapeHtml(alert.release)}</code></li>` +
-    `<li>Errors in five minutes: ${alert.count}</li>` +
-    `<li><a href="${escapeHtml(alert.issue_url)}">Open the errors in PostHog</a></li>` +
-    `</ul>`
+    (alert.alert_kind === "issue_spiking" ? `<p>PostHog detected a spike: ${alert.spike_count} hits in its detection window, baseline ${alert.spike_baseline}.</p>` : "") +
+    (alert.event_id ? `<p>posthog-alert:${escapeHtml(`${alert.alert_kind}:${alert.event_id}`)}</p>` : "")
   );
 }
 
-async function createIncident(fetchImpl, mcpToken, alert, rollback, config) {
+export async function createIncident(fetchImpl, mcpToken, alert, config) {
   const result = await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/tasks/create`, {
     method: "POST",
-    headers: mcpHeaders(mcpToken, `posthog-incident-${alert.event_id}`),
+    headers: mcpHeaders(mcpToken, `posthog-issue-${alert.issue_id}`),
     body: JSON.stringify({
       project_id: config.boardId,
       section_id: config.bugsSectionId,
       title: incidentTitle(alert),
-      description: incidentDescription(alert, rollback),
+      description: incidentDescription(alert),
+      labels: [config.severityLabels[alert.severity]],
       content_type: "html",
     }),
   });
-  const incidentNumber = result.task?.uniqueIndex;
+  // Create returns TaskDetail, which has ticketNumber but no uniqueIndex.
+  const match = /^HTPR-([1-9][0-9]{0,8})$/.exec(result.task?.ticketNumber || "");
+  const incidentNumber = match ? Number(match[1]) : NaN;
   if (
     !Number.isSafeInteger(incidentNumber) ||
     incidentNumber < 1 ||
@@ -230,23 +210,10 @@ async function createIncident(fetchImpl, mcpToken, alert, rollback, config) {
     throw new Error("Incident response had no valid ticket number");
   }
   return {
+    id: result.task.id,
     number: incidentNumber,
     url: `${config.appUrl}/detail/project-${config.boardId}/${incidentNumber}`,
   };
-}
-
-async function commentOnIncident(fetchImpl, mcpToken, alert, incident, rollback, config) {
-  const text = `<p><strong>${escapeHtml(rollbackMessage(alert, rollback))}</strong></p>`;
-  await jsonRequest(fetchImpl, `${config.appUrl}/api/mcp/comments`, {
-    method: "POST",
-    headers: mcpHeaders(mcpToken, `posthog-rollback-result-${alert.event_id}`),
-    body: JSON.stringify({
-      unique_index: incident.number,
-      project_id: config.boardId,
-      text,
-      content_type: "html",
-    }),
-  });
 }
 
 export async function handlePostHogAlert(
@@ -256,8 +223,14 @@ export async function handlePostHogAlert(
     rollbackImpl = emergencyRollback,
     now = Date.now(),
     vercelToken = process.env.VERCEL_TOKEN || "",
-    mcpToken = process.env.HYPERTASK_MCP_TOKEN || "",
     dispatchSecret = process.env.POSTHOG_ALERT_DISPATCH_SECRET?.trim() || "",
+    mcpToken = process.env.HYPERTASK_MCP_TOKEN || "",
+    apiKey = process.env.POSTHOG_FULL_API_KEY || "",
+    attempt = Number(process.env.POSTHOG_ALERT_ATTEMPT || "1"),
+    githubToken = process.env.GITHUB_TOKEN || "",
+    githubRepository = process.env.GITHUB_REPOSITORY || "",
+    githubRef = process.env.GITHUB_REF_NAME || "",
+    wait,
   } = {},
 ) {
   if (!verifyPostHogPayloadSignature(rawPayload, dispatchSecret)) {
@@ -267,7 +240,28 @@ export async function handlePostHogAlert(
   if (alert.environment === "preview") {
     return { action: "preview_verified", release: alert.release };
   }
-  if (!vercelToken || !mcpToken) throw new Error("Workflow secrets are not configured");
+  if (alert.alert_kind.startsWith("issue_")) {
+    if (!apiKey || !mcpToken) throw new Error("PostHog issue writer credentials are missing");
+    if (!Number.isInteger(attempt) || attempt < 1 || attempt > 3) throw new Error("PostHog alert attempt must be between 1 and 3");
+    const { readProductionIssue, severityLabels, upsertIssue } = await import("./posthog-error-issues.mjs");
+    const issue = await readProductionIssue(fetchImpl, apiKey, alert.issue_id, { wait });
+    if (issue.action === "skip") return issue;
+    if (issue.action === "retry") {
+      if (attempt === 3) throw new Error("PostHog issue has no exceptions in any environment after 3 attempts; pipeline watchdog must investigate ingestion lag");
+      if (!githubToken || !/^[\w.-]+\/[\w.-]+$/.test(githubRepository) || !githubRef) throw new Error("PostHog delayed retry GitHub configuration is missing or invalid");
+      await jsonRequest(fetchImpl, `https://api.github.com/repos/${githubRepository}/actions/workflows/posthog-error-alert.yml/dispatches`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${githubToken}`, "Content-Type": "application/json", Accept: "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" },
+        // Relay the original signed object, not the timestamp-normalized alert.
+        body: JSON.stringify({ ref: githubRef, inputs: { posthog_payload: JSON.stringify(rawPayload), attempt: String(attempt + 1) } }),
+      });
+      return { action: "retry_dispatched", attempt: attempt + 1, reason: issue.reason };
+    }
+    const config = productionConfig();
+    return upsertIssue(fetchImpl, mcpToken, { ...config, severityLabels: await severityLabels(fetchImpl, mcpToken, config) }, { ...alert, ...issue });
+  }
+  if (alert.alert_kind === "new_server_error") return { action: "rollback_not_needed" };
+  if (!vercelToken) throw new Error("VERCEL_TOKEN is not configured");
   const config = productionConfig();
 
   const live = await liveProduction(fetchImpl, vercelToken, config);
@@ -293,42 +287,12 @@ export async function handlePostHogAlert(
           : "No rollback ran because the current deployment is older than 15 minutes.",
     };
   }
-  const pending = rollbackEligible ? { action: "pending" } : initialRollback;
-  const [incidentResult, rollbackResult] = await Promise.allSettled([
-    createIncident(fetchImpl, mcpToken, alert, pending, config),
-    rollbackEligible
-      ? rollbackImpl(alert.release, vercelToken, fetchImpl)
-      : Promise.resolve(initialRollback),
-  ]);
-  let rollback;
-  if (rollbackResult.status === "fulfilled") {
-    rollback = rollbackResult.value;
-  } else {
-    const reason =
-      rollbackResult.reason instanceof Error
-        ? rollbackResult.reason.message
-        : "rollback failed";
-    rollback = { action: "failed", reason };
-  }
-  const incident = incidentResult.status === "fulfilled"
-    ? incidentResult.value
-    : undefined;
-
-  const comments = [];
-  if (rollbackEligible && incident) {
-    comments.push(commentOnIncident(fetchImpl, mcpToken, alert, incident, rollback, config));
-  }
-  const commentResults = await Promise.allSettled(comments);
-  const commentFailure = commentResults.find(
-    (result) => result.status === "rejected",
-  );
-  if (commentFailure?.status === "rejected") {
-    throw commentFailure.reason;
-  }
-  if (incidentResult.status === "rejected") {
-    throw incidentResult.reason;
-  }
-  return { action: "alerted", incident, rollback };
+  // Only native issue alerts write tickets. Keep the signed exception path rollback-only.
+  const rollback = rollbackEligible
+    ? await rollbackImpl(alert.release, vercelToken, fetchImpl)
+    : initialRollback;
+  if (rollback?.action === "failed") throw new Error("PostHog emergency rollback failed");
+  return { action: "rollback_checked", rollback };
 }
 
 async function main() {
@@ -338,5 +302,8 @@ async function main() {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  await main();
+  main().catch((error) => {
+    console.error(`::error::PostHog alert failed: ${error instanceof Error ? error.message : "signature or rollback check failed"}`);
+    process.exitCode = 1;
+  });
 }

@@ -7,10 +7,14 @@ on:
         description: Signed PostHog error payload relayed by the app
         required: false
         default: ""
+      attempt:
+        description: Ingestion retry attempt (maximum 3)
+        required: false
+        default: "1"
 
 concurrency:
-  # Alerts must not queue behind health checks or unrelated error alerts.
-  # The receiver's Redis claim stops duplicate dispatches for the same alert.
+  # A shared issue group drops intermediate pending lifecycle alerts.
+  # The writer reconciles racing creates by issue ID instead.
   group: ${{ format('posthog-error-{0}', github.run_id) }}
   cancel-in-progress: false
 
@@ -23,19 +27,23 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.posthog_payload != ''
     permissions:
       contents: read
+      actions: write
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Create an incident and roll back a fresh server-error spike
+      - name: File native issue alerts and guard fresh server-error rollbacks
         env:
           ERROR_ALERT_APP_URL: https://app.hypertask.ai
           ERROR_ALERT_BOARD_ID: "15"
           ERROR_ALERT_BUGS_SECTION_ID: "4389"
           ERROR_ALERT_VERCEL_PROJECT: hypertasks-prod
           HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_FULL_API_KEY: ${{ secrets.POSTHOG_FULL_API_KEY }}
           POSTHOG_ALERT_DISPATCH_SECRET: ${{ secrets.POSTHOG_ALERT_DISPATCH_SECRET }}
           POSTHOG_ALERT_PAYLOAD: ${{ inputs.posthog_payload }}
+          POSTHOG_ALERT_ATTEMPT: ${{ inputs.attempt }}
+          GITHUB_TOKEN: ${{ github.token }}
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
         run: node .github/scripts/posthog-error-alert.mjs
