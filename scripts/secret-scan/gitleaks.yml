@@ -30,12 +30,10 @@ jobs:
             range="$PR_BASE_SHA..$PR_HEAD_SHA"
           else
             # A push scans only the commits it adds. A new branch (or an unknown previous tip
-            # after a force push) scans everything not already on the default branch.
+            # after a force push) scans everything not already on the default branch; on the
+            # default branch itself that means its whole history.
             range="origin/$DEFAULT_BRANCH..$PUSH_HEAD_SHA"
-            if [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ]; then
-              range="$PUSH_HEAD_SHA~1..$PUSH_HEAD_SHA"
-              git cat-file -e "$PUSH_HEAD_SHA~1^{commit}" 2>/dev/null || range="$PUSH_HEAD_SHA"
-            fi
+            [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ] && range="$PUSH_HEAD_SHA"
             if [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
               && git cat-file -e "$PUSH_BEFORE_SHA^{commit}" 2>/dev/null; then
               range="$PUSH_BEFORE_SHA..$PUSH_HEAD_SHA"

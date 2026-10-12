@@ -1,7 +1,7 @@
 #!/bin/sh
 # Installs the commit-time key scan for every repo of this user (YPER4-324). Safe to rerun.
 #   global git hooks path -> ~/.config/git/hooks (scan, then each repo's own hook)
-#   husky repos           -> ~/.config/husky/init.sh
+#   husky repos           -> one line in ~/.config/husky/init.sh that sources husky-init.sh
 set -e
 src=$(cd "$(dirname "$0")" && pwd)
 config="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -12,17 +12,21 @@ if [ -n "$current" ] && [ "$current" != "$hooks" ]; then
   exit 1
 fi
 mkdir -p "$hooks" "$config/husky"
-cp "$src/scan-staged" "$src/git-hook" "$hooks/"
+cp "$src/scan-staged" "$src/git-hook" "$src/husky-init.sh" "$hooks/"
 chmod +x "$hooks/scan-staged" "$hooks/git-hook"
+# Every hook name git looks up in core.hooksPath, so each repo's own hooks keep running.
 for name in applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit \
   prepare-commit-msg commit-msg post-commit pre-rebase post-checkout post-merge pre-push \
-  post-rewrite reference-transaction push-to-checkout pre-auto-gc sendemail-validate; do
+  pre-receive update proc-receive post-receive post-update reference-transaction \
+  push-to-checkout pre-auto-gc post-rewrite sendemail-validate fsmonitor-watchman \
+  p4-changelist p4-prepare-changelist p4-post-changelist p4-pre-submit post-index-change; do
   ln -sf git-hook "$hooks/$name"
 done
-if [ -f "$config/husky/init.sh" ] && ! grep -q 'YPER4-324' "$config/husky/init.sh"; then
-  echo "install: $config/husky/init.sh exists with other content; add husky-init.sh to it by hand." >&2
-else
-  cp "$src/husky-init.sh" "$config/husky/init.sh"
+# Husky v9 repos set their own hooks path; husky sources init.sh before each of their hooks.
+line='. "${XDG_CONFIG_HOME:-$HOME/.config}/git/hooks/husky-init.sh" # YPER4-324 key scan'
+init="$config/husky/init.sh"
+if ! grep -qF "$line" "$init" 2>/dev/null; then
+  printf '%s\n' "$line" >> "$init"
 fi
 git config --global core.hooksPath "$hooks"
 echo "install: key scan active for every commit (hooks in $hooks)."

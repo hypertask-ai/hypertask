@@ -15,9 +15,12 @@ bad() { echo "not ok - $1"; fail=1; }
 # A random AWS-shaped id; ids ending in EXAMPLE are allowlisted by gitleaks.
 fake="AKIA$(LC_ALL=C tr -dc 'A-Z2-7' </dev/urandom | head -c 16)"
 
+mkdir -p "$XDG_CONFIG_HOME/husky"; echo 'export CUSTOM_INIT=1' > "$XDG_CONFIG_HOME/husky/init.sh"
 sh "$src/install" >/dev/null || bad "install runs"
 [ "$(git config --global core.hooksPath)" = "$XDG_CONFIG_HOME/git/hooks" ] && ok "global hooks path set" || bad "global hooks path set"
 sh "$src/install" >/dev/null && ok "install is rerunnable" || bad "install is rerunnable"
+grep -q CUSTOM_INIT "$XDG_CONFIG_HOME/husky/init.sh" && ok "existing husky init.sh kept" || bad "existing husky init.sh kept"
+[ "$(grep -c 'YPER4-324' "$XDG_CONFIG_HOME/husky/init.sh")" = 1 ] && ok "husky init line added once" || bad "husky init line added once"
 
 git init -q "$tmp/repo"; cd "$tmp/repo"
 echo hello > a.txt; git add a.txt
@@ -31,6 +34,12 @@ git reset -q --hard
 printf '#!/bin/sh\necho ran > "%s/own"\n' "$tmp" > .git/hooks/post-commit; chmod +x .git/hooks/post-commit
 echo two >> a.txt; git commit -qam two
 [ -f "$tmp/own" ] && ok "repo's own hook still runs" || bad "repo's own hook still runs"
+
+# A repo path with a space, whose .gitleaks.toml allowlists the fake key.
+git init -q "$tmp/my repo"; cd "$tmp/my repo"
+printf '[extend]\nuseDefault = true\n[allowlist]\nregexes = ['"'''%s'''"']\n' "$fake" > .gitleaks.toml
+echo "aws_access_key_id = $fake" > b.txt; git add .gitleaks.toml b.txt
+git commit -qm allowed 2>/dev/null && ok "repo .gitleaks.toml allowlist applies" || bad "repo .gitleaks.toml allowlist applies"
 
 # Husky v9 sets a local hooks path and sources init.sh before each hook (copy of its .husky/_/h).
 git init -q "$tmp/husky"; cd "$tmp/husky"
