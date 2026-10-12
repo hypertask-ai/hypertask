@@ -226,10 +226,13 @@ async function reportErrorTicket(report: ErrorReport) {
 }
 
 export async function reportError(report: ErrorReport) {
-  // Both reporters absorb their own failures. Starting them together keeps a
-  // slow analytics request from delaying the durable error-ticket path.
-  await Promise.all([
-    capturePostHogException(report),
-    reportErrorTicket(report),
-  ]);
+  // PostHog issue alerts file one Bugs ticket per error. The older ticket path
+  // only runs when PostHog did not get the error, so nothing is filed twice
+  // (YPER4-334). Both reporters absorb their own failures.
+  const captured = await capturePostHogException(report);
+  if (captured) {
+    trace("posthog-captured");
+    return;
+  }
+  await reportErrorTicket(report);
 }
