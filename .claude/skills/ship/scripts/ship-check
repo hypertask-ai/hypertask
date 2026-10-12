@@ -800,7 +800,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved
+  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
@@ -834,6 +834,8 @@ guard() {
         SHIP_CHECKOUT|SHIP_WORKER) printf -v "$setting" '%s' "$unquoted" ;;
       esac
     done
+    # A cd earlier in the command means the hook cwd no longer names the merge repo.
+    [[ $rest =~ ^(cd|pushd|popd)([[:space:]]|$) ]] && moved=true
     # Unparseable assignment prefixes must not hide a protected command.
     if [[ $seg =~ ^[[:space:]]*[^[:space:]]*= && ! $rest =~ ^$merge && ! $rest =~ ^$done \
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
@@ -842,9 +844,9 @@ guard() {
     # PR merge: the PR must be named right and its ticket must exist.
     if [[ $rest =~ ^$merge ]]; then
       # Only a positively resolved foreign repo may bypass the Hypertask checks.
-      target=$(python3 - "$rest" "$cwd" "$REPO" "$explicit" <<'PY'
+      target=$(python3 - "$rest" "$cwd" "$REPO" "$explicit" "$moved" <<'PY'
 import re, shlex, subprocess, sys
-command, cwd, repo, explicit = sys.argv[1:]
+command, cwd, repo, explicit, moved = sys.argv[1:]
 try:
     tokens = shlex.split(command, comments=True)
     flag = False
@@ -862,9 +864,12 @@ try:
         elif token.startswith('-R'):
             repo = token[2:].removeprefix('=')
             flag = True
+        elif url := re.fullmatch(r'(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/pull/\d+(?:[/?#].*)?', token, re.I):
+            repo = url[1]
+            flag = True
     if not flag and explicit != 'true':
-        if not cwd:
-            raise ValueError('missing cwd')
+        if not cwd or moved == 'true':
+            raise ValueError('missing or changed cwd')
         repo = subprocess.check_output(['git', '-C', cwd, 'remote', 'get-url', 'origin'],
                                        stderr=subprocess.DEVNULL, text=True).strip()
         remote = re.fullmatch(r'(?:https?://(?:[^/@]+@)?|ssh://(?:[^/@]+@)?|git://|git@)github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?', repo, re.I)
@@ -874,7 +879,7 @@ try:
     repo = re.sub(r'^github\.com/', '', repo, flags=re.I)
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
         raise ValueError('unparseable repo')
-    print(repo)
+    print(repo.lower())
 except (ValueError, IndexError, OSError, subprocess.CalledProcessError):
     sys.exit(1)
 PY
