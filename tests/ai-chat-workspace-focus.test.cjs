@@ -18,8 +18,8 @@ test("Control+Q switches between docked AI chat and the active workspace", () =>
   assert.match(layout, /tabIndex=\{-1\}/);
   assert.equal(
     layout.match(/data-ai-workspace/g)?.length,
-    2,
-    "both the mobile-detail and normal workspace wrappers should be marked"
+    1,
+    "mobile-detail and normal workspaces share one stable marked wrapper"
   );
   assert.match(sidebar, /data-ai-chat-panel/);
   assert.match(hook, /lastWorkspaceFocusRef/);
