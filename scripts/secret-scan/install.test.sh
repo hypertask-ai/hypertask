@@ -37,6 +37,15 @@ echo "| CF API token | in ~/.bashrc (value \`$cf\`) |" > notes.md; git add notes
 if git commit -qm leak 2>/dev/null; then bad "Cloudflare token in markdown blocked"; else ok "Cloudflare token in markdown blocked"; fi
 git reset -q --hard
 
+# A key trufflehog proves still works (a stub stands in for the live check).
+mkdir -p "$tmp/stub"; printf '#!/bin/sh\necho "{\\"DetectorName\\":\\"Cloudflare\\"}"\nexit 183\n' > "$tmp/stub/trufflehog"
+chmod +x "$tmp/stub/trufflehog"; echo "harmless text" > live.txt; git add live.txt
+if PATH="$tmp/stub:$PATH" git commit -qm live 2>"$tmp/err"; then bad "working key blocked"; else
+  grep -q Cloudflare "$tmp/err" && ok "working key blocked, type named" || bad "working key blocked, type named"; fi
+git reset -q --hard
+start=$(date +%s); echo three >> a.txt; git commit -qam timing
+echo "# one commit took $(( $(date +%s) - start ))s"
+
 printf '#!/bin/sh\necho ran > "%s/own"\n' "$tmp" > .git/hooks/post-commit; chmod +x .git/hooks/post-commit
 echo two >> a.txt; git commit -qam two
 [ -f "$tmp/own" ] && ok "repo's own hook still runs" || bad "repo's own hook still runs"
