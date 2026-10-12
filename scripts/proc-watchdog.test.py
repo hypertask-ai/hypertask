@@ -2,6 +2,7 @@
 """Tests for proc-watchdog.py (YPER4-278). Real throwaway processes, scoped to a temp dir so nothing else is touched."""
 import json
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -55,7 +56,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     def start_all():
         test = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid')])
         server = subprocess.Popen(['node', str(t / 'server.js')])
-        shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'])
+        shell = subprocess.Popen(['bash', '-c', f'sleep 300; echo {tmp} next build'], start_new_session=True)
         session = subprocess.Popen([str(t / 'claude'), '-c', 'import time; time.sleep(300)', f'{tmp}/tests/x.test.cjs'])
         premerge = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(300)', f'{tmp}/scripts/premerge-local-search.mjs'])
         # A worktree premerge server: no premerge path, only the PREMERGE_LOCAL=1 marker in its environment.
@@ -98,7 +99,11 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('INFRA MANAGER warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
           and 'stopped 3 runaway' in (t / 'notify.msg').read_text())
     for p in (server, shell, session):
-        p.kill()
+        # Killing just bash leaves its sleep child holding the test runner's output pipe.
+        if p is shell:
+            os.killpg(p.pid, signal.SIGKILL)
+        else:
+            p.kill()
     for f in ('notify.msg', 'notify.target', 'child.pid'):
         (t / f).unlink(missing_ok=True)
 
@@ -112,7 +117,10 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     check('server still running under the memory rule', alive(procs[1]))
     for p in list(procs[:5]) + procs_extra:
         if alive(p):
-            p.kill()
+            if p is procs[2]:
+                os.killpg(p.pid, signal.SIGKILL)
+            else:
+                p.kill()
 
     # 5. Secrets in command lines never reach the log or the warning.
     sec = subprocess.Popen(['node', str(t / 'tests/hang.test.cjs'), str(t / 'child.pid'), '--token=abc123secret'])
