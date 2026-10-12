@@ -1,0 +1,28 @@
+#!/bin/sh
+# Installs the commit-time key scan for every repo of this user (YPER4-324). Safe to rerun.
+#   global git hooks path -> ~/.config/git/hooks (scan, then each repo's own hook)
+#   husky repos           -> ~/.config/husky/init.sh
+set -e
+src=$(cd "$(dirname "$0")" && pwd)
+config="${XDG_CONFIG_HOME:-$HOME/.config}"
+hooks="$config/git/hooks"
+current=$(git config --global --get core.hooksPath || true)
+if [ -n "$current" ] && [ "$current" != "$hooks" ]; then
+  echo "install: global core.hooksPath is already $current; refusing to replace it." >&2
+  exit 1
+fi
+mkdir -p "$hooks" "$config/husky"
+cp "$src/scan-staged" "$src/git-hook" "$hooks/"
+chmod +x "$hooks/scan-staged" "$hooks/git-hook"
+for name in applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit \
+  prepare-commit-msg commit-msg post-commit pre-rebase post-checkout post-merge pre-push \
+  post-rewrite reference-transaction push-to-checkout pre-auto-gc sendemail-validate; do
+  ln -sf git-hook "$hooks/$name"
+done
+if [ -f "$config/husky/init.sh" ] && ! grep -q 'YPER4-324' "$config/husky/init.sh"; then
+  echo "install: $config/husky/init.sh exists with other content; add husky-init.sh to it by hand." >&2
+else
+  cp "$src/husky-init.sh" "$config/husky/init.sh"
+fi
+git config --global core.hooksPath "$hooks"
+echo "install: key scan active for every commit (hooks in $hooks)."

@@ -1,0 +1,45 @@
+# Copied into every repo agents push to by scripts/secret-scan in hypertask-ai/hypertask (YPER4-324).
+name: Gitleaks
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan:
+    name: secret-scan
+    runs-on: ubuntu-latest
+    # Deleting a branch adds no commits, so there is nothing to scan.
+    if: github.event_name != 'push' || !github.event.deleted
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Run gitleaks
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PUSH_HEAD_SHA: ${{ github.sha }}
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz gitleaks
+          if [ -n "$PR_BASE_SHA" ]; then
+            # A pull request scans only the commits it adds.
+            range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          else
+            # A push scans only the commits it adds. A new branch (or an unknown previous tip
+            # after a force push) scans everything not already on the default branch.
+            range="origin/$DEFAULT_BRANCH..$PUSH_HEAD_SHA"
+            if [ "$GITHUB_REF_NAME" = "$DEFAULT_BRANCH" ]; then
+              range="$PUSH_HEAD_SHA~1..$PUSH_HEAD_SHA"
+              git cat-file -e "$PUSH_HEAD_SHA~1^{commit}" 2>/dev/null || range="$PUSH_HEAD_SHA"
+            fi
+            if [ -n "$PUSH_BEFORE_SHA" ] && [ "$PUSH_BEFORE_SHA" != "0000000000000000000000000000000000000000" ] \
+              && git cat-file -e "$PUSH_BEFORE_SHA^{commit}" 2>/dev/null; then
+              range="$PUSH_BEFORE_SHA..$PUSH_HEAD_SHA"
+            fi
+          fi
+          echo "Scanning $range"
+          ./gitleaks detect --no-banner --source . --redact --log-opts "$range"
