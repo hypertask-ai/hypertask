@@ -1,4 +1,5 @@
 import membersShare from "@/utils/controllers/members/share";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 const handler: NextApiHandler = async (
@@ -7,14 +8,19 @@ const handler: NextApiHandler = async (
 ) => {
   if (req.method === "POST") {
     try {
-      const { userId, shareId } = req.body;
-      if (!userId || !shareId) {
+      // HTPR-7178: the joining user is the signed-in user, never a userId from the body.
+      const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
+      if (!session) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const { shareId } = req.body;
+      if (!shareId) {
         return res
           .status(400)
           .json({ message: "Missing required information" });
       }
 
-      const response = await membersShare(userId, shareId);
+      const response = await membersShare(session.userId, shareId);
       return res.status(200).json(response.json);
     } catch (error) {
       console.log(error);
