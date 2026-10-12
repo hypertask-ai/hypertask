@@ -12,6 +12,8 @@ import { EyeOff } from "lucide-react";
 import { ModalBody } from 'reactstrap';
 import { useRecoilState } from '@/lib/state';
 import { moveTaskToDifferentBoardAPI } from '@/lib/constants/APIRouteConstants';
+import { useFlag } from '@/hooks/useFlag';
+import { HTPR_7053_COMPOSE_BOARD_CHIP_FLAG } from '@/lib/flags/keys';
 
 interface ICreateTask {
     projectId: number;
@@ -28,9 +30,15 @@ interface IScreens {
 
 type IProps = {
     closeHTC: () => void;
+    onSelectBoard?: (boardId: number) => void;
+    boards?: IProject[];
 }
 const MoveTaskGlobal = (props: IProps) => {
-    const { data: data, isLoading } = useGetAllProjectsMinimal(["projectsAllMinimal"])
+    const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+    const composeBoardPicker = boardChipEnabled && Boolean(props.onSelectBoard);
+    const projects = useGetAllProjectsMinimal(["projectsAllMinimal"], undefined, { enabled: !composeBoardPicker });
+    const data = composeBoardPicker ? props.boards : projects.data;
+    const isLoading = composeBoardPicker ? !props.boards : projects.isLoading;
     const [inViewObject, __] = useRecoilState(inViewObjectAtom);
 
     const router = useRouter()
@@ -119,6 +127,11 @@ const MoveTaskGlobal = (props: IProps) => {
     // ========================================== HANDLE ENTER FROM SCREENS FOR CALLBACK ========================
     const handleCallBackFromScreens = (currentScreenValue: number, nextScreenValue: number | null, callbackIndexorString: string | number) => {
 
+        if (composeBoardPicker && currentScreenValue === 0) {
+            const board = data?.[callbackIndexorString as number];
+            if (board) props.onSelectBoard?.(board.id);
+            return;
+        }
         // if callback is from first screen 
         if (currentScreenValue === 0) {
             formik.setValues({
@@ -162,6 +175,8 @@ const MoveTaskGlobal = (props: IProps) => {
                     {/* ===========  based on the selected screen, show the form and results ==================== */}
                     <FilterableMenuScreen
                         screenCallback={handleCallBackFromScreens}
+                        composeBoardPicker={composeBoardPicker}
+                        onClose={props.closeHTC}
                         {...currentScreen}
                     />
                 </>
@@ -180,9 +195,13 @@ export default MoveTaskGlobal;
 
 interface FilterableMenuScreenProps {
     screenCallback: (currentScreenValue: number, nextScreenValue: number | null, indexOfSelectedRow: string | number) => void;
+    composeBoardPicker?: boolean;
+    onClose?: () => void;
 }
 
-const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ title, data, value, next, prev, screenCallback }) => {
+const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ title, data, value, next, prev, screenCallback, composeBoardPicker = false, onClose }) => {
+    const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
+    const composePicker = boardChipEnabled && composeBoardPicker;
 
     // =================== useStates
     const [keyword, setKeyword] = useState<string>("");
@@ -195,6 +214,27 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
 
     // ========================= key down functions =================
     const handleKeyDown = (e: KeyboardEvent) => {
+        if (composePicker) {
+            if (e.isComposing) return;
+            if (e.key === "Escape") {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                onClose?.();
+                return;
+            }
+            if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                setSelectedIndex(index => Math.max(0, Math.min((filteredData?.length ?? 0) - 1, index + (e.key === "ArrowDown" ? 1 : -1))));
+                return;
+            }
+            if (e.key === "j" || e.key === "k") return;
+            if (e.key === "Enter") {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                if (!filteredData?.[selectedIndex]) return;
+            }
+        }
         if (e.key === "Tab") {
             e.preventDefault()
             return
@@ -270,9 +310,13 @@ const FilterableMenuScreen: React.FC<FilterableMenuScreenProps & IScreens> = ({ 
 
     // ============================== handle keydown use effect
     useEffect(() => {
-        document.addEventListener('keydown', handleKeyDown);
-        return () => document.removeEventListener('keydown', handleKeyDown);
-    }, [document.activeElement, keyword, selectedIndex, filteredData, value]);
+        document.addEventListener('keydown', handleKeyDown, composePicker);
+        return () => document.removeEventListener('keydown', handleKeyDown, composePicker);
+    }, [document.activeElement, keyword, selectedIndex, filteredData, value, composePicker, onClose]);
+
+    useEffect(() => {
+        if (composePicker) document.getElementById(`command-${selectedIndex}`)?.scrollIntoView({ block: 'nearest' });
+    }, [composePicker, selectedIndex]);
 
     // ============================== onKeyword change
 

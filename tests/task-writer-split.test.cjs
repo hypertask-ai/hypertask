@@ -301,7 +301,7 @@ test("actual composer send caches every saved ticket and publishes the complete 
   assert.ok(send);
   const cache = [], intros = [], navigations = [];
   const context = {
-    enabled: true, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, sending: { current: false }, pendingImages: { current: 0 }, dictating: false, text: multiPrompt,
     files: [], showProgress: false, composer: { current: null }, setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {},
     setError(error) { if (error) throw new Error(error); }, taskContextRef: { current: null }, newTaskWindow: true, destinationProject: board,
     window: { location: { pathname: "/project", href: "https://app.hypertask.ai/project?id=15" } }, inView: null,
