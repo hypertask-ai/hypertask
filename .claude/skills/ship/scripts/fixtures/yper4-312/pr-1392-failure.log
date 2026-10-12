@@ -1,0 +1,22 @@
+2026-10-11T21:53:04.5223856Z test at tests/htpr-6971-chat-history-paging.test.cjs:774:1
+2026-10-11T21:53:04.5224316Z ✖ active newer summary automatically refreshes its transcript while preserving pending local writes (212.199459ms)
+2026-10-11T21:53:04.5224703Z   AssertionError [ERR_ASSERTION]: Expected values to be strictly deep-equal:
+2026-10-11T21:53:04.5224937Z   + actual - expected
+2026-10-11T21:53:04.5225186Z     [
+2026-10-11T21:53:04.5225310Z   +   'remote-active',
+2026-10-11T21:53:04.5225451Z       'pending-active',
+2026-10-11T21:53:04.5225591Z   -   'remote-active'
+2026-10-11T21:53:04.5225720Z     ]
+2026-10-11T21:53:04.5226308Z       at /home/runner/work/hypertask/hypertask/tests/htpr-6971-chat-history-paging.test.cjs:782:12
+2026-10-11T21:53:04.5226749Z       at async withHistory (/home/runner/work/hypertask/hypertask/tests/htpr-6971-chat-history-paging.test.cjs:74:5)
+2026-10-11T21:53:04.5227392Z       at async TestContext.<anonymous> (/home/runner/work/hypertask/hypertask/tests/htpr-6971-chat-history-paging.test.cjs:776:3)
+2026-10-11T21:53:04.5227760Z       at async Test.run (node:internal/test_runner/test:1409:7)
+2026-10-11T21:53:04.5228050Z       at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+2026-10-11T21:53:04.5228284Z     generatedMessage: true,
+2026-10-11T21:53:04.5228437Z     code: 'ERR_ASSERTION',
+2026-10-11T21:53:04.5228616Z     actual: [ 'remote-active', 'pending-active' ],
+2026-10-11T21:53:04.5228832Z     expected: [ 'pending-active', 'remote-active' ],
+2026-10-11T21:53:04.5229026Z     operator: 'deepStrictEqual',
+2026-10-11T21:53:04.5229182Z     diff: 'simple'
+2026-10-11T21:53:04.5229304Z   }
+2026-10-11T21:53:04.5512253Z ##[error]Process completed with exit code 1.
