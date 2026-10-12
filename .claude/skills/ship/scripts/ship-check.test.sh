@@ -69,6 +69,75 @@ G 2 $M 838 -R hypertask-ai/hypertask '&&' $M 822 -R hypertask-ai/hypertask
 G 0 grep "$M" notes.txt
 unset -f gh
 
+# Repo scope is determined from the hook cwd, not the guard process cwd.
+for repo in app foreign cli no-origin slack mixed; do git init -q "$E/$repo"; done
+git -C "$E/mixed" remote add origin https://github.com/Hypertask-AI/hypertask.git
+git -C "$E/slack" remote add origin https://github.com/valentinyeo/ht-slack.git
+git -C "$E/app" remote add origin https://github.com/hypertask-ai/hypertask.git
+git -C "$E/foreign" remote add origin git@github.com:valentinyeo/endless-testing.git
+git -C "$E/cli" remote add origin ssh://git@github.com/hypertask-ai/cli.git
+export SCOPE_LOG="$E/scope-log"
+mkdir -p "$E/scope-bin"
+cat > "$E/scope-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+prev=""
+for arg in "$@"; do
+  [ "$prev" != -R ] || printf '%s\n' "$arg" >> "$SCOPE_LOG"
+  prev=$arg
+done
+echo 'Invalid PR title'
+MOCK
+chmod +x "$E/scope-bin/gh"
+R() {
+  local want=$1 cwd=$2 repo=$3 cmd=$4 out got; shift 4
+  : > "$SCOPE_LOG"
+  out=$(jq -nc --arg c "$cmd" --arg d "$cwd" '{tool_input:{command:$c},cwd:$d}' \
+    | env -u SHIP_REPO PATH="$E/scope-bin:$PATH" "$@" ./ship-check guard 2>&1); got=$?
+  if [ "$got" = "$want" ] && [ "$(cat "$SCOPE_LOG")" = "$repo" ]; then ok "repo scope: $got $cmd"
+  else bad "repo scope: want $want $repo got $got $(cat "$SCOPE_LOG") $out"; fi
+  if [[ $repo == hypertask-ai/hypertask && ( $cwd == "$E/no-origin" || -z $cwd ) ]]; then
+    if [[ $out == *'Target repo could not be resolved'* && $out == *'-R owner/repo or SHIP_REPO=owner/repo'* ]]; then
+      ok 'unresolved target has actionable diagnostic'
+    else bad "unresolved target diagnostic: $out"; fi
+  fi
+}
+R 0 "$E/app" '' "$M 20 -R valentinyeo/endless-testing --squash"
+R 2 "$E/foreign" hypertask-ai/hypertask "$M 822 -R hypertask-ai/hypertask"
+R 0 "$E/foreign" '' "echo YPER4-197 && $M 20 --squash"
+R 2 "$E/cli" hypertask-ai/cli "$M 822"
+R 2 "$E/slack" hypertask-ai/slack "$M 822"
+R 2 "$E/mixed" hypertask-ai/hypertask "$M 822"
+R 2 "$E/foreign" hypertask-ai/hypertask "cd $E/app && $M 822"
+R 2 "$E/foreign" hypertask-ai/hypertask "pushd $E/app; $M 822"
+R 2 "$E/foreign" hypertask-ai/hypertask "builtin cd $E/app && $M 822"
+R 2 "$E/foreign" hypertask-ai/hypertask "command cd $E/app; $M 822"
+R 2 "$E/app" hypertask-ai/hypertask "$M 822 --squash <<< 'https://github.com/valentinyeo/endless-testing/pull/20'"
+R 2 "$E/app" hypertask-ai/hypertask "$M 822 --body https://github.com/valentinyeo/endless-testing/pull/20"
+R 0 "$E/foreign" '' "cd $E/app && $M 20 -R valentinyeo/endless-testing"
+R 2 "$E/foreign" '' "$M https://github.com/hypertask-ai/hypertask/pull/822"
+R 0 "$E/app" '' "$M https://github.com/valentinyeo/endless-testing/pull/20"
+R 2 "$E/app" hypertask-ai/slack "$M 822 -R valentinyeo/ht-slack"
+R 2 "$E/foreign" valentinyeo/endless-testing "SHIP_REPO=valentinyeo/endless-testing $M 822"
+R 2 "$E/foreign" valentinyeo/endless-testing "$M 822" SHIP_REPO=valentinyeo/endless-testing
+R 2 "$E/app" valentinyeo/endless-testing "$M 822 -R valentinyeo/endless-testing" SHIP_REPO=hypertask-ai/cli
+R 2 "$E/app" hypertask-ai/cli "SHIP_REPO=valentinyeo/endless-testing $M 822 -R hypertask-ai/cli"
+R 2 "$E/no-origin" hypertask-ai/hypertask "$M 822"
+R 2 '' hypertask-ai/hypertask "$M 822"
+R 2 "$E/app" hypertask-ai/hypertask "$M 822"
+R 2 "$E/app" hypertask-ai/hypertask "$M 822 # -R valentinyeo/endless-testing"
+for flag in '-Rvalentinyeo/endless-testing' '--repo=valentinyeo/endless-testing' '--repo "valentinyeo/endless-testing"'; do
+  R 0 "$E/app" '' "$M 20 $flag"
+done
+for flag in '-R"hypertask-ai/hypertask"' '--repo=hypertask-ai/hypertask' '--repo "github.com/hypertask-ai/hypertask"'; do
+  R 2 "$E/foreign" hypertask-ai/hypertask "$M 822 $flag"
+done
+for odd in '-R' '--repo=' '-R --repo valentinyeo/endless-testing' "-R \"\$UNKNOWN\"" '-R "unterminated'; do
+  R 2 "$E/app" hypertask-ai/hypertask "$M 822 $odd"
+done
+R 2 "$E/foreign" hypertask-ai/hypertask "$M 20 -R valentinyeo/endless-testing && $M 822 -R hypertask-ai/hypertask"
+R 0 "$E/foreign" '' "SHIP_REPO=hypertask-ai/cli echo hi && $M 20"
+R 2 "$E/foreign" '' "$M 20 && vcc task move YPER4-999 $DONE"
+
 # No real open PR is needed to test the unmerged gate.
 gh() {
   if [[ ${1:-} == pr && ${2:-} == view && ${3:-} == 809 && "$*" == *'--json number,title,state,mergeCommit,baseRefName'* ]]; then

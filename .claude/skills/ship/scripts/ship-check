@@ -800,7 +800,7 @@ check_premerge_status() (
 )
 
 guard() {
-  local cmd seg rest t c pr out checks setting v part unquoted
+  local cmd seg rest t c pr out checks setting v part unquoted input cwd target explicit unresolved moved=false
   local fragment="(\"[^\"]*\"|'[^']*'|[^[:space:]\"']+)" assignment
   assignment="^([A-Za-z_][A-Za-z0-9_]*)=($fragment*)[[:space:]]+"
   local checkout=${SHIP_CHECKOUT:-} worker=${SHIP_WORKER:-}
@@ -808,11 +808,16 @@ guard() {
   export SHIP_CHECKOUT SHIP_WORKER
   local merge='gh[[:space:]]+pr[[:space:]]+merge([[:space:]]|$)'
   local done="vcc[[:space:]]+tasks?[[:space:]]+move[[:space:]]+[\"']?((HTPR|HYFA|YPER4)-[0-9]+)[\"']?[[:space:]].*--section[[:space:]=]+[\"']?Done"
-  cmd=$(jq -r '.tool_input.command // empty')
+  input=$(cat)
+  cmd=$(jq -er '.tool_input.command | select(type == "string")' <<<"$input") || {
+    echo "ship-check blocked: cannot read the hook command." >&2; exit 2;
+  }
+  cwd=$(jq -r '.cwd | if type == "string" then . else "" end' <<<"$input")
   # Reset to process defaults so segment overrides cannot leak into later commands.
   while IFS= read -r seg; do
     REPO=${SHIP_REPO:-hypertask-ai/hypertask}; BASE=${SHIP_BASE:-production}
     SHIP_CHECKOUT=$checkout; SHIP_WORKER=$worker
+    explicit=false; [ "${SHIP_REPO+x}" != x ] || explicit=true
     [[ $seg =~ ^[[:space:]]* ]]; rest=${seg:${#BASH_REMATCH[0]}}
     while [[ $rest =~ $assignment ]]; do
       setting=${BASH_REMATCH[1]}; v=${BASH_REMATCH[2]}
@@ -824,11 +829,14 @@ guard() {
         unquoted+=$part
       done
       case $setting in
-        SHIP_REPO) REPO=$unquoted ;;
+        SHIP_REPO) REPO=$unquoted; explicit=true ;;
         SHIP_BASE) BASE=$unquoted ;;
         SHIP_CHECKOUT|SHIP_WORKER) printf -v "$setting" '%s' "$unquoted" ;;
       esac
     done
+    # A cd earlier in the command means the hook cwd no longer names the merge repo.
+    # Any cd word counts (builtin cd, command cd, env ... cd): fail closed, never guess.
+    [[ $rest =~ (^|[[:space:]\"\'])(cd|pushd|popd)([[:space:]\"\']|$) ]] && moved=true
     # Unparseable assignment prefixes must not hide a protected command.
     if [[ $seg =~ ^[[:space:]]*[^[:space:]]*= && ! $rest =~ ^$merge && ! $rest =~ ^$done \
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
@@ -836,12 +844,64 @@ guard() {
     fi
     # PR merge: the PR must be named right and its ticket must exist.
     if [[ $rest =~ ^$merge ]]; then
-      [[ $seg =~ (-R|--repo)[[:space:]=]+([^[:space:]]+) ]] && REPO=${BASH_REMATCH[2]}
+      # Only a positively resolved foreign repo may bypass the Hypertask checks.
+      target=$(python3 - "$rest" "$cwd" "$REPO" "$explicit" "$moved" <<'PY'
+import re, shlex, subprocess, sys
+command, cwd, repo, explicit, moved = sys.argv[1:]
+try:
+    tokens = shlex.split(command, comments=True)
+    flag = False
+    for i, token in enumerate(tokens):
+        if token == '--':
+            break
+        if token in ('-R', '--repo'):
+            repo = tokens[i + 1]
+            if repo.startswith('-'):
+                raise ValueError('missing repo flag value')
+            flag = True
+        elif token.startswith('--repo='):
+            repo = token.split('=', 1)[1]
+            flag = True
+        elif token.startswith('-R'):
+            repo = token[2:].removeprefix('=')
+            flag = True
+        # Only the PR argument right after `gh pr merge` names a repo; URLs elsewhere
+        # (redirections, here-strings, flag values) are not the merge target.
+        elif i == 3 and (url := re.fullmatch(r'(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/pull/\d+(?:[/?#].*)?', token, re.I)):
+            repo = url[1]
+            flag = True
+    if not flag and explicit != 'true':
+        if not cwd or moved == 'true':
+            raise ValueError('missing or changed cwd')
+        repo = subprocess.check_output(['git', '-C', cwd, 'remote', 'get-url', 'origin'],
+                                       stderr=subprocess.DEVNULL, text=True).strip()
+        remote = re.fullmatch(r'(?:https?://(?:[^/@]+@)?|ssh://(?:[^/@]+@)?|git://|git@)github\.com[:/]([A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+?)(?:\.git)?/?', repo, re.I)
+        if not remote:
+            raise ValueError('unreadable GitHub origin')
+        repo = remote[1]
+    repo = re.sub(r'^github\.com/', '', repo, flags=re.I)
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo):
+        raise ValueError('unparseable repo')
+    print(repo.lower())
+except (ValueError, IndexError, OSError, subprocess.CalledProcessError):
+    sys.exit(1)
+PY
+      ) || target=""
+      unresolved=""
+      if [ -z "$target" ]; then
+        REPO=hypertask-ai/hypertask
+        unresolved=" Target repo could not be resolved; name it with -R owner/repo or SHIP_REPO=owner/repo."
+      else
+        REPO=$target
+        # valentinyeo/ht-slack moved to hypertask-ai/slack; old checkouts still name it.
+        [[ ${REPO,,} == valentinyeo/ht-slack ]] && REPO=hypertask-ai/slack
+        [[ ${REPO,,} == hypertask-ai/* || $explicit == true ]] || continue
+      fi
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
-      [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number." >&2; exit 2; }
-      out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist)." >&2; exit 2; }
-      out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }." >&2; exit 2; }
-      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging." >&2; exit 2; }
+      [ -n "$pr" ] || { echo "ship-check blocked the merge: name the PR number.$unresolved" >&2; exit 2; }
+      out=$(check_title "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Retitle the PR to PREFIX-NNNN [TYPE] ... (create the ticket via vcc if it does not exist).$unresolved" >&2; exit 2; }
+      out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
+      out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging.$unresolved" >&2; exit 2; }
     fi
     # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
