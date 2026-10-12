@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must be the ticket link where Valentin approved with his own comment or thumbs up within 7 days'; }
 
 dry_run=false
 args=()
@@ -40,11 +40,11 @@ case "$command" in
       const value = process.argv[1];
       try {
         const url = new URL(value);
-        if (value.length > 500 || !value.startsWith("https://app.hypertask.ai/")
+        if (value.length > 500 || !/^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d*)\/([1-9]\d*)(?:[?#].*)?$/.test(value)
           || url.origin !== "https://app.hypertask.ai"
-          || !(url.pathname.startsWith("/detail/") || url.pathname.startsWith("/page/"))) process.exit(1);
+          || url.pathname.split("/").slice(-2).some(part => Number(part.replace("project-", "")) > 2147483647)) process.exit(1);
       } catch { process.exit(1); }
-    ' "$reason" || fail 'reason must link to a Hypertask ticket or page (max 500 characters)'
+    ' "$reason" || fail 'reason must be the ticket link where Valentin approved with his own comment or thumbs up within 7 days (max 500 characters)'
     body=$(jq -nc --arg key "$key" --arg mode "$mode" --arg reason "$reason" '{key:$key,mode:$mode,reason:$reason}')
     ;;
   *) usage ;;

@@ -345,7 +345,7 @@ export async function isFeatureEnabled(
 }
 
 export async function listFeatureFlagModes(
-  options: { includeTicketTitles?: boolean } = {},
+  options: { includeTicketTitles?: boolean; includeLastChange?: boolean } = {},
 ): Promise<FeatureFlagRow[]> {
   const stored = (
     await prisma.featureFlag.findMany({
@@ -368,10 +368,11 @@ export async function listFeatureFlagModes(
     ]),
   );
   stored.forEach((row) => byKey.set(row.key, withFeatureFlagMetadata(row, ticketTitleByNumber)));
+  if (!options.includeLastChange) return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
   const changes = await prisma.featureFlagChange.findMany({
     where: { key: { in: [...byKey.keys()] } },
     distinct: ["key"],
-    orderBy: [{ key: "asc" }, { createdAt: "desc" }, { id: "desc" }],
+    orderBy: [{ key: "asc" }, { id: "desc" }],
     select: {
       key: true, oldMode: true, newMode: true, agentName: true, reason: true, createdAt: true,
       user: { select: { displayName: true, email: true } },

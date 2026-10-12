@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
+import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_MODES,
   FeatureFlagInputError,
@@ -13,12 +14,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function noStore(body: unknown, status = 200) {
-  const response = NextResponse.json(body, { status });
-  response.headers.set("Cache-Control", "private, no-store");
-  return response;
-}
 
 function trustedOrigin(request: NextRequest) {
   const origin = request.headers.get("origin");
@@ -37,7 +32,7 @@ export async function GET(request: NextRequest) {
     if (!(await isFeatureFlagOwner(request.headers))) {
       return noStore({ error: "Not found" }, 404);
     }
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true });
     return noStore({ flags, detailsEnabled: true });
   } catch (error) {
     console.error("[feature-flags] admin read failed", error);

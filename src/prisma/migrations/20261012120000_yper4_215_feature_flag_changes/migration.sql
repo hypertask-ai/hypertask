@@ -1,6 +1,6 @@
 -- YPER4-215: retain the actor and reason for page and API flag mode changes.
 CREATE TABLE IF NOT EXISTS "FeatureFlagChange" (
-  "id" TEXT NOT NULL,
+  "id" SERIAL NOT NULL,
   "key" TEXT NOT NULL,
   "oldMode" "FeatureFlagMode",
   "newMode" "FeatureFlagMode" NOT NULL,

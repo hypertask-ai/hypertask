@@ -27,7 +27,8 @@ stubModule("src/lib/flags.ts", {
     if (authFails) throw new Error("auth unavailable");
     return userId === 6;
   },
-  listFeatureFlagModes: async () => {
+  listFeatureFlagModes: async (options) => {
+    assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true });
     reads += 1;
     return [
       {

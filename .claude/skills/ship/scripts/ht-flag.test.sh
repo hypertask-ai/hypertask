@@ -21,7 +21,6 @@ for pair in 'off OFF' 'everyone EVERYONE' 'owner-qa OWNER_AND_QA' 'only-me OWNER
   "$script" set "$key" "$input" --reason "$reason" --dry-run | jq -e --arg mode "$expected" --arg reason "$reason" --arg key "$key" \
     '.method == "PATCH" and .body == {key:$key,mode:$mode,reason:$reason}' >/dev/null
 done
-"$script" set "$key" off --reason 'https://app.hypertask.ai/page/approval' --dry-run | jq -e '.body.reason == "https://app.hypertask.ai/page/approval"' >/dev/null
 
 reject() {
   if "$script" "$@" --dry-run >"$tmp/output" 2>&1; then
@@ -38,6 +37,9 @@ reject set "$key" on --reason "$reason"
 reject set "$key" off
 reject set '' off --reason "$reason"
 reject set "$key" off --reason ''
+reject set "$key" off --reason 'https://app.hypertask.ai/page/approval'
+reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/215/extra'
+reject set "$key" off --reason 'https://app.hypertask.ai/detail/project-4060/2147483648'
 reject set "$key" off --reason 'http://app.hypertask.ai/detail/project-4060/215'
 reject set "$key" off --reason 'https://evil.test/detail/project-4060/215'
 reject set "$key" off --reason 'https://app.hypertask.ai.evil.test/detail/project-4060/215'

@@ -19,14 +19,14 @@ const prisma = {
   featureFlagChange: {
     create: async ({ data }) => {
       if (auditFails) throw new Error("audit unavailable");
-      const change = { id: String(changes.length), createdAt: new Date(), reason: null, ...data };
+      const change = { id: changes.length + 1, createdAt: new Date(), reason: null, ...data };
       changes.push(change);
       return { ...change, user: usersById.get(data.userId) };
     },
     findMany: async (query) => {
       changeQueries.push(query);
       const byKey = new Map();
-      for (const change of [...changes].sort((a, b) => b.createdAt - a.createdAt)) {
+      for (const change of [...changes].sort((a, b) => b.id - a.id)) {
         if (query.where.key.in.includes(change.key) && !byKey.has(change.key)) {
           const { key, oldMode, newMode, agentName, reason, createdAt, userId } = change;
           byKey.set(key, { key, oldMode, newMode, agentName, reason, createdAt, user: usersById.get(userId) });
@@ -1205,7 +1205,6 @@ test("every registered flag has a valid kind and only registered explicit relate
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
-
 test("typed property writes default Owner + QA and respect OFF", async () => {
   const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
   assert.equal(key, "htpr-6975-typed-writes");
@@ -1360,7 +1359,7 @@ test("owner userId check requires both the owner id and registered email", async
 
 test("actor mode changes are audited inside the locked transaction, including an unstored default", async () => {
   const key = "htpr-6136-figma-connect";
-  const actor = { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: "https://app.hypertask.ai/page/approval", source: "api" };
+  const actor = { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: "https://app.hypertask.ai/detail/project-4060/215", source: "api" };
   const order = [];
   const originalLock = prisma.$executeRaw;
   const originalCreate = prisma.featureFlagChange.create;
@@ -1414,19 +1413,27 @@ test("listing uses one latest-per-key audit query with agent, display name and e
   listedRows = keys.map((key) => ({ key, mode: "OFF" }));
   usersById.set(7, { displayName: "Page owner", email: "page@example.test" });
   changes = [
-    { key: keys[0], oldMode: "EVERYONE", newMode: "OFF", userId: 6, agentName: "Runner 3", reason: "https://app.hypertask.ai/page/approval", createdAt: new Date("2026-10-12T14:05:00Z") },
-    { key: keys[0], oldMode: null, newMode: "EVERYONE", userId: 6, agentName: "Old runner", reason: null, createdAt: new Date("2026-10-11T14:05:00Z") },
-    { key: keys[1], oldMode: null, newMode: "OFF", userId: 7, agentName: null, reason: null, createdAt: new Date() },
-    { key: keys[2], oldMode: "OWNER_ONLY", newMode: "OFF", userId: 6, agentName: null, reason: null, createdAt: new Date() },
+    { id: 4, key: keys[0], oldMode: "EVERYONE", newMode: "OFF", userId: 6, agentName: "Runner 3", reason: "https://app.hypertask.ai/detail/project-4060/215", createdAt: new Date("2026-10-12T14:05:00Z") },
+    { id: 3, key: keys[0], oldMode: null, newMode: "EVERYONE", userId: 6, agentName: "Old runner", reason: null, createdAt: new Date("2026-10-12T14:05:00Z") },
+    { id: 2, key: keys[1], oldMode: null, newMode: "OFF", userId: 7, agentName: null, reason: null, createdAt: new Date() },
+    { id: 1, key: keys[2], oldMode: "OWNER_ONLY", newMode: "OFF", userId: 6, agentName: null, reason: null, createdAt: new Date() },
   ];
-  const listed = await flags.listFeatureFlagModes();
+  const listed = await flags.listFeatureFlagModes({ includeLastChange: true });
   assert.equal(changeQueries.length, 1);
   assert.deepEqual(changeQueries[0].distinct, ["key"]);
-  assert.deepEqual(changeQueries[0].orderBy, [{ key: "asc" }, { createdAt: "desc" }, { id: "desc" }]);
+  assert.deepEqual(changeQueries[0].orderBy, [{ key: "asc" }, { id: "desc" }]);
   assert.deepEqual(listed.find(({ key }) => key === keys[0]).lastChange, {
     oldMode: "EVERYONE", newMode: "OFF", actorName: "Runner 3", reason: changes[0].reason, createdAt: changes[0].createdAt,
   });
   assert.equal(listed.find(({ key }) => key === keys[1]).lastChange.actorName, "Page owner");
   assert.equal(listed.find(({ key }) => key === keys[2]).lastChange.actorName, "valentin.yeo@gmail.com");
   assert.equal(listed.find(({ key }) => !keys.includes(key)).lastChange, null);
+});
+
+test("listing skips audit queries unless lastChange is explicitly requested", async () => {
+  for (const options of [{}, { includeTicketTitles: true }, { includeLastChange: false }]) {
+    const listed = await flags.listFeatureFlagModes(options);
+    assert.equal(changeQueries.length, 0);
+    assert.equal(listed.some((row) => Object.hasOwn(row, "lastChange")), false);
+  }
 });

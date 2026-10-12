@@ -51,7 +51,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 
 ## Switching flags from a session (YPER4-215)
 
-Every change needs Valentin's recorded yes; the reason URL must link to the ticket comment recording it.
+Every change needs Valentin's recorded yes within the last 7 days. The reason must be an `https://app.hypertask.ai/detail/project-<projectId>/<number>` ticket link where he approved with his own comment or his thumbs up on a comment. Agent-authored comments and reactions do not count; page links are refused.
 Use `.claude/skills/ship/scripts/ht-flag get [KEY]` to read modes with this session's agent identity.
 Use `.claude/skills/ship/scripts/ht-flag set KEY owner-qa --reason https://app.hypertask.ai/detail/project-4060/215#comment-ID` after approval.
 Modes: `off`, `everyone`, `owner-qa`, `only-me`, or the real enum names; add `--dry-run` to inspect without sending.

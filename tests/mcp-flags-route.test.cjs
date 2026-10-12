@@ -19,6 +19,8 @@ let broadcasts;
 let broadcastFails;
 let writeError;
 let previousMode;
+let approvalTicket;
+let approvalQueries;
 class FeatureFlagInputError extends Error {}
 const key = "htpr-6136-figma-connect";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
@@ -32,11 +34,12 @@ stubModule("src/lib/mcp/auth.ts", {
   },
 });
 stubModule("src/lib/flags.ts", {
+  FEATURE_FLAG_OWNER_USER_ID: 6,
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FeatureFlagInputError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
-  listFeatureFlagModes: async (options) => { calls.push("list"); assert.equal(options.includeTicketTitles, true); return rows; },
+  listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true }); return rows; },
   setFeatureFlagMode: async (...args) => {
     writes.push(args);
     if (writeError) throw writeError;
@@ -48,6 +51,35 @@ stubModule("src/lib/flags.ts", {
 });
 stubModule("src/lib/prisma.ts", {
   default: {
+    task: {
+      findFirst: async (query) => {
+        calls.push("approval");
+        approvalQueries.push(query);
+        assert.deepEqual(query.select, { id: true });
+        assert.equal(query.where.projectId, 4060);
+        assert.equal(query.where.uniqueIndex, 215);
+        assert.deepEqual(query.where.status, { not: "Deleted" });
+        const comment = query.where.OR[0].comments.some;
+        const reaction = query.where.OR[1].reactions.some;
+        assert.deepEqual({ ...comment, createdAt: undefined }, {
+          creatorId: 6, agentId: null, agentDisplayName: null, createdAt: undefined,
+        });
+        assert.deepEqual({ ...reaction, createdAt: undefined }, {
+          userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
+          comment: { is: {} }, createdAt: undefined,
+        });
+        assert.equal(comment.createdAt.lte - comment.createdAt.gte, 7 * 24 * 60 * 60 * 1000);
+        assert.deepEqual(reaction.createdAt, comment.createdAt);
+        if (!approvalTicket || approvalTicket.status === "Deleted") return null;
+        const recentHuman = (row, filter) => row.agentId === filter.agentId
+          && row.agentDisplayName === filter.agentDisplayName
+          && row.createdAt >= filter.createdAt.gte && row.createdAt <= filter.createdAt.lte;
+        const approved = approvalTicket.comments.some(row => row.creatorId === comment.creatorId && recentHuman(row, comment))
+          || approvalTicket.reactions.some(row => row.userId === reaction.userId && !row.isDeleted
+            && row.commentId != null && recentHuman(row, reaction));
+        return approved ? { id: 987 } : null;
+      },
+    },
     agent: {
       findUniqueOrThrow: async (query) => {
         assert.deepEqual(query, { where: { id: "runner-3" }, select: { displayName: true } });
@@ -80,6 +112,8 @@ test.beforeEach(() => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
+  approvalQueries = [];
+  approvalTicket = { comments: [{ creatorId: 6, agentId: null, agentDisplayName: null, createdAt: new Date() }], reactions: [] };
 });
 
 for (const method of ["GET", "PATCH"]) {
@@ -116,7 +150,7 @@ test("GET returns all flags or a single flag and 404 for an unknown key", async 
   assert.equal((await result(await GET(request("GET", undefined, "?key=missing")))).status, 404);
 });
 
-for (const badReason of [undefined, null, "", "not a URL", "http://app.hypertask.ai/detail/project-4060/215", "https://evil.test/detail/approval", "https://app.hypertask.ai.evil.test/page/approval", "https://app.hypertask.ai@evil.test/page/approval", "https://app.hypertask.ai/admin/flags", "https://app.hypertask.ai/detail/../admin/flags", "https://app.hypertask.ai/page/" + "a".repeat(500)]) {
+for (const badReason of [undefined, null, "", "not a URL", "http://app.hypertask.ai/detail/project-4060/215", "https://evil.test/detail/approval", "https://app.hypertask.ai.evil.test/page/approval", "https://app.hypertask.ai@evil.test/page/approval", "https://app.hypertask.ai/admin/flags", "https://app.hypertask.ai/page/approval", "https://app.hypertask.ai/detail/project-4060/215/extra", "https://app.hypertask.ai/detail/project-4060/2147483648", "https://app.hypertask.ai/detail/../admin/flags", "https://app.hypertask.ai/page/" + "a".repeat(500)]) {
   test(`PATCH rejects invalid reason ${JSON.stringify(badReason)}`, async () => {
     assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason: badReason })))).status, 400);
     assert.equal(writes.length, 0);
@@ -144,12 +178,12 @@ test("PATCH passes the authenticated actor, returns previous mode and broadcasts
   assert.equal(response.body.previousMode, "OWNER_AND_QA");
   assert.deepEqual(writes, [[key, "OFF", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
   assert.equal(broadcasts, 1);
-  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent"]);
+  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "approval", "agent"]);
 });
 
-test("PATCH accepts a page reason and handles an unstored default or unchanged mode", async () => {
+test("PATCH handles an unstored default or unchanged mode", async () => {
   previousMode = null;
-  const changed = await result(await PATCH(request("PATCH", { key, mode: "OFF", reason: "https://app.hypertask.ai/page/approval" })));
+  const changed = await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })));
   assert.equal(changed.status, 200);
   assert.equal(changed.body.previousMode, "OWNER_AND_QA");
   previousMode = undefined;
@@ -171,3 +205,43 @@ test("PATCH hides internal errors", async (t) => {
   writeError = new Error("database unavailable");
   assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), { status: 500, body: { error: "Unable to update feature flag" } });
 });
+
+test("PATCH accepts recent approval by the owner's own comment", async () => {
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+  assert.equal(approvalQueries.length, 1);
+});
+
+test("PATCH accepts recent approval by the owner's reaction on a comment", async () => {
+  approvalTicket.comments = [];
+  approvalTicket.reactions = [{ userId: 6, agentId: null, agentDisplayName: null, commentId: 123, isDeleted: false, createdAt: new Date() }];
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+  assert.equal(approvalQueries.length, 1);
+});
+
+for (const rejected of ["agent comment", "deleted agent comment", "agent reaction", "deleted agent reaction", "old comment", "old reaction", "future comment", "unknown ticket", "deleted ticket", "other user comment", "other user reaction", "deleted reaction", "description reaction"]) {
+  test(`PATCH refuses approval from ${rejected}`, async () => {
+    const comment = approvalTicket.comments[0];
+    const reaction = { userId: 6, agentId: null, agentDisplayName: null, commentId: 123, isDeleted: false, createdAt: new Date() };
+    if (rejected.includes("reaction")) { approvalTicket.comments = []; approvalTicket.reactions = [reaction]; }
+    if (rejected === "agent comment") comment.agentId = "runner-3";
+    if (rejected === "deleted agent comment") comment.agentDisplayName = "Deleted agent";
+    if (rejected === "agent reaction") reaction.agentId = "runner-3";
+    if (rejected === "deleted agent reaction") reaction.agentDisplayName = "Deleted agent";
+    if (rejected === "old comment") comment.createdAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000 - 1000);
+    if (rejected === "old reaction") reaction.createdAt = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000 - 1000);
+    if (rejected === "future comment") comment.createdAt = new Date(Date.now() + 1000);
+    if (rejected === "other user comment") comment.creatorId = 7;
+    if (rejected === "other user reaction") reaction.userId = 7;
+    if (rejected === "deleted reaction") reaction.isDeleted = true;
+    if (rejected === "description reaction") reaction.commentId = null;
+    if (rejected === "deleted ticket") approvalTicket.status = "Deleted";
+    if (rejected === "unknown ticket") approvalTicket = null;
+    assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
+      status: 403, body: { error: "Reason must link to a ticket where Valentin approved this in the last 7 days" },
+    });
+    assert.equal(writes.length, 0);
+    assert.equal(broadcasts, 0);
+    assert.equal(calls.includes("agent"), false);
+    assert.equal(approvalQueries.length, 1);
+  });
+}
