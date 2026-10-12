@@ -39,6 +39,19 @@ test('BUGFIX modifies existing UI without signoff but cannot add an unapproved e
   assert.match(result.description, /NewThing.*yes by name/);
 });
 
+test('REFACTOR that deletes a flag definition skips the wireframe but cannot add an unapproved element', async () => {
+  const flagFile = { filename: 'src/lib/flags/definitions/htpr-6553-agent-chat-polling.ts', status: 'removed' };
+  const refactor = 'HTPR-7145 [REFACTOR] Remove feature flag htpr-6553-agent-chat-polling';
+  assert.equal((await decision({ title: refactor, files: [modified, flagFile] })).state, 'success');
+  const withNew = await decision({ title: refactor, files: [modified, flagFile, { ...added, filename: 'src/components/x/NewThing.tsx' }] });
+  assert.equal(withNew.state, 'failure');
+  assert.match(withNew.description, /NewThing.*yes by name/);
+  const noFlag = await decision({ title: refactor, files: [modified, { ...flagFile, status: 'modified' }] });
+  assert.equal(noFlag.state, 'failure');
+  assert.match(noFlag.description, /yes on a wireframe on HTPR-7145/);
+  assert.equal((await decision({ title: 'HTPR-7145 [IMPROVE] Remove flag', files: [modified, flagFile] })).state, 'failure');
+});
+
 test('only a Valentin approval reaction on the wireframe counts', async () => {
   for (const emoji of ['👍', '👍🏻', '👍🏼', '👍🏽', '👍🏾', '👍🏿', '✅', '👍️']) {
     assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji }] })] })).state, 'success');

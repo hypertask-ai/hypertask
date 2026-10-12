@@ -95,7 +95,10 @@ export function evaluate({ title, author, files, comments = [] }) {
       return name === 'index' ? basename(dirname(filename)) : name;
     }))];
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
-  const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
+  // A flag removal refactors UI that already shipped, so it gets the same trust as a bug fix (YPER4-323).
+  const flagRemoved = files.some(({ filename, status }) =>
+    status === 'removed' && /^src\/lib\/flags\/definitions\/[^/]+\.ts$/.test(filename));
+  const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4' || (ticket.type === 'REFACTOR' && flagRemoved);
   const details = [];
   if (!exempt && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
