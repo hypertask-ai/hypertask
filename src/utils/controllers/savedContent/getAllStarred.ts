@@ -1,5 +1,10 @@
 import prisma from "@/lib/prisma";
-import { fetchProjectIds, includeSavedContentComment } from "./helper";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import {
+  commentOnSavedTask,
+  fetchProjectIds,
+  includeSavedContentComment,
+} from "./helper";
 
 export const getAllStarred = async (userId: number) => {
   try {
@@ -7,7 +12,7 @@ export const getAllStarred = async (userId: number) => {
       where: {
         userId,
         commentId: null,
-        task: { status: { not: "Deleted" } },
+        task: { status: { not: "Deleted" }, project: projectContentAccessWhere(userId) },
         type: "Private",
       },
       include: {
@@ -27,6 +32,7 @@ export const getAllStarred = async (userId: number) => {
         userId,
         commentId: { not: null },
         projectId: { in: projectIds },
+        task: { project: projectContentAccessWhere(userId) },
         type: "Private",
       },
       include: {
@@ -46,7 +52,10 @@ export const getAllStarred = async (userId: number) => {
 
     return {
       status: 200,
-      json: { pinnedComments, starredTasks },
+      json: {
+        pinnedComments: commentOnSavedTask(pinnedComments),
+        starredTasks,
+      },
     };
   } catch (error) {
     console.log("🚀 ~ getAllStarred ~ error:", error);
