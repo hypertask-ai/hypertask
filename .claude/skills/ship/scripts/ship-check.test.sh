@@ -70,7 +70,8 @@ G 0 grep "$M" notes.txt
 unset -f gh
 
 # Repo scope is determined from the hook cwd, not the guard process cwd.
-for repo in app foreign cli no-origin; do git init -q "$E/$repo"; done
+for repo in app foreign cli no-origin slack; do git init -q "$E/$repo"; done
+git -C "$E/slack" remote add origin https://github.com/valentinyeo/ht-slack.git
 git -C "$E/app" remote add origin https://github.com/hypertask-ai/hypertask.git
 git -C "$E/foreign" remote add origin git@github.com:valentinyeo/endless-testing.git
 git -C "$E/cli" remote add origin ssh://git@github.com/hypertask-ai/cli.git
@@ -103,6 +104,8 @@ R 0 "$E/app" '' "$M 20 -R valentinyeo/endless-testing --squash"
 R 2 "$E/foreign" hypertask-ai/hypertask "$M 822 -R hypertask-ai/hypertask"
 R 0 "$E/foreign" '' "echo YPER4-197 && $M 20 --squash"
 R 2 "$E/cli" hypertask-ai/cli "$M 822"
+R 2 "$E/slack" hypertask-ai/slack "$M 822"
+R 2 "$E/app" hypertask-ai/slack "$M 822 -R valentinyeo/ht-slack"
 R 2 "$E/foreign" valentinyeo/endless-testing "SHIP_REPO=valentinyeo/endless-testing $M 822"
 R 2 "$E/foreign" valentinyeo/endless-testing "$M 822" SHIP_REPO=valentinyeo/endless-testing
 R 2 "$E/app" valentinyeo/endless-testing "$M 822 -R valentinyeo/endless-testing" SHIP_REPO=hypertask-ai/cli

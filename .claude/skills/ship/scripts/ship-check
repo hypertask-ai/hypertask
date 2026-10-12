@@ -885,6 +885,8 @@ PY
         unresolved=" Target repo could not be resolved; name it with -R owner/repo or SHIP_REPO=owner/repo."
       else
         REPO=$target
+        # valentinyeo/ht-slack moved to hypertask-ai/slack; old checkouts still name it.
+        [[ ${REPO,,} == valentinyeo/ht-slack ]] && REPO=hypertask-ai/slack
         [[ ${REPO,,} == hypertask-ai/* || $explicit == true ]] || continue
       fi
       pr=""; [[ $seg =~ merge[[:space:]]+([0-9]+) ]] && pr=${BASH_REMATCH[1]}
