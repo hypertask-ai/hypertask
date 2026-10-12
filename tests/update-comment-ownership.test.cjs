@@ -47,7 +47,6 @@ function loadService(storedComment) {
       update: async (args) => calls.attachmentUpdates.push(args),
     },
     comment: {
-      findUniqueOrThrow: async () => ({ text: storedComment?.text ?? "" }),
       update: async (args) => {
         calls.commentUpdates.push(args);
         return {
@@ -72,6 +71,7 @@ function loadService(storedComment) {
     comment: {
       findFirst: async (args) => {
         calls.lookup.push(args);
+        assert.equal(args.select.text, true);
         return storedComment;
       },
     },
@@ -160,6 +160,7 @@ test("editing an agent comment preserves its creator and agent attribution", asy
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     creatorId: creator.id,
     creator,
     agentId: agent.id,
@@ -192,6 +193,7 @@ test("an owner updates text and attachments in one transaction", async () => {
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     task: { projectId: 15 },
   });
 
@@ -252,6 +254,7 @@ test("an incomplete attachment list does not delete stored files", async () => {
   const { updateCommentService, calls } = loadService({
     id: 44,
     taskId: 91,
+    text: "original",
     task: { projectId: 15 },
   });
 

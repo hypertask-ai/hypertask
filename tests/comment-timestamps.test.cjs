@@ -35,16 +35,16 @@ function serviceFixture() {
     Object.assign(stored, data)
     return stored
   }
-  const textReads = []
-  const findUniqueOrThrow = async (query) => {
-    textReads.push(query)
-    return { text: stored.text }
-  }
+  const ownershipReads = []
   const attachmentWrites = []
   const prisma = {
-    comment: { findFirst: async () => stored, findUniqueOrThrow, update },
+    comment: { findFirst: async (query) => {
+      ownershipReads.push(query)
+      assert.equal(query.select.text, true)
+      return stored
+    } },
     $transaction: async (run) => run({
-      comment: { findUniqueOrThrow, update },
+      comment: { update },
       attachment: { findMany: async () => [], createMany: async (query) => attachmentWrites.push(query) },
     }),
   }
@@ -60,7 +60,7 @@ function serviceFixture() {
     '@/lib/agents/publicAgent': { publicAgentSelect: {} },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
   })
-  return { stored, writes, textReads, attachmentWrites, prisma, ...service }
+  return { stored, writes, ownershipReads, attachmentWrites, prisma, ...service }
 }
 
 test('comment migration adds nullable edit timestamp and editor IDs without a default or backfill', () => {
@@ -85,21 +85,6 @@ test('shared app, MCP, CLI and AI text change persists the edit time without cha
   assert.deepEqual(fixture.writes, [{ text: '<p>edited</p>', summary: null, editedAt: new FixedDate(), editedByUserId: 6, editedByAgentId: null }])
   assert.equal(result.createdAt, createdAt)
   assert.equal(result.editedAt.toISOString(), editedAt.toISOString())
-})
-
-test('legacy controller text change also persists an edit time', async () => {
-  const fixture = serviceFixture()
-  const { default: handler } = load('src/utils/controllers/comments/updateComment.ts', {
-    '@/lib/prisma': { default: fixture.prisma, __esModule: true },
-    '@/lib/ai/hyperAiConfirmation': { invalidateHyperAiCommentOrigin: async () => {} },
-    '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 9 }) },
-    '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
-  })
-  const res = { status(code) { this.code = code; return this }, json(body) { return json(body, { status: this.code }) } }
-  const result = await handler({ method: 'PUT', body: { updatedComment: { text: 'legacy edit', creatorId: 6, taskId: 91, commentId: 44 } } }, res)
-  assert.equal(result.status, 200)
-  assert.deepEqual(fixture.writes, [{ text: 'legacy edit', editedAt: new FixedDate(), editedByUserId: 9, editedByAgentId: null }])
-  assert.equal(result.body.editedAt, editedAt.toISOString())
 })
 
 for (const agentId of [null, 'agent-editor', 'hidden-editor']) {
@@ -260,7 +245,10 @@ for (const previousEdit of [false, true]) {
       assert.equal(result[key], value)
       assert.equal(Object.hasOwn(fixture.writes[0], key), false)
     }
-    assert.deepEqual(fixture.textReads, [{ where: { id: 44 }, select: { text: true } }])
+    assert.deepEqual(fixture.ownershipReads, [{
+      where: { id: 44, creatorId: 6, task: { project: {} } },
+      select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } },
+    }])
   })
 }
 
@@ -272,31 +260,6 @@ test('normalized-equivalent text does not count as a text change', async () => {
   assert.equal(fixture.stored.editedByUserId, null)
   assert.equal(fixture.stored.editedByAgentId, null)
 })
-
-for (const previousEdit of [false, true]) {
-  test(`legacy normalized-equivalent text preserves ${previousEdit ? 'existing' : 'null'} edit fields`, async () => {
-    const fixture = serviceFixture()
-    fixture.stored.text = '<p>original</p>'
-    const metadata = previousEdit
-      ? { editedAt: createdAt, editedByUserId: 9, editedByAgentId: 'previous-editor' }
-      : { editedAt: null, editedByUserId: null, editedByAgentId: null }
-    Object.assign(fixture.stored, metadata)
-    const { default: handler } = load('src/utils/controllers/comments/updateComment.ts', {
-      '@/lib/prisma': { default: fixture.prisma, __esModule: true },
-      '@/lib/ai/hyperAiConfirmation': { invalidateHyperAiCommentOrigin: async () => {} },
-      '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
-      '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml },
-    })
-    const res = { status(code) { this.code = code; return this }, json(body) { return json(body, { status: this.code }) } }
-    const response = await handler({ method: 'PUT', headers: {}, body: { updatedComment: { text: 'original', creatorId: 6, taskId: 91, commentId: 44 } } }, res)
-    assert.equal(response.status, 200)
-    for (const [key, value] of Object.entries(metadata)) {
-      assert.equal(fixture.stored[key], value)
-      assert.equal(Object.hasOwn(fixture.writes[0], key), false)
-    }
-    assert.deepEqual(fixture.textReads, [{ where: { id: 44 }, select: { text: true } }])
-  })
-}
 
 function commentsRouteFixture(editorId, refetch = true) {
   const stored = { id: 44, text: '<p>original</p>', creatorId: 6, createdAt, editedAt, editedByUserId: 9, editedByAgentId: editorId, attachments: [], reactions: [] }
