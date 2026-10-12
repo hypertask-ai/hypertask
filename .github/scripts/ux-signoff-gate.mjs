@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { basename } from 'node:path';
+import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const CONTEXT = 'ux-signoff';
@@ -13,8 +13,9 @@ function ticketFromTitle(title) {
 }
 
 function visibleFiles(files) {
-  return files.filter(({ filename, status }) => status !== 'removed' &&
-    (filename.startsWith('src/components/') ||
+  return files.filter(({ filename }) =>
+    (filename.startsWith('src/components/') || filename.startsWith('src/styles/') ||
+      (filename.startsWith('src/pages/') && !filename.startsWith('src/pages/api/')) ||
       (filename.startsWith('src/app/') && !filename.startsWith('src/app/api/'))) &&
     /\.(tsx|jsx|css|scss)$/.test(filename) &&
     !/(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename));
@@ -23,6 +24,7 @@ function visibleFiles(files) {
 function plainText(text) {
   const entities = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' };
   return text.replace(/<span\b[^>]*\bdata-type\s*=\s*(["'])mention\1[^>]*>[\s\S]*?<\/span\s*>/gi, '')
+    .replace(/<\/(?:p|div|li|h[1-6])\s*>|<br\s*\/?\s*>/gi, '\n')
     .replace(/<[^>]*>/g, ' ')
     .replace(/&(#x[\da-f]+|#\d+|amp|lt|gt|quot|apos|nbsp);/gi, (raw, entity) => {
       if (!entity.startsWith('#')) return entities[entity.toLowerCase()];
@@ -31,11 +33,27 @@ function plainText(text) {
     });
 }
 
-function approvingComment(comment) {
-  if (comment.creatorId !== 6 || comment.agent != null) return false;
+function humanValentin(item, idField) {
+  return item[idField] === 6 &&
+    ['agent', 'agent_display_name', 'agentId', 'isAgent'].every((key) => item[key] == null);
+}
+
+function commentVerdict(comment) {
+  if (!humanValentin(comment, 'creatorId')) return null;
   const text = plainText(comment.text).trim().toLowerCase().replace(/[’‘]/g, "'");
-  return /^(?:(?:yes|yep|yeah|go|ok|okay|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) &&
-    !/\b(?:no|not|but|change|instead)\b|n't/.test(text);
+  if (/^(?:no|nope|not|reject|don't)\b|\b(?:no|not|but|change|instead)\b|n't/.test(text)) return 'reject';
+  return /^(?:(?:yes|yep|yeah|go|ok|okay|approve|approved|lgtm|looks good|ship it)\b|👍)/u.test(text) ? 'approve' : null;
+}
+
+function newest(comments) {
+  return comments.filter((comment) => Number.isFinite(Date.parse(comment.createdAt)))
+    .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt) || (b.id ?? 0) - (a.id ?? 0))[0];
+}
+
+function elementNames(comment) {
+  const normalize = (name) => name.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return [...plainText(comment.text).matchAll(/\bNew elements:[ \t]*([^\r\n.?;]*)/gi)]
+    .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
 }
 
 export function evaluate({ title, author, files, comments = [] }) {
@@ -49,28 +67,39 @@ export function evaluate({ title, author, files, comments = [] }) {
     return { state: 'failure', description, details: [description] };
   }
 
-  const approvals = comments.filter(approvingComment);
-  const approvedWireframes = comments.filter((comment) => WIREFRAME.test(comment.text) && (
-    // Agent reactions keep the owner's userId but carry isAgent/agent (HTPR-7122); they never count.
-    (comment.reactions ?? []).some(({ userId, emoji, isAgent, agent }) => userId === 6 && !isAgent && agent == null && /^(?:👍[🏻-🏿]?|✅)\uFE0F?$/u.test(emoji)) ||
-    approvals.some((approval) => Date.parse(approval.createdAt) > Date.parse(comment.createdAt))
-  ));
-  const normalize = (text) => plainText(text).toLowerCase().replace(/[^a-z0-9]/g, '');
-  const namedApprovalText = [...approvedWireframes, ...approvals].map((comment) => normalize(comment.text));
+  const wireframe = newest(comments.filter((comment) => WIREFRAME.test(comment.text)));
+  const created = wireframe ? Date.parse(wireframe.createdAt) : -Infinity;
+  const edits = wireframe ? [wireframe.updatedAt, wireframe.editedAt].filter((value) => value != null) : [];
+  const revision = Math.max(created, ...edits.map((value) => Date.parse(value)));
+  const verdict = newest(comments.filter((comment) =>
+    Date.parse(comment.createdAt) > created && commentVerdict(comment)));
+  const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
+  // MCP currently exposes neither comment edit times nor reaction creation times, so unseen edits cannot invalidate approval.
+  const reacted = wireframe && (wireframe.reactions ?? []).some((reaction) =>
+    humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)\uFE0F?$/u.test(reaction.emoji) &&
+    (edits.length === 0 || Date.parse(reaction.createdAt) > revision));
+  const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted);
+  const approvedNames = new Set([
+    ...(wireframe && approved ? elementNames(wireframe) : []),
+    ...(approval && approved ? elementNames(approval) : []),
+  ]);
   const newElements = [...new Set(ui.filter(({ filename, status }) =>
     (status === 'added' || status === 'copied') && filename.startsWith('src/components/') &&
-    /\.(tsx|jsx)$/.test(filename)).map(({ filename }) => basename(filename).replace(/\.(tsx|jsx)$/, '')))];
-  const missingNames = newElements.filter((name) =>
-    !namedApprovalText.some((text) => text.includes(name.toLowerCase().replace(/[^a-z0-9]/g, ''))));
+    /\.(tsx|jsx)$/.test(filename)).map(({ filename }) => {
+      const name = basename(filename).replace(/\.(tsx|jsx)$/, '');
+      return name === 'index' ? basename(dirname(filename)) : name;
+    }))];
+  const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
   const details = [];
-  if (ticket.type !== 'BUGFIX' && approvedWireframes.length === 0) {
+  if (!exempt && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
   }
   if (missingNames.length) {
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
   if (details.length) return { state: 'failure', description: details[0].slice(0, 140), details };
-  return success(ticket.type === 'BUGFIX' ? 'Bugfix restores intended behaviour; new elements approved' : 'Wireframe and new elements have UX signoff');
+  return success(exempt ? 'Wireframe exempt; new elements approved' : 'Wireframe and new elements have UX signoff');
 }
 
 export function ticketUrl(title, runUrl) {
@@ -113,7 +142,7 @@ async function githubPages(github, path) {
   }
 }
 
-export async function readComments(ticket, { env = process.env, fetchImpl = fetch } = {}) {
+export async function readComments(ticket, { env = process.env, fetchImpl = fetch, budget } = {}) {
   if (!env.MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is empty');
   const comments = [];
   const cursors = new Set();
@@ -123,10 +152,23 @@ export async function readComments(ticket, { env = process.env, fetchImpl = fetc
     url.searchParams.set('ticket_number', ticket);
     url.searchParams.set('limit', '100');
     if (cursor != null) url.searchParams.set('cursor', cursor);
+    if (budget) {
+      if (budget.stopped || budget.remaining === 0) {
+        throw Object.assign(new Error(budget.stopped || 'Hypertask read budget exhausted; left untouched this run'), { deferred: true });
+      }
+      budget.remaining--;
+    }
     const response = await fetchImpl(url, {
       headers: { Authorization: `Bearer ${env.MCP_TOKEN}` }, signal: AbortSignal.timeout(30000),
     });
-    if (!response.ok) throw new Error(`Hypertask API returned HTTP ${response.status}`);
+    if (!response.ok) {
+      const error = new Error(`Hypertask API returned HTTP ${response.status}`);
+      if (budget && (response.status === 429 || response.status >= 500)) {
+        budget.stopped = `${error.message}; further reads stopped this run`;
+        error.deferred = true;
+      }
+      throw error;
+    }
     const data = await response.json();
     if (data.success === false || !Array.isArray(data.comments) ||
       data.comments.some((comment) => !comment || typeof comment.text !== 'string')) {
@@ -144,17 +186,21 @@ export async function readComments(ticket, { env = process.env, fetchImpl = fetc
   return comments;
 }
 
-async function readVerdict(pr, { github, repo, env, fetchImpl }) {
-  if (!env.MCP_TOKEN) throw new Error('HYPERTASK_MCP_TOKEN is empty');
+async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, budget }) {
   if (typeof pr.title !== 'string' || typeof pr.user?.login !== 'string') throw new Error('Invalid PR metadata');
   const files = await githubPages(github, `repos/${repo}/pulls/${pr.number}/files`);
   if (files.some((file) => typeof file.filename !== 'string' || typeof file.status !== 'string') ||
     (Number.isInteger(pr.changed_files) && files.length !== pr.changed_files)) {
     throw new Error('Incomplete PR file list');
   }
+  const input = { title: pr.title, author: pr.user.login, files };
+  const preliminary = evaluate(input);
   const ticket = ticketFromTitle(pr.title);
-  const comments = ticket ? await readComments(ticket.key, { env, fetchImpl }) : [];
-  return evaluate({ title: pr.title, author: pr.user.login, files, comments });
+  if (preliminary.state === 'success' || !ticket) return preliminary;
+  if (!commentCache.has(ticket.key)) {
+    commentCache.set(ticket.key, readComments(ticket.key, { env, fetchImpl, budget }));
+  }
+  return evaluate({ ...input, comments: await commentCache.get(ticket.key) });
 }
 
 export async function run(args, { env = process.env, fetchImpl = fetch, github = createGithub({ env, fetchImpl }), log = console.log } = {}) {
@@ -168,7 +214,7 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   if (!reconcile && number == null) throw new Error('Read-only mode requires --pr <number>');
   const repo = env.REPO || env.GITHUB_REPOSITORY || 'hypertask-ai/hypertask';
   const runUrl = env.RUN_URL || `https://github.com/${repo}/actions${env.GITHUB_RUN_ID ? `/runs/${env.GITHUB_RUN_ID}` : ''}`;
-  const options = { github, repo, env, fetchImpl };
+  const options = { github, repo, env, fetchImpl, commentCache: new Map(), budget: { remaining: 120, stopped: false } };
   if (!reconcile) {
     const pr = await github(`repos/${repo}/pulls/${number}`);
     const verdict = await readVerdict(pr, options);
@@ -180,37 +226,46 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   const prs = number == null ? openPrs : openPrs.filter((pr) => pr.number === number);
   let errors = false;
   for (const listed of prs) {
-    let pr = listed;
-    let verdict;
     try {
-      pr = await github(`repos/${repo}/pulls/${listed.number}`);
-      if (pr.state !== 'open' || pr.base?.ref !== 'production') continue;
-      verdict = await readVerdict(pr, options);
-      const current = await github(`repos/${repo}/pulls/${pr.number}`);
-      if (current.state !== 'open' || current.base?.ref !== 'production') continue;
-      if (current.head?.sha !== pr.head?.sha || current.title !== pr.title || current.base?.sha !== pr.base?.sha) {
-        verdict = { state: 'error', description: 'Pull request changed during evaluation; retried every 10 minutes', details: [] };
+      let pr = await github(`repos/${repo}/pulls/${listed.number}`);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        if (pr.state !== 'open' || pr.base?.ref !== 'production') break;
+        let verdict;
+        try {
+          verdict = await readVerdict(pr, options);
+        } catch (error) {
+          if (error.deferred) {
+            log(JSON.stringify({ pr: pr.number, state: 'deferred', description: error.message }));
+            break;
+          }
+          verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
+        }
+        if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
+        const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);
+        const newestStatus = statuses.find((status) => status.context === CONTEXT);
+        // Keep the head read immediately before publication, including error verdicts.
+        const current = await github(`repos/${repo}/pulls/${pr.number}`);
+        if (current.state !== 'open' || current.base?.ref !== 'production') break;
+        if (current.head?.sha !== pr.head.sha || current.title !== pr.title || current.base?.sha !== pr.base?.sha) {
+          pr = current;
+          if (attempt === 2) log(JSON.stringify({ pr: pr.number, state: 'deferred', description: 'PR kept changing; left untouched this run' }));
+          continue;
+        }
+        if (newestStatus?.state !== verdict.state || newestStatus?.description !== verdict.description) {
+          await github(`repos/${repo}/statuses/${pr.head.sha}`, {
+            method: 'POST', body: {
+              context: CONTEXT, state: verdict.state, description: verdict.description,
+              target_url: ticketUrl(pr.title, runUrl),
+            },
+          });
+        }
+        if (verdict.state === 'error') errors = true;
+        log(JSON.stringify({ pr: pr.number, ...verdict }, null, 2));
+        break;
       }
-    } catch {
-      verdict = { state: 'error', description: READ_ERROR, details: [] };
-    }
-    try {
-      if (!/^[a-f0-9]{40}$/.test(pr.head?.sha ?? '')) throw new Error('No PR head SHA to publish');
-      const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`);
-      const newest = statuses.find((status) => status.context === CONTEXT);
-      if (newest?.state !== verdict.state || newest?.description !== verdict.description) {
-        await github(`repos/${repo}/statuses/${pr.head.sha}`, {
-          method: 'POST', body: {
-            context: CONTEXT, state: verdict.state, description: verdict.description,
-            target_url: ticketUrl(pr.title, runUrl),
-          },
-        });
-      }
-      if (verdict.state === 'error') errors = true;
-      log(JSON.stringify({ pr: pr.number, ...verdict }, null, 2));
     } catch {
       errors = true;
-      log(JSON.stringify({ pr: listed.number, state: 'error', description: 'Could not publish UX signoff status' }));
+      log(JSON.stringify({ pr: listed.number, state: 'error', description: 'Could not read or publish UX signoff status; left untouched' }));
     }
   }
   return errors ? 2 : 0;

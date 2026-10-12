@@ -77,11 +77,13 @@ test('new elements need normalized names in approved wireframes or approving hum
   const approved = wireframe({ text: 'https://hypertask.app/explorations/decision_inbox New elements: Decision Inbox Panel', reactions: [{ userId: 6, emoji: '👍' }] });
   assert.equal((await decision({ files: [added], comments: [approved] })).state, 'success');
   assert.equal((await decision({ files: [added], comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'failure');
-  assert.equal((await decision({ files: [added], comments: [wireframe(), yes({ text: 'yes Decision-Inbox_Panel' })] })).state, 'success');
+  const inQuestion = wireframe({ text: '<p>https://hypertask.app/wireframes/htpr-7072</p><p>Question: build it? New elements: DecisionInboxPanel.</p><p>Next: wait</p>', reactions: [{ userId: 6, emoji: '👍' }] });
+  assert.equal((await decision({ files: [added], comments: [inQuestion] })).state, 'success');
+  assert.equal((await decision({ files: [added], comments: [wireframe(), yes({ text: 'yes\nNew elements: Decision-Inbox_Panel' })] })).state, 'success');
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: `${approved.text}<span data-type="mention">DecisionInboxPanel</span>`, reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'success');
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: 'https://hypertask.app/wireframes/a <span data-type="mention">DecisionInboxPanel</span>', reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'failure');
-  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [added], comments: [yes({ text: 'approved DecisionInboxPanel' })] })).state, 'success');
-  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [added], comments: [yes({ text: 'approved DecisionInboxPanel', agent: { id: 'agent' } })] })).state, 'failure');
+  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [added], comments: [yes({ text: 'approved\nNew elements: DecisionInboxPanel' })] })).state, 'success');
+  assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Repair', files: [added], comments: [yes({ text: 'approved\nNew elements: DecisionInboxPanel', agent: { id: 'agent' } })] })).state, 'failure');
   assert.equal((await decision({ files: [added], comments: [wireframe({ text: approved.text }), yes({ text: 'maybe DecisionInboxPanel' })] })).state, 'failure');
 });
 
@@ -95,11 +97,11 @@ test('copied components need names; renamed components, CSS and app files need o
   assert.match(result.details[1], /VeryLongComponentName7/);
 });
 
-test('API, tests, stories, removed files and unrelated paths are not visible UI', async () => {
+test('API, tests, stories and unrelated paths are not visible UI', async () => {
   for (const filename of ['src/app/api/inbox/route.tsx', 'src/components/x/Foo.test.tsx', 'src/components/x/Foo.spec.jsx', 'src/components/x/Foo.stories.tsx', 'src/app/__tests__/page.tsx', 'src/lib/Foo.tsx', 'src/components/x/Foo.ts', 'src/application/Foo.tsx']) {
     assert.deepEqual(await decision({ files: [{ filename, status: 'added' }] }), { state: 'success', description: 'No visible UI change', details: [] });
   }
-  assert.equal((await decision({ files: [{ ...added, status: 'removed' }] })).description, 'No visible UI change');
+  assert.equal((await decision({ files: [{ ...added, status: 'removed' }] })).state, 'failure');
   assert.equal((await decision({ author: 'dependabot[bot]', title: 'Bump package', files: [added] })).state, 'success');
 });
 
@@ -131,7 +133,10 @@ function apiFixture({ prs = [pr()], files = [modified], statuses = [], prError, 
   const github = async (endpoint, options = {}) => {
     calls.push({ endpoint, ...options });
     if (options.method === 'POST') return {};
-    if (/\/pulls\?/.test(endpoint)) return prs;
+    if (/\/pulls\?/.test(endpoint)) {
+      const page = Number(new URL(`https://fixture/${endpoint}`).searchParams.get('page'));
+      return prs.slice((page - 1) * 100, page * 100);
+    }
     if (/\/files\?/.test(endpoint)) return files;
     if (/\/statuses\?/.test(endpoint)) return statuses;
     const number = Number(endpoint.split('/').at(-1));
@@ -206,7 +211,7 @@ test('PR files and open PR lists are paginated', async () => {
     calls.push(endpoint);
     if (/\/pulls\?/.test(endpoint)) return endpoint.endsWith('page=1') ? Array.from({ length: 100 }, (_, i) => pr(i + 1)) : [pr(101)];
     if (/\/files\?/.test(endpoint)) return endpoint.endsWith('page=1') ? Array(100).fill(modified) : [modified];
-    if (/\/statuses\?/.test(endpoint)) return [{ context: 'ux-signoff', state: 'success', description: 'Bugfix restores intended behaviour; new elements approved' }];
+    if (/\/statuses\?/.test(endpoint)) return [{ context: 'ux-signoff', state: 'success', description: 'Wireframe exempt; new elements approved' }];
     return pr(Number(endpoint.split('/').at(-1)));
   };
   assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: () => {} }), 0);
@@ -232,30 +237,27 @@ test('reconcile publishes failures on head SHAs with ticket targets and skips id
   assert.ok(changed.calls.some((call) => call.method === 'POST'));
 });
 
-test('missing secret and read errors publish error and continue the sweep', async () => {
+test('missing secret only affects gated PRs and metadata errors leave heads untouched', async () => {
   const { run } = await gate;
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
   assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl: commentsFetch, log: () => {} }), 2);
-  assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['error', 'success']);
-  const missing = apiFixture();
+  assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.body.state), ['success']);
+  const missing = apiFixture({ prs: [pr(1, { title })] });
   assert.equal(await run(['--reconcile', '--pr', '1'], { env: { ...env, MCP_TOKEN: '' }, github: missing.github, fetchImpl: () => assert.fail('must not fetch'), log: () => {} }), 2);
   const posted = missing.calls.find((call) => call.method === 'POST');
   assert.equal(posted.body.state, 'error');
-  assert.equal(posted.body.description, 'Could not read the ticket; retried every 10 minutes');
-  const readFailure = apiFixture();
-  assert.equal(await run(['--reconcile'], { env, github: readFailure.github, fetchImpl: async () => response({}, 503), log: () => {} }), 2);
-  assert.equal(readFailure.calls.find((call) => call.method === 'POST').body.state, 'error');
+  assert.match(posted.body.description, /HYPERTASK_MCP_TOKEN.*configure/);
+  const readFailure = apiFixture({ prs: [pr(1, { title })] });
+  assert.equal(await run(['--reconcile'], { env, github: readFailure.github, fetchImpl: async () => response({}, 503), log: () => {} }), 0);
+  assert.ok(readFailure.calls.every((call) => call.method !== 'POST'));
 });
 
-test('single-PR reconciliation retains a head SHA on metadata read error and touches only that PR', async () => {
+test('single-PR reconciliation never publishes an unvalidated head on metadata read error', async () => {
   const { run } = await gate;
   const fixture = apiFixture({ prs: [pr(1), pr(2)], prError: 1 });
   assert.equal(await run(['--reconcile', '--pr', '1'], { env, github: fixture.github, fetchImpl: commentsFetch, log: () => {} }), 2);
   const posts = fixture.calls.filter((call) => call.method === 'POST');
-  assert.equal(posts.length, 1);
-  assert.equal(posts[0].endpoint, `repos/fixture/repo/statuses/${pr(1).head.sha}`);
-  assert.equal(posts[0].body.state, 'error');
-  assert.equal(posts[0].body.target_url, 'https://app.hypertask.ai/detail/project-15/1');
+  assert.equal(posts.length, 0);
   assert.ok(!fixture.calls.some((call) => call.endpoint === 'repos/fixture/repo/pulls/2'));
 });
 
@@ -264,8 +266,8 @@ test('incomplete files, status publication errors and changed PR metadata do not
   const incomplete = apiFixture({ prs: [pr(1, { changed_files: 2 })] });
   assert.equal(await run(['--reconcile'], { env, github: incomplete.github, fetchImpl: commentsFetch, log: () => {} }), 2);
   const race = apiFixture({ currentPr: pr(1, { title: 'HTPR-1 [FEATURE] UI' }) });
-  assert.equal(await run(['--reconcile'], { env, github: race.github, fetchImpl: commentsFetch, log: () => {} }), 2);
-  assert.equal(race.calls.find((call) => call.method === 'POST').body.state, 'error');
+  assert.equal(await run(['--reconcile'], { env, github: race.github, fetchImpl: commentsFetch, log: () => {} }), 0);
+  assert.equal(race.calls.find((call) => call.method === 'POST').body.state, 'failure');
   const failed = apiFixture();
   assert.equal(await run(['--reconcile'], { env, github: (endpoint, options) => {
     if (options?.method === 'POST') throw new Error('write failed');
@@ -285,7 +287,7 @@ test('workflow uses trusted pinned production code, correct events, permissions 
   assert.match(workflow, /cron: ['"]\*\/10 \* \* \* \*['"]/);
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /permissions:\s*contents: read\s*pull-requests: read\s*statuses: write/);
-  assert.match(workflow, /group: ux-signoff-gate-\$\{\{ github\.event\.pull_request\.number \|\| 'all' \}\}\s*cancel-in-progress: false/);
+  assert.match(workflow, /group: ux-signoff-gate\s*cancel-in-progress: false/);
   assert.match(workflow, /runs-on: ubuntu-latest/);
   for (const action of ['checkout', 'setup-node']) {
     const pin = workflow.match(new RegExp(`actions/${action}@([a-f0-9]{40})`));
@@ -295,9 +297,187 @@ test('workflow uses trusted pinned production code, correct events, permissions 
   assert.match(workflow, /ref: production\s*persist-credentials: false/);
   assert.match(workflow, /node-version: 24/);
   assert.match(workflow, /MCP_TOKEN: \$\{\{ secrets\.HYPERTASK_MCP_TOKEN \}\}/);
-  assert.match(workflow, /--reconcile --pr "\$PR_NUMBER"/);
-  assert.match(workflow, /else\s*node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*fi/);
+  assert.match(workflow, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*$/);
+  assert.doesNotMatch(workflow, /--pr|EVENT_NAME|PR_NUMBER/);
   assert.doesNotMatch(workflow, /npm |pull_request\.head|git checkout|git fetch/);
+});
+
+test('item 1: all agent attribution markers reject comments and reactions', async () => {
+  for (const marker of ['agent', 'agent_display_name', 'agentId', 'isAgent']) {
+    for (const value of [{ id: 'runner' }, 'Private agent', true, false, 0, '']) {
+      assert.equal((await decision({ comments: [wireframe(), yes({ [marker]: value })] })).state, 'failure', marker);
+      assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍', [marker]: value }] })] })).state, 'failure', marker);
+    }
+    assert.equal((await decision({ comments: [wireframe(), yes({ [marker]: null })] })).state, 'success');
+  }
+});
+
+test('item 2: latest wireframe and newest subsequent human verdict decide', async () => {
+  const old = wireframe({ reactions: [{ userId: 6, emoji: '👍' }] });
+  const latest = wireframe({ id: 3, text: 'https://hypertask.app/wireframes/replacement', createdAt: '2026-10-10T12:02:00Z' });
+  assert.equal((await decision({ comments: [latest, yes(), old] })).state, 'failure');
+  const approved = { ...latest, reactions: [{ userId: 6, emoji: '✅' }] };
+  assert.equal((await decision({ comments: [old, approved] })).state, 'success');
+  const later = (text, extra = {}) => yes({ id: 4, text, createdAt: '2026-10-10T12:03:00Z', ...extra });
+  for (const text of ['no', 'nope', 'not this', 'reject this', "don't ship", 'yes but change it', 'use this instead']) {
+    assert.equal((await decision({ comments: [later(text), approved, yes()] })).state, 'failure', text);
+  }
+  assert.equal((await decision({ comments: [approved, later('no'), later('yes', { id: 5, createdAt: '2026-10-10T12:04:00Z' })] })).state, 'success');
+  assert.equal((await decision({ comments: [approved, later('no'), later('A neutral follow-up', { createdAt: '2026-10-10T12:05:00Z' })] })).state, 'failure');
+  assert.equal((await decision({ comments: [approved, later('no', { agent_display_name: 'Runner' })] })).state, 'success');
+  assert.equal((await decision({ comments: [yes()] })).state, 'failure');
+});
+
+test('item 3: edits require a timestamped later reaction or a separate later human yes', async () => {
+  const edit = '2026-10-10T12:02:00Z';
+  for (const field of ['updatedAt', 'editedAt']) {
+    const edited = wireframe({ [field]: edit, reactions: [{ userId: 6, emoji: '👍' }] });
+    assert.equal((await decision({ comments: [edited, yes()] })).state, 'failure');
+    for (const createdAt of [undefined, 'invalid', '2026-10-10T12:01:00Z', edit]) {
+      assert.equal((await decision({ comments: [{ ...edited, reactions: [{ userId: 6, emoji: '👍', createdAt }] }] })).state, 'failure');
+    }
+    assert.equal((await decision({ comments: [{ ...edited, reactions: [{ userId: 6, emoji: '👍', createdAt: '2026-10-10T12:03:00Z' }] }] })).state, 'success');
+    assert.equal((await decision({ comments: [edited, yes({ createdAt: '2026-10-10T12:03:00Z' })] })).state, 'success');
+    assert.equal((await decision({ comments: [edited, yes({ createdAt: edit })] })).state, 'failure');
+    assert.equal((await decision({ comments: [{ ...edited, [field]: 'invalid' }, yes({ createdAt: '2026-10-10T12:03:00Z' })] })).state, 'failure');
+  }
+  const both = wireframe({ updatedAt: edit, editedAt: '2026-10-10T12:04:00Z' });
+  assert.equal((await decision({ comments: [both, yes({ createdAt: '2026-10-10T12:03:00Z' })] })).state, 'failure');
+  assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'success');
+});
+
+test('item 4: exemptions precede ticket reads and secret checks', async () => {
+  const { run } = await gate;
+  for (const [prTitle, files] of [
+    [title, [{ filename: 'docs/guide.md', status: 'modified' }]],
+    ['HTPR-1 [BUGFIX] Repair', [modified]],
+    ['HTPR-1 [BUGFIX] Remove screen', [{ ...modified, status: 'removed' }]],
+    ['YPER4-254 [INFRA] Refactor', [modified]],
+  ]) {
+    for (const MCP_TOKEN of ['', env.MCP_TOKEN]) {
+      const fixture = apiFixture({ prs: [pr(1, { title: prTitle })], files });
+      assert.equal(await run(['--reconcile'], { env: { ...env, MCP_TOKEN }, github: fixture.github, fetchImpl: () => assert.fail('exempt PR must not read Hypertask'), log: () => {} }), 0);
+      assert.equal(fixture.calls.find((call) => call.method === 'POST').body.state, 'success');
+    }
+  }
+  for (const prTitle of [title, 'HTPR-1 [BUGFIX] Repair', 'YPER4-254 [INFRA] New element']) {
+    const fixture = apiFixture({ prs: [pr(1, { title: prTitle })], files: [added] });
+    assert.equal(await run(['--reconcile'], { env: { ...env, MCP_TOKEN: '' }, github: fixture.github, fetchImpl: () => assert.fail('missing token'), log: () => {} }), 2);
+    assert.equal(fixture.calls.find((call) => call.method === 'POST').body.state, 'error');
+  }
+});
+
+test('item 5: legacy pages, shared styles and removed UI are visible but APIs are not', async () => {
+  for (const filename of ['src/pages/home.tsx', 'src/pages/account/index.jsx', 'src/styles/globals.css', 'src/styles/theme.scss', modified.filename, 'src/app/settings/page.tsx']) {
+    for (const status of ['modified', 'removed']) {
+      assert.equal((await decision({ files: [{ filename, status }] })).state, 'failure', filename);
+      assert.equal((await decision({ title: 'HTPR-1 [BUGFIX] Restore', files: [{ filename, status }] })).state, 'success', filename);
+    }
+  }
+  for (const filename of ['src/pages/api/test.tsx', 'src/app/api/test/route.tsx', 'src/pages/home.test.tsx', 'src/styles/theme.stories.css']) {
+    assert.equal((await decision({ files: [{ filename, status: 'removed' }] })).description, 'No visible UI change');
+  }
+});
+
+test('item 6: exact normalized New elements entries use index parent identities', async () => {
+  const react = [{ userId: 6, emoji: '👍' }];
+  const named = (text) => wireframe({ text: `https://hypertask.app/wireframes/a\n${text}`, reactions: react });
+  assert.equal((await decision({ files: [added], comments: [named('New elements: Decision-Inbox_Panel')] })).state, 'success');
+  const panel = { ...added, filename: 'src/components/Panel.tsx' };
+  for (const text of ['New elements: DecisionInboxPanel', 'Panel is discussed here', 'New elements: none', 'New elements: none\nPanel', '<p>New elements: none</p><p>Panel</p>']) {
+    assert.equal((await decision({ files: [panel], comments: [named(text)] })).state, 'failure', text);
+  }
+  const indices = ['First', 'Second'].map((name) => ({ ...added, filename: `src/components/${name}/index.tsx` }));
+  assert.equal((await decision({ files: indices, comments: [named('New elements: First, Second')] })).state, 'success');
+  assert.equal((await decision({ files: indices, comments: [named('New elements: First')] })).state, 'failure');
+  assert.equal((await decision({ files: indices, comments: [named('New elements: index')] })).state, 'failure');
+  assert.equal((await decision({ files: [panel], comments: [wireframe(), yes({ text: '<p>yes</p><p>New elements: Panel</p>' })] })).state, 'success');
+  const stale = named('New elements: Panel');
+  const latest = wireframe({ createdAt: '2026-10-10T12:02:00Z', reactions: react });
+  assert.equal((await decision({ files: [panel], comments: [stale, latest] })).state, 'failure');
+  assert.equal((await decision({ files: [panel], comments: [wireframe(), yes({ text: 'yes\nNew elements: Panel' }), yes({ id: 3, text: 'yes\nNew elements: none', createdAt: '2026-10-10T12:02:00Z' })] })).state, 'failure');
+});
+
+test('item 7: reconciliation caches, caps reads including pages and stops after 429 or 5xx', async () => {
+  const { run } = await gate;
+  const prs = Array.from({ length: 124 }, (_, i) => pr(i + 1, { title: `HTPR-${Math.max(1, i)} [FEATURE] UI` }));
+  const execute = async (fetchImpl) => {
+    const fixture = apiFixture({ prs });
+    const logs = [];
+    assert.equal(await run(['--reconcile'], { env, github: fixture.github, fetchImpl, log: (line) => logs.push(JSON.parse(line)) }), 0);
+    return { posts: fixture.calls.filter((call) => call.method === 'POST'), logs };
+  };
+  let reads = 0;
+  const capped = await execute(async () => { reads++; return response({ comments: [], nextCursor: null }); });
+  assert.equal(reads, 120);
+  assert.equal(capped.posts.length, 121);
+  assert.equal(capped.logs.filter((line) => line.state === 'deferred').length, 3);
+  for (const status of [429, 500, 503]) {
+    reads = 0;
+    const stopped = await execute(async () => ++reads === 1 ? response({ comments: [] }) : response({}, status));
+    assert.equal(reads, 2, `HTTP ${status}`);
+    assert.equal(stopped.posts.length, 2);
+    assert.ok(stopped.posts.every((post) => post.body.state !== 'error'));
+    assert.ok(stopped.logs.some((line) => line.state === 'deferred' && line.description.includes(`HTTP ${status}`)));
+  }
+  reads = 0;
+  const paged = await execute(async () => response({ comments: [], nextCursor: String(++reads) }));
+  assert.equal(reads, 120);
+  assert.equal(paged.posts.length, 0);
+  assert.ok(paged.logs.every((line) => line.state === 'deferred'));
+  const mixed = apiFixture({ prs: [pr(1, { title }), pr(2, { title: 'HTPR-2 [FEATURE] UI' }), pr(3)] });
+  reads = 0;
+  assert.equal(await run(['--reconcile'], { env, github: mixed.github, fetchImpl: async () => { reads++; return response({}, 429); }, log: () => {} }), 0);
+  assert.equal(reads, 1);
+  assert.deepEqual(mixed.calls.filter((call) => call.method === 'POST').map((call) => [call.endpoint, call.body.state]), [[`repos/fixture/repo/statuses/${pr(3).head.sha}`, 'success']]);
+});
+
+test('item 8: re-read immediately before posting and evaluate changed heads with fresh files', async () => {
+  const { run } = await gate;
+  for (const oldError of [false, true]) {
+    const original = pr(1);
+    const current = pr(1, { title, head: { sha: 'c'.repeat(40) } });
+    const fixture = apiFixture({ prs: [original], currentPr: current });
+    let filesReads = 0;
+    const github = (endpoint, options) => {
+      if (/\/files\?/.test(endpoint)) {
+        filesReads++;
+        if (oldError && filesReads === 1) throw new Error('old head files failed');
+        return Promise.resolve(filesReads === 1 ? [modified] : [added]);
+      }
+      return fixture.github(endpoint, options);
+    };
+    assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: () => {} }), 0);
+    assert.equal(filesReads, 2);
+    const posts = fixture.calls.filter((call) => call.method === 'POST');
+    assert.equal(posts.length, 1);
+    assert.equal(posts[0].endpoint, `repos/fixture/repo/statuses/${current.head.sha}`);
+    assert.equal(posts[0].body.state, 'failure');
+    assert.ok(fixture.calls.at(-2).endpoint.endsWith('/pulls/1'));
+  }
+  for (const finalReadFailure of [false, true]) {
+    const fixture = apiFixture();
+    let reads = 0;
+    const github = (endpoint, options) => {
+      if (/\/pulls\/1$/.test(endpoint) && ++reads > 1) {
+        if (finalReadFailure) throw new Error('cannot validate current head');
+        return Promise.resolve(pr(1, { head: { sha: reads.toString(16).padStart(40, 'a') } }));
+      }
+      return fixture.github(endpoint, options);
+    };
+    await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: () => {} });
+    assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
+    assert.ok(reads <= 4);
+  }
+});
+
+test('item 9: all workflow triggers fully reconcile under one trusted global group', () => {
+  const workflow = readFileSync(path.join(root, '.github/workflows/ux-signoff-gate.yml'), 'utf8');
+  assert.match(workflow, /concurrency:\s*group: ux-signoff-gate\s*cancel-in-progress: false/);
+  assert.match(workflow, /run: node \.github\/scripts\/ux-signoff-gate\.mjs --reconcile\s*$/);
+  assert.doesNotMatch(workflow, /--pr|EVENT_NAME|PR_NUMBER|pull_request\.head/);
+  assert.match(workflow, /ref: production\s*persist-credentials: false/);
+  assert.match(workflow, /permissions:\s*contents: read\s*pull-requests: read\s*statuses: write\s*concurrency:/);
 });
 
 test('CI policy records ux-signoff without making it required', () => {

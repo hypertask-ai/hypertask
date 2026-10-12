@@ -19,7 +19,7 @@ permissions:
   statuses: write
 
 concurrency:
-  group: ux-signoff-gate-${{ github.event.pull_request.number || 'all' }}
+  group: ux-signoff-gate
   cancel-in-progress: false
 
 jobs:
@@ -43,11 +43,4 @@ jobs:
           MCP_BASE_URL: https://app.hypertask.ai
           REPO: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          EVENT_NAME: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT_NAME" = "pull_request_target" ]; then
-            node .github/scripts/ux-signoff-gate.mjs --reconcile --pr "$PR_NUMBER"
-          else
-            node .github/scripts/ux-signoff-gate.mjs --reconcile
-          fi
+        run: node .github/scripts/ux-signoff-gate.mjs --reconcile
