@@ -31,6 +31,11 @@ if git commit -qm leak 2>"$tmp/err"; then bad "fake key blocked"; else ok "fake 
 grep -q "looks like a key" "$tmp/err" && ok "blocked by the scan itself" || bad "blocked by the scan itself"
 grep -q "$fake" "$tmp/err" && bad "value hidden in output" || ok "value hidden in output"
 git reset -q --hard
+# The shape that leaked in agent-fleet 6ac2c153; the default rules alone miss it.
+cf="$(LC_ALL=C tr -dc 'A-Za-z0-9_-' </dev/urandom | head -c 40)"
+echo "| CF API token | in ~/.bashrc (value \`$cf\`) |" > notes.md; git add notes.md
+if git commit -qm leak 2>/dev/null; then bad "Cloudflare token in markdown blocked"; else ok "Cloudflare token in markdown blocked"; fi
+git reset -q --hard
 
 printf '#!/bin/sh\necho ran > "%s/own"\n' "$tmp" > .git/hooks/post-commit; chmod +x .git/hooks/post-commit
 echo two >> a.txt; git commit -qam two

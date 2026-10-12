@@ -12,7 +12,7 @@ if [ -n "$current" ] && [ "$current" != "$hooks" ]; then
   exit 1
 fi
 mkdir -p "$hooks" "$config/husky"
-cp "$src/scan-staged" "$src/git-hook" "$src/husky-init.sh" "$hooks/"
+cp "$src/scan-staged" "$src/git-hook" "$src/husky-init.sh" "$src/gitleaks.toml" "$hooks/"
 chmod +x "$hooks/scan-staged" "$hooks/git-hook"
 # Every hook name git looks up in core.hooksPath, so each repo's own hooks keep running.
 for name in applypatch-msg pre-applypatch post-applypatch pre-commit pre-merge-commit \

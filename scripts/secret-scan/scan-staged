@@ -9,7 +9,12 @@ if [ ! -x "$leaks" ]; then
 fi
 top=$(git rev-parse --show-toplevel) || exit 1
 set -- git --pre-commit --staged --redact --no-banner --log-level=warn
-[ -f "$top/.gitleaks.toml" ] && set -- "$@" "--config=$top/.gitleaks.toml"
+# The repo's own rules win; otherwise the base rules installed next to this script.
+if [ -f "$top/.gitleaks.toml" ]; then
+  set -- "$@" "--config=$top/.gitleaks.toml"
+elif [ -f "$(dirname "$0")/gitleaks.toml" ]; then
+  set -- "$@" "--config=$(dirname "$0")/gitleaks.toml"
+fi
 if ! "$leaks" "$@" "$top"; then
   echo "secret-scan: commit blocked, a staged change looks like a key (value hidden above)." >&2
   echo "secret-scan: remove it and keep keys in the key safe (stack-key)." >&2
