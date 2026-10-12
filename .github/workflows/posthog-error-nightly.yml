@@ -1,0 +1,28 @@
+name: PostHog Error Nightly Canary
+
+on:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: posthog-nightly-canary
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+      - name: Throw, find within fifteen minutes, and close a production test bug
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_ERROR_TEST_TOKEN: ${{ secrets.POSTHOG_ERROR_TEST_TOKEN }}
+        run: node .github/scripts/posthog-error-monitor.mjs
