@@ -7,6 +7,10 @@ const { load } = require("./task-route-loader.cjs");
 const { graph, getProjectWhere, projectRow, relationFields, visibility } = require("./legacy-task-relations-fixture.cjs");
 const projectContract = require("./htpr-6509-query-contracts.json").project;
 const taskContract = require("./legacy-task-relations-contract.json");
+const { projectContentAccessWhere } = load("src/utils/controllers/projects/getAllIncludes.ts", {
+  "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+  "@/utils/controllers/notifications/visibleInboxScope": {},
+});
 
 const key = "htpr-6924-rest-compat";
 const savedEnv = Object.fromEntries(["SESSION_SECRET", "BETTER_AUTH_ENABLED", "AUTH_LEGACY_FAST_PATH"].map((name) => [name, process.env[name]]));
@@ -52,7 +56,7 @@ function fixture(options = {}) {
       calls.sessions.push(headers.get("cookie"));
       return betterAuthId === undefined ? null : { user: { id: String(betterAuthId) } };
     } } } },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere, projectContentAccessWhere },
     "@/lib/agents/visibility": visibility,
   };
   async function invoke(route, { method = "POST", noCache = false } = {}) {
@@ -143,6 +147,12 @@ for (const [name, options] of [
       assert.equal(response.text, expectedText);
       const optedIn = !Object.hasOwn(options, "compat") || options.compat === "htpr-6924";
       assert.equal(f.calls.flags.length, optedIn ? 1 : 0);
+      if (route === "projects/detail") {
+        assert.equal(f.calls.projects.length, 1);
+        assert.deepEqual(f.calls.projects[0].where, { id: 15, status: "Normal", ...projectContentAccessWhere(options.userId ?? 985) });
+        assert.deepEqual(f.calls.projects[0].include, projectContract.args.include);
+        assert.equal(f.calls.projects[0].relationLoadStrategy, "join");
+      }
       if (route === "tasks/getAll") {
         const legacy = JSON.parse(response.text);
         assert.ok(legacy[0].subTasks[0].description.length > 0);
@@ -155,7 +165,11 @@ for (const [name, options] of [
 for (const [name, token] of [["unsigned", null], ["forged", "forged"], ["expired", signSession({ id: 985 }, -1)]]) {
   test(`${name} identity cannot enable either path via body, query, header or profile`, async () => {
     const f = fixture({ token, profileId: 6 });
-    assert.equal((await f.invoke("projects/detail")).text, JSON.stringify(projectContract.json.json));
+    const detail = await f.invoke("projects/detail");
+    assert.equal(detail.status, 401);
+    assert.equal(detail.text, '{"message":"Unauthorized"}');
+    assert.deepEqual(f.calls.projects, []);
+    assert.deepEqual(f.calls.flags, []);
     const tasks = await f.invoke("tasks/getAll");
     assert.equal(tasks.status, 401);
     assert.equal(tasks.text, '{"message":"Unauthorized"}');
