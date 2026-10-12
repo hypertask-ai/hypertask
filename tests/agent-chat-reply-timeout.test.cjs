@@ -8,7 +8,7 @@ const source = readAgentChatSource();
 
 test("polling chat replaces working with a generic notice after three minutes", () => {
   assert.match(source, /AWAITING_POLL_MAX_MS = 3 \* 60 \* 1000/);
-  assert.match(source, /const maxWait = pollingChatEnabled[\s\S]*AWAITING_POLL_MAX_MS/);
+  assert.match(source, /const remaining = sinceAt \+ AWAITING_POLL_MAX_MS - Date\.now\(\)/);
   assert.match(
     source,
     /setTimeout\([\s\S]*markTimedOut\(\)[\s\S]*}, remaining\)/,

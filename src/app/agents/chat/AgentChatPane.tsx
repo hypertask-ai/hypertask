@@ -28,7 +28,6 @@ type Props = Pick<
   Pick<
   ReturnType<typeof useAgentChatState>,
   | "isNarrow"
-  | "pollingChatEnabled"
   | "deliveryMode"
   | "detailsCollapsed"
   | "setDetailsSheetOpen"
@@ -102,7 +101,7 @@ type Props = Pick<
 >;
 
 export function AgentChatPane({
-  selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, pollingChatEnabled, deliveryMode,
+  selectedAgent, isNarrow, backToRoster, mobileFullscreenChrome, deliveryMode,
   toggleDetails, detailsCollapsed, setDetailsSheetOpen, isExternal, openingFullChat,
   handleOpenFullChat, activityRowsEnabled, feedFilter, setFeedFilter, showScrollToBottom, isMbl,
   mobileLayoutEnabled, scrollMessagesToBottom, messageListRef, handleMessageListScroll,
@@ -137,7 +136,7 @@ export function AgentChatPane({
           {!mobileFullscreenChrome && (
             <p className="truncate text-meta text-text-light-gray">
               {chatStatusText(selectedAgent)}
-              {pollingChatEnabled && deliveryMode === "polling"
+              {deliveryMode === "polling"
                 ? " · polling"
                 : ""}
             </p>

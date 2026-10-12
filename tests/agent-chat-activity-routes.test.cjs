@@ -71,7 +71,6 @@ stub("src/lib/flags.ts", {
     // The history route also reads the ticket-confirmation flag; only the
     // activity flag is under test here.
     if (key === "htpr-6006-chat-confirm-ticket") return false;
-    if (key === "htpr-6553-agent-chat-polling") return false;
     // Shared-chat rollout is evaluated against the agent owner before history
     // loads. Keep it on here so this suite stays about activity rows.
     if (key === "htpr-6002-shared-agent-chat") return true;
@@ -261,7 +260,7 @@ test("polling delivery status refreshes while an idle chat stays open", () => {
   );
 
   assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);
-  assert.match(polling, /pollingChatEnabled/);
+  assert.match(polling, /if \(!session \|\| awaiting \|\| activityRowsEnabled\) return;/);
   assert.match(polling, /setInterval\([\s\S]*?CHAT_AVAILABILITY_POLL_MS/);
   assert.match(polling, /document\.visibilityState !== "visible"/);
 });

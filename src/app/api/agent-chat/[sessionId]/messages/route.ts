@@ -16,7 +16,6 @@ import { AGENT_CHAT_BRIEF_FLAG, isFeatureEnabled } from "@/lib/flags";
 import {
   AGENT_CHAT_ADHD_REPLY_GUIDANCE,
   HTPR_6407_MOBILE_AGENT_CHAT_LAYOUT_FLAG,
-  HTPR_6553_AGENT_CHAT_POLLING_FLAG,
 } from "@/lib/flags/keys";
 import { hasFreshAgentChatHeartbeat } from "@/lib/agents/chatAvailability";
 
@@ -102,11 +101,6 @@ export async function POST(
       userId,
     );
 
-    const pollingChatEnabledForUser = await isFeatureEnabled(
-      HTPR_6553_AGENT_CHAT_POLLING_FLAG,
-      userId,
-    );
-
     const { message, deliveryIds, pollingChatEnabled } =
       await prisma.$transaction(async (tx) => {
       // Runtime heartbeats update this row. Taking its lock before the session
@@ -124,7 +118,6 @@ export async function POST(
         select: { active: true },
       });
       const pollingChatEnabled =
-        pollingChatEnabledForUser &&
         !subscription?.active &&
         hasFreshAgentChatHeartbeat(agent.heartbeatAt);
 
