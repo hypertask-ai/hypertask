@@ -2,6 +2,9 @@
 
 
 import prisma from "@/lib/prisma";
+import { headers } from "next/headers";
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
 import { IProject, ISection, ITask, IUser } from "@/models/model"
@@ -63,26 +66,21 @@ export const getAllProjects  = async(
   }
   
 
-export const getTaskServer = async(taskId:number)=>{
-  const copied = await prisma.task.findFirst({
-    where:{id:taskId}
-    })
-    console.log("🚀 Copied Task to clipboard: ", copied)
-    
-  return copied
-}
-
 export const getAllSubTasks = async (taskId: number) => {
+  const session = await getSessionUser(await headers());
+  if (!session) return;
+  const projectAccess = projectContentAccessWhere(session.userId);
   let allTasks: number[] = [];
 
   const getTask = async (taskId: number) => {
-    console.log("getting all Sub-Tasks (including Parent)");
     try {
-      const task = await prisma.task.findUnique({
-        where: { id: taskId },
+      const task = await prisma.task.findFirst({
+        where: { id: taskId, project: projectAccess },
         select: {
           id:true,
           subTasks: {
+            where: { project: projectAccess },
+            select: { id: true },
             orderBy: {
               status: "desc",
             },
@@ -102,10 +100,8 @@ export const getAllSubTasks = async (taskId: number) => {
   };
 
   try {
-    console.time("sub-task prefetching on delete");
     await getTask(taskId);
-    console.timeEnd("sub-task prefetching on delete");
-    console.log("🚀 ~ getAllSubTasks ~ tasks:", allTasks)
+    if (!allTasks.length) return;
 
     return allTasks;
   } catch (error) {

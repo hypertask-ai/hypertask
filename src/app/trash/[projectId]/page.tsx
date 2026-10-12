@@ -1,23 +1,19 @@
 import TrashComp from "@/components/PageComponents/Trash/TrashComp";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
 import getTrashByProjectId from "@/utils/controllers/trash/getByProjectId";
-import { redirect } from "next/navigation";
+import { parsePositiveInt } from "@/lib/parsePositiveInt";
+import { notFound } from "next/navigation";
 
 export default async function Page(props: { params: Promise<{ projectId: string }> }) {
     const params = await props.params;
 
     const user = await requireServerCookieUser();
-    const projectId = parseInt(params.projectId)
+    const projectId = parsePositiveInt(params.projectId)
 
-    if (!user ){
-        return redirect("/login")
-    }
+    if (!projectId) notFound()
 
     const projects = await getTrashByProjectId({projectId, userId:user.id})
-    console.log("🚀 ~ Page ~ projects:", projects)
-    if (!projects ){
-        return redirect("/login")
-    }
+    if (!projects) notFound()
     return (
         <TrashComp project={projects}/>
 
