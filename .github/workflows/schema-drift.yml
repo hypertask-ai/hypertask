@@ -9,7 +9,6 @@ on:
 
 permissions:
   contents: read
-  packages: read
 
 concurrency:
   group: production-schema-drift
@@ -24,6 +23,9 @@ jobs:
        github.event.deployment_status.state == 'success' &&
        github.event.deployment.environment == 'Production')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 15
     services:
       postgres:
