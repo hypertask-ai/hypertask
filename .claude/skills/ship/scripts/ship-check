@@ -835,7 +835,8 @@ guard() {
       esac
     done
     # A cd earlier in the command means the hook cwd no longer names the merge repo.
-    [[ $rest =~ ^(cd|pushd|popd)([[:space:]]|$) ]] && moved=true
+    # Any cd word counts (builtin cd, command cd, env ... cd): fail closed, never guess.
+    [[ $rest =~ (^|[[:space:]\"\'])(cd|pushd|popd)([[:space:]\"\']|$) ]] && moved=true
     # Unparseable assignment prefixes must not hide a protected command.
     if [[ $seg =~ ^[[:space:]]*[^[:space:]]*= && ! $rest =~ ^$merge && ! $rest =~ ^$done \
       && ( $seg =~ (^|[[:space:]])$merge || $seg =~ (^|[[:space:]])$done ) ]]; then
@@ -864,7 +865,9 @@ try:
         elif token.startswith('-R'):
             repo = token[2:].removeprefix('=')
             flag = True
-        elif url := re.fullmatch(r'(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/pull/\d+(?:[/?#].*)?', token, re.I):
+        # Only the PR argument right after `gh pr merge` names a repo; URLs elsewhere
+        # (redirections, here-strings, flag values) are not the merge target.
+        elif i == 3 and (url := re.fullmatch(r'(?:https?://)?(?:www\.)?github\.com/([^/]+/[^/]+)/pull/\d+(?:[/?#].*)?', token, re.I)):
             repo = url[1]
             flag = True
     if not flag and explicit != 'true':
