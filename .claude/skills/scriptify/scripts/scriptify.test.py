@@ -140,7 +140,7 @@ class ScannerTests(Sandbox):
     def test_scripted_time_filter_malformed_and_missing_usage(self):
         stub(self.home / '.local/bin/already-scripted', 'pass\n')
         for index in range(3):
-            path = fixture(self.home, ['already-scripted 42', 'git status'], index=index)
+            path = fixture(self.home, ['already-scripted 42', 'cat notes.txt'], index=index)
             with path.open('a') as stream:
                 stream.write('not json\n')
         old = fixture(self.home, ['other-program', 'git diff'], index=8)
@@ -163,11 +163,22 @@ class ScannerTests(Sandbox):
         self.assertTrue(SCAN.secret_like(name))
         stub(self.home / '.local/bin' / name, 'pass\n')
         for index in range(3):
-            fixture(self.home, [str(self.home / '.local/bin' / name), 'git status'], index=index)
+            fixture(self.home, [str(self.home / '.local/bin' / name), 'cat notes.txt'], index=index)
         result = self.scan()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(json.loads(result.stdout)['candidates'][0]['already_scripted'])
         self.assertNotIn(name, (self.directory / 'candidates.json').read_text())
+
+    def test_script_followed_by_manual_step_is_not_scripted(self):
+        steps = [{'pattern': 'already-scripted <NUM>', 'time': 0, 'error': False},
+                 {'pattern': 'git status', 'time': 60, 'error': False}]
+        result = SCAN.candidates({str(i): steps for i in range(3)}, {'already-scripted'})
+        pair = [item for item in result if len(item['pattern']) == 2][0]
+        self.assertFalse(pair['already_scripted'])
+
+    def test_attached_short_option_values_are_redacted(self):
+        self.assertEqual(SCAN.normalize('mysql -phunter2 -u root'), 'mysql -p<ARG> -u <ARG>')
+        self.assertNotIn('hunter2', SCAN.normalize('curl -sSfL -phunter2 https://x.example'))
 
     def test_sessions_count_not_occurrences_and_six_steps(self):
         steps = [{'pattern': f'git step{n}', 'time': n * 60, 'error': False} for n in range(7)]

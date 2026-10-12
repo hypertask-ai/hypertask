@@ -88,6 +88,9 @@ def normalize(command):
             else:
                 program = ''
                 result.append('<ARG>')
+        elif re.fullmatch(r'-[A-Za-z].+', word):
+            # Attached short-option values (-phunter2, -sSfL) keep only the first letter.
+            result.append(word[:2] + '<ARG>')
         elif re.fullmatch(r'--?[A-Za-z][A-Za-z0-9_-]*(?:=.*)?', word) and not secret_like(word.split('=')[0]):
             flag, sep, value = word.partition('=')
             result.append(flag + ('=' + placeholder(value) if sep else ''))
@@ -327,6 +330,11 @@ def routine_like(pattern):
     return any(program not in GENERIC and not program.startswith('<') for step in pattern for program in programs(step))
 
 
+def covered(step, scripts):
+    """A step is covered when it runs an existing script, or only plain shell reading around one."""
+    return step.get('scripted', False) or programs(step['pattern']) <= scripts | GENERIC
+
+
 def candidates(sessions, scripts):
     grouped = {}
     for session, steps in sessions.items():
@@ -335,7 +343,8 @@ def candidates(sessions, scripts):
                 occurrence = steps[start:start + size]
                 pattern = tuple(step['pattern'] for step in occurrence)
                 item = grouped.setdefault(pattern, {'sessions': set(), 'occurrences': 0, 'minutes': 0.0, 'errors': 0, 'tokens': None, 'scripted': True})
-                item['scripted'] &= occurrence[0].get('scripted', False) or pattern[0].split()[0] in scripts
+                item['scripted'] &= all(covered(step, scripts) for step in occurrence) and any(
+                    step.get('scripted', False) or programs(step['pattern']) & scripts for step in occurrence)
                 item['sessions'].add(session)
                 item['occurrences'] += 1
                 item['minutes'] += max(0, occurrence[-1]['time'] - occurrence[0]['time']) / 60
@@ -345,7 +354,7 @@ def candidates(sessions, scripts):
                     item['tokens'] = (item['tokens'] or 0) + sum(tokens)
     results = []
     for pattern, item in grouped.items():
-        if len(item['sessions']) < 3 or not routine_like(pattern):
+        if len(item['sessions']) < 3 or not (item['scripted'] or routine_like(pattern)):
             continue
         result = {'pattern': list(pattern), 'sessions': len(item['sessions']),
                   'occurrences': item['occurrences'], 'minutes': round(item['minutes'], 2),
