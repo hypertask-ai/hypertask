@@ -1,5 +1,7 @@
 # Skills for Valentin's Claude Code sessions
 
+**Runner browser policy.** A runner (any session not named INFRA MANAGER) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (INFRA MANAGER) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
+
 Together these skills, their scripts, the hooks and the rule files (CLAUDE.md, AGENTS.md) are the **Agent Kit**: how every Hypertask session works (Valentin, 2026-10-02). It lives in this repo, next to the code it works on. Changes to it are tickets on the Agents & Infra board (project 4060) and PRs, like any other change. (Not to be confused with Product Bot, the retired farm agent.)
 
 These skills are for an interactive session started with `/ship`. One session takes one ticket from the fix through the production check. Board writes go through `vcc` (identity "Valentins Claude Code CLI"). Reads go through the plain `hypertask` CLI.

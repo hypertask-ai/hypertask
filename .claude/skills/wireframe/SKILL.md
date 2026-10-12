@@ -5,6 +5,8 @@ description: Required before every new or changed visible Hypertask UI, except a
 
 # wireframe
 
+**Runner browser policy.** A runner (any session not named INFRA MANAGER) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (INFRA MANAGER) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
+
 ## When
 
 **Before visible UI code.** Required for every new or changed visible UI: publish a clickable wireframe on its ticket, move to **UX Sign-off** (board 15 column 22502), and wait for Valentin's yes before code. A `[BUGFIX]` restoring intended behaviour is exempt from wireframe sign-off, but every new component file still needs his yes naming it. The `ux-signoff` check enforces both rules (Valentin, 2026-10-10).
@@ -21,7 +23,7 @@ description: Required before every new or changed visible Hypertask UI, except a
 - **Two options at most**, one recommended, plus a Today picture; give each option a one-line plain description in one self-contained HTML page.
 - Valentin, 2026-10-11: "can the agents copy the key screens in the comment replies instead of me having to go to the url to see the key change? url still should be provided."
 - **Attach key-screen PNGs to every wireframe comment and reply**, never embedded images in the comment HTML. Capture each key screen with headless Playwright at 1440x900 and, if relevant, 390x844 into `~/.local/state/vcc-evidence/<TICKET>/wireframe/`. Each attachment stays under 3 MiB (crop to the changed area when useful); vcc rejects larger files. Changed-wireframe replies attach before and after PNGs. Keep the link and closing yes/no `Question:`; the wireframe comment is the ticket's last comment. Attach additional key-screen PNGs with `--attach` when needed.
-- Keep it clickable on hypertask.app (ticket pages strip JavaScript; Valentin, 2026-10-10: "including a clickable wireframe"). Open the published link in his zsb pane. Move to UX Sign-off (Valentin, 2026-10-10).
+- Keep it clickable on hypertask.app (ticket pages strip JavaScript; Valentin, 2026-10-10: "including a clickable wireframe"). Put the published link in the ticket comment only; INFRA MANAGER opens it only when mentioning it to him in chat. Move to UX Sign-off (Valentin, 2026-10-10).
 
 ## How
 
