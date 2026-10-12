@@ -494,19 +494,46 @@ test('CI policy records ux-signoff without making it required', () => {
   for (const line of policy.split('\n').filter((line) => /contexts:|required_status_checks:/.test(line))) assert.ok(!line.includes('ux-signoff'));
 });
 
-test('fair sweeps: consecutive runs reach every gated PR beyond the read budget', async () => {
+test('status cursor: every PR is read within ceil(reads / budget) sweeps and statuses per head stay bounded', async () => {
   const { run } = await gate;
-  const prs = Array.from({ length: 130 }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI` }));
-  const seen = new Set();
-  for (const now of [0, 600000]) {
-    const fixture = apiFixture({ prs });
-    const fetchImpl = async (url) => {
-      seen.add(new URL(String(url)).searchParams.get('ticket_number'));
-      return response({ comments: [], nextCursor: null });
+  for (const pages of [1, 13]) {
+    const total = 650;
+    // Zero padding keeps every head SHA unique (the shared fixture pads with 1s, so PR 1 and PR 17 collide).
+    const prs = Array.from({ length: total }, (_, i) => pr(i + 1, { title: `HTPR-${i + 1} [FEATURE] UI`, head: { sha: (i + 1).toString(16).padStart(40, '0') } }));
+    const store = new Map();
+    let clock = Date.parse('2026-10-12T00:00:00Z');
+    const github = async (endpoint, options = {}) => {
+      if (options.method === 'POST') {
+        const sha = endpoint.split('/').at(-1);
+        store.set(sha, [{ ...options.body, updated_at: new Date(clock).toISOString() }, ...(store.get(sha) ?? [])]);
+        return {};
+      }
+      const page = Number(new URL(`https://fixture/${endpoint}`).searchParams.get('page'));
+      if (/\/pulls\?/.test(endpoint)) return prs.slice((page - 1) * 100, page * 100);
+      if (/\/files\?/.test(endpoint)) return [modified];
+      if (/\/statuses\?/.test(endpoint)) return page === 1 ? (store.get(endpoint.split('/')[4]) ?? []) : [];
+      return prs.find((item) => item.number === Number(endpoint.split('/').at(-1)));
     };
-    await run(['--reconcile'], { env, github: fixture.github, fetchImpl, log: () => {}, now: () => now });
+    const read = new Set();
+    const fetchImpl = async (url) => {
+      const params = new URL(String(url)).searchParams;
+      read.add(params.get('ticket_number'));
+      const next = Number(params.get('cursor') ?? 0) + 1;
+      return response({ comments: [], nextCursor: next < pages ? String(next) : null });
+    };
+    const sweep = async () => {
+      await run(['--reconcile'], { env, github, fetchImpl, log: () => {}, now: () => clock });
+      clock += 600000;
+    };
+    // Whole tickets fit floor(120 / pages) per sweep; a ticket cut off mid-pagination is retried first next sweep.
+    const sweeps = Math.ceil(total / Math.floor(120 / pages));
+    for (let index = 0; index < sweeps; index++) await sweep();
+    assert.equal(read.size, total, `${pages} page(s): every PR read within ${sweeps} sweeps`);
+    // A further day of sweeps: about one heartbeat per head per hour, never one per sweep.
+    for (let index = 0; index < 144; index++) await sweep();
+    const perHead = Math.max(...[...store.values()].map((list) => list.length));
+    assert.ok(perHead <= 2 + 24 + 1, `${pages} page(s): ${perHead} statuses on one head`);
   }
-  assert.equal(seen.size, 130);
 });
 
 test("Valentin's yes that quotes the wireframe link still approves it", async () => {

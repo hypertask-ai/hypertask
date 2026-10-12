@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 const CONTEXT = 'ux-signoff';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
 const READ_BUDGET = 120;
+const HEARTBEAT_MS = 60 * 60 * 1000;
 const DEFERRED = 'Ticket not read this sweep; rechecked within 10 minutes';
 const TICKET_TITLE = /^(HTPR|HYFA|YPER4)-(\d+) \[([^\]]+)\] \S/;
 const WIREFRAME = /https:\/\/hypertask\.app\/(?:wireframes|explorations)\/[A-Za-z0-9_-]+/;
@@ -226,9 +227,17 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
   }
 
   const openPrs = await githubPages(github, `repos/${repo}/pulls?state=open&base=production`);
-  // Each 10-minute sweep starts one read budget further along, so a long PR list is covered within a few sweeps.
-  const start = openPrs.length ? (Math.floor(now() / 600000) * READ_BUDGET) % openPrs.length : 0;
-  const prs = number == null ? [...openPrs.slice(start), ...openPrs.slice(0, start)] : openPrs.filter((pr) => pr.number === number);
+  // The ux-signoff status on each head is the sweep cursor: oldest-evaluated heads (no status first) spend the read budget first.
+  const lastEvaluated = async (pr) => {
+    const statuses = await githubPages(github, `repos/${repo}/commits/${pr.head?.sha}/statuses`).catch(() => []);
+    const newestStatus = statuses.find((status) => status.context === CONTEXT);
+    // A deferred placeholder means the head was never evaluated, so it keeps first place.
+    const time = newestStatus?.description === DEFERRED ? NaN : Date.parse(newestStatus?.updated_at);
+    return Number.isNaN(time) ? -Infinity : time;
+  };
+  const targets = number == null ? openPrs : openPrs.filter((pr) => pr.number === number);
+  const order = await Promise.all(targets.map(async (pr) => ({ pr, time: await lastEvaluated(pr) })));
+  const prs = order.sort((a, b) => (a.time === b.time ? 0 : a.time < b.time ? -1 : 1)).map(({ pr }) => pr);
   let errors = false;
   for (const listed of prs) {
     try {
@@ -236,12 +245,14 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
       for (let attempt = 0; attempt < 3; attempt++) {
         if (pr.state !== 'open' || pr.base?.ref !== 'production') break;
         let verdict;
+        let deferred = false;
         try {
           verdict = await readVerdict(pr, options);
         } catch (error) {
           if (error.deferred) {
             log(JSON.stringify({ pr: pr.number, state: 'deferred', description: error.message }));
-            // Never leave an older green standing on a head whose ticket went unread.
+            // A head never evaluated gets pending; an evaluated head keeps its verdict until its turn comes.
+            deferred = true;
             verdict = { state: 'pending', description: DEFERRED, details: [] };
           } else verdict = { state: 'error', description: env.MCP_TOKEN ? READ_ERROR : 'HYPERTASK_MCP_TOKEN is empty; configure it for UI signoff', details: [] };
         }
@@ -256,7 +267,10 @@ export async function run(args, { env = process.env, fetchImpl = fetch, github =
           if (attempt === 2) log(JSON.stringify({ pr: pr.number, state: 'deferred', description: 'PR kept changing; left untouched this run' }));
           continue;
         }
-        if (newestStatus?.state !== verdict.state || newestStatus?.description !== verdict.description) {
+        if (deferred && newestStatus) break;
+        // Unchanged verdicts are re-posted hourly so the cursor moves while statuses per head stay bounded.
+        const stale = Date.parse(newestStatus?.updated_at) < now() - HEARTBEAT_MS;
+        if (stale || newestStatus?.state !== verdict.state || newestStatus?.description !== verdict.description) {
           await github(`repos/${repo}/statuses/${pr.head.sha}`, {
             method: 'POST', body: {
               context: CONTEXT, state: verdict.state, description: verdict.description,
