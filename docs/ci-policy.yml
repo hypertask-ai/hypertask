@@ -1,5 +1,5 @@
-version: 6
-last_updated: 2026-10-04
+version: 7
+last_updated: 2026-10-12
 purpose: "Fixed-cost CI with fast releases and a provider-neutral AI review gate. App CI runs on GitHub-hosted runners; the repo is public, so hosted minutes are free. The canonical reader-facing contract is https://hypertask.app/wiki/deployment; this file is the machine-readable companion."
 
 topology:
@@ -183,6 +183,18 @@ ci_tests:
       telegram_dedup: once_per_cause_per_utc_day
       previous_run_comparison: informational_only
       rollback_authority: current_production_health_probe
+
+schema_drift_monitor:
+  workflow: .github/workflows/schema-drift.yml
+  runs_on: ubuntu-latest
+  triggers: [nightly, successful_production_deployment, workflow_dispatch_production_only]
+  required_check: false
+  trusted_code_ref: production
+  production_access: catalog_reads_only
+  reader_secret: SCHEMA_READER_DATABASE_URL
+  shadow: disposable_postgres_service
+  failure_action: failed_workflow_with_named_schema_differences
+  repair_automatically: false
 
 agent_rules:
   - "Read docs/ci.md before changing workflows, runner labels, rulesets, or deployment checks."
