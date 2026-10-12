@@ -101,6 +101,7 @@ export function createUpdateCommentTool(context: ToolContext) {
           commentId: input.comment_id,
           text: sanitizedText,
           userId: user.id,
+          agentId: actingAgentId,
         });
 
         await persistUrlsForComment(

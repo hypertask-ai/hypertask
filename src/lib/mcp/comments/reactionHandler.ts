@@ -13,6 +13,7 @@ export type CommentReactionTarget = {
 // agent carries an id and name only when the caller may see that agent.
 type CommentReactionRow = {
   id: string;
+  createdAt: string;
   emoji: string;
   userId: number;
   isAgent?: true;

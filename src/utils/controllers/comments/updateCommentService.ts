@@ -38,7 +38,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
 
   const comment = await prisma.comment.findFirst({
     where: { id: commentId, creatorId: userId, task: { project: projectContentAccessWhere(userId, agentId) } },
-    select: { id: true, taskId: true, task: { select: { projectId: true } } }
+    select: { id: true, taskId: true, text: true, task: { select: { projectId: true } } }
   })
 
   if (!comment) {
@@ -46,6 +46,7 @@ export async function updateCommentService(params: UpdateCommentParams) {
   }
 
   await invalidateHyperAiCommentOrigin(commentId)
+  const textChanged = text !== normalizeBlockHtml(comment.text)
   const updatedComment = await prisma.$transaction(async (transaction) => {
     if (attachments && replaceAttachments) {
       const existingAttachments = await transaction.attachment.findMany({
@@ -118,9 +119,19 @@ export async function updateCommentService(params: UpdateCommentParams) {
       }
     }
 
+    // Same text as read: lock the row only if it still holds that text, else a concurrent edit landed and this write is an edit too.
+    const markEdited = textChanged || (await transaction.comment.updateMany({
+      where: { id: commentId, text: comment.text },
+      data: { summary: null }
+    })).count === 0
+
     return transaction.comment.update({
       where: { id: commentId },
-      data: { text, summary: null },
+      data: {
+        text,
+        summary: null,
+        ...(markEdited ? { editedAt: new Date(), editedByUserId: userId, editedByAgentId: agentId ?? null } : {})
+      },
       include: {
         creator: { select: { id: true, email: true, displayName: true } },
         agent: { select: publicAgentSelect },

@@ -15,6 +15,7 @@ export interface McpCommentReactionAgent {
 }
 
 export interface McpCommentReaction {
+  createdAt: string
   id: string
   emoji: string
   /** The person, or for an agent reaction the agent's owner (whose token it used). */
@@ -26,6 +27,7 @@ export interface McpCommentReaction {
 }
 
 interface McpCommentReactionRecord {
+  createdAt: Date
   id: string
   emoji: string
   userId: number
@@ -40,6 +42,7 @@ export const commentReactionInclude = {
   },
   select: {
     id: true,
+    createdAt: true,
     emoji: true,
     userId: true,
     agentId: true,
@@ -67,6 +70,7 @@ export function mapMcpCommentReaction(
     const visibleName = visibleAgents.get(reaction.agentId)
     return {
       id: reaction.id,
+      createdAt: reaction.createdAt.toISOString(),
       emoji: reaction.emoji,
       userId: reaction.userId,
       isAgent: true,
@@ -78,6 +82,7 @@ export function mapMcpCommentReaction(
   const displayName = reaction.user?.displayName
   return {
     id: reaction.id,
+    createdAt: reaction.createdAt.toISOString(),
     emoji: reaction.emoji,
     userId: reaction.userId,
     ...(reaction.user
