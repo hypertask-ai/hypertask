@@ -73,15 +73,14 @@ export function evaluate({ title, author, files, comments = [] }) {
   // Valentin's own comments are verdicts, even when they quote the wireframe link.
   const wireframe = newest(comments.filter((comment) => WIREFRAME.test(comment.text) && !humanValentin(comment, 'creatorId')));
   const created = wireframe ? Date.parse(wireframe.createdAt) : -Infinity;
-  const edits = wireframe ? [wireframe.updatedAt, wireframe.editedAt].filter((value) => value != null) : [];
-  const revision = Math.max(created, ...edits.map((value) => Date.parse(value)));
+  const edited = wireframe?.editedAt ?? wireframe?.updatedAt;
+  const revision = edited != null ? Date.parse(edited) : created;
   const verdict = newest(comments.filter((comment) =>
     Date.parse(comment.createdAt) > created && commentVerdict(comment)));
   const approval = verdict && commentVerdict(verdict) === 'approve' && Date.parse(verdict.createdAt) > revision ? verdict : null;
-  // MCP currently exposes neither comment edit times nor reaction creation times, so unseen edits cannot invalidate approval.
   const reacted = wireframe && (wireframe.reactions ?? []).some((reaction) =>
     humanValentin(reaction, 'userId') && /^(?:👍[🏻-🏿]?|✅)\uFE0F?$/u.test(reaction.emoji) &&
-    (edits.length === 0 || Date.parse(reaction.createdAt) > revision));
+    (edited == null || Date.parse(reaction.createdAt) > revision));
   const approved = commentVerdict(verdict ?? {}) !== 'reject' && Boolean(approval || reacted);
   const approvedNames = new Set([
     ...(wireframe && approved ? elementNames(wireframe) : []),

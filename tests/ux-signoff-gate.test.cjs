@@ -49,6 +49,52 @@ test('only a Valentin approval reaction on the wireframe counts', async () => {
   assert.equal((await decision({ comments: [wireframe(), yes({ text: 'Another comment', reactions: [{ userId: 6, emoji: '👍' }] })] })).state, 'failure');
 });
 
+test('edited wireframe rejects thumbs up before or at the edit and accepts it after', async () => {
+  const editedAt = '2026-10-10T12:02:00Z';
+  for (const [createdAt, expected] of [
+    ['2026-10-10T12:01:00Z', 'failure'], [editedAt, 'failure'],
+    ['2026-10-10T12:03:00Z', 'success'],
+  ]) {
+    const comment = wireframe({ editedAt, reactions: [{ userId: 6, emoji: '👍', createdAt }] });
+    assert.equal((await decision({ comments: [comment] })).state, expected);
+  }
+});
+
+test('edited wireframe rejects thumbs up with missing or invalid creation time', async () => {
+  for (const createdAt of [undefined, null, 'invalid']) {
+    const comment = wireframe({ editedAt: '2026-10-10T12:02:00Z', reactions: [{ userId: 6, emoji: '👍', createdAt }] });
+    assert.equal((await decision({ comments: [comment] })).state, 'failure');
+  }
+});
+
+test('never-edited wireframe accepts thumbs up without a creation time', async () => {
+  const comment = wireframe({ editedAt: null, editedBy: null, reactions: [{ userId: 6, emoji: '👍' }] });
+  assert.equal((await decision({ comments: [comment] })).state, 'success');
+});
+
+test('edited wireframe prefers editedAt over the updatedAt fallback for both approval types', async () => {
+  for (const updatedAt of ['2026-10-10T12:04:00Z', 'invalid']) {
+    const comment = wireframe({ editedAt: '2026-10-10T12:02:00Z', updatedAt });
+    const createdAt = '2026-10-10T12:03:00Z';
+    assert.equal((await decision({ comments: [comment, yes({ createdAt })] })).state, 'success');
+    assert.equal((await decision({ comments: [{ ...comment, reactions: [{ userId: 6, emoji: '👍', createdAt }] }] })).state, 'success');
+  }
+});
+
+test('agent edit and other-user edit invalidate earlier yes-comments but allow a later yes', async () => {
+  const editedAt = '2026-10-10T12:02:00Z';
+  for (const editedBy of [
+    { userId: 6, agentId: 'agent' }, { userId: 6, agentId: null, isAgent: true },
+    { userId: 7, agentId: null }, { userId: 6, agentId: null },
+  ]) {
+    const comment = wireframe({ editedAt, editedBy });
+    for (const [createdAt, expected] of [
+      ['2026-10-10T12:01:00Z', 'failure'], [editedAt, 'failure'],
+      ['2026-10-10T12:03:00Z', 'success'],
+    ]) assert.equal((await decision({ comments: [comment, yes({ createdAt })] })).state, expected);
+  }
+});
+
 test('only a later human Valentin yes approves a wireframe', async () => {
   assert.equal((await decision({ comments: [yes(), wireframe()] })).state, 'success');
   for (const approval of [
