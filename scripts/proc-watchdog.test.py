@@ -185,4 +185,53 @@ esac
           k('node /srv/premerge-local-notes/server.js') is None)
     check('next start from a disposable premerge copy is', k('node /tmp/premerge-local-fds-a/node_modules/next/dist/bin/next start') == 'premerge')
 
+    # 7. Synthetic /proc trees exercise GiB limits without allocating large amounts of RAM.
+    fake = t / 'proc'
+    fake.mkdir()
+    (fake / 'uptime').write_text('10000 0\n')
+    pw.PROC = fake
+
+    def fixture(pid, ppid, rss, cmd, marker=b'', age=60, name='node'):
+        entry = fake / str(pid)
+        entry.mkdir(exist_ok=True)
+        fields = ['S', str(ppid)] + ['0'] * 17 + [str(int((10000 - age) * pw.clock_ticks()))]
+        (entry / 'stat').write_text(f'{pid} ({name}) ' + ' '.join(fields))
+        (entry / 'status').write_text(f'VmRSS:\t{rss} kB\n')
+        (entry / 'cmdline').write_bytes(cmd.replace(' ', '\0').encode() + b'\0')
+        (entry / 'environ').write_bytes(marker)
+
+    gib = 1024 * 1024
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    fixture(101, 100, 7 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    check('premerge tree at 7 GiB is kept, including an unmarked descendant', pw.over_limit(pw.read_procs()) == [])
+    fixture(100, 1, gib, 'npm exec next build --webpack', name='npm exec next')
+    hits = pw.over_limit(pw.read_procs())
+    check('normal tree at 7 GiB is selected for killing as one whole tree',
+          len(hits) == 1 and hits[0]['pid'] == 100 and hits[0]['rss_kb'] == 7 * gib
+          and {pid for pid, _ in hits[0]['tree']} == {100, 101})
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_LOCAL=1\0', name='npm exec next')
+    check('broad premerge marker does not grant the build exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'OTHER=PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    check('marker text inside another variable does not grant the exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=0\0', name='npm exec next')
+    check('disabled build marker does not grant the exception', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', name='npm exec next')
+    fixture(101, 100, 8 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    check('premerge tree exactly at 8 GiB is kept', pw.over_limit(pw.read_procs()) == [])
+    fixture(101, 100, 8 * gib + 1, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    hits = pw.over_limit(pw.read_procs())
+    check('premerge tree over 8 GiB is selected for killing', len(hits) == 1 and 'using' in hits[0]['reason'])
+    fixture(101, 100, 7 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js')
+    fixture(100, 1, gib, 'npm exec next build --webpack', b'PREMERGE_NEXT_BUILD=1\0', age=7201, name='npm exec next')
+    hits = pw.over_limit(pw.read_procs())
+    check('premerge tree over 2 h is selected for killing despite the memory exception',
+          len(hits) == 1 and 'running' in hits[0]['reason'] and 'using' not in hits[0]['reason'])
+    fixture(100, 1, gib, 'npm exec next build --webpack', age=7201, name='npm exec next')
+    check('normal tree keeps its 2 h limit', len(pw.over_limit(pw.read_procs())) == 1)
+    fixture(100, 1, gib, 'npm exec next build --webpack', name='npm exec next')
+    fixture(101, 100, 6 * gib, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js', b'PREMERGE_NEXT_BUILD=1\0')
+    check('normal tree exactly at 6 GiB is kept even with group RSS over 6 GiB', pw.over_limit(pw.read_procs()) == [])
+    fixture(101, 100, 6 * gib + 1, 'node /w/node_modules/next/dist/compiled/jest-worker/processChild.js', b'PREMERGE_NEXT_BUILD=1\0')
+    check('a marked descendant cannot raise an unmarked root limit', len(pw.over_limit(pw.read_procs())) == 1)
+
 sys.exit(1 if fails else print('ALL PASS') or 0)
