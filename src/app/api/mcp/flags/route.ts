@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { parse } from "node-html-parser";
 import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_MODES,
@@ -22,7 +23,7 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   EVERYONE: "Everyone",
   OFF: "Off",
 };
-const SWITCH_REQUEST = /^(?:@Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
+const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -93,7 +94,8 @@ export async function PATCH(request: NextRequest) {
       },
       select: { commentText: true, text: true },
     });
-    const words = comment?.commentText || comment?.text || "";
+    // Comments posted through the API keep only HTML in text, so compare the rendered words.
+    const words = parse(comment?.commentText || comment?.text || "").text;
     const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
     if (!comment || !ask || ask[1] !== body.key
       || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {

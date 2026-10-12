@@ -227,6 +227,18 @@ for (const [mode, label] of [["OFF", "Off"], ["EVERYONE", "Everyone"], ["OWNER_A
   });
 }
 
+test("PATCH accepts an HTML-only comment from the API with the mention span", async () => {
+  approvalComment.commentText = "";
+  approvalComment.text = `<p><strong><span data-type=\"mention\" class=\"mention\" data-id=\"Valentin Yeo\" data-label=\"name-6\">Valentin Yeo</span> Question: Switch ${key} to Off?</strong></p>`;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+});
+
+test("PATCH refuses an HTML-only comment holding a negated request", async () => {
+  approvalComment.commentText = "";
+  approvalComment.text = `<p><span data-type=\"mention\" class=\"mention\" data-id=\"Valentin Yeo\" data-label=\"name-6\">Valentin Yeo</span> Question: Do not Switch ${key} to Off?</p>`;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 403);
+});
+
 test("PATCH accepts the request after the @Valentin Yeo mention", async () => {
   approvalComment.commentText = `@Valentin Yeo Question: Switch ${key} to Off?`;
   assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
