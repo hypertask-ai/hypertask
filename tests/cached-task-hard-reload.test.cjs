@@ -20,6 +20,8 @@ function mount({ enabled, cachedLayout, cachedNavigation = false, cachedTaskId =
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout }) },
     "@/lib/configs/taskDetail.config": { default: { navigation: { refresh: "Refresh" }, taskIds: { newTask: -1 } } },
     "@/utils/api/global": { default: {} },
+    "@/hooks/MultiPages/useUpdateTaskInBoards": { default: () => ({ deleteTodo: () => {} }) },
+    "@/components/undoToast": { undoToastSettings: {} },
     axios: { default: {} },
     "react-hot-toast": { default: () => {} },
     react: { useEffect: (callback, dependencies) => effects.push({ callback, dependencies }), useLayoutEffect: () => {} },
