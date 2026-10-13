@@ -64,10 +64,11 @@ for (const mode of ['rename', 'delete', 'switch']) {
     assert.deepEqual(h.queries, []);
   });
 }
-test('sync resolves every shared target before writes; inaccessible default cannot partially update applied view', async () => {
+const appliedOnly = (h) => h.writes.map(([name, query]) => [name, query.where.id]);
+test('sync: another owner Private default is skipped; the Public applied view still syncs', async () => {
   const h = fixture({ member: 'Accepted', defaultView: { visibility: 'Private' } });
-  assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
-  assert.deepEqual(h.writes, []);
+  assert.equal((await invoke(h, 'sync')).status, 200);
+  assert.deepEqual(appliedOnly(h), [['view-update', 'view']]);
 });
 for (const [actor, options] of Object.entries({ owner: { owner: true }, Accepted: { member: 'Accepted' }, 'teamless owner': { owner: true, teamless: true } })) {
   test(`sync: ${actor} can update only their own active Private default`, async () => {
@@ -90,10 +91,10 @@ for (const [name, options, race] of [
   assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
   assert.deepEqual(h.writes, []);
 });
-test('sync: Public applied view cannot propagate columns into even an owned Private default', async () => {
+test('sync: Public applied view syncs but never propagates columns into even an owned Private default', async () => {
   const h = fixture({ owner: true, defaultView: { userId: 42, visibility: 'Private' } });
-  assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
-  assert.deepEqual(h.writes, []);
+  assert.equal((await invoke(h, 'sync')).status, 200);
+  assert.deepEqual(appliedOnly(h), [['view-update', 'view']]);
 });
 test('sync unauthorized board with no prior state does not create a container', async () => {
   const h = fixture({ noState: true });
@@ -114,10 +115,10 @@ test('switching default retains null applied pointer and deletes only owned same
   assert.equal(state.create.appliedViewId, null);
   assert.deepEqual(h.writes.filter(([name]) => name === 'view-delete').map(([, query]) => query.where.id), ['draft']);
 });
-for (const [name, overrides] of [['foreign default', { project_view_id: 'foreign' }], ['Private default at lock', null]]) test(`sync: ${name} cannot cause a partial applied update`, async () => {
+for (const [name, overrides] of [['foreign default', { project_view_id: 'foreign' }], ['Private default at lock', null]]) test(`sync: ${name} is never written; only the Public applied view syncs`, async () => {
   const h = fixture({ owner: true, ...(overrides ? { defaultView: overrides } : { race: ({ defaultView }) => { defaultView.visibility = 'Private'; } }) });
-  assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
-  assert.deepEqual(h.writes, []);
+  assert.equal((await invoke(h, 'sync')).status, 200);
+  assert.deepEqual(appliedOnly(h), [['view-update', 'view']]);
 });
 for (const mode of ['rename', 'delete', 'switch']) test(`${mode}: poisoned draft never deletes another user's view`, async () => {
   const h = fixture({ owner: true, unsaved: true, draft: { userId: 99, project_view_id: 'foreign' } });
