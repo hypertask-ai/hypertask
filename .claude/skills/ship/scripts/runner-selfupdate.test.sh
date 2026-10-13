@@ -19,10 +19,12 @@ setup() {
   export RUNNER_SELFUPDATE_STATE=$C/state RUNNER_SELFUPDATE_SYSTEMCTL=$C/systemctl
   export FAKE_SYSTEMCTL_LOG=$C/systemctl.log FAKE_EVENTS=$C/events FAKE_DELIVER_CALLS=$C/deliver-calls
   export FAKE_SYSTEMCTL_FAIL_MARKER=$C/failure-used
-  unset RUNNER_SELFUPDATE_GIT FAKE_SYSTEMCTL_FAIL FAKE_NO_RUNNERS
+  unset RUNNER_SELFUPDATE_GIT FAKE_SYSTEMCTL_FAIL FAKE_NO_RUNNERS FAKE_UPDATER_PID
+  export TMPDIR=$C/backups
+  mkdir -p "$TMPDIR"
   mkdir -p "$HOME" "$C/source/.claude/skills/ship/scripts" "$C/source/.claude/hooks" "$C/source/.claude/systemd" "$C/lib" "$C/units/agent-events.service.d"
   S=$C/source/.claude/skills/ship/scripts
-  cp "$HERE/runner-pickup" "$S/"
+  cp "$HERE/runner-pickup" "$SCRIPT" "$S/"
   for file in runner-chat-reply ship-identity; do printf '#!/usr/bin/env bash\nexit 0\n' > "$S/$file"; done
   printf '#!/usr/bin/env bash\nexit 0\n' > "$C/source/.claude/hooks/runner-inbox-stop.sh"
   printf '#!/usr/bin/env python3\nprint("fixture")\n' > "$S/runner-webhook"
@@ -46,7 +48,16 @@ case "$*" in
   *list-unit-files*)
     [ "${FAKE_NO_RUNNERS:-0}" != 1 ] || exit 0
     printf 'runner-pickup@12.timer enabled enabled\nrunner-pickup@3.timer enabled enabled\nrunner-pickup@1.timer disabled enabled\n';;
-  *'enable --now runner-webhook.service') [ "${FAKE_SYSTEMCTL_FAIL:-}" != install ]; exit $?;;
+  *'enable --now runner-webhook.service')
+    if [ -n "${FAKE_UPDATER_PID:-}" ]; then
+      python3 - "$FAKE_UPDATER_PID" <<'PYEOF'
+import os, pathlib, signal, subprocess, sys
+sleeper = subprocess.Popen(["sleep", "0.2"])
+os.kill(int(pathlib.Path(sys.argv[1]).read_text()), signal.SIGTERM)
+sleeper.wait()
+PYEOF
+    fi
+    [ "${FAKE_SYSTEMCTL_FAIL:-}" != install ]; exit $?;;
   *'restart runner-webhook.service')
     if [ "${FAKE_SYSTEMCTL_FAIL:-}" = restart ] && [ ! -e "$FAKE_SYSTEMCTL_FAIL_MARKER" ]; then touch "$FAKE_SYSTEMCTL_FAIL_MARKER"; exit 1; fi;;
   *'is-active --quiet runner-webhook.service')
@@ -72,8 +83,8 @@ EOF
   : > "$FAKE_SYSTEMCTL_LOG"; : > "$FAKE_EVENTS"; : > "$FAKE_DELIVER_CALLS"
 }
 merge() { printf '%s\n' "$2" >> "$S/$1"; commit; git -C "$C/source" push -q origin production; }
-run_ok() { if "$SCRIPT" run > "$C/output" 2>&1; then ok "$1"; else bad "$1"; cat "$C/output"; fi; }
-run_bad() { if "$SCRIPT" run > "$C/output" 2>&1; then bad "$1 unexpectedly succeeded"; else ok "$1"; fi; }
+run_ok() { if "$C/lib/runner-selfupdate" run > "$C/output" 2>&1; then ok "$1"; else bad "$1"; cat "$C/output"; fi; }
+run_bad() { if "$C/lib/runner-selfupdate" run > "$C/output" 2>&1; then bad "$1 unexpectedly succeeded"; else ok "$1"; fi; }
 restored() {
   if diff -r "$C/old-lib" "$C/lib" && diff -r "$C/old-units" "$C/units"; then ok "$1 restored all lib and unit files"; else bad "$1 did not restore all files"; fi
 }
@@ -121,6 +132,7 @@ if grep -q 'daemon-reload' "$FAKE_SYSTEMCTL_LOG"; then ok 'rollback reloads unit
 
 setup webhook-failure
 merge runner-webhook '# merged receiver update'
+merge runner-selfupdate '# updater installed before webhook restart fails'
 export FAKE_SYSTEMCTL_FAIL=restart
 run_bad 'case 5: failed webhook restart rejected'
 restored webhook-failure
@@ -143,13 +155,69 @@ eq 'wrong HEAD never installs' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
 eq 'wrong HEAD alerts' "$(events)" 1
 
 setup install-timer
-rm "$C/units/runner-selfupdate.service" "$C/units/runner-selfupdate.timer"
+rm "$C/units/runner-selfupdate.service" "$C/units/runner-selfupdate.timer" "$C/lib/runner-selfupdate"
 if "$SCRIPT" install > "$C/output" 2>&1 &&
   cmp -s "$REPO/.claude/systemd/runner-selfupdate.service" "$C/units/runner-selfupdate.service" &&
-  cmp -s "$REPO/.claude/systemd/runner-selfupdate.timer" "$C/units/runner-selfupdate.timer"; then
-  ok 'case 7: install writes both timer units'
+  cmp -s "$REPO/.claude/systemd/runner-selfupdate.timer" "$C/units/runner-selfupdate.timer" &&
+  cmp -s "$SCRIPT" "$C/lib/runner-selfupdate" &&
+  [ "$(stat -c %a "$C/lib/runner-selfupdate")" = 755 ]; then
+  ok 'case 7: install writes timer units and executable updater'
 else bad 'timer install'; cat "$C/output"; fi
+eq 'service runs the installed updater' "$(sed -n 's/^ExecStart=//p' "$C/units/runner-selfupdate.service")" '%h/.local/lib/hypertask/runner-pickup/runner-selfupdate run'
 eq 'install reloads and enables timer' "$(cat "$FAKE_SYSTEMCTL_LOG")" $'--user daemon-reload\n--user enable --now runner-selfupdate.timer'
+
+setup updater-syntax-error
+merge runner-selfupdate 'if then'
+run_bad 'invalid changed updater rejected by the installed copy'
+restored updater-syntax-error
+eq 'updater validation precedes installation' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+eq 'invalid updater raises one alert' "$(events)" 1
+run_bad 'invalid updater stays rejected on retry'
+eq 'invalid updater alert is not repeated' "$(events)|$(wc -l < "$FAKE_DELIVER_CALLS" | tr -d ' ')" '1|1'
+
+setup updater-change
+merge runner-selfupdate '# valid merged updater change'
+run_ok 'installed updater updates itself from live production'
+if cmp -s "$S/runner-selfupdate" "$C/lib/runner-selfupdate" && [ "$(stat -c %a "$C/lib/runner-selfupdate")" = 755 ]; then
+  ok 'installed updater equals production and is executable'
+else bad 'updater installation differs'; fi
+: > "$FAKE_SYSTEMCTL_LOG"
+run_ok 'updated installed updater can run again'
+eq 'updated updater is idempotent' "$(cat "$FAKE_SYSTEMCTL_LOG")" ''
+
+setup rollback-failure
+merge runner-deliver '# update before failed recovery'
+export FAKE_SYSTEMCTL_FAIL=install
+mkdir "$C/bin"
+cat > "$C/bin/cp" <<'EOF'
+#!/usr/bin/env bash
+# Fail the recovery copy, not the backup or installation.
+if [[ ${2:-} == "$TMPDIR/"*/lib ]]; then exit 1; fi
+exec /usr/bin/cp "$@"
+EOF
+chmod +x "$C/bin/cp"
+PATH="$C/bin:$PATH" run_bad 'failed recovery exits nonzero'
+eq 'failed recovery raises exactly one alert' "$(events)" 1
+kept=$(find "$TMPDIR" -mindepth 1 -maxdepth 1 -type d)
+if [ -n "$kept" ] && diff -r "$C/old-lib" "$kept/lib" && [ -d "$kept/units" ]; then
+  ok 'failed recovery keeps its complete backup'
+else bad 'failed recovery deleted or damaged backup'; fi
+if grep -qE '^runner-selfupdate-rollback-[0-9a-f]{12}\|ht-product-lead\|.*recovery failed$' "$FAKE_EVENTS" &&
+  grep -Fq "backup kept at $kept " "$FAKE_EVENTS"; then
+  ok 'rollback alert names the kept backup and recovery failure'
+else bad 'missing rollback-specific recovery alert'; fi
+if [ -f "$C/lib/runner-deliver" ]; then ok 'failed recovery did not delete the installed library'; else bad 'failed recovery deleted installed library'; fi
+
+setup interrupted-install
+merge runner-deliver '# change before interruption'
+merge runner-selfupdate '# updater must also be restored after interruption'
+export FAKE_UPDATER_PID=$C/updater.pid
+if bash -c 'echo $$ > "$FAKE_UPDATER_PID"; exec "$1" run' bash "$C/lib/runner-selfupdate" > "$C/output" 2>&1; then
+  bad 'interrupted install unexpectedly succeeded'
+else ok 'TERM during sleeping installer exits nonzero'; fi
+restored interrupted-install
+eq 'interrupted install raises one alert' "$(events)" 1
+eq 'successful recovery removes its backup' "$(find "$TMPDIR" -mindepth 1 -maxdepth 1 -type d)" ''
 
 # Additional guards for the production-only, no-runner, active-check and locking contracts.
 setup dirty-source
