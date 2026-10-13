@@ -214,6 +214,8 @@ async function dispatchMethod(
     case 'ping':
       return jsonRpcResult(id, {})
     case 'tools/list':
+      // YPER4-352 negative proof only: DO NOT MERGE.
+      return jsonRpcResult(id, { tools: [] })
       if (deferred) {
         const metaOnly = new URL(request.url).searchParams.get('tools') === 'meta'
         if (metaOnly) {
