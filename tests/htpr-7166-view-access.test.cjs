@@ -69,6 +69,32 @@ test('sync resolves every shared target before writes; inaccessible default cann
   assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
   assert.deepEqual(h.writes, []);
 });
+for (const [actor, options] of Object.entries({ owner: { owner: true }, Accepted: { member: 'Accepted' }, 'teamless owner': { owner: true, teamless: true } })) {
+  test(`sync: ${actor} can update only their own active Private default`, async () => {
+    const h = fixture({ ...options, defaultView: { userId: 42, visibility: 'Private' } });
+    h.uv.appliedViewId = null;
+    assert.equal((await invoke(h, 'sync')).status, 200);
+    assert.deepEqual(h.writes.map(([name, query]) => [name, query.where.id, query.data.board_columns_view]), [['view-update', 'default', [{ id: 2 }]]]);
+    assert.equal(h.writes[0][1].where.visibility, 'Private');
+    assert.deepEqual(h.view.board_columns_view, [{ id: 1, section_title: 'view' }]);
+  });
+}
+for (const [name, options, race] of [
+  ['another owner Private default', { defaultView: { visibility: 'Private' } }],
+  ['foreign-container Private default', { defaultView: { userId: 42, visibility: 'Private', project_view_id: 'foreign' } }],
+  ['default ownership lost at lock', { defaultView: { userId: 42, visibility: 'Private' } }, ({ defaultView }) => { defaultView.userId = 99; }],
+  ['board access lost at lock', { defaultView: { userId: 42, visibility: 'Private' } }, ({ board }) => { board.ownerId = 99; }],
+]) test(`sync: ${name} denied without writes`, async () => {
+  const h = fixture({ owner: true, ...options, race });
+  h.uv.appliedViewId = null;
+  assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
+  assert.deepEqual(h.writes, []);
+});
+test('sync: Public applied view cannot propagate columns into even an owned Private default', async () => {
+  const h = fixture({ owner: true, defaultView: { userId: 42, visibility: 'Private' } });
+  assert.deepEqual(await invoke(h, 'sync'), { status: 404, body: deniedBody });
+  assert.deepEqual(h.writes, []);
+});
 test('sync unauthorized board with no prior state does not create a container', async () => {
   const h = fixture({ noState: true });
   assert.equal((await invoke(h, 'sync')).status, 404);
