@@ -4,11 +4,14 @@ import { useState, useCallback } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import Image from "next/image";
+import { isValidRedirectUri } from "@/lib/oauth/redirect-uri";
 
 export default function OAuthSuccessPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const redirectUri = searchParams?.get("redirect_uri");
+  // HTPR-7180: never navigate to an unchecked address (javascript: runs in our origin).
+  const rawRedirectUri = searchParams?.get("redirect_uri");
+  const redirectUri = rawRedirectUri && isValidRedirectUri(rawRedirectUri) ? rawRedirectUri : null;
   const oauthCode = searchParams?.get("code");
 
   const [isRedirecting, setIsRedirecting] = useState(false);
