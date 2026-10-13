@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -643,7 +644,8 @@ export async function GET(request: NextRequest) {
             id: true,
             ticketNumber: true,
             title: true,
-            uniqueIndex: true
+            uniqueIndex: true,
+            projectId: true
           }
         },
         status: true,
@@ -707,7 +709,8 @@ export async function GET(request: NextRequest) {
             id: true,
             ticketNumber: true,
             title: true,
-            uniqueIndex: true
+            uniqueIndex: true,
+            projectId: true
           },
           orderBy: {
             createdAt: "asc",
@@ -728,6 +731,7 @@ export async function GET(request: NextRequest) {
 
     // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
+      task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
         .map((assignee) => mapTaskAssignee(assignee, user.id, task.projectId))

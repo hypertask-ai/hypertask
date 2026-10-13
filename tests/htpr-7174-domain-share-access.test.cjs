@@ -14,6 +14,7 @@ function load(relPath, stubs) {
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", javascript)(mod, mod.exports, (request) => {
+    if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts", {});
     if (request in stubs) return stubs[request];
     throw new Error(`Unexpected import in ${relPath}: ${request}`);
   });

@@ -8,6 +8,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { scheduleTaskDeleteJob } from "../taskDeleteQueue";
 import Sugar from "sugar";
 import prisma from "@/lib/prisma";
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import globalConstants from "@/lib/constants";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -198,14 +199,15 @@ async function updateTaskTreeStatus(
       status === "Normal" ? currentStatus === "Normal" : currentStatus === "Deleted"
     )
     if (targetAlreadyApplied) {
-      return tx.task.findUniqueOrThrow({
+      return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
         where: { id: rootTaskId },
         select: {
           id: true,
+          projectId: true,
           subTasks: { orderBy: { status: "desc" } },
           parentTask: { include: { subTasks: true } },
         },
-      })
+      }))
     }
     if (isHumanOverride) {
       for (const id of taskIds) {
@@ -241,13 +243,14 @@ async function updateTaskTreeStatus(
     await tx.notification.deleteMany({
       where: { taskId: { in: taskIds } },
     })
-    return tx.task.findUniqueOrThrow({
+    return stripForeignTaskRelations(await tx.task.findUniqueOrThrow({
       where: { id: rootTaskId },
       select: {
         id: true,
+        projectId: true,
         subTasks: { orderBy: { status: "desc" } },
         parentTask: { include: { subTasks: true } },
       },
-    })
+    }))
   }, { timeout: 30_000 })
 }

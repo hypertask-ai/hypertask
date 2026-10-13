@@ -18,6 +18,7 @@ function moduleWithStubs(file, stubs) {
   }).outputText;
   const mod = { exports: {} };
   new Function("module", "exports", "require", code)(mod, mod.exports, (id) => {
+    if (id === "@/utils/controllers/tasks/parentTaskAccess") return load(path.join(root, "src/utils/controllers/tasks/parentTaskAccess.ts"));
     if (Object.hasOwn(stubs, id)) return stubs[id];
     if (!id.startsWith("@/") && !id.startsWith(".")) return require(id);
     throw new Error(`Unexpected dependency: ${id}`);

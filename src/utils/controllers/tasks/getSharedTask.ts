@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import {
   PRIVATE_AGENT_DISPLAY_NAME,
@@ -174,6 +175,7 @@ export const getSharedTaskInfo = async (shareId: string) => {
     },
   });
 
+  if (shared?.task) shared.task = stripForeignTaskRelations(shared.task);
   return redactAgentIdentitiesForPublicShare(shared);
 };
 

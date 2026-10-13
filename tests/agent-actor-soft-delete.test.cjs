@@ -105,6 +105,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
       update: async () => ({}),
       findUniqueOrThrow: async () => ({
         id: TASK_ID,
+        projectId: 15,
         subTasks: [],
         parentTask: null,
       }),
@@ -123,6 +124,7 @@ function loadDeleteHandler({ sectionId = ACTIVE_SECTION_ID } = {}) {
   };
 
   const stubs = {
+    "@/lib/tasks/sameBoardRelations": loadTs("src/lib/tasks/sameBoardRelations.ts"),
     "date-fns": { subMinutes: (date) => date },
     sugar: {
       Date: {

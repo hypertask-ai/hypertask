@@ -193,12 +193,17 @@ test("single GET and DELETE use the real controller's full relation query and pe
   assert.equal(functions.length, 2);
   const compiled = ts.transpileModule(functions.map(node => node.getText(parsed)).join("\n"), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
   const queries = [], deletes = [], exports = {};
+  const task = {
+    ...fullTask,
+    parentTask: { ...fullTask.parentTask, projectId: 15, subTasks: fullTask.parentTask.subTasks.map(row => ({ ...row, projectId: 15 })) },
+  };
   let deletion = "success";
-  new Function("prisma", "permanentlyDeleteTask", "exports", compiled)(
-    { task: { findUnique: async query => { queries.push(query); return fullTask; } } },
-    async (...args) => { deletes.push(args); return deletion; }, exports,
+  new Function("prisma", "permanentlyDeleteTask", "stripForeignTaskRelations", "exports", compiled)(
+    { task: { findUnique: async query => { queries.push(query); return task; } } },
+    async (...args) => { deletes.push(args); return deletion; },
+    load("src/lib/tasks/sameBoardRelations.ts", {}).stripForeignTaskRelations, exports,
   );
-  assert.deepEqual(await exports.getTaskSingle(42), { status: 200, json: fullTask });
+  assert.deepEqual(await exports.getTaskSingle(42), { status: 200, json: task });
   assert.deepEqual(queries, [{ where: { id: 42 }, include: {
     taskLabels: { select: { label: true, labelId: true, id: true, taskId: true } }, estimate: true, priority: true,
     description_: { select: { content: true } },

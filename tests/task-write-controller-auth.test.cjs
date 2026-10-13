@@ -101,6 +101,7 @@ function loadUpdateController(
     updateErrorTarget = ["projectId", "uniqueIndex"],
     initialTask = {},
     aliasError = false,
+    parentTasks = [],
     stateAtFence,
   } = {},
 ) {
@@ -132,6 +133,10 @@ function loadUpdateController(
   const aliases = new Map();
   const tx = {
     $executeRaw: async () => {},
+    $queryRaw: async (strings, parentId, parentProjectId) => {
+      assert.match(strings.join("?"), /SELECT id FROM "Task"[\s\S]*FOR SHARE/);
+      return parentTasks.filter(parent => parent.id === parentId && parent.projectId === parentProjectId && parent.status !== "Deleted").map(({ id }) => ({ id }));
+    },
     project: { findUnique: async ({ where }) => ({ uniqueIdentifier: where.id === MEMBER_PROJECT ? "M" : "S" }) },
     taskNumberAlias: {
       upsert: async (query) => {
@@ -243,6 +248,8 @@ function loadUpdateController(
     return { newComment: { id: 1 }, shouldNotify: moveShouldNotify };
   };
   const stubs = {
+    "@/lib/tasks/sameBoardRelations": execute(compile("src/lib/tasks/sameBoardRelations.ts"), {}),
+    "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
     "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
@@ -893,6 +900,7 @@ function loadMoveController({
 
 test("cross-board moves record aliases for the parent and nested subtasks through the real updater", async () => {
   const aliases = [];
+  const movedTasks = new Map();
   const child = (id, uniqueIndex, subTasks = []) => ({
     id, uniqueIndex, ticketNumber: `HTPR-${uniqueIndex}`, projectId: SOURCE_PROJECT,
     userId: USER_ID, dueDate: null, subTasks,
@@ -903,8 +911,10 @@ test("cross-board moves record aliases for the parent and nested subtasks throug
     agentId: null,
     subTasks: [child(102, 5732, [child(103, 5733)])],
     updateImplementation: async (task, user, agentId, options, initialTask) => {
-      const controller = loadUpdateController(SOURCE_PROJECT, OWNER_PROJECT, { initialTask });
+      const controller = loadUpdateController(SOURCE_PROJECT, OWNER_PROJECT, { initialTask, parentTasks: [...movedTasks.values()] });
       const result = await controller.updateTaskSingle(task, user, agentId, options);
+      assert.equal(result.status, 200);
+      movedTasks.set(task.id, result.json);
       aliases.push(...controller.calls.aliases);
       return result;
     },

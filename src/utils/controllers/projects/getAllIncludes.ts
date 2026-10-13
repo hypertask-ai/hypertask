@@ -241,6 +241,7 @@ export const getTaskIncludeLayers = ({
         sectionId: true,
         ticketNumber: true,
         title: true,
+        projectId: true,
       },
     },
   };

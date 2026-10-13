@@ -1,3 +1,5 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { recordAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
@@ -162,6 +164,20 @@ export async function updateTaskSingle(
     let sectionChanged = false;
     let sectionIdChanged = false;
     const normalizedTask = normalizeRequestedTaskMutation(newTask);
+    const nestedWriteKeys = [
+      "connect", "connectOrCreate", "create", "createMany", "set",
+      "disconnect", "delete", "deleteMany", "update", "updateMany", "upsert",
+    ];
+    if (Object.values(normalizedTask).some((value) =>
+      value !== null && typeof value === "object" &&
+      (Object.getPrototypeOf(value) === Object.prototype || Object.getPrototypeOf(value) === null) &&
+      nestedWriteKeys.some((key) => Object.prototype.hasOwnProperty.call(value, key))
+    )) {
+      return {
+        status: 400,
+        json: { message: "Nested writes are not allowed" },
+      };
+    }
     if (
       normalizedTask.projectId !== undefined &&
       normalizedTask.projectId !== oldTask.projectId &&
@@ -341,6 +357,14 @@ export async function updateTaskSingle(
             new Date(),
           ),
         );
+        const targetProject = updateData.projectId;
+        if (
+          updateData.parentTaskId != null &&
+          (updateData.parentTaskId !== currentState.parentTaskId ||
+            targetProject !== currentState.projectId)
+        ) {
+          await assertParentTaskOnBoard(tx, updateData.parentTaskId, targetProject);
+        }
         const requestedSectionId = requestedMutation.sectionId;
         const requestedSectionName = requestedMutation.section;
         sectionIdChanged =
@@ -722,6 +746,12 @@ export async function updateTaskSingle(
       moveActivity,
     };
   } catch (error) {
+    if (error instanceof ParentTaskNotFoundError) {
+      return {
+        status: 404,
+        json: { message: "Parent task not found" },
+      };
+    }
     if (error instanceof TaskTargetChangedError) {
       return {
         status: 409,
@@ -815,7 +845,7 @@ export async function getTaskSingle(taskId: number) {
     });
     return {
       status: 200,
-      json: task,
+      json: task ? stripForeignTaskRelations(task) : task,
     };
   } catch (error) {
     console.log("🤔 ~ getTask ~ error:", error);

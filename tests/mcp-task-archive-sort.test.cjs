@@ -29,6 +29,7 @@ function loadRoute() {
     },
   };
   const stubs = {
+    "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, status: init.status ?? 200 }),

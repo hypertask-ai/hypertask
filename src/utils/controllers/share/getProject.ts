@@ -1,4 +1,5 @@
 import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import { IProject, ISection, ITask } from "@/models/model";
 import { getCurrentProject } from "@/utils/helperFunctions/helperFunctions";
@@ -145,6 +146,8 @@ export default async function getProject(shareId: string) {
                 json: { message: "Project not found" }
             })
         }
+
+        project.tasks = project.tasks.map(stripForeignTaskRelations);
 
         // Process sections using the same logic as getAllProjects
         const projectAsIProject = project as unknown as IProject;

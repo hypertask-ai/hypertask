@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { tool } from "ai";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -158,7 +159,7 @@ export function createListTasksTool(context: ToolContext) {
               projectId: true,
               project: { select: { id: true, title: true } },
               parentTask: {
-                select: { id: true, ticketNumber: true, title: true, uniqueIndex: true },
+                select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true },
               },
               status: true,
               priority: { select: { Priority_Value: true } },
@@ -179,7 +180,7 @@ export function createListTasksTool(context: ToolContext) {
               },
               subTasks: {
                 where: { status: { not: "Deleted" } },
-                select: { id: true, ticketNumber: true, title: true, uniqueIndex: true },
+                select: { id: true, ticketNumber: true, title: true, uniqueIndex: true, projectId: true },
                 orderBy: { createdAt: "asc" },
               },
             },
@@ -192,6 +193,7 @@ export function createListTasksTool(context: ToolContext) {
         return sanitizeForJson({
           success: true,
           tasks: tasks.map((task) => {
+            task = stripForeignTaskRelations(task);
             const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId);
             const assigneeCount = task.assignees.filter(
               (assignee) =>

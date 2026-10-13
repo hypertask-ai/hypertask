@@ -23,6 +23,7 @@ function loadMappers() {
   }).outputText;
 
   const stubs = {
+    "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "@/lib/mcp/agents": {
       mapVisibleMcpAgent: (agent, userId, projectId) =>
         agent &&

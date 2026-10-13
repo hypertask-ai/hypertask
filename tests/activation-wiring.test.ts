@@ -17,6 +17,8 @@ const save = (h: ReturnType<typeof activationHarness>) => { localCaptures.push(.
 function taskController(h: ReturnType<typeof activationHarness>) {
   const noop = async () => undefined;
   Object.assign(h.mocks, {
+    "@/lib/tasks/sameBoardRelations": h.load("src/lib/tasks/sameBoardRelations.ts"),
+    "@/utils/controllers/tasks/parentTaskAccess": h.load("src/utils/controllers/tasks/parentTaskAccess.ts"),
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: noop },
     "@/utils/controllers/activities/createActivity": { default: noop },
     "@/utils/controllers/activities/createTaskMovedActivity": { createTaskMovedActivityInTransaction: async () => null },

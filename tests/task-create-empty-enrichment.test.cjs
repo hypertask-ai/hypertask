@@ -131,6 +131,7 @@ function loadCreateRoute() {
   };
   const sharedRoute = loadSharedRoute(async () => ({ userId: 6 }));
   const stubs = {
+    "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
     "@/lib/api/task-writes/route": sharedRoute,
     "./route": sharedRoute,
     "@/lib/ai/composeTaskTarget": execute(compile("src/lib/ai/composeTaskTarget.ts"), {}),

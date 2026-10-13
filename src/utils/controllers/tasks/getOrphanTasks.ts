@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 
 const SearchForOrphanTasks = async (
   projectId: number,
@@ -68,7 +69,7 @@ const SearchForOrphanTasks = async (
 
   return {
     status: 200,
-    json: orphans,
+    json: orphans.map(stripForeignTaskRelations),
   };
 };
 

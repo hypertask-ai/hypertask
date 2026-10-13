@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import {
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
@@ -184,6 +185,7 @@ export function taskMcpGetInclude(userId: number) {
             ticketNumber: true,
             title: true,
             uniqueIndex: true,
+            projectId: true,
         },
     },
     parentTask: {
@@ -192,6 +194,7 @@ export function taskMcpGetInclude(userId: number) {
             ticketNumber: true,
             title: true,
             uniqueIndex: true,
+            projectId: true,
         },
     },
     customFieldValues: {
@@ -209,6 +212,7 @@ export function taskMcpGetInclude(userId: number) {
 }
 
 export function mapTaskToMcpGetResponse(task: any, userId: number) {
+    task = stripForeignTaskRelations(task);
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
               (st: {

@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { Prisma, PrismaClient, Status } from "@prisma/client";
 import { waitUntil } from "@vercel/functions";
@@ -407,6 +408,7 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
             uniqueIndex: true,
             ticketNumber: true,
             title: true,
+            projectId: true,
           },
         },
       },
@@ -521,7 +523,7 @@ export async function fetchTaskDetail(
   const reactions = await fetchDescriptionReactions(task.description_?.id ?? "");
   const visibleAgent = projectVisibleTaskAgent(task.agent, userId, task.projectId);
   return {
-    ...task,
+    ...stripForeignTaskRelations(task),
     agentId: visibleAgent ? task.agentId : null,
     agent: visibleAgent,
     description_: task.description_
