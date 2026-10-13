@@ -23,6 +23,8 @@ function loadTs(relativePath) {
 
 process.env.DATABASE_URL = "postgresql://unused:unused@localhost:5432/unused";
 process.env.JWT_SECRET = "test-only-secret";
+// The route really sends mail when a Resend key is set; never from a test.
+process.env.RESEND_API_KEY = "";
 
 const prismaModule = loadTs("src/lib/prisma.ts");
 const prisma = prismaModule.default ?? prismaModule;
