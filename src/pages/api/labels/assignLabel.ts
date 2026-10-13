@@ -9,12 +9,13 @@ import {
   publishAgentWebhookDeliveries,
 } from '@/lib/agentWebhooks/outbox';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { validateProjectMemberIds } from "@/lib/mcp/tasks/services";
 import type { IUser } from "@/models/model";
 
 class LabelAssignmentError extends Error {
   constructor(
     message: string,
-    readonly statusCode: 400 | 404,
+    readonly statusCode: 400 | 403 | 404,
   ) {
     super(message);
     this.name = "LabelAssignmentError";
@@ -60,6 +61,11 @@ export default  async function handler(
       `;
       const task = lockedTasks[0];
       if (!task) throw new LabelAssignmentError("Task not found", 404);
+      // HTPR-7177: only members and the owner of the task's board may change its labels.
+      const memberCheck = await validateProjectMemberIds(task.projectId, [userObj.id]);
+      if (memberCheck.error || memberCheck.invalidIds?.length) {
+        throw new LabelAssignmentError("Forbidden", 403);
+      }
 
         await tx.$queryRaw<Array<{ id: number }>>`
           SELECT "id"

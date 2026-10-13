@@ -188,6 +188,10 @@ test("assignLabel broadcasts task:changed to open detail views", async () => {
       publishAgentWebhookDeliveries: async () => undefined,
     },
     "@/lib/realtime/server": { __esModule: true, ...realtimeStubs(broadcasts) },
+    "@/lib/mcp/tasks/services": {
+      __esModule: true,
+      validateProjectMemberIds: async () => ({ invalidIds: [], error: null }),
+    },
     ...sessionStub,
   };
   const handler = loadHandler("src/pages/api/labels/assignLabel.ts", stubs);
