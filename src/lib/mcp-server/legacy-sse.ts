@@ -1,3 +1,6 @@
+import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
+import { observeFeedbackTools } from '@/lib/aiFeedback/automatic'
+import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
@@ -172,14 +175,20 @@ export async function handleLegacySseRequest(
               Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
             const ctx = incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined
             const v2 = (method === 'tools/list' || method === 'tools/call') && Boolean(ctx && await isMcpV2Enabled(ctx.user.id))
-            if (enabled || v2) {
+            if (method === 'initialize') {
+              const params = (incoming.body as { params?: { clientInfo?: { name?: unknown } } }).params
+              rememberFeedbackClient(incoming.authInfo.token, params?.clientInfo?.name, userId)
+            }
+            if (method === 'tools/list' || method === 'tools/call') {
               // Resolve per message; flag changes and same-owner credentials must not reuse the opening scope.
-              const catalog = selectMcpTools(tools, enabled, {
+              const feedbackEnabled = await aiFeedbackEnabled(userId)
+              const available = tools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+              const catalog = observeFeedbackTools(selectMcpTools(available, enabled, {
                 managementPermissions: incoming.authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2)
+              }, v2), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

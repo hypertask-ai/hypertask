@@ -41,6 +41,7 @@ function loadRoute(authContext) {
       },
     },
   }
+  stubs['@/lib/mcp/routeWrapper'] = require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper(stubs)
   const routeModule = { exports: {} }
   new Function('module', 'exports', 'require', javascript)(
     routeModule,

@@ -13,7 +13,7 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
 const root = process.cwd()
 const token = 'transport-test-token'
-const flags = { stateless: false, deferred: false, catalog: false }
+const flags = { stateless: false, deferred: false, catalog: false, feedback: false }
 const echoCalls: unknown[] = []
 const echoTool = {
   name: 'echo',
@@ -23,6 +23,14 @@ const echoTool = {
     echoCalls.push({ args, bearer, invocation })
     return JSON.stringify({ args, bearer, invocation })
   },
+}
+
+let feedbackCalls = 0
+const feedbackTool = {
+  name: 'hypertask_report_feedback',
+  description: 'Report a technical failure',
+  parameters: z.object({}),
+  execute: async () => { feedbackCalls++; return JSON.stringify({ success: true }) },
 }
 
 // Exercise the actual route, auth wrapper and transports; only product data,
@@ -39,7 +47,7 @@ function loadRoutes() {
     loaded.paths = (Module as any)._nodeModulePaths(path.dirname(file))
     loaded.require = (request: string) => {
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
-      if (request === './tools') return { MCP_TOOLS: [echoTool] }
+      if (request === './tools') return { MCP_TOOLS: [echoTool, feedbackTool] }
       if (request === './consolidated-tools') return {
         selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}) => {
           if (!enabled) return tools
@@ -73,7 +81,7 @@ function loadRoutes() {
         HTPR_6531_DEFERRED_MCP_TOOLS_FLAG: 'deferred',
         HTPR_6532_STATELESS_MCP_FLAG: 'stateless',
         HTPR_6804_MCP_TOOLS_FLAG: 'catalog',
-        isFeatureEnabled: async (flag: string) => flags[flag as keyof typeof flags] ?? false,
+        isFeatureEnabled: async (flag: string) => flag === 'htpr-7195-ai-feedback' ? flags.feedback : flags[flag as keyof typeof flags] ?? false,
       }
       if (request.startsWith('.') || request.startsWith('@/')) {
         const resolved = request.startsWith('@/')
@@ -271,6 +279,37 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       } finally {
         await stream.reader.cancel()
         flags.catalog = false
+      }
+    })
+
+    await t.test('open SSE sessions can enable and disable feedback without reconnecting', async () => {
+      flags.feedback = false
+      const stream = frames(await first.sse.GET(request('/sse')))
+      streams.push(stream)
+      try {
+        const endpoint = await stream.next()
+        const rpc = async (id: number, method: string, params?: unknown) => {
+          const response = await second.message.POST(request(endpoint.data, 'POST', { jsonrpc: '2.0', id, method, params }))
+          assert.equal(response.status, 202)
+          return JSON.parse((await stream.next()).data)
+        }
+        await rpc(20, 'initialize', initialize.params)
+        const names = async (id: number) => (await rpc(id, 'tools/list')).result.tools.map((tool: { name: string }) => tool.name)
+        assert.equal((await names(21)).includes(feedbackTool.name), false)
+        flags.feedback = true
+        assert.equal((await names(22)).includes(feedbackTool.name), true)
+        const before = feedbackCalls
+        const allowed = await rpc(23, 'tools/call', { name: feedbackTool.name, arguments: {} })
+        assert.equal(allowed.result.isError, undefined)
+        assert.equal(feedbackCalls, before + 1)
+        flags.feedback = false
+        assert.equal((await names(24)).includes(feedbackTool.name), false)
+        const denied = await rpc(25, 'tools/call', { name: feedbackTool.name, arguments: {} })
+        assert.ok(denied.error || denied.result.isError)
+        assert.equal(feedbackCalls, before + 1)
+      } finally {
+        flags.feedback = false
+        await stream.reader.cancel()
       }
     })
 

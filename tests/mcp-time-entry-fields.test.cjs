@@ -12,6 +12,7 @@ function load(relativePath, stubs) {
   ).outputText;
   const loaded = { exports: {} };
   new Function("module", "exports", "require", javascript)(loaded, loaded.exports, (name) => {
+    if (name === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs);
     assert.ok(Object.hasOwn(stubs, name), `Unexpected dependency: ${name}`);
     return stubs[name];
   });

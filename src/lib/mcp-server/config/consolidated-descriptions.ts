@@ -1,3 +1,4 @@
+import feedback from './descriptions/report_feedback.json'
 import user_context from './descriptions/user_context.json'
 import tasks from './descriptions/tasks.json'
 import comments from './descriptions/comments.json'
@@ -20,6 +21,7 @@ import drafts from './descriptions/drafts.json'
 import attachments from './descriptions/attachments.json'
 
 export const CONSOLIDATED_TOOL_DESCRIPTIONS = [
+  feedback,
   user_context,
   tasks,
   comments,

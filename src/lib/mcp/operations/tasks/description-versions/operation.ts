@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
@@ -10,6 +11,7 @@ import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 // GET /api/mcp/tasks/description-versions?task_id=123
 // History of a task's description. Newest version first. Content as markdown.
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -81,4 +83,6 @@ export async function GET(request: NextRequest) {
     console.error('[MCP Task Description Versions] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

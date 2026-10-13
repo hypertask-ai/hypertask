@@ -1,3 +1,5 @@
+import { aiFeedbackEnabled } from '@/lib/aiFeedback/enabled'
+import { observeFeedbackTools, queueAiFeedback } from '@/lib/aiFeedback/automatic'
 import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import jwt from 'jsonwebtoken'
 import { MCP_TOOLS } from './tools'
@@ -114,6 +116,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const bearer = extractBearerToken(working.headers.get('Authorization'))
     const authInfo = await verifyToken(working, bearer ?? undefined)
     if (!authInfo) {
+      queueAiFeedback({ surface: 'mcp', tool: 'mcp', status: 401, errorCode: 'unauthorized' })
       return mcpUnauthorizedResponse(working)
     }
 
@@ -121,8 +124,11 @@ export async function mcpHandler(request: Request): Promise<Response> {
     if (Number.isFinite(userId)) telemetryUserId = userId
     const ctx = authInfo.extra?.mcpAuthContext as McpAuthContext
     const v2 = await isMcpV2Enabled(ctx.user.id)
-    const portableTools = selectMcpTools(
-      resolvePortableTools(MCP_TOOLS as PortableTool[]),
+    const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
+    const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
+    const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+    const portableTools = observeFeedbackTools(selectMcpTools(
+      availableTools,
       Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId),
       {
         managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
@@ -131,9 +137,9 @@ export async function mcpHandler(request: Request): Promise<Response> {
         ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
       },
       v2,
-    )
+    ), ctx.user.id)
     if (isLegacySseRequest(working)) {
-      return handleLegacySseRequest(working, authInfo, resolvePortableTools(MCP_TOOLS as PortableTool[]), v2 ? portableTools : undefined)
+      return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)
     }
 
     return withMcpExecutionContext(authInfo.token, authInfo.extra?.mcpAuthContext as McpAuthContext, () =>

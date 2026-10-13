@@ -1,3 +1,6 @@
+import { rememberFeedbackClient } from '@/lib/aiFeedback/clientInfo'
+import { feedbackClient } from '@/lib/aiFeedback/input'
+import { queueAiFeedback } from '@/lib/aiFeedback/automatic'
 import crypto from 'node:crypto'
 import type { ToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import { z } from 'zod'
@@ -5,6 +8,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
 import { executeToolResult, toolErrorResult } from './tool-response'
+import { SEARCH_TOOLS_NAME, DESCRIBE_TOOL_NAME } from './config/tool-summaries'
 import { getMcpRequestOrigin } from './resource-url'
 
 export const MCP_SERVER_INFO = {
@@ -34,7 +38,7 @@ export type PortableTool = {
   execute: (
     args: unknown,
     token: string,
-    invocation?: { requestId: string; clientFingerprint: string; sessionId?: string }
+    invocation?: { requestId: string; clientFingerprint: string; sessionId?: string; clientName?: string }
   ) => Promise<string>
 }
 
@@ -109,6 +113,7 @@ function jsonSchemaFor(parameters: z.ZodType): Record<string, unknown> {
 export type StatelessMcpOptions = {
   deferred?: boolean
   sessionId?: string
+  clientName?: string
 }
 
 const deferredByRequest = new WeakMap<Request, true>()
@@ -204,6 +209,11 @@ async function dispatchMethod(
 
   switch (method) {
     case 'initialize': {
+      const clientName = feedbackClient(objectParams(params.clientInfo).name)
+      if (clientName) {
+        options.clientName = clientName
+        rememberFeedbackClient(auth.token, clientName, Number(auth.clientId))
+      }
       const protocolVersion = protocolVersionFrom(request, params.protocolVersion)
       return jsonRpcResult(id, {
         protocolVersion,
@@ -216,6 +226,7 @@ async function dispatchMethod(
     case 'ping':
       return jsonRpcResult(id, {})
     case 'tools/list':
+      if (!tools.some((tool) => !tool.hidden && tool.name !== SEARCH_TOOLS_NAME && tool.name !== DESCRIBE_TOOL_NAME)) queueAiFeedback({ surface: 'mcp', tool: 'tools/list', errorCode: 'empty-tools-list' }, Number(auth.clientId))
       if (deferred) {
         const metaOnly = new URL(request.url).searchParams.get('tools') === 'meta'
         if (metaOnly) {
@@ -252,6 +263,7 @@ async function dispatchMethod(
           requestId: id === null ? crypto.randomUUID() : String(id),
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
           ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+          ...(options.clientName ? { clientName: options.clientName } : {}),
         }))
       }
       const parsed = tool.parameters.safeParse(rawArgs)
@@ -264,6 +276,7 @@ async function dispatchMethod(
           requestId,
           clientFingerprint: crypto.createHash('sha256').update(auth.token).digest('hex'),
           ...(options.sessionId ? { sessionId: options.sessionId } : {}),
+          ...(options.clientName ? { clientName: options.clientName } : {}),
         })
         if (deferred) {
           const structured = parseStructuredContent(text)

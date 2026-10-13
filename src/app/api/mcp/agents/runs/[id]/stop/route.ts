@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunsEnabledFor,
@@ -25,6 +26,7 @@ export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -72,4 +74,6 @@ export async function POST(
     console.error("[agent-run] stop failed", error);
     return noStore({ success: false, error: "Failed to stop agent run" }, 500);
   }
+
+  })(request, { params })
 }

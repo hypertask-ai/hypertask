@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { cookies } from 'next/headers';
 import { agentTokenCredentialFields, createMcpToken, revokeTokenByJti, validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth'
@@ -47,6 +48,7 @@ async function getCurrentUserFromCookies() {
  * Returns existing token info (masked) if token exists in cookies
  */
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const user = await getCurrentUserFromCookies()
     
@@ -109,6 +111,8 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -116,6 +120,7 @@ export async function GET(request: NextRequest) {
  * Generates a new MCP token for the user
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const user = await getCurrentUserFromCookies()
     
@@ -187,6 +192,8 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }
 
 /**
@@ -194,6 +201,7 @@ export async function POST(request: NextRequest) {
  * Revokes the bearer token presented by CLI/MCP clients
  */
 export async function DELETE(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
@@ -272,4 +280,6 @@ export async function DELETE(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

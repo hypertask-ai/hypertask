@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import {
   agentRunsEnabledFor,
@@ -19,6 +20,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  return wrapMcpRoute(async (request: NextRequest, { params }: { params: Promise<{ id: string }> }) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -42,4 +44,6 @@ export async function GET(
     console.error("[agent-run] read failed", error);
     return noStore({ success: false, error: "Failed to read agent run" }, 500);
   }
+
+  })(request, { params })
 }

@@ -19,6 +19,7 @@ const RENAMED_PARAMETERS: Record<string, string> = {
 }
 
 function canCall(action: Action, caller: ToolCaller): boolean {
+  if (action.permission === 'feedback') return true
   if (caller.agentRole === 'read' && !action.read_only) return false
   const permissions = caller.managementPermissions
   if (caller.teamScoped && ['hypertask_mint_token', 'hypertask_revoke_token', 'hypertask_list_connections'].includes(action.tool)) return false
@@ -103,14 +104,14 @@ export function selectMcpTools(
     return tool.execute(input, token, invocation)
   }
   const catalog: PortableTool[] = definitions.flatMap((definition) => {
-    const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => canCall(action, caller)))
+    const actions = Object.fromEntries(Object.entries(definition.actions).filter(([, action]) => byName.has(action.tool) && canCall(action, caller)))
     const names = Object.keys(actions)
     if (!names.length) return []
     const sameNameLegacy = byName.get(definition.name)
     const legacyShape = sameNameLegacy ? Object.fromEntries(Object.entries(sameNameLegacy.parameters.shape).filter(([key]) => key !== 'action').map(([key, schema]) => [key, z.optional(schema as z.ZodType)])) : {}
     const parameters = z.object({
       ...legacyShape,
-      action: z.enum(names as [string, ...string[]]).describe('Operation to perform on this resource.'),
+      action: (definition.name === 'hypertask_report_feedback' ? z.enum(names as [string, ...string[]]).default('report') : z.enum(names as [string, ...string[]])).describe('Operation to perform on this resource.'),
       input: z.record(z.string(), z.unknown()).default({}).describe('Action-specific fields documented in the corresponding input schema.'),
       response_format: z.enum(['concise', 'detailed']).default('concise').describe('Concise summarizes reads; detailed includes full fields. Writes always retain their receipts.'),
       limit: z.number().int().min(1).max(50).default(20).describe('Maximum rows per read collection; default 20, maximum 50.'),

@@ -455,6 +455,19 @@
       }
     },
     {
+      "id": "feedback.report",
+      "title": "Report anonymous, deduplicated AI feedback",
+      "matches": {
+        "api": ["^POST /api/mcp/feedback$"],
+        "mcp": ["^hypertask_report_feedback$"],
+        "hyperai": ["^hypertask_report_feedback$"]
+      },
+      "exclusions": {
+        "cli": "CLI clients use the authenticated feedback REST endpoint; no dedicated feedback command is registered.",
+        "ai_chat": "Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool."
+      }
+    },
+    {
       "id": "system.catalog",
       "title": "Inspect client capabilities and reject unknown routes",
       "matches": {

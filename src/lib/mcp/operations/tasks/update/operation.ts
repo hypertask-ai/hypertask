@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -18,6 +19,7 @@ import {
 export type { UpdateTaskResponse } from '@/lib/mcp/tasks/updateTask'
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   console.log('[MCP Update Task] Request received')
 
   const rateLimited = await checkMcpRateLimit(request)
@@ -109,4 +111,6 @@ export async function POST(request: NextRequest) {
     }
     throw error
   }
+
+  })(request)
 }

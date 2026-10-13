@@ -4,7 +4,7 @@
 
 The first landing is bootstrapped by the pre-existing, exact-head GitHub AI Review (`ai-review`) required check plus manual sensitive-path merge. After landing, `parity-contract-trusted` evaluates candidate source with the verifier and policy from the protected base branch; PR code cannot replace or relax the rules judging that PR.
 
-Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 170, mcp: 74, cli: 156, ai_chat: 84, hyperai: 74. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
+Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities <production-capabilities.json>`. Inventory: api: 171, mcp: 75, cli: 156, ai_chat: 84, hyperai: 75. A number is the count of concrete routes, tools, or leaf commands implementing the canonical job. ↪ records an intentional exclusion; 🛠 is a reviewed, temporary two-step transition and must be removed by its implementation PR. The CLI inventory is pinned to `@hypertask/hypertask_cli@2.0.10`; HyperAI keys are independently validated as the identity projection of the canonical MCP registry.
 
 | Job | api | mcp | cli | ai_chat | hyperai |
 |---|---|---|---|---|---|
@@ -39,4 +39,5 @@ Regenerate it with `node scripts/parity-contract.mjs --write --cli-capabilities 
 | **Search Hypertask product help** | ↪ Help search uses the public documentation service, not a user-data API route. | ✅ 1 | ↪ The CLI exposes command help locally instead of remote help-center search. | ✅ 1 | ✅ 1 |
 | **Search the public web for current information** | ↪ Public web search is an AI-runtime capability, not a board data endpoint. | ↪ MCP clients can provide their own web-search capability. | ↪ The board CLI does not proxy public web search. | ✅ 1 | ↪ HyperAI does not receive the AI Chat web-search provider. |
 | **Create, inspect, test, and delete webhooks** | ✅ 4 | ✅ 1 | ✅ 11 | ✅ 1 | ✅ 1 |
+| **Report anonymous, deduplicated AI feedback** | ✅ 1 | ✅ 1 | ↪ CLI clients use the authenticated feedback REST endpoint; no dedicated feedback command is registered. | ↪ Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool. | ✅ 1 |
 | **Inspect client capabilities and reject unknown routes** | ✅ 5 | ↪ MCP protocol discovery already returns the live tool catalog. | ✅ 1 | ↪ AI Chat tool discovery is internal to the model runtime. | ↪ HyperAI inherits the canonical MCP registry at runtime. |

@@ -122,6 +122,7 @@ test('transport analytics evaluates the catalog flag through an isolated fixture
     await call(endpoint)
     assert.deepEqual(flagChecks, [
       { key: 'htpr-6927-mcp-v2', userId: 2343 },
+      { key: 'htpr-7195-ai-feedback', userId: 2343 },
       { key: 'htpr-6804-mcp-tools', userId: 2343 },
     ])
   }

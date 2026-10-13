@@ -84,12 +84,13 @@ function spyTools() {
 }
 
 test('catalog flag off preserves the entire current deferred list exactly', async () => {
-  const selected = selectMcpTools(legacy, false, { managementPermissions: { management: ['read'] } })
-  assert.equal(selected, legacy)
+  const originalLegacy = legacy.filter((tool) => tool.name !== 'hypertask_report_feedback')
+  const selected = selectMcpTools(originalLegacy, false, { managementPermissions: { management: ['read'] } })
+  assert.equal(selected, originalLegacy)
   const listed = (await rpc(selected, 'tools/list')).result.tools
   const baseline = JSON.parse(fs.readFileSync(path.join(__dirname, 'fixtures/mcp-6804/legacy-catalog.json')))
   assert.deepEqual(listed, baseline)
-  assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), legacy.map((tool) => tool.name))
+  assert.deepEqual(baseline.filter((tool) => !['hypertask_search_tools', 'hypertask_describe_tool'].includes(tool.name)).map((tool) => tool.name), originalLegacy.map((tool) => tool.name))
 })
 
 test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate names', async () => {
@@ -112,11 +113,11 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
     authUserId = id
     assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)
     const listed = (await (await mcpHandler(request('tools/list'))).json()).result.tools
-    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 2)
+    assert.equal(listed.length, enabled ? definitions.length : legacy.length + 1)
   }
   mode = 'OFF'
   authUserId = 6
-  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 2)
+  assert.equal((await (await mcpHandler(request('tools/list'))).json()).result.tools.length, legacy.length + 1)
   const disabledCall = await (await mcpHandler(request('tools/call', { name: 'hypertask_tasks', arguments: { action: 'create', input: { project_id: 15, title: 'Not executed' } } }))).json()
   assert.equal(disabledCall.error.code, -32602)
   mode = null
@@ -125,8 +126,8 @@ test('server flag defaults to Owner + QA and evaluates the authenticated user', 
 
 test('scope filtering advertises only callable actions for management, agent and team credentials', async () => {
   for (const [permissions, expected] of [
-    [{ management: ['read'] }, { hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
-    [{ management: ['write'] }, { hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
+    [{ management: ['read'] }, { hypertask_report_feedback: ['report'], hypertask_user_context: ['connections'], hypertask_agents: ['list'] }],
+    [{ management: ['write'] }, { hypertask_report_feedback: ['report'], hypertask_agents: ['create', 'revoke', 'archive', 'delete'], hypertask_tokens: ['mint', 'revoke'] }],
   ]) {
     const tools = selectMcpTools(legacy, true, { managementPermissions: permissions })
     const listed = (await rpc(tools, 'tools/list')).result.tools
@@ -139,7 +140,7 @@ test('scope filtering advertises only callable actions for management, agent and
   assert.equal(agent.some((tool) => tool.name === 'hypertask_tokens'), false)
   assert.deepEqual(toolNamed(agent, 'hypertask_agents').parameters.shape.action.options, ['presence'])
   const scoped = visible(selectMcpTools(legacy, true, { teamScoped: true, managementPermissions: { management: ['read', 'write'] } }))
-  assert.deepEqual(scoped.map((tool) => tool.name), ['hypertask_agents'])
+  assert.deepEqual(scoped.map((tool) => tool.name), ['hypertask_report_feedback', 'hypertask_agents'])
 })
 
 test('legacy dispatch keeps every existing name callable and forwards credentials and invocation identity', async () => {

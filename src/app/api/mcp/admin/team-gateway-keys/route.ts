@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
@@ -127,6 +128,7 @@ async function resolveTarget(
 }
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -183,9 +185,12 @@ export async function GET(request: NextRequest) {
       };
     }),
   });
+
+  })(request)
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -309,4 +314,6 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  })(request)
 }

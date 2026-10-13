@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import { requireRole } from '@/lib/mcp/agents/scopes';
@@ -126,7 +127,7 @@ async function notifyReaction(
   });
 }
 
-export const POST = createCommentReactionHandler({
+export const POST = wrapMcpRoute(createCommentReactionHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeWrite: async (ctx) => ctx.agentId ? requireRole(ctx, 'write') : null,
@@ -162,4 +163,4 @@ export const POST = createCommentReactionHandler({
     setReaction(target, userId, emoji, active, ctx.agentId ?? null),
   afterChange: (target, userId, emoji, active, result, ctx) =>
     notifyReaction(target, userId, emoji, active, result, ctx.agentId ?? null),
-});
+}));

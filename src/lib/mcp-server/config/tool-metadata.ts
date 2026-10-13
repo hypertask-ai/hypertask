@@ -23,6 +23,10 @@ export interface ToolMetadata {
  * Tool names are automatically prefixed with service prefix following MCP best practices
  */
 const RAW_TOOL_METADATA = {
+  REPORT_FEEDBACK: {
+    name: buildToolName('report_feedback'),
+    description: 'Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work. Report only the tool, HTTP status, error code and a short technical note. Never include task, board or comment content, request bodies or tool arguments. The server scrubs text and files anonymous, deduplicated feedback.',
+  },
   HELLO: {
     name: buildToolName('hello'),
     description:

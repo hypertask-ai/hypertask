@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { buildFieldError } from '@/lib/mcp/fieldError'
@@ -38,6 +39,7 @@ type CreatePageBody = {
 const CONTENT_TYPES = ['markdown', 'html', 'html_canvas'] as const
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -271,4 +273,6 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Create Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }
