@@ -28,14 +28,12 @@ export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
 
-const teamAllowancesUsd = new Map<string, number>();
-
+/** YPER4-333: the team's monthly allowance and visible-lane use so far, for telemetry. */
 export async function teamAllowanceSnapshot(
   teamId: string,
+  allowanceUsd: number,
 ): Promise<{ allowanceUsd: number; usedUsd: number } | null> {
   try {
-    const allowanceUsd = teamAllowancesUsd.get(teamId);
-    if (allowanceUsd === undefined) return null;
     const redis = await getRedis();
     const committed = await redis.get(
       `ai-allowance:${aiAllowancePeriod().key}:${teamId}:committed`,
@@ -582,7 +580,6 @@ async function reserveSharedAllowance(args: {
   prompt: unknown;
   teamId: string;
 }): Promise<AllowanceReservation> {
-  teamAllowancesUsd.set(args.teamId, args.allowanceUsd);
   const now = new Date();
   const month = aiAllowancePeriod(now);
   const keyPrefix = `ai-allowance:${month.key}:${args.teamId}`;

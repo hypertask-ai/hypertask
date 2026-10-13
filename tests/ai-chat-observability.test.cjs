@@ -97,7 +97,7 @@ test("usage tracing passes the team allowance snapshot into generation capture",
     path.join(root, "src/app/api/ai/_lib/modelProvider.ts"),
     "utf8",
   );
-  assert.match(source, /const observation = \(async \(\) => \{[\s\S]*?teamAllowanceSnapshot\(row\.teamId\)/);
+  assert.match(source, /const observation = \(async \(\) => \{[\s\S]*?teamAllowanceSnapshot\(row\.teamId, allowanceUsd\)/);
   assert.match(source, /recordAiChatTurn\(\{[\s\S]*?teamId: row\.teamId,[\s\S]*?teamAllowanceUsd: allowanceSnapshot\?\.allowanceUsd \?\? null,[\s\S]*?teamAllowanceUsedUsd: allowanceSnapshot\?\.usedUsd \?\? null/);
 });
 

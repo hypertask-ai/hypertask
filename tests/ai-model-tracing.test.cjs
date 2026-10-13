@@ -85,7 +85,7 @@ test('all provider branches and gateway resolver are obligatorily traced without
 test('generation tracing includes the team allowance snapshot or null when unavailable', async () => {
   for (const teamSnapshot of [{ allowanceUsd: 40, usedUsd: 12.5 }, null]) {
     const h = harness({ teamSnapshot });
-    const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5');
+    const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5', 40);
     assert.equal(await middleware.wrapGenerate({ params, doGenerate: async () => h.result }), h.result);
     await h.flush();
     assert.equal(h.captures.length, 1);
@@ -93,6 +93,16 @@ test('generation tracing includes the team allowance snapshot or null when unava
     assert.equal(h.captures[0].teamAllowanceUsd, teamSnapshot?.allowanceUsd ?? null);
     assert.equal(h.captures[0].teamAllowanceUsedUsd, teamSnapshot?.usedUsd ?? null);
   }
+});
+
+test('calls on a team\'s own key carry the team id but no allowance', async () => {
+  const h = harness({ teamSnapshot: { allowanceUsd: 40, usedUsd: 12.5 } });
+  const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5');
+  assert.equal(await middleware.wrapGenerate({ params, doGenerate: async () => h.result }), h.result);
+  await h.flush();
+  assert.equal(h.captures[0].teamId, 'team_1');
+  assert.equal(h.captures[0].teamAllowanceUsd, null);
+  assert.equal(h.captures[0].teamAllowanceUsedUsd, null);
 });
 
 test('failures, successful retries and unknown costs each produce a metadata-only attempt', async () => {
