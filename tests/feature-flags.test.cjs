@@ -1401,6 +1401,41 @@ test("page audits use the user display name and retain the release countdown sem
   assert.equal(changes.length, 3);
 });
 
+test("a throwing verifier prevents flag reads, audits and upsert after the advisory lock", async (t) => {
+  row = { mode: "OFF" };
+  const order = [];
+  const failure = new flags.FeatureFlagApprovalError("Approval invalid");
+  t.mock.method(prisma, "$executeRaw", async () => { order.push("lock"); return 0; });
+  const read = t.mock.method(prisma.featureFlag, "findUnique");
+  const audit = t.mock.method(prisma.featureFlagChange, "create");
+  const upsert = t.mock.method(prisma.featureFlag, "upsert");
+  await assert.rejects(flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE", { userId: 6, source: "api" }, async (tx) => {
+    assert.equal(tx, prisma);
+    order.push("verify");
+    throw failure;
+  }), (error) => error === failure);
+  assert.deepEqual(order, ["lock", "verify"]);
+  assert.equal(read.mock.callCount(), 0);
+  assert.equal(audit.mock.callCount(), 0);
+  assert.equal(upsert.mock.callCount(), 0);
+  assert.equal(row.mode, "OFF");
+});
+
+test("a successful verifier runs before the flag read and upsert", async (t) => {
+  const order = [];
+  const originalRead = prisma.featureFlag.findUnique;
+  const originalUpsert = prisma.featureFlag.upsert;
+  t.mock.method(prisma, "$executeRaw", async () => { order.push("lock"); return 0; });
+  t.mock.method(prisma.featureFlag, "findUnique", async (args) => { order.push("read"); return originalRead(args); });
+  t.mock.method(prisma.featureFlag, "upsert", async (args) => { order.push("upsert"); return originalUpsert(args); });
+  const changed = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OFF", undefined, async (tx) => {
+    assert.equal(tx, prisma);
+    order.push("verify");
+  });
+  assert.deepEqual(order, ["lock", "verify", "read", "upsert"]);
+  assert.equal(changed.mode, "OFF");
+});
+
 test("audit failure prevents the mode write", async () => {
   row = { mode: "OFF" };
   auditFails = true;

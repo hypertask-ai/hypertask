@@ -21,7 +21,9 @@ let writeError;
 let previousMode;
 let approvalComment;
 let approvalQueries;
+let lockQueries;
 class FeatureFlagInputError extends Error {}
+class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
@@ -37,45 +39,66 @@ stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FeatureFlagInputError,
+  FeatureFlagApprovalError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
   listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true }); return rows; },
   setFeatureFlagMode: async (...args) => {
-    writes.push(args);
     if (writeError) throw writeError;
+    assert.equal(typeof args[3], "function");
+    await args[3](tx);
+    calls.push("write");
+    writes.push(args.slice(0, 3));
     return {
       key: args[0], mode: args[1],
       lastChange: previousMode === undefined ? null : { oldMode: previousMode, newMode: args[1], actorName: "Runner 3", reason: args[2].reason, createdAt: new Date() },
     };
   },
 });
+const tx = {
+  $queryRaw: async (strings, commentId) => {
+    const sql = strings.join("?");
+    const commentLock = lockQueries.length % 2 === 0;
+    assert.equal(sql, commentLock
+      ? 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? FOR UPDATE'
+      : 'SELECT id FROM "Reaction" WHERE "commentId" = ? FOR UPDATE');
+    assert.equal(commentId, 123);
+    lockQueries.push({ sql, commentId });
+    calls.push(commentLock ? "comment-lock" : "reaction-lock");
+    return approvalComment ? [{ id: commentId }] : [];
+  },
+  comment: {
+    findFirst: async (query) => {
+      assert.deepEqual(calls.slice(-2), ["comment-lock", "reaction-lock"]);
+      assert.equal(lockQueries.length, 2 * (approvalQueries.length + 1));
+      calls.push("approval");
+      approvalQueries.push(query);
+      const reaction = query.where.reactions.some;
+      assert.deepEqual(query.select, { commentText: true, text: true });
+      assert.equal(query.where.id, 123);
+      assert.equal(query.where.editedAt, null);
+      assert.deepEqual(query.where.task, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" } });
+      assert.deepEqual({ ...reaction, createdAt: undefined }, {
+        userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
+        unified: { startsWith: "1f44d" }, createdAt: undefined,
+      });
+      assert.ok(reaction.createdAt.gte instanceof Date);
+      assert.ok(Math.abs(Date.now() - reaction.createdAt.gte - 7 * 24 * 60 * 60 * 1000) < 1000);
+      if (!approvalComment || approvalComment.id !== query.where.id
+        || (query.where.editedAt === null && approvalComment.editedAt !== null)
+        || approvalComment.task.projectId !== query.where.task.projectId
+        || approvalComment.task.uniqueIndex !== query.where.task.uniqueIndex
+        || approvalComment.task.status === query.where.task.status.not) return null;
+      const approved = approvalComment.reactions.some(row => row.userId === reaction.userId
+        && row.agentId === reaction.agentId && row.agentDisplayName === reaction.agentDisplayName
+        && row.isDeleted === reaction.isDeleted && row.unified.startsWith(reaction.unified.startsWith)
+        && row.createdAt >= reaction.createdAt.gte);
+      return approved ? { commentText: approvalComment.commentText, text: approvalComment.text } : null;
+    },
+  },
+};
 stubModule("src/lib/prisma.ts", {
   default: {
-    comment: {
-      findFirst: async (query) => {
-        calls.push("approval");
-        approvalQueries.push(query);
-        assert.deepEqual(query.select, { commentText: true, text: true });
-        assert.equal(query.where.id, 123);
-        assert.deepEqual(query.where.task, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" } });
-        const reaction = query.where.reactions.some;
-        assert.deepEqual({ ...reaction, createdAt: undefined }, {
-          userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
-          unified: { startsWith: "1f44d" }, createdAt: undefined,
-        });
-        assert.ok(reaction.createdAt.gte instanceof Date);
-        assert.ok(Math.abs(Date.now() - reaction.createdAt.gte - 7 * 24 * 60 * 60 * 1000) < 1000);
-        if (!approvalComment || approvalComment.id !== query.where.id
-          || approvalComment.task.projectId !== query.where.task.projectId
-          || approvalComment.task.uniqueIndex !== query.where.task.uniqueIndex
-          || approvalComment.task.status === query.where.task.status.not) return null;
-        const approved = approvalComment.reactions.some(row => row.userId === reaction.userId
-          && row.agentId === reaction.agentId && row.agentDisplayName === reaction.agentDisplayName
-          && row.isDeleted === reaction.isDeleted && row.unified.startsWith(reaction.unified.startsWith)
-          && row.createdAt >= reaction.createdAt.gte);
-        return approved ? { commentText: approvalComment.commentText, text: approvalComment.text } : null;
-      },
-    },
     agent: {
       findUniqueOrThrow: async (query) => {
         assert.deepEqual(query, { where: { id: "runner-3" }, select: { displayName: true } });
@@ -108,10 +131,10 @@ test.beforeEach(() => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
-  approvalQueries = [];
+  approvalQueries = []; lockQueries = [];
   approvalComment = {
     id: 123, task: { projectId: 4060, uniqueIndex: 215, status: "Normal" },
-    commentText: `Question: Switch ${key} to Off?`, text: null,
+    commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
     reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
   };
 });
@@ -191,7 +214,7 @@ test("PATCH passes the authenticated actor, returns previous mode and broadcasts
   assert.equal(response.body.previousMode, "OWNER_AND_QA");
   assert.deepEqual(writes, [[key, "OFF", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
   assert.equal(broadcasts, 1);
-  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "approval", "agent"]);
+  assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval", "write"]);
 });
 
 test("PATCH handles an unstored default or unchanged mode", async () => {
@@ -244,7 +267,7 @@ test("PATCH accepts the request after the @Valentin Yeo mention", async () => {
   assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
 });
 
-test("PATCH accepts thumbs up with a skin tone and falls back to text", async () => {
+test("PATCH accepts thumbs up with a skin tone and visible text", async () => {
   approvalComment.commentText = null;
   approvalComment.text = `Question: Switch ${key} to Off?`;
   approvalComment.reactions[0].unified = "1f44d-1f3fd";
@@ -252,7 +275,7 @@ test("PATCH accepts thumbs up with a skin tone and falls back to text", async ()
   assert.equal(approvalQueries.length, 1);
 });
 
-for (const rejected of ["missing key", "wrong mode", "refusal naming both modes", "two requests", "prefix key", "no question mark", "negated request", "quoted request", "extra text after", "empty comment", "text overridden by commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
+for (const rejected of ["missing key", "wrong mode", "refusal naming both modes", "two requests", "prefix key", "no question mark", "negated request", "quoted request", "extra text after", "empty comment", "visible text differs from commentText", "no reaction", "agent reaction", "deleted agent reaction", "non-thumbs emoji", "old reaction", "other user reaction", "deleted reaction", "unknown comment", "different comment", "wrong project", "wrong ticket", "deleted ticket"]) {
   test(`PATCH refuses approval from ${rejected}`, async () => {
     const reaction = approvalComment.reactions[0];
     if (rejected === "missing key") approvalComment.commentText = "Question: Switch another-flag to Off?";
@@ -265,9 +288,8 @@ for (const rejected of ["missing key", "wrong mode", "refusal naming both modes"
     if (rejected === "extra text after") approvalComment.commentText = `Question: Switch ${key} to Off? No, keep it.`;
     if (rejected === "no question mark") approvalComment.commentText = `Switch ${key} to Off`;
     if (rejected === "empty comment") approvalComment.commentText = null;
-    if (rejected === "text overridden by commentText") {
-      approvalComment.text = approvalComment.commentText;
-      approvalComment.commentText = "Unrelated comment";
+    if (rejected === "visible text differs from commentText") {
+      approvalComment.text = "Unrelated comment";
     }
     if (rejected === "no reaction") approvalComment.reactions = [];
     if (rejected === "agent reaction") reaction.agentId = "runner-3";
@@ -282,11 +304,48 @@ for (const rejected of ["missing key", "wrong mode", "refusal naming both modes"
     if (rejected === "deleted ticket") approvalComment.task.status = "Deleted";
     if (rejected === "unknown comment") approvalComment = null;
     assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
-      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, and the whole comment must be: Question: Switch <flag-key> to <mode>?" },
+      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?" },
     });
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);
-    assert.deepEqual(calls, ["rate-limit", "auth", "owner", "approval"]);
+    assert.deepEqual(calls, ["rate-limit", "auth", "owner", "agent", "comment-lock", "reaction-lock", "approval"]);
     assert.equal(approvalQueries.length, 1);
   });
 }
+
+for (const edited of ["long ago", "before thumbs up", "at thumbs up", "after thumbs up"]) {
+  test(`PATCH refuses an edited comment ${edited} even with a valid thumbs up`, async () => {
+    const createdAt = approvalComment.reactions[0].createdAt;
+    approvalComment.editedAt = edited === "long ago" ? new Date(0)
+      : new Date(createdAt.getTime() + (edited === "before thumbs up" ? -1000 : edited === "after thumbs up" ? 1000 : 0));
+    assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
+      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?" },
+    });
+    assert.equal(approvalQueries[0].where.editedAt, null);
+    assert.equal(writes.length, 0);
+    assert.equal(broadcasts, 0);
+  });
+}
+
+test("PATCH accepts an unedited comment with a valid owner thumbs up", async () => {
+  assert.equal(approvalComment.editedAt, null);
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+  assert.equal(approvalQueries[0].where.editedAt, null);
+  assert.equal(writes.length, 1);
+  assert.equal(broadcasts, 1);
+});
+
+test("PATCH checks the visible text before legacy commentText", async () => {
+  approvalComment.commentText = "Unrelated legacy comment";
+  approvalComment.text = `<p>Question: Switch ${key} to Off?</p>`;
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+});
+
+test("PATCH locks the comment and task, then reactions before reading approval and writing the flag", async () => {
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+  assert.deepEqual(lockQueries, [
+    { sql: 'SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ? FOR UPDATE', commentId: 123 },
+    { sql: 'SELECT id FROM "Reaction" WHERE "commentId" = ? FOR UPDATE', commentId: 123 },
+  ]);
+  assert.deepEqual(calls.slice(-4), ["comment-lock", "reaction-lock", "approval", "write"]);
+});

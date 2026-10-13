@@ -5,6 +5,7 @@ import {
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
   FeatureFlagInputError,
+  FeatureFlagApprovalError,
   defaultFeatureFlagMode,
   isFeatureFlagOwnerUserId,
   listFeatureFlagModes,
@@ -80,29 +81,6 @@ export async function PATCH(request: NextRequest) {
     if (!link) {
       return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
     }
-    // Approval is Valentin's own thumbs up, within 7 days, on that comment, and the comment names
-    // this flag key and the target mode, so a refusal or an unrelated yes never counts.
-    const comment = await prisma.comment.findFirst({
-      where: {
-        id: Number(link[3]),
-        task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
-        reactions: { some: {
-          userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
-          unified: { startsWith: "1f44d" },
-          createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-        } },
-      },
-      select: { commentText: true, text: true },
-    });
-    // Comments posted through the API keep only HTML in text, so compare the rendered words.
-    const words = parse(comment?.commentText || comment?.text || "").text;
-    const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
-    if (!comment || !ask || ask[1] !== body.key
-      || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
-      return noStore({
-        error: "Valentin must thumbs-up that comment within 7 days, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
-      }, 403);
-    }
     const agent = await prisma.agent.findUniqueOrThrow({
       where: { id: ctx.agentId as string },
       select: { displayName: true },
@@ -113,6 +91,36 @@ export async function PATCH(request: NextRequest) {
       agentName: agent.displayName,
       reason: body.reason as string,
       source: "api",
+    }, async (tx) => {
+      const commentId = Number(link[3]);
+      // Hold the comment, its task and its reactions until the flag write commits, so an edit,
+      // a task delete or a removed thumbs up cannot land between this check and the write.
+      await tx.$queryRaw`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
+      await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
+      // An edited comment never counts: the thumbs up may have been given to different words,
+      // and edit and reaction times come from different clocks.
+      const comment = await tx.comment.findFirst({
+        where: {
+          id: commentId,
+          editedAt: null,
+          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
+          reactions: { some: {
+            userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
+            unified: { startsWith: "1f44d" },
+            createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+          } },
+        },
+        select: { commentText: true, text: true },
+      });
+      // Compare the visible HTML first; legacy comments may only have commentText.
+      const words = parse(comment?.text || comment?.commentText || "").text;
+      const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
+      if (!comment || !ask || ask[1] !== body.key
+        || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+        throw new FeatureFlagApprovalError(
+          "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
+        );
+      }
     });
     // The locked write supplies the previous mode, not a read that can race another session.
     const previousMode = flag.lastChange
@@ -123,6 +131,9 @@ export async function PATCH(request: NextRequest) {
     );
     return noStore({ flag, previousMode });
   } catch (error) {
+    if (error instanceof FeatureFlagApprovalError) {
+      return noStore({ error: error.message }, 403);
+    }
     if (error instanceof SyntaxError || error instanceof FeatureFlagInputError) {
       return noStore(
         { error: error instanceof FeatureFlagInputError ? error.message : "Invalid JSON" },

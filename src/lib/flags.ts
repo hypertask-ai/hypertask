@@ -1,6 +1,7 @@
 import type {
   FeatureFlagMode as PrismaFeatureFlagMode,
   PrismaClient,
+  Prisma,
 } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { cache } from "react";
@@ -118,6 +119,7 @@ export const FEATURE_FLAG_MODES = [
 export type FeatureFlagMode = PrismaFeatureFlagMode;
 
 export class FeatureFlagInputError extends Error {}
+export class FeatureFlagApprovalError extends Error {}
 
 type FeatureFlagDatabase = {
   featureFlag: Pick<PrismaClient["featureFlag"], "findUnique">;
@@ -423,6 +425,7 @@ export async function setFeatureFlagMode(
   key: string,
   mode: FeatureFlagMode,
   actor?: { userId: number; agentId?: string; agentName?: string; reason?: string; source: "page" | "api" },
+  verify?: (tx: Prisma.TransactionClient) => Promise<void>,
 ): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key) || !FEATURE_FLAG_MODES.includes(mode)) {
     throw new FeatureFlagInputError("Invalid feature flag");
@@ -439,6 +442,7 @@ export async function setFeatureFlagMode(
         hashtext(${key})
       )
     `;
+    await verify?.(tx);
     const stored = await tx.featureFlag.findUnique({
       where: { key },
       select: { key: true, mode: true, releasedAt: true },
