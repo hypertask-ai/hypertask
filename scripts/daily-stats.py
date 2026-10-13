@@ -22,6 +22,7 @@ import shutil
 import statistics
 import subprocess
 import sys
+import time
 import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -226,8 +227,14 @@ def safe(fn, *a):
         return {'ok': False, 'error': msg[:160]}
 
 
-def run(cmd, timeout=20):
-    p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+COLLECT_DEADLINE = time.monotonic() + 480  # leaves most of the 15 min service limit for render and publish
+
+
+def run(cmd, timeout=20, budget=True):
+    left = COLLECT_DEADLINE - time.monotonic() if budget else timeout
+    if left <= 1:
+        raise RuntimeError('collection time budget used up')
+    p = subprocess.run(cmd, capture_output=True, text=True, timeout=min(timeout, left))
     if p.returncode != 0:
         raise RuntimeError(f"{cmd[0]} failed: {(p.stderr or p.stdout).strip()[:120]}")
     return p.stdout
@@ -376,31 +383,31 @@ def collect(now):
 # ---------------------------------------------------------------- rendering
 
 CSS = """
-:root{--bg-pageBackground:#f4f4f4;--bg-cardBackground:#fff;--color-white-black:#161616;--muted:#525252;--line:#e0e0e0;--link:#0f62fe;--ok:#198038;--bad:#da1e28;--warn:#8e6a00;--tile:#f4f4f4}
-@media (prefers-color-scheme:dark){:root{--bg-pageBackground:#161616;--bg-cardBackground:#262626;--color-white-black:#f4f4f4;--muted:#c6c6c6;--line:#393939;--link:#78a9ff;--ok:#42be65;--bad:#ff8389;--warn:#f1c21b;--tile:#393939}}
+:root{--bg-pageBackground:#ffffff;--bg-cardBackground:#ffffff;--color-white-black:#18181b;--color-text-light-gray:#727279;--border-light-gray-thin:#e2e2e6;--color-rich-text-link:#1365a3;--color-pull-request-green:#1a7f37;--color-pull-request-checks-red:#cf222e;--warn:#8e6a00;--tile:#f4f4f5}
+@media (prefers-color-scheme:dark){:root{--bg-pageBackground:#0e0e0e;--bg-cardBackground:#262a30;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e;--color-rich-text-link:#5896f1;--color-pull-request-green:#4ade80;--color-pull-request-checks-red:#f87171;--warn:#f1c21b;--tile:#0e0e0e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg-pageBackground);color:var(--color-white-black);font:16px/1.5 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
 main{max-width:1056px;margin:0 auto;padding:16px}
 h1{font-size:24px;font-weight:400;margin:8px 0 4px}
 h2{font-size:18px;font-weight:600;margin:0 0 12px}
-section{background:var(--bg-cardBackground);border:1px solid var(--line);padding:16px;margin:16px 0}
-a{color:var(--link);word-break:break-word}
-.updated{margin:0 0 8px;color:var(--muted);font-size:14px}
-.updated.bad{color:var(--bad);font-weight:600}
+section{background:var(--bg-cardBackground);border:1px solid var(--border-light-gray-thin);padding:16px;margin:16px 0}
+a{color:var(--color-rich-text-link);word-break:break-word}
+.updated{margin:0 0 8px;color:var(--color-text-light-gray);font-size:14px}
+.updated.bad{color:var(--color-pull-request-checks-red);font-weight:600}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin:8px 0 16px}
 .tile{background:var(--tile);padding:12px}
 .tile .n{font-size:32px;line-height:1.1;font-weight:300}
-.tile .l{font-size:13px;color:var(--muted)}
+.tile .l{font-size:13px;color:var(--color-text-light-gray)}
 table{border-collapse:collapse;width:100%;font-size:14px}
-th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-weight:600;color:var(--muted)}
+th,td{text-align:left;padding:8px;border-bottom:1px solid var(--border-light-gray-thin);vertical-align:top}
+th{font-weight:600;color:var(--color-text-light-gray)}
 td.num,th.num{text-align:right;white-space:nowrap}
 ul{margin:0;padding-left:20px}
 li{margin:4px 0}
-.muted{color:var(--muted)}
+.muted{color:var(--color-text-light-gray)}
 .na{color:var(--warn)}
-.ok{color:var(--ok)}
-.bad{color:var(--bad)}
+.ok{color:var(--color-pull-request-green)}
+.bad{color:var(--color-pull-request-checks-red)}
 .tag{display:inline-block;font-size:12px;padding:0 8px;background:var(--tile);border-radius:4px;margin-left:6px;white-space:nowrap}
 h3{font-size:16px;margin:16px 0 4px}
 .scroll{overflow-x:auto}
@@ -701,7 +708,7 @@ def mark_failed(old_html, now, reason):
 # ---------------------------------------------------------------- publish / install / main
 
 def publish(path):
-    out = run(['htmlshare', str(path)], timeout=60).strip()
+    out = run(['htmlshare', str(path)], timeout=60, budget=False).strip()
     url = out.splitlines()[-1]
     if not url.startswith('https://'):
         raise RuntimeError('htmlshare gave no URL')
