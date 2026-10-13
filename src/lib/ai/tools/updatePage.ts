@@ -38,7 +38,7 @@ export function createUpdatePageTool(context: ToolContext) {
         }
 
         const access = await validateProjectAccess(
-          existingPage.projectId,
+          existingPage.task.projectId,
           user.id
         );
         if (access.error) {

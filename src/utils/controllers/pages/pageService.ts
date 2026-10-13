@@ -310,7 +310,7 @@ export async function listPages({
     where: {
       archived: false,
       ...(taskId === undefined ? {} : { taskId }),
-      ...(projectId === undefined ? {} : { projectId }),
+      ...(projectId === undefined ? {} : { task: { projectId } }),
     },
     select: {
       id: true,
@@ -336,7 +336,7 @@ export async function searchPages({
   return prisma.page.findMany({
     where: {
       archived: false,
-      projectId: { in: projectIds },
+      task: { projectId: { in: projectIds } },
       OR: [
         { title: { contains: normalizedQuery, mode: 'insensitive' } },
         { contentText: { contains: normalizedQuery, mode: 'insensitive' } },

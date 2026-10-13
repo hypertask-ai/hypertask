@@ -176,6 +176,7 @@ async function updateTaskRelatedData(taskId: number, projectId: number, sectionI
   await Promise.all([
     prisma.estimate.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
     prisma.priority.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
+    prisma.page.updateMany({ where: { taskId }, data: { projectId } }),
   ]);
 }
 

@@ -333,9 +333,8 @@ const fetchMentionPages = async (
     const pages = await prisma.page.findMany({
       take: 5,
       where: {
-        projectId,
         archived: false,
-        task: { deletedAt: null },
+        task: { projectId, deletedAt: null },
         ...(titleQuery
           ? { title: { contains: titleQuery, mode: "insensitive" as const } }
           : {}),

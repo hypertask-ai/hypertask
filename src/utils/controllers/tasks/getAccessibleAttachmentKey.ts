@@ -94,7 +94,7 @@ export async function getAccessibleAttachmentKey(
   // Page galleries synthesize attachment items, including images inside canvas HTML.
   const pages = await prisma.page.findMany({
     where: {
-      project: projectAccess,
+      task: { project: projectAccess },
       OR: [
         ...keyFragments.map((fragment) => ({ contentHtml: { contains: fragment } })),
         { contentHtml: { contains: "data-html-block" } },
