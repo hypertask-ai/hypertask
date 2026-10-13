@@ -75,6 +75,32 @@ test("the generation event contains tracking fields but no chat bodies", () => {
   );
 });
 
+test("generation events carry team allowance properties", () => {
+  const capture = observability.buildAiChatTurnCapture(
+    { ...baseTurn, teamId: "team_1", teamAllowanceUsd: 40, teamAllowanceUsedUsd: 12.5 },
+    "production",
+  );
+  assert.equal(capture.properties.ht_team_id, "team_1");
+  assert.equal(capture.properties.ht_team_ai_allowance_usd, 40);
+  assert.equal(capture.properties.ht_team_ai_used_usd, 12.5);
+});
+
+test("generation events default missing team allowance properties to null", () => {
+  const capture = observability.buildAiChatTurnCapture(baseTurn, "production");
+  assert.equal(capture.properties.ht_team_id, null);
+  assert.equal(capture.properties.ht_team_ai_allowance_usd, null);
+  assert.equal(capture.properties.ht_team_ai_used_usd, null);
+});
+
+test("usage tracing passes the team allowance snapshot into generation capture", () => {
+  const source = fs.readFileSync(
+    path.join(root, "src/app/api/ai/_lib/modelProvider.ts"),
+    "utf8",
+  );
+  assert.match(source, /const observation = \(async \(\) => \{[\s\S]*?teamAllowanceSnapshot\(row\.teamId\)/);
+  assert.match(source, /recordAiChatTurn\(\{[\s\S]*?teamId: row\.teamId,[\s\S]*?teamAllowanceUsd: allowanceSnapshot\?\.allowanceUsd \?\? null,[\s\S]*?teamAllowanceUsedUsd: allowanceSnapshot\?\.usedUsd \?\? null/);
+});
+
 test("failed and cancelled turns carry the correct outcomes", () => {
   const failed = observability.buildAiChatTurnCapture(
     { ...baseTurn, outcome: "failed", error: new Error("boom") },

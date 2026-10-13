@@ -11,7 +11,7 @@ const registry = load(path.join(root, 'src/lib/ai/prompts/registry.ts'));
 const { SharedAiAllowanceExceededError, sharedAiAllowanceErrorMessage, modelCostUsd } = load(path.join(root, 'src/app/api/ai/_lib/sharedAllowance.ts'));
 const { isHaiku55Model, isHaiku45Model, resolveHaikuModelId } = load(path.join(root, 'src/lib/aiModelOptions.ts'));
 
-function harness({ rejectTelemetry = false, rejectPricing = false, observationSink } = {}) {
+function harness({ rejectTelemetry = false, rejectPricing = false, observationSink, teamSnapshot = null } = {}) {
   const rows = [], captures = [], errors = [], pending = [], allowances = [];
   const usage = { inputTokens: { total: 100 }, outputTokens: { total: 20 } };
   const result = { content: [{ type: 'text', text: 'private reply' }], usage, finishReason: { unified: 'stop', raw: 'end_turn' } };
@@ -28,6 +28,7 @@ function harness({ rejectTelemetry = false, rejectPricing = false, observationSi
     ai: { ...require('ai'), createGateway: () => factory('gateway') },
     '@/app/api/ai/_lib/sharedAllowance': {
       sharedAiAllowanceErrorMessage,
+      teamAllowanceSnapshot: async () => teamSnapshot,
       modelCostUsd,
       gatewayCatalogModelSlug: (id) => id,
       createSharedAllowanceMiddleware: (args) => { allowances.push(args); return { specificationVersion: 'v4' }; },
@@ -79,6 +80,19 @@ test('all provider branches and gateway resolver are obligatorily traced without
   assert.equal(h.rows[5].userId, null);
   assert.equal(h.rows[5].model, 'anthropic/claude-opus-5.5');
   assert.ok(!JSON.stringify([h.rows, h.captures, h.errors]).includes('private'));
+});
+
+test('generation tracing includes the team allowance snapshot or null when unavailable', async () => {
+  for (const teamSnapshot of [{ allowanceUsd: 40, usedUsd: 12.5 }, null]) {
+    const h = harness({ teamSnapshot });
+    const middleware = h.api.createUsageTracingMiddleware({ teamId: 'team_1' }, 'claude-sonnet-5.5');
+    assert.equal(await middleware.wrapGenerate({ params, doGenerate: async () => h.result }), h.result);
+    await h.flush();
+    assert.equal(h.captures.length, 1);
+    assert.equal(h.captures[0].teamId, 'team_1');
+    assert.equal(h.captures[0].teamAllowanceUsd, teamSnapshot?.allowanceUsd ?? null);
+    assert.equal(h.captures[0].teamAllowanceUsedUsd, teamSnapshot?.usedUsd ?? null);
+  }
 });
 
 test('failures, successful retries and unknown costs each produce a metadata-only attempt', async () => {

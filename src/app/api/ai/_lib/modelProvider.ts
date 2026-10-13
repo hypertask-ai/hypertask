@@ -22,6 +22,7 @@ import {
   modelPricing,
   modelCostUsd,
   sharedAiAllowanceErrorMessage,
+  teamAllowanceSnapshot,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -356,9 +357,27 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         ? failure.statusCode : null;
       const observation = (async () => {
         row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
+        let allowanceSnapshot: Awaited<ReturnType<typeof teamAllowanceSnapshot>> = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          if (row.teamId) {
+            allowanceSnapshot = await Promise.race([
+              teamAllowanceSnapshot(row.teamId),
+              new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
+            ]);
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
         await Promise.allSettled([
           logAiUsage(row),
-          recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
+          recordAiChatTurn({
+            ...row, traceId, latencyMs: row.latencyMs!, outcome,
+            teamId: row.teamId,
+            teamAllowanceUsd: allowanceSnapshot?.allowanceUsd ?? null,
+            teamAllowanceUsedUsd: allowanceSnapshot?.usedUsd ?? null,
+            error: outcome === "failed" ? "AI model generation failed" : undefined,
+          }),
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) ? [reportError({
             message: "AI model generation failed",
             source: "server",
