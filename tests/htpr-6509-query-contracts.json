@@ -342,7 +342,13 @@
           "include": {
             "assignees": {
               "include": {
-                "user": true
+                "user": {
+                  "select": {
+                    "id": true,
+                    "displayName": true,
+                    "photoURL": true
+                  }
+                }
               }
             }
           },
@@ -359,7 +365,13 @@
             "ranking": "asc"
           }
         },
-        "owner": true,
+        "owner": {
+          "select": {
+            "id": true,
+            "displayName": true,
+            "photoURL": true
+          }
+        },
         "ai_custom_instructions": true
       }
     },
@@ -442,18 +454,8 @@
                 "snoozeUntil": null,
                 "user": {
                   "id": 7,
-                  "uid": null,
                   "displayName": "Fixture User",
-                  "photoURL": null,
-                  "email": null,
-                  "joinedAt": null,
-                  "emailVerified": null,
-                  "updatedAt": null,
-                  "googleCalendarGeneration": null,
-                  "mcpTokensRevokedAt": null,
-                  "stripe_customer_id": null,
-                  "UserSettingId": "70",
-                  "accountId": null
+                  "photoURL": null
                 }
               }
             ]
@@ -474,18 +476,8 @@
         ],
         "owner": {
           "id": 7,
-          "uid": null,
           "displayName": "Fixture User",
-          "photoURL": null,
-          "email": null,
-          "joinedAt": null,
-          "emailVerified": null,
-          "updatedAt": null,
-          "googleCalendarGeneration": null,
-          "mcpTokensRevokedAt": null,
-          "stripe_customer_id": null,
-          "UserSettingId": "70",
-          "accountId": null
+          "photoURL": null
         },
         "ai_custom_instructions": [
           {
