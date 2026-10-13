@@ -9,6 +9,7 @@ import {
 import generateRank from "@/utils/generateRank";
 import {
   boardForGithubRepository,
+  isAuthorizedPullRequestAuthor,
   parseGithubPullRequestUrl,
   type PullRequestLifecycle,
 } from "@/lib/pullRequests/githubPullRequests";
@@ -36,6 +37,7 @@ interface GithubPullRequestPayload {
     fork: boolean;
   };
   pull_request: {
+    user: { id: number };
     id: number;
     number: number;
     title: string;
@@ -460,6 +462,10 @@ export async function POST(request: NextRequest) {
       const rawPullRequest = parsedPayload.pull_request;
       if (
         !isRecord(rawPullRequest) ||
+        !isRecord(rawPullRequest.user) ||
+        typeof rawPullRequest.user.id !== "number" ||
+        !Number.isSafeInteger(rawPullRequest.user.id) ||
+        rawPullRequest.user.id <= 0 ||
         !Number.isInteger(rawPullRequest.id) ||
         !Number.isInteger(rawPullRequest.number) ||
         typeof rawPullRequest.title !== "string" ||
@@ -575,6 +581,17 @@ export async function POST(request: NextRequest) {
       Number.isNaN(sourceUpdatedAt.getTime())
     ) {
       return invalidPayload("Invalid pull request payload");
+    }
+
+    const authorId = pullRequest.user.id;
+    if (!isAuthorizedPullRequestAuthor(boardId, authorId)) {
+      console.log(
+        `[GitHub webhook] Unauthorized PR author: board=${boardId} repo=${repositoryFullName} pr=${pullRequest.number} authorId=${authorId}`,
+      );
+      return NextResponse.json({
+        success: true,
+        ignored: "Pull request author is not authorized for board",
+      });
     }
 
     const board = await prisma.project.findUnique({
@@ -836,8 +853,8 @@ export async function POST(request: NextRequest) {
           currentUser,
           null,
           {
-            // The signature check above is the gate. currentUser is the
-            // synthetic bot, which is on no board.
+            // The signature and PR-author checks above authorize this event.
+            // currentUser is the synthetic bot, which is on no board.
             trustedCaller: true,
             taskMovedActivity: {
               sendNotification: () =>

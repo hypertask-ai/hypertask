@@ -68,6 +68,19 @@ const BOARD_15_GITHUB_REPOSITORIES = new Set([
   "hypertask-ai/skills",
 ]);
 
+const BOARD_15_PULL_REQUEST_AUTHOR_IDS = new Set([
+  "3296316", // valentinyeo
+  "340644717", // hypertask-runners[bot]
+  "49699333", // dependabot[bot]
+]);
+
+export function isAuthorizedPullRequestAuthor(
+  boardId: number,
+  authorId: number,
+): boolean {
+  return boardId === 15 && BOARD_15_PULL_REQUEST_AUTHOR_IDS.has(String(authorId));
+}
+
 export function boardForGithubRepository(repository: {
   fullName?: unknown;
   isPrivate?: unknown;

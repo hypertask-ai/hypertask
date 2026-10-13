@@ -20,6 +20,7 @@ async function withStubbedGithubRoute(stubbedModules, run) {
     "src/utils/controllers/assignees/assign.ts",
     "src/utils/controllers/agents/boardMembers.ts",
     "src/lib/agents/visibility.ts",
+    "src/lib/pullRequests/syncTaskPullRequests.ts",
   ])].map((relativePath) => path.join(root, relativePath));
   const routePath = path.join(root, "src/app/api/webhooks/github/route.ts");
   const previous = new Map(
@@ -60,6 +61,7 @@ function mergedPullRequestPayload() {
       fork: false,
     },
     pull_request: {
+      user: { id: 3296316, login: "valentinyeo" },
       id: 456,
       number: 5952,
       title: "HTPR-5952 [BUGFIX] route merges to QA",
@@ -76,7 +78,7 @@ function mergedPullRequestPayload() {
   };
 }
 
-function signedGithubRequest(payload, secret) {
+function signedGithubRequest(payload, secret, event = "pull_request") {
   const rawBody = JSON.stringify(payload);
   const signature =
     "sha256=" + createHmac("sha256", secret).update(rawBody, "utf8").digest("hex");
@@ -87,7 +89,7 @@ function signedGithubRequest(payload, secret) {
       get: (name) =>
         ({
           "x-hub-signature-256": signature,
-          "x-github-event": "pull_request",
+          "x-github-event": event,
         })[name] ?? null,
     },
   };
@@ -923,4 +925,309 @@ test("extractTicketId is not hijacked by ticket-shaped technical prose in the ti
     }),
     "HTPR-4437"
   );
+});
+
+function forkPullRequestPayload(authorId = 987654321, action = "opened", merged = false) {
+  const payload = mergedPullRequestPayload();
+  payload.action = action;
+  payload.sender = { id: 987654321, login: "outsider" };
+  Object.assign(payload.pull_request, {
+    user: { id: authorId, login: "outsider" },
+    title: "HTPR-5952 [BUGFIX] outsider contribution",
+    body: "Fixes HTPR-5952",
+    author_association: "NONE",
+    merged,
+    state: action === "closed" ? "closed" : "open",
+    head: {
+      ref: "outsider/htpr-5952",
+      sha: "abc123",
+      repo: { id: 789, full_name: "outsider/hypertask", fork: true },
+    },
+  });
+  return payload;
+}
+
+async function runAuthorScenario(payload, mode = "linked", event = "pull_request") {
+  const writes = [];
+  const reads = [];
+  const syncCalls = [];
+  const checkCalls = [];
+  const moves = [];
+  const logs = [];
+  const task = {
+    id: 36637, projectId: 15, userId: 6, sectionId: 4309,
+    uniqueIndex: 5952, ticketNumber: "HTPR-5952", riskLevel: "Low",
+  };
+  const bot = { id: 1, email: "bot@example.invalid", displayName: "HyperAI", photoURL: null };
+  const read = (name, value) => async () => { reads.push(name); return value; };
+  const write = (name, value) => async () => { writes.push(name); return value; };
+  let link = mode === "existing" ? {
+    id: "existing-link", taskId: task.id, lifecycle: "open", checkState: "pending",
+    headSha: "abc123", sourceUpdatedAt: new Date("2026-09-01T06:00:00Z"),
+  } : null;
+  const transaction = {
+    taskPullRequest: {
+      findMany: read("links", link ? [{ taskId: task.id }] : []),
+      findUnique: async () => link,
+      createMany: async ({ data }) => {
+        writes.push("link.createMany");
+        if (link) return { count: 0 };
+        link = data;
+        return { count: 1 };
+      },
+      update: async ({ data }) => {
+        writes.push("link.update");
+        link = { ...link, ...data };
+        return link;
+      },
+    },
+    task: { findFirst: read("sync.task", task) },
+    user: { findUnique: read("sync.actor", bot) },
+    comment: { create: write("activity.create", {}) },
+    $queryRaw: write("row-lock", []),
+  };
+  const prisma = {
+    project: { findUnique: read("board", { uniqueIdentifier: "HTPR" }) },
+    task: {
+      findMany: read("tasks", [task]),
+      findFirst: async ({ where }) => {
+        reads.push("task");
+        return where.ticketNumber ? task : null;
+      },
+      findUnique: read("task.current", { projectId: 15, sectionId: 5511, status: "Normal" }),
+    },
+    section: {
+      findFirst: async ({ where }) => {
+        reads.push("section");
+        return { id: 5511, section_title: where.section_title.equals };
+      },
+      findUnique: read("section.current", {
+        id: 4309, projectId: 15, deleted: false, section_title: "In Progress",
+        isDone: false, autoAssignAgentId: null,
+      }),
+    },
+    user: { findUnique: read("bot", bot) },
+    comment: { findFirst: read("comment", null), create: write("comment.create", {}) },
+    $transaction: async (callback) => {
+      writes.push("transaction");
+      return callback(transaction);
+    },
+  };
+  const stubbedModules = {
+    "src/lib/prisma.ts": { default: prisma },
+    "src/lib/realtime/server.ts": {
+      broadcastBoardChange: write("broadcast.board"),
+      broadcastTaskChange: write("broadcast.task"),
+    },
+    "src/utils/generateRank.ts": { default: () => "rank" },
+    "src/utils/controllers/comments/createCommentService.ts": {
+      createCommentService: write("comment.service", {}),
+    },
+    "src/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove.ts": {
+      default: write("notification"),
+    },
+    "src/utils/controllers/tasks/single.ts": {
+      updateTaskSingle: async (update) => {
+        writes.push("task.move");
+        moves.push(update);
+        return { status: 200 };
+      },
+    },
+    "src/utils/controllers/assignees/assign.ts": {
+      default: write("assignment", { status: 200, json: {} }),
+    },
+  };
+  if (mode !== "real" && mode !== "existing") {
+    stubbedModules["src/lib/pullRequests/syncTaskPullRequests.ts"] = {
+      syncPullRequestFromWebhook: async (input) => {
+        syncCalls.push(input);
+        writes.push("sync.pr");
+        return mode === "legacy"
+          ? { linked: 0, updated: 0, taskIds: [] }
+          : { linked: 1, updated: 1, taskIds: [task.id] };
+      },
+      syncCheckSuiteFromWebhook: async (input) => {
+        checkCalls.push(input);
+        writes.push("sync.check");
+        return { updated: 1, taskIds: [task.id] };
+      },
+    };
+  }
+  const previousSecret = process.env.GITHUB_WEBHOOK_SECRET;
+  const previousLog = console.log;
+  const secret = "webhook-test-secret";
+  process.env.GITHUB_WEBHOOK_SECRET = secret;
+  console.log = (...args) => logs.push(args);
+  try {
+    return await withStubbedGithubRoute(stubbedModules, async ({ POST }) => {
+      const response = await POST(signedGithubRequest(payload, secret, event));
+      return { status: response.status, body: await response.json(), writes, reads, syncCalls, checkCalls, moves, logs };
+    });
+  } finally {
+    console.log = previousLog;
+    if (previousSecret === undefined) delete process.env.GITHUB_WEBHOOK_SECRET;
+    else process.env.GITHUB_WEBHOOK_SECRET = previousSecret;
+  }
+}
+
+function assertNoAuthorWrites(result) {
+  assert.deepEqual(result.syncCalls, []);
+  assert.deepEqual(result.checkCalls, []);
+  assert.deepEqual(result.moves, []);
+  assert.deepEqual(result.writes, []);
+  assert.deepEqual(result.reads, []);
+}
+
+function assertUnauthorizedAuthor(result) {
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body, {
+    success: true,
+    ignored: "Pull request author is not authorized for board",
+  });
+  assertNoAuthorWrites(result);
+  assert.deepEqual(result.logs, [[
+    "[GitHub webhook] Unauthorized PR author: board=15 repo=hypertask-ai/hypertask pr=5952 authorId=987654321",
+  ]]);
+}
+
+const pullRequestActions = [
+  ["opened", false], ["reopened", false], ["synchronize", false],
+  ["closed", true], ["closed", false],
+];
+
+test("pull request author authorization blocks signed outsiders across both paths and real sync", async (t) => {
+  for (const mode of ["linked", "legacy", "real", "existing"]) {
+    for (const [action, merged] of pullRequestActions) {
+      await t.test(`outsider ${action} merged=${merged} ${mode}`, async () => {
+        assertUnauthorizedAuthor(await runAuthorScenario(forkPullRequestPayload(987654321, action, merged), mode));
+      });
+    }
+  }
+});
+
+test("authorized author positive controls retain sync and movement", async (t) => {
+  for (const authorId of [3296316, 340644717, 49699333]) {
+    for (const mode of ["linked", "legacy", "real", "existing"]) {
+      await t.test(`authorized ${authorId} ${mode}`, async () => {
+        const result = await runAuthorScenario(forkPullRequestPayload(authorId), mode);
+        assert.equal(result.status, 200);
+        assert.equal(result.body.success, true);
+        assert.equal(result.moves.length, 1);
+        assert.equal(result.moves[0].section, "AI Review");
+        if (mode === "real") {
+          assert.equal(result.body.linked, 1);
+          assert.equal(result.writes.filter((name) => name === "link.createMany").length, 1);
+          assert.equal(result.writes.filter((name) => name === "activity.create").length, 1);
+        } else if (mode === "existing") {
+          assert.equal(result.body.updated, 1);
+          assert.ok(result.writes.includes("link.update"));
+        } else {
+          assert.equal(result.syncCalls.length, 1);
+          assert.equal(result.syncCalls[0].ticketNumber, "HTPR-5952");
+          assert.equal(result.writes.includes("comment.service"), mode === "legacy");
+        }
+      });
+    }
+  }
+});
+
+test("authorized authors retain lifecycle behavior for every supported action", async (t) => {
+  for (const authorId of [3296316, 340644717, 49699333]) {
+    for (const [action, merged] of pullRequestActions) {
+      await t.test(`authorized ${authorId} ${action} merged=${merged}`, async () => {
+        const result = await runAuthorScenario(forkPullRequestPayload(authorId, action, merged));
+        assert.equal(result.status, 200);
+        assert.equal(result.syncCalls.length, 1);
+        const shouldMove = action === "opened" || action === "reopened" || merged;
+        assert.equal(result.moves.length, shouldMove ? 1 : 0);
+        if (shouldMove) assert.equal(result.moves[0].section, merged ? "QA" : "AI Review");
+      });
+    }
+  }
+});
+
+test("PR author policy allows exactly the approved board 15 ids and denies unknown boards", () => {
+  const { isAuthorizedPullRequestAuthor } = loadTs("src/lib/pullRequests/githubPullRequests.ts");
+  for (const authorId of [3296316, 340644717, 49699333]) {
+    assert.equal(isAuthorizedPullRequestAuthor(15, authorId), true);
+    for (const boardId of [0, 1, 4060, 999]) {
+      assert.equal(isAuthorizedPullRequestAuthor(boardId, authorId), false);
+    }
+  }
+  for (const authorId of [987654321, 41898282, 334597260, 0, -1, Number.MAX_SAFE_INTEGER + 1]) {
+    assert.equal(isAuthorizedPullRequestAuthor(15, authorId), false);
+  }
+});
+
+test("PR consistency checks still reject an outsider's mismatched base before authorization", async () => {
+  const payload = forkPullRequestPayload();
+  payload.pull_request.base.repo.id = 999;
+  const result = await runAuthorScenario(payload);
+  assert.equal(result.status, 400);
+  assertNoAuthorWrites(result);
+  assert.deepEqual(result.logs, []);
+});
+
+test("PR author id, not sender, login, association or fork flags, controls authorization", async (t) => {
+  await t.test("authorized renamed author with outsider sender passes", async () => {
+    const payload = forkPullRequestPayload(3296316);
+    payload.pull_request.user.login = "renamed-account";
+    const result = await runAuthorScenario(payload);
+    assert.equal(result.status, 200);
+    assert.equal(result.syncCalls.length, 1);
+    assert.equal(result.moves.length, 1);
+  });
+  await t.test("outsider with trusted sender is denied", async () => {
+    const payload = forkPullRequestPayload();
+    payload.sender = { id: 3296316, login: "valentinyeo" };
+    assertUnauthorizedAuthor(await runAuthorScenario(payload));
+  });
+  await t.test("same login with different id is denied", async () => {
+    const payload = forkPullRequestPayload();
+    payload.pull_request.user.login = "valentinyeo";
+    assertUnauthorizedAuthor(await runAuthorScenario(payload));
+  });
+  await t.test("outsider non-fork owner association is denied", async () => {
+    const payload = forkPullRequestPayload();
+    payload.pull_request.author_association = "OWNER";
+    payload.pull_request.head.repo = payload.repository;
+    assertUnauthorizedAuthor(await runAuthorScenario(payload));
+  });
+});
+
+test("malformed pull request author ids fail closed without lookups or writes", async (t) => {
+  for (const value of [undefined, null, 0, "3296316", -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await t.test(`invalid id ${String(value)}`, async () => {
+      const payload = forkPullRequestPayload();
+      payload.pull_request.user.id = value;
+      const result = await runAuthorScenario(payload);
+      assert.equal(result.status, 400);
+      assert.equal(result.body.error, "Invalid pull request payload");
+      assertNoAuthorWrites(result);
+    });
+  }
+  await t.test("missing user", async () => {
+    const payload = forkPullRequestPayload();
+    delete payload.pull_request.user;
+    const result = await runAuthorScenario(payload);
+    assert.equal(result.status, 400);
+    assertNoAuthorWrites(result);
+  });
+});
+
+test("check suites still update existing PR links without PR-author authorization", async () => {
+  const payload = forkPullRequestPayload();
+  payload.action = "completed";
+  delete payload.pull_request;
+  payload.check_suite = {
+    app: { id: 15368, name: "GitHub Actions" }, head_sha: "abc123",
+    status: "completed", conclusion: "success", updated_at: "2026-09-02T06:00:00.000Z",
+    pull_requests: [{ number: 5952, base: { repo: payload.repository } }],
+  };
+  const result = await runAuthorScenario(payload, "linked", "check_suite");
+  assert.equal(result.status, 200);
+  assert.equal(result.body.updated, 1);
+  assert.equal(result.checkCalls.length, 1);
+  assert.deepEqual(result.syncCalls, []);
+  assert.ok(result.writes.includes("broadcast.task"));
 });
