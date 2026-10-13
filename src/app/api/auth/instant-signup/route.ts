@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import updateUsers from '@/utils/controllers/users/update_or_create_user'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
-import prisma from '@/lib/prisma'
+import { findUserByEmail } from '@/utils/controllers/users/findUserByEmail'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import { provisionFirstWorkspace } from '@/utils/controllers/users/provisionFirstWorkspace'
 import { companyRoleOptions, companySizeOptions } from '@/lib/constants/constants'
@@ -138,10 +138,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const existingUser = await prisma.user.findFirst({
-      where: { email: normalizedEmail },
-      select: { uid: true },
-    })
+    // HTPR-7159: the same Gmail-aware lookup updateUsers() uses, so a dot, +suffix
+    // or googlemail.com spelling of an existing account takes the early return too.
+    const existingUser = await findUserByEmail(normalizedEmail)
 
     // HTPR-4815: this route is unauthenticated, so for an address that already
     // has an account every line below runs on behalf of a stranger. updateUsers()
