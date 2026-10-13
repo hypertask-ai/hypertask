@@ -365,6 +365,8 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    outputs:
+      contract: ${{ steps.smoke.outputs.contract }}
     permissions:
       contents: read
       packages: read
@@ -435,6 +437,8 @@ jobs:
           npm ci --prefer-offline --no-audit --no-fund
           npx prisma generate
           npx playwright install --with-deps chromium
+          sudo apt-get update
+          sudo apt-get install -y strace
       - name: Prepare disposable local credentials
         shell: bash
         run: |
@@ -453,6 +457,11 @@ jobs:
             printf 'JWT_SECRET=%s\n' "$jwt_secret"
             printf 'BETTER_AUTH_SECRET=%s\n' "$better_auth_secret"
             printf '%s\n' 'BETTER_AUTH_URL=http://127.0.0.1:3100'
+            printf '%s\n' 'NEXT_PUBLIC_BASEURL=http://127.0.0.1:3100'
+            printf '%s\n' 'TURBOPUFFER_BASE_URL=http://127.0.0.1:53101'
+            printf '%s\n' 'TURBOPUFFER_API_KEY=disposable-fixture'
+            printf '%s\n' 'HT_PREMERGE_AI_STUB=1'
+            printf '%s\n' 'HT_PREMERGE_QUEUE_STUB=1'
             printf '%s\n' 'QSTASH_CALLBACK_BASE_URL=http://127.0.0.1:3100'
             printf '%s\n' 'QSTASH_AUTO_REGISTER_SWEEP=false'
             printf '%s\n' 'NEXT_PUBLIC_PUSHER_KEY=app-key'
@@ -472,27 +481,47 @@ jobs:
         id: fixtures
         env:
           BROWSER_SMOKE_STATE_FILE: e2e/smoke/.state/smoke-state.json
+          MCP_CLI_API_CONTRACT: '1'
         run: |
           npx prisma migrate deploy
           node scripts/seed-browser-smoke.mjs
+      - name: Download checksum-verified pinned native CLI
+        env:
+          TRUSTED_CLI_BINARY_VERSION: "0.2.15"
+          TRUSTED_CLI_BINARY_SHA256: "685af04562d52683e7d6f8feed58fa807407176940558ba79fbcc7cc5406b2a9"
+        run: |
+          set -euo pipefail
+          CLI_BINARY="$RUNNER_TEMP/hypertask-native"
+          curl --fail --location --silent --show-error \
+            "https://github.com/hypertask-ai/cli/releases/download/v${TRUSTED_CLI_BINARY_VERSION}/hypertask-linux-x86_64" \
+            --output "$CLI_BINARY"
+          echo "$TRUSTED_CLI_BINARY_SHA256  $CLI_BINARY" | sha256sum --check
+          chmod 755 "$CLI_BINARY"
+          printf 'MCP_CONTRACT_CLI=%s\n' "$CLI_BINARY" >> "$GITHUB_ENV"
       - name: Build the local app (no migrations)
         run: npx next build --webpack
       - name: Serve and check logged-in pages and layout lock
+        id: smoke
         env:
           BASE_URL: http://127.0.0.1:3100
           SMOKE_BOARD_PATH: ${{ steps.fixtures.outputs.board_path }}
           SMOKE_DEMO_BOARD_PATH: ${{ steps.fixtures.outputs.demo_board_path }}
           BROWSER_SMOKE_PR: '1'
         run: |
+          set -euo pipefail
+          node scripts/premerge-local-search.mjs e2e/smoke/.state/card-fixture.json 53101 > "$RUNNER_TEMP/contract-search.log" 2>&1 &
+          search=$!
           npx next start -H 127.0.0.1 -p 3100 > "$RUNNER_TEMP/browser-smoke-server.log" 2>&1 &
           server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
+          trap 'kill "$server" "$search" 2>/dev/null || true' EXIT
           for attempt in {1..60}; do
             if curl -fsS -o /dev/null "$BASE_URL/login"; then break; fi
             kill -0 "$server" 2>/dev/null || { echo '::error::Local app exited before it became ready'; exit 1; }
             sleep 2
           done
           curl -fsS -o /dev/null "$BASE_URL/login" || { echo '::error::Local app did not become ready'; exit 1; }
+          curl -fsS -o /dev/null "$TURBOPUFFER_BASE_URL/health"
+          node scripts/mcp-cli-api-contract.mjs
           npx playwright test -c playwright.config.smoke.ts e2e/smoke/prod.spec.ts e2e/smoke/layout-lock.spec.ts e2e/smoke/layout-lock-matrix.spec.ts
           # Keep the instant-open regression covered even while its live mode is OFF.
           BROWSER_SMOKE_STATE_FILE=e2e/smoke/.state/smoke-state.json node scripts/seed-browser-smoke.mjs --instant-open-control
@@ -509,6 +538,21 @@ jobs:
           path: test-results/layout-lock-matrix/
           if-no-files-found: ignore
           retention-days: 7
+
+  mcp-cli-api-contract:
+    name: mcp-cli-api-contract
+    needs: browser-smoke
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions: {}
+    steps:
+      - name: Require a successful producer and explicit contract pass
+        env:
+          SMOKE_RESULT: ${{ needs.browser-smoke.result }}
+          CONTRACT_RESULT: ${{ needs.browser-smoke.outputs.contract }}
+        run: |
+          test "$SMOKE_RESULT" = success && test "$CONTRACT_RESULT" = passed
 
   production-test-warning:
     name: production-test-warning
