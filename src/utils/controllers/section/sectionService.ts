@@ -20,19 +20,25 @@ export interface CreateSectionInput {
   title: string
   ranking?: string
   afterSectionId?: number
-  /** When provided, visibility is ON only in views owned by this user */
-  userId?: number
+  /** The acting user; must own or belong to the board. Visibility is ON only in their views. */
+  userId: number
+  agentId?: string | null
 }
 
 export type CreateSectionResult =
   | { status: 200; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null } }
-  | { status: 400 | 404 | 500; json: { message: string } | unknown }
+  | { status: 400 | 403 | 404 | 500; json: { message: string } | unknown }
 
 /**
  * Create a new section. Updates all project views.
  */
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
-  const { projectId, title, ranking: explicitRanking, afterSectionId, userId } = input
+  const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
+
+  // HTPR-7165: only the board's owner or members may add columns to it.
+  if (!(await canAccessProject(projectId, userId, agentId))) {
+    return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
+  }
 
   const project = await prisma.project.findUnique({ where: { id: projectId } })
   if (!project) {

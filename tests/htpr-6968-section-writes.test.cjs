@@ -234,6 +234,7 @@ for (const [name, label, scenario, options] of [
   ["create", "rank between sections", { body: { projectId: 15, title: "Column", after_section_id: 91 } }, {}],
   ["create", "explicit ranking", { body: { projectId: 15, title: "Column", ranking: "A0300" } }, {}],
   ["create", "missing predecessor", { body: { projectId: 15, title: "Column", after_section_id: 999 } }, {}],
+  ["create", "permission denial", {}, { denied: true }],
   ["update", "access and explicit ranking", {}, {}],
   ["update", "permission denial", {}, { denied: true }],
   ["rename", "task history and view refresh", {}, {}],
@@ -243,7 +244,7 @@ for (const [name, label, scenario, options] of [
   const factory = effects => serviceController(name, effects, options);
   const { fx: old, expected } = await run(`service ${name} ${label}`, name, scenario, factory);
   const writes = old.effects.filter(([label]) => label === "write-section");
-  if (name !== "create") {
+  {
     const gate = old.effects.find(([label]) => label === (name === "update" ? "last-or-access" : "board-access"));
     assert.deepEqual(gate[1].where, name === "update"
       ? { id: 91, project: { status: "Normal", ownerId: 985 } }
