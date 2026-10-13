@@ -80,7 +80,7 @@ test("page restore and archive enforce project access before mutation", () => {
   assert.ok(pageLookupAt < accessAt, "the page must resolve before its project is checked");
   assert.ok(accessAt < restoreAt, "access must be checked before restore");
   assert.ok(accessAt < archiveAt, "access must be checked before archive");
-  assert.match(body, /existingPage\.projectId,[\s\S]*?user\.id/);
+  assert.match(body, /existingPage\.task\.projectId,[\s\S]*?user\.id/);
   assert.match(body, /restorePageVersion\(\{[\s\S]*?pageId: existingPage\.id/);
   assert.match(body, /archivePage\(\{[\s\S]*?id: existingPage\.id/);
 });

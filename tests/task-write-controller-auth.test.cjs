@@ -813,6 +813,7 @@ function loadMoveController({
     },
     estimate: { updateMany: async () => undefined },
     priority: { updateMany: async () => undefined },
+    page: { updateMany: async () => undefined },
     savedContent: { updateMany: async () => undefined },
     notification: { deleteMany: async () => undefined },
     drafts: { deleteMany: async () => undefined },

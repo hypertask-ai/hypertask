@@ -32,7 +32,7 @@ export function createGetPageTool(context: ToolContext) {
           return { success: false, error: "Page not found" };
         }
 
-        const access = await validateProjectAccess(page.projectId, user.id);
+        const access = await validateProjectAccess(page.task.projectId, user.id);
         if (access.error) {
           return { success: false, error: access.error.message };
         }

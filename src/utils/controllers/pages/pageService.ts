@@ -310,7 +310,7 @@ export async function listPages({
     where: {
       archived: false,
       ...(taskId === undefined ? {} : { taskId }),
-      ...(projectId === undefined ? {} : { projectId }),
+      ...(projectId === undefined ? {} : { task: { projectId } }),
     },
     select: {
       id: true,
@@ -333,10 +333,10 @@ export async function searchPages({
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
 
-  return prisma.page.findMany({
+  const pages = await prisma.page.findMany({
     where: {
       archived: false,
-      projectId: { in: projectIds },
+      task: { projectId: { in: projectIds } },
       OR: [
         { title: { contains: normalizedQuery, mode: 'insensitive' } },
         { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
@@ -348,12 +348,14 @@ export async function searchPages({
       title: true,
       contentText: true,
       taskId: true,
-      projectId: true,
+      task: { select: { projectId: true } },
       parentPageId: true,
       updatedAt: true,
     },
     orderBy: { updatedAt: 'desc' },
   })
+  // HTPR-7154: report the board the task is on now, not the page's stored copy.
+  return pages.map(({ task, ...page }) => ({ ...page, projectId: task.projectId }))
 }
 
 export async function listPageVersions({ pageId }: { pageId: number }) {

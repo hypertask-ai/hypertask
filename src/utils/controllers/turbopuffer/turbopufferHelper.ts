@@ -64,6 +64,7 @@ export const turbopufferPageInclude = {
   task: {
     select: {
       id: true,
+      projectId: true,
       ticketNumber: true,
       title: true,
       project: {
@@ -360,7 +361,7 @@ export function buildTurbopufferPageRow(
     title,
     contentText,
     taskId: page.taskId.toString(),
-    projectId: page.projectId,
+    projectId: page.task.projectId,
     projectTitle: stringify(page.task.project?.title),
     taskTicketNumber: stringify(page.task.ticketNumber),
     taskTitle: stringify(page.task.title),
