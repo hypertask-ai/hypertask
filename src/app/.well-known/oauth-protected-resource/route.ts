@@ -1,14 +1,14 @@
+import { getMcpRequestOrigin, MCP_RESOURCE_URL } from '@/lib/mcp-server/resource-url'
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
 }
 
-const MCP_RESOURCE_URL =
-  process.env.NEXT_PUBLIC_MCP_SERVER_URL || 'https://mcp.hypertask.ai/mcp'
-
-export function GET(): Response {
+export async function GET(request: Request): Promise<Response> {
+  const origin = await getMcpRequestOrigin(request)
   return Response.json(
     {
-      resource: MCP_RESOURCE_URL,
+      resource: origin ? `${origin}/mcp` : MCP_RESOURCE_URL,
       authorization_servers: ['https://app.hypertask.ai'],
       scopes_supported: ['mcp:full'],
       bearer_methods_supported: ['header'],
