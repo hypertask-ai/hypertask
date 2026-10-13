@@ -3,6 +3,7 @@
 # Fake tmux and fake vcc on temp dirs: nothing here touches a real tmux session, the network or GitHub.
 cd "$(dirname "$0")" || exit 1
 HERE=$PWD
+LEGACY_NAME="INFRA MANAGER" # Deliberate fallback-name fixture.
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
 eq() { [ "$2" = "$3" ] && ok "$1" || bad "$1 (want '$3' got '$2')"; }
@@ -24,11 +25,11 @@ case "$1" in
 esac
 EOF
 chmod +x "$T/tmux"
-# A runner session whose pid sits below the pane pid (ancestor walk), and an INFRA MANAGER session that is a pane pid itself.
+# A runner session whose pid sits below the pane pid (ancestor walk), and a HT Product Lead session that is a pane pid itself.
 (sleep 300; true) & SUB=$!; sleep 0.3; RUNPID=$(pgrep -P "$SUB" | head -1); PIDS="$PIDS $SUB $RUNPID"
 sleep 300 & INFRA=$!; PIDS="$PIDS $INFRA"
 session() { jq -n --arg n "$2" --argjson p "$3" '{pid:$p, name:$n, nameSource:"user"}' > "$T/sessions/$1.json"; }
-session runner "RUNNER 3 | YPER4-256 work" "$RUNPID"; session infra "INFRA MANAGER" "$INFRA"
+session runner "RUNNER 3 | YPER4-256 work" "$RUNPID"; session infra "HT Product Lead" "$INFRA"
 printf '%%1 %s\n%%2 %s\n' "$SUB" "$INFRA" > "$FAKE_PANES"
 sent() { grep -c '|literal|' "$TMUX_LOG" 2>/dev/null || true; }
 lastline() { grep '|literal|' "$TMUX_LOG" | tail -1; }
@@ -39,9 +40,10 @@ UP=$(python3 -c 'import socket;s=socket.socket();s.bind(("127.0.0.1",0));print(s
 echo "$RANDOM-infra-key" > "$T/keys/infra-manager"; chmod 600 "$T/keys/infra-manager"
 RUNNER_WEBHOOK_PORT=$PORT RUNNER_WEBHOOK_FALLBACK_PORT=$UP python3 ./runner-webhook 2>/dev/null & PIDS="$PIDS $!"
 for _ in $(seq 50); do curl -fs "http://127.0.0.1:$PORT/runner-webhook/healthz" >/dev/null 2>&1 && break; sleep 0.1; done
-post() { # runner|infra-manager event deliveryId body [badsig]
-  local ts=${TS:-$(date +%s)} sig name=runner-$1; case "$1" in infra-manager|speed-runner) name=$1;; esac
-  sig=$(python3 -c 'import hmac,hashlib,sys;k=open(sys.argv[1],"rb").read().strip();print("sha256="+hmac.new(k,sys.argv[2].encode()+b"."+sys.argv[3].encode(),hashlib.sha256).hexdigest())' "$T/keys/$name" "$ts" "$4")
+post() { # runner|ht-product-lead|infra-manager event deliveryId body [badsig]
+  local ts=${TS:-$(date +%s)} sig name=runner-$1 key; case "$1" in ht-product-lead|infra-manager|speed-runner) name=$1;; esac
+  key=$name; [ "$key" != ht-product-lead ] || key=infra-manager
+  sig=$(python3 -c 'import hmac,hashlib,sys;k=open(sys.argv[1],"rb").read().strip();print("sha256="+hmac.new(k,sys.argv[2].encode()+b"."+sys.argv[3].encode(),hashlib.sha256).hexdigest())' "$T/keys/$key" "$ts" "$4")
   [ -z "${5:-}" ] || sig="sha256=$(printf '0%.0s' $(seq 64))"
   curl -s -o /dev/null -w '%{http_code}' -X POST "http://127.0.0.1:$PORT/webhook/$name" -H "X-Hypertask-Event: $2" \
     -H "X-Hypertask-Timestamp: $ts" -H "X-Hypertask-Delivery: $3" -H "X-Hypertask-Signature: $sig" -H 'Content-Type: application/json' --data "$4"
@@ -125,16 +127,33 @@ case "$(lastline)" in *'reacted 🎉 to your comment'*'go ahead'*) bad "party em
 : > "$TMUX_LOG"; post 3 comment.reaction d-rx4 "$(rx '👍' 9 '"agent-uuid"')" >/dev/null; sleep 0.4
 eq "agent reaction skipped" "$(sent)" "0"
 
-# ---- infra-manager route ----
+# ---- coordinator routes, with the old signing config and state identity ----
+session aaa-legacy "$LEGACY_NAME" "$SUB"
 : > "$TMUX_LOG"
 eq "infra-manager route accepted" "$(post infra-manager comment.created d-i1 "$(comment 'for the manager' 900)")" "200"
 wait_sent 1 && ok "infra-manager event delivered" || bad "infra-manager not delivered"
-case "$(lastline)" in '%2|literal|Board event for INFRA MANAGER: Valentin Yeo commented on'*'"for the manager"'*) ok "goes to the INFRA pane, no runner prefix";; *) bad "infra line: $(lastline)";; esac
+case "$(lastline)" in '%2|literal|Board event for HT Product Lead: Valentin Yeo commented on'*'"for the manager"'*) ok "goes to the INFRA pane, no runner prefix";; *) bad "infra line: $(lastline)";; esac
 : > "$TMUX_LOG"
 ichat=$(jq -nc '{event:"chat.message", agentId:"a", actor:{userId:6, displayName:"Valentin Yeo"}, chat:{sessionId:"sess-9", messageId:"m-9", text:"status?", userName:"Valentin Yeo"}}')
 post infra-manager chat.message d-i2 "$ichat" >/dev/null; wait_sent 1
-case "$(lastline)" in *'Agent Chat for INFRA MANAGER: '*'/lib/runner-chat-reply infra-manager sess-9 m-9 "<your answer>"') ok "infra chat reply command uses infra-manager";; *) bad "infra chat: $(lastline)";; esac
+case "$(lastline)" in *'Agent Chat for HT Product Lead: '*'/lib/runner-chat-reply infra-manager sess-9 m-9 "<your answer>"') ok "infra chat reply command uses infra-manager";; *) bad "infra chat: $(lastline)";; esac
 eq "wrong secret file for infra-manager rejected" "$(post infra-manager comment.created d-i3 "$(comment x 901)" bad)" "401"
+: > "$TMUX_LOG"
+eq "new route accepts the infra-manager signing config" "$(post ht-product-lead comment.created d-cpo1 "$(comment 'new route' 902)")" "200"
+if wait_sent 1; then ok "new route event delivered"; else bad "new route not delivered"; fi
+case "$(lastline)" in '%2|literal|Board event for HT Product Lead: '*'"new route"'*) ok "preferred session wins even when the fallback sorts first";; *) bad "preferred session: $(lastline)";; esac
+: > "$TMUX_LOG"
+eq "aliases share comment dedupe state" "$(post infra-manager comment.created d-cpo2 "$(comment 'new route' 902)")" "200"
+sleep 0.4; eq "same comment across aliases delivered once" "$(sent)" "0"
+if [ -f "$T/inbox/runner-infra-manager.seen" ] && [ ! -e "$T/inbox/runner-ht-product-lead.seen" ]; then ok "new route keeps infra-manager seen state"; else bad "alias split seen state"; fi
+eq "new route rejects a bad signature" "$(post ht-product-lead comment.created d-cpo3 "$(comment x 903)" bad)" "401"
+rm -f "$T/sessions/infra.json"; : > "$TMUX_LOG"
+eq "old session name still receives an old-route board event" "$(post infra-manager comment.created d-old1 "$(comment 'legacy route' 904)")" "200"
+if wait_sent 1; then ok "fallback session receives board event"; else bad "fallback board event not delivered"; fi
+case "$(lastline)" in '%1|literal|Board event for HT Product Lead: '*'"legacy route"'*) ok "fallback session keeps the new display label";; *) bad "fallback event: $(lastline)";; esac
+: > "$TMUX_LOG"
+eq "new target slug finds the fallback session" "$(printf 'legacy direct' | ./runner-deliver ht-product-lead)|$(lastline)" "delivered to HT Product Lead|%1|literal|legacy direct"
+rm -f "$T/sessions/aaa-legacy.json"; session infra "HT Product Lead | coordinator" "$INFRA"
 
 # ---- speed-runner route ----
 echo "$RANDOM-speed-key" > "$T/keys/speed-runner"; chmod 600 "$T/keys/speed-runner"
@@ -148,20 +167,50 @@ case "$(lastline)" in '%3|literal|Board event for SPEED RUNNER: '*'"for speed"'*
 case "$(lastline)" in *'/lib/runner-chat-reply speed-runner sess-s m-s "<your answer>"') ok "speed chat reply command";; *) bad "speed chat: $(lastline)";; esac
 eq "bad signature for speed-runner rejected" "$(post speed-runner comment.created d-s3 "$(comment x 951)" bad)" "401"
 rm -f "$T/sessions/speed.json"; : > "$TMUX_LOG"; printf 'x' | ./runner-deliver speed-runner >/dev/null
-eq "no live SPEED RUNNER: INFRA MANAGER with prefix" "$(lastline)" '%2|literal|No live speed runner: x'
+eq "no live SPEED RUNNER: HT Product Lead with prefix" "$(lastline)" '%2|literal|No live speed runner: x'
 printf '%%1 %s\n%%2 %s\n' "$SUB" "$INFRA" > "$FAKE_PANES"
 rm -f "$T/sessions/runner.json"
 
 # ---- runner-deliver fallbacks ----
 deliver() { printf '%s' "$2" | ./runner-deliver "$1" >/dev/null; echo $?; }
 : > "$TMUX_LOG"; session runner "RUNNER 5" 999999999   # no live RUNNER 3 now
-eq "no live runner: INFRA MANAGER gets it" "$(deliver 3 'hello there')" "0"
+eq "no live runner: HT Product Lead gets it" "$(deliver 3 'hello there')" "0"
 eq "prefix names the runner and goes to the INFRA pane" "$(lastline)" '%2|literal|No live Runner 3: hello there'
 kill "$INFRA" 2>/dev/null; sleep 0.2
 : > "$TMUX_LOG"; rm -f "$T/inbox/runner-3.pending.jsonl"
+eq "new target queues under the old slot when no coordinator is live" "$(printf 'alias queued' | ./runner-deliver ht-product-lead >/dev/null; echo $?)|$(jq -r .text "$T/inbox/runner-infra-manager.pending.jsonl" | tail -1)" "3|alias queued"
+if [ ! -e "$T/inbox/runner-ht-product-lead.pending.jsonl" ]; then ok "new target creates no separate pending file"; else bad "alias split pending state"; fi
 eq "infra-manager target never falls back to a runner" "$(printf x | ./runner-deliver infra-manager >/dev/null; echo $?)" "3"
 eq "neither live: exit 3 and nothing typed" "$(deliver 3 $'queued\nmessage')|$(sent)" "3|0"
 eq "message queued as one line for the next tick" "$(jq -r .text "$T/inbox/runner-3.pending.jsonl")" "queued message"
+
+# ---- runner-chat-reply aliases and identity fallback, entirely offline ----
+mkdir -p "$T/chat-bin" "$T/credentials"
+printf 'fixture-new' > "$T/credentials/ht-product-lead-agent-token"
+printf 'fixture-old' > "$T/credentials/infra-manager-agent-token"
+cat > "$T/chat-bin/curl" <<'EOF'
+#!/usr/bin/env bash
+cat > "$CHAT_AUTH"
+printf '%s\n' "$@" > "$CHAT_ARGS"
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = --output ]; then printf '{"success":true}' > "$2"; break; fi
+  shift
+done
+printf 200
+EOF
+chmod +x "$T/chat-bin/curl"
+chat_reply() { PATH="$T/chat-bin:$PATH" CHAT_AUTH="$T/chat-auth" CHAT_ARGS="$T/chat-args" VCC_SESSION_CREDENTIALS_DIR="$T/credentials" ./runner-chat-reply "$1" sess-346 m-346 'hello chat'; }
+for target in ht-product-lead infra-manager; do
+  eq "$target chat prefers the new identity" "$(chat_reply "$target")|$(cat "$T/chat-auth")" 'reply sent to chat sess-346|header = "Authorization: Bearer fixture-new"'
+  eq "$target chat keeps the reply body" "$(grep '^{' "$T/chat-args" | jq -c .)" '{"text":"hello chat","replyToMessageId":"m-346"}'
+done
+rm "$T/credentials/ht-product-lead-agent-token"
+for target in ht-product-lead infra-manager; do
+  eq "$target chat accepts the fallback identity" "$(chat_reply "$target")|$(cat "$T/chat-auth")" 'reply sent to chat sess-346|header = "Authorization: Bearer fixture-old"'
+done
+rm "$T/credentials/infra-manager-agent-token" "$T/chat-auth"
+eq "missing coordinator identity fails without a request" "$(chat_reply ht-product-lead 2>&1; echo $?)|$([ -e "$T/chat-auth" ] && echo request)" 'runner-chat-reply: no agent identity for HT Product Lead
+1|'
 
 # ---- runner-pickup backstop ----
 cat > "$T/vcc" <<'EOF'
@@ -328,15 +377,15 @@ eq "and the no-waiter case is logged once" "$(grep -c 'queued in the RUNNER 3 in
 ( exec 7>>"$T/inbox/runner-3.waiter.$RUNPID.lock"; flock 7; sleep 3 ) & WL=$!; sleep 0.3; : > "$TMUX_LOG"
 eq "a waiter holds its lock: inbox, nothing typed, nothing logged" "$(idel 3 ev-s2 'waiter reads')|$(sent)|$(evs runner-3)|$(grep -c 'no live waiter' "$T/inbox/typing-fallback.log")" "0|0|$((n0 + 2))|$((l0 + 1))"
 kill "$WL" 2>/dev/null; wait "$WL" 2>/dev/null
-# No live waiter: one notice to the hooked INFRA MANAGER per waiter gap, still nothing typed.
-sleep 120 & IMP=$!; session infra "INFRA MANAGER" "$IMP"; printf 'runner-3\ninfra-manager\n' > "$T/inbox/events-hook.enabled"; alive infra-manager "$IMP"
+# No live waiter: one notice to the hooked HT Product Lead per waiter gap, still nothing typed.
+sleep 120 & IMP=$!; session infra "HT Product Lead" "$IMP"; printf 'runner-3\ninfra-manager\n' > "$T/inbox/events-hook.enabled"; alive infra-manager "$IMP"
 rm -f "$T/inbox/runner-3.waiter.$RUNPID.lock" "$T/inbox/infra-manager.events.jsonl" "$T/tmux-called"; : > "$TMUX_LOG"
 idel 3 ev-nw1 'first' >/dev/null; idel 3 ev-nw2 'second' >/dev/null
 eq "no waiter, two events: both in the runner inbox, nothing typed" "$(jq -s 'map(select(.id|startswith("ev-nw")))|length' "$T/inbox/runner-3.events.jsonl")|$(sent)|$(cat "$T/tmux-called" 2>/dev/null)" "2|0|"
-eq "exactly one notice to the INFRA MANAGER inbox" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")|$(jq -r '.id' "$T/inbox/infra-manager.events.jsonl")" "1|nowaiter-runner-3-$RUNPID"
+eq "exactly one notice to the HT Product Lead inbox" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")|$(jq -r '.id' "$T/inbox/infra-manager.events.jsonl")" "1|nowaiter-runner-3-$RUNPID"
 case "$(jq -r '.text' "$T/inbox/infra-manager.events.jsonl")" in 'runner-3 has undelivered board events and no live waiter; its session is idle; next activity delivers them') ok "notice text";; *) bad "notice text";; esac
 rm -f "$T/inbox/infra-manager.events.jsonl"; printf 'x' | RUNNER_DELIVER_ID=ev-im RUNNER_PICKUP_TMUX=$T/notmux ./runner-deliver infra-manager >/dev/null 2>&1
-eq "an event for INFRA MANAGER itself without a waiter adds no notice" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")" "1"
+eq "an event for HT Product Lead itself without a waiter adds no notice" "$(jq -s 'length' "$T/inbox/infra-manager.events.jsonl")" "1"
 kill "$IMP" 2>/dev/null; rm -f "$T/sessions/infra.json" "$T/inbox/infra-manager.hook-alive" "$T/inbox/infra-manager.events.jsonl"; printf 'runner-3\n' > "$T/inbox/events-hook.enabled"
 take 'RUNNER 3' "$RUNPID" >/dev/null; alive runner-3 "$RUNPID"
 # Fallback typing only without the hook, and every use is logged.
@@ -346,11 +395,19 @@ grep -q 'typed into RUNNER 3 (pane %1): no events hook' "$T/inbox/typing-fallbac
 alive runner-3 "$RUNPID"; echo infra-manager > "$T/inbox/events-hook.enabled"; : > "$TMUX_LOG"
 eq "slot not enabled: typed as before" "$(printf 'not enabled' | ./runner-deliver 3 >/dev/null; echo $?)|$(sent)" "0|1"
 eq "two typed lines logged" "$(grep -c 'typed into RUNNER 3' "$T/inbox/typing-fallback.log")" "2"
-# No live runner: INFRA MANAGER's inbox gets it with the prefix when its hook is alive.
-sleep 300 & INFRA2=$!; PIDS="$PIDS $INFRA2"; session infra "INFRA MANAGER" "$INFRA2"; alive infra-manager "$INFRA2"
+# No live runner: HT Product Lead's inbox gets it with the prefix when its hook is alive.
+sleep 300 & INFRA2=$!; PIDS="$PIDS $INFRA2"; session infra "HT Product Lead" "$INFRA2"; alive infra-manager "$INFRA2"
 session runner "RUNNER 5" 999999999; rm -f "$T/tmux-called"
 eq "no live runner, INFRA hook alive: INFRA inbox" "$(idel 3 ev-3 'lost runner')|$(jq -r .text "$T/inbox/infra-manager.events.jsonl")|$(cat "$T/tmux-called" 2>/dev/null)" "0|No live Runner 3: lost runner|"
 eq "infra-manager target goes to its own inbox" "$(idel infra-manager ev-4 'direct')|$(evs infra-manager)" "0|2"
+eq "new target slug shares the inbox and dedupe" "$(idel ht-product-lead ev-4 'direct')|$(evs infra-manager)|$(idel ht-product-lead ev-cpo 'alias direct')|$(evs infra-manager)" "0|2|0|3"
+if [ ! -e "$T/inbox/ht-product-lead.events.jsonl" ]; then ok "new target creates no separate inbox"; else bad "alias split inbox"; fi
+case "$(take 'HT Product Lead' "$INFRA2")" in *'Board events for HT Product Lead,'*'3) alias direct') ok "HT Product Lead hook takes infra-manager events";; *) bad "coordinator hook mapping";; esac
+: > "$TMUX_LOG"
+eq "old-slot board event reaches the renamed session inbox" "$(post infra-manager comment.created d-slot346 "$(comment 'slot event' 34600)")" "200"
+for _ in $(seq 50); do [ "$(jq -s 'map(select(.id=="comment:34600"))|length' "$T/inbox/infra-manager.events.jsonl")" = 1 ] && break; sleep 0.1; done
+case "$(take 'HT Product Lead' "$INFRA2")" in *'1) Board event for HT Product Lead: '*'"slot event"'*) ok "renamed session consumes old-slot board event";; *) bad "old-slot board event missing";; esac
+eq "old-slot board event never typed" "$(sent)" "0"
 # Pending records keep their id; the retry goes to the inbox once the hook is alive.
 session runner "RUNNER 3" "$RUNPID"; echo '*' > "$T/inbox/events-hook.enabled"
 printf '{"ts":1,"text":"from the queue","id":"q-1"}\n{"ts":1,"text":"from the queue","id":"q-1"}\n' > "$T/inbox/runner-3.pending.jsonl"; inbox
@@ -364,7 +421,7 @@ rm -f "$T/inbox/runner-3.events.lock"; mkdir "$T/inbox/runner-3.events.lock"
 eq "inbox write fails on a hooked runner: exit 5, no typing, nothing queued" "$(idel 3 ev-fail 'cannot store')|$(cat "$T/tmux-called" 2>/dev/null)|$(sent)|$([ -s "$T/inbox/runner-3.pending.jsonl" ] && echo queued)|$(evs runner-3)" "5||0||$n0"
 grep -q 'could not write to the runner-3 inbox' "$T/inbox/typing-fallback.log" && ok "inbox failure logged" || bad "inbox failure not logged"
 echo "*" > "$T/inbox/events-hook.enabled"; session runner "RUNNER 5" 999999999; alive infra-manager "$INFRA2"; rm -f "$T/inbox/infra-manager.events.lock"; mkdir "$T/inbox/infra-manager.events.lock"
-eq "same on the INFRA MANAGER branch: exit 5, no typing" "$(idel 3 ev-fail2 'cannot store')|$(cat "$T/tmux-called" 2>/dev/null)|$(sent)" "5||0"
+eq "same on the HT Product Lead branch: exit 5, no typing" "$(idel 3 ev-fail2 'cannot store')|$(cat "$T/tmux-called" 2>/dev/null)|$(sent)" "5||0"
 rmdir "$T/inbox/runner-3.events.lock" "$T/inbox/infra-manager.events.lock"; session runner "RUNNER 3" "$RUNPID"
 eq "inbox writable again: delivered" "$(idel 3 ev-fail 'cannot store')|$(evs runner-3)" "0|$((n0 + 1))"
 # 5. Dedupe finds an id that is followed by other records.

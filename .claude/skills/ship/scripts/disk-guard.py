@@ -894,14 +894,14 @@ class Guard:
             if not token or not chat:
                 raise ValueError('missing notification configuration')
             body = urllib.parse.urlencode({'chat_id': chat, 'text':
-                f'INFRA MANAGER: disk guard critical, / is {used:.2f}% used. New heavy jobs are held. '
+                f'HT Product Lead: disk guard critical, / is {used:.2f}% used. New heavy jobs are held. '
                 'Review ~/.local/state/disk-guard/status.json and the disk report. '
                 'https://app.hypertask.ai/detail/project-4060/223'}).encode()
             request = urllib.request.Request(f'https://api.telegram.org/bot{token}/sendMessage', data=body)
             with urllib.request.urlopen(request, timeout=15) as response:
                 if not json.load(response).get('ok'):
                     raise ValueError('notification rejected')
-            self.log('alerted', 'INFRA MANAGER', 'critical disk via existing fleet-watchdog Telegram route')
+            self.log('alerted', 'HT Product Lead', 'critical disk via existing fleet-watchdog Telegram route')
         except Exception:
             # Exception strings and HTTP request URLs can contain the bot token.
             self.log('error', 'alert', 'notification failed; retry after hourly limit')

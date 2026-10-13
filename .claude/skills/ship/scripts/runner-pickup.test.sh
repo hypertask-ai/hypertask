@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Offline tests for runner-pickup and the runner-inbox-stop hook, using a fake vcc (no network, no GitHub).
 cd "$(dirname "$0")" || exit 1
+LEGACY_NAME="INFRA MANAGER" # Deliberate fallback-name fixture.
 HERE=$PWD; HOOK=$HERE/../../../hooks/runner-inbox-stop.sh; SCRIPT=$HERE/runner-pickup
 fails=0; passes=0
 ok() { echo "ok   $*"; passes=$((passes+1)); }; bad() { echo "FAIL $*"; fails=$((fails+1)); }
@@ -142,7 +143,12 @@ hook 'RUNNER 3' "$pl" post > /dev/full 2>/dev/null
 eq "output write fails: event is not marked, it comes again" "$(undelivered runner-3)" "1"
 eq "and the retry hands it over" "$(hook 'RUNNER 3' "$pl" post | ctx | tail -1)" "1) five"
 ev infra-manager i1 'for the manager'; ev speed-runner s1 'for speed'
-eq "INFRA MANAGER gets its own slot" "$(hook 'INFRA MANAGER' "$pl" post | ctx | tail -1)" "1) for the manager"
+out=$(hook 'HT Product Lead | coordinator' "$pl" post | ctx)
+case "$out" in 'PostToolUse|Board events for HT Product Lead,'*'1) for the manager') ok "renamed session takes the infra-manager board event";; *) bad "renamed session slot: $out";; esac
+ev infra-manager i2 'legacy fallback'
+out=$(hook "$LEGACY_NAME" "$pl" post | ctx)
+case "$out" in 'PostToolUse|Board events for HT Product Lead,'*'1) legacy fallback') ok "fallback name takes the same slot with the new display label";; *) bad "fallback slot: $out";; esac
+eq "both names share the same delivery state" "$(undelivered infra-manager)|$(hook 'HT Product Lead' "$pl" post)" "0|"
 eq "SPEED RUNNER gets its own slot" "$(hook 'SPEED RUNNER | perf' "$pl" prompt | ctx | tail -1)" "1) for speed"
 # Waiter (asyncRewake): wakes with exit 2 only for a new event, once, one per session.
 wait_hook() { echo "$pl" | SHIP_SESSION_NAME="$1" SHIP_SESSION_PID="$2" RUNNER_EVENTS_POLL=0.1 RUNNER_EVENTS_WAIT_MAX="${3:-1}" "$HOOK" wait; }

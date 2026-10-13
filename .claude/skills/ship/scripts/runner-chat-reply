@@ -4,13 +4,18 @@
 # with the runner agent's credential, read here at run time from the file ship-identity names (never printed).
 set -uo pipefail
 n=${1:-}; sid=${2:-}; mid=${3:-}; text=${4:-}
+[ "$n" != ht-product-lead ] || n=infra-manager
 # <n> is a runner number or a named slug (identity = session name).
-case "$n" in infra-manager) who="INFRA MANAGER" ;; speed-runner) who="SPEED RUNNER" ;; *) who="RUNNER $n" ;; esac
-[[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager || $n = speed-runner ]] && [[ $sid =~ ^[A-Za-z0-9_-]+$ ]] && [[ $mid =~ ^[A-Za-z0-9_-]+$ ]] && [ -n "$text" ] || { echo 'usage: runner-chat-reply <runner number|infra-manager|speed-runner> <session-id> <message-id> <text>' >&2; exit 2; }
+case "$n" in infra-manager) who="HT Product Lead" ;; speed-runner) who="SPEED RUNNER" ;; *) who="RUNNER $n" ;; esac
+[[ $n =~ ^[1-9][0-9]*$ || $n = infra-manager || $n = speed-runner ]] && [[ $sid =~ ^[A-Za-z0-9_-]+$ ]] && [[ $mid =~ ^[A-Za-z0-9_-]+$ ]] && [ -n "$text" ] || { echo 'usage: runner-chat-reply <runner number|ht-product-lead|infra-manager|speed-runner> <session-id> <message-id> <text>' >&2; exit 2; }
 here=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 ident=${RUNNER_CHAT_IDENTITY:-$here/ship-identity}; [ -x "$ident" ] || ident=$HOME/.agents/skills/ship/scripts/ship-identity
-IFS=$'\t' read -r name credfile < <(SHIP_SESSION_NAME="$who" "$ident")
-[ "$name" = "$who" ] && [ -r "$credfile" ] || { echo "runner-chat-reply: no agent identity for $who" >&2; exit 1; }
+names=("$who"); [ "$n" != infra-manager ] || names+=("INFRA MANAGER")
+for candidate in "${names[@]}"; do
+  IFS=$'\t' read -r name credfile < <(SHIP_SESSION_NAME="$candidate" "$ident")
+  [ "$name" = "$candidate" ] && [ -r "$credfile" ] && break
+done
+[ "$name" = "$candidate" ] && [ -r "$credfile" ] || { echo "runner-chat-reply: no agent identity for $who" >&2; exit 1; }
 base=${RUNNER_CHAT_BASE:-https://app.hypertask.ai/api/mcp}
 body=$(mktemp); trap 'rm -f "$body"' EXIT
 code=$(printf 'header = "Authorization: Bearer %s"\n' "$(cat "$credfile")" |

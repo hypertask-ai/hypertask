@@ -1401,7 +1401,8 @@ class OperationTests(Fixture):
             self.guard.now += 900
             self.guard.critical(95)
             self.assertEqual(notify.call_count, 1)
-            self.assertIn('INFRA+MANAGER', notify.call_args.args[0].data.decode())
+            self.assertIn('HT+Product+Lead', notify.call_args.args[0].data.decode())
+            self.assertIn('HT Product Lead', self.output.getvalue())
             self.guard.now += 2701
             self.guard.critical(91)
             self.assertEqual(notify.call_count, 2)

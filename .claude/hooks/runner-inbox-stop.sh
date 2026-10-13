@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # runner-inbox-stop.sh stop|prompt|post|wait: hand board events and new tickets to a named session as its own message,
-# never typed into its input box (YPER4-244, YPER4-284). Inert unless the session is named "RUNNER <n>", "INFRA MANAGER"
+# never typed into its input box (YPER4-244, YPER4-284). Inert unless the session is named "RUNNER <n>", "HT Product Lead"
 # or "SPEED RUNNER". Never touches the network.
 #   prompt (UserPromptSubmit) and post (PostToolUse): pending board events as additionalContext, so a busy session sees
 #          them between tool calls; prompt also hands a RUNNER its next assigned ticket.
@@ -49,12 +49,13 @@ runner=""
 # Prints the slot a session name maps to (runner-<n>, infra-manager, speed-runner), nothing for any other name.
 slot_of() {
   case "$1" in
-    "INFRA MANAGER") echo infra-manager ;;
+    "HT Product Lead"|"INFRA MANAGER") echo infra-manager ;;
     "SPEED RUNNER") echo speed-runner ;;
     *) [[ $1 =~ ^RUNNER\ ([1-9][0-9]*)$ ]] && echo "runner-${BASH_REMATCH[1]}" ;;
   esac
 }
 slot=$(slot_of "$name"); [ -n "$slot" ] || exit 0
+[ "$slot" != infra-manager ] || name="HT Product Lead"
 [[ $slot == runner-* ]] && runner=${slot#runner-}
 mkdir -p "$STATE" 2>/dev/null || exit 0
 events=$STATE/$slot.events.jsonl

@@ -5,7 +5,7 @@ description: Start a Valentins Claude Code (VCC) session, Valentin's own one-ses
 
 # Valentins Claude Code (VCC) session
 
-**Runner browser policy.** A runner (any session not named INFRA MANAGER) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (INFRA MANAGER) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
+**Runner browser policy.** A runner (any session not named HT Product Lead) never opens pages in Valentin's browser: no `zsb` navigate/open/activate. Links to tickets, pages, reports and wireframes go in ticket comments only. Browser QA and checks use headless Playwright with QA account 985, following `verify-qa`, never his browser. Only the session he talks to (HT Product Lead) opens a page for him, and only when it mentions that page to him in chat. (Valentin, 2026-10-12): "i never look a the runner sessoins they don't need to do that i reply to ticket in the inbox and via you thats it" and "but should the even try to open pages?"
 
 You are one of Valentin's own sessions (Claude Code or Codex). He runs one session per ticket and may pick ANY ticket on any board (Valentin, 2026-10-01: "make it so that i can pick ANY ticket i want and work on it myself"). Each session takes its ticket end to end: fix, PR, merge, deploy, QA on the live site, close. `/ship` is the map that points here.
 
@@ -19,7 +19,7 @@ You are one of Valentin's own sessions (Claude Code or Codex). He runs one sessi
 
 ## Start of session
 
-1. If he gave a ticket, onboard it with the `/ticket` skill steps: put the full title and URL in a ticket comment; only INFRA MANAGER replies with the URL and opens it when mentioning it in chat. Then print `/rename HTPR-NNNN | Title`.
+1. If he gave a ticket, onboard it with the `/ticket` skill steps: put the full title and URL in a ticket comment; only HT Product Lead replies with the URL and opens it when mentioning it in chat. Then print `/rename HTPR-NNNN | Title`.
 2. Read the ticket and every comment (`hypertask tasks get HTPR-NNNN`). Two exceptions where you stop and ask Valentin in one line: a ticket assigned to Abdul, and a ticket another VCC session claimed in the last 24 hours.
 3. Claim it as yours: add your agent (`vcc task assign <TICKET> --self`) next to any human assignee, never removing one (agents are human companions, Valentin, 2026-10-02), post `<p><strong>Claimed.</strong> Valentins Claude Code session working it now.</p><p>Next: ... Session: <name>. Requested by Valentin in a Claude session, <date>, <session link>.</p>` and move it to In Progress, all via `vcc`. If an earlier PR or branch exists for it, read it first and build on it or close it with a one-line reason.
 4. Post the resume line to the ticket's agent log once: `vcc comment add HTPR-NNNN --text "<p>Resume this Claude session: claude --resume $CLAUDE_CODE_SESSION_ID</p>"`.
@@ -53,7 +53,7 @@ The session that built a change also QAs it on the live site. Valentin never QAs
    - Drive the real user path from the matching file in `.claude/skills/verify-qa/reference/feature-map/` (how to reach it, how to drive it, what proves it). If the ticket's area has no file, add one in the same shape in your PR (pattern from https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md).
    - Check the flag-off path too: an account without the flag sees today's behaviour.
 5. **Report on the ticket via `vcc`:** one comment with what you checked, the evidence attached (`--attach`), the merged PR link and deploy time, and what Valentin can try himself (URL plus 3 to 5 steps). Then move the ticket: PASS to Done, or if anything failed, fix it in a new PR and repeat from step 1. Switching a flag to Everyone stays Valentin's decision.
-6. **Report on the ticket:** verdict first, the URL to try, and any honest gap you could not verify. Only INFRA MANAGER mentions and opens pages in chat.
+6. **Report on the ticket:** verdict first, the URL to try, and any honest gap you could not verify. Only HT Product Lead mentions and opens pages in chat.
 
 ## Stay in your lane
 
@@ -62,4 +62,4 @@ The session that built a change also QAs it on the live site. Valentin never QAs
 
 ## Talking to Valentin
 
-Global CLAUDE.md applies: /pospeak style, terse, verdict first, plain full https URLs, runners share links in ticket comments only; INFRA MANAGER opens only pages it mentions to him in chat, no em dashes, you are the QA (prove it on the live site with evidence before saying done).
+Global CLAUDE.md applies: /pospeak style, terse, verdict first, plain full https URLs, runners share links in ticket comments only; HT Product Lead opens only pages it mentions to him in chat, no em dashes, you are the QA (prove it on the live site with evidence before saying done).
