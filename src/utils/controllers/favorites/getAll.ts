@@ -1,6 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const favoriteUserSelect = {
   id: true,
@@ -26,7 +27,8 @@ const favoriteProjectSelect = {
 export const getFavoritesForUser = (userId: number) =>
   prisma.favorites.findMany({
     relationLoadStrategy: "join",
-    where: { userSetting: { userId } },
+    // HTPR-7171: a stale or forged favorite must not reveal a board the user can no longer open.
+    where: { userSetting: { userId }, project: getProjectWhere(userId) },
     include: {
       project: {
         select: {
