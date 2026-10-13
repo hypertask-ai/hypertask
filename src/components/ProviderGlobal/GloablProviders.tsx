@@ -178,6 +178,7 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { markBoardSwitchIntent } from "@/lib/analytics/boardSwitchLatency";
 import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHydration";
 import { useFlag } from "@/hooks/useFlag";
+import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
 import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
 
@@ -316,6 +317,7 @@ export default function GlobalProvider({
   // ------------------------ context & hooks
   useMobileToastAutoDismiss(); // PERT-92: resume stuck dismiss timers after a tap
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
+  useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
   const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
   useEffect(() => {
