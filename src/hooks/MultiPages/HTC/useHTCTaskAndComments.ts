@@ -19,6 +19,8 @@ import {
 import useFollowerKanban from "@/hooks/General/useFollowerKanban";
 import { useRemoveParentTask } from "../Tasks";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
 
 interface IProps {
   callbackHandler?: (payload: any, mode: string) => void | Promise<void>;
@@ -43,6 +45,7 @@ const useHTCTaskAndComments = ({
   _activeItem,
   toggleCreateTaskGlobally,
 }: IProps) => {
+  const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const {
@@ -343,7 +346,12 @@ const useHTCTaskAndComments = ({
       );
     }
     boardCloseHandler();
-    if (pathname?.startsWith("/detail") && callbackHandler) navigate("Back");
+    if (pathname?.startsWith("/detail") && callbackHandler) {
+      // Keep the registered Undo alive even when the task was opened by deep link.
+      if (deleteTaskUndo && response && _currentProject && inViewObject.sectionId) {
+        navigate("Replace", `/project?id=${_currentProject.id}`);
+      } else navigate("Back");
+    }
     // goToProjectShortcut(_currentProject?.id!);
   };
 
