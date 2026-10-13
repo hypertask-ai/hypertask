@@ -453,7 +453,10 @@ export const getProjectAllViewsInclude = ({
 }) => ({
   where: {
     OR: [
-      { visibility: ViewVisibility.Public },
+      // HTPR-7188: an open invite is not access; shared views need owner or accepted membership.
+      ...(currentUserId !== undefined
+        ? [{ visibility: ViewVisibility.Public, project_view: { project: savedViewBoardAccessWhere(currentUserId) } }]
+        : []),
       { userId: currentUserId, visibility: ViewVisibility.Private },
     ],
     title: { not: { equals: "" } },

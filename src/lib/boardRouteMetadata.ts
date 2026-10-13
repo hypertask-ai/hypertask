@@ -1,4 +1,4 @@
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { projectContentAccessWhere, savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import "server-only";
 
 import prisma from "@/lib/prisma";
@@ -36,7 +36,7 @@ export const getProjectForValidation = cache(async (
               where: {
                 slug: viewSlug ?? "__default_board_view__",
                 OR: [
-                  { visibility: "Public" },
+                  { visibility: "Public", project_view: { project: savedViewBoardAccessWhere(userId) } },
                   { userId },
                 ],
               },
