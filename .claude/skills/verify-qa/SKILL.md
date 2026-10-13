@@ -56,6 +56,8 @@ Pass the state file with `--state`. Never print the file. Pick the account for t
 | Owner + QA flags | 985 | `~/.config/hypertask-videos/storageState-qa.json` | Flagged path and doctor shot, not admin pages | `/qa/login` with configured QA credentials, then save state to this path. Never use ordinary email login for this shared address. |
 | Plain customer | 2343 | `~/.config/hypertask-videos/storageState-qa-normal.json` | Flag-off path | Email-code login below: `valentin+qa-normal@hypertask.ai` |
 | Free | 3411 | `~/.config/ht-qa/state-free.json` | Free limits and upgrade prompts; keep on Free | Runner `scripts/login.mjs --tier free` |
+
+Never test revoke-all (Connections "revoke all", the revoke-token tool with `revoke_all`, or `/api/mcp/token` revoke) on QA account 2343: it runs the 5-minute MCP watcher (YPER4-352). Use 985 for that test.
 | BYOK | 3412 | `~/.config/ht-qa/state-byok.json` | BYOK settings and AI with a saved, enabled `gateway` key | Runner `scripts/login.mjs --tier byok` |
 | Pro | 3413 | `~/.config/ht-qa/state-pro.json` | Pro AI and paid-plan access | Runner `scripts/login.mjs --tier pro` |
 | Team owner | 4036 | `~/.config/ht-qa/state-owner.json` | Owns **QA Team Board**, board 7283 | Email-code login below: `valentin+qa-owner@hypertask.ai` |
