@@ -191,6 +191,15 @@ const CommentsContainer = () => {
         id={`comment-${i}`}
         data-testid="ticket-comment"
         data-task-comment-box={!comment.activity || undefined}
+        data-task-comment-state={
+          comment.activity
+            ? undefined
+            : currentId === `comment-${i}` || currentId === `comment-${i}-input`
+            ? "active"
+            : pinned && !isStacked
+            ? "pinned"
+            : undefined
+        }
         onMouseDownCapture={rememberPressStart}
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}

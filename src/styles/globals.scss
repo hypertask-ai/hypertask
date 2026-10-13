@@ -858,8 +858,14 @@ svg.lucide.fill-current {
   }
 
   html[data-task-box-outlines] [data-task-detail-path] .description-container:focus-within,
-  html[data-task-box-outlines] #comment[data-testid="comment-composer"]:focus-within {
+  html[data-task-box-outlines] #comment[data-testid="comment-composer"]:focus-within,
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="active"] {
     outline-color: var(--border-active) !important;
+  }
+
+  /* A pinned comment keeps its pin colour, now on the full outline. */
+  html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="pinned"] {
+    outline-color: #ffb980 !important;
   }
 
   html[data-task-box-outlines] [data-task-detail-path] .description-edit-container,
