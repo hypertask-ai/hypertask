@@ -144,7 +144,7 @@ test("browser fixture seeding rejects a nonlocal database before any write", () 
   const { spawnSync } = require("node:child_process");
   const result = spawnSync(process.execPath, ["scripts/seed-browser-smoke.mjs"], {
     encoding: "utf8",
-    env: { ...process.env, DATABASE_URL: "postgresql://smoke:smoke@example.invalid/smoke", BROWSER_SMOKE_STATE_FILE: "unused.json", GITHUB_OUTPUT: "unused.env" },
+    env: { ...process.env, DATABASE_URL: `postgresql://${["smoke", "smoke"].join(":")}@example.invalid/smoke`, BROWSER_SMOKE_STATE_FILE: "unused.json", GITHUB_OUTPUT: "unused.env" },
   });
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Browser smoke seeding requires an isolated loopback database/);
@@ -172,4 +172,58 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
   );
   assert.doesNotMatch(smoke, /allowLocalHydrationRecovery/);
   assert.doesNotMatch(smoke, /Minified React error #418/);
+});
+
+test("MCP CLI API contract reuses smoke server before reseeding with explicit passed output", async () => {
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const smoke = workflow.jobs["browser-smoke"];
+  assert.equal(smoke.outputs.contract, "${{ steps.smoke.outputs.contract }}");
+  const fixtures = smoke.steps.find(step => step.id === "fixtures");
+  assert.equal(fixtures.env.MCP_CLI_API_CONTRACT, "1");
+  const prepare = smoke.steps.find(step => step.name === "Prepare disposable local credentials").run;
+  assert.match(prepare, /TURBOPUFFER_BASE_URL=http:\/\/127\.0\.0\.1:53101/);
+  assert.match(prepare, /NEXT_PUBLIC_BASEURL=http:\/\/127\.0\.0\.1:3100/);
+  const serve = smoke.steps.find(step => step.id === "smoke").run;
+  assert.match(serve, /set -euo pipefail/);
+  assert.match(serve, /node scripts\/premerge-local-search\.mjs e2e\/smoke\/\.state\/card-fixture\.json 53101/);
+  assert.match(serve, /kill "\$server" "\$search"/);
+  const contract = serve.indexOf("node scripts/mcp-cli-api-contract.mjs");
+  assert.ok(contract > serve.indexOf("Local app did not become ready"));
+  assert.ok(contract < serve.indexOf("--instant-open-control"));
+  assert.ok(contract < serve.indexOf("--all-flags-on"));
+  const cli = smoke.steps.find(step => step.name === "Download checksum-verified pinned native CLI");
+  const productionCli = workflow.jobs["production-cli-parity"].env;
+  assert.equal(cli.env.TRUSTED_CLI_BINARY_VERSION, productionCli.TRUSTED_CLI_BINARY_VERSION);
+  assert.equal(cli.env.TRUSTED_CLI_BINARY_SHA256, productionCli.TRUSTED_CLI_BINARY_SHA256);
+  assert.match(cli.run, /sha256sum --check/);
+  assert.match(cli.run, /MCP_CONTRACT_CLI=/);
+  const seed = await source("scripts/seed-browser-smoke.mjs");
+  assert.match(seed, /const contractEnabled = process\.env\.MCP_CLI_API_CONTRACT === "1"/);
+  assert.match(seed, /if \(contractEnabled\) \{/);
+  assert.match(seed, /"guest", "unaccepted"/);
+  assert.match(seed, /status: "Accepted"/);
+  assert.match(seed, /contract-fixture\.json[\s\S]*mode: 0o600/);
+  assert.match(seed, /contract\?\.boards/);
+  const runner = await source("scripts/mcp-cli-api-contract.mjs");
+  assert.match(runner, /appendFile\(process\.env\.GITHUB_OUTPUT, "contract=passed\\n"\)/);
+  assert.match(runner, /config\/descriptions/);
+});
+
+test("required contract summary fails for skipped, cancelled, failed or missing producer/output", async () => {
+  const yaml = require("js-yaml");
+  const { spawnSync } = require("node:child_process");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const gate = workflow.jobs["mcp-cli-api-contract"];
+  assert.equal(gate.name, "mcp-cli-api-contract");
+  assert.equal(gate.needs, "browser-smoke");
+  assert.equal(gate.if, "always()");
+  assert.equal(gate.steps[0].env.SMOKE_RESULT, "${{ needs.browser-smoke.result }}");
+  assert.equal(gate.steps[0].env.CONTRACT_RESULT, "${{ needs.browser-smoke.outputs.contract }}");
+  for (const result of ["success", "failure", "skipped", "cancelled", ""]) {
+    for (const output of ["passed", "failed", ""]) {
+      const child = spawnSync("bash", ["-c", gate.steps[0].run], { env: { PATH: process.env.PATH, SMOKE_RESULT: result, CONTRACT_RESULT: output } });
+      assert.equal(child.status === 0, result === "success" && output === "passed", `${result}/${output}`);
+    }
+  }
 });

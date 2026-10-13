@@ -1,0 +1,417 @@
+#!/usr/bin/env python3
+"""Read-only MCP probes with durable, once-per-incident reporting."""
+import argparse
+from datetime import datetime, timezone
+import fcntl
+import html
+import http.client
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import signal
+import socket
+import stat
+import subprocess
+import sys
+import tempfile
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+
+HERE = Path(__file__).resolve().parent
+HOME = Path.home()
+CONFIG = HOME / '.config/hypertask-agents/mcp-contract-watch'
+STATE = HOME / '.local/state/mcp-contract-watch'
+STEPS = ('initialize', 'tools/list', 'list-boards', 'get-task', 'list-labels')
+CORE = (
+    ('hypertask_list_projects', 'hypertask_projects', 'list'),
+    ('hypertask_get_tasks', 'hypertask_tasks', 'get'),
+    ('hypertask_list_labels', 'hypertask_labels', 'list'),
+)
+
+
+def utc():
+    return datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
+
+
+def save(state):
+    fd, name = tempfile.mkstemp(prefix='.state-', dir=STATE)
+    try:
+        with os.fdopen(fd, 'w') as out:
+            json.dump(state, out)
+            out.write('\n')
+            out.flush()
+            os.fsync(out.fileno())
+        os.replace(name, STATE / 'state.json')
+        directory = os.open(STATE, os.O_DIRECTORY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        if os.path.exists(name):
+            os.unlink(name)
+
+
+def install():
+    target = HOME / '.local/lib/hypertask/mcp-contract-watch'
+    units = HOME / '.config/systemd/user'
+    target.mkdir(parents=True, exist_ok=True)
+    units.mkdir(parents=True, exist_ok=True)
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    for name in ('mcp-contract-watch', 'mcp-contract-watch.service', 'mcp-contract-watch.timer'):
+        if HERE != target:
+            shutil.copy2(HERE / name, target / name)
+    for suffix in ('service', 'timer'):
+        shutil.copy2(target / f'mcp-contract-watch.{suffix}', units)
+    subprocess.run(['systemctl', '--user', 'daemon-reload'], check=True)
+    subprocess.run(['systemctl', '--user', 'enable', '--now', 'mcp-contract-watch.timer'], check=True)
+    print('Installed mcp-contract-watch user timer')
+
+
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def payload(result):
+    if 'structuredContent' in result:
+        value = result['structuredContent']
+    else:
+        content = result.get('content', [])
+        texts = [item.get('text') for item in content if isinstance(item, dict) and item.get('type') == 'text']
+        if len(texts) != 1:
+            raise ValueError('missing JSON tool result')
+        value = json.loads(texts[0])
+    if isinstance(value, dict) and 'data' in value:
+        value = value['data']
+    if isinstance(value, dict) and (value.get('success') is False or value.get('error')):
+        raise ValueError('tool reported failure')
+    return value
+
+
+def rows(value, key):
+    if isinstance(value, dict):
+        value = value.get(key, value.get('items'))
+    if not isinstance(value, list) or any(not isinstance(row, dict) for row in value):
+        raise ValueError('missing result collection')
+    return value
+
+
+def probe(args):
+    tick = dict(time=utc(), ok=False, tools_count=0, calls=[], incident_id=None)
+    config = dict(board_id=15, task_ref='HTPR-7190', url='https://app.hypertask.ai/mcp')
+    try:
+        if (CONFIG / 'config.json').exists():
+            config.update(json.loads((CONFIG / 'config.json').read_text()))
+        board = config['board_id']
+        task = config['task_ref']
+        url = urllib.parse.urlsplit(config['url'])
+        if type(board) is not int or board < 1 or not isinstance(task, str) or not re.fullmatch(r'[A-Za-z0-9_-]+', task):
+            raise ValueError('invalid board or task')
+        if url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password or url.query or url.fragment:
+            raise ValueError('invalid URL')
+        if url.scheme == 'http' and url.hostname not in ('localhost', '127.0.0.1', '::1'):
+            raise ValueError('HTTPS required outside loopback')
+        fd = os.open(CONFIG / 'token', os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        with os.fdopen(fd) as source:
+            info = os.fstat(source.fileno())
+            if not stat.S_ISREG(info.st_mode) or stat.S_IMODE(info.st_mode) != 0o600 or info.st_uid != os.getuid():
+                raise ValueError('token must be an owner-owned regular file with mode 0600')
+            token = source.read(16385).strip()
+            if not token or len(token) > 16384 or any(char.isspace() for char in token):
+                raise ValueError('invalid token file')
+    except (OSError, ValueError, TypeError, KeyError):
+        tick['calls'].append(dict(step='configuration', call='load private token and configuration', status='refused', ok=False))
+        return tick
+
+    opener = urllib.request.build_opener(NoRedirect())
+    protocol = '2025-03-26'
+
+    def timed_out(signum, frame):
+        raise TimeoutError('MCP call deadline exceeded')
+
+    signal.signal(signal.SIGALRM, timed_out)
+
+    def call(step, method, params):
+        request_id = len(tick['calls']) + 1
+        descriptor = dict(method=method, params=params)
+        record = dict(step=step, call=descriptor, status='network-error', ok=False)
+        tick['calls'].append(record)
+        body = json.dumps(dict(jsonrpc='2.0', id=request_id, **descriptor)).encode()
+        request = urllib.request.Request(config['url'], data=body, headers={
+            'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json',
+            'Accept': 'application/json', 'MCP-Protocol-Version': protocol,
+        })
+        # A socket timeout alone resets on each read; also bound the whole call.
+        signal.setitimer(signal.ITIMER_REAL, 15)
+        try:
+            with opener.open(request, timeout=15) as response:
+                record['status'] = response.status
+                raw = response.read(2 * 1024 * 1024 + 1)
+            if len(raw) > 2 * 1024 * 1024:
+                raise ValueError('response too large')
+            result = json.loads(raw)
+            if not isinstance(result, dict) or result.get('jsonrpc') != '2.0' or result.get('id') != request_id:
+                raise ValueError('invalid JSON-RPC response')
+            if 'error' in result:
+                record['reason'] = 'JSON-RPC error'
+                error = result['error']
+                if isinstance(error, dict) and type(error.get('code')) is int:
+                    record['rpc_error_code'] = error['code']
+                return None
+            result = result.get('result')
+            if not isinstance(result, dict):
+                raise ValueError('invalid result')
+            if result.get('isError') is True:
+                record['reason'] = 'tool returned isError true'
+                return None
+            if args.force_fail == step:
+                record['reason'] = 'forced response-check failure'
+                return None
+            record['ok'] = True
+            return result
+        except urllib.error.HTTPError as error:
+            record['status'] = error.code
+            error.close()
+        except (TimeoutError, socket.timeout):
+            record['status'] = 'timeout'
+        except urllib.error.URLError as error:
+            record['status'] = 'timeout' if isinstance(error.reason, TimeoutError) else 'network-error'
+        except (OSError, ValueError, TypeError, http.client.HTTPException):
+            record['reason'] = 'invalid response or request failed'
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+        return None
+
+    initialized = call('initialize', 'initialize', dict(protocolVersion=protocol, capabilities={}, clientInfo=dict(name='mcp-contract-watch', version='1.0')))
+    if initialized is None:
+        return tick
+    if initialized.get('protocolVersion') not in ('2025-03-26', '2025-11-25', '2026-07-28'):
+        tick['calls'][-1].update(ok=False, reason='missing supported protocol version')
+        return tick
+    protocol = initialized['protocolVersion']
+    catalog = call('tools/list', 'tools/list', {})
+    if catalog is None:
+        return tick
+    tools = catalog.get('tools')
+    if not isinstance(tools, list) or not tools or any(not isinstance(tool, dict) for tool in tools):
+        tick['calls'][-1].update(ok=False, reason='empty or invalid tools/list')
+        return tick
+    tick['tools_count'] = len(tools)
+    names = {tool.get('name') for tool in tools if isinstance(tool.get('name'), str)}
+    selected = []
+    for legacy, consolidated, action in CORE:
+        if legacy in names:
+            selected.append((legacy, None))
+        elif consolidated in names:
+            selected.append((consolidated, action))
+        else:
+            tick['calls'][-1].update(ok=False, reason='missing core read tool: ' + legacy + ' or ' + consolidated)
+            return tick
+    inputs = ({'limit': 50}, {'ticket_number': [task]}, {'project_id': board, 'limit': 50})
+    for step, (name, action), fields in zip(STEPS[2:], selected, inputs):
+        arguments = fields if action is None else dict(action=action, input=fields, response_format='detailed', limit=50)
+        result = call(step, 'tools/call', dict(name=name, arguments=arguments))
+        if result is None:
+            continue
+        try:
+            value = payload(result)
+            if step == 'list-boards':
+                if not any(str(row.get('id', row.get('project_id'))) == str(board) for row in rows(value, 'projects')):
+                    raise ValueError('configured board missing')
+            elif step == 'get-task':
+                if not any(str(row.get('ticketNumber', row.get('ticket_number', row.get('ticket')))).upper() == task.upper() for row in rows(value, 'tasks')):
+                    raise ValueError('configured ticket missing')
+            else:
+                rows(value, 'labels')
+        except (ValueError, TypeError, KeyError):
+            tick['calls'][-1].update(ok=False, reason='tool result failed the ' + step + ' contract')
+    tick['ok'] = all(record['ok'] for record in tick['calls'])
+    return tick
+
+
+def command(argv, env, timeout=30, text=None):
+    # Child output may contain upstream secrets. Never print or persist it.
+    try:
+        result = subprocess.run(argv, input=text, capture_output=True, text=True, env=env, timeout=timeout)
+        return result.returncode, result.stdout
+    except (OSError, subprocess.TimeoutExpired, UnicodeError):
+        return -1, ''
+
+
+def receipt(text):
+    try:
+        value = json.loads(text)
+        if not isinstance(value, dict) or value.get('success') is False or value.get('error'):
+            return None
+        task = value.get('task')
+        if not isinstance(task, dict):
+            return None
+        ticket = task.get('ticketNumber', task.get('ticket_number', task.get('id')))
+        if type(ticket) in (str, int) and re.fullmatch(r'(?:[A-Za-z][A-Za-z0-9_]*-[0-9]+|[0-9]+)', str(ticket)):
+            return str(ticket)
+    except (ValueError, TypeError):
+        pass
+    return None
+
+
+def reconcile(incident, vcc, env):
+    # Scan the board, not an eventually-consistent keyword index. Only a complete
+    # successful scan permits retry after an ambiguous create result.
+    deadline = time.monotonic() + 45
+    offset = 0
+    while time.monotonic() < deadline:
+        code, output = command([vcc, 'task', 'list', '--project', str(incident['bug_project']), '--limit', '100', '--offset', str(offset), '--json'], env, timeout=min(15, max(1, deadline - time.monotonic())))
+        try:
+            value = json.loads(output)
+            if code != 0 or value.get('success') is not True:
+                return 'unknown', None
+            tasks = rows(value, 'tasks')
+            for task in tasks:
+                if incident['marker'] in str(task.get('description', '')):
+                    found = receipt(json.dumps(dict(task=task)))
+                    if found:
+                        return 'done', found
+                    return 'unknown', None
+            total = value.get('total')
+            if type(total) is not int or total < 0 or (not tasks and offset < total):
+                return 'unknown', None
+            offset += len(tasks)
+            if offset >= total:
+                return 'pending', None
+        except (ValueError, TypeError, AttributeError):
+            return 'unknown', None
+    return 'unknown', None
+
+
+def plans(incident):
+    failure = incident['failure']
+    exact = json.dumps(failure['call'], sort_keys=True)
+    reason = failure.get('reason', 'request failed')
+    if 'rpc_error_code' in failure:
+        reason += ' (code ' + str(failure['rpc_error_code']) + ')'
+    title = '[MCP watcher] MCP stopped working for allowed users: ' + failure['step']
+    description = (
+        '<p><strong>MCP is not working for an allowed account.</strong> The five-minute check failed. '
+        'Please restore access without blocking accounts that should still be allowed.</p>'
+        '<p><strong>Failed call:</strong> <code>' + html.escape(exact) + '</code></p>'
+        '<p><strong>Status:</strong> ' + html.escape(str(failure['status'])) + '. '
+        + html.escape(reason) + '</p>'
+        '<p><strong>Time (UTC):</strong> ' + incident['opened_at'] + '</p>'
+        '<p><strong>Incident:</strong> <code>' + incident['marker'] + '</code></p>'
+    )
+    message = 'MCP stopped working for allowed users. Incident ' + incident['id'] + '. Failed call: ' + exact
+    message += '. Status: ' + str(failure['status']) + '. ' + reason + '. Time (UTC): ' + incident['opened_at']
+    message += '. Bug filing: ' + incident['create_state'] + ('. Ticket: ' + incident['ticket_id'] if incident['ticket_id'] else '')
+    return title, description, message
+
+
+def report(incident, dry_run, state):
+    env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher')
+    vcc = env.get('MCP_CONTRACT_WATCH_VCC', 'vcc')
+    deliver = env.get('MCP_CONTRACT_WATCH_DELIVER', str(HOME / '.agents/skills/ship/scripts/runner-deliver'))
+    if dry_run:
+        title, description, message = plans(incident)
+        print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section='Bugs', assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
+        return
+    if incident['create_state'] != 'done':
+        identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
+        code, output = command([identity], env, timeout=5)
+        fields = output.strip().split('\t')
+        # Only agent identities write to the board: the dedicated watcher login, else the shared Valentins Claude Code agent.
+        if code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file():
+            if incident['create_state'] == 'unknown':
+                incident['create_state'], incident['ticket_id'] = reconcile(incident, vcc, env)
+                save(state)
+            if incident['create_state'] == 'pending':
+                title, description, _ = plans(incident)
+                incident['create_state'] = 'unknown'
+                save(state)
+                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', '--section', 'Bugs', '--json'], env)
+                ticket = receipt(output) if code == 0 else None
+                if ticket:
+                    incident.update(create_state='done', ticket_id=ticket)
+                save(state)
+    if incident['alert_state'] != 'done':
+        _, _, message = plans(incident)
+        env['RUNNER_DELIVER_ID'] = incident['marker']
+        incident['alert_state'] = 'pending'
+        save(state)
+        code, _ = command([deliver, 'ht-product-lead'], env, timeout=15, text=message + '\n')
+        incident['alert_state'] = 'done' if code == 0 else 'pending'
+        save(state)
+
+
+def tick_once(args):
+    STATE.mkdir(parents=True, exist_ok=True, mode=0o700)
+    os.chmod(STATE, 0o700)
+    with (STATE / 'tick.lock').open('a') as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        path = STATE / 'state.json'
+        state = json.loads(path.read_text()) if path.exists() else dict(incident=None)
+        state.setdefault('pending_incidents', [])
+        tick = probe(args)
+        incident = state['incident']
+        if not tick['ok'] and (incident is None or incident.get('closed_at')):
+            if incident and (incident['create_state'] != 'done' or incident['alert_state'] != 'done'):
+                state['pending_incidents'].append(incident)
+            identifier = tick['time']
+            incident = dict(id=identifier, marker='mcp-contract-watch:' + identifier, opened_at=identifier,
+                            failure=next(record for record in tick['calls'] if not record['ok']),
+                            bug_project=args.bug_project, create_state='pending', alert_state='pending',
+                            ticket_id=None, consecutive_ok=0, closed_at=None)
+            state['incident'] = incident
+        if incident and not incident.get('closed_at'):
+            incident['consecutive_ok'] = incident['consecutive_ok'] + 1 if tick['ok'] else 0
+            tick['incident_id'] = incident['id']
+        if incident:
+            if not args.dry_run:
+                save(state)
+            # Recovery rearms detection, but never discards an undelivered report.
+            for pending in [incident] + state['pending_incidents']:
+                if not pending.get('closed_at') or pending['create_state'] != 'done' or pending['alert_state'] != 'done':
+                    report(pending, args.dry_run, state)
+            if incident['consecutive_ok'] >= 2 and not incident.get('closed_at'):
+                incident['closed_at'] = tick['time']
+            state['pending_incidents'] = [pending for pending in state['pending_incidents']
+                                          if pending['create_state'] != 'done' or pending['alert_state'] != 'done']
+            if not args.dry_run:
+                save(state)
+        if not args.dry_run:
+            with (STATE / 'ticks.jsonl').open('a') as out:
+                out.write(json.dumps(tick) + '\n')
+                out.flush()
+                os.fsync(out.fileno())
+        print(json.dumps(tick))
+        return 0 if tick['ok'] else 1
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--install', action='store_true')
+    parser.add_argument('--once', action='store_true', help='Run one tick (also the default; the timer schedules it)')
+    parser.add_argument('--dry-run', action='store_true', help='Print planned reporting without external writes or changing incident state')
+    parser.add_argument('--force-fail', choices=STEPS, help='Fail only this response check, never the MCP service')
+    parser.add_argument('--bug-project', type=int, default=15)
+    args = parser.parse_args()
+    if args.bug_project < 1:
+        parser.error('--bug-project must be positive')
+    if args.install and (args.once or args.dry_run or args.force_fail or args.bug_project != 15):
+        parser.error('--install cannot be combined with proof flags')
+    os.umask(0o077)
+    try:
+        if args.install:
+            install()
+            return 0
+        return tick_once(args)
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError):
+        print('mcp-contract-watch: local state or installation failed; no response bodies logged', file=sys.stderr)
+        return 2
+
+
+if __name__ == '__main__':
+    sys.exit(main())

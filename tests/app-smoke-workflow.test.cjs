@@ -319,6 +319,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(workflow, /REQUIRED="\$REQUIRED feature-flag-gate"/);
   assert.match(workflow, /REQUIRED="\$REQUIRED browser-smoke"/);
+  assert.match(workflow, /REQUIRED="\$REQUIRED mcp-cli-api-contract"/);
   assert.match(ciWorkflow, /name: Verify live required-check settings/);
   assert.doesNotMatch(ciWorkflow, /if \. == "claude-review" then "ai-review" else \. end/);
   assert.match(ciWorkflow, /unique \| sort \| \.\[\]/);
@@ -333,7 +334,7 @@ test("auto-merge waits for app smoke and runs when it completes", async () => {
   );
   assert.match(
     ciWorkflow,
-    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke premerge-evidence \| sort\)/,
+    /expected=\$\(printf '%s\\n' "\$expected" browser-smoke mcp-cli-api-contract premerge-evidence \| sort\)/,
   );
 });
 
@@ -342,6 +343,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   const required = [
     "app-smoke",
     "browser-smoke",
+    "mcp-cli-api-contract",
     "ci-tests",
     "ai-review",
     "claude-review",
@@ -357,6 +359,7 @@ test("CI policy keeps the protected smoke producer live and required", async () 
   assert.deepEqual(policy.required_checks.automerge_also_requires, [
     "app-smoke",
     "browser-smoke",
+    "mcp-cli-api-contract",
     "ci-tests",
     "feature-flag-gate",
   ]);
