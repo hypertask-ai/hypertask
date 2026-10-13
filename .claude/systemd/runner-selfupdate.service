@@ -1,0 +1,9 @@
+[Unit]
+Description=Refresh installed runner code from merged production
+
+[Service]
+Type=oneshot
+Environment=HOME=%h
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=%h/projects/ht-skills-live/.claude/skills/ship/scripts/runner-selfupdate run
+TimeoutStartSec=4min

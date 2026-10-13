@@ -1,0 +1,11 @@
+[Unit]
+Description=Every five minutes refresh installed runner code from production
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=5min
+AccuracySec=1s
+Unit=runner-selfupdate.service
+
+[Install]
+WantedBy=timers.target
