@@ -39,3 +39,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/deploym
 ## Security checks
 
 See [Strix security checks](docs/strix-weekly.md) for the scheduled review, live checks, assessment commands and coverage limits.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for bug reports, ideas, and our contribution policy.
