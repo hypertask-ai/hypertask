@@ -33,7 +33,8 @@ test("the visible Inbox scope intentionally requires a live task", () => {
 
 // Minimal Prisma-where evaluator covering only the operators
 // visibleUserInboxWhere actually emits (AND/OR/NOT, `in`, `not`, `every`,
-// and the `task`/`Reminders` relation filters). This runs the real,
+// `some`, and the `task`/`Reminders`/`project`/`members` relation filters).
+// This runs the real,
 // unmodified where clause against fixture rows instead of re-describing its
 // logic, so a regression in the clause itself fails the test.
 function fieldMatches(value, condition) {
@@ -55,6 +56,14 @@ function whereMatches(where, row) {
       if (row.task == null) return false;
       return whereMatches(condition, row.task);
     }
+    if (key === "project") {
+      if (row.project == null) return false;
+      return whereMatches(condition, row.project);
+    }
+    if (key === "members") {
+      const members = row.members ?? [];
+      return members.some((member) => whereMatches(condition.some, member));
+    }
     if (key === "Reminders") {
       const reminders = row.Reminders ?? [];
       return reminders.every((reminder) => whereMatches(condition.every, reminder));
@@ -62,6 +71,9 @@ function whereMatches(where, row) {
     return fieldMatches(row[key], condition);
   });
 }
+
+// A board owned by someone else, with the recipient (6) as a current member.
+const memberProject = { ownerId: 1, members: [{ userId: 6, agentId: null }] };
 
 function baseNotification(overrides = {}) {
   return {
@@ -73,10 +85,33 @@ function baseNotification(overrides = {}) {
     fromAgentId: null,
     type: "TaskReminder",
     returnedFromReminders: null,
-    task: { status: "Normal", Reminders: [] },
     ...overrides,
+    task: {
+      status: "Normal",
+      Reminders: [],
+      project: memberProject,
+      ...overrides.task,
+    },
   };
 }
+
+test("HTPR-7182: a removed member's old notifications stop returning the task", () => {
+  const where = visibleUserInboxWhere(6);
+  const withProject = (project) => baseNotification({ task: { project } });
+
+  assert.equal(whereMatches(where, baseNotification()), true);
+  assert.equal(whereMatches(where, withProject({ ownerId: 6, members: [] })), true);
+  // Removed: only other people are still members.
+  assert.equal(
+    whereMatches(where, withProject({ ownerId: 1, members: [{ userId: 9, agentId: null }] })),
+    false,
+  );
+  // An agent membership row is not human access.
+  assert.equal(
+    whereMatches(where, withProject({ ownerId: 1, members: [{ userId: 6, agentId: "agent-1" }] })),
+    false,
+  );
+});
 
 test("HTPR-5683: a reminder returned onto an archived task stays visible", () => {
   const where = visibleUserInboxWhere(6);
@@ -164,6 +199,10 @@ test("Inbox relations load only for database-selected response rows", async () =
   assert.match(sql, /t\."status" = 'Archive'::"Status"/);
   assert.match(sql, /n\."returnedFromReminders" = true/);
   assert.match(sql, /NOT EXISTS \(/);
+  // HTPR-7182: selection also requires current board access.
+  assert.match(sql, /p\."ownerId" = \?/);
+  assert.match(sql, /FROM "Member" AS m/);
+  assert.match(sql, /m\."agentId" IS NULL/);
 });
 
 test("an empty Inbox selection skips the deep relation query", async () => {

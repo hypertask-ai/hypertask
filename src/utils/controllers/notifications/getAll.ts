@@ -11,6 +11,7 @@ import {
   getSplitsNoImportant,
 } from "@/lib/inboxSplitSettings";
 import { visibleUserInboxWhere } from "@/utils/controllers/notifications/visibleInboxScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
   buildRecentInboxActors,
   normalizeInboxActorActivityRows,
@@ -108,6 +109,23 @@ const visibleInboxSql = (userId: number) => {
         t."status" = 'Archive'::"Status"
         AND n."returnedFromReminders" = true
       )
+    )
+    -- Mirror projectContentAccessWhere(userId): a removed member's old
+    -- notifications must not keep returning the task (HTPR-7182).
+    AND EXISTS (
+      SELECT 1
+      FROM "Project" AS p
+      WHERE p.id = t."projectId"
+        AND (
+          p."ownerId" = ${userId}
+          OR EXISTS (
+            SELECT 1
+            FROM "Member" AS m
+            WHERE m."projectId" = p.id
+              AND m."userId" = ${userId}
+              AND m."agentId" IS NULL
+          )
+        )
     )
     AND NOT EXISTS (
       SELECT 1
@@ -227,6 +245,7 @@ const notificationGetAll = async (userId: string | string[]) => {
         where: {
           waitingOnUserId: parsedUserId,
           status: "Normal",
+          project: projectContentAccessWhere(parsedUserId),
         },
         orderBy: { waitingOnSetAt: "asc" },
         select: {

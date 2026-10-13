@@ -10,6 +10,10 @@ import { inboxConfig } from "@/lib/configs/inbox.config";
  * rendered All tab on this predicate so cleanup cannot reach hidden records.
  * A visible persisted notification is task-backed: `task.status = Normal`
  * intentionally excludes taskless rows before any response projection loads.
+ * Old notifications are not a grant: the recipient must still be able to read
+ * the task's board (HTPR-7182). The board check equals
+ * projectContentAccessWhere(userId) for a human; it is written out here
+ * because getAllIncludes imports this module.
  */
 export const visibleUserInboxWhere = (
   userId: number
@@ -46,6 +50,16 @@ export const visibleUserInboxWhere = (
         },
         { taskId: null },
       ],
+    },
+    {
+      task: {
+        project: {
+          OR: [
+            { ownerId: userId },
+            { members: { some: { userId, agentId: null } } },
+          ],
+        },
+      },
     },
   ],
 });
