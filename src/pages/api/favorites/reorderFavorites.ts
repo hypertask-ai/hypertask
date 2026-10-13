@@ -2,6 +2,7 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 // Replaces the entire favorites set for the *authenticated* user in one
 // transaction. The client sends the desired order; slots (= Cmd/Alt shortcut)
@@ -46,10 +47,21 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   const clean: { projectId: number; index: number }[] = [];
   for (const f of favorites) {
     const pid = Number(f?.projectId);
-    if (!Number.isFinite(pid) || seen.has(pid)) continue;
+    if (!Number.isSafeInteger(pid) || pid <= 0 || seen.has(pid)) continue;
     seen.add(pid);
     const pos = clean.length;
     clean.push({ projectId: pid, index: pos >= 9 ? 0 : pos + 1 });
+  }
+
+  // HTPR-7171: same board check as addEditFavorites, for every id in the new set.
+  if (clean.length > 0) {
+    const allowed = await prisma.project.findMany({
+      where: { id: { in: clean.map((f) => f.projectId) }, ...getProjectWhere(userId) },
+      select: { id: true },
+    });
+    if (allowed.length !== clean.length) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
   }
 
   try {

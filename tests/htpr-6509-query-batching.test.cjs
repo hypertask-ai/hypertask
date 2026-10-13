@@ -5,7 +5,7 @@ const test = require("node:test");
 const { Prisma, PrismaClient } = require("@prisma/client");
 const { ColumnTypeEnum } = require("@prisma/driver-adapter-utils");
 const { load } = require("./task-route-loader.cjs");
-const { projectContentAccessWhere } = load("src/utils/controllers/projects/getAllIncludes.ts", {
+const { getProjectWhere, projectContentAccessWhere } = load("src/utils/controllers/projects/getAllIncludes.ts", {
   "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
   "@/utils/controllers/notifications/visibleInboxScope": {},
 });
@@ -136,7 +136,7 @@ async function run(name, strategy, empty = false) {
   const profile = { id: 7, displayName: "Fixture User", email: "fixture@example.invalid", UserSetting: {} };
   const mocks = {
     "@/lib/prisma": { default: database },
-    "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere, projectContentAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 7 }) },
     "next/headers": { cookies: async () => ({ get: () => ({ value: JSON.stringify(profile) }) }) },
     "@/utils/controllers/turbopuffer/turbopufferHelper": {},
