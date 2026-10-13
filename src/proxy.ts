@@ -35,7 +35,12 @@ async function authMiddleware(request: NextRequest) {
   ) && request.headers.get('Authorization')?.startsWith('Bearer ');
   // Auth handlers guard cookie-derived grants; fresh logins and cleanup stay reachable.
   const isAuthRoute = currentPath === '/api/auth' || currentPath.startsWith('/api/auth/');
-  if (!isMcpBearer && !isAuthRoute && await isSessionTokenRevoked(
+  // Machine endpoints authenticate without cookies; a stale browser cookie must not block them.
+  const isCookieFreeEndpoint = [
+    '/oauth/token', '/oauth/register', '/oauth/revoke',
+    '/mcp', '/sse', '/message', '/mcp-health',
+  ].includes(currentPath) || currentPath.startsWith('/.well-known');
+  if (!isMcpBearer && !isAuthRoute && !isCookieFreeEndpoint && await isSessionTokenRevoked(
     request.cookies.get('ht_session')?.value,
     { failClosed: false }
   )) {
@@ -45,7 +50,9 @@ async function authMiddleware(request: NextRequest) {
         { status: 401 }
       );
     }
-    const res = NextResponse.redirect(new URL(login, request.url));
+    // Reload the same URL signed out, so login links keep their token and
+    // protected pages send the visitor to login through the usual path.
+    const res = NextResponse.redirect(request.nextUrl);
     res.cookies.delete('nookies_user');
     res.cookies.delete('ht_session');
     return res;

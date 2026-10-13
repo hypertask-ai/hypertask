@@ -170,7 +170,11 @@ export const signOutCurrentAccount = async (
       // Revocation is best effort and must not block switching accounts.
     }
 
-    if (!(await activateAccount(nextSessionToken))) return false;
+    // setActive mints fresh legacy cookies, replacing the one revoked above.
+    if (!(await activateAccount(nextSessionToken))) {
+      await activateAccount(currentSessionToken);
+      return false;
+    }
 
     if (!(await removeAccount(currentSessionToken))) {
       await activateAccount(currentSessionToken);

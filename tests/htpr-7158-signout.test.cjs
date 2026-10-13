@@ -216,3 +216,32 @@ test('account-specific sign-out revokes A before switching to B, and revoke fail
     assert.equal(await h.revocation.isSessionTokenRevoked(b, { failClosed: true }), false)
   }
 })
+
+test('a failed switch re-activates the current account so it gets a fresh, unrevoked cookie', async (t) => {
+  const h = harness()
+  const a = session.signSession({ id: 7 })
+  const aFresh = session.signSession({ id: 7 })
+  let currentCookie = a
+  const { POST } = load('src/app/api/auth/force-signout/route.ts', h.imports)
+  t.mock.method(global, 'fetch', async (url, options) => POST(request(url, currentCookie, JSON.parse(options.body))))
+  global.window = { location: { assign: (url) => h.events.push(`navigate:${url}`) } }
+  const { signOutCurrentAccount } = load('src/lib/auth/accounts.ts', {
+    nookies: {}, '@/lib/configs/auth.config': {},
+    '@/lib/auth/betterAuthClient': { authClient: {
+      getSession: async () => ({ data: { session: { token: 'A' } } }),
+      multiSession: {
+        setActive: async ({ sessionToken }) => {
+          h.events.push(`activate:${sessionToken}`)
+          if (sessionToken === 'B') return { error: { message: 'fake failure' } }
+          currentCookie = aFresh
+          return { data: {} }
+        },
+        revoke: async () => { throw new Error('must not remove A after a failed switch') },
+      },
+    } },
+  })
+  assert.equal(await signOutCurrentAccount('B'), false)
+  assert.deepEqual(h.events.filter((e) => e.startsWith('activate:')), ['activate:B', 'activate:A'])
+  assert.equal(await h.revocation.isSessionTokenRevoked(a, { failClosed: false }), true)
+  assert.equal(await h.revocation.isSessionTokenRevoked(currentCookie, { failClosed: true }), false)
+})

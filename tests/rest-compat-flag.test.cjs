@@ -88,6 +88,7 @@ test('account-switch precedence is retained through the real session resolver an
       let sessionReads = 0;
       const { getSessionUser } = load('src/lib/auth/getSessionUser.ts', {
         '@/lib/auth/session': { SESSION_COOKIE: 'ht_session', verifySession: () => ({ id: 985 }) },
+        '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false },
         '@/lib/auth/betterAuth': { auth: { api: { getSession: async () => { sessionReads++; return { user: { id: '6' } }; } } } },
       });
       const result = await run(operation, 'ON', { mocks: { '@/lib/auth/getSessionUser': { getSessionUser } } });

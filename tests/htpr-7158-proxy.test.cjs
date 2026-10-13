@@ -78,17 +78,41 @@ test('revoked cookies get SESSION_REQUIRED on API requests with or without unsig
   }
 })
 
-test('revoked page cookies redirect to login and clear both identity cookies', async () => {
+test('revoked page cookies reload the same URL signed out, keeping login link tokens', async () => {
   const h = harness()
   const token = session.signSession({ id: 7 })
   await h.writer.revokeSessionToken(token)
-  const response = await h.proxy(request('/inbox', token))
-  assert.equal(response.status, 307)
-  assert.equal(response.headers.get('location'), 'http://localhost/login')
-  for (const name of ['ht_session', 'nookies_user']) {
-    assert.equal(response.cookies.get(name)?.value, '')
-    assert.equal(response.cookies.get(name)?.expires.getTime(), 0)
+  for (const route of ['/inbox', '/login?token=fresh-link-value']) {
+    const response = await h.proxy(request(route, token))
+    assert.equal(response.status, 307)
+    assert.equal(response.headers.get('location'), `http://localhost${route}`)
+    for (const name of ['ht_session', 'nookies_user']) {
+      assert.equal(response.cookies.get(name)?.value, '')
+      assert.equal(response.cookies.get(name)?.expires.getTime(), 0)
+    }
   }
+  // The reload carries no cookies, so the usual signed-out handling sends /inbox to login.
+  const reload = await h.proxy(request('/inbox', undefined, { user: false }))
+  assert.match(reload.headers.get('location') ?? '', /\/login/)
+})
+
+test('cookie-free machine endpoints are not blocked by a revoked incidental cookie', async () => {
+  const h = harness()
+  const token = session.signSession({ id: 7 })
+  await h.writer.revokeSessionToken(token)
+  for (const route of ['/oauth/token', '/oauth/register', '/oauth/revoke', '/mcp', '/sse', '/message', '/mcp-health', '/.well-known/oauth-authorization-server']) {
+    const response = await h.proxy(request(route, token))
+    assert.equal(response.headers.get('x-middleware-next'), '1', route)
+  }
+})
+
+test('cookie-authenticated OAuth pages refuse a revoked cookie', async () => {
+  const h = harness()
+  const token = session.signSession({ id: 7 })
+  await h.writer.revokeSessionToken(token)
+  const response = await h.proxy(request('/oauth/authorize?client_id=c', token))
+  assert.equal(response.status, 307)
+  assert.equal(response.cookies.get('ht_session')?.value, '')
 })
 
 test('a valid cookie still passes API and page handling without a negative cache', async () => {
