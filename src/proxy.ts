@@ -4,6 +4,7 @@ import { isMobileDevice } from './utils/serverActions';
 import { canAccessTrialPage } from './utils/helperFunctions/helperFunctions';
 import { parseSafeReturnTo } from '@/lib/auth/safeReturnTo';
 import { verifySessionEdge } from '@/lib/auth/sessionEdge';
+import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation';
 import { verifyCookieIdentity } from '@/lib/auth/cookieIdentity';
 import { detailWithoutTicketRedirect } from '@/lib/routing/detailWithoutTicket';
 import {
@@ -27,6 +28,28 @@ const CLI_LATEST_VERSION = "1.10.2"
 
 async function authMiddleware(request: NextRequest) {
   const currentPath = request.nextUrl.pathname;
+  const isMcpBearer = (
+    currentPath.startsWith('/api/mcp') ||
+    currentPath === '/api/v1' ||
+    currentPath.startsWith('/api/v1/')
+  ) && request.headers.get('Authorization')?.startsWith('Bearer ');
+  // Auth handlers guard cookie-derived grants; fresh logins and cleanup stay reachable.
+  const isAuthRoute = currentPath === '/api/auth' || currentPath.startsWith('/api/auth/');
+  if (!isMcpBearer && !isAuthRoute && await isSessionTokenRevoked(
+    request.cookies.get('ht_session')?.value,
+    { failClosed: false }
+  )) {
+    if (currentPath.startsWith('/api')) {
+      return NextResponse.json(
+        { error: 'Unauthorized', code: 'SESSION_REQUIRED' },
+        { status: 401 }
+      );
+    }
+    const res = NextResponse.redirect(new URL(login, request.url));
+    res.cookies.delete('nookies_user');
+    res.cookies.delete('ht_session');
+    return res;
+  }
 
   if (currentPath === '/mcp' || currentPath === '/sse' || currentPath === '/message' || currentPath === '/mcp-health') {
     return NextResponse.next();

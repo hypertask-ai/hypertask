@@ -159,6 +159,17 @@ export const signOutCurrentAccount = async (
       return false;
     }
 
+    try {
+      await fetch("/api/auth/force-signout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ revokeOnly: true }),
+        signal: AbortSignal.timeout(1500),
+      });
+    } catch {
+      // Revocation is best effort and must not block switching accounts.
+    }
+
     if (!(await activateAccount(nextSessionToken))) return false;
 
     if (!(await removeAccount(currentSessionToken))) {

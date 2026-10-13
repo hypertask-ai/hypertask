@@ -4,6 +4,7 @@ import { agentTokenCredentialFields, createMcpToken, revokeTokenByJti, validateM
 import prisma from '@/lib/prisma'
 import jwt from 'jsonwebtoken'
 import { verifySession, SESSION_COOKIE } from '@/lib/auth/session'
+import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation'
 
 const NON_EXPIRING_TOKEN_REVOKED_UNTIL = new Date('9999-12-31T23:59:59.999Z')
 
@@ -26,10 +27,13 @@ async function getCurrentUserFromCookies() {
     }
 
     const user = JSON.parse(userCookie.value)
-    const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value)
+    const token = cookieStore.get(SESSION_COOKIE)?.value
+    const session = verifySession(token)
     if (!session || String(session.id) !== String(user?.id)) {
       return null
     }
+
+    if (await isSessionTokenRevoked(token, { failClosed: true })) return null
 
     return user
   } catch (error) {

@@ -79,6 +79,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
       verifySession: (token) => token === 'guest-session' ? { id: guestId } : token === 'new-session' ? { id: userId } : null,
       signSession: () => 'new-session', sessionCookieOptions: () => ({}), clearBetterAuthSessionCookies: () => {},
     },
+    '@/lib/auth/sessionRevocation': { isSessionTokenRevoked: async () => false, revokeSessionToken: async () => {} },
     '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
     '@/lib/configs/auth.config': { cookies: { theme: 'theme' }, onboarding: { skipOnboarding: true, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder'] },

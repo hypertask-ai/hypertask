@@ -17,6 +17,7 @@ import {
   sessionCookieOptions,
   signSession,
 } from '@/lib/auth/session'
+import { revokeSessionToken } from '@/lib/auth/sessionRevocation'
 import { slimUserForCookie } from '@/lib/auth/slimUserCookie'
 import { getThemeCookieOptions } from '@/lib/auth/themeCookie'
 import authConfig from '@/lib/configs/auth.config'
@@ -253,6 +254,12 @@ export function legacyCookiePlugin() {
                 console.error('[onboarding/welcome] scheduling failed', error)
               }
             }
+          }),
+        },
+        {
+          matcher: (ctx) => ctx.path === '/sign-out',
+          handler: createAuthMiddleware(async (ctx) => {
+            await revokeSessionToken(ctx.getCookie?.(SESSION_COOKIE) ?? undefined)
           }),
         },
       ],

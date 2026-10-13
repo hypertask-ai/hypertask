@@ -1,6 +1,7 @@
 import { parseCookies } from 'better-auth/cookies'
 
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
+import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation'
 
 export type SessionUser =
   | { userId: number; source: 'better-auth' }
@@ -13,6 +14,9 @@ export async function getSessionUser(headers: Headers): Promise<SessionUser | nu
     ? parseCookies(cookieHeader).get(SESSION_COOKIE)
     : undefined
   const legacySession = verifySession(token)
+  if (legacySession && await isSessionTokenRevoked(token, { failClosed: false })) {
+    return null
+  }
 
   // HTPR-5453: whenever a valid signed ht_session exists, the full lookup
   // below always resolves to legacySession.id anyway — if Better Auth agrees,

@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
+import { isSessionTokenRevoked } from "@/lib/auth/sessionRevocation";
 import authConfig from "@/lib/configs/auth.config";
 import prisma from "@/lib/prisma";
 import type { IUser } from "@/models/model";
@@ -31,10 +32,13 @@ export async function getServerCookieUser(): Promise<IUser | null> {
   }
 
   const claimedId = parseUserCookieId(userCookie.value);
-  const session = verifySession(cookieStore.get(SESSION_COOKIE)?.value);
+  const token = cookieStore.get(SESSION_COOKIE)?.value;
+  const session = verifySession(token);
   if (claimedId === null || !session || session.id !== claimedId) {
     return null;
   }
+
+  if (await isSessionTokenRevoked(token, { failClosed: false })) return null;
 
   const user = await prisma.user.findUnique({
     where: { id: session.id },

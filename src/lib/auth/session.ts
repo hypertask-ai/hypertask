@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'crypto'
 
 export const SESSION_COOKIE = 'ht_session'
 export const SESSION_TTL_SECONDS = 600 * 60 * 24 * 7
@@ -14,6 +14,7 @@ type SessionPayload = {
 
 type SignedSessionPayload = SessionPayload & {
   iat: number
+  jti?: string
   exp: number
 }
 
@@ -57,6 +58,7 @@ export function signSession(
     ...(payload.email !== undefined ? { email: payload.email } : {}),
     ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
     iat: now,
+    jti: randomBytes(12).toString('base64url'),
     exp: now + ttlSeconds,
   }
   const encodedPayload = base64UrlEncode(JSON.stringify(signedPayload))
@@ -65,7 +67,7 @@ export function signSession(
   return `${encodedPayload}.${encodedSignature}`
 }
 
-export function verifySession(token: string | undefined): SessionPayload | null {
+function verifiedSessionPayload(token: string | undefined): SignedSessionPayload | null {
   try {
     if (!token) {
       return null
@@ -109,14 +111,25 @@ export function verifySession(token: string | undefined): SessionPayload | null 
       return null
     }
 
-    return {
-      id: payload.id,
-      ...(payload.email !== undefined ? { email: payload.email } : {}),
-      ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
-    }
+    return payload
   } catch {
     return null
   }
+}
+
+export function verifySession(token: string | undefined): SessionPayload | null {
+  const payload = verifiedSessionPayload(token)
+  if (!payload) return null
+
+  return {
+    id: payload.id,
+    ...(payload.email !== undefined ? { email: payload.email } : {}),
+    ...(payload.agentId !== undefined ? { agentId: payload.agentId } : {}),
+  }
+}
+
+export function verifiedSessionExpiry(token: string | undefined): number | null {
+  return verifiedSessionPayload(token)?.exp ?? null
 }
 
 export function sessionCookieOptions(maxAgeSeconds: number) {

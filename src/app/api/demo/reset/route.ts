@@ -6,6 +6,7 @@ import {
   sessionCookieOptions,
 } from "@/lib/auth/session";
 import { isGuestRequest } from "@/lib/demo/guestGuard";
+import { revokeSessionToken } from "@/lib/auth/sessionRevocation";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,8 @@ export async function GET(request: NextRequest) {
   });
 
   if (!isGuest) return response;
+
+  await revokeSessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   response.cookies.set(SESSION_COOKIE, "", sessionCookieOptions(0));
   response.cookies.set("nookies_user", "", {

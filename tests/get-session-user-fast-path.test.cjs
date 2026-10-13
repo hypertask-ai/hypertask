@@ -22,9 +22,13 @@ const javascript = ts.transpileModule(source, {
   },
 }).outputText;
 
+const originalRedis = global.redis;
+global.redis = { get: async () => null };
 const originalSessionSecret = process.env.SESSION_SECRET;
 process.env.SESSION_SECRET = "test-secret-value-that-is-long-enough";
 test.after(() => {
+  if (originalRedis === undefined) delete global.redis;
+  else global.redis = originalRedis;
   if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
   else process.env.SESSION_SECRET = originalSessionSecret;
 });
@@ -35,6 +39,7 @@ const jiti = require("jiti")(__filename, {
 });
 const realSessionModule = jiti(path.join(root, "src/lib/auth/session.ts"));
 const realCookiesModule = require("better-auth/cookies");
+const realRevocationModule = jiti(path.join(root, "src/lib/auth/sessionRevocation.ts"));
 const { signSession, SESSION_COOKIE } = realSessionModule;
 
 function loadGetSessionUser(getSession) {
@@ -45,6 +50,7 @@ function loadGetSessionUser(getSession) {
       return { auth: { api: { getSession } } };
     }
     if (request === "@/lib/auth/session") return realSessionModule;
+    if (request === "@/lib/auth/sessionRevocation") return realRevocationModule;
     throw new Error(`Unexpected import in getSessionUser.ts: ${request}`);
   };
   new Function("module", "exports", "require", javascript)(
