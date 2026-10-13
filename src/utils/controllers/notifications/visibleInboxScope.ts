@@ -1,6 +1,7 @@
 import { Prisma } from "@prisma/client";
 
 import { inboxConfig } from "@/lib/configs/inbox.config";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 /**
  * The server-side notification scope behind the user Inbox's visible All tab.
@@ -10,6 +11,8 @@ import { inboxConfig } from "@/lib/configs/inbox.config";
  * rendered All tab on this predicate so cleanup cannot reach hidden records.
  * A visible persisted notification is task-backed: `task.status = Normal`
  * intentionally excludes taskless rows before any response projection loads.
+ * Old notifications are not a grant: the recipient must still be able to read
+ * the task's board (HTPR-7182).
  */
 export const visibleUserInboxWhere = (
   userId: number
@@ -24,6 +27,7 @@ export const visibleUserInboxWhere = (
     type: { in: inboxConfig.selfTriggeredHidden },
   },
   AND: [
+    { task: { project: projectContentAccessWhere(userId) } },
     {
       OR: [
         { task: { status: "Normal" } },
