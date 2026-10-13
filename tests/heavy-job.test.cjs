@@ -240,6 +240,54 @@ test('npm lint, test, test:file, typecheck and premerge build use the semaphore'
     assert.match(scripts[name], /^bash scripts\/heavy-job\.sh /);
   }
   const premerge = readFileSync(path.join(root, 'scripts/premerge-local.sh'), 'utf8');
-  assert.match(premerge, /bash "\$root\/scripts\/heavy-job\.sh" npx --no-install next build --webpack/);
+  assert.match(premerge, /bash "\$root\/scripts\/heavy-job\.sh" --exclusive npx --no-install next build --webpack/);
+  assert.match(scripts.test, /^bash scripts\/heavy-job\.sh --exclusive node scripts\/run-tests\.mjs$/);
+  assert.doesNotMatch(scripts['test:file'], /--exclusive/);
   assert.match(premerge, /HT_HEAVY_SLOTS="\$\{HT_HEAVY_SLOTS:-\}"/);
+});
+
+test('--exclusive lets only one full run or build go at a time, even with free slots', async () => {
+  const { dir, env } = fixture();
+  try {
+    const wide = { ...env, HT_HEAVY_SLOTS: '4' };
+    const exclusive = (code) => {
+      const child = spawn('bash', [script, '--exclusive', process.execPath, '-e', code], { env: wide, cwd: root });
+      let stdout = '', stderr = '';
+      child.stdout.on('data', chunk => { stdout += chunk; });
+      child.stderr.on('data', chunk => { stderr += chunk; });
+      const ready = new Promise(resolve => child.stdout.once('data', resolve));
+      const done = new Promise(resolve => child.on('close', status => resolve({ status, stdout, stderr })));
+      return { ready, done };
+    };
+    const first = exclusive('console.log("holder");setTimeout(()=>console.log("released "+Date.now()),700)');
+    await first.ready;
+    const shared = await run(wide, 'console.log("shared")').done;
+    assert.equal(shared.stderr, '', 'a targeted run does not wait for the exclusive holder');
+    const second = exclusive('console.log("second "+Date.now())');
+    const [a, b] = await Promise.all([first.done, second.done]);
+    assert.equal(b.status, 0);
+    assert.ok(Number(b.stdout.trim().split(' ')[1]) >= Number(a.stdout.trim().split('released ')[1]), 'second full run starts only after the first');
+    assert.equal(b.stderr, 'waiting for the one full test run or build slot\n');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('local heavy jobs run at nice 10 by default and HT_HEAVY_NICE is validated', async () => {
+  const { dir, env } = fixture();
+  try {
+    const base = require('node:os').getPriority();
+    const result = await run(env, 'console.log(require("node:os").getPriority())').done;
+    assert.equal(result.status, 0);
+    assert.equal(Number(result.stdout.trim()), Math.min(19, base + 10));
+    const ci = await run({ ...env, CI: 'true' }, 'console.log(require("node:os").getPriority())').done;
+    assert.equal(Number(ci.stdout.trim()), base, 'CI is not reniced');
+    const bad = await run({ ...env, HT_HEAVY_NICE: '20' }, 'console.log("must not run")').done;
+    assert.equal(bad.status, 2);
+    assert.match(bad.stderr, /HT_HEAVY_NICE must be 0 to 19/);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('the full suite uses 2 test workers locally and 4 in CI', () => {
+  const runner = readFileSync(path.join(root, 'scripts/run-tests.mjs'), 'utf8');
+  assert.match(runner, /TEST_CONCURRENCY = process\.env\.TEST_CONCURRENCY \?\? \(isCi \? 4 : 2\)/);
+  assert.match(runner, /--test-concurrency=\$\{TEST_CONCURRENCY\}/);
 });

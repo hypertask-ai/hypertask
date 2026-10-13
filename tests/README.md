@@ -1,5 +1,11 @@
 # Local test fixtures
 
+On the shared VPS, run only the tests for the files you changed
+(`npm run test:file -- <files>`) and leave the full suite to CI. A local full
+`npm test` and the premerge `next build` take one shared exclusive slot, so a
+second one waits; every local heavy job runs at `nice -n 10` and the full suite
+uses 2 test workers locally, 4 in CI (YPER4-339).
+
 Docker-backed tests use the digest-pinned images in `.github/ci-images.json`:
 `ghcr.io/hypertask-ai/ci-postgres:16-alpine` for PostgreSQL suites,
 `ghcr.io/hypertask-ai/ci-postgres:16-bookworm` for agent-token backfill verifiers,

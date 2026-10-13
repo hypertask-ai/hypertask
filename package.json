@@ -15,7 +15,7 @@
     "lint:changed": "bash scripts/heavy-job.sh node scripts/lint-changed.mjs",
     "typecheck": "bash scripts/heavy-job.sh tsc --noEmit",
     "e2e:midscene": "npm --prefix e2e/midscene run smoke",
-    "test": "bash scripts/heavy-job.sh node scripts/run-tests.mjs",
+    "test": "bash scripts/heavy-job.sh --exclusive node scripts/run-tests.mjs",
     "test:file": "bash scripts/heavy-job.sh node scripts/run-tests.mjs",
     "coverage:report": "c8 report && node scripts/coverage-summary.mjs",
     "performance:budget": "node scripts/check-app-performance-budget.mjs",
