@@ -41,7 +41,7 @@ test('MCP clientInfo produces a validated bounded slug', () => {
   assert.equal(feedbackClient('Claude Desktop'), 'claude-desktop')
   assert.equal(feedbackClient('---'), undefined)
   assert.equal(feedbackClient(null), undefined)
-  assert.ok(feedbackClient('a'.repeat(90)).length <= 40)
+  assert.equal(feedbackClient('a'.repeat(90)), undefined)
 })
 
 
@@ -69,4 +69,27 @@ test('ticket flag defaults to Owner + QA as a feature, supports Off and permits 
   mode = 'EVERYONE'
   assert.equal(await flags.isFeatureEnabled(key, 42, db), true)
   assert.equal(await flags.featureFlagCandidateUserIds(key, db), null)
+})
+
+
+test('structured fields reject token prefixes, JWTs, long runs and numeric identifiers while legitimate slugs still work', () => {
+  const secrets = ['htk_secret123', 'htmk_' + 'secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'sk-secret', 'sk_secret', 'ghp_secret', 'gho_secret', 'github_pat_secret', 'xoxb-secret', 'Bearer-secret', 'error-123456', 'aB7cD9eF2g' + 'H4jK6mN8pQ', 'tool-htk_secret123', 'tool-sk_secret']
+  for (const field of ['tool', 'client', 'errorCode']) {
+    for (const value of secrets) {
+      assert.equal(aiFeedbackSchema.safeParse({ surface: 'mcp', [field]: value }).success, false, `${field}: ${value}`)
+    }
+    for (const value of ['hypertask_tasks', 'hypertask_list_tasks', 'service-unavailable', '12345', 'a'.repeat(19)]) {
+      assert.equal(aiFeedbackSchema.safeParse({ surface: 'mcp', [field]: value }).success, true, `${field}: ${value}`)
+    }
+  }
+  for (const value of secrets) assert.equal(feedbackClient(value), undefined, value)
+  assert.equal(aiFeedbackSchema.safeParse({ surface: 'mcp', tool: '/api/mcp/projects/:projectId/members' }).success, true)
+})
+
+test('category defaults to other and accepts only the documented categories, retaining free-text compatibility', () => {
+  assert.equal(aiFeedbackSchema.parse({ surface: 'cli', note: 'private', error: 'private' }).category, 'other')
+  for (const category of ['call_failed', 'empty_result', 'unexpected_result', 'auth_failed', 'slow', 'user_reported_broken', 'other']) {
+    assert.equal(aiFeedbackSchema.parse({ surface: 'api', category }).category, category)
+  }
+  assert.equal(aiFeedbackSchema.safeParse({ surface: 'api', category: 'private' }).success, false)
 })

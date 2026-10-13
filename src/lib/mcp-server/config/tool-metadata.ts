@@ -25,7 +25,7 @@ export interface ToolMetadata {
 const RAW_TOOL_METADATA = {
   REPORT_FEEDBACK: {
     name: buildToolName('report_feedback'),
-    description: 'Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work. Report only the tool, HTTP status, error code and a short technical note. Never include task, board or comment content, request bodies or tool arguments. The server scrubs text and files anonymous, deduplicated feedback.',
+    description: 'Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work. Report only the tool, HTTP status, error code and category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other). Never include task, board or comment content, request bodies or tool arguments. Free-form note and error are accepted for compatibility but never stored. Structured fields must not contain credentials. The server files anonymous, deduplicated feedback.',
   },
   HELLO: {
     name: buildToolName('hello'),

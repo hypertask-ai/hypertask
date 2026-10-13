@@ -1,18 +1,24 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
+// Match sk tokens at a boundary: hypertask_ is a tool namespace, not a token prefix.
+const credential = /htk_|htmk_|eyJ|(?:^|[^a-z0-9])sk[-_]|ghp_|gho_|github_pat_|xox|Bearer|\d{6,}|[^ _\-.\/:]{20,}/i
 const slug = z.string().max(40).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i)
+  .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed')
 export const aiFeedbackSchema = z.object({
   surface: z.enum(['mcp', 'cli', 'api', 'agent']),
   client: slug.optional(),
-  tool: z.string().regex(/^[a-z0-9_.:\/-]{1,80}$/i).optional(),
+  tool: z.string().regex(/^[a-z0-9_.:\/-]{1,80}$/i)
+    .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed').optional(),
   status: z.number().int().min(100).max(599).optional(),
   errorCode: slug.optional(),
-  error: z.string().max(5000).optional(),
-  note: z.string().max(5000).optional(),
+  category: z.enum(['call_failed', 'empty_result', 'unexpected_result', 'auth_failed', 'slow', 'user_reported_broken', 'other'])
+    .default('other').describe('Structured failure category; defaults to other.'),
+  error: z.string().max(5000).optional().describe('Accepted for compatibility. Free text is never stored.'),
+  note: z.string().max(5000).optional().describe('Accepted for compatibility. Free text is never stored.'),
 }).strict()
 
-export type AiFeedbackInput = z.infer<typeof aiFeedbackSchema>
+export type AiFeedbackInput = z.input<typeof aiFeedbackSchema>
 
 export function scrubFeedbackText(value: string): string {
   return value
@@ -39,7 +45,7 @@ export function feedbackFingerprint(input: AiFeedbackInput): string {
 }
 
 export function feedbackClient(value: unknown): string | undefined {
-  if (typeof value !== 'string') return undefined
+  if (typeof value !== 'string' || credential.test(value)) return undefined
   const candidate = value.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40).replace(/-$/g, '')
   return slug.safeParse(candidate).success ? candidate : undefined
 }

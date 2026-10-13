@@ -29,14 +29,13 @@ stub('src/lib/prisma.ts', { default: {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
   project: {
     findFirst: async () => configured ? { ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] } : null,
-    findMany: async (query) => query.where.OR[0].ownerId === 42 ? [{ title: 'Acme Launch Board', name: 'acme-launch' }] : [],
   },
   section: { findMany: async () => [{ id: 222, section_title: 'Done' }, { id: 333, section_title: 'Shipped' }] },
   label: {
     findFirst: async (query) => { assert.deepEqual(query.where, { projectId: 15, value: 'ai-feedback' }); return labelCreated ? { id: 'label-ai' } : null },
     create: async (query) => { assert.deepEqual(query.data, { projectId: 15, value: 'ai-feedback' }); labelCreated++; return { id: 'label-ai' } },
   },
-  task: { findMany: async (query) => query.where.OR[0].userId === 42 ? [{ title: 'Fire the Berlin supplier' }, { title: 'abc' }] : [], findFirst: async (query) => {
+  task: { findFirst: async (query) => {
     taskQuery = query
     return rows.find((row) => row.status === query.where.status && ![222, 333].includes(row.sectionId) && !['Done', 'Shipped'].includes(row.section) && row.description_.content.includes(query.where.description_.is.content.contains)) ?? null
   } },
@@ -92,13 +91,6 @@ test('same fingerprint across accounts and notes bumps one open report, deduping
   assert.equal(content.match(/Clients: ([^<]*)/)[1].split(', ').length, 10)
   assert.match(content, /Seen 32 times/)
   assert.equal((content.match(/Seen /g) ?? []).length, 1)
-})
-
-test('unquoted task and board titles of the reporting account never reach the report', async () => {
-  await fileAiFeedback({ ...input, error: undefined, note: 'tasks list failed while I opened fire the berlin supplier on Acme Launch Board, abc stays' }, 42)
-  const text = created[0].description
-  for (const secret of ['Berlin', 'berlin', 'Acme', 'acme']) assert.equal(text.includes(secret), false)
-  assert.match(text, /tasks list failed while I opened on , abc stays/)
 })
 
 test('escaped reporting display names survive dedupe without injecting HTML', () => {
@@ -160,7 +152,7 @@ test('flag-off and invalid input never write or consume quota; failed writes kee
 })
 
 test('titles use tool, errorCode or status and never exceed 80 characters; unconfigured destination fails closed', async () => {
-  for (const report of [{ surface: 'api', errorCode: 'oops' }, { surface: 'cli', status: 500 }, { surface: 'agent', tool: 'x'.repeat(80) }]) await fileAiFeedback(report, 42)
+  for (const report of [{ surface: 'api', errorCode: 'oops' }, { surface: 'cli', status: 500 }, { surface: 'agent', tool: ('x'.repeat(19) + '-').repeat(4).slice(0, 79) }]) await fileAiFeedback(report, 42)
   assert.equal(created[0].title, 'AI feedback: api oops'); assert.equal(created[1].title, 'AI feedback: cli 500'); assert.equal(created[2].title.length, 80)
   configured = false
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
@@ -195,24 +187,84 @@ test('flag storage errors fail closed, and a concurrent destination write cannot
   assert.equal(created.length, 0)
   failFlag = false
   lock = 'another-report'
+  let attempts = 0
+  activeRedis = { ...redis, set: async (...args) => { attempts++; return redis.set(...args) } }
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
   assert.equal(created.length, 0)
   assert.equal(bucketCounts.size, 0)
   assert.equal(lock, 'another-report')
+  assert.equal(attempts, 20)
 })
 
 
-test('dedupe descriptions are rebuilt from validated fields, never arbitrary existing ticket edits', async () => {
+test('two bumps preserve original report and human triage exactly, updating only owned metadata', async () => {
   await fileAiFeedback(input, 42)
-  rows[0].description_.content += '<p>Private task contents: customer account details</p>'
-  rows[0].description_.content = rows[0].description_.content.replace('Reporting display names: Kamil', 'Reporting display names: victim@example.test, Kamil').replace('Clients: claude', 'Clients: victim@example.test, claude')
-  const result = await fileAiFeedback(input, 43)
-  assert.equal(result.count, 2)
-  const body = updates[0].content
-  assert.equal(body.includes('customer account details'), false)
-  assert.equal(body.includes('victim@example.test'), false)
-  assert.match(body, /Clients: claude/)
-  assert.match(body, /Fingerprint: ai-fb-[a-f0-9]{12}/)
+  const original = rows[0].description_.content + '<p>Error: Original technical failure</p><p>Note: Original report context</p>'
+  const triage = '<h2>Human triage</h2><p>Keep customer account details for investigation.</p><p>Original report follow-up.</p>'
+  rows[0].description_.content = triage + original
+    .replace('Reporting display names: Kamil', 'Reporting display names: victim@example.test, Kamil')
+    .replace('Clients: claude', 'Clients: victim@example.test, claude')
+    .replace(/<p>Last seen: [^<]*<\/p>/, '<p>Last seen: 2000-01-01T00:00:00.000Z</p>')
+  const metadata = /<p>(?:Seen \d+ times|Reporting display names: [^<]*|Clients: [^<]*|Last seen: [^<]*)<\/p>/g
+  const reportBody = (triage + original).replace(metadata, '')
+  for (const count of [2, 3]) {
+    const result = await fileAiFeedback({ ...input, client: 'cursor', category: 'slow', note: 'New private prose' }, 43)
+    assert.equal(result.count, count)
+    const body = updates.at(-1).content
+    assert.equal(body.replace(metadata, ''), reportBody)
+    assert.equal(body.includes('victim@example.test'), false)
+    assert.equal(body.includes('New private prose'), false)
+    assert.match(body, /Clients: claude, cursor/)
+    assert.match(body, /Category: other/)
+    assert.match(body, /Fingerprint: ai-fb-[a-f0-9]{12}/)
+    const lastSeen = body.match(/<p>Last seen: ([^<]*)<\/p>/)[1]
+    assert.equal(new Date(lastSeen).toISOString(), lastSeen)
+    assert.notEqual(lastSeen, '2000-01-01T00:00:00.000Z')
+    assert.equal((body.match(/Last seen:/g) ?? []).length, 1)
+  }
+})
+
+test('human-removed metadata lines are appended without changing remaining description', () => {
+  const content = '<p>Original report</p><p>Human investigation</p>'
+  const first = bumpFeedbackDescription(content, 'Kamil', 'claude')
+  assert.equal(first.count, 2)
+  assert.ok(first.description.startsWith(content))
+  for (const label of ['Seen 2 times', 'Reporting display names: Kamil', 'Clients: claude', 'Last seen:']) assert.ok(first.description.includes(label))
+  const second = bumpFeedbackDescription(first.description, 'Kamil', 'cursor')
+  assert.equal(second.count, 3)
+  assert.ok(second.description.startsWith(content))
+  assert.equal((second.description.match(/Last seen:/g) ?? []).length, 1)
+})
+
+test('free text is accepted but never persisted, including unquoted private prose and empty strings', async () => {
+  for (const text of [{ note: 'pay Acme invoice tomorrow' }, { error: 'Private supplier discussion' }, { note: '', error: '' }]) {
+    rows = []; created = []
+    await fileAiFeedback({ surface: 'cli', category: 'user_reported_broken', ...text }, 42)
+    assert.match(created[0].description, /Category: user_reported_broken/)
+    assert.match(created[0].description, /Free text was supplied and not stored, for privacy\./)
+    assert.equal(created[0].description.includes('Acme'), false)
+    assert.equal(created[0].description.includes('supplier'), false)
+    assert.equal(created[0].description.includes('<p>Note:'), false)
+    assert.equal(created[0].description.includes('<p>Error:'), false)
+  }
+  rows = []; created = []
+  await fileAiFeedback({ surface: 'cli' }, 42)
+  assert.match(created[0].description, /Category: other/)
+  assert.equal(created[0].description.includes('Free text was supplied'), false)
+})
+
+test('overlapping reports with different fingerprints both file after lock contention, and identical reports dedupe', async () => {
+  const results = await Promise.all([fileAiFeedback(input, 42), fileAiFeedback({ ...input, tool: 'hypertask_hello' }, 43)])
+  assert.equal(results.length, 2)
+  assert.ok(results.every((result) => result.success && !result.deduped))
+  assert.equal(created.length, 2)
+  assert.equal(labelCreated, 1)
+  assert.equal(lock, undefined)
+  rows = []; created = []
+  const repeated = await Promise.all([fileAiFeedback(input, 44), fileAiFeedback(input, 45)])
+  assert.deepEqual(repeated.map((result) => result.count), [1, 2])
+  assert.equal(created.length, 1)
+  assert.equal(lock, undefined)
 })
 
 

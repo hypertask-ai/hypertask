@@ -1,12 +1,16 @@
 import { waitUntil } from '@vercel/functions'
-import type { AiFeedbackInput } from './input'
+import { aiFeedbackSchema, type AiFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
 export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
   // Keep imports, flag evaluation and storage entirely off the response path.
   try {
-    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(input, userId)).catch(() => {}))
+    const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
+    for (const field of ['tool', 'client', 'errorCode'] as const) {
+      if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
+    }
+    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {}))
   } catch {
     // Background scheduling is best effort outside Vercel too.
   }

@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const path = require('node:path')
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
-const expected = 'HTPR-7195 [FEATURE] AI clients file their own anonymous feedback to board 15'
+const expected = 'HTPR-7195 Fail closed on free text, reject secrets, keep report history, retry lock'
 assert.equal(process.cwd(), '/home/valentin/projects/hypertask-htpr-7195')
 assert.equal(git('branch', '--show-current'), 'htpr-7195-ai-feedback')
 assert.equal(git('log', '-1', '--format=%s'), expected)

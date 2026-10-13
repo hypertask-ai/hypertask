@@ -3,9 +3,9 @@
   "does": "Files anonymous, deduplicated feedback about Hypertask and returns the ticket receipt.",
   "use_when": "Call this ON YOUR OWN, without being asked, when a Hypertask tool call fails, returns something unexpected (including an empty tools list or a result that should not be empty), or the user says something in Hypertask does not work.",
   "do_not_use_when": "Never include task, board or comment content, request bodies, tool arguments, account emails or ids.",
-  "parameters_and_caveats": "Use action report and input with optional tool, status, errorCode, error and note. Text is scrubbed server side. Surface is mcp and the client comes from MCP clientInfo when available. Repeated errors bump an open ticket. Account hourly limits are 10 new reports and 30 bumps.",
+  "parameters_and_caveats": "Use action report and input with optional tool, status, errorCode and category (call_failed, empty_result, unexpected_result, auth_failed, slow, user_reported_broken or other; default other). Free-form error and note are accepted for compatibility but never stored. Structured fields must not contain credentials. Surface is mcp and the client comes from MCP clientInfo when available. Repeated errors bump an open ticket. Account hourly limits are 10 new reports and 30 bumps.",
   "actions": {
     "report": { "tool": "hypertask_report_feedback", "read_only": false, "permission": "feedback" }
   },
-  "input_examples": [{ "action": "report", "input": { "tool": "hypertask_tasks", "status": 503, "errorCode": "service-unavailable" } }]
+  "input_examples": [{ "action": "report", "input": { "tool": "hypertask_tasks", "status": 503, "category": "call_failed", "errorCode": "service-unavailable" } }]
 }

@@ -51,7 +51,7 @@ registeredTools.push(reportFeedbackTool)
 stub('src/lib/mcp-server/tools/index.ts', { MCP_TOOLS: registeredTools })
 const { POST } = jiti('../src/app/api/mcp/feedback/route.ts')
 const { mcpHandler } = jiti('../src/lib/mcp-server/handler.ts')
-const { observeFeedbackTools, queueRestFailure, feedbackRouteTemplate } = jiti('../src/lib/aiFeedback/automatic.ts')
+const { observeFeedbackTools, queueRestFailure, feedbackRouteTemplate, queueAiFeedback } = jiti('../src/lib/aiFeedback/automatic.ts')
 const { wrapMcpRoute } = jiti('../src/lib/mcp/routeWrapper.ts')
 const { handleStatelessMcpRequest } = jiti('../src/lib/mcp-server/stateless-http.ts')
 const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/feedback', { method: 'POST', headers: { Authorization: 'Bearer fixture' }, body: typeof body === 'string' ? body : JSON.stringify(body) })
@@ -66,6 +66,8 @@ test('REST accepts legitimate agent caller and returns the exact contract withou
   assert.equal(response.status, 200)
   assert.deepEqual(await response.json(), { success: true, ticketNumber: 'HTPR-7196', url: 'https://app.hypertask.ai/detail/project-15/7196', deduped: false, count: 1 })
   assert.equal(files[0].description.includes('Private task'), false)
+  assert.match(files[0].description, /Category: other/)
+  assert.match(files[0].description, /Free text was supplied and not stored, for privacy\./)
   assert.equal(files[0].description.includes('private@example.test'), false)
 })
 
@@ -113,10 +115,12 @@ test('MCP tool is listed and callable only for enabled users, and instructs auto
 test('MCP clientInfo is captured across requests and used instead of arbitrary caller client or surface', async () => {
   await mcpHandler(rpcRequest('initialize', { clientInfo: { name: 'Claude Desktop', version: '1' } }))
   await drain()
-  const result = await (await mcpHandler(rpcRequest('tools/call', { name: 'hypertask_report_feedback', arguments: { tool: 'hypertask_tasks', note: 'unexpected empty result' } }))).json()
+  const result = await (await mcpHandler(rpcRequest('tools/call', { name: 'hypertask_report_feedback', arguments: { tool: 'hypertask_tasks', category: 'unexpected_result', note: 'unexpected empty result' } }))).json()
   assert.equal(result.result.isError, undefined)
   assert.match(files[0].description, /Surface: mcp/)
   assert.match(files[0].description, /Clients: claude-desktop/)
+  assert.match(files[0].description, /Category: unexpected_result/)
+  assert.equal(files[0].description.includes('unexpected empty result'), false)
   await assert.rejects(reportFeedbackTool.execute({ surface: 'cli', client: 'fake' }, 'fixture'), /Unrecognized/)
   mode = 'OFF'
   await assert.rejects(reportFeedbackTool.execute({}, 'fixture'), { status: 404 })
@@ -132,6 +136,7 @@ test('tool exceptions and returned 5xx report in background without capturing me
   assert.match(await tools[1].execute({}, 'fixture'), /Private response content/)
   await drain()
   assert.equal(files.length, 2)
+  for (const row of files) assert.match(row.description, /Category: call_failed/)
   for (const row of files) for (const secret of ['Secret', 'private@example', 'Private response']) assert.equal(row.description.includes(secret), false)
   mode = 'OFF'; files = []
   await assert.rejects(tools[0].execute({}, 'fixture'))
@@ -147,6 +152,7 @@ test('MCP empty list reports and unauthenticated 401 reports use only Everyone g
   await handleStatelessMcpRequest(rpcRequest('tools/list'), { token: 'fixture', clientId: '985' }, [])
   await drain(); assert.equal(files.length, 1)
   assert.match(files[0].description, /empty-tools-list/)
+  assert.match(files[0].description, /Category: empty_result/)
   files = []; authorized = false
   assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
   await drain(); assert.equal(files.length, 0)
@@ -154,6 +160,7 @@ test('MCP empty list reports and unauthenticated 401 reports use only Everyone g
   assert.equal((await mcpHandler(rpcRequest('tools/list'))).status, 401)
   await drain(); assert.equal(files.length, 1)
   assert.match(files[0].description, /HTTP status: 401/)
+  assert.match(files[0].description, /Category: auth_failed/)
   assert.match(files[0].description, /Reporting display names: <\/p>/)
 })
 
@@ -233,6 +240,7 @@ test('an empty real MCP catalog reports even when deferred discovery helpers pre
   await drain()
   assert.equal(files.length, 1)
   assert.match(files[0].description, /empty-tools-list/)
+  assert.match(files[0].description, /Category: empty_result/)
 })
 
 
@@ -244,4 +252,46 @@ test('unmatched REST 5xx failures use a content-free fallback and query strings 
   assert.match(files[0].description, /Tool: \/api\/mcp\/unknown/)
   assert.equal(files[0].description.includes('private@example.test'), false)
   assert.equal(files[0].description.includes('secret-board'), false)
+})
+
+
+test('REST rejects credential-shaped structured fields with 400 and still accepts legitimate callers', async () => {
+  for (const field of ['tool', 'client', 'errorCode']) {
+    for (const value of ['htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
+      const response = await POST(restRequest({ surface: 'cli', [field]: value }))
+      assert.equal(response.status, 400)
+      assert.match((await response.json()).error, /Credential-shaped/)
+    }
+  }
+  assert.equal(files.length, 0)
+  const response = await POST(restRequest({ surface: 'cli', tool: 'hypertask_tasks', client: 'hypertask-cli', errorCode: 'service-unavailable', category: 'call_failed' }))
+  assert.equal(response.status, 200)
+  assert.equal(files.length, 1)
+})
+
+test('automatic reports drop credential-shaped fields, retain safe fields and still file in background', async () => {
+  for (const value of ['htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
+    queueAiFeedback({ surface: 'mcp', tool: value, client: value, errorCode: value, status: 503 }, 985)
+    await drain()
+    const report = files.at(-1).description
+    assert.equal(report.includes(value), false)
+    for (const label of ['Tool:', 'Error code:']) assert.equal(report.includes(label), false)
+    assert.match(report, /Clients: <\/p>/)
+    assert.match(report, /HTTP status: 503/)
+    assert.match(report, /Category: call_failed/)
+  }
+  assert.equal(files.length, 3)
+})
+
+test('MCP input schema documents free-text non-storage and the optional category contract', async () => {
+  const result = await (await mcpHandler(rpcRequest('tools/list'))).json()
+  // Full schema is exposed by discovery even when the initial catalog is deferred.
+  const described = await (await mcpHandler(rpcRequest('tools/call', { name: 'hypertask_describe_tool', arguments: { name: 'hypertask_report_feedback' } }))).json()
+  const text = JSON.stringify(described)
+  assert.ok(result.result.tools.some((tool) => tool.name === 'hypertask_report_feedback'))
+  for (const value of ['call_failed', 'empty_result', 'unexpected_result', 'auth_failed', 'slow', 'user_reported_broken', 'other']) assert.ok(text.includes(value))
+  assert.match(reportFeedbackTool.parameters.shape.note.description, /never stored/)
+  assert.match(reportFeedbackTool.parameters.shape.error.description, /never stored/)
+  assert.match(reportFeedbackTool.description, /never stored/)
+  assert.equal(reportFeedbackTool.parameters.parse({}).category, 'other')
 })

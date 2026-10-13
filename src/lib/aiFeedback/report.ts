@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { setTimeout } from 'node:timers/promises'
 import prisma from '@/lib/prisma'
 import { getRedis } from '@/lib/redis'
 import { aiFeedbackEnabled } from './enabled'
@@ -38,50 +39,32 @@ function reportingNames(content: string, label: string, value?: string): string[
   return [...new Set(values)].slice(0, MAX_REPORTERS)
 }
 
-export function bumpFeedbackDescription(content: string, displayName?: string, client?: string, reportBody = '') {
+export function bumpFeedbackDescription(content: string, displayName?: string, client?: string) {
   const previous = Number(content.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
   const count = Number.isSafeInteger(previous) && previous > 0 ? previous + 1 : 2
   const reporters = reportingNames(content, 'Reporting display names', displayName)
   const clients = reportingNames(content, 'Clients', client)
-  const body = reportBody.replace(/<p>Seen \d+ times<\/p>|<p>Reporting display names: [^<]*<\/p>|<p>Clients: [^<]*<\/p>/g, '')
-  return { count, description: `${body}<p>Seen ${count} times</p>${reporterLine('Reporting display names', reporters)}${reporterLine('Clients', clients)}` }
-}
-
-// The reporter's own task and board titles never reach board 15, even unquoted.
-async function reporterTitles(userId?: number): Promise<string[]> {
-  if (userId === undefined) return []
-  const [tasks, projects] = await Promise.all([
-    prisma.task.findMany({
-      where: { OR: [{ userId }, { assignees: { some: { userId } } }] },
-      orderBy: { id: 'desc' }, take: 500, select: { title: true },
-    }),
-    prisma.project.findMany({
-      where: { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
-      take: 200, select: { title: true, name: true },
-    }),
-  ])
-  return [...tasks.map((task) => task.title), ...projects.flatMap((project) => [project.title, project.name])]
-    .filter((title): title is string => typeof title === 'string' && title.trim().length >= 4)
-}
-
-export function removeTitles(text: string, titles: string[]): string {
-  let result = text
-  const unique = [...new Set(titles.map((title) => title.trim()))].sort((a, b) => b.length - a.length)
-  for (const title of unique) {
-    if (!result.toLowerCase().includes(title.toLowerCase())) continue
-    result = result.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ')
+  const metadata: [RegExp, string][] = [
+    [/<p>Seen \d+ times<\/p>/g, `<p>Seen ${count} times</p>`],
+    [/<p>Reporting display names: [^<]*<\/p>/g, reporterLine('Reporting display names', reporters)],
+    [/<p>Clients: [^<]*<\/p>/g, reporterLine('Clients', clients)],
+    [/<p>Last seen: [^<]*<\/p>/g, `<p>Last seen: ${new Date().toISOString()}</p>`],
+  ]
+  let description = content
+  for (const [pattern, line] of metadata) {
+    description = description.match(pattern) ? description.replace(pattern, () => line) : description + line
   }
-  return result.replace(/\s+/g, ' ').trim()
+  return { count, description }
 }
 
-function description(input: AiFeedbackInput, fingerprint: string, displayName?: string, titles: string[] = []) {
+function description(input: AiFeedbackInput, fingerprint: string, displayName?: string) {
   const rows = [
     ['Surface', input.surface], ['Tool', input.tool], ['HTTP status', input.status],
-    ['Error code', input.errorCode], ['Error', removeTitles(scrubFeedbackText(input.error ?? ''), titles)],
-    ['Note', removeTitles(scrubFeedbackText(input.note ?? ''), titles)],
+    ['Error code', input.errorCode], ['Category', input.category ?? 'other'],
   ].filter(([, value]) => value !== undefined && value !== '')
   return rows.map(([label, value]) => `<p>${label}: ${escapeHtml(String(value))}</p>`).join('') +
-    `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p><p>Seen 1 times</p>` +
+    (input.note !== undefined || input.error !== undefined ? '<p>Free text was supplied and not stored, for privacy.</p>' : '') +
+    `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p><p>Seen 1 times</p><p>Last seen: ${new Date().toISOString()}</p>` +
     reporterLine('Reporting display names', displayName ? [displayName] : []) +
     reporterLine('Clients', input.client ? [input.client] : [])
 }
@@ -99,8 +82,10 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
   // Serialize destination writes, including label creation and dedupe across accounts.
   const lockKey = 'ai-feedback:destination-lock'
   const lockToken = randomUUID()
-  if (await redis.set(lockKey, lockToken, 'EX', 300, 'NX') !== 'OK') {
-    throw new AiFeedbackError(503, 'Feedback is busy, try again shortly')
+  for (let attempt = 0; ; attempt++) {
+    if (await redis.set(lockKey, lockToken, 'EX', 300, 'NX') === 'OK') break
+    if (attempt === 19) throw new AiFeedbackError(503, 'Feedback is busy, try again shortly')
+    await setTimeout(250)
   }
   try {
     const [project, user, doneSections] = await Promise.all([
@@ -132,9 +117,8 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       select: { id: true, ticketNumber: true, uniqueIndex: true, description_: { select: { content: true } } },
     })
     if (!await reserveFeedbackQuota(userId, Boolean(existing))) throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
-    const titles = await reporterTitles(userId)
     if (existing) {
-      const bump = bumpFeedbackDescription(existing.description_?.content ?? '', displayName, input.client, description(input, fingerprint, undefined, titles))
+      const bump = bumpFeedbackDescription(existing.description_?.content ?? '', displayName, input.client)
       await upsertTaskDescription({ taskId: existing.id, creatorId: actorId, actingUserId: actorId, content: bump.description })
       void broadcastTaskChange(existing.id).catch(() => {})
       return receipt(existing, true, bump.count, project.uniqueIdentifier)
@@ -143,7 +127,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       await prisma.label.create({ data: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
     const { task } = await createTaskCore({
       title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-      description: description(input, fingerprint, displayName, titles),
+      description: description(input, fingerprint, displayName),
       userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
       projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
       priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,
