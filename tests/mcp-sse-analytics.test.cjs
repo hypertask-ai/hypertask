@@ -128,7 +128,9 @@ test('transport analytics evaluates the catalog flag through an isolated fixture
   authenticated = false
   try {
     assert.equal((await call('/sse')).status, 401)
-    assert.deepEqual(flagChecks, [])
+    assert.deepEqual(flagChecks, [
+      { key: 'htpr-7190-mcp-resource-host', userId: 0 },
+    ])
   } finally {
     authenticated = true
   }

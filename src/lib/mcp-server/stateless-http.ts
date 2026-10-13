@@ -5,6 +5,7 @@ import type { AuthInfo } from '@modelcontextprotocol/sdk/server/auth/types.js'
 import { listToolsDeferred, parseStructuredContent, toolsForConnect } from './deferred-tools'
 import { listMetaTools } from './deferred-tools'
 import { executeToolResult, toolErrorResult } from './tool-response'
+import { getMcpRequestOrigin } from './resource-url'
 
 export const MCP_SERVER_INFO = {
   name: 'hyperTask',
@@ -61,8 +62,9 @@ const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Expose-Headers': 'MCP-Protocol-Version, WWW-Authenticate',
 }
 
-export function mcpUnauthorizedResponse(request: Request): Response {
-  const resourceUrl = new URL(RESOURCE_METADATA_PATH, request.url).href
+export async function mcpUnauthorizedResponse(request: Request): Promise<Response> {
+  const origin = await getMcpRequestOrigin(request)
+  const resourceUrl = new URL(RESOURCE_METADATA_PATH, origin ?? request.url).href
   return new Response(
     JSON.stringify({
       jsonrpc: '2.0',

@@ -3,7 +3,8 @@ const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
 const { root, loader } = require('./htpr-6927-fixtures.cjs')
-const load = loader()
+const flagOff = { '@/lib/flags': { isFeatureEnabled: async () => false } }
+const load = loader(flagOff)
 const { TOOL_NAMES } = load('src/lib/mcp-server/config/tool-metadata.ts')
 const definitions = load('src/lib/mcp-server/config/consolidated-descriptions.ts').CONSOLIDATED_TOOL_DESCRIPTIONS
 const { validateToolNames } = load('src/lib/mcp-server/config/mcp-standards.ts')
@@ -39,12 +40,12 @@ test('name validation rejects duplicates, missing prefixes, invalid characters a
   validateCatalog(['hypertask_good.name-1', `hypertask_${'a'.repeat(118)}`])
 })
 
-test('protected-resource metadata advertises the canonical MCP resource and OAuth server', async () => {
+test('protected-resource metadata advertises the canonical MCP resource and OAuth server with the host fix off', async () => {
   const original = process.env.NEXT_PUBLIC_MCP_SERVER_URL
   delete process.env.NEXT_PUBLIC_MCP_SERVER_URL
   try {
-    const route = loader()('src/app/.well-known/oauth-protected-resource/route.ts')
-    const response = route.GET()
+    const route = loader(flagOff)('src/app/.well-known/oauth-protected-resource/route.ts')
+    const response = await route.GET(new Request('https://app.hypertask.ai/.well-known/oauth-protected-resource'))
     assert.equal(response.status, 200)
     assert.equal(response.headers.get('Access-Control-Allow-Origin'), '*')
     assert.deepEqual(await response.json(), {
@@ -55,7 +56,7 @@ test('protected-resource metadata advertises the canonical MCP resource and OAut
     assert.equal(options.status, 204)
     assert.equal(options.headers.get('Access-Control-Allow-Methods'), 'GET, OPTIONS')
     process.env.NEXT_PUBLIC_MCP_SERVER_URL = 'https://mcp.fixture.invalid/mcp'
-    assert.equal((await loader()('src/app/.well-known/oauth-protected-resource/route.ts').GET().json()).resource, process.env.NEXT_PUBLIC_MCP_SERVER_URL)
+    assert.equal((await (await loader(flagOff)('src/app/.well-known/oauth-protected-resource/route.ts').GET(new Request('https://app.hypertask.ai/.well-known/oauth-protected-resource'))).json()).resource, process.env.NEXT_PUBLIC_MCP_SERVER_URL)
   } finally {
     if (original === undefined) delete process.env.NEXT_PUBLIC_MCP_SERVER_URL
     else process.env.NEXT_PUBLIC_MCP_SERVER_URL = original
@@ -101,7 +102,7 @@ test('unauthorized MCP challenges link to discoverable protected-resource metada
     assert.equal(url.pathname, '/.well-known/oauth-protected-resource')
     assert.ok(response.headers.get('Access-Control-Expose-Headers').includes('WWW-Authenticate'))
     assert.equal((await response.json()).error.code, -32001)
-    assert.equal(load(`src/app${url.pathname}/route.ts`).GET().status, 200)
+    assert.equal((await load(`src/app${url.pathname}/route.ts`).GET(new Request(url))).status, 200)
   }
 })
 
