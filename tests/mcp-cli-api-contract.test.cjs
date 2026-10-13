@@ -113,7 +113,10 @@ test("opt-in seed creates accepted guest without a team and an invite-only contr
         return { ...data, id, UserSetting: { id } };
       }, update: async () => {} },
       userPicture: { create: async () => {} },
-      user_Activity: { create: async ({ data }) => assert.equal(data.totalTeamsOwned, 0) },
+      googleAccount: { create: async () => ({ id: "contract-account" }) },
+      team: { create: async () => ({ id: "contract-team" }) },
+      team_Activity: { create: async () => {} },
+      user_Activity: { create: async ({ data }) => assert.equal(data.totalTeamsOwned, data.userId === users.length + 9 && users.length === 1 ? 1 : 0) },
       member_Team: { create: async ({ data }) => teams.push(data), count: async ({ where }) => teams.filter(row => where.userId.in.includes(row.userId)).length },
       member: { createMany: async ({ data }) => memberships.push(...data) },
       invite: { createMany: async ({ data }) => invites.push(...data) },
@@ -127,8 +130,9 @@ test("opt-in seed creates accepted guest without a team and an invite-only contr
       assert.equal(users.length + memberships.length + teams.length + invites.length + files.length, 0);
       continue;
     }
-    assert.equal(users.length, 3);
-    assert.deepEqual(teams.map(row => row.userId), [result.callers.member.id]);
+    assert.equal(users.length, 4);
+    assert.notEqual(result.callers.owner.id, 1);
+    assert.deepEqual(teams.map(row => row.userId), [result.callers.owner.id, result.callers.member.id]);
     for (const board of result.boards) {
       assert.deepEqual(memberships.filter(row => row.projectId === board.id).map(row => [row.userId, row.status]),
         [[result.callers.member.id, "Accepted"], [result.callers.guest.id, "Accepted"]]);
