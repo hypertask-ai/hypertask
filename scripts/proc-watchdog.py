@@ -10,7 +10,7 @@ premerge-local-sweep (12 h, marker-only) is retired: --install disables its time
 A matched tree stops when its root is older than 2 hours or any member exceeds 6 GiB,
 except premerge build roots marked PREMERGE_NEXT_BUILD=1, whose members may use up to 8 GiB.
 Only this user's processes are read. Claude, tmux, services and dev servers never match. Every stop is logged to
-~/.local/state/proc-watchdog/kills.log and INFRA MANAGER gets one warning per sweep through runner-deliver.
+~/.local/state/proc-watchdog/kills.log and HT Product Lead gets one warning per sweep through runner-deliver.
 
   proc-watchdog.py sweep        stop what is over the limits
   proc-watchdog.py --dry-run    list what would be stopped, stop nothing
@@ -244,7 +244,7 @@ def short(argv, n):
 
 
 def notify(message):
-    """Send to INFRA MANAGER; a message that cannot be delivered is kept and retried on the next sweep."""
+    """Send to HT Product Lead; a message that cannot be delivered is kept and retried on the next sweep."""
     pending = STATE / 'unsent.txt'
 
     def save(items):

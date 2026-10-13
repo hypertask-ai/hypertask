@@ -143,7 +143,7 @@ in place. Reinstall to update the installed copy. No crontab is used.
   existing `CI=true` / `GITHUB_ACTIONS` bypass skips both checks. A run below
   90% removes the flag.
 - Critical notifications reuse the fleet-watchdog Telegram route, addressed to
-  INFRA MANAGER, using the two `TELEGRAM_HYPERTASK_*` variables in
+  HT Product Lead, using the two `TELEGRAM_HYPERTASK_*` variables in
   `~/.config/hypertask-env.sh` or the environment. Attempts are limited to one
   per hour. Credentials and notification errors are never printed or logged.
 - Docker volumes other than leaked smoke volumes (cache category 1) are never

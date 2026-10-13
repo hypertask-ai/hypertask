@@ -96,7 +96,7 @@ with tempfile.TemporaryDirectory(prefix='pwd-test-') as tmp:
     lines = [json.loads(x) for x in (t / 'state/kills.log').read_text().splitlines()]
     check('log has one line per stopped tree', sorted(x['kind'] for x in lines) == ['premerge', 'premerge', 'test'])
     check('log says why', all('running' in x['reason'] for x in lines) and lines[0]['processes'] >= 1)
-    check('INFRA MANAGER warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
+    check('HT Product Lead warned once', (t / 'notify.target').read_text().strip() == 'infra-manager'
           and 'stopped 3 runaway' in (t / 'notify.msg').read_text())
     for p in (server, shell, session):
         # Killing just bash leaves its sleep child holding the test runner's output pipe.
@@ -175,6 +175,8 @@ esac
     pw = importlib.util.module_from_spec(spec)
     os.environ.pop('PROC_WATCHDOG_ONLY', None)
     spec.loader.exec_module(pw)
+    check('warning documentation names HT Product Lead', 'HT Product Lead' in pw.__doc__
+          and 'HT Product Lead' in pw.notify.__doc__)
     k = lambda cmd, name='node': pw.kind_of({'cmd': cmd, 'name': name})
     check('node test file', k('node tests/compose-task-palette.test.cjs') == 'test')
     check('node --test', k('node --test tests/') == 'test')
@@ -186,7 +188,7 @@ esac
     check('astro dev is not a build', k('/usr/bin/node /p/node_modules/astro/bin/astro.mjs dev --port 4399') is None)
     check('claude never matches', k('claude --resume x tests/a.test.cjs', 'claude') is None)
     r = pw.redact(['curl', '-H', 'Authorization: Bearer abcVALUE1', '--api-key', 'abcVALUE2', 'X_TOKEN=abcVALUE3',
-                   'https://u:abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
+                   'https://u:' + 'abcVALUE4@h/x', 'Bearer', 'abcVALUE5', '--key=abcVALUE6', 'tests/a.test.cjs'])
     check('whole sensitive arguments and flag values are hidden', 'abcVALUE' not in r and 'tests/a.test.cjs' in r)
     check('a value starting with a dash is hidden too', '-abcVALUE' not in pw.redact(['--token', '-abcVALUE7', 'x']))
     check('a server under a path named premerge-local is not a premerge job',

@@ -73,7 +73,7 @@ ux_signoff:
   context: ux-signoff
   workflow: .github/workflows/ux-signoff-gate.yml
   script: .github/scripts/ux-signoff-gate.mjs
-  # Infra Manager flips this after statuses are seeded on all open PRs.
+  # HT Product Lead flips this after statuses are seeded on all open PRs.
   required: false
 
 feature_flag_gate:

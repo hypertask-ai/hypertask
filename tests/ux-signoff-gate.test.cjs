@@ -536,7 +536,7 @@ test('CI policy records ux-signoff without making it required', () => {
   assert.match(section, /workflow: \.github\/workflows\/ux-signoff-gate\.yml/);
   assert.match(section, /script: \.github\/scripts\/ux-signoff-gate\.mjs/);
   assert.match(section, /required: false/);
-  assert.match(section, /Infra Manager.*statuses.*seeded.*all open PRs/);
+  assert.match(section, /HT Product Lead.*statuses.*seeded.*all open PRs/);
   for (const line of policy.split('\n').filter((line) => /contexts:|required_status_checks:/.test(line))) assert.ok(!line.includes('ux-signoff'));
 });
 
