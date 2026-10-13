@@ -190,6 +190,7 @@ const CommentsContainer = () => {
         tabIndex={i}
         id={`comment-${i}`}
         data-testid="ticket-comment"
+        data-task-comment-box={!comment.activity || undefined}
         onMouseDownCapture={rememberPressStart}
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}
@@ -246,6 +247,7 @@ const CommentsContainer = () => {
     };
     const commentBubble = (
       <div
+        data-task-comment-box
         className={`
                         rounded-sm
                         ${styles.hellow}
