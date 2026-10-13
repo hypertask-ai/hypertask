@@ -147,7 +147,7 @@ export default async function getProject(shareId: string) {
             })
         }
 
-        project.tasks = project.tasks.map(stripForeignTaskRelations);
+        if (project.tasks) project.tasks = project.tasks.map(stripForeignTaskRelations);
 
         // Process sections using the same logic as getAllProjects
         const projectAsIProject = project as unknown as IProject;
