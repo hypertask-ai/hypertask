@@ -14,10 +14,10 @@ let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false
 const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
 stub('src/lib/prisma.ts', { default: {
-  project: { findFirst: async () => ({ ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] }) },
+  project: { findFirst: async () => ({ ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] }), findMany: async () => [] },
   user: { findUnique: async () => ({ displayName: 'QA' }) },
   section: { findMany: async () => [] },
-  task: { findFirst: async () => null },
+  task: { findFirst: async () => null, findMany: async () => [] },
   label: { findFirst: async () => ({ id: 'ai-feedback' }) },
 } })
 stub('src/lib/flags.ts', {

@@ -47,11 +47,38 @@ export function bumpFeedbackDescription(content: string, displayName?: string, c
   return { count, description: `${body}<p>Seen ${count} times</p>${reporterLine('Reporting display names', reporters)}${reporterLine('Clients', clients)}` }
 }
 
-function description(input: AiFeedbackInput, fingerprint: string, displayName?: string) {
+// The reporter's own task and board titles never reach board 15, even unquoted.
+async function reporterTitles(userId?: number): Promise<string[]> {
+  if (userId === undefined) return []
+  const [tasks, projects] = await Promise.all([
+    prisma.task.findMany({
+      where: { OR: [{ userId }, { assignees: { some: { userId } } }] },
+      orderBy: { id: 'desc' }, take: 500, select: { title: true },
+    }),
+    prisma.project.findMany({
+      where: { OR: [{ ownerId: userId }, { members: { some: { userId } } }] },
+      take: 200, select: { title: true, name: true },
+    }),
+  ])
+  return [...tasks.map((task) => task.title), ...projects.flatMap((project) => [project.title, project.name])]
+    .filter((title): title is string => typeof title === 'string' && title.trim().length >= 4)
+}
+
+export function removeTitles(text: string, titles: string[]): string {
+  let result = text
+  const unique = [...new Set(titles.map((title) => title.trim()))].sort((a, b) => b.length - a.length)
+  for (const title of unique) {
+    if (!result.toLowerCase().includes(title.toLowerCase())) continue
+    result = result.replace(new RegExp(title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi'), ' ')
+  }
+  return result.replace(/\s+/g, ' ').trim()
+}
+
+function description(input: AiFeedbackInput, fingerprint: string, displayName?: string, titles: string[] = []) {
   const rows = [
     ['Surface', input.surface], ['Tool', input.tool], ['HTTP status', input.status],
-    ['Error code', input.errorCode], ['Error', scrubFeedbackText(input.error ?? '')],
-    ['Note', scrubFeedbackText(input.note ?? '')],
+    ['Error code', input.errorCode], ['Error', removeTitles(scrubFeedbackText(input.error ?? ''), titles)],
+    ['Note', removeTitles(scrubFeedbackText(input.note ?? ''), titles)],
   ].filter(([, value]) => value !== undefined && value !== '')
   return rows.map(([label, value]) => `<p>${label}: ${escapeHtml(String(value))}</p>`).join('') +
     `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p><p>Seen 1 times</p>` +
@@ -105,8 +132,9 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       select: { id: true, ticketNumber: true, uniqueIndex: true, description_: { select: { content: true } } },
     })
     if (!await reserveFeedbackQuota(userId, Boolean(existing))) throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
+    const titles = await reporterTitles(userId)
     if (existing) {
-      const bump = bumpFeedbackDescription(existing.description_?.content ?? '', displayName, input.client, description(input, fingerprint))
+      const bump = bumpFeedbackDescription(existing.description_?.content ?? '', displayName, input.client, description(input, fingerprint, undefined, titles))
       await upsertTaskDescription({ taskId: existing.id, creatorId: actorId, actingUserId: actorId, content: bump.description })
       void broadcastTaskChange(existing.id).catch(() => {})
       return receipt(existing, true, bump.count, project.uniqueIdentifier)
@@ -115,7 +143,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       await prisma.label.create({ data: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
     const { task } = await createTaskCore({
       title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-      description: description(input, fingerprint, displayName),
+      description: description(input, fingerprint, displayName, titles),
       userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
       projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
       priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,

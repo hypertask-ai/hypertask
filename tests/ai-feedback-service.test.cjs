@@ -27,13 +27,16 @@ stub('src/lib/redis.ts', { getRedis: async () => activeRedis })
 stub('src/lib/flags.ts', { isFeatureEnabled: async () => { if (failFlag) throw new Error('flag storage failed'); return enabled }, featureFlagCandidateUserIds: async () => { if (failFlag) throw new Error('flag storage failed'); return globalEnabled ? null : [6, 985] } })
 stub('src/lib/prisma.ts', { default: {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
-  project: { findFirst: async () => configured ? { ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] } : null },
+  project: {
+    findFirst: async () => configured ? { ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] } : null,
+    findMany: async (query) => query.where.OR[0].ownerId === 42 ? [{ title: 'Acme Launch Board', name: 'acme-launch' }] : [],
+  },
   section: { findMany: async () => [{ id: 222, section_title: 'Done' }, { id: 333, section_title: 'Shipped' }] },
   label: {
     findFirst: async (query) => { assert.deepEqual(query.where, { projectId: 15, value: 'ai-feedback' }); return labelCreated ? { id: 'label-ai' } : null },
     create: async (query) => { assert.deepEqual(query.data, { projectId: 15, value: 'ai-feedback' }); labelCreated++; return { id: 'label-ai' } },
   },
-  task: { findFirst: async (query) => {
+  task: { findMany: async (query) => query.where.OR[0].userId === 42 ? [{ title: 'Fire the Berlin supplier' }, { title: 'abc' }] : [], findFirst: async (query) => {
     taskQuery = query
     return rows.find((row) => row.status === query.where.status && ![222, 333].includes(row.sectionId) && !['Done', 'Shipped'].includes(row.section) && row.description_.content.includes(query.where.description_.is.content.contains)) ?? null
   } },
@@ -89,6 +92,13 @@ test('same fingerprint across accounts and notes bumps one open report, deduping
   assert.equal(content.match(/Clients: ([^<]*)/)[1].split(', ').length, 10)
   assert.match(content, /Seen 32 times/)
   assert.equal((content.match(/Seen /g) ?? []).length, 1)
+})
+
+test('unquoted task and board titles of the reporting account never reach the report', async () => {
+  await fileAiFeedback({ ...input, error: undefined, note: 'tasks list failed while I opened fire the berlin supplier on Acme Launch Board, abc stays' }, 42)
+  const text = created[0].description
+  for (const secret of ['Berlin', 'berlin', 'Acme', 'acme']) assert.equal(text.includes(secret), false)
+  assert.match(text, /tasks list failed while I opened on , abc stays/)
 })
 
 test('escaped reporting display names survive dedupe without injecting HTML', () => {
