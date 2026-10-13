@@ -277,7 +277,8 @@ async function seedSessionFixtures(flags) {
   let contract;
   if (contractEnabled) {
     const callers = {};
-    for (const role of ["member", "guest", "unaccepted"]) {
+    let contractGoogleAccount, contractTeam;
+    for (const role of ["owner", "member", "guest", "unaccepted"]) {
       const caller = await prisma.user.create({
         data: {
           uid: `contract-${role}-${runKey}`,
@@ -287,27 +288,43 @@ async function seedSessionFixtures(flags) {
         },
         include: { UserSetting: true },
       });
-      await prisma.user.update({ where: { id: caller.id }, data: { UserSettingId: caller.UserSetting.id } });
+      if (role === "owner") {
+        contractGoogleAccount = await prisma.googleAccount.create({ data: {
+          userId: caller.id, stripe_customer_id: `contract-${runKey}`,
+        } });
+        contractTeam = await prisma.team.create({ data: {
+          title: "MCP contract", totalSeats: 2, googleAccountId: contractGoogleAccount.id,
+        } });
+        await prisma.team_Activity.create({ data: { teamId: contractTeam.id, lastActiviyAt: new Date() } });
+        await prisma.member_Team.create({ data: {
+          userId: caller.id, teamId: contractTeam.id, googleAccountId: contractGoogleAccount.id,
+          status: "Accepted", acceptedAt: new Date(),
+        } });
+        caller.accountId = contractGoogleAccount.id;
+      }
+      await prisma.user.update({ where: { id: caller.id }, data: {
+        UserSettingId: caller.UserSetting.id, ...(role === "owner" ? { accountId: caller.accountId } : {}),
+      } });
       await prisma.userPicture.create({ data: { userId: caller.id, displayName: caller.displayName } });
-      await prisma.user_Activity.create({ data: { userId: caller.id, totalTeamsOwned: 0, lastActiveAt: new Date() } });
+      await prisma.user_Activity.create({ data: { userId: caller.id, totalTeamsOwned: role === "owner" ? 1 : 0, lastActiveAt: new Date() } });
       callers[role] = { id: caller.id, cookies: [
         { name: "ht_session", value: signSession({ id: caller.id, email: caller.email }) },
         { name: "nookies_user", value: encodeURIComponent(JSON.stringify({ ...caller, UserSettingId: caller.UserSetting.id })) },
       ] };
     }
     await prisma.member_Team.create({ data: {
-      userId: callers.member.id, teamId: team.id, googleAccountId: googleAccount.id,
+      userId: callers.member.id, teamId: contractTeam.id, googleAccountId: contractGoogleAccount.id,
       status: "Accepted", acceptedAt: new Date(),
     } });
     const boards = [];
     for (const suffix of ["contract", "contract-target"]) {
-      const project = await createBoard({ ownerId: user.id, teamId: team.id, googleAccountId: googleAccount.id, title: `MCP contract ${suffix}`, suffix });
+      const project = await createBoard({ ownerId: callers.owner.id, teamId: contractTeam.id, googleAccountId: contractGoogleAccount.id, title: `MCP contract ${suffix}`, suffix });
       await prisma.member.createMany({ data: ["member", "guest"].map(role => ({
         projectId: project.id, userId: callers[role].id, status: "Accepted",
         invitedAt: new Date(), acceptedAt: new Date(),
       })) });
       await prisma.invite.createMany({ data: ["guest", "unaccepted"].map(role => ({
-        key: randomUUID(), userId: user.id, projectId: project.id,
+        key: randomUUID(), userId: callers.owner.id, projectId: project.id,
         emails: [`contract-${role}-${runKey}@example.invalid`],
         uses: role === "guest" ? 0 : 1,
       })) });
@@ -318,7 +335,7 @@ async function seedSessionFixtures(flags) {
     if (await prisma.member_Team.count({ where: { userId: { in: [callers.guest.id, callers.unaccepted.id] } } })) {
       throw new Error("Contract guest controls must not have team membership");
     }
-    contract = { callers: { owner: { id: user.id, cookies: state.cookies }, ...callers }, boards, flags };
+    contract = { callers, boards, flags };
     await writeFile(path.join(path.dirname(stateFile), "contract-fixture.json"), JSON.stringify(contract), { flag: "wx", mode: 0o600 });
   }
   await writeFile(fixtureFile, JSON.stringify({

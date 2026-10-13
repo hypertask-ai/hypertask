@@ -190,6 +190,7 @@ test("MCP CLI API contract reuses smoke server before reseeding with explicit pa
   assert.match(serve, /kill "\$server" "\$search"/);
   const contract = serve.indexOf("node scripts/mcp-cli-api-contract.mjs");
   assert.ok(contract > serve.indexOf("Local app did not become ready"));
+  assert.ok(contract < serve.indexOf("npx playwright test"));
   assert.ok(contract < serve.indexOf("--instant-open-control"));
   assert.ok(contract < serve.indexOf("--all-flags-on"));
   const cli = smoke.steps.find(step => step.name === "Download checksum-verified pinned native CLI");
