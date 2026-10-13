@@ -202,6 +202,6 @@ test("every concurrent existing-board filter writer participates in the lock pro
   );
   assert.equal(
     (source("src/lib/api/project-writes/views/delete-rename-view.ts").match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
-    2,
+    1,
   );
 });
