@@ -102,6 +102,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/configs/auth.config': { onboarding: { skipOnboarding, shouldSkipInteractive: true } },
     '@/lib/constants/constants': { companySizeOptions: ['Just me'], companyRoleOptions: ['Founder'] },
     '@/utils/controllers/users/update_or_create_user': async () => ({ status: 200, res: { user, isNewUser: !existing } }),
+    '@/utils/controllers/users/findUserByEmail': { findUserByEmail: (email) => prisma.user.findFirst({ where: { email } }) },
     '@/utils/controllers/users/autoJoinByEmailDomain': async () => {},
     '@/lib/auth/requestBaseUrl': { getRequestBaseUrl: () => 'https://app.hypertask.ai' },
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },

@@ -78,6 +78,7 @@ function makeHarness(redis = makeRedis()) {
       isFeatureEnabled: async key => key === 'htpr-7032-email-expiry-copy',
     },
     '@/utils/controllers/users/update_or_create_user': updateUser,
+    '@/utils/controllers/users/findUserByEmail': { findUserByEmail: (email) => prisma.user.findFirst({ where: { email } }) },
     '@/lib/configs/auth.config': { onboarding: { shouldSkipInteractive: true, skipOnboarding: true } },
     '@/utils/controllers/users/autoJoinByEmailDomain': { default: async () => {} },
     '@/utils/controllers/users/provisionFirstWorkspace': { provisionFirstWorkspace: async () => {} },
