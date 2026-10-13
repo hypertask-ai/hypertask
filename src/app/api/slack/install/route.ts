@@ -2,13 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
-import { createSlackOAuthState } from "@/lib/slack/oauthState";
+import {
+  createSlackOAuthNonce,
+  createSlackOAuthState,
+  SLACK_OAUTH_ATTEMPT_COOKIE,
+  SLACK_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
+} from "@/lib/slack/oauthState";
 import {
   findSoleAccessibleTeamId,
   hasTeamMembershipAccess,
 } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
-import { buildSlackAuthorizeUrl } from "@/lib/slack/authorize";
+import { buildSlackAuthorizeUrl, SLACK_REDIRECT_PATH } from "@/lib/slack/authorize";
 import { resolveSlackInstallTeamId } from "@/lib/slack/installTeam";
 
 export const dynamic = "force-dynamic";
@@ -48,12 +53,21 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  const nonce = createSlackOAuthNonce();
   authorizeUrl.searchParams.set(
     "state",
-    createSlackOAuthState({ teamId, userId: user.id }, clientSecret),
+    createSlackOAuthState({ nonce, teamId, userId: user.id }, clientSecret),
   );
 
-  return NextResponse.redirect(authorizeUrl);
+  const response = NextResponse.redirect(authorizeUrl);
+  response.cookies.set(SLACK_OAUTH_ATTEMPT_COOKIE, nonce, {
+    httpOnly: true,
+    maxAge: SLACK_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
+    path: SLACK_REDIRECT_PATH,
+    sameSite: "lax",
+    secure: new URL(getRequestBaseUrl(request)).protocol === "https:",
+  });
+  return response;
 }
 
 function settingsRedirect(
