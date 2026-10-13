@@ -463,7 +463,7 @@
         "hyperai": ["^hypertask_report_feedback$"]
       },
       "exclusions": {
-        "cli": "CLI clients use the authenticated feedback REST endpoint; no dedicated feedback command is registered.",
+        "cli": "The hypertask feedback command ships in hypertask-ai/cli and calls the REST endpoint; the pinned CLI inventory predates it.",
         "ai_chat": "Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool."
       }
     },
