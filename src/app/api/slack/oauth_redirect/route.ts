@@ -7,7 +7,12 @@ import { SLACK_SETTINGS_PATH } from "@/lib/auth/safeReturnTo";
 import { isFeatureEnabled } from "@/lib/flags";
 import { encryptSecret } from "@/lib/crypto/byokCipher";
 import { HTPR_4857_ADD_TO_SLACK_FLAG } from "@/lib/flags/keys";
-import { verifySlackOAuthState } from "@/lib/slack/oauthState";
+import {
+  SLACK_OAUTH_ATTEMPT_COOKIE,
+  slackOAuthNonceMatches,
+  verifySlackOAuthState,
+} from "@/lib/slack/oauthState";
+import { SLACK_REDIRECT_PATH } from "@/lib/slack/authorize";
 import { hasTeamMembershipAccess } from "@/utils/controllers/teams/hasTeamMembershipAccess";
 
 export const dynamic = "force-dynamic";
@@ -58,9 +63,19 @@ export async function GET(request: NextRequest) {
 
   const state = verifySlackOAuthState(rawState, clientSecret);
   if (!state) return redirectWithError(request, "invalid_state");
+  // HTPR-7157: only the browser and signed-in user that started the install may finish it.
+  if (
+    !slackOAuthNonceMatches(
+      state,
+      request.cookies.get(SLACK_OAUTH_ATTEMPT_COOKIE)?.value,
+    )
+  ) {
+    return redirectWithError(request, "invalid_state");
+  }
 
   const currentUser = await getServerCookieUser();
-  if (currentUser && currentUser.id !== state.userId) {
+  if (!currentUser) return redirectWithError(request, "signed_out");
+  if (currentUser.id !== state.userId) {
     return redirectWithError(request, "user_mismatch");
   }
   if (!(await hasTeamMembershipAccess(state.userId, state.teamId))) {
@@ -145,7 +160,7 @@ export async function GET(request: NextRequest) {
 
     const destination = new URL("/settings/slack", request.url);
     destination.searchParams.set("slack_success", "connected");
-    return NextResponse.redirect(destination);
+    return clearAttemptCookie(NextResponse.redirect(destination));
   } catch (error) {
     console.error("Slack OAuth callback failed", error);
     return redirectWithError(request, "server_error");
@@ -155,5 +170,16 @@ export async function GET(request: NextRequest) {
 function redirectWithError(request: NextRequest, error: string) {
   const destination = new URL("/settings/slack", request.url);
   destination.searchParams.set("slack_error", error);
-  return NextResponse.redirect(destination);
+  return clearAttemptCookie(NextResponse.redirect(destination));
+}
+
+// The attempt cookie is single use: every callback outcome consumes it.
+function clearAttemptCookie(response: NextResponse) {
+  response.cookies.set(SLACK_OAUTH_ATTEMPT_COOKIE, "", {
+    httpOnly: true,
+    maxAge: 0,
+    path: SLACK_REDIRECT_PATH,
+    sameSite: "lax",
+  });
+  return response;
 }

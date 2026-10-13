@@ -1,14 +1,34 @@
-import { createHmac, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
+
+// HTPR-7157: the signed state is bound to the browser that started the install.
+// Its nonce is also in this HttpOnly cookie; the callback needs both to match.
+export const SLACK_OAUTH_ATTEMPT_COOKIE = "ht_slack_oauth_attempt";
+export const SLACK_OAUTH_ATTEMPT_MAX_AGE_SECONDS = STATE_TTL_MS / 1000;
 
 export type SlackOAuthState = {
   expiresAt: number;
   issuedAt: number;
+  nonce: string;
   teamId: string;
   userId: number;
-  version: 1;
+  version: 2;
 };
+
+export function newSlackInstallNonce(): string {
+  return randomBytes(32).toString("base64url");
+}
+
+export function slackOAuthNonceMatches(
+  state: Pick<SlackOAuthState, "nonce">,
+  cookieNonce: string | null | undefined,
+): boolean {
+  if (!cookieNonce) return false;
+  const expected = Buffer.from(state.nonce, "utf8");
+  const supplied = Buffer.from(cookieNonce, "utf8");
+  return expected.length === supplied.length && timingSafeEqual(expected, supplied);
+}
 
 function stateSignature(encodedPayload: string, secret: string): string {
   return createHmac("sha256", secret)
@@ -17,16 +37,17 @@ function stateSignature(encodedPayload: string, secret: string): string {
 }
 
 export function createSlackOAuthState(
-  input: { teamId: string; userId: number },
+  input: { nonce: string; teamId: string; userId: number },
   secret: string,
   nowMs = Date.now(),
 ): string {
   const payload: SlackOAuthState = {
     expiresAt: nowMs + STATE_TTL_MS,
     issuedAt: nowMs,
+    nonce: input.nonce,
     teamId: input.teamId,
     userId: input.userId,
-    version: 1,
+    version: 2,
   };
   const encodedPayload = Buffer.from(JSON.stringify(payload), "utf8").toString(
     "base64url",
@@ -64,7 +85,9 @@ export function verifySlackOAuthState(
       Buffer.from(encodedPayload, "base64url").toString("utf8"),
     ) as Partial<SlackOAuthState>;
     if (
-      payload.version !== 1 ||
+      payload.version !== 2 ||
+      typeof payload.nonce !== "string" ||
+      payload.nonce.length < 32 ||
       typeof payload.userId !== "number" ||
       !Number.isInteger(payload.userId) ||
       typeof payload.teamId !== "string" ||

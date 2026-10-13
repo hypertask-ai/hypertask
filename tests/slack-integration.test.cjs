@@ -81,8 +81,9 @@ test("Slack OAuth state is signed, team-bound, and short-lived", () => {
   );
   const secret = "slack-client-secret";
   const nowMs = 1_800_000_000_000;
+  const nonce = "n".repeat(43);
   const state = createSlackOAuthState(
-    { teamId: "team-a", userId: 42 },
+    { nonce, teamId: "team-a", userId: 42 },
     secret,
     nowMs,
   );
@@ -90,9 +91,10 @@ test("Slack OAuth state is signed, team-bound, and short-lived", () => {
   assert.deepEqual(verifySlackOAuthState(state, secret, nowMs), {
     expiresAt: nowMs + 10 * 60 * 1000,
     issuedAt: nowMs,
+    nonce,
     teamId: "team-a",
     userId: 42,
-    version: 1,
+    version: 2,
   });
   assert.equal(verifySlackOAuthState(`${state}x`, secret, nowMs), null);
   assert.equal(verifySlackOAuthState(state, "wrong-secret", nowMs), null);
