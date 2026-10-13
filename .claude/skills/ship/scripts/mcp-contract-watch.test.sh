@@ -19,6 +19,10 @@ MODE = sys.argv[2] if len(sys.argv) > 2 else ''
 if MODE == '--dedupe-probe':
     SCRIPT = Path(sys.argv[3]).resolve()
 TOKEN = 'private-test-credential-never-log-this'
+ROTATED_TOKEN = 'rotated-test-credential-never-log-this'
+COOKIE = 'private-browser-cookie-never-log-this'
+APP_COOKIE = 'private-app-cookie-never-log-this'
+OTHER_COOKIE = 'unrelated-cookie-never-log-this'
 
 MOCK = r'''#!/usr/bin/env python3
 import json, os
@@ -97,6 +101,8 @@ class Harness:
         self.home = Path(self.temp.name)
         self.script = script
         self.requests = []
+        self.rotations = []
+        self.current_token = TOKEN
         self.fixture = dict(mode='green', secret=TOKEN)
         self.bin = self.home / 'bin'
         self.bin.mkdir()
@@ -118,15 +124,37 @@ class Harness:
                 pass
 
             def do_POST(self):
+                request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+                if self.path == '/api/mcp/admin/agents/watcher-agent/token':
+                    assert request == {}
+                    assert 'Authorization' not in self.headers
+                    assert self.headers['Cookie'] == 'session=' + COOKIE + '; app-session=' + APP_COOKIE
+                    harness.rotations.append(dict(path=self.path, body=request))
+                    status = harness.fixture.get('rotate_status', 200)
+                    body = {'error': COOKIE} if status != 200 else {'token': ROTATED_TOKEN}
+                    if harness.fixture.get('rotate_no_token'):
+                        body = {'error': COOKIE}
+                    if status == 200 and 'token' in body:
+                        harness.current_token = ROTATED_TOKEN
+                    data = json.dumps(body).encode()
+                    self.send_response(status)
+                    self.send_header('Content-Type', 'application/json')
+                    self.send_header('Content-Length', str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    return
                 assert self.path == '/mcp'
-                assert self.headers['Authorization'] == 'Bearer ' + TOKEN
+                assert self.headers['Authorization'] == 'Bearer ' + harness.current_token
+                assert 'Cookie' not in self.headers
                 assert self.headers['Accept'] == 'application/json'
                 assert self.headers['MCP-Protocol-Version'] == '2025-03-26'
-                request = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
                 harness.requests.append(request)
                 mode = harness.fixture['mode']
                 method = request['method']
                 status = int(mode) if mode in ('401', '403', '500') else 200
+                if harness.fixture.get('revoked') and harness.current_token == TOKEN:
+                    if not harness.fixture.get('revoke_step') or method == harness.fixture['revoke_step']:
+                        status = 401
                 if mode == 'timeout':
                     threading.Event().wait(16)
                 if mode == 'slow-body' and method == 'initialize':
@@ -200,6 +228,19 @@ class Harness:
                         MCP_CONTRACT_WATCH_IDENTITY=str(self.bin / 'ship-identity'))
         self.outputs = []
 
+    def enable_rotation(self):
+        storage = self.home / 'qa-storage.json'
+        storage.write_text(json.dumps(dict(cookies=[
+            dict(name='session', value=COOKIE, domain='.hypertask.ai'),
+            dict(name='app-session', value=APP_COOKIE, domain='app.hypertask.ai'),
+            dict(name='unrelated', value=OTHER_COOKIE, domain='other.example'),
+            dict(name='lookalike', value=OTHER_COOKIE, domain='evilhypertask.ai'),
+        ])))
+        config_file = self.token_file.with_name('config.json')
+        config = json.loads(config_file.read_text())
+        config.update(qa_storage_state=str(storage), agent_id='watcher-agent')
+        config_file.write_text(json.dumps(config))
+
     def run(self, *flags):
         (self.home / 'fixture.json').write_text(json.dumps(self.fixture))
         result = subprocess.run([str(self.script), '--once', *flags], env=self.env, capture_output=True, text=True, timeout=110)
@@ -241,6 +282,198 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(self.h.records('commands.jsonl'), [])
         self.assertFalse((self.h.home / '.local/state/mcp-contract-watch/state.json').exists())
         self.assertEqual(len(self.h.records('.local/state/mcp-contract-watch/ticks.jsonl')), 3)
+
+    def test_revoked_token_rotates_once_then_green_without_incident(self):
+        self.h.enable_rotation()
+        self.h.fixture['revoked'] = True
+        result, tick = self.h.run()
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(tick['ok'])
+        self.assertTrue(tick['token_rotated'])
+        self.assertIsNone(tick['incident_id'])
+        self.assertIsNone(self.h.state())
+        self.assertEqual(len(self.h.rotations), 1)
+        self.assertEqual(len(self.h.requests), 6)
+        self.assertTrue(self.h.token_file.read_text().strip() == ROTATED_TOKEN, 'new credential not saved')
+        self.assertEqual(self.h.token_file.stat().st_mode & 0o777, 0o600)
+        self.assertEqual(list(self.h.token_file.parent.glob('.token-*')), [])
+        self.assertEqual(self.h.records('bugs.json'), [])
+        alert = self.h.records('alerts.jsonl')
+        self.assertEqual(len(alert), 1)
+        self.assertEqual(alert[0]['id'], 'mcp-contract-watch:token-rotated:' + tick['time'])
+        self.assertEqual(alert[0]['text'], "Watcher token revoked, MCP fine. The QA account's MCP tokens were revoked (revoke-all), the watcher rotated its own token and the check passed.\n")
+        self.assertTrue(self.h.records('.local/state/mcp-contract-watch/ticks.jsonl')[0]['token_rotated'])
+        self.h.run()
+        self.assertEqual(len(self.h.rotations), 1)
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assert_secret_free()
+
+    def test_later_first_failure_401_also_rotates(self):
+        self.h.enable_rotation()
+        self.h.fixture.update(revoked=True, revoke_step='tools/call')
+        _, tick = self.h.run()
+        self.assertTrue(tick['ok'])
+        self.assertTrue(tick['token_rotated'])
+        self.assertEqual(len(self.h.rotations), 1)
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assert_secret_free()
+
+    def test_fresh_token_401_is_one_real_incident(self):
+        self.h.enable_rotation()
+        self.h.fixture['mode'] = '401'
+        ticks = [self.h.run()[1] for _ in range(3)]
+        self.assertTrue(all(not tick['ok'] and tick['token_rotated'] for tick in ticks))
+        self.assertEqual(len(self.h.rotations), 3)
+        self.assertEqual(len({tick['incident_id'] for tick in ticks}), 1)
+        self.assertEqual(len(self.h.records('bugs.json')), 1)
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        failure = self.h.state()['failure']
+        self.assertEqual(failure['status'], 401)
+        self.assertEqual(failure['reason'], '401 on a freshly rotated token')
+        self.assertIn('401 on a freshly rotated token', self.h.records('alerts.jsonl')[0]['text'])
+        self.assert_secret_free()
+
+    def test_retry_non401_is_normal_incident(self):
+        self.h.enable_rotation()
+        self.h.fixture.update(revoked=True, mode='500')
+        _, tick = self.h.run()
+        self.assertFalse(tick['ok'])
+        self.assertTrue(tick['token_rotated'])
+        self.assertEqual(len(self.h.rotations), 1)
+        self.assertEqual(self.h.state()['failure']['status'], 500)
+        self.assertEqual(len(self.h.records('bugs.json')), 1)
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assert_secret_free()
+
+    def test_failed_rotation_alerts_once_per_day_without_bug(self):
+        self.h.enable_rotation()
+        self.h.fixture.update(revoked=True, rotate_status=401, tick_time='2026-01-01T12:00:00.000000Z')
+        clocked = self.h.home / 'clocked-watcher'
+        source = self.h.script.read_text()
+        old = "return datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')"
+        self.assertEqual(source.count(old), 1)
+        clocked.write_text(source.replace(old, "return json.loads((HOME / 'fixture.json').read_text())['tick_time']"))
+        clocked.chmod(0o755)
+        self.h.script = clocked
+        ticks = [self.h.run()[1] for _ in range(3)]
+        self.assertTrue(all(not tick['ok'] and tick['watcher_credential'] == 'revoked' for tick in ticks))
+        self.assertTrue(all(tick['incident_id'] is None for tick in ticks))
+        self.assertTrue(all(tick['watcher_credential'] == 'revoked' for tick in self.h.records('.local/state/mcp-contract-watch/ticks.jsonl')))
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assertIsNone(self.h.state())
+        alerts = self.h.records('alerts.jsonl')
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]['id'], 'mcp-contract-watch:rotate-failed:' + ticks[0]['time'][:10])
+        self.assertEqual(alerts[0]['text'], 'Watcher token revoked and could not be rotated (status 401). MCP status unknown; refresh the QA session file and rotate the watcher token.\n')
+        self.assertTrue(self.h.token_file.read_text().strip() == TOKEN, 'failed rotation changed credential')
+        self.h.fixture['tick_time'] = '2026-01-02T00:00:00.000000Z'
+        self.h.run()
+        self.h.run()
+        alerts = self.h.records('alerts.jsonl')
+        self.assertEqual(len(alerts), 2)
+        self.assertEqual(alerts[1]['id'], 'mcp-contract-watch:rotate-failed:2026-01-02')
+        self.assert_secret_free()
+
+    def test_rotation_missing_token_and_expired_session_do_not_file(self):
+        self.h.enable_rotation()
+        self.h.fixture.update(revoked=True, rotate_no_token=True)
+        _, tick = self.h.run()
+        self.assertEqual(tick['watcher_credential'], 'revoked')
+        self.assertEqual(tick['rotation_status'], 200)
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assertTrue(self.h.token_file.read_text().strip() == TOKEN, 'missing token changed credential')
+        (self.h.home / 'qa-storage.json').write_text('{')
+        _, tick = self.h.run()
+        self.assertEqual(tick['watcher_credential'], 'revoked')
+        self.assertEqual(tick['rotation_status'], 'refused')
+        self.assertEqual(len(self.h.rotations), 1)
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assert_secret_free()
+
+    def test_unknown_credential_status_cannot_close_existing_incident(self):
+        self.h.enable_rotation()
+        self.h.fixture['mode'] = 'empty'
+        self.h.run()
+        self.h.fixture['mode'] = 'green'
+        self.h.run()
+        self.assertEqual(self.h.state()['consecutive_ok'], 1)
+        self.h.fixture.update(revoked=True, rotate_status=403)
+        for _ in range(2):
+            _, tick = self.h.run()
+            self.assertEqual(tick['watcher_credential'], 'revoked')
+            self.assertEqual(self.h.state()['consecutive_ok'], 0)
+        self.assertEqual(len(self.h.records('bugs.json')), 1)
+        self.h.fixture['revoked'] = False
+        self.h.run()
+        self.assertIsNone(self.h.state()['closed_at'])
+        self.h.run()
+        self.assertIsNotNone(self.h.state()['closed_at'])
+        self.assert_secret_free()
+
+    def test_invalid_storage_cookies_and_missing_file_are_rotation_failures(self):
+        self.h.enable_rotation()
+        self.h.fixture['revoked'] = True
+        storage = self.h.home / 'qa-storage.json'
+        for cookies in ([], [dict(domain=42, name='session', value=COOKIE)],
+                        [dict(domain='.hypertask.ai', name='session', value=COOKIE + '\r\n')]):
+            storage.write_text(json.dumps(dict(cookies=cookies)))
+            _, tick = self.h.run()
+            self.assertEqual(tick['watcher_credential'], 'revoked')
+        storage.unlink()
+        _, tick = self.h.run()
+        self.assertEqual(tick['watcher_credential'], 'revoked')
+        self.assertEqual(self.h.rotations, [])
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assert_secret_free()
+
+    def test_failed_rotation_delivery_is_attempted_at_most_once_daily(self):
+        self.h.enable_rotation()
+        self.h.fixture.update(revoked=True, rotate_status=403, alert_fail=True)
+        for _ in range(3):
+            self.h.run()
+        self.assertEqual(len(self.h.records('alert-attempts.jsonl')), 1)
+        self.assertEqual(self.h.records('bugs.json'), [])
+        self.assert_secret_free()
+
+    def test_rotation_requires_both_config_fields(self):
+        for missing in ('qa_storage_state', 'agent_id'):
+            self.h.enable_rotation()
+            path = self.h.token_file.with_name('config.json')
+            config = json.loads(path.read_text())
+            del config[missing]
+            path.write_text(json.dumps(config))
+            self.h.fixture['mode'] = '401'
+            _, tick = self.h.run()
+            self.assertFalse(tick['ok'])
+            self.assertNotIn('token_rotated', tick)
+            self.assertNotIn('watcher_credential', tick)
+        self.assertEqual(self.h.rotations, [])
+        self.assertEqual(len(self.h.records('bugs.json')), 1)
+        self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
+        self.assert_secret_free()
+
+    def test_drills_and_dry_runs_never_rotate(self):
+        self.h.enable_rotation()
+        self.h.fixture['mode'] = '401'
+        _, tick = self.h.run('--force-fail', 'initialize')
+        self.assertFalse(tick['ok'])
+        self.assertTrue(self.h.state()['test'])
+        _, tick = self.h.run('--dry-run')
+        self.assertFalse(tick['ok'])
+        self.assertEqual(self.h.rotations, [])
+        self.assertTrue(self.h.token_file.read_text().strip() == TOKEN, 'proof changed credential')
+        self.assert_secret_free()
+
+    def test_non401_first_failure_never_rotates(self):
+        self.h.enable_rotation()
+        self.h.fixture['mode'] = '500'
+        _, tick = self.h.run()
+        self.assertFalse(tick['ok'])
+        self.assertEqual(self.h.rotations, [])
+        self.assertEqual(len(self.h.records('bugs.json')), 1)
 
     def test_empty_tools_and_missing_core_fail(self):
         for mode in ('empty', 'missing'):
@@ -480,12 +713,21 @@ class WatcherTests(unittest.TestCase):
         self.assertEqual(self.h.records('systemctl.jsonl'), [['--user', 'daemon-reload'], ['--user', 'enable', '--now', 'mcp-contract-watch.timer']])
 
     def assert_secret_free(self):
-        self.assertNotIn(TOKEN, ''.join(self.h.outputs))
+        texts = [''.join(self.h.outputs), json.dumps(self.h.records('alerts.jsonl')),
+                 json.dumps(self.h.records('alert-attempts.jsonl')), json.dumps(self.h.records('bugs.json')),
+                 json.dumps(self.h.records('commands.jsonl'))]
         root = self.h.home / '.local/state/mcp-contract-watch'
-        for path in root.rglob('*'):
-            if path.is_file():
-                self.assertNotIn(TOKEN, path.read_text())
-        self.assertNotIn(TOKEN, json.dumps(self.h.records('alerts.jsonl')))
+        texts.extend(path.read_text() for path in root.rglob('*') if path.is_file())
+        self.assertFalse(any(secret in text for secret in (TOKEN, ROTATED_TOKEN, COOKIE, APP_COOKIE, OTHER_COOKIE)
+                             for text in texts), 'credential leaked into watcher output, state, or reporting')
+
+    def test_secret_detection_rejects_known_leaks_without_echoing_values(self):
+        for secret in (TOKEN, ROTATED_TOKEN, COOKIE, APP_COOKIE, OTHER_COOKIE):
+            self.h.outputs.append(secret)
+            with self.assertRaises(AssertionError):
+                self.assert_secret_free()
+            self.h.outputs.pop()
+        self.assert_secret_free()
 
 
 if MODE == '--dry-run-proof':
@@ -520,5 +762,5 @@ with tempfile.TemporaryDirectory(prefix='mcp-watch-mutation-') as directory:
     probe = subprocess.run(['/bin/bash', str(SCRIPT.with_name('mcp-contract-watch.test.sh')), '--dedupe-probe', str(mutant)], capture_output=True, text=True)
     assert probe.returncode == 1 and '3 != 1' in probe.stderr, probe.stdout + probe.stderr
     print('DEDUPE MUTATION REJECTED: repeated red ticks created three bugs')
-print('WATCHER TESTS PASSED')
+print('WATCHER TESTS PASSED: ALL PASS')
 PY
