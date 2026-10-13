@@ -4,6 +4,7 @@ import { APIError, createAuthEndpoint, getSessionFromCtx } from 'better-auth/api
 import { setSessionCookie } from 'better-auth/cookies'
 
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
+import { isSessionTokenRevoked } from '@/lib/auth/sessionRevocation'
 import { getAppShellBootstrap } from '@/lib/appShellBootstrap/server'
 
 export function bridgeSessionPlugin() {
@@ -18,8 +19,9 @@ export function bridgeSessionPlugin() {
           disableBody: true,
         },
         async (ctx: GenericEndpointContext) => {
-          const legacySession = verifySession(ctx.getCookie(SESSION_COOKIE) ?? undefined)
-          if (!legacySession) {
+          const token = ctx.getCookie(SESSION_COOKIE) ?? undefined
+          const legacySession = verifySession(token)
+          if (!legacySession || await isSessionTokenRevoked(token, { failClosed: true })) {
             throw APIError.fromStatus('UNAUTHORIZED', {
               message: 'Invalid legacy session',
             })

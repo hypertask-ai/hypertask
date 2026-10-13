@@ -565,6 +565,7 @@ test("production: prefixed ticket URLs pass the proxy before page flag and acces
     "./utils/helperFunctions/helperFunctions": {},
     "@/lib/auth/safeReturnTo": {},
     "@/lib/auth/sessionEdge": { verifySessionEdge: async () => ({ id: 985 }) },
+    "@/lib/auth/sessionRevocation": { isSessionTokenRevoked: async () => false },
     "@/lib/auth/cookieIdentity": {},
     "@/lib/routing/detailWithoutTicket": load("src/lib/routing/detailWithoutTicket.ts"),
     "@/lib/tutorial/keyboardShortcutTutorial": { isKeyboardShortcutTutorialPath: () => false, hasKeyboardShortcutTutorialQuery: () => false },

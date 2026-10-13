@@ -2,6 +2,7 @@ import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrence
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";
+import { isSessionTokenRevoked } from "@/lib/auth/sessionRevocation";
 import { GUEST_UID_PREFIX } from "@/lib/demo/guest";
 import prisma from "@/lib/prisma";
 
@@ -45,7 +46,7 @@ export async function adoptGuestBoards(
 ): Promise<number> {
   try {
     const previousSession = verifySession(previousSessionToken ?? undefined);
-    if (!previousSession) return 0;
+    if (!previousSession || await isSessionTokenRevoked(previousSessionToken ?? undefined, { failClosed: true })) return 0;
 
     const guest = await prisma.user.findUnique({
       where: { id: previousSession.id },

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import { parseCookies } from "better-auth/cookies";
+import { revokeSessionToken } from "@/lib/auth/sessionRevocation";
 import {
   SESSION_COOKIE,
   clearBetterAuthSessionCookies,
 } from "@/lib/auth/session";
 
-export async function POST() {
+export async function POST(request: Request) {
+  await revokeSessionToken(parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   const response = NextResponse.json({ ok: true });
   const secure = process.env.NODE_ENV === "production";
 
