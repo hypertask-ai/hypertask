@@ -4,6 +4,9 @@ import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
+// HTPR-7183: members see only public profile fields of the owner and assignees.
+const publicUserSelect = { id: true, displayName: true, photoURL: true } as const;
+
 
 const projectDetail = async (projectId:number, userId:number, agentId?:string) => {
         try {
@@ -26,7 +29,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                         include: {
                             assignees: {
                                 include: {
-                                    user: true
+                                    user: { select: publicUserSelect }
                                 }
                             },
 
@@ -44,7 +47,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                             ranking:"asc"
                         }
                     },
-                    owner: true,
+                    owner: { select: publicUserSelect },
                     ai_custom_instructions:true
 
                 }
