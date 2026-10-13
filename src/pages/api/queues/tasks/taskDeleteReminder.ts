@@ -155,11 +155,15 @@ async function updateTaskTreeStatus(
   return prisma.$transaction(async (tx) => {
     const rows = await tx.$queryRaw<TaskTreeRow[]>`
       WITH RECURSIVE task_tree AS (
-        SELECT id FROM "Task" WHERE id = ${rootTaskId}
+        -- HTPR-7187: stay on the root's board; legacy cross-board sub-tasks
+        -- are not trashed with the parent.
+        SELECT id, "projectId" FROM "Task" WHERE id = ${rootTaskId}
         UNION
-        SELECT child.id
+        SELECT child.id, child."projectId"
         FROM "Task" child
-        INNER JOIN task_tree parent ON child."parentTaskId" = parent.id
+        INNER JOIN task_tree parent
+          ON child."parentTaskId" = parent.id
+          AND child."projectId" = parent."projectId"
       )
       SELECT id FROM task_tree ORDER BY id
     `

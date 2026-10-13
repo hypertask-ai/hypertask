@@ -36,11 +36,13 @@ async function claimTaskTreeForHardDelete(
     async (tx) => {
       const tree = await tx.$queryRaw<TaskTreeRow[]>`
       WITH RECURSIVE task_tree AS (
-        SELECT id FROM "Task" WHERE id = ${taskId}
+        SELECT id, "projectId" FROM "Task" WHERE id = ${taskId}
         UNION
-        SELECT child.id
+        SELECT child.id, child."projectId"
         FROM "Task" child
-        INNER JOIN task_tree parent ON child."parentTaskId" = parent.id
+        INNER JOIN task_tree parent
+          ON child."parentTaskId" = parent.id
+          AND child."projectId" = parent."projectId"
       )
       SELECT id FROM task_tree ORDER BY id
     `;
@@ -103,6 +105,12 @@ async function claimTaskTreeForHardDelete(
           );
         }
       }
+      // HTPR-7187: the tree stops at the board boundary. A legacy sub-task on
+      // another board is unlinked and kept, never deleted with this parent.
+      await tx.task.updateMany({
+        where: { parentTaskId: { in: taskIds }, id: { notIn: taskIds } },
+        data: { parentTaskId: null },
+      });
       const claimedAt = now;
       const claimed = await tx.task.updateMany({
         where: {
