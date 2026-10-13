@@ -226,7 +226,7 @@ def safe(fn, *a):
         return {'ok': False, 'error': msg[:160]}
 
 
-def run(cmd, timeout=60):
+def run(cmd, timeout=20):
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     if p.returncode != 0:
         raise RuntimeError(f"{cmd[0]} failed: {(p.stderr or p.stdout).strip()[:120]}")
@@ -247,8 +247,21 @@ def gh_json(args):
     return json.loads(run(['gh'] + args) or 'null')
 
 
-def fetch_board(pid):
-    return ht_get(f'/mcp/tasks?projectId={pid}&limit=500')['tasks']
+def fetch_board(pid, max_pages=10):
+    # The list endpoint caps a page at 100 tasks; follow its cursor so big boards stay complete.
+    tasks, cursor = [], None
+    for _ in range(max_pages):
+        q = f'/mcp/tasks?projectId={pid}&limit=100&offset={len(tasks)}'
+        if cursor:
+            q += f'&cursor={cursor}'
+        d = ht_get(q)
+        tasks += d.get('tasks') or []
+        cursor = d.get('nextCursor')
+        if not cursor and len(tasks) >= int(d.get('total') or 0):
+            return tasks
+        if not d.get('tasks'):
+            break
+    raise RuntimeError(f'board {pid}: only {len(tasks)} tasks read, list is incomplete')
 
 
 def fetch_comments(task):
@@ -363,14 +376,14 @@ def collect(now):
 # ---------------------------------------------------------------- rendering
 
 CSS = """
-:root{--bg:#f4f4f4;--layer:#fff;--text:#161616;--muted:#525252;--line:#e0e0e0;--link:#0f62fe;--ok:#198038;--bad:#da1e28;--warn:#8e6a00;--tile:#f4f4f4}
-@media (prefers-color-scheme:dark){:root{--bg:#161616;--layer:#262626;--text:#f4f4f4;--muted:#c6c6c6;--line:#393939;--link:#78a9ff;--ok:#42be65;--bad:#ff8389;--warn:#f1c21b;--tile:#393939}}
+:root{--bg-pageBackground:#f4f4f4;--bg-cardBackground:#fff;--color-white-black:#161616;--muted:#525252;--line:#e0e0e0;--link:#0f62fe;--ok:#198038;--bad:#da1e28;--warn:#8e6a00;--tile:#f4f4f4}
+@media (prefers-color-scheme:dark){:root{--bg-pageBackground:#161616;--bg-cardBackground:#262626;--color-white-black:#f4f4f4;--muted:#c6c6c6;--line:#393939;--link:#78a9ff;--ok:#42be65;--bad:#ff8389;--warn:#f1c21b;--tile:#393939}}
 *{box-sizing:border-box}
-body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
+body{margin:0;background:var(--bg-pageBackground);color:var(--color-white-black);font:16px/1.5 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
 main{max-width:1056px;margin:0 auto;padding:16px}
-h1{font-size:28px;font-weight:400;margin:8px 0 4px}
-h2{font-size:20px;font-weight:600;margin:0 0 12px}
-section{background:var(--layer);border:1px solid var(--line);padding:16px;margin:16px 0}
+h1{font-size:24px;font-weight:400;margin:8px 0 4px}
+h2{font-size:18px;font-weight:600;margin:0 0 12px}
+section{background:var(--bg-cardBackground);border:1px solid var(--line);padding:16px;margin:16px 0}
 a{color:var(--link);word-break:break-word}
 .updated{margin:0 0 8px;color:var(--muted);font-size:14px}
 .updated.bad{color:var(--bad);font-weight:600}
@@ -388,7 +401,7 @@ li{margin:4px 0}
 .na{color:var(--warn)}
 .ok{color:var(--ok)}
 .bad{color:var(--bad)}
-.tag{display:inline-block;font-size:12px;padding:0 8px;background:var(--tile);border-radius:12px;margin-left:6px;white-space:nowrap}
+.tag{display:inline-block;font-size:12px;padding:0 8px;background:var(--tile);border-radius:4px;margin-left:6px;white-space:nowrap}
 h3{font-size:16px;margin:16px 0 4px}
 .scroll{overflow-x:auto}
 """

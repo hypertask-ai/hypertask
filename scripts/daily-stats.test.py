@@ -227,5 +227,37 @@ class InstallTests(unittest.TestCase):
         self.assertIn('%h/.local/share/daily-stats/daily-stats.py', (HERE / 'daily-stats.service').read_text())
 
 
+class BoardPagingTests(unittest.TestCase):
+    def fake(self, pages):
+        calls = []
+
+        def ht_get(path):
+            calls.append(path)
+            return pages[len(calls) - 1]
+        return calls, ht_get
+
+    def test_follows_pages_until_total(self):
+        pages = [{'tasks': [{'id': i} for i in range(100)], 'total': 150, 'nextCursor': 'c1'},
+                 {'tasks': [{'id': i} for i in range(100, 150)], 'total': 150, 'nextCursor': None}]
+        calls, fake = self.fake(pages)
+        real, ds.ht_get = ds.ht_get, fake
+        try:
+            self.assertEqual(len(ds.fetch_board(15)), 150)
+        finally:
+            ds.ht_get = real
+        self.assertEqual(len(calls), 2)
+        self.assertIn('cursor=c1', calls[1])
+
+    def test_incomplete_list_is_an_error_not_a_short_count(self):
+        pages = [{'tasks': [{'id': 1}], 'total': 5, 'nextCursor': None}, {'tasks': [], 'total': 5, 'nextCursor': None}]
+        calls, fake = self.fake(pages)
+        real, ds.ht_get = ds.ht_get, fake
+        try:
+            with self.assertRaises(RuntimeError):
+                ds.fetch_board(15)
+        finally:
+            ds.ht_get = real
+
+
 if __name__ == '__main__':
     unittest.main()
