@@ -16,7 +16,7 @@ export type SlackOAuthState = {
   version: 2;
 };
 
-export function createSlackOAuthNonce(): string {
+export function newSlackInstallNonce(): string {
   return randomBytes(32).toString("base64url");
 }
 

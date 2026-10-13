@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRequestBaseUrl } from "@/lib/auth/requestBaseUrl";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
 import {
-  createSlackOAuthNonce,
+  newSlackInstallNonce,
   createSlackOAuthState,
   SLACK_OAUTH_ATTEMPT_COOKIE,
   SLACK_OAUTH_ATTEMPT_MAX_AGE_SECONDS,
@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const nonce = createSlackOAuthNonce();
+  const nonce = newSlackInstallNonce();
   authorizeUrl.searchParams.set(
     "state",
     createSlackOAuthState({ nonce, teamId, userId: user.id }, clientSecret),
