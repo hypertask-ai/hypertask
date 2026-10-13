@@ -294,9 +294,11 @@ def plans(incident):
     reason = failure.get('reason', 'request failed')
     if 'rpc_error_code' in failure:
         reason += ' (code ' + str(failure['rpc_error_code']) + ')'
-    title = '[MCP watcher] MCP stopped working for allowed users: ' + failure['step']
+    drill = 'TEST DRILL, not a real outage. ' if incident.get('test') else ''
+    title = ('[TEST] ' if drill else '') + '[MCP watcher] MCP stopped working for allowed users: ' + failure['step']
     description = (
-        '<p><strong>MCP is not working for an allowed account.</strong> The five-minute check failed. '
+        ('<p><strong>' + drill + '</strong>This bug was filed by a forced watcher test and can be closed.</p>' if drill else '')
+        + '<p><strong>MCP is not working for an allowed account.</strong> The five-minute check failed. '
         'Please restore access without blocking accounts that should still be allowed.</p>'
         '<p><strong>Failed call:</strong> <code>' + html.escape(exact) + '</code></p>'
         '<p><strong>Status:</strong> ' + html.escape(str(failure['status'])) + '. '
@@ -304,9 +306,13 @@ def plans(incident):
         '<p><strong>Time (UTC):</strong> ' + incident['opened_at'] + '</p>'
         '<p><strong>Incident:</strong> <code>' + incident['marker'] + '</code></p>'
     )
-    message = 'MCP stopped working for allowed users. Incident ' + incident['id'] + '. Failed call: ' + exact
+    message = drill + 'MCP stopped working for allowed users. Incident ' + incident['id'] + '. Failed call: ' + exact
     message += '. Status: ' + str(failure['status']) + '. ' + reason + '. Time (UTC): ' + incident['opened_at']
-    message += '. Bug filing: ' + incident['create_state'] + ('. Ticket: ' + incident['ticket_id'] if incident['ticket_id'] else '')
+    number = re.search(r'([0-9]+)$', str(incident['ticket_id'] or ''))
+    if incident['create_state'] == 'done' and number:
+        message += '. Bug filed: https://app.hypertask.ai/detail/project-' + str(incident['bug_project']) + '/' + number.group(1)
+    else:
+        message += '. Bug filing FAILED (state ' + incident['create_state'] + '): file it by hand on board ' + str(incident['bug_project'])
     return title, description, message
 
 
@@ -331,7 +337,9 @@ def report(incident, dry_run, state):
                 title, description, _ = plans(incident)
                 incident['create_state'] = 'unknown'
                 save(state)
-                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', '--section', 'Bugs', '--json'], env)
+                # Only board 15 has a Bugs column; a proof run on another board uses its default column.
+                section = ['--section', 'Bugs'] if incident['bug_project'] == 15 else []
+                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section, '--json'], env)
                 ticket = receipt(output) if code == 0 else None
                 if ticket:
                     incident.update(create_state='done', ticket_id=ticket)
@@ -362,7 +370,7 @@ def tick_once(args):
             identifier = tick['time']
             incident = dict(id=identifier, marker='mcp-contract-watch:' + identifier, opened_at=identifier,
                             failure=next(record for record in tick['calls'] if not record['ok']),
-                            bug_project=args.bug_project, create_state='pending', alert_state='pending',
+                            bug_project=args.bug_project, test=bool(args.force_fail), create_state='pending', alert_state='pending',
                             ticket_id=None, consecutive_ok=0, closed_at=None)
             state['incident'] = incident
         if incident and not incident.get('closed_at'):

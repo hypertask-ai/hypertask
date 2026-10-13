@@ -55,7 +55,10 @@ bugs_file = home / 'bugs.json'
 bugs = json.loads(bugs_file.read_text()) if bugs_file.exists() else []
 if args[:2] == ['task', 'create']:
     assert args[args.index('--priority') + 1] == 'urgent'
-    assert args[args.index('--section') + 1] == 'Bugs'
+    if args[args.index('--project') + 1] == '15':
+        assert args[args.index('--section') + 1] == 'Bugs'
+    else:
+        assert '--section' not in args
     assert '--assignee' not in args
     if fixture.get('create_fail'):
         print(fixture['secret'], file=sys.stderr)
@@ -363,7 +366,7 @@ class WatcherTests(unittest.TestCase):
         self.h.run()
         self.assertEqual(self.h.records('bugs.json'), [])
         self.assertEqual(len(self.h.records('alerts.jsonl')), 1)
-        self.assertIn('Bug filing: unknown', self.h.records('alerts.jsonl')[0]['text'])
+        self.assertIn('Bug filing FAILED (state unknown)', self.h.records('alerts.jsonl')[0]['text'])
         self.h.fixture.update(create_fail=False, search_fail=True)
         self.h.run()
         self.assertEqual(self.h.records('bugs.json'), [])
@@ -435,6 +438,10 @@ class WatcherTests(unittest.TestCase):
         creates = [c for c in self.h.records('commands.jsonl') if c['name'] == 'vcc' and c['args'][1] == 'create']
         self.assertEqual(creates[0]['args'][creates[0]['args'].index('--project') + 1], '4060')
         self.assertEqual(self.h.state()['bug_project'], 4060)
+        self.assertTrue(creates[0]['args'][creates[0]['args'].index('--title') + 1].startswith('[TEST] '))
+        alert = self.h.records('alerts.jsonl')[0]['text']
+        self.assertTrue(alert.startswith('TEST DRILL, not a real outage.'))
+        self.assertIn('Bug filed: https://app.hypertask.ai/detail/project-4060/100', alert)
         self.assert_secret_free()
 
     def test_dry_run_keeps_existing_incident_state_unchanged(self):
