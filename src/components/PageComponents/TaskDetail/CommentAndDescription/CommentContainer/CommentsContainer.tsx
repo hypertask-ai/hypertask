@@ -190,6 +190,16 @@ const CommentsContainer = () => {
         tabIndex={i}
         id={`comment-${i}`}
         data-testid="ticket-comment"
+        data-task-comment-box={!comment.activity || undefined}
+        data-task-comment-state={
+          comment.activity
+            ? undefined
+            : currentId === `comment-${i}` || currentId === `comment-${i}-input`
+            ? "active"
+            : pinned && !isStacked
+            ? "pinned"
+            : undefined
+        }
         onMouseDownCapture={rememberPressStart}
         onClick={handleSingleTap}
         onDoubleClick={handleDesktopDoubleClick}
@@ -246,6 +256,7 @@ const CommentsContainer = () => {
     };
     const commentBubble = (
       <div
+        data-task-comment-box
         className={`
                         rounded-sm
                         ${styles.hellow}
