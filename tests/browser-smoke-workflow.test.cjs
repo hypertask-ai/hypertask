@@ -174,6 +174,24 @@ test("automated realtime opt-in is limited to the isolated local smoke", async (
   assert.doesNotMatch(smoke, /Minified React error #418/);
 });
 
+test("MCP CLI API contract stays fatal inside the required browser-smoke job", async () => {
+  // YPER4-352: the contract blocks merges only because browser-smoke is required and fails with it.
+  const yaml = require("js-yaml");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const policy = yaml.load(await source("docs/ci-policy.yml"));
+  assert.ok(policy.required_checks.contexts.includes("browser-smoke"));
+  const smoke = workflow.jobs["browser-smoke"];
+  assert.notEqual(smoke["continue-on-error"], true);
+  const step = smoke.steps.find(s => s.id === "smoke");
+  assert.notEqual(step["continue-on-error"], true);
+  assert.equal(step.if, undefined);
+  assert.match(step.run, /^set -euo pipefail$/m);
+  const lines = step.run.split("\n").filter(line => line.includes("scripts/mcp-cli-api-contract.mjs"));
+  assert.equal(lines.length, 1, "the contract runs exactly once in the browser-smoke step");
+  assert.match(lines[0], /^\s*node scripts\/mcp-cli-api-contract\.mjs\s*$/, "no || true, no &, no if around the contract");
+  assert.doesNotMatch(step.run.slice(0, step.run.indexOf(lines[0])), /set \+e/);
+});
+
 test("MCP CLI API contract reuses smoke server before reseeding with explicit passed output", async () => {
   const yaml = require("js-yaml");
   const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));

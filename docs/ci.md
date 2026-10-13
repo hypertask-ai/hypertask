@@ -88,8 +88,9 @@ Before the second dedicated runner was restored, the latest 100 AI-review workfl
 
 ## MCP, CLI and API contract
 
-`mcp-cli-api-contract` is a required, fail-closed summary of a contract executed inside
-`browser-smoke`, using its disposable server before any layout flag reseed. The owner,
+`mcp-cli-api-contract` is a separately reported, fail-closed summary of a contract executed inside
+`browser-smoke`. It is not in the ruleset itself: it blocks merges because the contract step runs
+inside the required `browser-smoke` job, so a failing contract fails that job. It uses the disposable server before any layout flag reseed. The owner,
 team member, accepted external board guest, owner-created write agent and ordinary
 OAuth client exercise catalog discovery, keyword search, task/comment/column writes
 and readbacks, labels and pages. A read-role agent remains readable but cannot write;
