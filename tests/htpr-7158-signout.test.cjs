@@ -74,16 +74,6 @@ test('force-signout revokes the presented cookie before clearing all auth cookie
   assert.equal(await h.revocation.isSessionTokenRevoked(token, { failClosed: false }), true)
 })
 
-test('revokeOnly records revocation without clearing any cookies', async () => {
-  const h = harness()
-  const { POST } = load('src/app/api/auth/force-signout/route.ts', h.imports)
-  const token = session.signSession({ id: 7 })
-  const response = await POST(request('/api/auth/force-signout', token, { revokeOnly: true }))
-  assert.equal(response.status, 200)
-  assert.equal(response.headers.has('set-cookie'), false)
-  assert.equal(await h.revocation.isSessionTokenRevoked(token, { failClosed: false }), true)
-})
-
 test('force-signout still clears after a failed Redis write and invalid request JSON', async (t) => {
   const h = harness()
   const errors = []
@@ -159,7 +149,7 @@ test('the actual Better Auth sign-out dispatch and multi-session after-hook reta
   const legacy = legacyCookiePlugin()
   const hook = legacy.hooks.after.find((entry) => entry.matcher({ path: '/sign-out' }) && !entry.matcher({ path: '/sign-in/email' }))
   assert.ok(hook)
-  assert.equal(hook.matcher({ path: '/multi-session/set-active' }), false)
+  assert.equal(hook.matcher({ path: '/multi-session/set-active' }), true)
   assert.equal(hook.matcher({ path: '/sign-out/other' }), false)
   const options = { baseURL: 'http://localhost', plugins: [multiSession(), legacy] }
   const incoming = request('/api/auth/sign-out', token)
@@ -181,67 +171,49 @@ test('the actual Better Auth sign-out dispatch and multi-session after-hook reta
   assert.equal(await h.revocation.isSessionTokenRevoked(token, { failClosed: false }), true)
 })
 
-test('account-specific sign-out revokes A before switching to B, and revoke failure does not block the switch', async (t) => {
-  const previousWindow = global.window
-  t.after(() => { global.window = previousWindow })
-  for (const outage of [false, true]) {
-    const h = harness()
-    const a = session.signSession({ id: 7 })
-    const b = session.signSession({ id: 8 })
-    let currentCookie = a
-    const { POST } = load('src/app/api/auth/force-signout/route.ts', h.imports)
-    t.mock.method(global, 'fetch', async (url, options) => {
-      assert.equal(url, '/api/auth/force-signout')
-      assert.deepEqual(JSON.parse(options.body), { revokeOnly: true })
-      assert.ok(options.signal instanceof AbortSignal)
-      h.events.push('revoke-request')
-      if (outage) throw new Error('fake network failure')
-      return POST(request(url, currentCookie, JSON.parse(options.body)))
-    })
-    global.window = { location: { assign: (url) => h.events.push(`navigate:${url}`) } }
-    const { signOutCurrentAccount } = load('src/lib/auth/accounts.ts', {
-      nookies: {}, '@/lib/configs/auth.config': {},
-      '@/lib/auth/betterAuthClient': { authClient: {
-        getSession: async () => ({ data: { session: { token: 'A' } } }),
-        multiSession: {
-          setActive: async ({ sessionToken }) => { h.events.push(`activate:${sessionToken}`); currentCookie = b; return { data: {} } },
-          revoke: async ({ sessionToken }) => { h.events.push(`remove:${sessionToken}`); return { data: { status: true } } },
-        },
-      } },
-    })
-    assert.equal(await signOutCurrentAccount('B'), true)
-    assert.ok(h.events.indexOf('revoke-request') < h.events.indexOf('activate:B'))
-    assert.deepEqual(h.events.slice(-3), ['activate:B', 'remove:A', 'navigate:/inbox'])
-    assert.equal(await h.revocation.isSessionTokenRevoked(a, { failClosed: false }), !outage)
-    assert.equal(await h.revocation.isSessionTokenRevoked(b, { failClosed: true }), false)
-  }
+
+function legacyHook(h) {
+  const unavailable = () => { throw new Error('the revocation hook must not run login work') }
+  const { legacyCookiePlugin } = load('src/lib/auth/legacyCookiePlugin.ts', {
+    ...h.imports, 'better-auth/api': require('better-auth/api'),
+    '@vercel/functions': { waitUntil: unavailable },
+    '@/lib/onboarding/emails/welcome': {}, '@/lib/onboarding/emails/agentNudge': {},
+    '@/lib/auth/slimUserCookie': {}, '@/lib/auth/themeCookie': {}, '@/lib/configs/auth.config': {}, '@/lib/themePreferences': {},
+    '@/lib/prisma': { default: {} },
+    '@/utils/controllers/demo/adoptGuestBoards': {}, '@/utils/controllers/demo/resolveLoginBoard': {},
+    '@/utils/controllers/users/provisionFirstWorkspace': {}, '@/lib/constants/constants': {}, '@/lib/flags': {},
+  })
+  return legacyCookiePlugin().hooks.after.find((entry) => entry.matcher({ path: '/multi-session/set-active' }) && !entry.matcher({ path: '/sign-in/email' }))
+}
+
+test('a successful account switch revokes the outgoing cookie; a failed one keeps it working', async () => {
+  const h = harness()
+  const hook = legacyHook(h)
+  const outgoing = session.signSession({ id: 7 })
+  const ctx = (newSession) => ({ path: '/multi-session/set-active', context: { newSession }, headers: new Headers({ cookie: `ht_session=${outgoing}` }) })
+
+  await hook.handler(ctx(null))
+  assert.equal(await h.revocation.isSessionTokenRevoked(outgoing, { failClosed: true }), false)
+
+  await hook.handler(ctx({ user: { id: '8' }, session: {} }))
+  assert.equal(await h.revocation.isSessionTokenRevoked(outgoing, { failClosed: false }), true)
 })
 
-test('a failed switch re-activates the current account so it gets a fresh, unrevoked cookie', async (t) => {
+test('account-specific sign-out makes no client revocation call and a failed switch revokes nothing', async (t) => {
   const h = harness()
-  const a = session.signSession({ id: 7 })
-  const aFresh = session.signSession({ id: 7 })
-  let currentCookie = a
-  const { POST } = load('src/app/api/auth/force-signout/route.ts', h.imports)
-  t.mock.method(global, 'fetch', async (url, options) => POST(request(url, currentCookie, JSON.parse(options.body))))
+  t.mock.method(global, 'fetch', async () => { throw new Error('signOutCurrentAccount must not call fetch') })
   global.window = { location: { assign: (url) => h.events.push(`navigate:${url}`) } }
   const { signOutCurrentAccount } = load('src/lib/auth/accounts.ts', {
     nookies: {}, '@/lib/configs/auth.config': {},
     '@/lib/auth/betterAuthClient': { authClient: {
       getSession: async () => ({ data: { session: { token: 'A' } } }),
       multiSession: {
-        setActive: async ({ sessionToken }) => {
-          h.events.push(`activate:${sessionToken}`)
-          if (sessionToken === 'B') return { error: { message: 'fake failure' } }
-          currentCookie = aFresh
-          return { data: {} }
-        },
+        setActive: async ({ sessionToken }) => { h.events.push(`activate:${sessionToken}`); return { error: { message: 'fake failure' } } },
         revoke: async () => { throw new Error('must not remove A after a failed switch') },
       },
     } },
   })
   assert.equal(await signOutCurrentAccount('B'), false)
-  assert.deepEqual(h.events.filter((e) => e.startsWith('activate:')), ['activate:B', 'activate:A'])
-  assert.equal(await h.revocation.isSessionTokenRevoked(a, { failClosed: false }), true)
-  assert.equal(await h.revocation.isSessionTokenRevoked(currentCookie, { failClosed: true }), false)
+  assert.deepEqual(h.events, ['activate:B'])
+  assert.equal(h.store.size, 0)
 })

@@ -257,8 +257,12 @@ export function legacyCookiePlugin() {
           }),
         },
         {
-          matcher: (ctx) => ctx.path === '/sign-out',
+          // A successful account switch replaces this browser's legacy cookie
+          // (the hook above mints a new one), so the outgoing value can go.
+          // Revoking only after success keeps a failed switch signed in.
+          matcher: (ctx) => ctx.path === '/sign-out' || ctx.path === '/multi-session/set-active',
           handler: createAuthMiddleware(async (ctx) => {
+            if (ctx.path === '/multi-session/set-active' && !ctx.context.newSession) return
             await revokeSessionToken(ctx.getCookie?.(SESSION_COOKIE) ?? undefined)
           }),
         },
