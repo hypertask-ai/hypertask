@@ -74,6 +74,9 @@ export type AiChatTurnRecord = {
   promptId?: string;
   promptVersion?: string;
   projectId?: number | null;
+  teamId?: string | null;
+  teamAllowanceUsd?: number | null;
+  teamAllowanceUsedUsd?: number | null;
   taskId?: number | null;
   agentId?: string | null;
   /** The resolved model id and provider, as billed and logged by logAiUsage. */
@@ -112,6 +115,9 @@ export function buildAiChatTurnCapture(
     ht_prompt_version: turn.promptVersion ?? null,
     ht_user_id: turn.userId,
     ht_project_id: turn.projectId ?? null,
+    ht_team_id: turn.teamId ?? null,
+    ht_team_ai_allowance_usd: turn.teamAllowanceUsd ?? null,
+    ht_team_ai_used_usd: turn.teamAllowanceUsedUsd ?? null,
     ht_task_id: turn.taskId ?? null,
     ht_agent_id: turn.agentId ?? null,
     ht_outcome: turn.outcome,

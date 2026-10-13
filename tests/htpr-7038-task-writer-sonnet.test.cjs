@@ -125,6 +125,7 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     "@/app/api/ai/_lib/sharedAllowance": {
       gatewayCatalogModelSlug: (id) => id,
       sharedAiAllowanceErrorMessage: () => null,
+      teamAllowanceSnapshot: async () => null,
       createSharedAllowanceMiddleware: ({ allowanceUsd, modelSlug }) => {
         reservations.push({ allowanceUsd, modelSlug });
         return { specificationVersion: "v4" };

@@ -22,6 +22,7 @@ import {
   modelPricing,
   modelCostUsd,
   sharedAiAllowanceErrorMessage,
+  teamAllowanceSnapshot,
 } from "@/app/api/ai/_lib/sharedAllowance";
 import {
   getAiModelDefinition,
@@ -119,25 +120,31 @@ export function gatewayFundingSourceForApiKey(
   return "customer";
 }
 
+// YPER4-333: the monthly allowance of each platform-funded model, so telemetry
+// reports allowance use only for calls that actually draw on it.
+const allowanceFundedModels = new WeakMap<object, number>();
+
 function gatewayLanguageModel(modelSlug: string, gatewayApiKey: string) {
   const model = createGateway({ apiKey: gatewayApiKey })(
     gatewayCatalogModelSlug(modelSlug),
   );
   const fundingSource = gatewayFundingSourceForApiKey(gatewayApiKey);
-  return fundingSource !== "customer"
-    ? wrapLanguageModel({
-        model,
-        providerId: "gateway",
-        middleware: createSharedAllowanceMiddleware({
-          allowanceUsd:
-            fundingSource === "shared"
-              ? FREE_TEAM_AI_ALLOWANCE_USD
-              : PAID_TEAM_AI_ALLOWANCE_USD,
-          gatewayApiKey,
-          modelSlug,
-        }),
-      })
-    : model;
+  if (fundingSource === "customer") return model;
+  const allowanceUsd =
+    fundingSource === "shared"
+      ? FREE_TEAM_AI_ALLOWANCE_USD
+      : PAID_TEAM_AI_ALLOWANCE_USD;
+  const funded = wrapLanguageModel({
+    model,
+    providerId: "gateway",
+    middleware: createSharedAllowanceMiddleware({
+      allowanceUsd,
+      gatewayApiKey,
+      modelSlug,
+    }),
+  });
+  allowanceFundedModels.set(funded, allowanceUsd);
+  return funded;
 }
 
 function gatewayImageModel(modelSlug: string, gatewayApiKey: string) {
@@ -312,7 +319,7 @@ async function generationCostUsd(modelId: string, provider: string, inputTokens:
   }
 }
 
-export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string): LanguageModelMiddleware {
+export function createUsageTracingMiddleware(context: ModelUsageContext, modelId: string, allowanceUsd?: number): LanguageModelMiddleware {
   const start = (prompt: unknown) => {
     const startedAt = performance.now();
     const attribution = { ...context };
@@ -356,9 +363,27 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
         ? failure.statusCode : null;
       const observation = (async () => {
         row.costUsd = await generationCostUsd(modelId, row.provider, inputTokens, outputTokens, cachedInputTokens ?? undefined, cacheWriteInputTokens ?? undefined);
+        let allowanceSnapshot: Awaited<ReturnType<typeof teamAllowanceSnapshot>> = null;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          if (row.teamId && allowanceUsd !== undefined) {
+            allowanceSnapshot = await Promise.race([
+              teamAllowanceSnapshot(row.teamId, allowanceUsd),
+              new Promise<null>((resolve) => { timer = setTimeout(() => resolve(null), 1500); }),
+            ]);
+          }
+        } finally {
+          if (timer) clearTimeout(timer);
+        }
         await Promise.allSettled([
           logAiUsage(row),
-          recordAiChatTurn({ ...row, traceId, latencyMs: row.latencyMs!, outcome, error: outcome === "failed" ? "AI model generation failed" : undefined }),
+          recordAiChatTurn({
+            ...row, traceId, latencyMs: row.latencyMs!, outcome,
+            teamId: row.teamId,
+            teamAllowanceUsd: allowanceSnapshot?.allowanceUsd ?? null,
+            teamAllowanceUsedUsd: allowanceSnapshot?.usedUsd ?? null,
+            error: outcome === "failed" ? "AI model generation failed" : undefined,
+          }),
           ...(outcome === "failed" && !sharedAiAllowanceErrorMessage(error) ? [reportError({
             message: "AI model generation failed",
             source: "server",
@@ -466,7 +491,7 @@ function traceLanguageModel(
   const context: ModelUsageContext = { provider };
   let traced = wrapLanguageModel({
     model,
-    middleware: createUsageTracingMiddleware(context, model.modelId),
+    middleware: createUsageTracingMiddleware(context, model.modelId, allowanceFundedModels.get(model)),
   });
   if (replacement && isHaiku45Model(model.modelId)) {
     // Resolve before the original model's allowance and tracing middleware run.

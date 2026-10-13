@@ -28,6 +28,22 @@ export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
 
+/** YPER4-333: the team's monthly allowance and visible-lane use so far, for telemetry. */
+export async function teamAllowanceSnapshot(
+  teamId: string,
+  allowanceUsd: number,
+): Promise<{ allowanceUsd: number; usedUsd: number } | null> {
+  try {
+    const redis = await getRedis();
+    const committed = await redis.get(
+      `ai-allowance:${aiAllowancePeriod().key}:${teamId}:committed`,
+    );
+    return { allowanceUsd, usedUsd: Number(committed ?? 0) / MICRO_USD_PER_USD };
+  } catch {
+    return null;
+  }
+}
+
 export class SharedAiAllowanceExceededError extends Error {
   /**
    * The allowance period this reservation was rejected against. Callers that
