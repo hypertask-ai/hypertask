@@ -417,7 +417,9 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
       where: { commentId: null, userId },
       select: { id: true, type: true },
     },
+    // HTPR-7186: links may cross boards, so show only those the reader can still open.
     relatedToTasks: {
+      where: { sourceTask: { project: projectContentAccessWhere(userId) } },
       include: {
         sourceTask: {
           select: {
@@ -431,6 +433,7 @@ export function taskDetailInclude(userId: number, projectId: number, cachedRelat
       },
     },
     relatedFromTasks: {
+      where: { targetTask: { project: projectContentAccessWhere(userId) } },
       include: {
         targetTask: {
           select: {
