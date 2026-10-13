@@ -21,6 +21,8 @@
   // Mobile keeps its existing 20px inset. Desktop uses a 4px focus rail plus
   // a 48px control gutter, so tabs, date labels, and sender text share x=52px.
   --inbox-text-left-offset: 20px;
+  // Pinned comment marker, the same in every theme (was a raw left-edge colour).
+  --border-pinned: #ffb980;
 }
 
 @media (min-width: 768px) {
@@ -865,7 +867,7 @@ svg.lucide.fill-current {
 
   /* A pinned comment keeps its pin colour, now on the full outline. */
   html[data-task-box-outlines] [data-task-detail-path] [data-task-comment-state="pinned"] {
-    outline-color: #ffb980 !important;
+    outline-color: var(--border-pinned) !important;
   }
 
   html[data-task-box-outlines] [data-task-detail-path] .description-edit-container,
