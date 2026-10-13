@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import { NextApiHandler } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
@@ -27,9 +28,24 @@ const handler: NextApiHandler = async (req, res) => {
       ? await prisma.agent.findUnique({ where: { id: agentId } })
       : null;
 
+    // HTPR-7163: only someone who may write to the task's board may change
+    // its priority, and every branch below works on this checked task.
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        project: taskWriteAccessWhere(
+          session.userId,
+          typeof agentId === "string" ? agentId : null,
+        ),
+      },
+      include: { priority: true },
+    });
+
+    if (!task) return res.status(404).json({ message: "Task not found" });
+
     // Delete priority if priority_index is 0
     if (priority_index === 0) {
-      await prisma.priority.deleteMany({ where: { taskId } });
+      await prisma.priority.deleteMany({ where: { taskId: task.id } });
       createPriorityActivity({
         userObj: user,
         taskId,
@@ -38,14 +54,6 @@ const handler: NextApiHandler = async (req, res) => {
       });
       return res.status(200).json({ message: "Successfully deleted" });
     }
-
-    // Try to find the task and its current priority
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
-      include: { priority: true },
-    });
-
-    if (!task) return res.status(404).json({ message: "Task not found" });
 
     // If there's no priority for this task, create it
     if (!task.priority) {

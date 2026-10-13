@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import createEstimateActivity from "@/utils/controllers/activities/createEstimateActivity";
 import { NextApiHandler } from "next";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import type { IUser } from "@/models/model";
 
@@ -37,22 +38,29 @@ const handler: NextApiHandler = async (req, res) => {
         })
       : null;
 
-    // Delete estimate if required
-    if (estimate_index === 0) {
-      await prisma.estimate.deleteMany({
-        where: { taskId },
-      });
-      return res.status(200).json({ message: "Successfully deleted" });
-    }
-
-    // Find the task and its existing estimate
-    const task = await prisma.task.findUnique({
-      where: { id: taskId },
+    // HTPR-7163: only someone who may write to the task's board may change
+    // its estimate, and every branch below works on this checked task.
+    const task = await prisma.task.findFirst({
+      where: {
+        id: taskId,
+        project: taskWriteAccessWhere(
+          session.userId,
+          typeof agentId === "string" ? agentId : null,
+        ),
+      },
       include: { estimate: true },
     });
 
     if (!task) {
       return res.status(404).json({ message: "Task not found" });
+    }
+
+    // Delete estimate if required
+    if (estimate_index === 0) {
+      await prisma.estimate.deleteMany({
+        where: { taskId: task.id },
+      });
+      return res.status(200).json({ message: "Successfully deleted" });
     }
 
     // CREATE or UPDATE estimate
