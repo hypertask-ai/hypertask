@@ -355,6 +355,7 @@ for (const foreignParent of [false, true]) {
       "@/utils/helperFunctions/Views/FilterHelperFunctions": {},
       "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
       "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": {},
+      "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeProjectBoardFilters: (project) => project },
       "../projects/getAllIncludes": { getProjectViewBaseInclude: () => ({}) },
     });
     const output = await getProject("share-id");
