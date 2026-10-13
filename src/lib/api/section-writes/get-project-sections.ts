@@ -10,8 +10,11 @@ export const POST = taskWriteRoute({
   operation: async (body, session) => {
     const req = { body };
     const userId = session.userId;
-    const { projectId } = req.body;
-    if (!projectId) {
+    const { projectId: rawProjectId } = req.body;
+    const projectId = typeof rawProjectId === "string" && /^\d+$/.test(rawProjectId)
+      ? Number(rawProjectId)
+      : rawProjectId;
+    if (typeof projectId !== "number" || !Number.isSafeInteger(projectId) || projectId <= 0) {
       return NextResponse.json({ message: "Missing Required Credentials" }, { status: 400 });
     }
     try {

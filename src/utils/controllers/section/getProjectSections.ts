@@ -2,6 +2,7 @@ import prisma from "@/lib/prisma";
 import { ISection } from "@/models/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { resolveMoveToColumnSections } from "./moveToColumnSections";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const sectionGetProjectSections = async (
   projectId: number,
@@ -13,6 +14,7 @@ const sectionGetProjectSections = async (
     const project = await prisma.project.findFirst({
       where: {
         id: projectId,
+        ...projectContentAccessWhere(currentUserId),
       },
       include: {
         project_view: {
@@ -36,6 +38,10 @@ const sectionGetProjectSections = async (
       },
     });
 
+    if (!project) {
+      return { status: 404, json: { message: "Project not found" } };
+    }
+
     const defaultColumns =
       project?.project_view?.default_view?.board_columns_view;
     const activeView = getViewFromProject(project);
@@ -46,7 +52,7 @@ const sectionGetProjectSections = async (
       Array.isArray(defaultColumns) && defaultColumns.length
         ? []
         : ((await prisma.section.findMany({
-            where: { projectId, deleted: false },
+            where: { projectId: project.id, deleted: false },
             orderBy: { ranking: "asc" },
           })) as unknown as ISection[]);
 

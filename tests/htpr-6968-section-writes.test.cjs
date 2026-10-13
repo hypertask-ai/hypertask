@@ -376,3 +376,149 @@ for (const name of ["rename", "update"]) test(`${name}: real Pages HTTP strips t
   };
   assert.deepEqual(await quiet(() => request(fixture(name, scenario), "current")), { status: 204, body: "" });
 });
+
+function projectSectionsController(effects, { defaultShape = "populated", activeType } = {}) {
+  const columns = projectId => [
+    { ...section, id: projectId * 10 + 2, projectId, section_title: `Board ${projectId} second`, ranking: "A0200", isDone: true, autoAssignUserId: 99 },
+    { ...section, id: projectId * 10 + 1, projectId, section_title: `Board ${projectId} first`, ranking: "A0100", visibility: false },
+  ];
+  const projectView = projectId => {
+    if (defaultShape === "no project_view") return null;
+    const stored = columns(projectId);
+    const default_view = defaultShape === "no default_view" ? null : {
+      board_columns_view: defaultShape === "populated" ? stored
+        : defaultShape === "empty" ? [] : defaultShape === "null" ? null : { columns: stored },
+    };
+    const active = { board_columns_view: [{ ...stored[0], visibility: false }] };
+    return { default_view, user_project_views: activeType ? [{ [activeType === "Applied" ? "appliedView" : "unsavedView"]: active }] : [] };
+  };
+  const projects = [
+    { id: 15, teamId: 1, ownerId: 985, members: [] },
+    { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null }] },
+    { id: 17, teamId: 2, ownerId: 99, members: [] },
+    { id: 18, teamId: 2, ownerId: 99, members: [{ userId: 985, agentId: "agent-only" }] },
+    { id: 19, teamId: null, ownerId: 985, members: [] },
+    { id: 20, teamId: 1, ownerId: 99, members: [] },
+  ].map(project => ({ ...project, project_view: projectView(project.id) }));
+  const matchesId = (id, filter) => filter === undefined || id === filter ||
+    (filter && typeof filter === "object" && (filter.in?.includes(id) || (filter.gte !== undefined && id >= filter.gte)));
+  const accessible = (project, where) => !where.OR || where.OR.some(branch =>
+    branch.ownerId === project.ownerId || (branch.members && project.members.some(member =>
+      member.userId === branch.members.some.userId && member.agentId === branch.members.some.agentId)));
+  const getViewFromProject = load("src/lib/firstScreen/boardView.ts", {}).getViewFromProject;
+  return load("src/utils/controllers/section/getProjectSections.ts", {
+    "@/lib/prisma": { default: {
+      project: { findFirst: async query => {
+        effects.push(["read-project", structuredClone(query)]);
+        return projects.find(project => matchesId(project.id, query.where.id) && accessible(project, query.where)) ?? null;
+      } },
+      section: { findMany: async query => {
+        effects.push(["read-sections", structuredClone(query)]);
+        return projects.flatMap(project => [...columns(project.id), { ...section, projectId: project.id, deleted: true }])
+          .filter(row => matchesId(row.projectId, query.where.projectId) && row.deleted === query.where.deleted)
+          .sort((a, b) => a.ranking.localeCompare(b.ranking));
+      } },
+    } },
+    "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: project => {
+      effects.push(["read-view", project?.id]);
+      return getViewFromProject(project);
+    } },
+    "@/lib/agents/publicAgent": {}, "@/lib/cycles": {}, "@/lib/agents/visibility": {},
+    "@/utils/controllers/notifications/visibleInboxScope": {},
+  }).default;
+}
+
+for (const target of ["current", "web"]) {
+  for (const defaultShape of ["populated", "empty", "null", "malformed", "no default_view", "no project_view"]) {
+    test(`getProjectSections: HTPR-7172 denial foreign ${defaultShape} ${target}`, async () => {
+      const scenario = { body: { projectId: 17, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape }));
+      const result = await invoke(fx, "getProjectSections", scenario, target);
+      assert.deepEqual(result, { status: 404, body: { message: "Project not found" }, headers: {} });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project"], "denial precedes view selection and Section reads");
+      assert.deepEqual(fx.effects[0][1].where, {
+        id: 17, OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
+      });
+      assert.deepEqual(fx.effects[0][1].include.project_view.include.user_project_views.where, { userId: 985 });
+      assert.ok(!JSON.stringify(result.body).includes("Board 17"));
+      assert.ok(!JSON.stringify(result.body).includes("172"));
+    });
+  }
+  for (const [label, projectId] of [["missing", 999], ["agent-only member", 18], ["same-team outsider", 20]]) {
+    test(`getProjectSections: HTPR-7172 denial ${label} ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 404, body: { message: "Project not found" }, headers: {},
+      });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project"]);
+    });
+  }
+  for (const [label, projectId] of [
+    ["in filter", { in: [15, 17] }], ["gte filter", { gte: 1 }], ["array", [15, 17]],
+    ["negative", -1], ["zero", 0], ["non-digit", "15tail"], ["fraction", 1.5],
+    ["unsafe integer", Number.MAX_SAFE_INTEGER + 1], ["unsafe digits", "9007199254740992"],
+    ["empty string", ""], ["whitespace", " 15"], ["signed string", "+15"], ["decimal string", "15.0"],
+    ["exponent string", "1e1"], ["negative string", "-15"], ["zero string", "0"],
+    ["boolean", true], ["null", null], ["missing", undefined],
+  ]) {
+    test(`getProjectSections: HTPR-7172 denial invalid ${label} ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape: "empty" }));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 400, body: { message: "Missing Required Credentials" }, headers: {},
+      });
+      assert.deepEqual(fx.effects, [], "invalid ids must never reach Prisma or view selection");
+    });
+  }
+  for (const [label, projectId, id] of [["owner", 15, 15], ["human member", 16, 16], ["teamless guest owner", 19, 19], ["digit string", "15", 15]]) {
+    test(`getProjectSections: HTPR-7172 allowed ${label} preserves payload and stored order ${target}`, async () => {
+      const scenario = { body: { projectId, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 200, body: [
+          { ...section, id: id * 10 + 2, projectId: id, section_title: `Board ${id} second`, ranking: "A0200", isDone: true, autoAssignUserId: 99 },
+          { ...section, id: id * 10 + 1, projectId: id, section_title: `Board ${id} first`, ranking: "A0100", visibility: false },
+        ], headers: {},
+      });
+      assert.deepEqual(fx.effects[0][1].where, {
+        id, OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
+      });
+      assert.deepEqual(fx.effects.map(([label]) => label), ["read-project", "read-view"]);
+    });
+  }
+  for (const defaultShape of ["empty", "null", "malformed", "no default_view", "no project_view"]) {
+    test(`getProjectSections: HTPR-7172 allowed ${defaultShape} falls back to its own ranked sections ${target}`, async () => {
+      const scenario = { body: { projectId: "15", userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { defaultShape }));
+      assert.deepEqual(await invoke(fx, "getProjectSections", scenario, target), {
+        status: 200, body: [
+          { ...section, id: 151, projectId: 15, section_title: "Board 15 first", ranking: "A0100", visibility: true },
+          { ...section, id: 152, projectId: 15, section_title: "Board 15 second", ranking: "A0200", isDone: true, autoAssignUserId: 99, visibility: true },
+        ], headers: {},
+      });
+      assert.deepEqual(fx.effects.find(([label]) => label === "read-sections")[1], {
+        where: { projectId: 15, deleted: false }, orderBy: { ranking: "asc" },
+      });
+    });
+  }
+  for (const activeType of ["Applied", "Unsaved"]) {
+    test(`getProjectSections: HTPR-7172 allowed ${activeType} view keeps visibility reconciliation ${target}`, async () => {
+      const scenario = { body: { projectId: 15, userId: 99 }, realWeb: true };
+      const fx = fixture("getProjectSections", scenario, effects => projectSectionsController(effects, { activeType }));
+      const result = await invoke(fx, "getProjectSections", scenario, target);
+      assert.equal(result.status, 200);
+      assert.deepEqual(result.body.map(({ id, visibility }) => ({ id, visibility })), [{ id: 152, visibility: false }, { id: 151, visibility: false }]);
+      assert.ok(!fx.effects.some(([label]) => label === "read-sections"));
+    });
+  }
+}
+
+test("getProjectSections: HTPR-7172 controller fallback is bound to the authorized project even with a raw filter", async () => {
+  const effects = [];
+  const controller = projectSectionsController(effects, { defaultShape: "empty" });
+  const result = await controller({ in: [15, 17] }, 985);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.json.map(row => row.projectId), [15, 15]);
+  assert.deepEqual(effects.find(([label]) => label === "read-sections")[1].where, { projectId: 15, deleted: false });
+});

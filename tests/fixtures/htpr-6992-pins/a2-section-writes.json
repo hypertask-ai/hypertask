@@ -2,7 +2,7 @@
  "create": "48b0f12ca4a2c052",
  "getAll": "e4ac0a8769f4c852",
  "getByTaskId": "beb3c3865f71582a",
- "getProjectSections": "e51dfdc769b3f3ac",
+ "getProjectSections": "52d1e121efcec4e5",
  "rename": "31971dccd5d4def4",
  "resetRanks": "280b73750cf7f108",
  "update": "44829b3eacea7854"
