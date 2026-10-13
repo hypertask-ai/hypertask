@@ -7,7 +7,7 @@ import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
 import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
-import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
+import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
 import {
   appendSectionToAllViews,
@@ -35,14 +35,12 @@ export type CreateSectionResult =
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
   const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
 
-  // HTPR-7165: only the board's owner or members may add columns to it.
-  if (!(await canAccessProject(projectId, userId, agentId))) {
+  if (!Number.isSafeInteger(projectId) || projectId <= 0 || !Number.isSafeInteger(userId) || userId <= 0) {
     return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }
-
-  const project = await prisma.project.findUnique({ where: { id: projectId } })
+  const project = await prisma.project.findFirst({ where: { id: projectId, status: 'Normal', ...savedViewBoardAccessWhere(userId, agentId) }, select: { id: true } })
   if (!project) {
-    return { status: 400, json: { message: 'Project not found' } }
+    return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }
 
   let ranking = explicitRanking

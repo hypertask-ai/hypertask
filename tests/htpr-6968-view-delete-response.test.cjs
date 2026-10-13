@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
+const { matches, savedViewBoardAccessWhere } = require("./helpers/htpr-7166-fixture.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-view-delete-response");
 // Pins group by route so the fixture holds one digest per route.
@@ -14,13 +15,14 @@ const query = { viewId: "deleted-view", projectId: "7641" };
 function fixture({ active = false, unsaved = false, last = false, payloadUndefined = false } = {}) {
   const effects = [];
   const projectView = { id: "project-view", projectId: 7641, default_view_id: last ? query.viewId : "default-view" };
-  const view = { id: query.viewId, project_view_id: projectView.id, project_view: projectView, title: "Zeta renamed", board_filters: { addedFilters: [] } };
+  const view = { id: query.viewId, project_view_id: projectView.id, project_view: projectView, userId: actor.userId, visibility: "Public", title: "Zeta renamed", board_filters: { addedFilters: [] } };
+  projectView.project = { ownerId: actor.userId, members: [] };
   const defaultView = { ...view, id: "default-view", title: "Default" };
   const userView = { userId: actor.userId, project_view_id: projectView.id, appliedViewId: active ? view.id : null, unsavedViewId: unsaved ? "unsaved-view" : null };
   const views = new Map([[view.id, view], ...(!last ? [[defaultView.id, defaultView]] : []), ...(unsaved ? [["unsaved-view", { ...view, id: "unsaved-view" }]] : [])]);
   const prisma = {
     view: {
-      findUnique: async ({ where }) => { effects.push(["lookup", where.id]); return views.get(where.id) ?? null; },
+      findFirst: async ({ where }) => { effects.push(["lookup", where.id]); const view = views.get(where.id); return view && matches(view, where) ? view : null; },
       delete: async ({ where }) => {
         effects.push(["delete", where.id]);
         const deleted = views.get(where.id);
@@ -34,16 +36,19 @@ function fixture({ active = false, unsaved = false, last = false, payloadUndefin
     },
     view_Last_Used: { deleteMany: async ({ where }) => { effects.push(["last-used", where.viewId]); return { count: 1 }; } },
     user_Project_View: { findUnique: async () => { effects.push(["user-view"]); return userView; } },
-    project_View: { findUnique: async () => {
+    project_View: { findFirst: async () => {
       effects.push(["payload"]);
       if (payloadUndefined) return undefined;
-      return { ...projectView, default_view: views.get(projectView.default_view_id) ?? null, allViews: [...views.values()], user_project_views: [{ ...userView, appliedView: views.get(userView.appliedViewId) ?? null, unsavedView: views.get(userView.unsavedViewId) ?? null }] };
+      const { project, ...container } = projectView;
+      const scalarView = row => row ? Object.fromEntries(Object.entries(row).filter(([key]) => key !== "project_view")) : null;
+      return { ...container, default_view: scalarView(views.get(projectView.default_view_id)), allViews: [...views.values()].map(scalarView), user_project_views: [{ ...userView, appliedView: scalarView(views.get(userView.appliedViewId)), unsavedView: scalarView(views.get(userView.unsavedViewId)) }] };
     } },
     $transaction: async operation => { effects.push(["transaction"]); const result = await operation(prisma); effects.push(["commit"]); return result; },
   };
   class ManagedSmartSplitMutationError extends Error {}
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/projects/getAllIncludes": { savedViewBoardAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => actor },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => effects.push(["broadcast", ...args]) },
     "@/utils/controllers/projects/views/boardFilterWriteLock": {
@@ -81,12 +86,12 @@ for (const [label, scenario] of [
   pin(`DELETE ${label}`, { wire, effects: current.effects });
 });
 
-test("an interrupted successful delete followed by a duplicate returns 404 View does not exist without another write", async () => {
+test("an interrupted successful delete followed by a duplicate returns 404 opaque not-found without another write", async () => {
   const current = fixture(), success = await exchange(current, "current");
   assert.equal(success.status, 200);
   const failed = await exchange(current, "current");
   assert.equal(failed.status, 404);
-  assert.equal(failed.text, '{"message":"View does not exist"}');
+  assert.equal(failed.text, '{"message":"View not found on this board"}');
   assert.equal(current.effects.filter(([name]) => name === "delete").length, 1);
   pin("duplicate delete", { success, failed, effects: current.effects });
 });

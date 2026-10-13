@@ -64,7 +64,7 @@ const getAll = async (
 
     return {
       status: 200,
-      json: projects.map((project) => sanitizeProjectBoardFilters(project)),
+      json: projects.map((project) => sanitizeProjectBoardFilters(project, currentUserId ?? userId)),
     };
   } catch (error) {
     console.log(error);

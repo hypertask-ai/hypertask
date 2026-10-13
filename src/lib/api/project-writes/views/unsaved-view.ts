@@ -5,7 +5,7 @@ import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import prisma from "@/lib/prisma";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
 import { isDeepEqual } from "@/utils/helperFunctions/helperFunctions";
-import { sanitizeBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
+import { sanitizeBoardFilters, projectVisibleViewRelations } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { defaultEmptySections } from "@/utils/helperFunctions/Views/EmptySectionsHelperFunction";
 import { defaultFilterSettings } from "@/utils/helperFunctions/Views/FilterHelperFunctions";
 import { defaultSubtaskSettings } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
@@ -102,7 +102,7 @@ const route = taskWriteRoute({
       board_layout: null,
     };
     try {
-      const projectView = await prisma.project_View.upsert({
+      const loadedProjectView = await prisma.project_View.upsert({
         create: {
           // ... data to create a User_Project_View
           projectId,
@@ -120,14 +120,14 @@ const route = taskWriteRoute({
       });
       console.log(
         "🚀 ~ consthandler:NextApiHandler= ~ projectView:",
-        projectView
+        loadedProjectView
       );
 
-      const user_project_view = await prisma.user_Project_View.findUnique({
+      const loadedUserProjectView = await prisma.user_Project_View.findUnique({
         where: {
           user_project: {
             userId: userId,
-            project_view_id: projectView.id,
+            project_view_id: loadedProjectView.id,
           },
         },
         include: {
@@ -135,6 +135,11 @@ const route = taskWriteRoute({
           unsavedView: true,
         },
       });
+      const projectView = projectVisibleViewRelations({
+        ...loadedProjectView,
+        user_project_views: loadedUserProjectView ? [loadedUserProjectView] : [],
+      }, userId);
+      const user_project_view = projectView.user_project_views[0] ?? null;
       console.log("🚀 ~ 55: ~ user_project_view:", user_project_view);
 
       const baseView = hasBaseViewId

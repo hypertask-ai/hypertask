@@ -88,7 +88,7 @@ const getBoardTasks = async (
       ? await attachAgentStatus(tasksWithWaitingOnUsers)
       : tasksWithWaitingOnUsers;
 
-    const sanitizedProject = sanitizeProjectBoardFilters(project);
+    const sanitizedProject = sanitizeProjectBoardFilters(project, currentUserId ?? userId);
     const { allViews = [], ...projectView } =
       sanitizedProject.project_view ?? {};
     const projectPayload = sanitizedProject.project_view

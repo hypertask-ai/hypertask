@@ -1,8 +1,9 @@
+import { savedViewBoardAccessWhere } from "../projects/getAllIncludes";
+import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import prisma from "@/lib/prisma";
 import { ISection } from "@/models/model";
 import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
 import { resolveMoveToColumnSections } from "./moveToColumnSections";
-import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 const sectionGetProjectSections = async (
   projectId: number,
@@ -11,10 +12,10 @@ const sectionGetProjectSections = async (
   try {
     //We are now fetching sections w.r.t the default sections. By comparing active view sections with default, we return
     //sections for move column modal.
-    const project = await prisma.project.findFirst({
+    const loadedProject = await prisma.project.findFirst({
       where: {
         id: projectId,
-        ...projectContentAccessWhere(currentUserId),
+        ...savedViewBoardAccessWhere(currentUserId),
       },
       include: {
         project_view: {
@@ -38,10 +39,8 @@ const sectionGetProjectSections = async (
       },
     });
 
-    if (!project) {
-      return { status: 404, json: { message: "Project not found" } };
-    }
-
+    if (!loadedProject) return { status: 404, json: { message: "Project not found" } };
+    const project = sanitizeProjectBoardFilters(loadedProject, currentUserId);
     const defaultColumns =
       project?.project_view?.default_view?.board_columns_view;
     const activeView = getViewFromProject(project);

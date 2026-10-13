@@ -205,15 +205,17 @@ test("generic label and view endpoints reject paired smart-split mutations", () 
     "utf8",
   );
 
+  assert.match(viewRoute, /export const POST = route\("POST"\)/);
+  assert.match(viewRoute, /route\("DELETE"\)/);
   assert.match(labelRoute, /isManagedSmartSplitLabel/);
   assert.equal((labelRoute.match(/Manage this smart split from Manage views/g) ?? []).length, 2);
   assert.equal(
     (viewRoute.match(/assertViewIsNotManagedSmartSplit\(/g) ?? []).length,
-    2,
+    1,
   );
   assert.equal(
     (viewRoute.match(/error instanceof ManagedSmartSplitMutationError/g) ?? []).length,
-    2,
+    1,
   );
 });
 

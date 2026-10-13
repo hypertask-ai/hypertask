@@ -3,6 +3,7 @@ const assert = require("node:assert/strict");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
+const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixture.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-section-writes");
 const GROUPS = ["create","update","rename","resetRanks","getAll","getByTaskId","getProjectSections"];
@@ -217,7 +218,7 @@ function serviceController(name, effects, options = {}) {
     "@/lib/flags": { isFeatureEnabled: async () => false },
     "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmail: () => assert.fail("human section writes must not schedule agent email") },
-    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }) },
+    "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     "@/utils/generateRank": load("src/utils/generateRank.ts", {}),
     "./viewHelpers": {
       appendSectionToAllViews: record("append-views"), updateSectionInAllViews: record("update-views"), removeSectionFromAllViews: record("remove-views"),
@@ -246,9 +247,12 @@ for (const [name, label, scenario, options] of [
   const writes = old.effects.filter(([label]) => label === "write-section");
   {
     const gate = old.effects.find(([label]) => label === (name === "update" ? "last-or-access" : "board-access"));
-    assert.deepEqual(gate[1].where, name === "update"
-      ? { id: 91, project: { status: "Normal", ownerId: 985 } }
-      : { id: 15, status: "Normal", ownerId: 985 });
+    // HTPR-7166 requires Accepted human membership and allows teamless owners and active owned-agent delegation.
+    assert.deepEqual(gate[1].where, name === "create"
+      ? { id: 15, status: "Normal", ...savedViewBoardAccessWhere(985) }
+      : name === "update"
+        ? { id: 91, project: { status: "Normal", ownerId: 985 } }
+        : { id: 15, status: "Normal", ownerId: 985 });
     assert.ok(!writes.length || old.effects.indexOf(gate) < old.effects.indexOf(writes[0]));
   }
   if (options.denied) { assert.equal(expected.status, 403); assert.deepEqual(writes, []); }
@@ -279,7 +283,7 @@ for (const name of ["getAll", "getByTaskId", "getProjectSections"]) test(`${name
         section: { findMany: record("read-sections", [section, { ...section, id: 92, ranking: "A0200" }]) },
       } },
       "@/utils/helperFunctions/Views/ViewsHelperFunctions": { getViewFromProject: () => undefined },
-      "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }) },
+      "@/utils/controllers/projects/getAllIncludes": { projectContentAccessWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     };
     return load(`src/utils/controllers/section/${name === "getByTaskId" ? "getByTask" : name}.ts`, mocks).default;
   };
@@ -314,7 +318,7 @@ for (const name of ["getAll", "getByTaskId"]) {
     test(`${name}: HTPR-6982 real content-access policy ${label} matches pinned response and Web handler`, async () => {
       const projects = [
         { id: 15, teamId: 1, ownerId: 985, members: [] },
-        { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null }] },
+        { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null, status: "Accepted" }] },
         { id: 17, teamId: 2, ownerId: 99, members: [] },
         { id: 18, teamId: 2, ownerId: 99, members: [{ userId: 985, agentId: "agent-only" }] },
         { id: 19, teamId: null, ownerId: 985, members: [] },
@@ -386,15 +390,16 @@ function projectSectionsController(effects, { defaultShape = "populated", active
     if (defaultShape === "no project_view") return null;
     const stored = columns(projectId);
     const default_view = defaultShape === "no default_view" ? null : {
+      id: `default-${projectId}`, project_view_id: `pv-${projectId}`, visibility: "Public",
       board_columns_view: defaultShape === "populated" ? stored
         : defaultShape === "empty" ? [] : defaultShape === "null" ? null : { columns: stored },
     };
-    const active = { board_columns_view: [{ ...stored[0], visibility: false }] };
-    return { default_view, user_project_views: activeType ? [{ [activeType === "Applied" ? "appliedView" : "unsavedView"]: active }] : [] };
+    const active = { id: `active-${projectId}`, userId: 985, project_view_id: `pv-${projectId}`, visibility: "Private", board_columns_view: [{ ...stored[0], visibility: false }] };
+    return { id: `pv-${projectId}`, default_view_id: default_view?.id, default_view, user_project_views: activeType ? [{ userId: 985, project_view_id: `pv-${projectId}`, [activeType === "Applied" ? "appliedViewId" : "unsavedViewId"]: active.id, [activeType === "Applied" ? "appliedView" : "unsavedView"]: active }] : [] };
   };
   const projects = [
     { id: 15, teamId: 1, ownerId: 985, members: [] },
-    { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null }] },
+    { id: 16, teamId: 1, ownerId: 99, members: [{ userId: 985, agentId: null, status: "Accepted" }] },
     { id: 17, teamId: 2, ownerId: 99, members: [] },
     { id: 18, teamId: 2, ownerId: 99, members: [{ userId: 985, agentId: "agent-only" }] },
     { id: 19, teamId: null, ownerId: 985, members: [] },
@@ -402,9 +407,7 @@ function projectSectionsController(effects, { defaultShape = "populated", active
   ].map(project => ({ ...project, project_view: projectView(project.id) }));
   const matchesId = (id, filter) => filter === undefined || id === filter ||
     (filter && typeof filter === "object" && (filter.in?.includes(id) || (filter.gte !== undefined && id >= filter.gte)));
-  const accessible = (project, where) => !where.OR || where.OR.some(branch =>
-    branch.ownerId === project.ownerId || (branch.members && project.members.some(member =>
-      member.userId === branch.members.some.userId && member.agentId === branch.members.some.agentId)));
+  const accessible = (project, where) => matches(project, { OR: where.OR });
   const getViewFromProject = load("src/lib/firstScreen/boardView.ts", {}).getViewFromProject;
   return load("src/utils/controllers/section/getProjectSections.ts", {
     "@/lib/prisma": { default: {
@@ -437,7 +440,7 @@ for (const target of ["current", "web"]) {
       assert.deepEqual(result, { status: 404, body: { message: "Project not found" }, headers: {} });
       assert.deepEqual(fx.effects.map(([label]) => label), ["read-project"], "denial precedes view selection and Section reads");
       assert.deepEqual(fx.effects[0][1].where, {
-        id: 17, OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
+        id: 17, ...savedViewBoardAccessWhere(985),
       });
       assert.deepEqual(fx.effects[0][1].include.project_view.include.user_project_views.where, { userId: 985 });
       assert.ok(!JSON.stringify(result.body).includes("Board 17"));
@@ -482,7 +485,7 @@ for (const target of ["current", "web"]) {
         ], headers: {},
       });
       assert.deepEqual(fx.effects[0][1].where, {
-        id, OR: [{ ownerId: 985 }, { members: { some: { userId: 985, agentId: null } } }],
+        id, ...savedViewBoardAccessWhere(985),
       });
       assert.deepEqual(fx.effects.map(([label]) => label), ["read-project", "read-view"]);
     });

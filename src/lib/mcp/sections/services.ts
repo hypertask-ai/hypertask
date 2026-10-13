@@ -75,8 +75,14 @@ export async function createSection(
 ): Promise<CreateSectionResult | CreateSectionError> {
   const { projectId, title, userId, afterSectionId } = params
 
-  const access = await verifyProjectAccess(projectId, userId, agentId)
-  if (!access.ok) return access.error
+  // Preserve MCP's 404 for inactive boards; the shared creation guard returns 403.
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, status: 'Normal' },
+    select: { id: true }
+  })
+  if (!project) {
+    return { success: false, error: 'Not found', message: `Project with ID ${projectId} not found`, status: 404 }
+  }
 
   const result = await sectionService.createSection({
     projectId,
@@ -94,7 +100,7 @@ export async function createSection(
     const isNotFound = result.status === 404
     return {
       success: false,
-      error: isNotFound ? 'Not found' : 'Validation error',
+      error: isNotFound ? 'Not found' : result.status === 403 ? 'Permission error' : 'Validation error',
       message: errorMessage,
       status: result.status
     }
