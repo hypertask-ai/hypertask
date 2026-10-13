@@ -2,107 +2,59 @@ import { z } from "zod";
 import { taskWriteRoute } from "@/lib/api/task-writes/route";
 import { viewWriteJson } from "./response";
 import prisma from "@/lib/prisma";
+import { savedViewBoardAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+import { acquireBoardFilterWriteLock } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 import getProjectView from "@/utils/controllers/projects/views/viewsHelperAPIfunctions";
-
-
-
-
-// ============= simple stuff here
-// 1. user selects the default view.
-// 2. so that means the applied view in user_project_view is now null.
-// 3. LITERALLY THATS IT
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Missing required information",
   allowNullBody: true,
   operation: async (body, session) => {
-    const req = { body };
-    const userId = session.userId;
-
-    // lets check if the api request misses info like user, projectid.
-
-    const { projectId,  newViewId } = req.body
-
-    try {
-        if (!projectId || !newViewId) return viewWriteJson({ message: "Missing required information" }, 101)
-        const view = await prisma.view.findUnique({
-            where: { id: newViewId },
-            select: {
-                project_view: {
-                    select: { id: true, projectId: true, default_view_id: true }
-                }
-            }
-        })
-        if (!view) throw new Error("View does not exist")
-        const project_View = view.project_view
-        const viewProjectId = project_View.projectId
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ project_View:", project_View)
-
-        const updatedUserProjectView = await prisma.user_Project_View.upsert({
-            create: {
-                // ... data to create a User_Project_View
-                userId:userId,
-                project_view_id:project_View.id,
-                appliedViewId:newViewId,
-
-              },
-              update: {
-                // ... if the newviewId is the default board, then simply set appliedView and unsaved as null
-                appliedViewId:project_View.default_view_id===newViewId?null:newViewId,
-              },
-              where: {
-                // ... the filter for the User_Project_View we want to update
-                user_project:{
-                    userId:userId,
-                    project_view_id:project_View.id
-                }
-              }
-        })
-        const currentDate=new Date()
-
-        await prisma.view.update({
-            where:{
-                id: newViewId
-            },
-            data:{
-                lastUsedAt:currentDate
-            }
-        })
-
-
-        const lastviewused = await prisma.view_Last_Used.upsert({
-            create:{
-                userId:userId,
-                viewId:newViewId,
-                lastUsedAt:currentDate
-            },
-            update:{
-                lastUsedAt:currentDate
-            },
-            where:{
-                user_view_last_used:{
-                    userId:userId,
-                    viewId:newViewId,
-                }
-            }
-        })
-
-        if (updatedUserProjectView.unsavedViewId) await prisma.view.delete({
-            where:{
-                id:updatedUserProjectView.unsavedViewId
-            }
-        })
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ updatedUserProjectView:", updatedUserProjectView)
-        const project_view_updated = await getProjectView(viewProjectId, userId)
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ project_view_updated:", project_view_updated)
-
-        return viewWriteJson(project_view_updated, 200)
-    } catch (error) {
-        console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
-        return viewWriteJson(error, 500)
+    const { projectId, newViewId } = body ?? {};
+    if (!Number.isSafeInteger(projectId) || projectId <= 0 || typeof newViewId !== "string" || !newViewId.trim()) {
+      return viewWriteJson({ message: "Missing required information" }, 400);
     }
-
+    const userId = session.userId;
+    const where = {
+      id: newViewId,
+      project_view: { projectId, project: savedViewBoardAccessWhere(userId) },
+      OR: [{ visibility: "Public" as const }, { userId }],
+    };
+    const select = { project_view: { select: { id: true, projectId: true, default_view_id: true } } } as const;
+    const notFound = () => viewWriteJson({ message: "View not found on this board" }, 404);
+    try {
+      if (!await prisma.view.findFirst({ where, select })) return notFound();
+      const switched = await prisma.$transaction(async tx => {
+        await acquireBoardFilterWriteLock(tx, projectId);
+        const view = await tx.view.findFirst({ where, select });
+        if (!view) return false;
+        const pv = view.project_view;
+        const appliedViewId = pv.default_view_id === newViewId ? null : newViewId;
+        const state = await tx.user_Project_View.upsert({
+          create: { userId, project_view_id: pv.id, appliedViewId },
+          update: { appliedViewId },
+          where: { user_project: { userId, project_view_id: pv.id } },
+        });
+        const currentDate = new Date();
+        await tx.view.update({ where, data: { lastUsedAt: currentDate } });
+        await tx.view_Last_Used.upsert({
+          create: { userId, viewId: newViewId, lastUsedAt: currentDate },
+          update: { lastUsedAt: currentDate },
+          where: { user_view_last_used: { userId, viewId: newViewId } },
+        });
+        if (state.unsavedViewId) {
+          const draft = await tx.view.findFirst({ where: { id: state.unsavedViewId, userId, project_view_id: pv.id } });
+          if (draft) await tx.view.delete({ where: { id: draft.id, userId, project_view_id: pv.id, project_view: { project: savedViewBoardAccessWhere(userId) } } });
+        }
+        return true;
+      });
+      if (!switched) return notFound();
+      return viewWriteJson(await getProjectView(projectId, userId), 200);
+    } catch (error) {
+      if ((error as { code?: string })?.code === "P2025") return notFound();
+      return viewWriteJson(error, 500);
+    }
   },
 });
 

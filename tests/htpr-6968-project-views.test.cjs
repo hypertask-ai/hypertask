@@ -4,6 +4,7 @@ const ts = require("typescript");
 const http = require("node:http");
 const { apiResolver } = require("next/dist/server/api-utils/node/api-resolver");
 const { load } = require("./task-route-loader.cjs");
+const { matches, savedViewBoardAccessWhere } = require("./helpers/htpr-7166-fixture.cjs");
 const { pins } = require("./helpers/htpr-6992-pins.cjs");
 const rawPin = pins("a2-project-views");
 const GROUPS = ["create-view","update-view","delete-rename-view","switch-view","unsaved-view","reset-to-default","update-order","reset-order","set-default-order","smart-split"];
@@ -44,6 +45,7 @@ function fixture(endpoint, scenario = {}) {
   const userId = scenario.userId ?? 985, signedId = scenario.signedUserId ?? userId;
   const session = scenario.noAuth ? null : { userId, source: "better-auth" };
   const view = { id: "view", userId, title: "QA view", visibility: "Public", slug: "qa-view", project_view_id: "pv", project_view: { id: "pv", projectId: 15, default_view_id: "default", default_view_order: ["view"] }, ...settings };
+  if (["delete-rename-view", "switch-view"].includes(name)) view.project_view.project = { id: 15, ownerId: scenario.denied ? 99 : userId, members: [] };
   const defaultView = { ...view, id: "default", board_columns_view: [{ id: 1 }, { id: 2 }] };
   const projectView = { id: "pv", projectId: 15, default_view_id: "default", default_view: scenario.noDefault ? null : defaultView };
   const userView = { id: "uv", project_view_id: "pv", appliedViewId: "view", appliedView: view, unsavedViewId: scenario.unsaved ? "unsaved" : null, unsavedView: scenario.unsaved ? { ...view, id: "unsaved" } : null };
@@ -68,6 +70,7 @@ function fixture(endpoint, scenario = {}) {
           return scenario.missingView ? null : view;
         }
         if (name === "create-view") return scenario.existing ? view : null;
+        if (["delete-rename-view", "switch-view"].includes(name)) return scenario.missingView || !matches(view, args.where) ? null : view;
         return scenario.denied || scenario.missingView ? null : view;
       }),
       findUnique: record("view-read", scenario.missingView ? null : view),
@@ -117,7 +120,7 @@ function fixture(endpoint, scenario = {}) {
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => { effects.push(["broadcast", ...args]); if (scenario.broadcastThrows) throw new Error("Broadcast unavailable"); } },
     "@/lib/ai/labelClassifier": { scheduleBackfillAiLabel: id => { effects.push(["backfill", id]); if (scenario.backfillThrows) throw new Error("Backfill unavailable"); } },
     "node:crypto": { randomUUID: () => "synthetic-split" },
-    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: id => ({ ownerId: id }), getProjectWhere: id => ({ ownerId: id }) },
+    "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: id => ({ ownerId: id }), getProjectWhere: id => ({ ownerId: id }), savedViewBoardAccessWhere },
     "@/utils/controllers/projects/views/viewsHelperAPIfunctions": { default: record("payload", scenario.payloadUndefined ? undefined : scenario.noPayload ? null : { ...projectView, allViews: [view], user_project_views: [userView] }), getUniqueSlug: record("slug", "renamed") },
     "@/utils/controllers/projects/views/boardFilterWriteLock": {
       MissingBoardFilterLabelError, ManagedSmartSplitMutationError,
@@ -125,7 +128,7 @@ function fixture(endpoint, scenario = {}) {
       assertViewIsNotManagedSmartSplit: async (...args) => { effects.push(["smart-guard", ...args.slice(1)]); if (scenario.managed) throw new ManagedSmartSplitMutationError(); },
       withBoardFilterWriteLock: async (id, filters, operation) => { effects.push(["filter-lock", id, structuredClone(filters)]); if (scenario.missingLabel) throw new MissingBoardFilterLabelError(); return operation(prisma); },
     },
-    "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeBoardFilters: value => value, sanitizeViewBoardFilters: value => value },
+    "@/utils/helperFunctions/Views/BoardFilterSanitizer": { sanitizeBoardFilters: value => value, sanitizeViewBoardFilters: value => value, projectVisibleViewRelations: load("src/utils/helperFunctions/Views/BoardFilterSanitizer.ts", {}).projectVisibleViewRelations },
     "@/utils/helperFunctions/helperFunctions": { isDeepEqual: () => !!scenario.equal },
     "@/utils/helperFunctions/Views/EmptySectionsHelperFunction": { defaultEmptySections: "Show" },
     "@/utils/helperFunctions/Views/FilterHelperFunctions": { defaultFilterSettings: {} },
@@ -153,7 +156,7 @@ function input(endpoint, scenario) {
   return {
     method: scenario.method ?? endpoint.method,
     body: clean(Object.hasOwn(scenario, "body") ? scenario.body : { ...bodyFor(endpoint.name), userId: 6 }),
-    query: scenario.query ?? { viewId: "view", projectId: "999", userId: "6" },
+    query: scenario.query ?? { viewId: "view", projectId: "15", userId: "6" },
     cookies: Object.hasOwn(scenario, "cookies") ? scenario.cookies : { ht_session: "synthetic-signed", nookies_user: '{"id":6}' },
     headers: { cookie: "ht_session=synthetic-signed; nookies_user=spoofed" },
   };
@@ -235,7 +238,7 @@ for (const endpoint of endpoints) {
   });
 }
 for (const [name, body, status, message] of [
-  ["switch-view", {}, 101, "Missing required information"], ["delete-rename-view", {}, 101, "Missing required information"],
+  ["switch-view", {}, 400, "Missing required information"], ["delete-rename-view", {}, 400, "Missing required information"],
   ["update-view", {}, 401, "Authentication required"], ["update-view", { projectId: 15, viewId: "view" }, 500, undefined],
   ["create-view", {}, 400, "Missing required information!"], ["unsaved-view", {}, 400, "Missing required information!"],
   ["reset-to-default", {}, 400, "A valid board and reset mode are required"],
@@ -247,9 +250,10 @@ for (const [name, method, status] of [["create-view", "POST", 403], ["unsaved-vi
   const { expected, effects } = await parity({ name, method }, { denied: true }, `denied ${name} ${method}`);
   assert.equal(expected.status, status); assert.ok(!effects.some(([label]) => label.startsWith("write-") || ["backfill", "broadcast"].includes(label)));
 });
-for (const name of ["switch-view", "delete-rename-view"]) test(`${name}: retain historical lack of board permission check rather than tightening this refactor`, async () => {
-  const { expected } = await parity({ name, method: "POST" }, { denied: true }, `no permission check ${name}`);
-  assert.equal(expected.status, 200);
+for (const [name, method] of [["switch-view", "POST"], ["delete-rename-view", "POST"], ["delete-rename-view", "DELETE"]]) test(`${name} ${method}: denied board has no side effects`, async () => {
+  const { expected, effects } = await parity({ name, method }, { denied: true }, `denied legacy ${name} ${method}`);
+  assert.deepEqual(expected, { status: 404, body: { message: "View not found on this board" } });
+  assert.ok(!effects.some(([label]) => label.startsWith("write-") || ["slug", "transaction", "filter-lock", "broadcast"].includes(label)));
 });
 test("smart split retries preserve 409 and success preserves 201/backfill after commit", async () => {
   const endpoint = { name: "smart-split", method: "POST" };

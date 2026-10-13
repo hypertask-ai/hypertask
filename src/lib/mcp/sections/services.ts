@@ -75,9 +75,6 @@ export async function createSection(
 ): Promise<CreateSectionResult | CreateSectionError> {
   const { projectId, title, userId, afterSectionId } = params
 
-  const access = await verifyProjectAccess(projectId, userId, agentId)
-  if (!access.ok) return access.error
-
   const result = await sectionService.createSection({
     projectId,
     title,
@@ -94,7 +91,7 @@ export async function createSection(
     const isNotFound = result.status === 404
     return {
       success: false,
-      error: isNotFound ? 'Not found' : 'Validation error',
+      error: isNotFound ? 'Not found' : result.status === 403 ? 'Permission error' : 'Validation error',
       message: errorMessage,
       status: result.status
     }

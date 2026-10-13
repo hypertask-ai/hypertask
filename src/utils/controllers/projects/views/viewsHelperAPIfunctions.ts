@@ -1,9 +1,10 @@
+import { savedViewBoardAccessWhere } from "../getAllIncludes";
 import prisma from "@/lib/prisma";
 import { sanitizeProjectViewBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 
 const getProjectView = async (projectId: number, currentUserId: number) => {
-  const project_view_updated = await prisma.project_View.findUnique({
-    where: { projectId },
+  const project_view_updated = await prisma.project_View.findFirst({
+    where: { projectId, project: savedViewBoardAccessWhere(currentUserId) },
     include: {
       user_project_views: {
         where: {
@@ -70,7 +71,7 @@ const getProjectView = async (projectId: number, currentUserId: number) => {
       },
     },
   });
-  return sanitizeProjectViewBoardFilters(project_view_updated);
+  return sanitizeProjectViewBoardFilters(project_view_updated, currentUserId);
 };
 
 export const getUniqueSlug = async (

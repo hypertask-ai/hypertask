@@ -6,6 +6,7 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 const { load } = require("./task-route-loader.cjs");
+const { savedViewBoardAccessWhere, matches } = require("./helpers/htpr-7166-fixture.cjs");
 
 const root = path.resolve(__dirname, "..");
 const flag = "htpr-6985-delete-view-once";
@@ -162,14 +163,16 @@ function server(appRoute, scenario = {}) {
   class ManagedSmartSplitMutationError extends Error { constructor() { super("Managed smart split"); this.status = 409; } }
   const prisma = {
     view: {
-      findUnique: async () => {
+      findFirst: async ({ where }) => {
         if (scenario.failure) throw new Error("Unavailable");
-        return exists ? { id: "saved", project_view: { id: "pv", projectId: 15 } } : null;
+        const view = { id: "saved", visibility: "Public", project_view_id: "pv", project_view: { id: "pv", projectId: 15, project: { ownerId: 6, members: [] } } };
+        return exists && matches(view, where) ? view : null;
       },
       delete: async () => {
         if (scenario.race) throw Object.assign(new Error("Record already deleted"), { code: "P2025" });
         effects.push("delete");
         exists = false;
+        return { id: "saved" };
       },
     },
     user_Project_View: { findUnique: async () => null },
@@ -178,6 +181,7 @@ function server(appRoute, scenario = {}) {
   prisma.$transaction = async callback => callback(prisma);
   const mocks = {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/projects/getAllIncludes": { savedViewBoardAccessWhere },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => scenario.noAuth ? null : { userId: 6 } },
     "@/lib/flags": { isFeatureEnabled: async () => appRoute },
     "@/lib/realtime/server": { broadcastBoardChange: () => effects.push("broadcast") },
@@ -210,13 +214,13 @@ for (const appRoute of [false, true]) {
   const mode = appRoute ? "App" : "Pages";
   test(`server ${mode}: missing view returns 404 without writes`, async () => {
     const fixture = server(appRoute, { missing: true });
-    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View does not exist" } });
+    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View not found on this board" } });
     assert.deepEqual(fixture.effects, []);
   });
   test(`server ${mode}: successful delete returns the board, repeated delete returns 404`, async () => {
     const fixture = server(appRoute);
     assert.deepEqual(await fixture.invoke(), { status: 200, body: fixture.payload });
-    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View does not exist" } });
+    assert.deepEqual(await fixture.invoke(), { status: 404, body: { message: "View not found on this board" } });
     assert.deepEqual(fixture.effects, ["delete", "broadcast"]);
   });
   test(`server ${mode}: concurrent deletion returns 404 not 500`, async () => {

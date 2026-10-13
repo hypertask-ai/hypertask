@@ -1,3 +1,4 @@
+import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import prisma from "@/lib/prisma";
 import { IProject, ISection, ITask } from "@/models/model";
 import { getCurrentProject } from "@/utils/helperFunctions/helperFunctions";
@@ -38,7 +39,7 @@ export default async function getProject(shareId: string) {
         // Extract project ID from invite object
         const projectId = inviteObj.projectId;
 
-        const project = await prisma.project.findFirst({
+        const loadedProject = await prisma.project.findFirst({
             where: {
                 id: projectId,
             },
@@ -137,6 +138,7 @@ export default async function getProject(shareId: string) {
             },
         })
 
+        const project = sanitizeProjectBoardFilters(loadedProject, undefined, true);
         if (!project) {
             return ({
                 status: 404,

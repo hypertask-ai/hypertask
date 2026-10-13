@@ -381,6 +381,30 @@ export const getBoardTaskInclude = (
   );
 };
 
+// Saved views require accepted board membership; team membership and stored
+// personal view pointers are not access grants. Delegates must be owned/active.
+export const savedViewBoardAccessWhere = (
+  userId: number,
+  agentId?: string | null,
+): Prisma.ProjectWhereInput => {
+  const activeAgent = { id: agentId!, userId, revokedAt: null };
+  return {
+    OR: [
+      agentId
+        ? { owner: { id: userId, agents: { some: activeAgent } } }
+        : { ownerId: userId },
+      { members: { some: {
+        userId, agentId: null, status: "Accepted",
+        ...(agentId ? { user: { agents: { some: activeAgent } } } : {}),
+      } } },
+      ...(agentId ? [{ members: { some: {
+        agentId, status: "Accepted" as const,
+        agent: { userId, revokedAt: null },
+      } } }] : []),
+    ],
+  };
+};
+
 export const getProjectViewBaseInclude = ({
   currentUserId,
 }: {

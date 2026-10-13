@@ -1,3 +1,4 @@
+import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/BoardFilterSanitizer";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
@@ -83,7 +84,7 @@ const getFirst = async (userId:number) => {
             }
             return({
                 status:200,
-                json:project
+                json:sanitizeProjectBoardFilters(project, userId)
             })
         } catch (error) {
             console.log(error);

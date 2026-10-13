@@ -17,6 +17,9 @@ import { sanitizeProjectBoardFilters } from "@/utils/helperFunctions/Views/Board
  * custom AI instructions beyond the selected model
  */
 const minimalViewSelect = {
+  userId: true,
+  visibility: true,
+  project_view_id: true,
   board_columns_view: true,
   board_filters: true,
   board_staleness: true,
@@ -166,7 +169,24 @@ const getAllMinimal = async (
 
     return {
       status: 200,
-      json: projects.map((project) => sanitizeProjectBoardFilters(project)),
+      json: projects.map((project) => {
+        const safeProject = sanitizeProjectBoardFilters(project, userId);
+        if (mode === "ExtraMinimal" && "project_view" in safeProject && safeProject.project_view) {
+          type MinimalView = Prisma.ViewGetPayload<{ select: typeof minimalViewSelect }>;
+          const pv = safeProject.project_view as {
+            default_view: MinimalView | null;
+            user_project_views: Array<{ appliedView: MinimalView | null; unsavedView: MinimalView | null }>;
+          };
+          for (const view of [pv.default_view, ...pv.user_project_views.flatMap(row => [row.appliedView, row.unsavedView])]) {
+            if (!view) continue;
+            // Authorization metadata is internal, not part of ExtraMinimal's wire contract.
+            delete (view as Partial<typeof view>).userId;
+            delete (view as Partial<typeof view>).visibility;
+            delete (view as Partial<typeof view>).project_view_id;
+          }
+        }
+        return safeProject;
+      }),
     };
   } catch (error) {
     console.log("🚀 ~ getAllMinimal ~ error:", error);
