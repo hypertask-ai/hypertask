@@ -37,7 +37,7 @@ def utc():
     return datetime.now(timezone.utc).isoformat(timespec='microseconds').replace('+00:00', 'Z')
 
 
-def save(state):
+def save(state, path):
     fd, name = tempfile.mkstemp(prefix='.state-', dir=STATE)
     try:
         with os.fdopen(fd, 'w') as out:
@@ -45,7 +45,7 @@ def save(state):
             out.write('\n')
             out.flush()
             os.fsync(out.fileno())
-        os.replace(name, STATE / 'state.json')
+        os.replace(name, path)
         directory = os.open(STATE, os.O_DIRECTORY)
         try:
             os.fsync(directory)
@@ -238,17 +238,24 @@ def rotate_token(config):
     status = 'refused'
     name = None
     try:
+        url = urllib.parse.urlsplit(config.get('url', 'https://app.hypertask.ai/mcp'))
+        if (url.scheme, url.netloc) != ('https', 'app.hypertask.ai'):
+            return status, False
+        rotate_path = '/api/mcp/admin/agents/' + urllib.parse.quote(str(config['agent_id']), safe='') + '/token'
         cookies = json.loads(Path(config['qa_storage_state']).expanduser().read_text())['cookies']
         selected = [cookie for cookie in cookies
-                    if cookie['domain'].lstrip('.').lower() == 'hypertask.ai'
-                    or cookie['domain'].lower().endswith('.hypertask.ai')]
+                    if cookie['domain'].lower() in ('app.hypertask.ai', '.hypertask.ai', 'hypertask.ai')
+                    and cookie['path'].startswith('/')
+                    and (cookie['path'] == rotate_path or
+                         rotate_path.startswith(cookie['path']) and
+                         (cookie['path'].endswith('/') or rotate_path[len(cookie['path']):].startswith('/')))
+                    and (cookie['expires'] == -1 or cookie['expires'] > time.time())
+                    and (not cookie['secure'] or url.scheme == 'https')]
         if not selected or any(not re.fullmatch(r"[!#$%&'*+.^_`|~0-9A-Za-z-]+", cookie['name'])
                                or any(char in cookie['value'] for char in '\r\n;') for cookie in selected):
             return status, False
         cookie_header = '; '.join(cookie['name'] + '=' + cookie['value'] for cookie in selected)
-        url = urllib.parse.urlsplit(config.get('url', 'https://app.hypertask.ai/mcp'))
-        endpoint = urllib.parse.urlunsplit((url.scheme, url.netloc,
-                    '/api/mcp/admin/agents/' + urllib.parse.quote(str(config['agent_id']), safe='') + '/token', '', ''))
+        endpoint = 'https://app.hypertask.ai' + rotate_path
         request = urllib.request.Request(endpoint, data=b'{}', headers={
             'Content-Type': 'application/json', 'Cookie': cookie_header,
         })
@@ -364,13 +371,14 @@ def plans(incident):
     return title, description, message
 
 
-def report(incident, dry_run, state):
+def report(incident, dry_run, state, path):
     env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher')
     vcc = env.get('MCP_CONTRACT_WATCH_VCC', 'vcc')
     deliver = env.get('MCP_CONTRACT_WATCH_DELIVER', str(HOME / '.agents/skills/ship/scripts/runner-deliver'))
+    section = 'Bugs' if incident['bug_project'] == 15 else None
     if dry_run:
         title, description, message = plans(incident)
-        print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section='Bugs', assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
+        print(json.dumps(dict(would_file=dict(project=incident['bug_project'], title=title, description=description, priority='urgent', section=section, assignee=None), would_send=dict(target='ht-product-lead', id=incident['marker'], message=message))))
         return
     if incident['create_state'] != 'done':
         identity = env.get('MCP_CONTRACT_WATCH_IDENTITY', str(HOME / '.agents/skills/ship/scripts/ship-identity'))
@@ -380,26 +388,26 @@ def report(incident, dry_run, state):
         if code == 0 and len(fields) == 2 and fields[0] in ('MCP Contract Watcher', 'Valentins Claude Code') and Path(fields[1]).is_file():
             if incident['create_state'] == 'unknown':
                 incident['create_state'], incident['ticket_id'] = reconcile(incident, vcc, env)
-                save(state)
+                save(state, path)
             if incident['create_state'] == 'pending':
                 title, description, _ = plans(incident)
                 incident['create_state'] = 'unknown'
-                save(state)
+                save(state, path)
                 # Only board 15 has a Bugs column; a proof run on another board uses its default column.
-                section = ['--section', 'Bugs'] if incident['bug_project'] == 15 else []
-                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section, '--json'], env)
+                section_args = ['--section', section] if section else []
+                code, output = command([vcc, 'task', 'create', '--project', str(incident['bug_project']), '--title', title, '--description', description, '--priority', 'urgent', *section_args, '--json'], env)
                 ticket = receipt(output) if code == 0 else None
                 if ticket:
                     incident.update(create_state='done', ticket_id=ticket)
-                save(state)
+                save(state, path)
     if incident['alert_state'] != 'done':
         _, _, message = plans(incident)
         env['RUNNER_DELIVER_ID'] = incident['marker']
         incident['alert_state'] = 'pending'
-        save(state)
+        save(state, path)
         code, _ = command([deliver, 'ht-product-lead'], env, timeout=15, text=message + '\n')
         incident['alert_state'] = 'done' if code == 0 else 'pending'
-        save(state)
+        save(state, path)
 
 
 def tick_once(args):
@@ -407,7 +415,7 @@ def tick_once(args):
     os.chmod(STATE, 0o700)
     with (STATE / 'tick.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        path = STATE / 'state.json'
+        path = STATE / ('state-drill.json' if args.force_fail else 'state.json')
         state = json.loads(path.read_text()) if path.exists() else dict(incident=None)
         state.setdefault('pending_incidents', [])
         tick = probe(args)
@@ -431,17 +439,21 @@ def tick_once(args):
                 else:
                     tick.update(watcher_credential='revoked', rotation_status=status)
                     date = tick['time'][:10]
-                    if state.get('rotate_failed_date') != date:
-                        state['rotate_failed_date'] = date
-                        notification = ('mcp-contract-watch:rotate-failed:' + date,
-                            'Watcher token revoked and could not be rotated (status ' + str(status) + '). '
-                            'MCP status unknown; refresh the QA session file and rotate the watcher token.')
+                    notification = ('mcp-contract-watch:rotate-failed:' + date,
+                        'Watcher token revoked and could not be rotated (status ' + str(status) + '). '
+                        'MCP status unknown; refresh the QA session file and rotate the watcher token.')
         if notification:
-            # Persist the daily attempt before delivery so restarts cannot spam it.
-            save(state)
-            env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher', RUNNER_DELIVER_ID=notification[0])
-            deliver = env.get('MCP_CONTRACT_WATCH_DELIVER', str(HOME / '.agents/skills/ship/scripts/runner-deliver'))
-            command([deliver, 'ht-product-lead'], env, timeout=15, text=notification[1] + '\n')
+            state.setdefault('notices', {}).setdefault(notification[0], dict(message=notification[1], delivered=False))
+        if not args.dry_run:
+            for identifier, notice in state.get('notices', {}).items():
+                if notice['delivered']:
+                    continue
+                save(state, path)
+                env = dict(os.environ, SHIP_SESSION_NAME='MCP Contract Watcher', RUNNER_DELIVER_ID=identifier)
+                deliver = env.get('MCP_CONTRACT_WATCH_DELIVER', str(HOME / '.agents/skills/ship/scripts/runner-deliver'))
+                code, _ = command([deliver, 'ht-product-lead'], env, timeout=15, text=notice['message'] + '\n')
+                notice['delivered'] = code == 0
+                save(state, path)
         credential_revoked = tick.get('watcher_credential') == 'revoked'
         incident = state['incident']
         if not tick['ok'] and not credential_revoked and (incident is None or incident.get('closed_at')):
@@ -456,21 +468,21 @@ def tick_once(args):
         if incident and not incident.get('closed_at'):
             incident['consecutive_ok'] = incident['consecutive_ok'] + 1 if tick['ok'] else 0
             tick['incident_id'] = incident['id']
-        if incident and not credential_revoked:
+        if incident or state['pending_incidents']:
             if not args.dry_run:
-                save(state)
+                save(state, path)
             # Recovery rearms detection, but never discards an undelivered report.
-            for pending in [incident] + state['pending_incidents']:
+            for pending in ([incident] if incident else []) + state['pending_incidents']:
                 if not pending.get('closed_at') or pending['create_state'] != 'done' or pending['alert_state'] != 'done':
-                    report(pending, args.dry_run, state)
-            if incident['consecutive_ok'] >= 2 and not incident.get('closed_at'):
+                    report(pending, args.dry_run, state, path)
+            if incident and not credential_revoked and incident['consecutive_ok'] >= 2 and not incident.get('closed_at'):
                 incident['closed_at'] = tick['time']
             state['pending_incidents'] = [pending for pending in state['pending_incidents']
                                           if pending['create_state'] != 'done' or pending['alert_state'] != 'done']
             if not args.dry_run:
-                save(state)
+                save(state, path)
         if credential_revoked:
-            save(state)
+            save(state, path)
         if not args.dry_run:
             with (STATE / 'ticks.jsonl').open('a') as out:
                 out.write(json.dumps(tick) + '\n')
