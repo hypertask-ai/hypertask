@@ -6,7 +6,12 @@ import type { TaskDetailContext } from "./TaskDetailContext";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
+import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
+import { undoToastSettings } from "@/components/undoToast";
+import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
 export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
+  const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
+  const { deleteTodo } = UpdateKanban();
   const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
@@ -81,13 +86,22 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     if (!currentTask || !state) return;
     try {
       const response = await globalAPIHandlers.deleteTaskAPI(currentTask.id);
+      if (deleteTaskUndo) {
+        await deleteTodo("Undo task delete", {
+          id: currentTask.id,
+          projectId: currentTask.projectId,
+          status: "Deleted",
+        });
+      }
       if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { status: taskDetailConfig.taskStatus.deleted });
       console.log("🚀 ~ deleteTask ~ response:", response);
       // @ts-ignore
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
       await queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.projectsAll] });
-      toast(taskDetailConfig.toastMessages.taskDeleted);
-      onGoback();
+      if (!deleteTaskUndo || !undoToastSettings.single) toast(taskDetailConfig.toastMessages.taskDeleted);
+      // History Back can reload a deep link's previous document and lose Undo.
+      if (deleteTaskUndo) navigate("Replace", `/project?id=${currentTask.projectId}`);
+      else onGoback();
     } catch (error: any) {
       console.log("🚀 ~ deleteTask ~ error:", error);
       toast.error(taskDetailConfig.toastMessages.errorDeletingTask);
