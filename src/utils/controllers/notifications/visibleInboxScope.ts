@@ -27,7 +27,6 @@ export const visibleUserInboxWhere = (
     type: { in: inboxConfig.selfTriggeredHidden },
   },
   AND: [
-    { task: { project: projectContentAccessWhere(userId) } },
     {
       OR: [
         { task: { status: "Normal" } },
@@ -51,5 +50,6 @@ export const visibleUserInboxWhere = (
         { taskId: null },
       ],
     },
+    { task: { project: projectContentAccessWhere(userId) } },
   ],
 });
