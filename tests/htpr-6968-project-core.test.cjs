@@ -260,6 +260,7 @@ function createController(effects, quota = false) {
     "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
     "@/lib/prisma": { default: {
       user: { findUnique: record("user", { id: 985 }) },
+      team: { findFirst: record("team", { googleAccountId: "calendar" }) },
       $transaction: async fn => fn(tx), project: { update: record("write-name", board) },
       project_View: { upsert: record("default-view", { default_view_id: "default" }) },
     } },

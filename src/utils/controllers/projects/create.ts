@@ -35,6 +35,26 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       // return res.status(400).json({ message: "User not found" });
     }
 
+    // HTPR-7164: only the team owner or an accepted member may add a board,
+    // and the board takes the team's own account, never one from the request.
+    const team = await prisma.team.findFirst({
+      where: {
+        id: teamId,
+        OR: [
+          ...(user.accountId ? [{ googleAccountId: user.accountId }] : []),
+          { googleAccount: { is: { userId } } },
+          { members: { some: { userId, status: "Accepted" } } },
+        ],
+      },
+      select: { googleAccountId: true },
+    })
+    if (!team) {
+      return ({
+        status: 403,
+        json: { message: "You cannot create boards in this team" }
+      })
+    }
+
     // HTPR-4894: free accounts cap out at FREE_BOARD_LIMIT owned boards.
     if (await isBoardLimitReached(userId)) {
       return ({
@@ -69,7 +89,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
           name: `project-${projectCount + 1}`,
           title: title,
           teamId: teamId,
-          googleAccountId: googleAccountId,
+          googleAccountId: team.googleAccountId,
           section: { // Add the section field with the related section records
             create: [
               { section_title: "Todo", ranking: "A0100" },
