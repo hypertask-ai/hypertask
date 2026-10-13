@@ -10,6 +10,7 @@ import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFun
 import { IViewType } from '@/models/model';
 import { sendEmailNotification } from '@/utils/controllers/notifications/sendNotification';
 import { getSessionUser } from "@/lib/auth/getSessionUser";
+import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 
 
 
@@ -33,8 +34,13 @@ export default  async function handler(
       return res.status(401).json({ message: "Unauthorized" });
     }
     
-    const {projectId, email, userId} = req.body;
-    if (!projectId || !email || !userId) return res.status(400).json({message:"Missing required information"})
+    const {projectId: rawProjectId, email} = req.body;
+    const projectId = Number(rawProjectId)
+    if (!Number.isInteger(projectId) || !email) return res.status(400).json({message:"Missing required information"})
+    // HTPR-7176: only the board's owner and members may resend its invites.
+    const allowed = await getMemberAndOwner(projectId)
+    if (!Array.isArray(allowed) || !allowed.includes(user.id)) return res.status(403).json({message:"Forbidden"})
+    const userId = user.id
 
       var invite:any = undefined
       // =============== first find the invite

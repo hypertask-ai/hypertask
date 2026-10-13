@@ -13,6 +13,9 @@ let existingInvite;
 let sessionCookie;
 let redeemed;
 let inviter;
+let boardMemberIds;
+let cancelled;
+let viewUserIds;
 const board = { id: 42, title: "R&D #1 + Q? 日本語 %26", name: "project-42", owner: { email: "owner@example.test" } };
 
 function stub(relativePath, exports) {
@@ -42,12 +45,12 @@ stub("src/lib/prisma.ts", { default: {
   },
 } });
 stub("src/utils/controllers/logs/createLog.ts", { default: async () => {} });
-stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: () => ({}) });
+stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: ({ currentUserId }) => { viewUserIds.push(currentUserId); return {}; } });
 stub("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", { getViewFromProject: () => undefined });
 stub("src/lib/demo/guestGuard.ts", { isGuestRequest: async () => false });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
-stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => [7] });
-stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async () => {} });
+stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => boardMemberIds });
+stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async (...args) => { cancelled.push(args); } });
 stub("src/lib/email/sendEmail.ts", { sendEmail: async (email) => { sent.push(email); return { id: "test-email" }; } });
 stub("src/utils/controllers/notifications/digest.ts", { enqueueDigest: async () => false });
 stub("src/utils/controllers/notifications/projectMute.ts", { isTaskProjectMuted: async () => false });
@@ -95,6 +98,9 @@ test.beforeEach(() => {
   redeemed = undefined;
   inviter = { id: 7, displayName: body.sender, email: body.senderEmail, userPicture: null };
   existingInvite = { id: "invite&#+?日本語", project: board };
+  boardMemberIds = [7];
+  cancelled = [];
+  viewUserIds = [];
 });
 
 test("all invite query values round-trip punctuation, unicode and literal percent escapes", async () => {
@@ -236,4 +242,24 @@ test("unused legacy sender is absent and the source search detects a positive ca
   }
   scan(path.join(root, "src"));
   assert.equal(fs.existsSync(path.join(root, "src/utils/controllers/invite/sendInviteEmail.js")), false);
+});
+
+test("HTPR-7176: resend refuses a caller outside the board and leaves its invite alone", async () => {
+  boardMemberIds = [99];
+  let response;
+  await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 99 } }, {
+    status: (code) => ({ json: (value) => { response = { code, value }; } }),
+  });
+  assert.deepEqual(response, { code: 403, value: { message: "Forbidden" } });
+  assert.equal(sent.length, 0);
+  assert.equal(cancelled.length, 0);
+});
+
+test("HTPR-7176: resend takes the viewer from the session, not the request body", async () => {
+  await resend({ headers: {}, body: { projectId: "42", email: body.recipient, userId: 99 } }, {
+    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+  });
+  assert.deepEqual(viewUserIds, [7]);
+  assert.equal(cancelled.length, 1);
+  assert.equal(sent.length, 1);
 });
