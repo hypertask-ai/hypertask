@@ -89,6 +89,24 @@
       "where": {
         "userSetting": {
           "userId": 7
+        },
+        "project": {
+          "teamId": {
+            "not": null
+          },
+          "OR": [
+            {
+              "ownerId": 7
+            },
+            {
+              "members": {
+                "some": {
+                  "userId": 7,
+                  "agentId": null
+                }
+              }
+            }
+          ]
         }
       },
       "include": {
