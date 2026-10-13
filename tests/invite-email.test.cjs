@@ -141,7 +141,7 @@ test("send and resend deliver the board title and normalized inviter to the real
   const result = await addMemberController(7, 42, [body.recipient]);
   assert.equal(result.status, 200);
   await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 7 } }, {
-    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
   });
   assert.equal(sent.length, 2);
   for (const email of sent) {
@@ -158,7 +158,7 @@ test("send and resend use an explicitly saved profile name when the display name
   inviter.userPicture = { nameSet: true, displayName: "Valentin Yeo" };
   await addMemberController(7, 42, [body.recipient]);
   await resend({ headers: {}, body: { projectId: 42, email: body.recipient, userId: 7 } }, {
-    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
   });
   assert.equal(sent.length, 2);
   for (const email of sent) {
@@ -257,7 +257,7 @@ test("HTPR-7176: resend refuses a caller outside the board and leaves its invite
 
 test("HTPR-7176: resend takes the viewer from the session, not the request body", async () => {
   await resend({ headers: {}, body: { projectId: "42", email: body.recipient, userId: 99 } }, {
-    status: () => ({ json: (value) => assert.fail(JSON.stringify(value)) }),
+    status: (code) => ({ json: (value) => assert.equal(code, 200, JSON.stringify(value)) }),
   });
   assert.deepEqual(viewUserIds, [7]);
   assert.equal(cancelled.length, 1);

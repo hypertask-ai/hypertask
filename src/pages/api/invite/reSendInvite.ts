@@ -111,7 +111,7 @@ export default  async function handler(
         link: inviteLink,
       })
       if (sent) recordActivationOccurrence(user.id, "teammate_invited", invite.id, { method: "email" });
-      
+      return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)
       return res.status(500).json(error)
