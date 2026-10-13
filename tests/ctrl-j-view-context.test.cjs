@@ -204,6 +204,7 @@ test("existing create validation rejects foreign labels, users and agents before
   for (const invalid of ["label", "user", "agent", null]) {
     const sharedRoute = loadSharedRoute(async () => ({ userId: 985 }));
     const created = load("src/lib/api/task-writes/create-global.ts", {
+      "@/utils/controllers/tasks/parentTaskAccess": load("src/utils/controllers/tasks/parentTaskAccess.ts", {}),
       "./route": sharedRoute,
       "./create-global-effects": {
         isAgentAssignee: person => typeof person.id === "string", getActiveAgentOwnerId: async () => 42,

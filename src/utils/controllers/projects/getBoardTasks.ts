@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7071_AGENT_STATUS_CHIP_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { teamBillingSnapshotSelect } from "@/lib/ai/teamBillingSnapshotSelect";
@@ -99,7 +100,7 @@ const getBoardTasks = async (
       status: 200,
       json: {
         project: projectPayload,
-        tasks: tasksWithAgentStatus,
+        tasks: tasksWithAgentStatus.map(stripForeignTaskRelations),
         allViews,
       },
     };

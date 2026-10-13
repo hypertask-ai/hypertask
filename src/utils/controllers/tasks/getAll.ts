@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import {  PrismaClient } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
@@ -132,7 +133,7 @@ const tasksGetAll = async (
             })
             return({
                 status:200,
-                json:tasks
+                json:tasks.map(stripForeignTaskRelations)
             })
             // return res.status(200).json(tasks);
         } catch (error) {

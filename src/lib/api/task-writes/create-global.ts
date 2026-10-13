@@ -1,3 +1,4 @@
+import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { NextResponse } from "next/server";
@@ -325,6 +326,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           parentTaskId: parentTaskId || parentTask?.id || undefined,
           agentId,
         };
+        if (body.parentTaskId != null) {
+          await assertParentTaskOnBoard(tx, body.parentTaskId, projectId);
+        }
         const task = await tx.task.create({
           data: {
             ...body,
@@ -419,6 +423,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       tagsCreated = created.result.taskLabels;
       assignmentsCreated = created.result.assignments;
     } catch (e) {
+      if (e instanceof ParentTaskNotFoundError) {
+        return NextResponse.json({ message: "Parent task not found" }, { status: 404, headers: responseHeaders });
+      }
       if (e instanceof TaskSectionValidationError) {
         return NextResponse.json({ message: e.message }, { status: 400, headers: responseHeaders });
       }

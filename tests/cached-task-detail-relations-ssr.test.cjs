@@ -14,6 +14,7 @@ const { findCachedTaskDetail } = jiti(path.join(root, "src/lib/navigation/cached
 function load({ enabled = [], task = null, legacy = false } = {}) {
   const queries = [], flagCalls = [];
   const mocks = {
+    "@/lib/tasks/sameBoardRelations": jiti(path.join(root, "src/lib/tasks/sameBoardRelations.ts")),
     "@prisma/client": require("@prisma/client"),
     "@vercel/functions": {},
     "@/lib/realtime/server": {},
@@ -46,9 +47,10 @@ function projectRelation(row, select) {
   return projected;
 }
 
-test("flag-off relation projections retain the compact legacy shape", () => {
+test("flag-off relation projections retain the compact legacy shape plus sibling board ids", () => {
   const { taskDetailInclude } = load();
   const legacy = load({ legacy: true }).taskDetailInclude(6, 15);
+  legacy.parentTask.select.subTasks.select.projectId = true;
   for (const projection of [taskDetailInclude(6, 15), taskDetailInclude(6, 15, false)]) {
     assert.deepEqual(projection.subTasks, legacy.subTasks);
     assert.deepEqual(projection.parentTask, legacy.parentTask);

@@ -330,17 +330,20 @@ test("real searchAll ranking keeps exact first, descending recency, stable ties 
 
 test("real orphan query preserves createdAt ranking, full subtasks and the nested response envelope", async () => {
   const queries = [];
+  const orphanRows = ranked.map(row => ({
+    ...row, parentTask: null, subTasks: row.subTasks.map(child => ({ ...child, projectId: row.projectId })),
+  }));
   for (const target of ["current", "web"]) {
     const fx = fixture("searchOrphans", {});
     const controller = load("src/utils/controllers/tasks/getOrphanTasks.ts", {
-      "@/lib/prisma": { default: { task: { findMany: async query => { queries.push(query); return ranked; } } } },
+      "@/lib/prisma": { default: { task: { findMany: async query => { queries.push(query); return orphanRows; } } } },
     }).default;
     fx.mocks["@/utils/controllers/tasks/getOrphanTasks"] = { default: controller };
     fx.web = load("src/lib/api/task-writes/search-orphans.ts", fx.mocks).GET;
     fx.mocks["@/lib/api/task-writes/search-orphans"] = { GET: fx.web };
     fx.current = load("src/pages/api/tasks/searchOrphans.ts", fx.mocks).default;
     const result = await invoke(fx, "searchOrphans", {}, target);
-    assert.equal(JSON.stringify(result.body), JSON.stringify({ status: 200, json: ranked }));
+    assert.equal(JSON.stringify(result.body), JSON.stringify({ status: 200, json: orphanRows }));
     assert.deepEqual(queries.at(-1).orderBy, { createdAt: "desc" });
     assert.equal(queries.at(-1).select.subTasks, true);
   }

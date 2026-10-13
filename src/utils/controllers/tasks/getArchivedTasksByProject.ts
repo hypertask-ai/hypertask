@@ -1,3 +1,4 @@
+import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import prisma from "@/lib/prisma";
 import {
   getFullTaskInclude,
@@ -80,7 +81,7 @@ const tasksGetArchivedTasksByProject = async (
 
     return {
       status: 200,
-      json: await attachWaitingOnUsers(tasks),
+      json: await attachWaitingOnUsers(tasks.map(stripForeignTaskRelations)),
     };
   } catch (error) {
     console.log(error);
