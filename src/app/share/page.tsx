@@ -9,6 +9,7 @@ import {
   checkIfBoardMember,
   getSharedComments,
   getSharedTaskInfo,
+  isShareLinkLive,
   processSharedComments,
 } from "@/utils/controllers/tasks/getSharedTask";
 import SharedTaskDetailComp from "./SharedTaskDetailComp";
@@ -30,12 +31,16 @@ export async function generateMetadata(props: any): Promise<Metadata> {
         select: {
           ticketNumber: true,
           title: true,
+          status: true,
         },
       },
     },
   });
+  // HTPR-7174: a Domain link's title stays private to the board, like its content.
   const tabTitle =
-    taskInfo?.task.ticketNumber + " " + taskInfo?.task?.title + " - Hypertask";
+    taskInfo && taskInfo.shareType !== "Domain" && isShareLinkLive(taskInfo)
+      ? taskInfo.task.ticketNumber + " " + taskInfo.task.title + " - Hypertask"
+      : "Shared Task - Hypertask";
   return {
     title: tabTitle,
     robots: "noindex, nofollow",
@@ -65,7 +70,7 @@ export default async function Page(
   const sharedTask = await getSharedTaskInfo(shareId);
   let user: IUser | undefined;
   task = sharedTask?.task;
-  if (!sharedTask || sharedTask.task.status === "Deleted") {
+  if (!sharedTask || !isShareLinkLive(sharedTask)) {
     redirect("/unauthorized");
   }
 
@@ -93,17 +98,25 @@ export default async function Page(
     }
   }
 
+  // HTPR-7174: board members were redirected above, so a Domain link reaching this
+  // point belongs to an outsider. Send no task content at all, only the login/join bar.
+  if (sharedTask.shareType === "Domain") {
+    return (
+      <SharedTaskPageFooter
+        shareType={sharedTask.shareType}
+        shareId={sharedTask.id}
+        sharedUserEmail={sharedTask.user.email}
+        checkBoardMember={checkBoardMember}
+        user={user}
+      >
+        <main translate="no" />
+      </SharedTaskPageFooter>
+    );
+  }
+
   if (!Array.isArray(task) && task) {
     comments = await getSharedComments(task?.id?.toString());
     initialMap = processSharedComments(comments.json || []);
-  }
-
-  let shouldBlur: boolean = false;
-  if (sharedTask.shareType === "Domain") {
-    if (user === undefined) shouldBlur = true;
-    else {
-      if (checkBoardMember === 201) shouldBlur = true;
-    }
   }
 
   return (
@@ -134,11 +147,7 @@ export default async function Page(
               isShareView
             >
               <FollowersProvider>
-                <div
-                  className={`${
-                    shouldBlur ? "blur-sm pointer-events-none" : ""
-                  }`}
-                >
+                <div>
                   <SharedTaskDetailComp
                     key={`task-detail-page-container-${task.id}`}
                     _slugs={[

@@ -34,9 +34,13 @@ export const LaunchHypertaskOnboardingScreen = () => {
   };
 
   const getSharedTaskInfoURL = async (shareId: string) => {
-    const res = await axios.post(`${getSharedTaskRoute}?shareId=${shareId}`);
-    if (res.status === 200) {
-      return `/detail/project-${res.data.taskShared.projectId}/${res.data.taskShared.task.uniqueIndex}`;
+    try {
+      const res = await axios.post(`${getSharedTaskRoute}?shareId=${shareId}`);
+      if (res.status === 200) {
+        return `/detail/project-${res.data.taskShared.projectId}/${res.data.taskShared.task.uniqueIndex}`;
+      }
+    } catch {
+      // HTPR-7174: an expired link or a Domain link for a non-member is refused.
     }
     return "/";
   };

@@ -220,12 +220,13 @@ async function main() {
     controller,
     /return redactAgentIdentitiesForPublicShare\(shared\)/,
   );
-  for (const publicApi of [getSharedTaskApi, createShareLinkApi]) {
-    assert.match(
-      publicApi,
-      /taskShared: redactAgentIdentitiesForPublicShare\(taskShared\)/,
-    );
-  }
+  assert.match(
+    createShareLinkApi,
+    /taskShared: redactAgentIdentitiesForPublicShare\(taskShared\)/,
+  );
+  // HTPR-7174: getSharedTask returns only routing ids, so no task or agent data leaves it.
+  assert.match(getSharedTaskApi, /task: \{ uniqueIndex: taskShared\.task\.uniqueIndex \}/);
+  assert.doesNotMatch(getSharedTaskApi, /task: true|include:/);
   assert.match(activityRenderer, /activity\.data\.isSelfAssignment \?\?/);
   assert.doesNotMatch(activityRenderer, /(?:from|to)Agent\?\.photoURL\s*\?\?/);
 
