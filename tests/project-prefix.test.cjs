@@ -338,6 +338,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
   let created = null;
   const prisma = {
     user: { findUnique: async () => ({ id: 6 }) },
+    team: { findFirst: async () => ({ googleAccountId: "account-1" }) },
     project: {
       findFirst: async ({ where }) => clash ? { id: 99 } : boards.find(board => matches(board, where)) ?? null,
       create: async ({ data }) => { created = { ...data, id: 15 }; return created; },
