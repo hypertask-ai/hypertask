@@ -45,9 +45,9 @@ EOF
 set -euo pipefail
 printf '%s\n' "$*" >> "$FAKE_SYSTEMCTL_LOG"
 case "$*" in
-  *list-unit-files*)
+  *list-units*)
     [ "${FAKE_NO_RUNNERS:-0}" != 1 ] || exit 0
-    printf 'runner-pickup@12.timer enabled enabled\nrunner-pickup@3.timer enabled enabled\nrunner-pickup@1.timer disabled enabled\n';;
+    printf 'runner-pickup@12.timer loaded active waiting\nrunner-pickup@3.timer loaded active waiting\nrunner-pickup@1.timer loaded inactive dead\n';;
   *'enable --now runner-webhook.service')
     if [ -n "${FAKE_UPDATER_PID:-}" ]; then
       python3 - "$FAKE_UPDATER_PID" <<'PYEOF'

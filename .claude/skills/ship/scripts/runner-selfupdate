@@ -85,10 +85,10 @@ path = pathlib.Path(sys.argv[1])
 compile(path.read_bytes(), str(path), 'exec')
 PY
   then alert syntax 'Runner update contains invalid hook or webhook code'; return 1; fi
-  if ! enabled=$("$SYSTEMCTL" --user list-unit-files 'runner-pickup@*.timer' --state=enabled --no-legend --no-pager); then
-    alert runners 'Could not find enabled runner timers'; return 1
+  if ! enabled=$("$SYSTEMCTL" --user list-units 'runner-pickup@*.timer' --all --plain --no-legend --no-pager); then
+    alert runners 'Could not list runner timers'; return 1
   fi
-  n=$(awk '$1 ~ /^runner-pickup@[1-9][0-9]*\.timer$/ && $2 == "enabled" {sub(/^runner-pickup@/, "", $1); sub(/\.timer$/, "", $1); print $1}' <<<"$enabled" | sort -n | head -1)
+  n=$(awk '$1 ~ /^runner-pickup@[1-9][0-9]*\.timer$/ && $3 == "active" {sub(/^runner-pickup@/, "", $1); sub(/\.timer$/, "", $1); print $1}' <<<"$enabled" | sort -n | head -1)
   [ -n "$n" ] || return 0
   trap interrupted TERM INT HUP
   deploying=1
