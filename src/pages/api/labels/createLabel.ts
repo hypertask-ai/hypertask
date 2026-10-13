@@ -48,13 +48,11 @@ export default  async function handler(
     const aiPrompt = typeof ai_prompt === "string" && ai_prompt.trim()
       ? ai_prompt.trim()
       : null;
-    // Smart labels run an LLM classification pass on every task in the
-    // project (cost), so require project membership before setting one.
-    if (aiPrompt) {
-      const memberCheck = await validateProjectMemberIds(projectId, [userObj.id]);
-      if (memberCheck.error || memberCheck.invalidIds?.length) {
-        return res.status(403).json({ message: "Forbidden" });
-      }
+    // HTPR-7177: only members and the owner of the board may add labels to it,
+    // with or without a smart-label prompt.
+    const memberCheck = await validateProjectMemberIds(projectId, [userObj.id]);
+    if (memberCheck.error || memberCheck.invalidIds?.length) {
+      return res.status(403).json({ message: "Forbidden" });
     }
 
 
