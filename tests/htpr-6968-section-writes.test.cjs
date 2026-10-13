@@ -249,7 +249,7 @@ for (const [name, label, scenario, options] of [
     const gate = old.effects.find(([label]) => label === (name === "update" ? "last-or-access" : "board-access"));
     // HTPR-7166 requires Accepted human membership and allows teamless owners and active owned-agent delegation.
     assert.deepEqual(gate[1].where, name === "create"
-      ? { id: 15, ...savedViewBoardAccessWhere(985) }
+      ? { id: 15, status: "Normal", ...savedViewBoardAccessWhere(985) }
       : name === "update"
         ? { id: 91, project: { status: "Normal", ownerId: 985 } }
         : { id: 15, status: "Normal", ownerId: 985 });

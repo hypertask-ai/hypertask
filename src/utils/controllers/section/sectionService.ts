@@ -38,7 +38,7 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
   if (!Number.isSafeInteger(projectId) || projectId <= 0 || !Number.isSafeInteger(userId) || userId <= 0) {
     return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }
-  const project = await prisma.project.findFirst({ where: { id: projectId, ...savedViewBoardAccessWhere(userId, agentId) }, select: { id: true } })
+  const project = await prisma.project.findFirst({ where: { id: projectId, status: 'Normal', ...savedViewBoardAccessWhere(userId, agentId) }, select: { id: true } })
   if (!project) {
     return { status: 403, json: { message: 'User does not have permission to add a section to this project' } }
   }

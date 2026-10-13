@@ -144,6 +144,32 @@ test('section columns ignore another owner private default and fall back to boar
   assert.equal(result.status, 200);
   assert.deepEqual(result.json.map(column => column.section_title), ['Safe column']);
 });
+for (const status of ['Normal', 'Archive', 'Deleted']) {
+  for (const [name, options] of Object.entries({ owner: { owner: true }, Accepted: { member: 'Accepted' }, 'owned agent': { agent: true } })) {
+    test(`MCP section create lifecycle: ${status} ${name}`, async () => {
+      const h = fixture({ ...options, status });
+      h.mocks['@/utils/controllers/agents/boardMembers'] = {};
+      const result = await h.load('src/lib/mcp/sections/services.ts').createSection({ projectId: 17, title: 'New', userId: 42 }, options.agent ? 'owned-agent' : undefined);
+      assert.equal(result.success, status === 'Normal');
+      if (status !== 'Normal') {
+        assert.equal(result.status, 404);
+        assert.equal(result.error, 'Not found');
+        assert.equal(result.message, 'Project with ID 17 not found');
+        assert.ok(!h.queries.some(([name]) => ['section', 'sections'].includes(name)));
+      }
+      assert.deepEqual(h.effects, status === 'Normal' ? ['section-create', 'fanout'] : []);
+    });
+  }
+  for (const [name, options] of Object.entries({ owner: { owner: true }, Accepted: { member: 'Accepted' } })) {
+    test(`app section create preserves production lifecycle: ${status} ${name}`, async () => {
+      const h = fixture({ ...options, status });
+      const result = await h.load('src/lib/api/section-writes/create.ts').POST(h.request({ projectId: 17, title: 'New' }));
+      assert.equal(result.status, status === 'Normal' ? 200 : 403);
+      assert.deepEqual(h.effects, status === 'Normal' ? ['section-create', 'fanout', 'broadcast'] : []);
+    });
+  }
+}
+
 test('MCP section create passes the owned agent to the same accepted-only guard', async () => {
   const h = fixture({ agent: true, teamless: true });
   h.mocks['@/utils/controllers/agents/boardMembers'] = {};
