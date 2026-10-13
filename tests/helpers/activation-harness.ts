@@ -122,6 +122,7 @@ export function activationHarness() {
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 123 }) },
     "@/utils/controllers/getMemberAndOwnerForBoard": { default: async () => [123] },
     "@/lib/auth/session": { verifySession: () => ({ id: 50 }) },
+    "@/lib/auth/sessionRevocation": { isSessionTokenRevoked: async () => false },
     "@/lib/subscription": {},
     "@/lib/configs/general.config": { generalConfig: { hyperAiId: 77 } },
     "@/lib/stripeCustomerName": {},
