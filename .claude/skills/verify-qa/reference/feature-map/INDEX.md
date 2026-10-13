@@ -22,6 +22,7 @@ each ticket only needs the one or two areas it touches.
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
 | Announcements admin API | [announcements-admin-api.md](announcements-admin-api.md) | no smoke id; no-login 401 checks on the three admin routes |
+| Feature flag switch API | [feature-flags-api.md](feature-flags-api.md) | no smoke id; agent `ht-flag get` and a refused `ht-flag set` |
 | Task share links | [task-share-links.md](task-share-links.md) | no smoke id; no-login 401 and signed-in join checks on `/api/members/share` |
 | Board member list | [board-member-list.md](board-member-list.md) | no smoke id; query `teamId` ignored on `/api/members/getAll` |
 | Inbox | [inbox.md](inbox.md) | `view-inbox` (load-only); no write journey for archive/undo |
