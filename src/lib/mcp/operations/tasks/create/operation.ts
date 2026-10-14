@@ -11,6 +11,7 @@ import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml';
 import { IdempotencyInProgressError, normalizeIdempotencyKey, withIdempotency } from '@/lib/mcp/idempotency/idempotencyStore';
 import { buildFieldError } from '@/lib/mcp/fieldError';
 import { requireRole } from '@/lib/mcp/agents/scopes';
+import { isAgentOnBoard } from '@/utils/controllers/agents/boardMembers';
 import { isFeatureEnabled } from '@/lib/flags';
 import { HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG } from '@/lib/flags/definitions/htpr-7121-mcp-not-found-detail';
 import prisma from '@/lib/prisma';
@@ -115,6 +116,18 @@ export async function POST(request: NextRequest) {
                     ...(correlationId && { correlationId })
                 },
                 { status: projectCheck.error.status }
+            );
+        }
+
+        if (ctx.agentId && !(await isAgentOnBoard(project_id, ctx.agentId))) {
+            return NextResponse.json(
+                {
+                    ...buildFieldError('forbidden', 'project_id', 'Permission error'),
+                    message: 'This agent is not a member of this board. Ask the board owner to add it.',
+                    ...(dryRun && { valid: false }),
+                    ...(correlationId && { correlationId })
+                },
+                { status: 403 }
             );
         }
 
