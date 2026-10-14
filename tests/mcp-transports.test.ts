@@ -13,8 +13,9 @@ const require = createRequire(import.meta.url)
 const ts = require('typescript') as typeof import('typescript')
 const root = process.cwd()
 const token = 'transport-test-token'
-const flags = { stateless: false, deferred: false, catalog: false, feedback: false }
+const flags = { stateless: false, deferred: false, catalog: false, feedback: false, flatSchema: false }
 const echoCalls: unknown[] = []
+const schemaSelections: boolean[] = []
 const echoTool = {
   name: 'echo',
   description: 'Repeat the text',
@@ -51,7 +52,9 @@ function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
       if (request === './tools') return { MCP_TOOLS: [echoTool, feedbackTool] }
       if (request === './consolidated-tools') return {
-        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}) => {
+        selectMcpTools: (tools: typeof echoTool[], enabled: boolean, caller: { managementPermissions?: unknown } = {}, _v2 = false, flatSchema = false) => {
+          assert.equal(flatSchema, flags.flatSchema)
+          schemaSelections.push(flatSchema)
           if (!enabled) return tools
           const permitted = !caller.managementPermissions
           const execute = async (...args: Parameters<typeof echoTool.execute>) => {
@@ -83,7 +86,11 @@ function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
         HTPR_6531_DEFERRED_MCP_TOOLS_FLAG: 'deferred',
         HTPR_6532_STATELESS_MCP_FLAG: 'stateless',
         HTPR_6804_MCP_TOOLS_FLAG: 'catalog',
-        isFeatureEnabled: async (flag: string) => flag === 'htpr-7195-ai-feedback' ? flags.feedback : flags[flag as keyof typeof flags] ?? false,
+        HTPR_7203_MCP_FLAT_SCHEMA_FLAG: 'flatSchema',
+        isFeatureEnabled: async (flag: string, userId: number) => {
+          if (flag === 'flatSchema') assert.ok(userId === 6 || userId === 7)
+          return flag === 'htpr-7195-ai-feedback' ? flags.feedback : flags[flag as keyof typeof flags] ?? false
+        },
       }
       if (request.startsWith('.') || request.startsWith('@/')) {
         const resolved = request.startsWith('@/')
@@ -256,6 +263,13 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
         const listed = await rpc(10, 'tools/list')
         assert.deepEqual(listed.result.tools.map((tool: { name: string }) => tool.name), ['consolidated_echo'])
         assert.equal(listed.result.tools[0].outputSchema.type, 'object')
+        for (const flatSchema of [true, false]) {
+          flags.flatSchema = flatSchema
+          const before = schemaSelections.length
+          await rpc(101, 'tools/list')
+          assert.equal(schemaSelections.length, before + 2, 'both the message route and SSE relay resolve the flag')
+          assert.ok(schemaSelections.slice(before).every((selection) => selection === flatSchema))
+        }
         for (const name of ['consolidated_echo', 'echo']) {
           const called = await rpc(11, 'tools/call', { name, arguments: { text: 'flagged works' } })
           assert.equal(called.result.structuredContent.args.text, 'flagged works')

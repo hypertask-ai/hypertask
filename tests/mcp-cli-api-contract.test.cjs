@@ -163,3 +163,20 @@ test("unexpected fixture parsing failures never print credential-shaped contents
   assert.match(child.stderr, /unexpected runner failure \(details withheld\)/);
   assert.doesNotMatch(child.stdout + child.stderr, /private-placeholder/);
 });
+
+for (const keyword of ["oneOf", "allOf", "anyOf"]) {
+  test(`every advertised tool rejects top-level ${keyword}, including non-core tools`, async () => {
+    const { assertTools } = await helpers;
+    for (const name of [core[0], "non_core_tool"]) {
+      assert.throws(() => assertTools({ tools: [tool, { name, inputSchema: { type: "object", [keyword]: [] } }] }, core), /top-level/);
+    }
+  });
+}
+
+test("every advertised tool must have an object schema; nested combinators remain allowed", async () => {
+  const { assertTools } = await helpers;
+  for (const schema of [undefined, {}, { type: "string" }, { type: ["object", "null"] }]) {
+    assert.throws(() => assertTools({ tools: [tool, { name: "non_core_tool", inputSchema: schema }] }, core), /object inputSchema/);
+  }
+  assertTools({ tools: [{ ...tool, inputSchema: { type: "object", properties: { input: { anyOf: [{ type: "object" }] } } } }] }, core);
+});

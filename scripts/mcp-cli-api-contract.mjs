@@ -47,6 +47,12 @@ export function assertTools(result, expected) {
   for (const name of expected) {
     requireThat(result.tools.some(tool => tool.name === name && tool.inputSchema?.type === "object"), `tools/list: missing core tool ${name}`);
   }
+  for (const tool of result.tools) {
+    requireThat(tool.inputSchema?.type === "object", `tools/list: ${tool.name} must have an object inputSchema`);
+    for (const keyword of ["oneOf", "allOf", "anyOf"]) {
+      requireThat(!Object.hasOwn(tool.inputSchema, keyword), `tools/list: ${tool.name} has unsupported top-level ${keyword}`);
+    }
+  }
 }
 
 export function toolData(result, label) {
