@@ -13,12 +13,6 @@ const CALENDAR_AUDIENCE = "calendar-feed";
 const PAST_WINDOW_MS = 90 * 24 * 60 * 60 * 1000;
 const FUTURE_WINDOW_MS = 400 * 24 * 60 * 60 * 1000;
 
-/**
- * GET /api/calendar/feed?token=...
- * Read-only iCalendar feed of the user's tasks that have a due date.
- * Auth is the signed `token` query param (audience calendar-feed) so calendar
- * apps that can't send headers (Google Calendar "From URL") can subscribe.
- */
 export async function GET(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token");
   if (!token) {

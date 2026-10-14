@@ -1,14 +1,7 @@
-/**
- * @fileoverview
- * Task Detail Page Configuration
- * Centralized constants for the task detail page component.
- * Used by TaskDetailComp.tsx and related task detail components.
- */
 
 import { escapeHtml } from "@/utils/htmlEscape";
 
 const taskDetailConfig = {
-  // ==================== ELEMENT IDs ====================
   elementIds: {
     descriptionContainer: "description-container",
     taskDetailPageBackButton: "task-detail-page-back-button",
@@ -26,7 +19,6 @@ const taskDetailConfig = {
   },
 
   
-  // ==================== MODAL IDs ====================
   modals: {
     active: ["assignees", "linksModal", "htc"] as const,
     assignees: "assignees",
@@ -34,7 +26,6 @@ const taskDetailConfig = {
     htc: "htc",
   },
 
-  // ==================== CSS CLASS NAMES ====================
   classNames: {
     tipTap: "tiptap ProseMirror ProseMirror-focused",
     proseMirror: "ProseMirror ProseMirror-focused",
@@ -51,7 +42,6 @@ const taskDetailConfig = {
     ] as const,
   },
 
-  // ==================== QUERY KEYS ====================
   queryKeys: {
     moveTaskModal: "moveTaskModal",
     priority: "priority",
@@ -61,44 +51,39 @@ const taskDetailConfig = {
     projectsAll: "projectsAll",
   },
 
-  // ==================== TIMEOUTS & DELAYS (in milliseconds) ====================
   delays: {
-    doubleKeyPress: 500, // Delay for detecting double key presses (g, m+a)
-    titleEditMode: 100, // Delay before setting title edit mode
-    audioButtonClick: 200, // Delay before clicking audio button
-    scrollToElement: 500, // Delay for scrolling to element
-    focusCommentInput: 300, // Delay for focusing comment input
-    defaultCommentFocus: 400, // Delay for default comment focus
-    mobileFocusComment: 500, // Delay for mobile focus comment
+    doubleKeyPress: 500,
+    titleEditMode: 100,
+    audioButtonClick: 200,
+    scrollToElement: 500,
+    focusCommentInput: 300,
+    defaultCommentFocus: 400,
+    mobileFocusComment: 500,
   },
 
-  // ==================== UI DIMENSIONS ====================
   dimensions: {
     desktopNavigation: {
-      top: 40, // Top position for desktop navigation
+      top: 40,
     },
     backButton: {
-      size: 40, // Width and height of back button
-      borderRadius: 20, // Border radius of back button
+      size: 40,
+      borderRadius: 20,
     },
     tooltip: {
-      leftOffset: 45, // Left offset for tooltip
-      bottomOffset: 2, // Bottom offset for tooltip
+      leftOffset: 45,
+      bottomOffset: 2,
     },
   },
 
-  // ==================== HTTP STATUS CODES ====================
   httpStatus: {
     ok: 200,
   },
 
-  // ==================== TASK STATUS ====================
   taskStatus: {
     deleted: "Deleted",
     move: "Move",
   },
 
-  // ==================== EDIT MODES ====================
   editModes: {
     title: "title",
     description: "description",
@@ -108,37 +93,31 @@ const taskDetailConfig = {
     editCommentAi: "edit-comment-ai",
   },
 
-  // ==================== SCROLL SETTINGS ====================
   scrollSettings: {
     none: "None",
     bottom: "Bottom",
   },
 
-  // ==================== TASK ID CONSTANTS ====================
   taskIds: {
-    newTask: -1, // ID for newly created tasks
+    newTask: -1,
   },
 
-  // ==================== KEYBOARD SHORTCUTS ====================
   keyboard: {
     escape: "Escape",
     escapeCombination: ["ESC"] as const,
   },
 
-  // ==================== URL PATTERNS ====================
   urls: {
     taskDetailPattern: "/detail/project-",
     commentHashPrefix: "#comment-",
     templates: {
       commentLink: (projectId: number, uniqueIndex: string, ticketNumber: string, commentIndex: number) => {
-        // SECURITY: Keep staging's shared HTML escape helper and the PR hardening; link text and href path fragments are escaped/encoded before generating HTML.
         const safeProjectId = encodeURIComponent(String(projectId));
         const safeUniqueIndex = encodeURIComponent(uniqueIndex);
         const safeCommentIndex = encodeURIComponent(String(commentIndex));
         return `<a target="_blank" rel="noopener noreferrer nofollow" href="${taskDetailConfig.urls.taskDetailPattern}${safeProjectId}/${safeUniqueIndex}${taskDetailConfig.urls.commentHashPrefix}${safeCommentIndex}">${escapeHtml(ticketNumber)}</a>`;
       },
       mention: (displayName: string, userId: number) => {
-        // SECURITY: Display names are user-controlled; escape both rendered text and mention attributes before injecting HTML spans.
         const escapedDisplayName = escapeHtml(displayName);
         const escapedUserId = escapeHtml(userId);
         return `<span data-type="mention" class="mention" data-id="${escapedDisplayName}" data-label="name-${escapedUserId}" uniqueindex="" projectid="">${escapedDisplayName}</span>`;
@@ -146,12 +125,10 @@ const taskDetailConfig = {
     },
   },
 
-  // ==================== LOCAL STORAGE KEYS ====================
   localStorage: {
     mentionProjectId: "MENTION_PROJECT_ID",
   },
 
-  // ==================== SEARCH PARAMS ====================
   searchParams: {
     commentId: "commentId",
     reply: "reply",
@@ -160,7 +137,6 @@ const taskDetailConfig = {
     hash: "hash",
   },
 
-  // ==================== COMMAND MODES ====================
   commandModes: {
     delete: "DELETE",
     archive: "ARCHIVE",
@@ -196,7 +172,6 @@ const taskDetailConfig = {
     toggleTimeTracking: "ToggleTimeTracking",
   },
 
-  // ==================== COPY FUNCTION TYPES ====================
   copyTypes: {
     id: "ID",
     titleAndId: "TitleAndID",
@@ -206,7 +181,6 @@ const taskDetailConfig = {
     publicFormatted: "PublicFormatted",
   },
 
-  // ==================== FOCUS TYPES ====================
   focusTypes: {
     description: "Description",
     editComment: "Edit-Comment",
@@ -214,7 +188,6 @@ const taskDetailConfig = {
     others: "Others",
   },
 
-  // ==================== MODAL KEYS ====================
   modalKeys: {
     moveToColumn: "move-to-column-modal-for-task:",
     setPriority: "set-priority-modal-for-task:",
@@ -223,14 +196,12 @@ const taskDetailConfig = {
     dueDate: "due-date-modal-for-task:",
   },
 
-  // ==================== API ENDPOINTS ====================
   apiEndpoints: {
     moveTask: "/api/tasks/moveTask",
     moveTaskToInbox: "/api/notifications/moveTaskToInbox",
     unfollowTask: "/api/follower/unFollowTask",
   },
 
-  // ==================== TOAST MESSAGES ====================
   toastMessages: {
     undoNotificationArchive: "Undo notification archive",
     taskDeleted: "Task deleted",
@@ -241,12 +212,10 @@ const taskDetailConfig = {
     errorCopyCommentContent: "Failed to copy comment content",
   },
 
-  // ==================== DELETE MODAL CONTENT ====================
   deleteModal: {
     confirmationMessage: "Clicking confirm will delete this task! Task can be recovered within 30 days.",
   },
 
-  // ==================== NAVIGATION ROUTES ====================
   navigation: {
     back: "Back",
     refresh: "Refresh",
@@ -258,13 +227,11 @@ const taskDetailConfig = {
     unauthorized: "/unauthorized",
   },
 
-  // ==================== POSITION VALUES ====================
   positions: {
     top: "top",
     forceNavigate: "forceNavigate",
   },
 
-  // ==================== AUDIO BUTTON SUFFIXES ====================
   audioButtons: {
     suffix: "audio-button",
     improveSuffix: "-improve",

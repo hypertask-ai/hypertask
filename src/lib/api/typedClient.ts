@@ -38,7 +38,6 @@ export async function getBoardMemory(projectId: number): Promise<AxiosResponse<B
   if (result.success) {
     response.data = result.data;
   } else {
-    // Keep legacy parsed JSON on drift so validation alone cannot make a working UI fail.
     console.warn("Typed API contract mismatch: getBoardMemory", result.error.issues);
   }
   return response;
@@ -53,14 +52,11 @@ export async function listSkills(params: SkillsListQuery): Promise<AxiosResponse
   if (result.success) {
     response.data = result.data;
   } else {
-    // Keep legacy parsed JSON on drift so validation alone cannot make a working UI fail.
     console.warn("Typed API contract mismatch: listSkills", result.error.issues);
   }
   return response;
 }
 
-// Descriptors describe the wire contract only. Concrete readers keep their original
-// transport and rejection semantics instead of imposing a shared request wrapper.
 export type ReadRouteDescriptor<Path extends z.ZodType = z.ZodType> = {
   method: "GET" | "POST";
   pathParams: Path;
@@ -105,7 +101,6 @@ export const boardDetailRoute = {
 
 function validateRead<Schema extends z.ZodType>(name: string, schema: Schema, data: z.output<Schema>, validate: ReadRouteDescriptor["validate"] = "sync"): z.output<Schema> {
   if (validate === "deferred") {
-    // Large answers are diagnostic only; never delay board hydration or replace its data.
     if (typeof window !== "undefined") {
       const check = () => { validateRead(name, schema, data); };
       if (typeof window.requestIdleCallback === "function") {
@@ -118,7 +113,6 @@ function validateRead<Schema extends z.ZodType>(name: string, schema: Schema, da
   }
   const result = schema.safeParse(data);
   if (result.success) return result.data;
-  // Match slice 1: drift is diagnostic, never a new user-visible failure.
   console.warn(`Typed API contract mismatch: ${name}`, result.error.issues);
   return data;
 }
@@ -156,7 +150,6 @@ export async function getBoardDetail(body: BoardDetailBody, signal?: AbortSignal
   return response;
 }
 
-// Writes keep each caller's transport and HTTP rejection behavior.
 type WriteRouteDescriptor = Omit<ReadRouteDescriptor, "method"> & { method: "GET" | "POST" | "PUT" };
 
 export const moveTaskRoute = {
@@ -313,7 +306,6 @@ export async function moveTask(body: taskWrites.MoveTaskBody) {
   });
 }
 
-// Native-fetch callers keep their distinct status checks and JSON error handling.
 export async function readMoveTaskResponse(response: Response): Promise<z.output<typeof moveTaskRoute.success>> {
   return validateRead("moveTask", moveTaskRoute.success, await response.json(), moveTaskRoute.validate);
 }
@@ -420,7 +412,6 @@ export async function toggleNotificationArchive(query: notificationWrites.Notifi
     method: route.method,
     headers: { ...headers, "X-Hypertask-Client": "htpr-6925" },
   });
-  // The caller only checks status. Diagnose a clone without consuming its body.
   if (response.ok) {
     try {
       validateRead("toggleNotificationArchive", route.success, await response.clone().json());

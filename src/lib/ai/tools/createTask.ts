@@ -138,7 +138,6 @@ export function createCreateTaskTool(context: ToolContext) {
             return { success: false, error: `Invalid due_date: "${input.due_date}". Use an ISO-8601 date.` };
           }
 
-          // Assignees must be project owner/members — same check hypertask_assign_user does.
           if (input.assignee_ids?.length) {
             const allowedMemberIds = await getMemberAndOwner(input.project_id);
             if (typeof allowedMemberIds === "string") {

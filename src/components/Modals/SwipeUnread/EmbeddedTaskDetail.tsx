@@ -36,7 +36,6 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { currentTask, setCurrentTask, setDescription, editMode, hasDraft, hasDraftInit, uploadingDescription } = useTaskContext();
   currentTaskRef.current = currentTask;
-  // Joining a shared prefetch skips this observer's queryFn; use the provider's assignee references.
   if (dedupe && assigneeSnapshotRef.current === null) {
     assigneeSnapshotRef.current = { assignees: currentTask?.assignees };
   }
@@ -50,7 +49,6 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
       refreshRetries.current = 0;
       return;
     }
-    // Retry transient failures before replacing the cached view with a cold document's Suspense fallback.
     if (editing || (noLoadingFlash && !(error instanceof TaskAccessDeniedError) && refreshRetries.current < 3)) {
       const retry = window.setTimeout(() => {
         if (!editing) refreshRetries.current += 1;
@@ -58,11 +56,9 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
       }, editing ? 1000 : 1000 * 2 ** refreshRetries.current);
       return () => window.clearTimeout(retry);
     }
-    // Recover through the authorized route only when no local work is active.
     window.location.replace(window.location.href);
   }, [error, editing, noLoadingFlash, refetch]);
   useEffect(() => {
-    // Structural sharing can retain task identity after an identical server read.
     if (previousTask.current === task && (!keepAssignee || previousUpdatedAt.current === dataUpdatedAt)) return;
     previousTask.current = task;
     previousUpdatedAt.current = dataUpdatedAt;
@@ -78,8 +74,7 @@ function RefreshCachedTask({ task, dataUpdatedAt, error, refetch, currentTaskRef
       return editMode === "title" && current ? { ...refreshed, title: current.title } : refreshed;
     });
     if (!preserveContent) setDescription(task.description_?.content ?? "");
-    // Reconcile a new server snapshot once, not when editing ends.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [task, dataUpdatedAt]);
   if (error instanceof TaskAccessDeniedError) return <Unauthorized />;
   return children;
@@ -145,7 +140,6 @@ const EmbeddedTaskDetail = ({
     );
   }
 
-  // Only the guarded refresh path may replace content after the editor mounts.
   const serializedTask = embedded ? JSON.stringify(task) : initialSerializedTask.current!;
   const serializedComments = JSON.stringify(comments);
   const slugs = [`project-${projectId}`, String(uniqueIndex)];

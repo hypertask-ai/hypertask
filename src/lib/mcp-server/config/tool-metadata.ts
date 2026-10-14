@@ -1,12 +1,3 @@
-/**
- * Tool Metadata Configuration
- * 
- * Single source of truth for all MCP tool names and descriptions.
- * Import these constants in tool definitions to maintain consistency.
- * 
- * Following MCP best practice: Name Tools for Discovery
- * All tool names are prefixed with service name for better discovery.
- */
 
 import { buildToolName } from './mcp-standards';
 import { REPORT_CAPABILITIES } from '@/utils/controllers/reports/reportService';
@@ -18,10 +9,6 @@ export interface ToolMetadata {
 }
 
   
-/**
- * All tool metadata in one place
- * Tool names are automatically prefixed with service prefix following MCP best practices
- */
 const RAW_TOOL_METADATA = {
   REPORT_FEEDBACK: {
     name: buildToolName('report_feedback'),
@@ -491,14 +478,8 @@ assertToolSummaries(RAW_TOOL_METADATA as Record<string, ToolMetadata>)
 
 export const TOOL_METADATA = RAW_TOOL_METADATA;
 
-/**
- * Extract just the names for easy iteration
- */
 export const TOOL_NAMES: string[] = Object.values(TOOL_METADATA).map((tool) => tool.name);
 
-/**
- * Helper to get tool metadata by name
- */
 export function getToolMetadata(name: string): ToolMetadata | undefined {
   return Object.values(TOOL_METADATA).find((tool) => tool.name === name);
 }

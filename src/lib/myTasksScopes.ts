@@ -13,7 +13,6 @@ const SCOPE_SET = new Set<string>(MY_TASKS_SCOPE_VALUES);
 
 export const DEFAULT_MY_TASKS_SCOPES: MyTasksScope[] = ["assigned"];
 
-/** Allowlists and dedupes. Empty or garbage input becomes assigned-only. */
 export function normalizeMyTasksScopes(value: unknown): MyTasksScope[] {
   if (!Array.isArray(value)) return [...DEFAULT_MY_TASKS_SCOPES];
   const selected = new Set<MyTasksScope>();
@@ -25,10 +24,6 @@ export function normalizeMyTasksScopes(value: unknown): MyTasksScope[] {
   return unique.length > 0 ? unique : [...DEFAULT_MY_TASKS_SCOPES];
 }
 
-/**
- * Flag-off always queries assigned-only. Flag-on uses the saved list.
- * Saved config still keeps scopes when the flag is off so rollout does not wipe them.
- */
 export function effectiveMyTasksScopes(
   scopes: MyTasksScope[] | undefined,
   flagEnabled: boolean,
@@ -37,7 +32,6 @@ export function effectiveMyTasksScopes(
   return normalizeMyTasksScopes(scopes ?? DEFAULT_MY_TASKS_SCOPES);
 }
 
-/** One OR clause per selected scope. Caller ANDs this with board-access filters. */
 export function buildMyTasksScopeOr(
   userId: number,
   scopes: MyTasksScope[],
@@ -55,7 +49,6 @@ export function buildMyTasksScopeOr(
         clauses.push({ followers: { some: { userId, agentId: null } } });
         break;
       case "mentioned": {
-        // TipTap mention chips store the user as data-label="name-{userId}".
         const mentionMarker = `data-label="name-${userId}"`;
         clauses.push({
           OR: [

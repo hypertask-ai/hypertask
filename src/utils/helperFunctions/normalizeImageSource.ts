@@ -2,10 +2,6 @@ const SCREENCAST2_HOSTS = new Set(["screencast2.com", "www.screencast2.com"]);
 const IMAGE_PATH = /\.(?:avif|gif|jpe?g|png|webp)$/i;
 const IMAGE_SRC_RE = /(<img\b[^>]*?\ssrc\s*=\s*)(["'])([^"']*)\2/gi;
 
-/**
- * Screencast2's share URL looks like an image URL but serves an HTML viewer.
- * Adding the provider's `raw` query flag returns the image payload itself.
- */
 export const normalizeImageSource = (src: string): string => {
   if (!src) return src;
 

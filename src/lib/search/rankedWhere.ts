@@ -17,7 +17,6 @@ export async function rankedSearchWhere(
   taskOrderBy?: Prisma.TaskOrderByWithRelationInput[],
 ) {
   const where = await searchFilterWhere(parsed, projectIds, status)
-  // HTPR-6368: type:ticket ranks only tickets, type:comment only comments (negated flips it). Resolved before any branch.
   const { allowTasks, allowComments, commentOnly, phraseScope } = resultKinds(parsed)
   const phrases = parsed.filters.phrase ?? []
   const rankedIds: number[] = []
@@ -27,7 +26,6 @@ export async function rankedSearchWhere(
   const commentMode = allowComments && (commenters.length > 0 || (commentOnly && !parsed.text))
   if (commentMode) {
     const matching = commenterWhere(commenters, parsed.text, phrases)
-    // Comment results: only tickets that have a matching comment can page, count or be returned.
     const effectiveWhere: Prisma.TaskWhereInput = { ...where, AND: [...((where.AND ?? []) as Prisma.TaskWhereInput[]), { comments: { some: matching } }] }
     const taskWhere: Prisma.TaskWhereInput = { AND: [effectiveWhere, extraWhere] }
     let cursorValid = true
@@ -47,7 +45,6 @@ export async function rankedSearchWhere(
         { createdAt: { _max: { lt: anchor.createdAt } } },
         { createdAt: { _max: { equals: anchor.createdAt } }, taskId: { lt: cursorId } },
       ] } : undefined
-      // Group and page in the database: Prisma's distinct would deduplicate in memory.
       const groups = cursorValid ? await prisma.comment.groupBy({
         by: ['taskId'], where: { ...matching, task: taskWhere },
         _max: { createdAt: true }, having,

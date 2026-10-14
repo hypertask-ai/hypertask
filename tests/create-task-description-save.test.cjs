@@ -103,7 +103,7 @@ test("discard during title generation cancels the pending save", () => {
 test("discard checks the latest create-task fields before React renders", () => {
   const hook = read("src/hooks/MultiPages/Tasks/useCreateTaskModalStates.ts");
   const guardStart = hook.indexOf("const hasUnsavedChanges");
-  const guardEnd = hook.indexOf("// Any draft written", guardStart);
+  const guardEnd = hook.indexOf("useEffect(() => {\n    purgeLegacyCreateTaskDrafts", guardStart);
   assert.notEqual(guardStart, -1, "the discard guard must exist");
   assert.notEqual(guardEnd, -1, "the discard guard boundary must exist");
   const guard = hook.slice(guardStart, guardEnd);

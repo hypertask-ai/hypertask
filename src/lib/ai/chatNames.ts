@@ -1,5 +1,3 @@
-// HTPR-7052: pure naming rules for new AI chats. No imports, so tests and both
-// the client and the server can use it.
 
 export const DEFAULT_CHAT_TITLE = "New AI Chat";
 export const CHAT_TITLE_MAX_LENGTH = 50;
@@ -20,7 +18,6 @@ function stripMarkup(text: string) {
     .replace(/(^|\s)[@#](?=\S)/g, "$1");
 }
 
-/** First user message as a short plain-text title, or "" when nothing readable is left. */
 export function deriveChatTitle(message: string | null | undefined) {
   const text = clean(stripMarkup(message ?? ""));
   if (text.length <= CHAT_TITLE_MAX_LENGTH) return text;
@@ -30,14 +27,12 @@ export function deriveChatTitle(message: string | null | undefined) {
   return `${head.replace(/[.,;:!?\s]+$/, "")}...`;
 }
 
-/** Title for a chat with no message yet: ticket title, else board name, else null (keep the default). */
 export function initialChatTitle(enabled: boolean, context: NamingContext) {
   if (!enabled) return null;
   const title = clean(context.taskTitle) || clean(context.boardName);
   return title ? title.slice(0, 120) : null;
 }
 
-/** True when the stored title is one the app wrote, so a manual rename is never replaced. */
 export function isAutoChatTitle(currentTitle: string | null | undefined, context: NamingContext) {
   const title = clean(currentTitle);
   if (!title || title === DEFAULT_CHAT_TITLE) return true;
@@ -47,7 +42,6 @@ export function isAutoChatTitle(currentTitle: string | null | undefined, context
   });
 }
 
-/** Title to write when the first message arrives, or null to leave the chat alone. */
 export function firstMessageChatTitle(
   enabled: boolean,
   currentTitle: string | null | undefined,

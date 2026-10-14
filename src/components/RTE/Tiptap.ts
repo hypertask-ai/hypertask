@@ -21,7 +21,6 @@ const allowedCommentModes: RedirectMode[] = [
 import styles from "@/styles/tiptap.module.scss";
 import Underline from "@tiptap/extension-underline";
 import Gapcursor from "@tiptap/extension-gapcursor";
-// import { TrailingNode } from "./Extensions/trailingNode";
 
 import { normalizeEditorHtml, shouldSyncDraft } from "./draftSync";
 import SlashCommands from "./Extensions/SlashCommands/SlashCommands";
@@ -81,8 +80,6 @@ interface IProps {
   createNewComment?: boolean;
   trackFocus?: boolean;
   mentionProjectId?: number | null;
-  // Overrides the mode-derived random tip, for callers (e.g. the feedback
-  // form) that need a fixed, specific placeholder instead.
   placeholder?: string;
 }
 const useTiptap = ({
@@ -105,19 +102,8 @@ const useTiptap = ({
   const autocapUndoRef = useRef(autocapUndo);
   if (autocapUndo) autocapUndoRef.current = true;
   else autocapUndoRef.current = false;
-  // A phone has no CTRL key, so the "CTRL+J for Ai" tip is dead copy there
-  // (HTPR-5517). Mobile descriptions get a plain placeholder instead.
   const isMobileView = useContext(MobileViewContext);
-  // Tiptap's onDestroy hands back no editor, so keep the instance from onCreate
-  // to unregister the exact editor that died, not whoever holds `mode` now.
   const editorRef = useRef<Editor | null>(null);
-  // Capture the initial content once. Passing a changing `content` to useEditor
-  // makes it call setOptions on re-render, which reconfigures the ProseMirror
-  // plugins and destroys any open suggestion popup. The content prop changes
-  // while editing (draft autosave updates the draft query that feeds it), so we
-  // freeze the value the editor was created with. Callers only render this editor
-  // once real content is available, and content updates flow through the editor
-  // itself after mount, so freezing the initial value is safe.
   const [initialContent] = useState(defaultContent);
   const editorProps = useMemo(() => {
     if (mode !== "read-edit-description") return writingAssistanceEditorProps;
@@ -139,25 +125,11 @@ const useTiptap = ({
         left: defaultScrollMargin,
       },
     };
-    // mode is fixed for each editor instance.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, []);
-  // Memoize the extensions so their instances are stable across renders.
-  // Tiptap v3's useEditor compares extensions by reference and, when any
-  // instance differs, calls setOptions which reconfigures every ProseMirror
-  // plugin (destroying and recreating their plugin views). Building this array
-  // inline on each render created fresh instances every time (StarterKit.configure,
-  // SlashCommands(mode), Link.configure, ... all return new objects), so any
-  // re-render tore down an open suggestion popup. That is why the slash "/" and
-  // @ mention menus flashed then vanished the first time (opening them triggers a
-  // re-render). A stable array keeps the plugins mounted and the menus open.
   const extensions = useMemo(
     () => [
       Gapcursor,
-      // v3 StarterKit now bundles link/underline/blockquote/orderedList/gapcursor.
-      // Disable them here so our separately-configured versions (custom Link
-      // target/_blank, OrderedList numbered-list class, etc.) are the single
-      // registration and win deterministically instead of double-registering.
       StarterKit.configure({
         link: false,
         underline: false,
@@ -175,8 +147,6 @@ const useTiptap = ({
         },
       }),
       TaskItem,
-      // Document,
-      // DBlock,
       OrderedList.configure({
         itemTypeName: "listItem",
         HTMLAttributes: {
@@ -185,8 +155,6 @@ const useTiptap = ({
       }),
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        // Use a placeholder:
-
         placeholder:
           placeholder ??
           (allowedCommentModes.includes(mode)
@@ -200,34 +168,16 @@ const useTiptap = ({
         emptyNodeClass: "New Comment",
       }),
       Underline,
-      // Image.configure({
-      //     inline: true,
-      //     allowBase64: true,
-      //     HTMLAttributes: ({
-      //         style: {
-      //             default: 'width: 10%; height: auto; cursor: pointer;',
-      //         },
-      //     }),
 
-      // }),
       SlashCommands(mode),
       Snippets,
-      // HTPR-6205: autolink was disabled in HTPR-3236 because the Link mark
-      // is inclusive whenever autolink is on, so a link mark active before an
-      // @mention bled across the mention node into text typed after it.
-      // Force the mark non-inclusive instead of disabling autolink outright.
       Link.extend({ inclusive: false }).configure({
         openOnClick: true,
         autolink: true,
         linkOnPaste: true,
         HTMLAttributes: {
-          // Change rel to different value
-          // Allow search engines to follow links(remove nofollow)
-          // rel: 'noopener noreferrer',
-          // Remove target entirely so links open in current tab
           target: "_blank",
         },
-        // validate: href => /^https?:\/\//.test(href),
       }),
       ReplyBlockquote,
       LazyEmoji.configure({
@@ -244,7 +194,6 @@ const useTiptap = ({
       ),
       ResizableMedia.configure({
         uploadFn: async (file) => {
-          // You could implement your own progress tracking here
           try {
             const strings = await uploadFilesViaApi([file]);
             console.log("🚀 ~ uploadFn: ~ strings:", strings);
@@ -255,13 +204,10 @@ const useTiptap = ({
           }
         },
         onUploadStart: () => {
-          // Notify the application that an upload has started
-          // You could set a global loading state here
           console.log("Upload started");
           document.body.classList.add("editor-uploading");
         },
         onUploadEnd: () => {
-          // Notify the application that an upload has ended
           console.log("Upload ended");
           document.body.classList.remove("editor-uploading");
         },
@@ -274,12 +220,7 @@ const useTiptap = ({
         undoCapitalizationEnabled: () => autocapUndoRef.current,
       }),
     ],
-    // Build the extensions exactly once for this editor instance. They must be
-    // referentially stable: Tiptap v3's useEditor reconfigures the whole plugin
-    // set (destroying open suggestion popups) whenever any extension instance
-    // changes between renders. mode/isApple/createNewComment/mentionProjectId are
-    // fixed per instance, so capturing them on first render is correct.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     []
   );
   const editor = useEditor({
@@ -299,65 +240,7 @@ const useTiptap = ({
       if (trackFocus && editor) unregisterTiptapEditor(mode, editor);
       editorRef.current = null;
     },
-    // editorProps: {
-    //     handlePaste(view, event) {
-    //         console.log("🚀 ~ file: TipTap.tsx:187 ~ handlePaste ~ event:", event)
-    //         // console.log("🚀 ~ file: TipTap.tsx:181 ~ handlePaste ~ event:", event.clipboardData)
-    //         let hasFiles = false;
-    //         let reader = new FileReader();
-
-    //         reader.onload = function (event) {
-    //             let imageUrl = event?.target?.result;
-    //             console.log("🚀 ~ handlePaste ~ view.state.schema?.nodes?.image:", view.state.schema?.nodes)
-    //             const node = view.state.schema?.nodes?.image.create({ src: imageUrl });
-    //             const transaction = view.state.tr.replaceSelectionWith(node);
-    //             view.dispatch(transaction);
-    //         };
-
-    //         if (event?.clipboardData?.files) {
-    //             console.log("🚀 ~ file: TipTap.tsx:194 ~ handlePaste ~ event?.clipboardData?.files:", event?.clipboardData?.files)
-
-    //             Array.from(event?.clipboardData?.files)
-    //                 .filter(item => item.type.startsWith("image"))
-    //                 .forEach(item => {
-    //                     reader.readAsDataURL(item);
-    //                     hasFiles = true;
-    //                 });
-
-    //         }
-
-    //         const cursorPos = editor?.state.selection.$anchor.pos;
-    //         if(cursorPos) {
-    //             const cursorCoords = view.coordsAtPos(cursorPos);
-    //             const isCursorOutOfView =
-    //               cursorCoords.top < 0 ||
-    //               cursorCoords.bottom > window.innerHeight;
-
-    //             if (isCursorOutOfView) {
-    //             setTimeout(()=>{
-    //                 view.dom.scrollIntoView({
-    //                     behavior: 'smooth',
-    //                     block: 'end',
-    //                   });
-    //             },10)
-
-    //             }
-    //         }
-
-    //         if (hasFiles) {
-    //             event.preventDefault();
-    //             return true;
-    //         }
-    //     },
-    // },
   });
-  // Drafts arrive asynchronously (react-query), so the composer normally mounts
-  // before its draft is fetched and `initialContent` freezes the mount value.
-  // Drafts written outside this browser (CLI/MCP `draft create`) always lose that
-  // race. Seed the editor when the stored draft differs from what it is showing,
-  // for as long as the user has not touched it — see `shouldSyncDraft`. Typing,
-  // posting and discarding all go through the editor and emit an update, so a late
-  // or stale response can never overwrite the user or resurrect posted content.
   const userHasEditedRef = useRef(false);
   useEffect(() => {
     if (!editor) return;
@@ -372,18 +255,10 @@ const useTiptap = ({
 
   useEffect(() => {
     if (!editor) return;
-    // Compare against the editor's OWN html, not the frozen mount value: a draft
-    // rewritten elsewhere has to replace an older one, not just fill an empty
-    // editor. Tiptap re-serialises what it is given, so this is also the only
-    // comparison that stays stable across a sync.
     const incoming = normalizeEditorHtml(defaultContent);
     const rendered = normalizeEditorHtml(editor.getHTML());
     if (!shouldSyncDraft(incoming, rendered, userHasEditedRef.current)) return;
-    // Replacing the document maps every position to the end, so a caret the user
-    // placed but has not typed at yet would silently jump. Put it back.
     const caret = editor.isFocused ? editor.state.selection.from : null;
-    // emitUpdate:false — syncing must not fire the draft autosave back at the API,
-    // and must not count as the user's own edit.
     editor.commands.setContent(defaultContent ?? "", { emitUpdate: false });
     if (caret !== null) {
       editor.commands.setTextSelection(Math.min(caret, editor.state.doc.content.size));

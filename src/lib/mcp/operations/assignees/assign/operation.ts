@@ -31,11 +31,8 @@ interface AssignBody {
   user_id?: number;
   user_ids?: number[];
   mode?: "multiple";
-  /** Agent-only: add the calling agent itself as an assignee. No user_id needed. */
   assign_self?: boolean;
-  /** Owner-only: assign or unassign one of your own agents by id. No user_id needed. */
   agent_id?: string;
-  /** Default `assign` (idempotent). Use `unassign` to remove assignee; omit legacy toggle. */
   intent?: "assign" | "unassign";
 }
 
@@ -52,8 +49,6 @@ async function findTaskByIdentifier(
     ticket_number?: string | null;
     unique_index?: number | null;
     project_id?: number | null;
-    // Unassign must reach Archive/Deleted tasks so cleanup does not require a
-    // status round-trip (HTPR-6428). Assign stays Normal-only.
     allowNonNormalStatus?: boolean;
   }
 ) {
@@ -144,7 +139,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate task identification
     const taskIdCount = [!!task_id, !!ticket_number, !!unique_index].filter(Boolean).length;
     if (taskIdCount === 0) {
       return NextResponse.json(
@@ -175,7 +169,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate user identification
     const hasSingleUser = user_id != null && !isNaN(Number(user_id));
     const hasMultipleUsers = Array.isArray(user_ids) && user_ids.length > 0 && mode === "multiple";
 
@@ -271,17 +264,12 @@ export async function POST(request: NextRequest) {
     };
 
     if (assign_self) {
-      // Agent self-assignment: add the calling agent itself as an assignee.
-      // The controller records agentId on the row and validates board membership.
       if (!ctx.agentId) {
         return NextResponse.json(
           { success: false, error: "assign_self requires an agent token" },
           { status: 400 }
         );
       }
-      // Same request-boundary adoption as AI Chat: take a lease for this
-      // request's first fenced write, then release it so the assigned worker
-      // can claim immediately instead of waiting for TTL expiry (HTPR-6388).
       const response = await withAdoptedAgentMutationLease(
         prisma,
         { agentId: ctx.agentId, userId: currentUser.id },
@@ -306,8 +294,6 @@ export async function POST(request: NextRequest) {
       }
       recordAssignmentResult(response.json as AssignmentResult);
     } else if (hasAgentId) {
-      // Owner acting on one of their own agents. This is the only way to remove
-      // a revoked agent, whose token is gone so it cannot unassign itself.
       const targetAgentId = (agent_id as string).trim();
       const ownedAgent = await prisma.agent.findFirst({
         where: { id: targetAgentId, userId: ctx.user.id },
@@ -357,9 +343,6 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Validate all users are members of the task's project (owner or project member).
-      // Removals skip this: someone who has left the board must still be
-      // removable, or their chip is stuck on the task forever (HTPR-4187).
       const allowedMemberIds =
         assignIntent === "unassign" ? [] : await getMemberAndOwner(task.projectId);
       if (typeof allowedMemberIds === "string") {
@@ -388,7 +371,6 @@ export async function POST(request: NextRequest) {
       }
 
       for (const uid of userIdsToProcess) {
-        //Right now we are only assigning users from agents
         const response = await withAdoptedAgentMutationLease(
           prisma,
           { agentId: ctx.agentId, userId: currentUser.id },
@@ -448,7 +430,6 @@ export async function POST(request: NextRequest) {
     const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);
 
     void broadcastBoardChange(task.projectId, { originUserId: user.id });
-    // HTPR-6281: the open task detail view listens only on the task channel.
     void broadcastTaskChange(task.id, { originUserId: user.id });
 
     return NextResponse.json(

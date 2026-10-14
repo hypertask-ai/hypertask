@@ -79,16 +79,12 @@ const tasksGetArchivedTasks = async (
                     status:200,
                     json:tasks
                 })
-            
-
-            // res.status(200).json(tasks);
         } catch (error) {
             console.log(error);
             return ({
                 status:300,
                 json:{message:"No Response", error:error}
             })
-            // res.status(200).json([]);
         }
     
 };
@@ -100,8 +96,6 @@ export const tasksGetArchivedTasksMeta = async (
 ) => {
   try {
     const where = getArchivedTasksWhere(userId, projectId, boardScope);
-    // ponytail: count + a projectId-only scan for the per-project splits; fine at
-    // personal-archive scale, swap to a raw GROUP BY if a user's archive gets huge.
     const [total, rows] = await prisma.$transaction([
       prisma.task.count({ where }),
       prisma.task.findMany({

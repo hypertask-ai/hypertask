@@ -69,35 +69,10 @@ const useUpdateSubtask = () => {
         },
       }
     )
-    // toast.promise(
-    //   axios.post(removeParentTaskRoute, {
-    //     childId: currentTask?.id,
-    //     parentId: currentTask?.parentTaskId,
-    //   }),
-    //   {
-    //     loading: "Removing parent task",
-    //     success: () => {
-    //       setCurrentTask((prev) => {
-    //         if (!prev) return null;
-    //         return {
-    //           ...prev,
-    //           parentTask: undefined,
-    //           parentTaskId: undefined,
-    //         };
-    //       });
-    //       return `Parent task has been removed`;
-    //     },
-    //     error: (error) => {
-    //       console.log("🚀 ~ toast.promise ~ error:", error);
-    //       return "Error removing parent task";
-    //     },
-    //   }
-    // );
 
     scrollToDescription();
   };
 
-  // --------------- update subtasks
   useEffect(() => {
     if (
       newTaskCreated &&

@@ -5,18 +5,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 export const runtime = "nodejs";
 
-/**
- * What an agent has actually been doing, newest first.
- *
- * There is no activity table: an agent's work is spread across the rows it
- * wrote (comments, evidence, questions it raised, work sessions) plus the model
- * turns it burned tokens on. This unions those sources rather than adding a
- * write path, so nothing has to be recorded twice and history that already
- * exists shows up immediately.
- *
- * Each source is capped and the merged result is trimmed, so one chatty source
- * cannot crowd the others out of the page.
- */
 
 const DEFAULT_LIMIT = 40;
 const MAX_LIMIT = 100;
@@ -60,8 +48,6 @@ export async function GET(
     );
   }
 
-  // Ownership is re-checked here, not inferred from knowing the id: this
-  // returns what an agent has been doing across every board it touches.
   const agent = await prisma.agent.findFirst({
     where: { id: params.agentId, userId },
     select: { id: true },
@@ -79,9 +65,6 @@ export async function GET(
       ? Math.min(Math.trunc(requested), MAX_LIMIT)
       : DEFAULT_LIMIT;
 
-  // Owning the agent is not the same as still being able to see the board it
-  // worked on. Without this an owner removed from a board would keep reading
-  // that board's task titles and links out of their agent's history.
   const visibleTask = { task: { project: getProjectWhere(userId) } };
 
   const [comments, evidence, questions, sessions, usage] = await Promise.all([

@@ -11,9 +11,8 @@ import { planKindFromStripePriceId } from "./planFromStripePriceId";
 import { stripeCustomerName } from "@/lib/stripeCustomerName";
 
 export const stripe = new Stripe(String(process.env.STRIPE_SECRET_KEY), {
-  // Deliberately pinned; account/webhook payload shapes depend on it.
   apiVersion: "2023-08-16" as typeof Stripe.API_VERSION,
-  maxNetworkRetries: 10, // Retry a request twice before giving up
+  maxNetworkRetries: 10,
   httpClient: Stripe.createFetchHttpClient(),
 });
 
@@ -33,7 +32,6 @@ export interface InvoiceWithCardDetails {
   cardDetails?: Stripe.Response<Stripe.PaymentMethod>;
 }
 
-//   ============================ GET UPCOMING INVOICE OF THAT USER =========================
 export async function getUpcomingInvoice(
   customerId: string
 ): Promise<Stripe.Response<UpcomingInvoice> | null> {
@@ -56,7 +54,6 @@ export async function getCustomer(
   return customer;
 }
 
-// ======================== GET INVOICES OF THE CUSTOMER =====================
 export async function getInvoices(
   customerId: string
 ): Promise<InvoiceWithCardDetails[]> {
@@ -80,7 +77,6 @@ export async function getInvoices(
           );
 
           if (paymentIntent.payment_method) {
-            // const paymentMethod = await stripe.paymentMethods.retrieve(paymentIntent.payment_method as string);
             const paymentMethod = await stripe.customers.retrievePaymentMethod(
               customerId,
               paymentIntent.payment_method as string
@@ -102,51 +98,14 @@ export async function getInvoices(
   }
 }
 
-// export async function getInvoices(customerId:string){
-//     const invoices = await stripe.invoices.list({
-//         customer: 'cus_PHFSdkieUkWw5t',
-//             // customer: customerId,
-
-//       });
-//       if (invoices.data[0].payment_intent){
-//           const paymentIntent = await stripe.paymentIntents.retrieve(invoices.data[0].payment_intent as string);
-//           console.log("🚀 ~ file: subscription.ts:22 ~ getInvoices ~ paymentIntent:", paymentIntent)
-//           if (paymentIntent.payment_method) {
-//             // Retrieve the payment method details
-//             const paymentMethod = await stripe.customers.retrievePaymentMethod(
-//                 'cus_PHFSdkieUkWw5t',
-//                 paymentIntent.payment_method as string
-//               );
-//             console.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ paymentMethod:", paymentMethod)
-//             // const paymentMethod = await stripe.paymentMethods.retrieve(paymentIntent.payment_method as string);
-
-//             // Access the card details (you might want to handle this securely on your server)
-//             const cardDetails = paymentMethod.card;
-//             console.log("🚀 ~ file: subscription.ts:29 ~ getInvoices ~ cardDetails:", cardDetails)
-
-//             // You can access card details such as card brand, last 4 digits, expiration date, etc.
-//             // return `Card ending in ${cardDetails?.last4}, expiring ${cardDetails?.exp_month}/${cardDetails?.exp_year}`;
-//           }
-//       }
-//       return invoices
-// }
-
 export async function hasSubscription(teamId: any) {
-  // if (!teamId) return
   const team = await prisma.team.findFirst({
     where: { id: teamId ?? undefined },
   });
-  // console.log("🚀 ~ file: subscription.ts:16 ~ hasSubscription ~ team:", team)
 
-  // cus_P2coaGr750mSSE
   const PaidTeam = await prisma.team.findFirst({
     where: {
       stripe_customer_id: String(team?.stripe_customer_id),
-      // subscriptionPlan:{
-      //     some:{
-      //         subscriptionStatus:{not:"Expired"}
-      //     }
-      // }
     },
     include: {
       projects: {
@@ -183,9 +142,6 @@ export async function hasSubscription(teamId: any) {
 
   console.log("🚀 ~ hasSubscription ~ subscription:", filteredSubscriptions)
 
-
-
-  // if there are no active subscriptions remove them
   if (!yearlySubscription && !monthlySubscription && PaidTeam)
     updateTeamInDBToExpired(String(team?.stripe_customer_id), PaidTeam.id);
 
@@ -197,7 +153,6 @@ export async function hasSubscription(teamId: any) {
   };
 }
 
-// Generate Customer portal
 export async function generateCustomerPortalLink(customerId: string) {
   try {
     const portalSession = await stripe.billingPortal.sessions.create({
@@ -276,15 +231,6 @@ export async function findTeam(user: IUser) {
   }
 }
 
-/**
- * Provisions the team's Stripe customer when it doesn't have one yet and
- * returns its id.
- *
- * HTPR-4358: this used to wrap everything in a bare try/catch that returned
- * `undefined` on ANY prisma or Stripe failure, so a broken money path looked
- * like a successful no-op to every caller. Errors now propagate; each caller
- * decides what a failure means.
- */
 export async function createCustomerIfNull(
   _userEmail: string,
   teamId: string
@@ -300,20 +246,13 @@ export async function createCustomerIfNull(
   }
   if (team.stripe_customer_id) return team.stripe_customer_id;
 
-  // The key and request parameters must both be team-stable. Stripe rejects an
-  // idempotency-key retry when another team member supplies a different email.
   const customer = await stripe.customers.create(
     { name: stripeCustomerName(team.title), metadata: { teamId: team.id } },
     {
       idempotencyKey: `hypertask-team:${teamId}:stripe-customer`,
-      // Stripe reports an in-flight use of this key as HTTP 409. stripe-node
-      // retries conflicts, so a concurrent caller waits for the same result.
       maxNetworkRetries: 10,
     }
   );
-  // Claim conditionally so two concurrent requests cannot each overwrite the
-  // team with their own new customer. The database picks the winner, and the
-  // loser returns whatever is actually stored rather than its own stale id.
   const claimed = await prisma.team.updateMany({
     where: { id: teamId, stripe_customer_id: null },
     data: { stripe_customer_id: customer.id },
@@ -337,10 +276,7 @@ export async function createInvoiceAndPay(
 ) {
   const productId = String(process.env.NEXT_PUBLIC_STRIPE_PRODUCT_ID);
 
-  //create an invoice if the current plan status is active or paid.
-  //update subcription plan if the current plan status is active or paid.
   if (currentPlanStatus === "active" || currentPlanStatus === "Paid") {
-    // ============== create an invoice
     const invoice = await stripe.invoices.create({
       customer: customerId,
       collection_method: "charge_automatically",
@@ -354,7 +290,6 @@ export async function createInvoiceAndPay(
         : remainingTime && remainingTime * defaultStripeAmountYear;
     console.log("🚀 ~ createInvoiceAndPay ~ amountToCharge:", amountToCharge);
 
-    // ============== Create an Invoice Item with the Price, and Customer you want to charge
     await stripe.invoiceItems.create({
       customer: customerId,
       price_data: {
@@ -365,7 +300,6 @@ export async function createInvoiceAndPay(
       invoice: invoice.id,
     });
 
-    // ============== get payment method for that user
     const paymentMethods = await stripe.customers.listPaymentMethods(
       customerId
     );
@@ -377,7 +311,6 @@ export async function createInvoiceAndPay(
       return "Error";
     }
 
-    // ============== finally pay for that user.
     const payment = await stripe.invoices.pay(invoice.id, {
       payment_method: paymentMethods.data[0].id,
     });
@@ -389,7 +322,6 @@ export async function createInvoiceAndPay(
     return "SEATED";
   }
 
-  // ============== returnn a success message
   return "Error";
 }
 

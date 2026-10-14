@@ -13,7 +13,6 @@ const PageContainer: FC<IPageContainer> = ({ title, children }) => {
             
             <div className='w-full max-w-[1440px] min-h-screen inbox_tag_mobile_view py-9 text-white-black px-16 flex flex-col items-start bg-containerBackground'>
                     <PageTitle title={title}/>
-                {/* Render the children here */}
                 {children}
             </div>
         </div>

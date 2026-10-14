@@ -98,8 +98,6 @@ export function rotateFigmaConnectionVersion(
     FIGMA_CONNECTION_VERSION_COOKIE,
     randomBytes(16).toString("base64url"),
     {
-      // This random cache version is not a credential; previews read it to
-      // reject responses started before a connection change.
       httpOnly: false,
       maxAge: FIGMA_CONNECTION_VERSION_MAX_AGE_SECONDS,
       path: "/",

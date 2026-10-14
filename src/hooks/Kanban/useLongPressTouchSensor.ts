@@ -180,7 +180,6 @@ export const useLongPressTouchSensor: Sensor = (api) => {
     }
 
     listenForStart();
-    // Safari needs one non-capturing listener before a later drag can cancel scrolling.
     const safariTouchMove = () => {};
     window.addEventListener("touchmove", safariTouchMove, {
       capture: false,

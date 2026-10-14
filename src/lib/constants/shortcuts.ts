@@ -32,7 +32,6 @@ export const getKeyboardShortcuts = (
   const altOptions = isApple ? "OPT" : "ALT";
   const boardSwitch = isApple ? "CTRL" : "ALT";
 
-  // Helper function to clean pressKey arrays (trim strings, handle comma-separated values, preserve nulls)
   const cleanPressKey = (keys: (string | null)[]): (string | null)[] => {
     return keys
       .flatMap((key) => {
@@ -40,7 +39,6 @@ export const getKeyboardShortcuts = (
           return [null];
         }
         const trimmed = key.trim();
-        // Handle comma-separated values like "J, ⭣" by splitting
         if (trimmed.includes(", ")) {
           return trimmed.split(", ");
         }
@@ -122,8 +120,6 @@ export const getKeyboardShortcuts = (
         { shortTitle: "Add task at top", pressKey: [cmdControl, "SHIFT", "C"] },
         { shortTitle: "Add task at bottom", pressKey: ["SHIFT", "C"] },
         { shortTitle: "Open task", pressKey: ["ENTER"] },
-        // [ / ] cycle views on the old shell only; on the rail shell "[" is
-        // the sidebar toggle (HTPR-4890) and views cycle with TAB/Shift+TAB.
         ...(appShellRailOn
           ? []
           : [
@@ -212,10 +208,6 @@ export const getKeyboardShortcuts = (
     {
       title: "Agent Chat",
       sub: [
-        // Ctrl+Tab also cycles agents but browsers (and, on Mac, the OS)
-        // reserve it for switching tabs/apps before it ever reaches the
-        // page, so Option/Alt+Arrow is the one advertised here as reliable
-        // on every platform.
         { shortTitle: "Next agent", pressKey: [altOptions, "⭣"] },
         { shortTitle: "Previous agent", pressKey: [altOptions, "⭡"] },
         { shortTitle: "Send message", pressKey: [cmdControl, "ENTER"] },

@@ -7,6 +7,5 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.redirect('/login?error=no_code');
   }
 
-  // Handle the callback
   return res.redirect('/');
 }

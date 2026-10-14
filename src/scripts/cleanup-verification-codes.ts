@@ -2,28 +2,20 @@
 
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 
-/**
- * Cleanup script for expired verification codes
- * Run this periodically (e.g., every hour) to keep the database clean
- */
 async function cleanupExpiredCodes() {
   try {
     console.log('🧹 Starting comprehensive cleanup...')
     
-    // Clean up expired verification codes
     await VerificationCodeService.cleanupExpiredCodes()
     
-    // Clean up rate limiting memory
     VerificationCodeService.cleanupRateLimit()
     
-    // Get and display stats
     const stats = await VerificationCodeService.getStats()
     console.log('📊 Verification code stats:', {
       ...stats,
       timestamp: new Date().toISOString()
     })
     
-    // Health check alerts
     if (stats.active > 100) {
       console.warn('⚠️  High number of active codes detected:', stats.active)
     }
@@ -41,5 +33,4 @@ async function cleanupExpiredCodes() {
   }
 }
 
-// Run cleanup
 cleanupExpiredCodes() 

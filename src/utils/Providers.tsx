@@ -37,14 +37,6 @@ import {
   stripChunkRecoveryParam,
 } from "@/utils/helperFunctions/chunkLoadRecovery";
 
-// Never persist the inbox: a restored snapshot can predate an archive, and while it is
-// still within staleTime react-query serves it without refetching, so an archived
-// notification comes back on reload until the snapshot ages out (HTPR-4086).
-// Preferences are not persisted either: the query key is global, not per user,
-// so a persisted snapshot survived switchAccount's hard reload and showed the
-// previous account its predecessor's snippets, AI models, notification matrix
-// and saved calendar views for up to five minutes (HTPR-4693). They are one
-// small request on load, so keeping them in memory only costs nothing.
 const REACT_QUERY_PERSIST_BUSTER =
   "startup-budget-v3-view-show-archived";
 const CHUNK_RECOVERY_STABLE_MS = 30 * 1000;
@@ -93,22 +85,11 @@ const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {
     [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
 };
 
-/** Public share links: read-only, never the signed-in app shell. */
 function isPublicSharePath(pathname: string | null | undefined): boolean {
   if (!pathname) return false;
   return pathname === "/share" || pathname.startsWith("/share/");
 }
 
-/**
- * GlobalProvider mounts the whole signed-in shell (sidebars, modals, teams /
- * favorites / announcements / realtime queries). On a public /share link a
- * signed-in non-member gained nothing from it, but its queries fired mid-
- * hydration. With an RSC request in flight, Next 14's AppRouter hits its
- * conditional `use(state)` (useUnwrapState) and React throws #310, taking the
- * whole page down. Rendering a minimal shell here removes that. HTPR-4089.
- *
- * GlobalProvider exposes no context, so nothing under /share depends on it.
- */
 function PublicShell({ children }: { children: ReactNode }) {
   const mbl = useContext(MobileViewContext);
   return (
@@ -141,8 +122,6 @@ export default function Provider({
 }) {
   const pathname = usePathname();
   const publicShare = isPublicSharePath(pathname);
-  // A document seed is adopted only at the existing account boundary's mount,
-  // never on a later RSC navigation over a live edit or cached ticket/back tree.
   const [initialDocument] = useState(() => getBoardDocument(firstScreen ?? null, authenticatedUserId ?? 0) ?? getInboxDocument(firstScreen ?? null, authenticatedUserId ?? 0));
   const snapshot = initialDocument?.scope.accountId === authenticatedUserId ? initialDocument : null;
   const initialValues = useMemo(() => {
@@ -163,16 +142,9 @@ export default function Provider({
     previousQueryBoundary.current = queryBoundary;
   }, [queryBoundary]);
 
-  // Reaching here means the root chain mounted, so clear global-error's
-  // auto-reload budget. Without this a tab that recovered twice would show the
-  // error page on the next unrelated root crash instead of re-hydrating.
   useEffect(() => {
     window.sessionStorage.removeItem("ht-root-reload");
 
-    // Provider mount alone is not proof that every descendant/lazy chunk is
-    // healthy. Preserve the capped attempt budget until the recovered tree has
-    // stayed mounted; an error-boundary unmount cancels this reset and prevents
-    // a persistent missing chunk from creating an infinite navigation loop.
     const stableTimer = window.setTimeout(() => {
       window.sessionStorage.removeItem(CHUNK_RELOAD_STORAGE_KEY);
 
@@ -188,7 +160,6 @@ export default function Provider({
   return (
     <FirstScreenSurfaceProvider snapshot={snapshot}>
       <ThemeListener />
-      {/* <RootErrorBoundary> */}
       <PersistQueryClientProvider
         key={`query-account-${authenticatedUserId ?? "guest"}`}
         client={queryBoundary.client}
@@ -202,8 +173,6 @@ export default function Provider({
         }}
       >
         <DeviceProvider initialIsApple={initialIsApple}>
-          {/* MobileViewProvider wraps UndoProvider: the undo pipeline reads
-              the viewport to anchor the toast left on mobile (HTPR-5564). */}
           <MobileViewProvider initialIsMobile={initialIsMobile}>
             <StateRoot key={`state-account-${authenticatedUserId ?? "guest"}`} initialValues={initialValues}>
               <UndoProvider>
@@ -228,9 +197,6 @@ export default function Provider({
           </MobileViewProvider>
         </DeviceProvider>
       </PersistQueryClientProvider>
-      {/* </RootErrorBoundary> */}
-      {/* <QueryClientProvider client={queryClient}> */}
-      {/* </QueryClientProvider> */}
     </FirstScreenSurfaceProvider>
   );
 }

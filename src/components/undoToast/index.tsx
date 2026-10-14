@@ -6,8 +6,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 export const SINGLE_UNDO_TOASTER_ID = "htpr-6885-undo";
-// UndoToaster is imperative and also called outside FeatureFlagProvider.
-// The authenticated global toaster publishes its flag here; default is off.
 export const undoToastSettings = { single: false };
 let previousUndoToastId: string | undefined;
 
@@ -29,34 +27,10 @@ export const SingleUndoToaster = ({
 );
 
 export const UNDO_ACTION_WINDOW_MS = 15_000;
-// The toast is the only visible way to undo an archive, so it must stay on
-// screen for as long as the undo is actually available. #2668 cut the prompt
-// to 5s while the action window stayed at 15s, which left a dead zone: from
-// 5s the toast is removed from the DOM, so the UNDO button no longer exists
-// and the archive can only be reversed by Ctrl+Z, which most people never
-// try. Verified live on production for HTPR-5543: clicking UNDO 1.2s after
-// archiving restores the task, at 7s there is no button left to click and the
-// task stays archived. Keep the two timings in lockstep.
 export const UNDO_TOAST_DURATION_MS = UNDO_ACTION_WINDOW_MS;
-// HTPR-5872: mobile halves the undo window; desktop keeps 15s. The mobile
-// toast follows its window in lockstep for the same reason as above: the
-// prompt must never outlive or underlive the action it offers.
 export const MOBILE_UNDO_ACTION_WINDOW_MS = 7_500;
 export const MOBILE_UNDO_TOAST_DURATION_MS = MOBILE_UNDO_ACTION_WINDOW_MS;
 
-/**
- * Rendered inside the <Toaster> tree, so it can read MobileViewContext.
- *
- * Mobile (HTPR-5564, per the approved wireframe): the same narrow dark pill,
- * now with the desktop Dismiss X, anchored to the LEFT edge just below
- * vertical center (top edge ~52% of screen height — set by
- * `.toastContainerMobile { top: 52% }`; the left anchor comes from this
- * toast's own `position: "top-left"`, so ordinary mobile toasts stay on the
- * right). That keeps the task actions clear and stays out of the bottom thumb
- * zone. Undo keeps its full window: 7.5s on mobile (HTPR-5872), 15s on
- * desktop.
- * Desktop keeps the existing white toast with an explicit X.
- */
 export const UndoToastContent = ({
   t,
   toastText,
@@ -103,8 +77,6 @@ export const UndoToastContent = ({
   } as const;
 
   if (isMbl) {
-    // Anchored to the left edge by this toast's own position; slide back
-    // toward that edge on exit.
     const slide = {
       opacity: t.visible ? 1 : 0,
       transform: t.visible ? "translateX(0)" : "translateX(-16px)",
@@ -122,8 +94,6 @@ export const UndoToastContent = ({
           <button
             type="button"
             aria-label="Dismiss"
-            // Keep the required 44px target outside the layout so it does not
-            // add empty space to the visible pill.
             className={`${MOBILE_TARGET} absolute -right-3 -top-3 cursor-pointer rounded text-[12px] font-bold leading-none text-text-light-gray`}
             onClick={() => toast.dismiss(t.id)}
           >
@@ -148,10 +118,6 @@ export const UndoToastContent = ({
       style={fade}
     >
       <div className="pl-1 pr-3 text-black">{toastText}</div>
-      {/* Real buttons, not clickable divs: the label already reads "Undo task
-          archive", so anything targeting the toast by its accessible name (a
-          screen reader, the keyboard, an agent driving the app) landed on the
-          inert label and the archive was never reversed (HTPR-5569). */}
       <button
         type="button"
         aria-label="Undo"
@@ -180,14 +146,9 @@ export const UndoToaster = (
 ) => {
   const singleUndoToast = undoToastSettings.single;
   const callback = async (toastId: string) => {
-    // toast.dismiss(toastId)
     await undoHandler(dataBeforeDeletion, toastId);
-    //  first you need to bring the item back in its place.
-    // then you need to run the api call so there is no render blocking.
   };
 
-  // Keep action IDs unique for undo history. Removing (not dismissing) the
-  // previous card avoids two cards overlapping during its exit animation.
   if (singleUndoToast && previousUndoToastId) toast.remove(previousUndoToastId, SINGLE_UNDO_TOASTER_ID);
 
   const toastHandler: any = toast.custom(
@@ -205,17 +166,9 @@ export const UndoToaster = (
       removeDelay: 200,
       position: "bottom-left",
     } : {
-      // Matches the undo action window on each viewport: the prompt never
-      // disappears while the action behind it can still be undone.
       duration: isMobile
         ? MOBILE_UNDO_TOAST_DURATION_MS
         : UNDO_TOAST_DURATION_MS,
-      // Mobile anchors left so the task actions on the right stay clear
-      // (HTPR-5564 wireframe); react-hot-toast aligns each toast row on its
-      // own side of the shared `.toastContainerMobile` wrapper. The position
-      // is captured at creation, like the desktop/desktop-content split always
-      // was: rotating across the breakpoint mid-window changes only which side
-      // the pill hugs for its remaining seconds.
       position: isMobile ? "top-left" : "bottom-left",
     },
   );

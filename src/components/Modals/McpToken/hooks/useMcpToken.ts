@@ -37,8 +37,6 @@ export function useMcpToken() {
       const response = await fetch("/api/mcp/token")
       const data = await response.json()
       if (data.success && data.hasToken) {
-        // Mask only for UI. Callers must use isUsableMcpBearerToken before
-        // sending Authorization, or session auth is skipped and HyperAI 401s.
         setToken(MCP_TOKEN_MASK)
         if (data.expiresAt) setExpiresAt(data.expiresAt)
       }
@@ -49,9 +47,6 @@ export function useMcpToken() {
     }
   }
 
-  //Generates token
-  // silent must be an exact-true check: the modal passes generateToken as an
-  // onClick handler, so the first argument can be a click event (HTPR-4165).
   const generateToken = async (options?: { silent?: boolean }) => {
     const silent = options?.silent === true
     setIsGenerating(true)

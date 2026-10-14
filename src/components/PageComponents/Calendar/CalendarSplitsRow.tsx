@@ -7,8 +7,6 @@ import { useCalendarContext } from "@/lib/contexts/Calendar/calendar.context";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
-// Mirrors the inbox split tab, minus its InboxZeroContext dependency: that
-// context only wraps the inbox, and reading it here throws on /calendar.
 const CalendarSplitTitle = ({
   label,
   count,

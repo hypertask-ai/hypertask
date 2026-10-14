@@ -86,8 +86,6 @@ async function assignBatchTaskUsers(input: {
   }
   agentId: string | null
 }) {
-  // Removals skip the membership check: a user who has left the board must
-  // still be removable from the task (HTPR-4187).
   const allowedMemberIds =
     input.intent === 'unassign' ? [] : await getMemberAndOwner(input.projectId)
   if (typeof allowedMemberIds === 'string') {

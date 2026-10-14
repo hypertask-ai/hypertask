@@ -15,9 +15,6 @@ function getTokenRevocationExpiry(decoded: jwt.JwtPayload) {
     : NON_EXPIRING_TOKEN_REVOKED_UNTIL
 }
 
-/**
- * Helper to get current user from cookies (server-side)
- */
 async function getCurrentUserFromCookies() {
   try {
     const cookieStore = await cookies()
@@ -43,10 +40,6 @@ async function getCurrentUserFromCookies() {
   }
 }
 
-/**
- * GET /api/mcp/token
- * Returns existing token info (masked) if token exists in cookies
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -59,19 +52,15 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Check for token in cookies
     const cookieStore = await cookies()
     const tokenCookie = cookieStore.get('mcp_token')
     
     if (tokenCookie?.value) {
-      // Decode token to get expiration info
       try {
         const decoded = jwt.decode(tokenCookie.value) as jwt.JwtPayload
         const expiresAt = decoded.exp ? new Date(decoded.exp * 1000) : null
         
-        // Check if token is expired
         if (expiresAt && expiresAt < new Date()) {
-          // Token expired, remove cookie
           const response = NextResponse.json({
             success: true,
             hasToken: false,
@@ -88,7 +77,6 @@ export async function GET(request: NextRequest) {
           message: 'Token exists'
         })
       } catch (error) {
-        // Invalid token, remove cookie
         const response = NextResponse.json({
           success: true,
           hasToken: false,
@@ -115,10 +103,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/token
- * Generates a new MCP token for the user
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -131,7 +115,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user's email
     const dbUser = await prisma.user.findUnique({
       where: { id: user.id },
       select: { email: true, displayName: true }
@@ -144,7 +127,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Revoke previous token so renewed bearer configs stop working
     const cookieStore = await cookies()
     const mcpTokenCookie = cookieStore.get('mcp_token')
     if (mcpTokenCookie?.value) {
@@ -155,18 +137,14 @@ export async function POST(request: NextRequest) {
         }
       } catch (error) {
         console.error('Error revoking previous token:', error)
-        // Continue with token generation even if revocation fails
       }
     }
 
-    // Generate new MCP token (30 days expiration)
     const token = createMcpToken(user.id, dbUser.email, '30d')
 
-    // Decode token to get expiration info
     const decoded = jwt.decode(token) as jwt.JwtPayload
     const expiresAt = decoded.exp ? new Date(decoded.exp * 1000) : null
 
-    // Create response
     const response = NextResponse.json({
       success: true,
       token,
@@ -174,10 +152,9 @@ export async function POST(request: NextRequest) {
       message: 'MCP token generated successfully'
     })
 
-    // Store token in cookie (30 days expiration)
-    const maxAge = 30 * 24 * 60 * 60 // 30 days in seconds
+    const maxAge = 30 * 24 * 60 * 60
     response.cookies.set('mcp_token', token, {
-      httpOnly: false, // Allow client-side access for display
+      httpOnly: false,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: maxAge,
@@ -196,10 +173,6 @@ export async function POST(request: NextRequest) {
   })(request)
 }
 
-/**
- * DELETE /api/mcp/token
- * Revokes the bearer token presented by CLI/MCP clients
- */
 export async function DELETE(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -214,9 +187,6 @@ export async function DELETE(request: NextRequest) {
       )
     }
 
-    // An htmk_ management key would fall through to the revoke-all branch
-    // below (it has no jti), nuking every JWT while the key itself stays
-    // valid — the exact wrong outcome during key-compromise response.
     if (ctx.management) {
       return NextResponse.json(
         {

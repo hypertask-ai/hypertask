@@ -9,8 +9,6 @@ export function shouldAutoEnsureSweepSchedule() {
   if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "false") return false;
   if (process.env.QSTASH_AUTO_REGISTER_SWEEP === "true") return true;
 
-  // Preview deployments share production data. Do not let a preview URL replace
-  // the live schedule destination unless explicitly requested.
   if (process.env.VERCEL_ENV === "preview") return false;
 
   return process.env.NODE_ENV === "production";

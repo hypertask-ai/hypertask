@@ -3,7 +3,6 @@ import prisma from "@/lib/prisma";
 import NextCors from "nextjs-cors";
 import { requireAnnouncementAdmin } from "@/lib/admin/requireAnnouncementAdmin";
 
-// /api/admin/postAnnouncements
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
@@ -11,10 +10,9 @@ const handler: NextApiHandler = async (
   console.log(req.method);
   try {
     await NextCors(req, res, {
-      // Options
       methods: ["POST", "DELETE"],
-      origin: ["*"], // replace this with your actual origin
-      optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+      origin: ["*"],
+      optionsSuccessStatus: 200,
       preflightContinue: true,
     });
     if (req.method === "OPTIONS") return res.status(200).end();
@@ -49,7 +47,6 @@ const handler: NextApiHandler = async (
     } else if (req.method === "DELETE") {
       const { announcementId } = req.query;
 
-      // Ensure announcementId is a valid integer
       const id = parseInt(announcementId as string, 10);
       if (isNaN(id))
         return res.status(400).json({ error: "Invalid announcementId" });

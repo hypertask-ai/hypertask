@@ -5,12 +5,6 @@ import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { deliverWebhook } from '@/lib/mcp/webhooks/delivery'
 
-/**
- * POST /api/mcp/webhooks/{id}/test
- * Send a signed test ping to a subscription's URL and report whether the
- * receiver answered 2xx. Access-scoped by board. Awaits delivery (unlike the
- * fire-and-forget event emit) so the caller gets an immediate result.
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

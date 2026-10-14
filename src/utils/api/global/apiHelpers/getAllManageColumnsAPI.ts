@@ -1,9 +1,6 @@
 import { ISection } from "@/models/model"
 import axios from "axios"
 
-
-
-// get all notifications for a user 
 export const getAllManageColumnsAPI = async (projectId:number|null|undefined, userId:number) => {
     console.log("🚀 ~ getAllManageColumnsAPI ~ projectId:", projectId)
     if (!projectId) return false

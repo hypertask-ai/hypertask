@@ -14,7 +14,6 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
             }
         })
         if (!project) return 
-       // ============ check if the invite link already exists.
        const invite = await prisma.invite.findFirst({
         where:{
             projectId,
@@ -30,13 +29,11 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
     console.log("🚀 ~ invite:", invite)
     
 
-    // ======================== let's check for the active view if any
     const activeView = getViewFromProject(project)
     let viewSlug: string | undefined;
     viewSlug = setViewSlug(activeView)
     if (invite) return {inviteLink:await generateInviteLink(invite.id, projectId, invite.project.name, viewSlug, userId), amountUsed:(invite.uses*-1)-1}
 
-    // ============ create a new invite link
     const newInvite = await prisma.invite.create({
         data:{
             key:"public",

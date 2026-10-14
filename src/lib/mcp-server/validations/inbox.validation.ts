@@ -1,10 +1,6 @@
 import { z } from 'zod';
 import { createTaskIdentificationBaseSchema } from './common/task-identification';
 
-/**
- * move_task_to_inbox: route a task into a specific project member's inbox,
- * mirroring the "Move task to inbox" command-palette action. HTPR-4553.
- */
 export function getMoveTaskToInboxBaseSchema() {
   return createTaskIdentificationBaseSchema().extend({
     user_id: z
@@ -51,7 +47,6 @@ export type MoveTaskToInboxInput = z.infer<typeof MoveTaskToInboxInputSchema>;
 export function getInboxListBaseSchema() {
   return z
     .object({
-      /** Omit to use the authenticated user from the JWT (recommended for CLI / HTPR-3079). */
       user_id: z.number().int().positive().optional(),
       composition: z.boolean().optional(),
       project_id: z
@@ -88,7 +83,6 @@ export function getInboxArchiveInputSchema() {
 export const InboxArchiveInputSchema = getInboxArchiveInputSchema();
 export type InboxArchiveInput = z.infer<typeof InboxArchiveInputSchema>;
 
-/** Same shape as archive: notification row ids to restore to the inbox. */
 export function getInboxUnarchiveInputSchema() {
   return getInboxArchiveInputSchema();
 }

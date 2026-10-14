@@ -78,9 +78,6 @@ export interface TimeReportInput {
   running?: boolean;
 }
 
-/**
- * Service for time-tracking operations.
- */
 export class TimeService {
   constructor(private readonly apiClient: IApiClient) {}
 

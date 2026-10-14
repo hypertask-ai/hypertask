@@ -36,9 +36,7 @@ function parsePositiveInteger(value: unknown): number | null {
     : null
 }
 
-/** Coerce a body value to a positive int task id, or null if not one. */
 const idFor = (v: unknown): number | null => parsePositiveInteger(v)
-/** Coerce a body value to a non-empty ticket_number string, or null. */
 const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
@@ -181,8 +179,6 @@ export async function POST(request: NextRequest) {
         targetTaskId: targetTask.id,
         relationType,
       },
-      // On an existing pair, update the type so a caller "fixing" a RelatedTo to
-      // BlockedBy actually takes effect, rather than silently keeping the old type.
       update: { relationType },
       select: {
         id: true,
@@ -288,8 +284,6 @@ export async function GET(request: NextRequest) {
         return {
           relationType: relation.relationType,
           direction: outgoing ? 'outgoing' : 'incoming',
-          // Sibling endpoint /mcp/tasks/related returns a url; without one a
-          // client has no way to link the task and falls back to a search URL.
           otherTask: {
             ...otherTask,
             url: buildMcpTaskUrl(otherTask.projectId, otherTask.uniqueIndex),
@@ -308,8 +302,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-// Remove a relation between two tasks, so a mistakenly-declared dependency can be
-// cleared (not just retyped). Idempotent: deleting a non-existent relation is 200.
 export async function DELETE(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request)

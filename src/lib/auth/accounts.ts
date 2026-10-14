@@ -4,15 +4,6 @@ import nookies, { parseCookies } from "nookies";
 import authConfig from "@/lib/configs/auth.config";
 import { authClient } from "@/lib/auth/betterAuthClient";
 
-/**
- * Multi-account support, rebuilt on Better Auth multi-session (HTPR-358).
- *
- * Each "account" is a real Better Auth device session. Switching calls
- * multiSession.setActive, whose response re-mints the legacy nookies_user +
- * signed ht_session cookies for the new user (via legacyCookiePlugin), so the
- * HTPR-4182 identity gate is satisfied. The old cookie-swap approach is dead:
- * swapping nookies_user without a matching signed ht_session now 401s.
- */
 export interface SwitchAccount {
   sessionToken: string;
   id: number;
@@ -37,7 +28,6 @@ export interface AccountListResult {
   ok: boolean;
 }
 
-/** All accounts signed in on this device, including request status. */
 export const listAccountsWithStatus = async (): Promise<AccountListResult> => {
   try {
     const { data } = await authClient.multiSession.listDeviceSessions();
@@ -59,11 +49,9 @@ export const listAccountsWithStatus = async (): Promise<AccountListResult> => {
   }
 };
 
-/** All accounts signed in on this device. */
 export const listAccounts = async (): Promise<SwitchAccount[]> =>
   (await listAccountsWithStatus()).accounts;
 
-/** The currently-active account id, read from the legacy identity cookie. */
 export const getActiveAccountId = (): number | null => {
   try {
     const c = parseCookies();
@@ -75,13 +63,6 @@ export const getActiveAccountId = (): number | null => {
   }
 };
 
-/**
- * The active account as a display row, read from the legacy identity cookie.
- * A session created before multi-session was enabled won't appear in
- * listDeviceSessions until re-login, so the modal falls back to this to always
- * show (and checkmark) the account you're currently signed in as. It has no
- * sessionToken because it isn't a switch target — it's already active.
- */
 export const getCurrentAccount = (): SwitchAccount | null => {
   try {
     const c = parseCookies();
@@ -101,7 +82,6 @@ export const getCurrentAccount = (): SwitchAccount | null => {
   }
 };
 
-/** Include the active legacy identity when Better Auth does not list it yet. */
 export const mergeCurrentAccount = (
   accounts: SwitchAccount[],
 ): SwitchAccount[] => {
@@ -113,24 +93,16 @@ export const mergeCurrentAccount = (
   return [current, ...accounts];
 };
 
-/**
- * Make the given device session active, then hard-reload. setActive's response
- * mints fresh legacy cookies for that user; reloading to "/" lets the app
- * resolve their landing board server-side from the new identity.
- */
 export const switchAccount = async (
   sessionToken: string,
 ): Promise<boolean> => {
   const activated = await activateAccount(sessionToken);
   if (!activated) return false;
 
-  // "/" is a logout booby trap (src/app/page.tsx clears cookies on reach);
-  // land switched accounts on a real authed surface instead.
   window.location.assign("/inbox");
   return true;
 };
 
-/** Sign a single account out without affecting the other device sessions. */
 export const removeAccount = async (
   sessionToken: string,
 ): Promise<boolean> => {
@@ -142,13 +114,6 @@ export const removeAccount = async (
   }
 };
 
-/**
- * Sign out the active account and land on another signed-in account.
- *
- * Activating first keeps a valid authenticated request available for revoking
- * the old session. If revocation fails, restore the old identity so the
- * Better Auth and legacy identity cookies do not disagree.
- */
 export const signOutCurrentAccount = async (
   nextSessionToken: string,
 ): Promise<boolean> => {
@@ -166,8 +131,6 @@ export const signOutCurrentAccount = async (
       return false;
     }
 
-    // "/" is a logout booby trap (src/app/page.tsx clears cookies on reach);
-    // land switched accounts on a real authed surface instead.
     window.location.assign("/inbox");
     return true;
   } catch {
@@ -175,7 +138,6 @@ export const signOutCurrentAccount = async (
   }
 };
 
-/** Better Auth multi-session revokes every device session on normal sign-out. */
 export const signOutAllAccounts = async (): Promise<boolean> => {
   try {
     const response = await authClient.signOut();
@@ -185,21 +147,15 @@ export const signOutAllAccounts = async (): Promise<boolean> => {
   }
 };
 
-/**
- * Start "add another account": set a short-lived cookie so proxy.ts lets the
- * still-authenticated user reach /login (which otherwise redirects them away),
- * then go there. Signing in appends a new device session automatically.
- */
 export const addAccount = (): void => {
   if (typeof window === "undefined") return;
   nookies.set(null, ADD_ACCOUNT_COOKIE, "1", {
-    maxAge: 60 * 10, // 10 min
+    maxAge: 60 * 10,
     path: authConfig.cookies.options.path,
   });
   window.location.assign("/login");
 };
 
-/** Clear the add-account marker once a login completes. */
 export const clearAddAccountFlag = (): void => {
   if (typeof window === "undefined") return;
   nookies.destroy(null, ADD_ACCOUNT_COOKIE, {

@@ -149,8 +149,6 @@ const usePullDownCommand = () => {
       reset();
 
       if (committed) {
-        // Commit while the touch gesture is still active so the palette's
-        // autofocus can open the mobile keyboard.
         flushSync(() => {
           setShowCommands({ show: true, mode: CommandMode.Command });
         });

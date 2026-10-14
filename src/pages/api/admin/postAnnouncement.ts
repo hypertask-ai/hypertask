@@ -10,10 +10,9 @@ const handler: NextApiHandler = async (
   console.log(req.method);
   try {
     await NextCors(req, res, {
-      // Options
       methods: ["POST"],
-      origin: ["*"], // replace this with your actual origin
-      optionsSuccessStatus: 200, // some legacy browsers (IE11, various SmartTVs) choke on 204
+      origin: ["*"],
+      optionsSuccessStatus: 200,
       preflightContinue: true,
     });
 

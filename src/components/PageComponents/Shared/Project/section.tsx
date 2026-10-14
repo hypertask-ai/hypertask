@@ -29,7 +29,6 @@ export const ReadOnlySection = ({
   return (
     <div
       ref={sectionRef}
-      // tabIndex={-1}
       className={`
           ${
             isMbl

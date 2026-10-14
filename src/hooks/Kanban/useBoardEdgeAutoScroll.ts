@@ -2,10 +2,6 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { boardEdgeScrollStep, canScrollX } from "@/lib/kanban/boardEdgeAutoScroll";
 
-// Drives the board's horizontal scroll while a card is dragged near the left or
-// right edge. @hello-pangea/dnd only auto-scrolls the droppable's closest scroll
-// container (the column list) and the window, so without this a card cannot
-// reach an off-screen column (HTPR-5546).
 
 const findScroller = (): HTMLElement | null => {
   if (typeof document === "undefined") return null;

@@ -71,9 +71,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Spare HTML-canvas blocks from the AI edit: pull them out before the model
-    // sees them, splice them back into the result. Otherwise the model drops the
-    // opaque block and the slash command silently deletes the embedded HTML.
     const { stripped, blocks } = extractHtmlBlocks(body.content);
 
     const selected = await selectTiptapModel({

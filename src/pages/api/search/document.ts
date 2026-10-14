@@ -79,7 +79,6 @@ const handler: NextApiHandler = async (
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)) {
-        // The picker groups trimmed names; resolve every spelling to IDs before the exact-name filter trims them.
         const labels = await prisma.label.findMany({
           where: { projectId: { in: requestedProjectIds } }, select: { id: true, value: true },
         });

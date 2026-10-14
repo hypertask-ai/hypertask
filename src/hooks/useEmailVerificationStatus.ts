@@ -7,15 +7,10 @@ import axios from 'axios'
 export type VerificationStatus = 'pending' | 'verifying' | 'verified' | 'error'
 
 interface UseEmailVerificationStatusOptions {
-  /** User ID for polling verification status (for modal) */
   userId?: number
-  /** Token to verify (for verify-email page) */
   token?: string | null
-  /** Callback when verification succeeds */
   onVerified?: () => void
-  /** Whether to poll for verification status */
   enablePolling?: boolean
-  /** Polling interval in milliseconds (default: 3000) */
   pollingInterval?: number
   initialStatus?: VerificationStatus
 }
@@ -28,10 +23,6 @@ interface UseEmailVerificationStatusReturn {
   updateUserVerificationStatus: (isVerified: boolean) => void
 }
 
-/**
- * Unified hook for managing email verification status
- * Handles both token verification (for verify-email page) and polling (for modal)
- */
 export const useEmailVerificationStatus = (
   options: UseEmailVerificationStatusOptions = {}
 ): UseEmailVerificationStatusReturn => {
@@ -49,9 +40,6 @@ export const useEmailVerificationStatus = (
   const [errorMessage, setErrorMessage] = useState<string>('')
   const processedToken = useRef<string | null>(null)
 
-  /**
-   * Update currentUser atom with verification status
-   */
   const updateUserVerificationStatus = useCallback(
     (isVerified: boolean) => {
       setCurrentUser((prevUser: IUser | null) => {
@@ -68,9 +56,6 @@ export const useEmailVerificationStatus = (
     [setCurrentUser]
   )
 
-  /**
-   * Verify email with token (for verify-email page)
-   */
   const verifyWithToken = useCallback(
     async (verificationToken: string) => {
       setStatus('verifying')
@@ -101,9 +86,6 @@ export const useEmailVerificationStatus = (
     [onVerified, updateUserVerificationStatus]
   )
 
-  /**
-   * Poll for verification status (for modal)
-   */
   useEffect(() => {
     if (!enablePolling || !userId || !currentUser) return
 
@@ -123,10 +105,8 @@ export const useEmailVerificationStatus = (
       }
     }
 
-    // Check immediately
     checkVerificationStatus()
 
-    // Then poll at interval
     const interval = setInterval(checkVerificationStatus, pollingInterval)
 
     return () => {
@@ -134,17 +114,12 @@ export const useEmailVerificationStatus = (
     }
   }, [userId, currentUser, enablePolling, pollingInterval, onVerified, updateUserVerificationStatus])
 
-  /**
-   * Handle token verification (for verify-email page)
-   */
   useEffect(() => {
     if (token) {
-      // Effect reruns (including Strict Mode) must not redeem a single-use link twice.
       if (processedToken.current === token) return
       processedToken.current = token
       verifyWithToken(token)
     } else if (!enablePolling) {
-      // If no token and not polling, set to pending
       setStatus('pending')
     }
   }, [token, verifyWithToken, enablePolling])

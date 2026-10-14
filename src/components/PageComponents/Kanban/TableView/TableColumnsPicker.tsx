@@ -28,7 +28,6 @@ import { HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG } from "@/lib/flags/keys";
 type TableColumnsPickerProps = {
   closeHandler: () => void;
   projectId?: number;
-  /** Controlled mode (My Tasks). When set with onChange, never touches the board atom. */
   availableColumns?: readonly string[];
   columnLabels?: Record<string, string>;
   value?: string[];
@@ -97,9 +96,6 @@ const TableColumnsPicker = ({
     enabled: Boolean(projectId) && !hideCustomFields && !controlled,
     queryFn: async () => (await axios.get(`/api/customFields?projectId=${projectId}`)).data,
   });
-  // A field with showInTable=false (set in the manage-custom-fields modal) is
-  // removed from the table everywhere, including here — it must not be an
-  // option a user can re-toggle on per-view.
   const tableEligibleFields = useMemo(
     () => customFields.filter((field) => field.showInTable !== false),
     [customFields]
@@ -122,7 +118,6 @@ const TableColumnsPicker = ({
       (key !== "time" || showTimeTotals) &&
       (!isCustomFieldColumnKey(key) || eligibleKeySet.has(key))
   );
-  // Visible columns first (stored/dragged order), then the rest in canonical order.
   const displayOrder = useMemo(() => {
     const visibleSet = new Set(visibleColumns);
     const eligibleBuiltIns = (availableColumns
@@ -160,15 +155,12 @@ const TableColumnsPicker = ({
     setStoredColumns(normalizeColumns(reordered.filter((key) => visibleSet.has(key))));
   };
 
-  // Custom fields reset to visible too, appended after the built-ins.
   const resetToDefault = () => {
     const base = [...(defaultColumns ?? (showTimeTotals ? [...DEFAULT_TABLE_COLUMNS, "time"] : DEFAULT_TABLE_COLUMNS))];
     setStoredColumns(
       controlled ? base : seedMissingCustomFieldColumns(base, customFieldKeys),
     );
   };
-  // Drops every drag-resize override (HTPR-4993): title goes back to auto-flex,
-  // every other column back to its default width.
   const resetWidths = () => setColumnWidths({});
 
   const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {

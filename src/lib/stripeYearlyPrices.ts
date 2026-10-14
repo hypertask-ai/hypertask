@@ -1,4 +1,3 @@
-// not being used anywhere, but keeping it here for reference.
 export const yearlyPriceIds:{ [key: number]: string }={
     1:"price_1OSg5BIhmcH60VccZ4dpgtN6",
     2:"price_1OSg5TIhmcH60Vcc9KxEdh1A",

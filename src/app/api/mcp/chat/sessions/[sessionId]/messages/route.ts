@@ -30,12 +30,6 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
   )
 }
 
-/**
- * GET /api/mcp/chat/sessions/[sessionId]/messages
- *
- * Agent-readable transcript of one Agent Chat session. Only the session's own
- * agent (the agentId on the bearer token) may read it.
- */
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -53,8 +47,6 @@ export async function GET(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
-    // Proven non-null by the gate above; the helper returns a response, not a
-    // type predicate, so the narrowing has to be restated here.
     const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
@@ -71,7 +63,6 @@ export async function GET(
     }
     const session = access.session
 
-    // Last 50, oldest first: page desc from the tail, then flip.
     const messages = (
       await prisma.chatMessage.findMany({
         where: {
@@ -137,13 +128,6 @@ type PostChatMessageBody = {
   proposal?: unknown
 }
 
-/**
- * POST /api/mcp/chat/sessions/[sessionId]/messages
- *
- * The agent runtime posts its reply here. `replyToMessageId` is the
- * idempotency key: a retried POST with the same value returns the already
- * stored reply instead of creating a second one.
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string }> }
@@ -161,8 +145,6 @@ export async function POST(
     }
     const agentGate = requireAgentToken(ctx.agentId)
     if (agentGate) return agentGate
-    // Proven non-null by the gate above; the helper returns a response, not a
-    // type predicate, so the narrowing has to be restated here.
     const tokenAgentId = ctx.agentId as string
 
     const { sessionId } = await params
@@ -234,11 +216,6 @@ export async function POST(
       })
     }
 
-    // A proposal is the whole point of the confirm-before-side-effects boundary:
-    // the agent asks for a ticket instead of doing the work. Everything is
-    // checked before anything is stored, so a rejected proposal creates nothing.
-    // This runs after the replay check above: a retry of an already stored
-    // reply must not be refused because the agent's rights narrowed since.
     const parsedProposal = parseChatTicketProposal(body?.proposal)
     if (parsedProposal.error) {
       return NextResponse.json(
@@ -255,15 +232,11 @@ export async function POST(
       targetSectionTitle: string
     } | null = null
     if (parsedProposal.proposal) {
-      // Flag off: keep the reply, drop the card. Rejecting the whole POST would
-      // break the turn for every user who does not have the feature yet.
       const enabled = await isFeatureEnabled(
         AGENT_CHAT_TICKET_CONFIRM_FLAG,
         session.userId
       )
       if (enabled) {
-        // The ticket the user confirms is created with the agent's write role
-        // and the chat user's board rights: the intersection, never either alone.
         const scopeError = await requireRole(ctx, 'write')
         if (scopeError) return scopeError
         const projectCheck = await validateProjectAccess(
@@ -304,9 +277,6 @@ export async function POST(
     }> | null = null
     try {
       message = await prisma.$transaction(async (tx) => {
-        // This update is first on purpose: it takes the ChatSession row lock, so
-        // a reply cannot race a timeout, cancellation, or another reply. Session
-        // access above already proves this token belongs to the addressed agent.
         await tx.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
         if (await tx.chatMessage.findUnique({ where: { replyToMessageId } })) throw Object.assign(new Error('Concurrent reply'), { code: 'P2002' })
         const created = await tx.chatMessage.create({
@@ -319,8 +289,6 @@ export async function POST(
             authorAgentId: tokenAgentId,
           },
         })
-        // Same transaction, and messageId is unique: one reply carries at most
-        // one proposal, and a retried POST can never add a second.
         if (proposalData) {
           createdProposal = await tx.chatTicketProposal.create({
             data: { messageId: created.id, ...proposalData },
@@ -330,7 +298,6 @@ export async function POST(
         return created
       })
     } catch (error: any) {
-      // Lost a race against a concurrent reply with the same idempotency key.
       if (error?.code !== 'P2002') throw error
       const existing = await prisma.chatMessage.findUnique({
         where: { replyToMessageId },
@@ -350,9 +317,6 @@ export async function POST(
         createdProposal
     }
 
-    // Every open Agent Chat tab on this thread refetches it. The agent's reply
-    // is the message a teammate is actually waiting on, so it cannot go only to
-    // the person whose name is on the session row.
     await broadcastChatSession(session.id, [session.userId])
 
     return NextResponse.json({

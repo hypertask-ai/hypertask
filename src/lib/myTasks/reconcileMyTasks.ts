@@ -63,7 +63,6 @@ export const createMyTasksReconcileRunner = (options: {
     } finally {
       activeRuns = Math.max(0, activeRuns - 1);
       if (activeRuns === 0 && waiters.length > 0 && !dirty) {
-        // A waiter arrived after the last apply resolved earlier waiters.
         resolveWaiters(lastApplied);
       }
     }
@@ -72,13 +71,11 @@ export const createMyTasksReconcileRunner = (options: {
   return {
     request: () => {
       if (activeRuns > 0) {
-        // Keep the in-flight fetch; trail one more after it finishes.
         dirty = true;
         return;
       }
       void run();
     },
-    /** Fetch once (or finish the dirty cycle) and resolve with the applied payload. */
     flush: (): Promise<MyTasksListPayload | null> => {
       return new Promise((resolve) => {
         waiters.push(resolve);

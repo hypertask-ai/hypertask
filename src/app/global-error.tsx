@@ -1,4 +1,4 @@
-'use client' // global-error must be a Client Component and render its own <html>/<body>
+'use client'
 
 import { useEffect } from 'react'
 import { isChunkLoadError } from '@/utils/helperFunctions/isChunkLoadError'
@@ -10,10 +10,6 @@ import {
   nextChunkRecoveryAttempt,
 } from '@/utils/helperFunctions/chunkLoadRecovery'
 
-// Catches crashes in the ROOT layout / Providers chain. error.tsx cannot reach
-// those, so without this a root-level crash (provider throw, hydration mismatch,
-// or a stale JS chunk after a deploy) renders a blank white page that only a
-// manual refresh clears. PERT-89.
 export default function GlobalError({
   error,
   reset,
@@ -35,11 +31,6 @@ export default function GlobalError({
 
     if (typeof window === 'undefined') return
 
-    // Stale-bundle crashes are the common "reload once or twice fixes it" case:
-    // fetch a cache-busted document instead of replaying cached HTML that points
-    // at the same missing chunk. Only report if recovery is unavailable or the
-    // capped attempts are exhausted, so successful self-healing does not create
-    // an automated bug ticket. HTPR-5253.
     if (isChunkLoadError(error)) {
       const attempt = nextChunkRecoveryAttempt(
         window.sessionStorage.getItem(CHUNK_RELOAD_STORAGE_KEY)
@@ -73,13 +64,6 @@ export default function GlobalError({
 
     report()
 
-    // Next 14's app-router calls `use(state)` only when the router state is a
-    // pending promise (useUnwrapState). If an RSC request is still in flight
-    // while the page hydrates, that conditional hook changes the hook count and
-    // React throws #310 ("Rendered more hooks than during the previous render")
-    // from inside AppRouter itself. It is a hydration race, so re-hydrating
-    // almost always succeeds. Public /share links hit it hardest (HTPR-4089).
-    // Capped per tab session so a deterministic crash still surfaces the UI.
     const KEY = 'ht-root-reload'
     const tries = Number(window.sessionStorage.getItem(KEY) || '0')
     if (tries < 2) {

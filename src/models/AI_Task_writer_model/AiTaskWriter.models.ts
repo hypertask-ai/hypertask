@@ -60,7 +60,6 @@ export interface IAITaskWriterContainerProps {
   id: string;
   additionalContext?: string;
   defaultMode?: TAiMode;
-  /** For Task Writer: callback when title/description/properties are extracted. Props optional for AcceptDescTitle. */
   returnTitleAndDescription: (
     title: string,
     description: string,

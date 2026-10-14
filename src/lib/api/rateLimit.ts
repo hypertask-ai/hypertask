@@ -38,7 +38,6 @@ export async function checkRestRateLimit(
       )
     }
   } catch {
-    // This availability budget must not replace security-domain fail-closed policies.
     console.warn('[rest-rate-limit] Counter unavailable; allowing request')
   }
   return null

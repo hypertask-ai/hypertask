@@ -146,9 +146,6 @@ export const ChatHeader = () => {
     [sessions, historySessions, sessionPagingEnabled]
   );
 
-  // currentSession is the one canonical resolved session (title, messages,
-  // and now delete/highlight all read it) so none of them can disagree about
-  // which chat is on screen (HTPR-6100).
   const resolvedSessionId = currentSession?.id;
 
   useEffect(() => {
@@ -165,18 +162,12 @@ export const ChatHeader = () => {
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // HTPR-6360: Escape must close the open header menu before TaskDetail's
-  // Escape handler navigates back to the board (same capture pattern as
-  // ModelSelectorDropdown).
   useEffect(() => {
     if (!isDropdownOpen && !isOverflowOpen) return;
 
     const closeOnEscape = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
       event.preventDefault();
-      // stopImmediatePropagation: other document keydown listeners (TaskDetail
-      // Escape -> back) share this same node, so stopPropagation alone is not
-      // enough to keep navigation from firing.
       event.stopImmediatePropagation();
       setIsDropdownOpen(false);
       setIsOverflowOpen(false);
@@ -196,7 +187,6 @@ export const ChatHeader = () => {
         try {
           editor?.view.dom.focus();
         } catch {
-          // The editor may have unmounted while the request completed.
         }
       }, 0);
     } catch {
@@ -330,16 +320,10 @@ export const ChatHeader = () => {
 
   return (
     <div
-      // Sidebar mode sits beside the board's title row, which is pt-4 over a
-      // 32px row (centre 32px from the top). py-2 in a 48px box centred at 24px,
-      // so the titles were 8px out of line: pt-4/pb-0 puts the centre at 32px.
       className={`z-10 text-content font-bold px-2 gap-4 flex items-center justify-between border-gray-700 text-white-black ${
         isSidebarMode ? "h-[48px] pt-4 pb-0" : "py-2"
       }`}
     >
-      {/* min-w-0 is what actually lets the title truncate: a flex child refuses to shrink
-          below its content width without it, so a long session title wrapped to three
-          lines and spilled out of the fixed 48px header onto the messages (HTPR-4720). */}
       <div className="relative min-w-0 flex-1" ref={dropdownRef}>
         <button
           type="button"
@@ -374,7 +358,6 @@ export const ChatHeader = () => {
         {renderSessionMenu("left-0")}
       </div>
 
-      {/* right side */}
       <div className="flex shrink-0 items-center space-x-2">
         <button
           onClick={handleStartNewSession}
@@ -541,8 +524,6 @@ export const ChatHeader = () => {
           {isSidebarMode && !isMbl ? (
             <ChevronRight size={16} strokeWidth={1.75} />
           ) : isMbl ? (
-            // On mobile this fully closes the chat, so show a close affordance —
-            // a minus reads as "minimize" and left the exit ambiguous.
             <X size={18} strokeWidth={1.75} />
           ) : (
             <Minus size={16} strokeWidth={1.75} />

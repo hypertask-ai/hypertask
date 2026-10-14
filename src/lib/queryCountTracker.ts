@@ -1,8 +1,5 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 
-// HTPR-4706: warn when a single call chain issues more Prisma queries than a
-// normal request needs, so N+1 fan-outs (one query per loop iteration) show
-// up in logs before they exhaust the connection pool. Log-only, never throws.
 export const N1_QUERY_WARNING_THRESHOLD = 10
 
 type QueryCountState = { count: number; origin: string }

@@ -21,7 +21,6 @@ const route = taskWriteRoute({
         try {
           compact = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, session.userId);
         } catch {
-          // A failed flag probe must preserve the legacy response.
         }
       }
       const response = compact

@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-key */
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
@@ -85,38 +85,29 @@ const PinnedCommentsContainer = ({
     )
       return;
 
-    // [e] for archive (keyCode 69 = 'e')
     if (e.keyCode === 69 && cmdControl) {
       e.preventDefault();
       eHandler();
     }
 
-    // [j] for down (keyCode 74 = 'j') or ArrowDown (keyCode 40)
     if (e.keyCode === 74 || e.keyCode === 40) ArrowDownHandler();
 
-    // [k] for up (keyCode 75 = 'k') or ArrowUp (keyCode 38)
     if (e.keyCode === 75 || e.keyCode === 38) ArrowUpHandler();
 
-    // [enter] (keyCode 13)
     if (e.keyCode === 13)
       openTask(
         savedContent[selectedIndex].task,
         savedContent[selectedIndex].comment!
       );
 
-    // g (keyCode 71 = 'g')
     if (e.keyCode === 71) gPressHandler();
 
-    // b (keyCode 66 = 'b')
     if (e.keyCode === 66) gThenB();
 
-    // i (keyCode 73 = 'i')
     if (e.keyCode === 73) gThenI();
 
-    // t (keyCode 84 = 't')
     if (e.keyCode === 84) gThenT();
 
-    //[cmdControl][shift][,]
     if (e.keyCode === 188 && cmdControl && e.shiftKey && !e.altKey) {
       e.preventDefault();
       return copyTaskURL(
@@ -124,7 +115,6 @@ const PinnedCommentsContainer = ({
         savedContent[selectedIndex].task?.projectId
       );
     }
-    //[cmdControl][,]
     if (e.keyCode === 188 && cmdControl && !e.shiftKey && !e.altKey) {
       e.preventDefault();
       return copyTaskFormattedURL(
@@ -135,19 +125,16 @@ const PinnedCommentsContainer = ({
       );
     }
 
-    //[cmdControl][shift][.]
     if (e.keyCode === 190 && cmdControl && e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler();
     }
 
-    //[cmdControl][.]
     if (e.keyCode === 190 && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler(true);
     }
 
-    //[cmdControl][I]
     if (e.keyCode === 73 && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return copyTitleAndTicketNumber(
@@ -156,13 +143,11 @@ const PinnedCommentsContainer = ({
       );
     }
 
-    //[cmdControl][shift][i]
     if (e.keyCode === 73 && cmdControl && e.shiftKey) {
       e.preventDefault();
       return copyTicketNumber(savedContent[selectedIndex].task?.ticketNumber!);
     }
 
-    // [cmdControl][shift][p]
     if (e.keyCode === 80 && cmdControl && e.shiftKey && !e.altKey) {
       e.preventDefault();
       return handlePinComment();
@@ -195,7 +180,6 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // [e] for unarchive
   const eHandler = () => {
     if (savedContent[selectedIndex]) {
       if (selectedIndex >= 0) {
@@ -208,7 +192,6 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // [j] for down
   const ArrowDownHandler = () => {
     if (savedContent[selectedIndex]) {
       const index = savedContent.findIndex(
@@ -234,7 +217,6 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // [k] for up
   const ArrowUpHandler = () => {
     if (savedContent[selectedIndex]) {
       const index = savedContent.findIndex(
@@ -262,13 +244,11 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // [g]
   const gPressHandler = () => {
     const now = new Date().getTime();
     lastgClick.current = now;
   };
 
-  // g->i
   const gThenI = () => {
     const now = new Date().getTime();
     if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -277,7 +257,6 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // g->t
   const gThenB = () => {
     const now = new Date().getTime();
     if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -286,7 +265,6 @@ const PinnedCommentsContainer = ({
     }
   };
 
-  // g->h
   const gThenT = () => {
     const now = new Date().getTime();
     if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -363,13 +341,11 @@ const PinnedCommentsContainer = ({
     (currentHoveredDiv.current = index);
 
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && taskRef.current) {
         (taskRef.current as HTMLDivElement)?.blur();
@@ -379,7 +355,6 @@ const PinnedCommentsContainer = ({
   };
 
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       setSelectedIndex(
         currentHoveredDiv.current ? currentHoveredDiv.current : 0
@@ -401,15 +376,6 @@ const PinnedCommentsContainer = ({
     });
   };
 
-  // const getCommentIndex = (savedContent: ISavedContent) => {
-  //   const itemIndex = savedContent.task.comments?.findIndex(
-  //     (taskComment) =>
-  //       taskComment.id.toString() === savedContent.comment?.id?.toString()
-  //   );
-
-  //   return itemIndex;
-  // };
-
   useEffect(() => {
     if (savedContent && savedContent.length > 0) {
       const elementToScrollTo = document.getElementById(
@@ -421,7 +387,6 @@ const PinnedCommentsContainer = ({
       const tasksPlayList: any = savedContent?.map((item) => ({
         projectId: item.task.projectId,
         uniqueIndex: item.task.uniqueIndex,
-        // commentHash: getCommentIndex(item),
       }));
 
       setTasksPlayList(tasksPlayList);

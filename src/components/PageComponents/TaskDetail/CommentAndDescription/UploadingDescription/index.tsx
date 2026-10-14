@@ -18,9 +18,6 @@ interface IProps {
   attachments: UploadFileItem[],
   totalAttachments: number
 }
-// 1: process html
-// 2: setInlineImagesUploadedTotal pass this callback. 
-// 3: when ALL attachments are uploaded, create the comment and use setComments to upload it. 
 
 
 const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, totalAttachments }) => {
@@ -59,19 +56,13 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
     }
   }
 
-  // RUN WHEN ALL IS DONE
 
   const callbackAttachments = async (attachmentsReturned: UploadFileItem[]) => {
-
-    // get all the urls back
     console.log("🚀 ~ callbackAttachments ~ attachmentsReturned:", attachmentsReturned)
-    // this is confirmation that attachments are uploaded.
-    // setTotalChecks(prev=>prev+1)
     setUploadedAttachments(attachmentsReturned)
     setTotalChecks(prev => ({ ...prev, attachments: true }));
   }
 
-  // run this use effect whenever the passed checks change
   const finalStep = async () => {
     try {
       const saved = await handleSubmit(
@@ -91,13 +82,10 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
 
   useEffect(() => { if (totalChecks.content && totalChecks.attachments) void finalStep() }, [totalChecks])
   useEffect(() => {
-    // Calculate the total number of attachments that need to be uploaded
-
     const totalAttachmentsUploaded = inlineImagesUploadedTotal + uploadedAttachments.length;
-    const progressPerAttachment = 100 / totalAttachments; // Calculate the progress per attachment
-    const totalProgress = progressPerAttachment * totalAttachmentsUploaded; // Calculate the total progress
+    const progressPerAttachment = 100 / totalAttachments;
+    const totalProgress = progressPerAttachment * totalAttachmentsUploaded;
 
-    // Update the progress percentage based on the total progress
     setProgressPercentage(totalProgress);
   }, [uploadedAttachments, inlineImagesUploadedTotal, totalAttachments]);
 
@@ -132,7 +120,6 @@ const UploadingDescription: React.FC<IProps> = ({ id, content, attachments, tota
           }}
         />
       </div>
-      {/* <span className='w-full text-content font-bold text-icon-dark-gray'>Updating...</span> */}
     </>
   )
 }

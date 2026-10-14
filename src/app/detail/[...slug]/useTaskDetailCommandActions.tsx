@@ -12,7 +12,6 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
   const { currentId, comments, markAsDone, setCurrentTask, summarizeTicket, callBackHandlerSubtaskLinking, currentUser, currentTask, handleStarTask, navigateToNextTask, setShowRemindMeModal, callBackHandlerRemoveParent, PostFollower, queryClient, setAiChatAutoOpenSuppressed, showAiChatInterface, setAiChatExplicitOpenAt, setShowAiChatInterface, copyCommentToAiChat, summarizeComment, setEditMode, focusOn, copyTicketNumber, copyTitleAndTicketNumber, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL } = getContext();
 
 
-  // =============================== CALLBACK HANDLER FROM COMMANDS
   const callback = (payload: any, mode: string) => {
     const { handleReplyCommentFromHTC, handleReactToCommentFromHTC, deleteComment, moveTaskToNextColumn, openAifromHtc, viewSubTasksfromHtc, copyCommentURLFromHTC, copyCommentContentFromHTC, createTaskFromCommentHTC, handleEditCommentFromHTC, handleStarCommentFromHTC, toggleRemoveSubtaskModal, UnFollowCallback, getTask } = getContext();
     if (mode === taskDetailConfig.commandModes.delete) deleteComment(payload);
@@ -20,10 +19,10 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
     else if (mode === taskDetailConfig.commandModes.acceptTask)
       return moveTaskToNextColumn(payload);
     else if (mode === taskDetailConfig.commandModes.dueDate)
-      // @ts-ignore
+      // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, dueDate: payload }));
     else if (mode === taskDetailConfig.commandModes.assignees)
-      // @ts-ignore
+      // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, assignees: payload }));
     else if (mode === "WaitingOn")
       setCurrentTask((old) => (old ? { ...old, ...payload } : old));
@@ -68,7 +67,6 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
       );
     else if (mode === taskDetailConfig.commandModes.followTask)
       PostFollower(Number(currentUser?.id), Number(currentTask?.id));
-    //Wont touch how this is called. Just shifting the place where its called.
     else if (mode === taskDetailConfig.commandModes.unfollowTask) UnFollowCallback();
     else if (mode === taskDetailConfig.commandModes.speechToText) audioInputHandler();
     else if (mode === taskDetailConfig.commandModes.toggleTimeTracking)
@@ -133,7 +131,7 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
 
   const fastLikeFocusedComment = () => {
     const commentIndex = getCurrentCommentIndex();
-    if (commentIndex == null) return; // == null, not !commentIndex: index 0 is a valid comment
+    if (commentIndex == null) return;
     const comment = comments[commentIndex];
     if (!comment || comment.activity) return;
     window.dispatchEvent(
@@ -144,8 +142,6 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
   };
 
   const audioInputHandler = (improve: boolean = false) => {
-    //get current focused ID. Alright. If we have current focused then
-    //opoen audio on that alright.
     const shouldImprove = improve ? taskDetailConfig.audioButtons.improveSuffix : "";
     if (currentId === taskDetailConfig.elementIds.comment) {
       setEditMode(taskDetailConfig.editModes.comment);
@@ -206,7 +202,6 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
     }
   };
 
-  //Handles copy functions from HTC
   const handleCopyFunctionsFromHTC = (
     payload:
       | "Private"

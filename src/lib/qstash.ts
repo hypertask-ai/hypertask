@@ -7,7 +7,6 @@ import { getRedis } from "@/lib/redis";
 
 let qstashClient: Client | undefined;
 
-/** Public base URL QStash calls back into (this app). */
 export function qstashCallbackBase(): string {
   const b =
     process.env.QSTASH_CALLBACK_BASE_URL ||
@@ -102,21 +101,14 @@ export function withQstashSignature(handler: NextApiHandler): NextApiHandler {
   };
 }
 
-// Namespace by queue path so two queues using the same jobId for the same entity
-// don't collide in a single Redis keyspace.
 const msgIdKey = (path: string, jobId: string) => `qstash:msgid:${path}:${jobId}`;
-// Per-job lock guarding the cancel+publish+record sequence in scheduleJobById.
 const lockKey = (path: string, jobId: string) => `qstash:lock:${path}:${jobId}`;
-// Keep the jobId -> messageId map a little longer than the free-tier max delay (7d).
 const MSGID_TTL_SECONDS = 60 * 60 * 24 * 8;
-// Short - only has to cover one cancel + publish round-trip.
 const SCHEDULE_LOCK_TTL_SECONDS = 10;
 
 export interface PublishOpts {
-  /** Internal route QStash should call, e.g. "/api/queues/FAST/generateSummaryQueue". */
   path: string;
   body: unknown;
-  /** Unix timestamp in SECONDS to run at; omit for immediate delivery. */
   notBefore?: number;
 }
 
@@ -136,7 +128,6 @@ async function recordPremergeJob(opts: PublishOpts & { jobId?: string }) {
   return { messageId };
 }
 
-/** Fire-and-forget publish of a delayed/immediate job to an internal queue route. */
 export async function publishJob(opts: PublishOpts) {
   if (premergeStubEnabled("queue")) return recordPremergeJob(opts);
   const url = `${qstashCallbackBase()}${opts.path}`;
@@ -147,17 +138,6 @@ export async function publishJob(opts: PublishOpts) {
   });
 }
 
-/**
- * Schedule a job under a stable id, replacing any still-pending job with the same
- * id, replacing any older pending message. Uses Redis to map
- * jobId -> QStash messageId so the pending one can be cancelled/replaced.
- *
- * A per-job lock serializes the cancel+publish+record sequence: without it, two
- * concurrent schedules for the same jobId could both cancel the old message and both
- * publish a new one (double delivery + one untracked/leaked message). The loser
- * skips - its runAt is within the lock TTL of the winner's, so the debounce is
- * unchanged. Sequential reschedules still replace as before.
- */
 export async function scheduleJobById(opts: PublishOpts & { jobId: string }) {
   if (premergeStubEnabled("queue")) return recordPremergeJob(opts);
   const redis = await getRedis();
@@ -177,12 +157,10 @@ export async function scheduleJobById(opts: PublishOpts & { jobId: string }) {
     try {
       await redis.del(lock);
     } catch {
-      // lock TTL will expire it anyway
     }
   }
 }
 
-/** Cancel a pending job previously scheduled with scheduleJobById (scoped to its queue path). No-op if already delivered. */
 export async function cancelJobById(jobId: string, path: string): Promise<void> {
   if (premergeStubEnabled("queue")) {
     const redis = await getRedis();
@@ -197,7 +175,6 @@ export async function cancelJobById(jobId: string, path: string): Promise<void> 
   try {
     await getQstashClient().messages.delete(messageId);
   } catch {
-    // already delivered or gone — nothing to cancel
   }
   await redis.del(key);
 }

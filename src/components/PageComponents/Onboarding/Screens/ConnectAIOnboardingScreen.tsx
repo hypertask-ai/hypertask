@@ -59,7 +59,6 @@ const BUILTIN_USE_CASES = [
   "Turn a note into tasks",
 ];
 
-// Weighted: chat apps most people use first, terminal tools for developers.
 const TOOL_TIERS: Array<{
   heading: string;
   blurb: string;
@@ -96,7 +95,6 @@ const METHOD_LABELS: Record<ConnectMethod, string> = {
   rest: "REST API",
 };
 
-// Terminal-capable tools can drive Hypertask three ways; chat apps only via MCP connector.
 const TOOL_METHODS: Partial<Record<ToolChoice, ConnectMethod[]>> = {
   "claude-code": ["cli", "mcp", "rest"],
   codex: ["cli", "mcp", "rest"],
@@ -148,7 +146,6 @@ function ConnectionStatus({ label, onConnected, first = false, visible = true, s
           if (intervalId) clearInterval(intervalId);
         }
       } catch {
-        // Connection confirmation is best-effort; keep polling after transient errors.
       } finally {
         pending = false;
       }

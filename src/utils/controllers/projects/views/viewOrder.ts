@@ -80,8 +80,6 @@ const filterToAvailableViews = async (
     select: { id: true },
   });
   const availableIds = new Set(availableViews.map((view) => view.id));
-  // Built-in views (Overdue, Blocked, ...) are client-side constants with no row
-  // in the View table, but they share the same order list, so keep their ids.
   return requestedOrder.filter(
     (id) => availableIds.has(id) || isBuiltinViewId(id)
   );
@@ -143,7 +141,6 @@ export const saveDefaultViewOrder = async (
   }
 
   const projectView = await getProjectView(projectId);
-  // Private views are user-specific and cannot define a useful order for the team.
   const defaultViewOrder = await filterToAvailableViews(
     projectView.id,
     userId,

@@ -1,8 +1,3 @@
-/**
- * Page-related validation schemas
- *
- * Validations for: create_page, get_page, update_page, list_pages, search_pages
- */
 
 import { z } from 'zod';
 import {
@@ -61,9 +56,6 @@ function normalizePageIdentifierAlias<
 
 const pageContentTypeSchema = z.enum(['markdown', 'html']).default('markdown');
 
-/**
- * Schema for create_page tool input
- */
 export function getCreatePageInputSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
@@ -108,9 +100,6 @@ export function getCreatePageInputSchema() {
 export const CreatePageInputSchema = getCreatePageInputSchema();
 export type CreatePageInput = z.infer<typeof CreatePageInputSchema>;
 
-/**
- * Schema for get_page tool input
- */
 export function getGetPageInputSchema() {
   return getGetPageBaseSchema()
     .superRefine(validatePageIdentifierAlias)
@@ -129,9 +118,6 @@ export function getGetPageBaseSchema() {
 export const GetPageInputSchema = getGetPageInputSchema();
 export type GetPageInput = z.infer<typeof GetPageInputSchema>;
 
-/**
- * Schema for update_page tool input
- */
 export function getUpdatePageInputSchema() {
   return getUpdatePageBaseSchema()
     .superRefine((data, ctx) => {
@@ -179,10 +165,6 @@ export function getUpdatePageBaseSchema() {
 export const UpdatePageInputSchema = getUpdatePageInputSchema();
 export type UpdatePageInput = z.infer<typeof UpdatePageInputSchema>;
 
-/**
- * Schema for list_pages tool input
- * Exactly one task identifier or project_id must be provided.
- */
 export function getListPagesInputSchema() {
   return z
     .object({
@@ -233,9 +215,6 @@ export function getListPagesInputSchema() {
 export const ListPagesInputSchema = getListPagesInputSchema();
 export type ListPagesInput = z.infer<typeof ListPagesInputSchema>;
 
-/**
- * Schema for search_pages tool input
- */
 export function getSearchPagesInputSchema() {
   return z
     .object({
@@ -254,10 +233,6 @@ export function getSearchPagesInputSchema() {
 export const SearchPagesInputSchema = getSearchPagesInputSchema();
 export type SearchPagesInput = z.infer<typeof SearchPagesInputSchema>;
 
-/**
- * Base schema for page_history tool input.
- * FastMCP requires a plain Zod object for tool parameters.
- */
 export function getPageHistoryBaseSchema() {
   return z
     .object({

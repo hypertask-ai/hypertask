@@ -212,8 +212,6 @@ export function createCreateBoardTool(context: ToolContext) {
           };
         }
 
-        // HTPR-4894: createBoardFromManifest enforces the same cap by throwing;
-        // check up front so the model gets a readable reason to relay instead.
         if (await isBoardLimitReached(user.id)) {
           return {
             success: false,
@@ -223,7 +221,6 @@ export function createCreateBoardTool(context: ToolContext) {
           };
         }
 
-        // Chat tool calls are not retried HTTP requests, so skip the MCP Idempotency-Key/Redis replay layer.
         const { board, sections, labels, tasks } = await createBoardFromManifest({
           teamId: team.id,
           googleAccountId: team.googleAccountId,

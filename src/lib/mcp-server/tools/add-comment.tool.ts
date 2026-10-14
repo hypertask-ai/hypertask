@@ -8,11 +8,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { normalizeTaskInput } from '../utils/normalize-task-input';
 
-/**
- * Tool: add_comment
- * Add, update, or delete a comment. Use action: add (create), update (edit), delete (remove).
- * For update/delete, call get_comments_for_task first to obtain comment_id.
- */
 const AddCommentCrudBaseSchema = getAddCommentCrudBaseSchema();
 
 export const addCommentTool = {
@@ -27,7 +22,6 @@ export const addCommentTool = {
     const rawArgs = args as Record<string, any>;
     const action = rawArgs?.action ?? 'add';
 
-    // Only normalize task input when action is add (update/delete use comment_id only)
     const normalizedArgs =
       action === 'add' ? normalizeTaskInput(rawArgs) : rawArgs;
 

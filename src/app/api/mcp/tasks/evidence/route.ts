@@ -22,11 +22,6 @@ const idFor = (v: unknown): number | null =>
 const ticketFor = (v: unknown): string | null =>
   typeof v === 'string' && v.trim() !== '' ? v.trim() : null
 
-/**
- * POST /api/mcp/tasks/evidence
- * Attach typed proof-of-work (test run, screenshot, deploy link, diff) to a task.
- * Body: { task_id | ticket_number, project_id?, type?, title?, url?, summary? }.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -92,10 +87,6 @@ export async function POST(request: NextRequest) {
   })(request)
 }
 
-/**
- * GET /api/mcp/tasks/evidence?task_id|ticket_number&project_id
- * List the evidence attached to a task, newest first.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

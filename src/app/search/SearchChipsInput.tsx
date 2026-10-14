@@ -126,10 +126,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       const dockRect = dock?.getBoundingClientRect();
       const dockTop = dockRect && dockRect.height && dockRect.top < viewportTop + viewportHeight && dockRect.bottom > viewportTop ? dockRect.top : undefined;
       const next = { ...mobileSearchPickerBounds(viewportTop, viewportHeight, container.firstElementChild!.getBoundingClientRect().bottom, dockTop), left, width };
-      // Keep the same state object when nothing moved, so the selected-row effect does not rerun.
       setMobileBounds((previous) => previous && (Object.keys(next) as (keyof typeof next)[]).every((key) => previous[key] === next[key]) ? previous : next);
     };
-    // Scrolling the suggestion list itself must not re-measure, or the list snaps back to the selected row.
     const onScroll = (event: Event) => {
       if (event.target instanceof Node && pickerRef.current?.contains(event.target)) return;
       measure();
@@ -155,7 +153,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
     const list = (mobileEnabled && pickerRef.current?.querySelector<HTMLElement>(`#${listId}`)) || pickerRef.current;
     const row = list?.querySelector<HTMLElement>(`#mention-button-${selectedIndex}`);
     if (mobileEnabled && list && row) {
-      // Scroll only the list: scrollIntoView can pan the page behind the keyboard.
       const listRect = list.getBoundingClientRect();
       const rowRect = row.getBoundingClientRect();
       if (rowRect.top < listRect.top) list.scrollTop -= listRect.top - rowRect.top;
@@ -174,7 +171,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setDismissed(true);
       onRun(value);
     };
-    // React's beforeinput shim does not expose every soft-keyboard inputType.
     input?.addEventListener('beforeinput', beforeInput);
     return () => input?.removeEventListener('beforeinput', beforeInput);
   }, [mobileEnabled, value, onRun, inputRef]);
@@ -187,10 +183,8 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
         setFocused(false);
       }
     };
-    // The list stays open when focus leaves, so Escape must still close it from anywhere.
     const dismissOnEscape = (event: globalThis.KeyboardEvent) => {
       if (escLeavesEnabled || event.key !== 'Escape' || document.activeElement === inputRef.current || !openRef.current) return;
-      // Handled here: stop the search page's Escape-back from also clearing the query.
       event.preventDefault();
       setDismissed(true);
     };
@@ -292,7 +286,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
   }, [value, editing, boardId, layoutEnabled, layoutEnabled ? recentSearches.join('\n') : '', labelScopeEnabled, pickedBoards, commenterEnabled]);
 
   function change(event: ChangeEvent<HTMLInputElement> | React.CompositionEvent<HTMLInputElement>) {
-    // Clearing the draft must not reactivate the last committed chip.
     setEditing(!autocompleteEnabled || Boolean(event.currentTarget.value.trim()));
     setDismissed(false);
     setSelectedIndex(layoutEnabled && event.currentTarget.value.trim() ? 1 : 0);
@@ -382,7 +375,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       return;
     }
     if (autocompleteEnabled && (event.nativeEvent.isComposing || event.ctrlKey || event.metaKey || event.altKey)) return;
-    // Escape leaves search in one press, even over tips or suggestions.
     if (open && event.key === "Escape" && !escLeavesEnabled) {
       event.preventDefault();
       event.stopPropagation();
@@ -397,7 +389,6 @@ export default function SearchChipsInput({ value, onChange, onRun, boardId, inpu
       setSelectedIndex((current) => Math.max(0, Math.min(rows.length - 1, current + (moveDown ? 1 : -1))));
       return;
     }
-    // A lone Ask AI row is not a completion: Enter still runs the search.
     if (open && rows.length && !(layoutEnabled && event.key === "Enter" && selectedRow?.kind === "ai" && (selectedIndex !== 0 || rows.length === 1)) && (event.key === "Enter" || (event.key === "Tab" && (!autocompleteEnabled || !event.shiftKey)))) {
       event.preventDefault();
       event.stopPropagation();

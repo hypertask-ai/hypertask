@@ -42,7 +42,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // A failed flag probe must leave the legacy HTTP contract unchanged.
       }
     }
 

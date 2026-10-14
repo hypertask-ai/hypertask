@@ -2,10 +2,6 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// HTPR-6509: the AI chat task-tree tool used to issue one query per ancestor
-// hop and two queries per tree node. These helpers keep the exact output and
-// error semantics but load the ancestor chain in one recursive query and the
-// subtree with a single authorized recursive read.
 
 type Db = Pick<PrismaClient, "$queryRaw" | "task">;
 
@@ -22,9 +18,6 @@ export const MAX_TREE_ANCESTOR_HOPS = 256;
 
 type AncestorRow = { id: number; parentTaskId: number | null };
 
-// Walks up from the anchor without access filtering, returning at most
-// MAX_TREE_ANCESTOR_HOPS rows (hop 0 is the anchor). It stops before revisiting
-// a task, so cycles terminate; the caller replays the walk to report them.
 export function ancestorChainSql(anchorTaskId: number) {
   return Prisma.sql`
     WITH RECURSIVE chain AS (
@@ -63,8 +56,6 @@ export async function findRootTaskIdForTree(
           ).map((row) => row.id)
         );
 
-  // Replays the original one-query-per-hop walk so cycle, access and depth
-  // errors come back in the same order as before.
   const visited = new Set<number>();
   let currentId = anchorTaskId;
 
@@ -107,8 +98,6 @@ function toTreeNode(task: {
   return node;
 }
 
-// A node at depth 0 has no
-// `children` key; any other node gets `children`, empty when it has none.
 export async function buildTaskTree(
   rootId: number,
   userId: number,
@@ -160,8 +149,6 @@ export async function buildTaskTree(
       orderBy: { uniqueIndex: "asc" },
     });
   } else {
-    // Mirror getProjectWhere(userId) in this statement so revoked ownership or
-    // membership cannot leave stale access IDs. Denied parents prune descendants.
     rows = await db.$queryRaw<ChildRow[]>(Prisma.sql`
       WITH RECURSIVE bounds AS (
         SELECT ${rootId}::integer AS root_id, ${depth ?? null}::bigint AS max_depth,

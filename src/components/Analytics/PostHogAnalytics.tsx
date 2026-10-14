@@ -57,9 +57,6 @@ const reconcilePersistedIdentity = (
 
   posthog.stopSessionRecording();
 
-  // Persistence is shared with hypertask.ai so anonymous acquisition survives
-  // signup. An identified account is different: it must be cleared on logout
-  // or account switching before PostHog emits the initial pageview.
   if (
     persistedAccountId !== null &&
     persistedAccountId !== expectedAccountId
@@ -68,9 +65,6 @@ const reconcilePersistedIdentity = (
   }
 
   posthog.set_config({ disable_session_recording: !identity.isGuest });
-  // reset() (when needed) has completed, so captures now belong either to the
-  // safe anonymous acquisition identity or to a clean device identity. Open
-  // the gate before identify() so its anonymous-to-user link is retained.
   markIdentitySafe();
   if (expectedAccountId !== null) posthog.identify(expectedAccountId);
   if (identity.isGuest) posthog.startSessionRecording();
@@ -95,10 +89,6 @@ export default function PostHogAnalytics({
     identityKey(latestIdentityRef.current),
   );
   const performanceIdentityStartedAtRef = useRef(0);
-  // Next Web Vitals are document-scoped, not reset by SPA navigation. Once a
-  // document crosses identities, its navigation metrics can never describe
-  // the new account. Keep this true for the document lifetime; route-specific
-  // Board/Inbox/Calendar readiness is measured by the product event pipeline.
   const documentIdentityTransitionedRef = useRef(false);
   const posthogRef = useRef<PostHogInterface | null>(null);
   const identityReadyRef = useRef(false);
@@ -137,8 +127,6 @@ export default function PostHogAnalytics({
       posthogRef.current &&
       identityKey(appliedIdentityRef.current) !== committedIdentityKey
     ) {
-      // The new identity is now committed. Close capture until the passive
-      // reconciliation effect has removed or identified PostHog state.
       identityReadyRef.current = false;
     }
 
@@ -149,9 +137,6 @@ export default function PostHogAnalytics({
         title: document.title,
       };
     } else if (currentPathname !== initialPageviewRef.current.pathname) {
-      // Web Vitals describe the document entry, not whichever SPA route is
-      // visible when a late callback fires. Only a committed route transition
-      // may permanently close this document-scoped metric window.
       documentRouteTransitionedRef.current = true;
     }
 
@@ -214,8 +199,6 @@ export default function PostHogAnalytics({
         identityTransitioned: documentIdentityTransitionedRef.current,
         identityStartedAt: performanceIdentityStartedAtRef.current,
         observedAt: performance.now(),
-        // Bind the document-scoped metric to the document entry. Query-string
-        // identifiers are sanitized by buildAuthenticatedProjectWebVital.
         observedUrl: documentEntry.href,
       };
       const posthog = posthogRef.current;
@@ -249,10 +232,6 @@ export default function PostHogAnalytics({
       return;
     }
 
-    // Keep this a separate identity-aware installation gate. Analytics can
-    // initialize anonymously and then receive an authenticated server session
-    // without re-running the SDK initializer. The dependency's buffered
-    // PerformanceObservers retain supported entries from before this import.
     const installAttempt = ++webVitalsInstallAttemptRef.current;
     webVitalsInstallStateRef.current = "installing";
     try {
@@ -275,9 +254,6 @@ export default function PostHogAnalytics({
         return;
       }
 
-      // Mark installed before registering callbacks because buffered entries
-      // may invoke a callback synchronously. No later identity effect may add a
-      // duplicate set of document observers.
       webVitalsInstallStateRef.current = "installed";
       onCLS(reportWebVital);
       onFCP(reportWebVital);
@@ -309,14 +285,8 @@ export default function PostHogAnalytics({
     const previousIdentity = appliedIdentityRef.current;
     if (!posthog || identityKey(previousIdentity) === nextIdentityKey) return;
 
-    // Login refreshes the server tree; logout and account switching hard
-    // navigate. If identity still changes within this document, remove every
-    // trace of the previous user before applying the newly verified session.
     identityReadyRef.current = false;
     posthog.stopSessionRecording();
-    // Preserve anonymous -> identified linkage for the marketing-to-app
-    // funnel. Reset only when an already identified guest/user changes or
-    // signs out, so two real identities can never share PostHog state.
     if (previousIdentity.userId !== null) posthog.reset();
     posthog.set_config({ disable_session_recording: !identity.isGuest });
     identityReadyRef.current = true;
@@ -370,17 +340,8 @@ export default function PostHogAnalytics({
       initializationStarted = true;
       clearSchedule();
       try {
-        // HTPR-4883: a guest who rejected optional cookies skips analytics
-        // entirely. Unset (not yet asked, or a signed-in user who never sees
-        // the banner) keeps the existing capture-by-default behavior.
         if (getCookieConsent() === "essential") return;
 
-        // The app does not use surveys, feature flags, toolbar helpers, or the
-        // other optional integrations bundled by the default entrypoint. The
-        // supported slim build keeps capture, identity, web vitals, and guest
-        // session recording while removing those dormant modules.
-        // The slim build ships no extensions, so browser errors were never
-        // captured (YPER4-361). Load only the error tracking bundle with it.
         const [{ default: posthog }, { ErrorTrackingExtensions }] =
           await Promise.all([
             import("posthog-js/dist/module.slim"),
@@ -391,51 +352,28 @@ export default function PostHogAnalytics({
         posthog.init(key, {
           api_host:
             process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
-          // api_host is our own proxy domain, which posthog-js cannot map back to a
-          // region, so it would send toolbar/survey links to the US app without this.
           ui_host: "https://eu.posthog.com",
           defaults: "2025-05-24",
-          // Same cookie name and scope as the marketing site's snippet, so a visitor
-          // who lands on hypertask.ai keeps one identity through signup. Diverge and
-          // every signup looks like a brand-new stranger with no acquisition source.
           persistence: "localStorage+cookie",
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
           __extensionClasses: ErrorTrackingExtensions,
           capture_exceptions: true,
-          // Replay is for watching what demo guests do with the product; a
-          // signed-in user's real work is never recorded.
           disable_session_recording: !identity.isGuest,
-          // The app installs one identity-aware observer set below. Keep the
-          // SDK's generic observer off so marketing/shared traffic cannot mix
-          // with the authenticated app series or double count its metrics.
           capture_performance: false,
-          // Give signed-in project vitals a dedicated, exact-host event. The
-          // marketing site keeps `$web_vitals`, so its traffic cannot enter the
-          // app series even though both surfaces share a PostHog project.
           before_send: (event) => {
-            // Fail closed while shared persistence still might belong to a
-            // previous account. This also covers SDK captures that happen
-            // before the loaded hook, regardless of internal init ordering.
             if (!identityReadyRef.current) return null;
             return scopeProjectWebVitalsEvent(event, {
               userId: latestIdentityRef.current.userId,
               isGuest: latestIdentityRef.current.isGuest,
             });
           },
-          // This runs synchronously before PostHog starts its request queue and
-          // schedules the initial pageview. Reconcile shared persistence here so
-          // a hard logout/account switch cannot emit under the previous account.
           loaded: (loadedPostHog) => {
             const loadedIdentity = latestIdentityRef.current;
             reconcilePersistedIdentity(loadedPostHog, loadedIdentity, () => {
               identityReadyRef.current = true;
             });
-            // With authenticated startup intentionally delayed, a fast SPA
-            // navigation can happen before PostHog installs history capture.
-            // Preserve the true entry route; PostHog will capture the current
-            // route immediately after this callback and future history changes.
             if (window.location.href !== initialPageview.href) {
               loadedPostHog.capture("$pageview", {
                 $current_url: initialPageview.href,
@@ -451,14 +389,8 @@ export default function PostHogAnalytics({
                 sendProjectWebVital(loadedPostHog, queued),
               );
           },
-          // We do not run PostHog surveys, but posthog-js loads its surveys
-          // bundle anyway: 97 KiB, ~80% unused, the single largest script on the
-          // board page. Turning surveys off drops that request entirely.
           disable_surveys: true,
         });
-        // Product readiness events are independent of the optional Web Vitals
-        // chunk. Install their sink first so a failed delayed chunk request
-        // cannot leave Board, Inbox, Calendar, or task telemetry queued.
         uninstallSink = installProductPerformanceSink(
           ({ event, properties }, accountId) => {
             const latestIdentity = latestIdentityRef.current;
@@ -530,9 +462,6 @@ export default function PostHogAnalytics({
       if (cancelled || initializationStarted) return;
       clearSchedule();
       if (!authenticated) {
-        // Keep anonymous acquisition and login-funnel pageviews on their
-        // current idle schedule. Only the authenticated app pays the
-        // paint-first delay.
         scheduleInIdlePeriod(ANONYMOUS_ANALYTICS_FALLBACK_MS);
         return;
       }
@@ -546,9 +475,6 @@ export default function PostHogAnalytics({
         AUTHENTICATED_ANALYTICS_MAX_WAIT_MS,
       );
 
-      // A fast IndexedDB restore can beat this component's passive effect.
-      // The bounded queue is authoritative, so handle that race without
-      // requiring another product event.
       if (
         window.__hypertaskProductPerformanceQueue?.some(
           isProductReadinessEvent,

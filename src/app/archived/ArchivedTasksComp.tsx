@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-key */
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client"
 
 import { useRouter } from 'next/navigation';
@@ -47,7 +47,6 @@ const ArchivedTasksContainer = ({
     }
 
     const { navigateToTask } = useHypertasksNavigate()
-    // refs
     const currentHoveredDiv = useRef<number | null>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
     const taskRef = useRef<HTMLDivElement>(null);
@@ -89,16 +88,12 @@ const ArchivedTasksContainer = ({
             eHandler()
         }
 
-        // [j] for down
         if (e.key === "j" || e.key === "ArrowDown") ArrowDownHandler()
 
-        // [k] for up
         if (e.key === "k" || e.key === "ArrowUp") ArrowUpHandler()
 
-        // [enter]
         if (e.key === "Enter") openTask(tasksFromQuery[selectedIndex])
         
-        // cmd/ctrl + m
         if (e.keyCode===77 && cmdControl) openTask(tasksFromQuery[selectedIndex], "reply")
         if (e.key === "g") gPressHandler()
         if (e.key === 'b') gThenB()
@@ -106,7 +101,6 @@ const ArchivedTasksContainer = ({
         if (e.key === 't') gThenT()
     }
 
-   // [e] for unarchive
    const eHandler = (task?:ITask, index?:number)=>{
         const targetTask = task ?? tasksFromQuery[selectedIndex];
         const targetIndex = index ?? selectedIndex;
@@ -121,7 +115,6 @@ const ArchivedTasksContainer = ({
         }
     }
 
-    // [j] for down
     const ArrowDownHandler = ()=>{
         if (tasksFromQuery[selectedIndex]) {
             const index = _tasks.findIndex((task)=>task.id===tasksFromQuery[selectedIndex].id)
@@ -140,7 +133,6 @@ const ArchivedTasksContainer = ({
         }
     }
 
-    // [k] for up
     const ArrowUpHandler = ()=>{
         if (tasksFromQuery[selectedIndex]) {
             const index = _tasks.findIndex((task)=>task.id===tasksFromQuery[selectedIndex].id)
@@ -159,13 +151,11 @@ const ArchivedTasksContainer = ({
         }
     }
 
-    // [g]
     const gPressHandler=()=>{
         const now = new Date().getTime();
         lastgClick.current = now;
     }
 
-    // g->i
     const gThenI =()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -174,7 +164,6 @@ const ArchivedTasksContainer = ({
         }
     }
 
-    // g->t
     const gThenB=()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -183,7 +172,6 @@ const ArchivedTasksContainer = ({
         }
     }
 
-    // g->h
     const gThenT=()=>{
         const now = new Date().getTime();
         if (lastgClick.current && now - lastgClick.current < 5000) {
@@ -339,19 +327,14 @@ const TaskRowComponent = (
                 onClick={() => openTask(task)}  
                 key={task.id} 
                 className={`flex md:items-center space-x-8 cursor-pointer py-2 px-4 border-l-4 border-transparent rounded-md ${selected  ? "bg-active-list-element border-l-selected-item-border" : "transparent"} justify-between  w-full flex-col md:flex-row`}>
-                {/* <div className='flex space-x-6 w-1/5 text-white-black'>
-                    <span style={{ fontSize: 14 }}>{task.user?.displayName ?? ''}</span>
-                </div> */}
 
-                {/* -------------- project name ---------------- */}
                 <ProjectName title={task.project?.title ?? task.project?.name}/>
                 
-                {/* -------------- task title ----------------- */}
                 <TaskTitleUniqueIndex title={task.title} uniqueIndex={task.uniqueIndex}/>
                 <span style={{ color: '#8E9093', fontSize: 13 }}>{formatDateDifference(task.archivedAt!)}</span>
                 <div className="group"
                     onClick={(e) =>{
-                    e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                    e.stopPropagation();
                     eHandler(task, index)}}
                 >
                     <ButtonGroup status={task.status}/>
@@ -376,7 +359,6 @@ const ButtonGroup = ({status}:{status:string|undefined})=>{
                     keyCombination={[`${!isApple?"CTRL":"CMD"}`,"E"]}
                     />
             <Check size={15} color={(status) === 'Archive' ? 'green' : '#8E9093'} strokeWidth={1.75} />
-                {/* <FiCheck size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} /> */}
         </button>
       
         </>

@@ -4,16 +4,12 @@ import type { WebhookDelivery } from './events'
 import { WORKSPACE_WEBHOOK_EVENTS, createWebhookEnvelope } from './events'
 import { queueBoardWebhookDelivery } from './queue'
 
-/**
- * Structural, not Prisma-generated: the same functions run against the root
- * client and interactive transaction clients.
- */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 type BoardWebhookDb = {
   webhookSubscription: { findMany: (args: any) => Promise<any> }
   boardWebhookDelivery: { create: (args: any) => Promise<any> }
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+
 
 export function webhookPayloadHash(payload: unknown): string {
   const serialized = JSON.stringify(payload)
@@ -43,9 +39,6 @@ function eventForSubscription(
   delivery: WebhookDelivery,
   supportsUnassignedEvent: boolean,
 ): WebhookDelivery {
-  // Before task.unassigned became independently selectable, board subscribers
-  // received it as task.assigned with action=unassigned. Keep that wire contract
-  // only for subscriptions created before the expanded event catalog.
   if (delivery.event === 'task.unassigned' && !supportsUnassignedEvent) {
     return {
       event: 'task.assigned',
@@ -55,7 +48,6 @@ function eventForSubscription(
   return delivery
 }
 
-/** Persist intended recipients inside the caller's domain transaction. */
 export async function persistBoardWebhookEvent(
   tx: BoardWebhookDb,
   projectId: number,
@@ -140,7 +132,6 @@ export async function persistBoardWebhookEvents(
   return deliveryIds
 }
 
-/** Publish only after the transaction commits; a failure remains sweepable. */
 export async function publishBoardWebhookDeliveries(
   deliveryIds: string[],
 ): Promise<void> {
@@ -187,7 +178,6 @@ export async function createBoardWebhookTestDelivery(input: {
   return deliveryId
 }
 
-/** Manual retry starts a fresh logical delivery so receiver deduplication works. */
 export async function retryBoardWebhookDelivery(input: {
   deliveryId: string
   subscriptionId: string

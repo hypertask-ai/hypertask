@@ -11,7 +11,6 @@ export function taskWriterDateContext(timeZone?: string | null, now = new Date()
   return { today: `${value("year")}-${value("month")}-${value("day")}`, timeZone: zone };
 }
 
-// Accept a real calendar date from today through two years ahead; anything else gives no due date.
 export function validateTaskWriterDueDate(value: unknown, today: string): string | undefined {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const date = new Date(`${value}T00:00:00Z`);
@@ -25,7 +24,6 @@ export function taskWriterDueDateInstructions(context: ReturnType<typeof taskWri
 Set the due date (YYYY-MM-DD) only when the user explicitly asks for a deadline for that task, as <span id="${MARKER}" style="display:none">YYYY-MM-DD</span> after the description. Never set it when the user negates it ("not due", "no deadline"). Resolve relative dates against today and the time zone above. A date mentioned for another reason (history, notes) is not a deadline.`;
 }
 
-// The model's own date, validated. The marker is removed and re-added only when the date is valid.
 export function applyTaskWriterDueDate(html: string, context: ReturnType<typeof taskWriterDateContext>) {
   const root = parse(html);
   const markers = root.querySelectorAll(`#${MARKER}`);

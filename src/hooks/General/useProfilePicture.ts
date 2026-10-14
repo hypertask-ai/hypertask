@@ -30,14 +30,6 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
     }
   }, [_currentUser?.displayName]);
 
-  /**
-   *Selected image is processed(cropped) and uploaded to s3.
-   *New url is then updated to user
-   *Also updating nookie_default_img cookie with default image.
-   *Updates user in db/cookie/recoil
-   * @param {ChangeEvent<HTMLInputElement>} event
-   * @return {*}
-   */
   const handleFileUpload = async (event: ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
@@ -46,10 +38,8 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
 
     await toast.promise(
       (async () => {
-        // Crop image to circle
         const circularImageBlob = await cropToCircle(selectedFile);
 
-        // Convert blob to File
         const circularImageFile = new File(
           [circularImageBlob],
           "profileImage.png",
@@ -60,21 +50,18 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
 
         setUploadedFile(circularImageFile);
 
-        // Convert to base64
         const base64String = await convertFileToBase64(circularImageFile);
 
-        // Convert base64 to file and upload
         const newUrl = await base64ToFile(
           base64String as string,
           "profileImage.png"
         );
 
-        // Update user
         const updatedUser = await updateProfileAPI(newUrl);
         if (updatedUser) updateUserStateAndCookie(updatedUser);
       })().catch((error) => {
         console.log("🚀 ~ error:", error)
-        throw error; // Re-throw so toast handles the UI
+        throw error;
       }),
       {
         loading: "Uploading profile image...",
@@ -86,19 +73,13 @@ export const useProfilePicture = (_currentUser: IUser | null) => {
 
   const updateUserStateAndCookie = (user: any) => {
     nookies.set(null, "nookies_user", JSON.stringify(slimUserForCookie(user)), {
-      maxAge: 600 * 60 * 24 * 7, // 1 week
+      maxAge: 600 * 60 * 24 * 7,
       path: "/",
     });
     setCurrentUser(user);
     _setCurrentUser(user);
     toast("Refresh to view changes");
   };
-  /**
-   *Removes the applied image if any
-   *Preventing unneccesary API calls if user is already on default
-   *Updates user in db/cookie/recoil
-   * @return {*}
-   */
   const removeProfilePicture = async () => {
     if (currentUser?.photoURL?.startsWith("https://lh3.googleusercontent.com"))
       return;

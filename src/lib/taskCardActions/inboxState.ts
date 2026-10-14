@@ -93,9 +93,6 @@ export async function setTaskMovedToInboxState(
         where: { ...recipient, status: 'Normal' },
         data: { status: 'Archive', archivedAt },
       })
-      // A human Inbox reminder is another source of active task delivery. Turn
-      // it off in the same task lock/transaction so a queued job can only skip,
-      // never restore the notification after this explicit inactive state.
       if (input.agentId == null) {
         await tx.reminder.updateMany({
           where: {

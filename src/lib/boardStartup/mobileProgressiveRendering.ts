@@ -21,8 +21,6 @@ export const getProgressiveTaskRenderMode = ({
   taskModuleFailed: boolean;
   shouldRenderTask: boolean;
 }): ProgressiveTaskRenderMode => {
-  // Preserve the existing desktop loading state. Only mobile large boards may
-  // show lightweight titled placeholders before the card module is ready.
   if (!isMobile && !taskModuleReady && !taskModuleFailed) return "skeleton";
   if (taskModuleFailed || !shouldRenderTask) return "placeholder";
   if (!taskModuleReady) return "skeleton";

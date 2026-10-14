@@ -104,8 +104,8 @@ test("Add to Slack fixes /ht copy even with Marketplace off and gates only new l
 
 test("support is exempt from signed-out and incomplete-onboarding redirects, without exposing sibling routes", () => {
   const proxy = fs.readFileSync(path.join(root, "src/proxy.ts"), "utf8");
-  const publicRoutes = proxy.slice(proxy.indexOf("// Allow public routes"), proxy.indexOf("// HTPR-4845"));
-  const onboarding = proxy.slice(proxy.indexOf("!checkIfOnboarded(user)"), proxy.indexOf("// Voluntary /trial"));
+  const publicRoutes = proxy.slice(proxy.indexOf("if (currentPath.startsWith(\"/invite\""), proxy.indexOf("if (currentPath === \"/\") {\n      return"));
+  const onboarding = proxy.slice(proxy.indexOf("!checkIfOnboarded(user)"), proxy.indexOf("if (currentPath === trial"));
   assert.match(publicRoutes, /currentPath === '\/slack\/support'/);
   assert.match(onboarding, /currentPath !== '\/slack\/support'/);
   assert.equal(publicRoutes.includes("currentPath.startsWith('/slack')"), false);

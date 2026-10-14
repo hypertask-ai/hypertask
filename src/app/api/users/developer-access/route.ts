@@ -18,17 +18,6 @@ import {
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-/**
- * GET /api/users/developer-access
- *
- * One read for every credential that can act on the account, so Settings can
- * show scope, expiry, and last use in a single list instead of three surfaces
- * that each know about their own key type.
- *
- * The CLI is not a fourth credential: `hypertask login` stores the same MCP
- * bearer token, so it is reported as a client of that token rather than as a
- * separate secret.
- */
 export async function GET(_request: NextRequest) {
   try {
     const user = await getApiKeyOwnerFromCookies()
@@ -85,7 +74,6 @@ export async function GET(_request: NextRequest) {
       }),
     ])
 
-    // Ordered newest-first, so the first row for a client is its latest use.
     const clientMap = new Map<
       string,
       { id: string; name: string; lastUsedAt: string }
@@ -136,10 +124,6 @@ export async function GET(_request: NextRequest) {
         teamScoped: row.prefix === TEAM_MANAGEMENT_KEY_PREFIX,
         team: teamScopedKeysEnabled ? row.team : null,
       })),
-      // Browser-scoped on purpose: the MCP token lives in a cookie, so this
-      // reports the calling browser's token only. A token minted on another
-      // device is invisible here, which is why the UI says so rather than
-      // claiming the account has none.
       mcpToken: {
         active: Boolean(mcpExpiresAt),
         expiresAt: mcpExpiresAt,

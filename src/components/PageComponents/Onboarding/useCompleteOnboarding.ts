@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { USER_API_CONTROLLER } from "@/utils/api/users";
 import { slimUserForCookie } from "@/lib/auth/slimUserCookie";
 
-/** Marks onboarding done (tour flag + refreshed user cookie). Shared by the tutorial and launch screens. */
 export const useCompleteOnboarding = () => {
   const router = useRouter();
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
@@ -33,7 +32,7 @@ export const useCompleteOnboarding = () => {
       const { user } = await response.data;
 
       nookies.set(null, "nookies_user", JSON.stringify(slimUserForCookie(user)), {
-        maxAge: 600 * 60 * 24 * 7, // 1 week
+        maxAge: 600 * 60 * 24 * 7,
         path: "/",
       });
       _setCurrentUser(user);

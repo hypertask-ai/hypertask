@@ -1,4 +1,3 @@
-// Prompt text is unchanged. Bump the entry version whenever its parts change.
 export const PROMPTS = {
   "suggest-reply-context-1": {
     id: "suggest-reply-context-1",

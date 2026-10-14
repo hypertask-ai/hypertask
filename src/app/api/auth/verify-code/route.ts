@@ -23,7 +23,6 @@ import {
 } from '@/lib/auth/emailCodeRateLimit'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 
-// --------- Route Handler ---------
 export async function POST(request: NextRequest) {
   try {
     const { code, email, abTestVariant } = await request.json()
@@ -48,8 +47,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Vercel supplies the trusted client IP. Without it, fail closed rather
-    // than let a caller choose the identity used by the hard IP budget.
     const clientIp = getEmailCodeClientIp(request)
     if (!clientIp) {
       return NextResponse.json(
@@ -61,12 +58,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Reserve capacity before comparing the code so parallel guesses cannot
-    // all pass a separate check-then-increment rate limiter.
     const attempt = await claimEmailCodeAttempt(normalizedEmail, clientIp)
-    // The IP budget is the hard pre-verification boundary. A shared email
-    // budget cannot block this step: otherwise anyone who knows an address can
-    // spend five guesses and prevent the owner from redeeming the correct code.
     if (!attempt.ipAllowed) {
       return NextResponse.json(
         {
@@ -79,14 +71,11 @@ export async function POST(request: NextRequest) {
 
     console.log('🧪 AB Test Variant:', abTestVariant)
 
-    // Verify the code
     const verifiedEmail = await VerificationCodeService.verifyCode(
       code,
       normalizedEmail
     )
     if (!verifiedEmail) {
-      // The email count is a soft boundary for invalid guesses. Correct codes
-      // are still consumed above, while repeated invalid attempts get a 429.
       if (!attempt.emailAllowed) {
         return NextResponse.json(
           {
@@ -114,7 +103,6 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Update user in database (EXACTLY like useAuth.tsx does)
     const userUpdateResult = await update_or_create_user(
       verifiedEmail,
       {
@@ -124,7 +112,7 @@ export async function POST(request: NextRequest) {
       },
       authConfig.onboarding.shouldSkipInteractive,
       authConfig.onboarding.skipOnboarding,
-      true, // isVerified: true (email verified via code)
+      true,
       signupAttributionFromHeaders(request.headers, 'email'),
     )
 
@@ -153,27 +141,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Ensure isVerified is set to true in UserSetting
     if (userData.UserSetting) {
       await prisma.userSetting.update({
         where: { id: userData.UserSetting.id },
         data: { isVerified: true },
       })
-      // Keep the Better Auth column in sync, or a user who verifies by code
-      // stays blocked from Google account linking forever (HTPR-4159 gate).
       await prisma.user.update({
         where: { id: userData.id },
         data: { emailVerified: true },
       })
-      // The mailbox is now proven, so pick up any team that allowlisted this domain.
-      // Idempotent, and the only auto-join chance an instant-signup user gets: they
-      // were provisioned unverified, and provisionNewUser does not run again.
       try {
         await autoJoinByEmailDomain(userData.id, userData.email)
       } catch (error) {
         console.error('Auto-join by email domain failed (non-fatal):', error)
       }
-      // Refetch user to get updated isVerified status
       const updatedUser = await prisma.user.findUnique({
         relationLoadStrategy: 'join',
         where: { id: userData.id },
@@ -192,8 +173,6 @@ export async function POST(request: NextRequest) {
       trialStatus: (userData as any).UserSetting?.trialStatus
     })
 
-    // Auto-provision a team/board for brand-new users so they land on a real
-    // board instead of the empty state, matching instant-signup's behavior.
     let welcomeBoardId: number | undefined
     if (userUpdateResult.res.isNewUser && authConfig.onboarding.skipOnboarding) {
       try {
@@ -201,22 +180,18 @@ export async function POST(request: NextRequest) {
         const onboardingResult = await provisionFirstWorkspace(
           userData as any,
           request.cookies.get(SESSION_COOKIE)?.value,
-          'MyTeam', // Default team title
-          'MyBoard', // Default board title
-          companySizeOptions[0], // Default: "Just me"
-          companyRoleOptions[0] // Default: "Founder or leadership team"
+          'MyTeam',
+          'MyBoard',
+          companySizeOptions[0],
+          companyRoleOptions[0]
         )
         welcomeBoardId = onboardingResult?.Project?.id
         console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
         console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
-        // Don't fail the request - user can still use the app
-        // The onboarding can be completed later if needed
       }
     }
 
-    // Returning users and flag-Off signups still need the original adoption hook.
-    // Flag-On signups adopt before provisioning in provisionFirstWorkspace.
     await adoptGuestBoards(request.cookies.get(SESSION_COOKIE)?.value, userData!.id)
 
     const loginBoard = await resolveLoginBoard(userData!.id, request.cookies.get('previousBoard')?.value)
@@ -225,25 +200,22 @@ export async function POST(request: NextRequest) {
       : loginBoard
     console.log('📋 User projects fetched:', prevBoard)
 
-    // Create response with redirect URL following useAuth.tsx logic
     const response = NextResponse.json({
       success: true,
-      user: userData, // Pass the full user data from database
-      prevBoard: prevBoard, // Pass the project data
-      isNewUser: userUpdateResult.res.isNewUser, // Pass the isNewUser flag
-      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser), // false = not mobile
+      user: userData,
+      prevBoard: prevBoard,
+      isNewUser: userUpdateResult.res.isNewUser,
+      redirectUrl: loginBoard === null ? '/onboarding' : getRedirectUrl(userData, prevBoard, false, abTestVariant, undefined, undefined, userUpdateResult.res.isNewUser),
       message: 'Email verified and signed in successfully!',
-      abTestVariant: abTestVariant // Pass through for client-side tracking
+      abTestVariant: abTestVariant
     })
 
-    // Set authentication cookies EXACTLY like useAuth.tsx
     try {
-      // Set nookies_user cookie (main auth cookie)
       response.cookies.set('nookies_user', JSON.stringify(slimUserForCookie(userData)), {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 600 * 60 * 24 * 7, // 1 week
+        maxAge: 600 * 60 * 24 * 7,
         path: '/'
       })
       response.cookies.set(
@@ -255,13 +227,12 @@ export async function POST(request: NextRequest) {
 
       seedResponseThemeCookie(request, response)
 
-      // Set previous board cookie if we have one (EXACTLY like useAuth.tsx)
       if (prevBoard?.id) {
         response.cookies.set('previousBoard', `project-${prevBoard.id}|&|`, {
           httpOnly: false,
           secure: process.env.NODE_ENV === 'production',
           sameSite: 'lax',
-          maxAge: 600 * 60 * 24 * 7, // 1 week
+          maxAge: 600 * 60 * 24 * 7,
           path: '/'
         })
         console.log('✅ Previous board cookie set:', `project-${prevBoard.id}`)
@@ -269,12 +240,11 @@ export async function POST(request: NextRequest) {
 
       if (loginBoard === null) response.cookies.delete('previousBoard')
 
-      // Track the source for analytics
       response.cookies.set('signup_source', 'email_code', {
         httpOnly: false,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7, // 7 days
+        maxAge: 60 * 60 * 24 * 7,
         path: '/'
       })
 
@@ -297,7 +267,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// Helper functions from useAuth.tsx
 async function getProjects(
   userId: number,
   baseUrl: string
@@ -334,28 +303,23 @@ function getRedirectUrl(
   console.log('🧪 getRedirectUrl - abTestVariant:', abTestVariant)
   console.log('👤 getRedirectUrl - isNewUser:', isNewUser)
 
-  // Shared task URL generation helper
   const getSharedTaskUrl = () =>
     sharedTask
       ? `/detail/project-${sharedTask.projectId}/${sharedTask.task?.uniqueIndex}`
       : ""
 
-  // Project URL with optional view parameter
   const getProjectUrl = () =>
     `/project?id=${prevBoard?.id}${view ? `&view=${view}` : ""}`
 
-  // User has completed all onboarding steps
   if (onboardingTutorialStatus) {
     return sharedTask ? getSharedTaskUrl() : getProjectUrl()
   }
 
-  // User has not completed onboarding
   return `/onboarding?projectId=${prevBoard?.id}&teamTitle=${
     prevBoard?.team?.title || 'MyTeam'
   }&id=${prevBoard?.team?.id || ''}${sharedTask ? `&shareId=${sharedTask.id}` : ""}`
 }
 
-// Debug endpoint to see stored codes (remove in production)
 export async function GET() {
   const stats = await VerificationCodeService.getStats()
   

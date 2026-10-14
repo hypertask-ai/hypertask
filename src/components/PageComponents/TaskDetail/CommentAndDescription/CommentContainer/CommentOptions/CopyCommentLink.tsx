@@ -6,7 +6,6 @@ import { cn } from "@/utils/undoActions/helperFuncs"
 import toast from 'react-hot-toast';
 
 interface IProps {
-    // onClickHandler :(currentIndex: number) => void;
     currentIndex: number;
     href:string
 }
@@ -16,14 +15,12 @@ const CopyCommentLink: React.FC<IProps> = ({ currentIndex, href }) => {
 
     const onClick = (e: any) => {
         e.stopPropagation()
-        const currentURL = href; // Get the current page URL
-        navigator.clipboard.writeText(currentURL + `#comment-${currentIndex}`) // Copy it to the clipboard
+        const currentURL = href;
+        navigator.clipboard.writeText(currentURL + `#comment-${currentIndex}`)
         toast("Link to this comment copied to clipboard!")
     }
     return (
-        // <div className={cn(className,"")}>
         <Link size={14} onClick={onClick} strokeWidth={1.75} className={cn(className, 'text-content text-white-black')} />
-        // </div>
     )
 }
 

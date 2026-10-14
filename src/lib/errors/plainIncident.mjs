@@ -1,7 +1,3 @@
-// Plain-language wording for error tickets (YPER4-260).
-// Pure and dependency free so both the app (reportError.ts) and the GitHub
-// workflow script (.github/scripts/posthog-error-alert.mjs) import this file.
-// Deterministic on purpose: no model call, so the same error reads the same.
 
 const PAGE_RULES = [
   [/^\/(onboarding|interactive-onboarding)(\/|$)/, "onboarding"],
@@ -19,14 +15,12 @@ const PAGE_RULES = [
   [/^\/admin(\/|$)/, "the admin area"],
 ];
 
-/** Maps a URL or path to a product page name. Unknown becomes "the app". */
 export function plainPageName(urlOrPath) {
   if (typeof urlOrPath !== "string" || !urlOrPath.trim()) return "the app";
   let path = urlOrPath.trim();
   try {
     path = new URL(path, "https://app.invalid").pathname;
   } catch {
-    // keep the raw value
   }
   for (const [pattern, name] of PAGE_RULES) {
     if (pattern.test(path)) return name;
@@ -34,7 +28,6 @@ export function plainPageName(urlOrPath) {
   return "the app";
 }
 
-/** Maps a raw error message to a short plain phrase. */
 export function plainProblem(message) {
   const text = typeof message === "string" ? message : "";
   const prisma = /prisma\.(\w+)\.(\w+)\(\)`?\s+invocation/i.exec(text);
@@ -59,7 +52,6 @@ function isBrowserSource(source) {
   return source === "client" || source === "browser";
 }
 
-/** Title under 100 characters, no bracket prefix, never a bare "Error". */
 export function plainTitle({ kind = "error", url, message, source }) {
   const page = plainPageName(url);
   const noun = isBrowserSource(source) ? "Browser error" : "Server error";
@@ -68,7 +60,6 @@ export function plainTitle({ kind = "error", url, message, source }) {
   return `${lead}${where}: ${plainProblem(message)}`.slice(0, 99);
 }
 
-/** The bold one-sentence summary that opens the ticket. */
 export function plainSummary({ url, message, source }) {
   const where = isBrowserSource(source) ? "in the browser" : "on the server";
   return (

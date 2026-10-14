@@ -26,7 +26,6 @@ type Props = {
     viewId: number | null,
     defaultBoardId: number,
   ) => Promise<void>;
-  /** Returns true when the created task id is present after refresh. */
   onRefresh: (taskId: number) => Promise<boolean>;
 };
 

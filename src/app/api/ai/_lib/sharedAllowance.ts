@@ -28,7 +28,6 @@ export const SYSTEM_AI_ALLOWANCE_MULTIPLIER = 10;
 
 type AllowanceLane = "visible" | "system";
 
-/** YPER4-333: the team's monthly allowance and visible-lane use so far, for telemetry. */
 export async function teamAllowanceSnapshot(
   teamId: string,
   allowanceUsd: number,
@@ -45,12 +44,6 @@ export async function teamAllowanceSnapshot(
 }
 
 export class SharedAiAllowanceExceededError extends Error {
-  /**
-   * The allowance period this reservation was rejected against. Callers that
-   * deduplicate per period must use this rather than re-deriving it from a
-   * clock of their own: a caller straddling UTC month rollover would otherwise
-   * key its bookkeeping to a different month than the one that actually said no.
-   */
   readonly periodKey: string;
 
   constructor(periodKey: string) {
@@ -100,14 +93,9 @@ type ModelPricing = {
   };
 };
 
-/** HTPR-7076: Anthropic prices cache reads at 0.1x and 5-minute cache writes at 1.25x the input rate. */
 export const CACHE_READ_INPUT_MULTIPLIER = 0.1;
 export const CACHE_WRITE_INPUT_MULTIPLIER = 1.25;
 
-/**
- * `inputTokens` is the total prompt size and already includes cached tokens
- * (the AI SDK reports total = noCache + cacheRead + cacheWrite).
- */
 export function modelCostUsd(
   pricing: ModelPricing,
   inputTokens: number,
@@ -136,11 +124,6 @@ type AllowanceReservation = {
   amountMicroUsd: number;
   committedKey: string;
   id: string;
-  /**
-   * What the prompt alone costs (no output, no safety margin), or null when
-   * the HTPR-7079 flag is off. A call that fails before any output settles
-   * at this amount instead of the full reservation.
-   */
   inputOnlyMicroUsd: number | null;
   pricing: ModelPricing;
   reservationsKey: string;
@@ -265,7 +248,6 @@ function gatewayPricingLookupSlugs(modelSlug: string): string[] {
 
 export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
   if (isHaiku55Model(modelSlug)) {
-    // The catalog exposes only one rate, but Haiku 5.5 prices the entire request by size.
     return {
       inputUsdPerToken: 0.10 / 1_000_000,
       outputUsdPerToken: 0.50 / 1_000_000,
@@ -284,9 +266,6 @@ export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
   const tier = /^openai\/gpt-6(?:\.\d+)?-(luna|sol)$/.exec(modelSlug)?.[1]
     ?? (/^anthropic\/claude-opus-5[.-]5$/.test(modelSlug) ? "opus" : null);
   if (tier) {
-    // Until Gateway publishes successor pricing, reserve at least the most
-    // expensive catalog rate in the same tier, with a deliberately high floor
-    // (USD/token) so missing new-model rates never inherit a cheaper old rate.
     const floor = tier === "luna"
       ? { inputUsdPerToken: 0.00001, outputUsdPerToken: 0.00004 }
       : tier === "sol"
@@ -306,8 +285,6 @@ export async function modelPricing(modelSlug: string): Promise<ModelPricing> {
 }
 
 function estimatePromptTokenUpperBound(prompt: unknown): number {
-  // UTF-8 bytes are a conservative upper bound for tokenizer pieces and also
-  // make inline base64/file inputs reserve meaningful headroom.
   return Buffer.byteLength(JSON.stringify(prompt ?? ""), "utf8");
 }
 
@@ -335,8 +312,6 @@ function inputOnlyMicroUsd(pricing: ModelPricing, prompt: unknown): number {
 
 async function failedCallsCountInputOnly(): Promise<boolean> {
   try {
-    // No user is attached to a model call, so only the global mode matters:
-    // user 0 matches Everyone and no owner or QA list.
     return await isFeatureEnabled(HTPR_7079_FAILED_AI_ALLOWANCE_FLAG, 0);
   } catch {
     return false;
@@ -433,9 +408,6 @@ async function gatewaySpendBreakdownMicroUsd(
     throw new Error("AI Gateway allowance report omitted the owning team tag");
   }
 
-  // New system calls carry both their feature tag and the stable included tag.
-  // max() preserves pre-migration summary/question spend without double-counting
-  // new calls that appear in both rows.
   const systemUsd = Math.min(
     teamUsd,
     Math.max(markedSystemUsd, legacySystemUsd),
@@ -566,8 +538,6 @@ async function reconcileLegacySplit(args: {
       finalReconciliation ? "1" : "0",
     );
   } catch {
-    // Pending legacy spend remains conservatively charged to the visible lane.
-    // A later request retries after the short reconciliation lock expires.
   }
 }
 
@@ -583,9 +553,6 @@ async function reserveSharedAllowance(args: {
   const now = new Date();
   const month = aiAllowancePeriod(now);
   const keyPrefix = `ai-allowance:${month.key}:${args.teamId}`;
-  // The visible lane deliberately keeps the original key names. Rolling
-  // deployments therefore share committed spend and active reservations with
-  // the previous code instead of opening a fresh cap window.
   const visibleCommittedKey = `${keyPrefix}:committed`;
   const visibleReservationsKey = `${keyPrefix}:reservations`;
   const systemCommittedKey = `${keyPrefix}:system:committed`;
@@ -609,9 +576,6 @@ async function reserveSharedAllowance(args: {
       month.startDate,
       month.endDate,
     );
-    // Atomically split the legacy total ledger once. Active legacy
-    // reservations stay in the visible lane, and committed spend not yet
-    // present in the Gateway report is retained conservatively.
     initialized =
       Number(
         await redis.eval(
@@ -738,14 +702,9 @@ async function settleAfterInference(
   try {
     await settleReservation(reservation, usage, beforeOutput);
   } catch {
-    // Inference has already started, so the provider may have billed even when
-    // it did not return usage. Retry with the conservative reservation amount.
-    // If Redis is still unavailable, leave the reservation in place: the next
-    // allowance check will convert it to committed spend after expiry.
     try {
       await settleReservation(reservation);
     } catch {
-      // The existing reservation continues to count against the team cap.
     }
   }
 }
@@ -781,8 +740,6 @@ export function createSharedAllowanceMiddleware(args: {
     specificationVersion: "v4",
     transformParams: async ({ params }) => ({
       ...params,
-      // The reservation uses this same bound, so the provider cannot generate
-      // more billable output than the amount admitted by the team cap.
       maxOutputTokens: Math.min(
         params.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
         DEFAULT_MAX_OUTPUT_TOKENS,
@@ -798,7 +755,6 @@ export function createSharedAllowanceMiddleware(args: {
         if (previousModelForFailedStream(args.modelSlug.split("/").at(-1)!, error, false, false, isHaiku55Model(args.modelSlug))) {
           await releaseUnavailableReservation(reservation);
         } else {
-          // Nothing was returned, so only the prompt can have been billed.
           await settleAfterInference(reservation, undefined, true);
         }
         throw error;

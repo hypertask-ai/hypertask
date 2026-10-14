@@ -26,7 +26,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 }
 export default handler
 async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, lastXmonths: number = 12) {
-  // Monthly aggregation
   const monthlyCounts: ITaskMonthly[] = await prisma.$queryRaw`
       SELECT 
         TO_CHAR("createdAt", 'Month,YYYY') AS month,
@@ -44,7 +43,6 @@ async function getTaskCounts(lastXdays: number = 7, lastXweeks: number = 4, last
     `;
 
 
-  // Weekly aggregation
   const weeklyCounts: ITaskWeekly[] = await prisma.$queryRaw`
       SELECT 
         EXTRACT(YEAR FROM "createdAt") AS year,

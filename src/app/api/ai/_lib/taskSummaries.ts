@@ -256,8 +256,6 @@ async function generateAndStoreTaskSummaryWithLease(
       teamId: task.project.teamId,
       projectId: task.projectId,
       taskId: task.id,
-      // Explicit null means a human triggered the debounced job. Only direct
-      // legacy callers that omit the actor fall back to the task creator.
       agentId: options.agentId === undefined ? task.agentId : options.agentId,
       abortSignal,
     });
@@ -337,8 +335,6 @@ async function scheduleSummaryRetry(taskId: number, agentId?: string | null) {
     const scheduled = await scheduleJobById({
       jobId: `ai-summary-retry-for-taskId:${taskId}`,
       path: SUMMARY_RETRY_PATH,
-      // Preserve omitted versus explicit null across retries. Omitted allows
-      // the worker to recover the legacy task-agent attribution fallback.
       body: agentId === undefined ? { taskId } : { taskId, agentId },
       notBefore: Math.floor(Date.now() / 1000) + delaySeconds,
     });
@@ -518,7 +514,6 @@ function recoverSummaryText(text?: string) {
       return completeRecoveredSummary(parsed.summary);
     }
   } catch {
-    // Some providers return the usable markdown even when structured parsing fails.
   }
 
   const summaryStart = unfenced.indexOf("## What this is");

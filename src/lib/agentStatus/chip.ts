@@ -1,6 +1,5 @@
 export type AgentStep = "working" | "in review" | "in QA" | "waiting for you" | "blocked";
 
-/** HTPR-7071: the step is read from the card's column and labels, never fetched. */
 export function agentStepFor(sectionTitle: string | null | undefined, labelValues: readonly string[] = []): AgentStep {
   const title = (sectionTitle ?? "").trim().toLowerCase();
   if (title === "blocked" || labelValues.some((value) => value.trim().toLowerCase() === "blocked")) return "blocked";
@@ -10,10 +9,8 @@ export function agentStepFor(sectionTitle: string | null | undefined, labelValue
   return "working";
 }
 
-/** Matches the board's 6 hour claim staleness rule: older runs say nothing useful. */
 export const AGENT_STATUS_MAX_AGE_MS = 6 * 60 * 60 * 1000;
 
-/** True while the last report is under six hours old; `minute` is the shared minute clock value. */
 export function agentStatusIsFresh(iso: string, minute: number = Math.floor(Date.now() / 60_000)): boolean {
   return minute * 60_000 - new Date(iso).getTime() < AGENT_STATUS_MAX_AGE_MS;
 }

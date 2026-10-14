@@ -11,8 +11,6 @@ export function omitCommentSeen<T extends CommentWithSeen>(
   return commentWithoutSeen;
 }
 
-// The viewer's own id always stays in seen: comment stacking keys off
-// seen.includes(viewerId), and knowing your own read state is not a receipt.
 const keepOnlySelf = <T extends CommentWithSeen>(
   comment: T,
   viewerId: number,

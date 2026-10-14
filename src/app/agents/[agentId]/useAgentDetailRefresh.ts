@@ -196,8 +196,6 @@ export function useAgentDetailRefresh({
     return () => clearInterval(timer);
   }, []);
 
-  // Native turns and an external agent's own Hyper AI calls both run on
-  // Hypertask credentials, so every agent can carry a key of its own.
   const loadedAgentId = agent?.id;
   useEffect(() => {
     if (!loadedAgentId) return;
@@ -215,8 +213,6 @@ export function useAgentDetailRefresh({
           }[];
         }) => {
         if (cancelled) return;
-        // A disabled key resolves to the team credential, so the row has to
-        // read "Team key" rather than show a key that is not in use.
         const row = data?.keys?.find(
           (k) => k.provider === "openrouter" && k.enabled !== false,
         );

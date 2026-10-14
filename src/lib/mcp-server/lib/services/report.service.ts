@@ -5,10 +5,6 @@ import { logger } from '../../utils/logger';
 
 type ReportApiResponse = Record<string, unknown>;
 
-/**
- * Service for creating, reading, updating, listing, and deleting reports.
- * Validates input and makes API requests.
- */
 export class ReportService {
   constructor(private readonly apiClient: IApiClient) {}
 

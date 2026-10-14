@@ -77,7 +77,6 @@ async function authenticate(request: NextRequest) {
   return { response: null, ctx };
 }
 
-/** GET /api/mcp/custom-fields?project_id=123 */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -119,7 +118,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/** POST /api/mcp/custom-fields */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

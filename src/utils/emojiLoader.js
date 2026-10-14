@@ -1,7 +1,5 @@
-// File: /utils/emojiLoader.js
 import { lazy, Suspense } from 'react';
 
-// Module-level cache to track loading state
 let emojiDataPromise = null;
 let emojiPickerPromise = null;
 let emojiSyncTimer = null;
@@ -15,7 +13,6 @@ const persistFrequentEmojis = () => {
       if (!raw) return;
       const map = JSON.parse(raw);
       if (!map || typeof map !== 'object') return;
-      // fire-and-forget; server derives userId from cookie
       fetch('/api/users/preferences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -32,7 +29,6 @@ const persistFrequentEmojis = () => {
  */
 export const loadEmojiData = () => {
   if (!emojiDataPromise) {
-    // Start the loading process only once
     emojiDataPromise = import('@emoji-mart/data').then(module => module.default);
   }
   return emojiDataPromise;
@@ -49,30 +45,17 @@ export const loadEmojiPicker = () => {
   return emojiPickerPromise;
 };
 
-/**
- * Preloads emoji resources in the background
- * Can be called from app initialization or on user interaction
- */
 export const preloadEmojiResources = () => {
-  // Load in background without awaiting
   loadEmojiData();
   loadEmojiPicker();
 };
 
-// emoji-mart defaults to theme="auto", which follows the OS colour scheme and
-// ignores our cookie-driven app theme — a light picker lands on a dark app (and
-// vice-versa). Resolve from the app's own theme class instead. dark/amoled carry
-// `dark`; light/dia carry `light`, so this maps every app theme to the two the
-// picker supports. An explicit `theme` prop still wins.
 const resolveAppTheme = () =>
   typeof document !== 'undefined' &&
   document.documentElement.classList.contains('dark')
     ? 'dark'
     : 'light';
 
-// Lazy-loaded component that shares the same data instance.
-// Raw lazy export: suspends the CALLER's boundary. Only for call sites that
-// provide their own Suspense with visible loading UI (EmojiGifPicker).
 export const LazyEmojiPickerRaw = lazy(() =>
   Promise.all([loadEmojiPicker(), loadEmojiData()])
     .then(([Picker, data]) => ({
@@ -96,10 +79,6 @@ export const LazyEmojiPickerRaw = lazy(() =>
     }))
 );
 
-// Ships with its own Suspense boundary: every usage site portals this straight
-// into #portal-root with no local boundary, so on first open the load would
-// suspend the nearest ancestor. On mobile that is the route-level boundary,
-// which blanks the whole task page and destroys the scroll position (HTPR-4584).
 export const LazyEmojiPicker = (props) => (
   <Suspense fallback={null}>
     <LazyEmojiPickerRaw {...props} />

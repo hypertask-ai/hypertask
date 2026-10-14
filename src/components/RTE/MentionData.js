@@ -1,4 +1,4 @@
-/* eslint-disable import/no-anonymous-default-export */
+
 import { ReactRenderer } from "@tiptap/react";
 import tippy from "tippy.js";
 import MentionList from "./MentionList";
@@ -41,7 +41,6 @@ export const createMentionData = (mentionProjectId) => ({
         return [{ type: "no-results", name: "No results found" }];
       }
     } catch (error) {
-      // Return a specific item to signal an error
       return [{ type: "error", name: "Error loading results" }];
     }
   },
@@ -51,8 +50,6 @@ export const createMentionData = (mentionProjectId) => ({
   render: () => {
     let component;
     let popup;
-    // Created once per suggestion, then fed the newest getter on each update, so
-    // the remembered rect survives an update that resolves to null (HTPR-3383).
     let getClientRect;
     const anchor = stableClientRect(() => getClientRect?.());
 
@@ -64,7 +61,6 @@ export const createMentionData = (mentionProjectId) => ({
         if (component) {
           component.destroy();
         }
-        // --- FIX ENDS HERE ---
 
         component = new ReactRenderer(MentionList, {
           props,
@@ -81,7 +77,6 @@ export const createMentionData = (mentionProjectId) => ({
           interactive: true,
           trigger: "manual",
           placement: "auto-start",
-          // Above #portal-root (z-index 5000) and the comment composer (HTPR-6404).
           zIndex: 10001,
           popperOptions: {
             strategy: "fixed",
@@ -111,10 +106,9 @@ export const createMentionData = (mentionProjectId) => ({
       onKeyDown(props) {
         if (props.event.key === "Escape") {
           popup[0]?.hide();
-          return true; // Return true to indicate the event was handled
+          return true;
         }
 
-        // Pass the event to the MentionList component's handler
         return component?.ref?.onKeyDown(props);
       },
 

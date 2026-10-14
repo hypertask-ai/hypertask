@@ -170,8 +170,6 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
           teamMembers.data.owner?.email ??
           null;
       } catch {
-        // Membership is enough to prevent self-provisioning. The owner name is
-        // optional context for the toast.
       }
 
       return { kind: "member", ownerName };
@@ -284,9 +282,6 @@ const PurchasePlanModal: React.FC<ITrialModal> = ({
       <ModalHeader className="!bg-black rounded-none border-b-0 h-[60px] pl-[24px] text-subheading font-bold [&>*:first-child]:w-full">
         <div className="flex justify-end items-center gap-3 w-full">
           <PaywallAccountSwitcher />
-          {/* HTPR-4839: out-of-trial is the free tier now, so the plans are
-              always closable. upgradeMode used to trap users behind a lone
-              sign-out icon. */}
           <X size={18} strokeWidth={1.75}
             onClick={() => {
               callback();
@@ -372,10 +367,8 @@ const NewTrialBody = ({
 
   return (
     <div className="h-full overflow-auto max-h-[100vh]  scrollbar-none flex md:flex-row flex-col-reverse">
-      {/* Left Side - Testimonials Carousel */}
       <TestimonialCarousel upgradeMode={upgradeMode} />
 
-      {/* Right Side - Pricing */}
       <div className="md:h-full w-full md:w-1/2 p-12 md:bg-gradient-dark flex flex-col justify-center ">
         <div className="text-center mb-12">
           <Image

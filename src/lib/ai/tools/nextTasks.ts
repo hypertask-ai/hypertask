@@ -129,9 +129,6 @@ export function createNextTasksTool(context: ToolContext) {
         );
         const tasks = scannedTasks.slice(0, scanLimit);
 
-        // A blocker can live on a different board, so each one is resolved
-        // against its OWN project's finished columns. Applying the requesting
-        // board's flags to a foreign blocker is worse than applying none.
         const blockersOf = (task: (typeof tasks)[number]) => [
           ...task.relatedFromTasks.map((relation) => relation.targetTask),
           ...task.relatedToTasks.map((relation) => relation.sourceTask),

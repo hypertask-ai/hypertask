@@ -190,14 +190,8 @@ export async function resolveChatTeamContext({
         aiProviderSettings: project.team?.aiProviderSettings,
       });
     }
-    // An agent with no board of its own still has to bill someone. Fall
-    // through to the session board or the user's strongest team. Explicit
-    // invalid page context still fails closed below, so we never pick an
-    // unrelated account team just because the requested board was wrong.
   }
 
-  // Invalid request context must not select an unrelated account team. Native
-  // sessions resolve above because their assigned board remains authoritative.
   if (requestedProjectId != null || teamId) return null;
 
   if (session?.projectId != null) {
@@ -206,9 +200,6 @@ export async function resolveChatTeamContext({
     if (context) return context;
   }
 
-  // Brand-new ordinary sessions have no project yet, so account chat continues
-  // from the strongest team the user can access. A newer Free team must not
-  // hide an older paid or comped membership.
   const accountTeams = await prisma.team.findMany({
     where: {
       OR: [

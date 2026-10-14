@@ -5,7 +5,6 @@ import { loadSessionUserRecord } from '@/lib/auth/sessionUserRecord'
 import updateProject from '@/utils/controllers/projects/update'
 import { broadcastBoardChange } from '@/lib/realtime/server'
 
-/** PATCH /api/mcp/projects/:projectId with { title: string }. */
 export async function PATCH(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }

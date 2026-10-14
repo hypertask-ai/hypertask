@@ -215,9 +215,6 @@ export async function persistComment(
           })
         : null);
     if (resolvedDirectReplyUserId != null) {
-      // A direct answer wakes a snoozed task and persists its Important row in
-      // the same transaction as the reply/claim. A failed write rolls all three
-      // back, so retries cannot lose the notification behind comment dedupe.
       const awakenedReminders = await tx.reminder.updateMany({
         where: {
           userId: resolvedDirectReplyUserId,
@@ -257,10 +254,6 @@ export async function persistComment(
     }
 
     const webhookDeliveryIds: Array<string | null> = [];
-    // Board-wide subscribers get comment.created in the same transaction, so
-    // a comment that commits always has its outbox row (HTPR-4530).
-    // Use only this locked, current task snapshot for webhook scope. The
-    // pre-transaction task read may belong to the task's previous board.
     const commentCreatedEvent: WebhookDelivery = {
       event: "comment.created",
       data: {
@@ -301,8 +294,6 @@ export async function persistComment(
       authorAgentId: agentId,
       fixOn: await isAgentCommentFanoutFixOn(creatorIdNum),
     });
-    // Target assigned agents directly. This is not a board broadcast, so an
-    // assigned agent receives one comment.created delivery per comment.
     webhookDeliveryIds.push(
       ...(await persistAgentWebhookEvents(tx, {
         event: "comment.created",
@@ -326,8 +317,6 @@ export async function persistComment(
       agentId: agentId ?? null,
       displayName: actorDisplayName || "Hypertask user",
     };
-    // Only human comments continue active runs. Agent-authored replies must
-    // not wake the same agent and create a webhook feedback loop.
     if (!agentId) {
       webhookDeliveryIds.push(
         ...(await persistAgentTaskRunPromptWebhooks(tx, {

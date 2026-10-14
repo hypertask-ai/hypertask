@@ -4,10 +4,6 @@ import { executeWithService } from '../utils/executeWithService';
 import { TOOL_METADATA } from '../config/tool-metadata';
 import { normalizeTaskInput } from '../utils/normalize-task-input';
 
-/**
- * Tool: assign_user
- * Assigns (idempotent) or unassigns via intent; see tool description.
- */
 export const assignUserTool = {
   name: TOOL_METADATA.ASSIGN_USER.name,
   description: TOOL_METADATA.ASSIGN_USER.description,

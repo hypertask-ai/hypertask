@@ -8,10 +8,6 @@ interface HeaderIconWrapperProps {
   id?: string;
 }
 
-/**
- * Reusable wrapper for header icon components in the Kanban header.
- * Provides consistent styling with hover effects and cursor pointer.
- */
 const HeaderIconWrapper: React.FC<HeaderIconWrapperProps> = ({
   id,
   children,

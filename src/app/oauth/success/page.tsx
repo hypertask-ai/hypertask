@@ -9,7 +9,6 @@ import { isValidRedirectUri } from "@/lib/oauth/redirect-uri";
 export default function OAuthSuccessPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  // HTPR-7180: never navigate to an unchecked address (javascript: runs in our origin).
   const rawRedirectUri = searchParams?.get("redirect_uri");
   const redirectUri = rawRedirectUri && isValidRedirectUri(rawRedirectUri) ? rawRedirectUri : null;
   const oauthCode = searchParams?.get("code");

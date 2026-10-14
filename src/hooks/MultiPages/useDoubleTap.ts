@@ -53,7 +53,6 @@ export function useDoubleTap<
                 openingClickAccepted.current = accepted;
             }
             if (!accepted) {
-                // A control tap must also break a pending text double tap.
                 if (timer.current) clearTimeout(timer.current);
                 timer.current = null;
                 return;

@@ -98,7 +98,6 @@ function featureRow(
       haiku55Enabled,
       context,
     ),
-    // Dictation has no LLM model, but a swappable transcription provider.
     ...(feature === "dictation"
       ? { provider: resolveDictationProvider(settings) }
       : {}),

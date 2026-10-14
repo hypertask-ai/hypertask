@@ -49,8 +49,6 @@ async function preflight(options: ExecuteTaskUpdateOptions, plan: UpdatePlan) {
     }
   }
 
-  // Observe speculative section failures only after the user and cookie checks,
-  // preserving V1's error precedence while independent reads overlap.
   const [userResult, sectionResult] = await Promise.allSettled([
     prisma.user.findUnique({ where: { id: ctx.user.id }, select: { id: true, email: true, displayName: true, photoURL: true } }),
     requestBody.sectionId

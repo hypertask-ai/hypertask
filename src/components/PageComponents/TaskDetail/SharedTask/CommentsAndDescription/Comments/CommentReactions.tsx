@@ -16,9 +16,8 @@ const SharedCommentReactions = () => {
 
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
 
-  const [isHovered, setIsHovered] = useState(false); // State to track hover
+  const [isHovered, setIsHovered] = useState(false);
 
-  // ============================== MOBILE
   if (_mbl) {
     if (editState === i) return <></>;
     return (
@@ -39,7 +38,7 @@ const SharedCommentReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
         <div className="relative  flex">
           <SmilePlus size={14}
@@ -50,7 +49,6 @@ const SharedCommentReactions = () => {
     );
   }
 
-  // ============================ DESKTOP
   else if (comment?.reactions && comment?.reactions?.length > 0)
     return (
       <div
@@ -70,13 +68,13 @@ const SharedCommentReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
         {comment?.reactions && comment?.reactions?.length > 0 && (
           <div className="relative group flex">
             <SmilePlus size={14}
               className="cursor-pointer text-white-black ml-1 rounded-lg  "
-              onMouseEnter={() => setIsHovered(true)} // Set isHovered to true on mouse enter
+              onMouseEnter={() => setIsHovered(true)}
               onMouseLeave={() => setIsHovered(false)}
              strokeWidth={1.75}/>
             {isHovered && (

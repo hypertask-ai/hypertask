@@ -38,12 +38,9 @@ export type TaskAttachmentUploadReceipt = {
 type UploadUrlApiResponse = {
   success?: boolean;
   uploads?: DirectUploadTicket[];
-  /** Signed proof of which keys this caller was issued. */
   grant?: string;
 };
 
-// Vercel rejects an oversized body at the edge, so that 413 has no JSON body to
-// read. Turn any 413 into a message the UI can show (HTPR-5516).
 function throwReadableUploadError(error: unknown): never {
   if (axios.isAxiosError(error) && error.response?.status === 413) {
     const serverMessage = (
@@ -58,42 +55,11 @@ function throwReadableUploadError(error: unknown): never {
   throw error;
 }
 
-/**
- * One object to send to storage.
- *
- * A batch is the files the user picked, each optionally followed by the JPEG
- * copy of it that HTPR-6264 generates for a HEIC. `previewOfIndex` is the only
- * thing that tells the two apart, and it points backwards at the entry the
- * preview belongs to so the server can derive its key.
- */
 type BatchEntry = {
   file: File;
-  /** Set only on a generated preview; the index of the file it is a copy of. */
   previewOfIndex?: number;
 };
 
-/**
- * Flattens the upload plans into the batch the handshake sends.
- *
- * Order matters twice: `previewOfIndex` refers to a position in this array, and
- * the caller reads results back out of it by position to return only the URLs
- * of the files the user actually picked.
- */
-/**
- * Whether a generated copy is worth the second object.
- *
- * Two ways it is not. It may not fit: JPEG is a worse compressor than HEIC, so
- * a photo close to the per-file ceiling can decode to something over it, and
- * sending that would fail the size check for the whole batch and cost the user
- * the photo itself for the sake of a thumbnail.
- *
- * Or it may be unreachable. The decoder identifies a HEIC by its bytes, but
- * render sites resolve the copy from the attachment's stored type and name, so
- * a photo that arrives with no usable MIME type AND no extension is converted
- * successfully and then can never be resolved back. Uploading that copy would
- * cost storage and change nothing on screen; the original stands alone and
- * renders as the download tile, which is what it did before this shipped.
- */
 function isWorthUploading(preview: File, original: File): boolean {
   if (preview.size > DIRECT_UPLOAD_MAX_FILE_BYTES) return false;
   return isHeicByMetadata(
@@ -104,7 +70,6 @@ function isWorthUploading(preview: File, original: File): boolean {
 
 function buildBatch(plans: UploadPlan[]): {
   entries: BatchEntry[];
-  /** Position in `entries` of each picked file, in the order they were picked. */
   pickedAt: number[];
 } {
   const entries: BatchEntry[] = [];
@@ -120,7 +85,6 @@ function buildBatch(plans: UploadPlan[]): {
   return { entries, pickedAt };
 }
 
-/** Storage could not be reached directly, so the buffered route may be tried. */
 class DirectUploadUnavailableError extends Error {
   constructor(message: string) {
     super(message);
@@ -136,7 +100,6 @@ function putToStorage(
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("PUT", ticket.uploadUrl, true);
-    // The signature covers this header, so it must be sent exactly as issued.
     request.setRequestHeader("Content-Type", ticket.contentType);
     request.upload.onprogress = (event) => onBytes(event.loaded);
     request.onload = () => {
@@ -151,8 +114,6 @@ function putToStorage(
         )
       );
     };
-    // A CORS or network failure gives no status, so it is the one case where
-    // the buffered route is still worth trying for a small file.
     request.onerror = () =>
       reject(new DirectUploadUnavailableError("Could not reach storage"));
     request.onabort = () =>
@@ -161,10 +122,6 @@ function putToStorage(
   });
 }
 
-/**
- * Asks the server for one short-lived signed PUT per file (HTPR-5524), so a
- * video is no longer capped by the 4.5 MB serverless request-body ceiling.
- */
 async function requestUploadTickets(
   files: BatchEntry[],
   issueTaskLinkReceipts = false,
@@ -182,9 +139,6 @@ async function requestUploadTickets(
         : {}),
     })
     .catch((error: unknown) => {
-      // The handshake itself being unreachable is exactly the case the buffered
-      // route exists for, so it must not look different from storage being
-      // unreachable. A 4xx is a real answer and is passed through.
       const status = axios.isAxiosError(error) ? error.response?.status : undefined;
       if (status === undefined || status >= 500) {
         throw new DirectUploadUnavailableError("Could not reach the upload service");
@@ -202,7 +156,6 @@ async function requestUploadTickets(
   return { uploads, grant };
 }
 
-/** The original buffered path. Kept as the fallback for small files. */
 async function uploadFilesViaBufferedApi(
   files: File[],
   onProgress?: (progress: number) => void,
@@ -247,11 +200,6 @@ async function uploadFilesViaBufferedApi(
   return { urls: fileUrls, taskLinkReceipts };
 }
 
-/**
- * Closes the handshake: the server verifies the stored size of everything kept
- * and deletes anything discarded. A cleanup call must never mask the original
- * failure, so only the verification call is allowed to throw.
- */
 async function finalizeUploads(
   grant: string,
   keep: string[],
@@ -271,8 +219,6 @@ async function finalizeUploads(
   }
   const response = await request.catch(throwReadableUploadError);
   const receipts = response.data?.taskLinkReceipts ?? [];
-  // A generated preview (HTPR-6264) is verified and kept but is not an
-  // attachment, so it never gets a receipt and must not be counted as owed one.
   const linkable = keep.filter((key) => !isHeicPreviewUrl(key)).length;
   if (issueTaskLinkReceipts && receipts.length !== linkable) {
     throw new Error("Upload was verified but no task link receipt was returned");
@@ -289,19 +235,10 @@ async function uploadFilesViaApiInternal(
     throw new Error("Task-link uploads must contain exactly one file");
   }
 
-  // HTPR-6264: last stop before the bytes leave the browser. A HEIC is paired
-  // here with a JPEG copy of itself, and both are sent: the original so it can
-  // still be downloaded, the copy so every picture surface has something an
-  // <img> can paint. Everything else plans to a single untouched file.
-  //
-  // This must run before the size check and before the handshake, because both
-  // read the names, sizes and types it produces, and each signed PUT is bound
-  // to one of those exact content types.
   const plans = await planUploadFiles(requestedFiles);
   const { entries, pickedAt } = buildBatch(plans);
   const picked = plans.map((plan) => plan.file);
 
-  // Check before sending: nothing above the direct-upload ceiling is accepted.
   const sizeError = getDirectUploadSizeError(
     entries.map(({ file, previewOfIndex }) => ({
       name: file.name,
@@ -322,8 +259,6 @@ async function uploadFilesViaApiInternal(
       issueTaskLinkReceipts,
     ));
   } catch (error) {
-    // No tickets at all, so nothing has been uploaded yet and the whole batch
-    // can still go the buffered way when it is small enough.
     if (
       !(error instanceof DirectUploadUnavailableError) ||
       getUploadSizeError(picked) !== null
@@ -331,11 +266,6 @@ async function uploadFilesViaApiInternal(
       throw error;
     }
     onProgress?.(0);
-    // Previews are dropped here on purpose. The buffered route mints its own
-    // unrelated key per file, so a preview sent through it could not be found
-    // from the original's URL and would just be an orphan paying for storage.
-    // Losing it costs a HEIC its thumbnail, which is the HTPR-6254 download
-    // chip, not a broken page.
     return uploadFilesViaBufferedApi(
       picked,
       onProgress,
@@ -352,11 +282,7 @@ async function uploadFilesViaApiInternal(
     onProgress(Math.min(100, Math.round((sent * 100) / totalBytes)));
   };
 
-  // Fall back per file, never per batch: a file that already reached storage
-  // must not be uploaded a second time or left behind unreferenced.
   const stored: string[] = [];
-  // Every worker is awaited before cleanup, so a PUT that lands just after a
-  // sibling fails is still deleted rather than left unreferenced.
   const settled = await Promise.allSettled(
     entries.map(async ({ file, previewOfIndex }, index) => {
       const isPreview = previewOfIndex !== undefined;
@@ -368,10 +294,6 @@ async function uploadFilesViaApiInternal(
         stored.push(uploads[index].key);
         return uploads[index].fileUrl;
       } catch (error) {
-        // A preview is a nicety, and it is not what the user attached. Letting
-        // it fail the batch would lose the photo over a missing thumbnail, so a
-        // preview that will not upload is simply abandoned: the HEIC renders as
-        // the HTPR-6254 download chip, exactly as it did before HTPR-6264.
         if (isPreview) {
           loaded[index] = file.size;
           report();
@@ -383,8 +305,6 @@ async function uploadFilesViaApiInternal(
         ) {
           throw error;
         }
-        // The bytes may still have landed before the connection dropped, so the
-        // direct object is discarded before the buffered retry.
         stored.push(uploads[index].key);
         const fallback = await uploadFilesViaBufferedApi(
           [file],
@@ -431,11 +351,6 @@ async function uploadFilesViaApiInternal(
     discard.push(fallback.discardKey);
   });
 
-  // A file that fell back to the buffered route has a new, unrelated key, so
-  // the preview signed against its discarded one can never be found from the
-  // URL that was actually stored. Left alone it would sit in the bucket forever
-  // as an orphan nothing references. Done in a second pass so every entry's
-  // outcome is known.
   entries.forEach(({ previewOfIndex }, index) => {
     if (previewOfIndex === undefined) return;
     const originalFellBack = discard.includes(uploads[previewOfIndex].key);
@@ -444,12 +359,8 @@ async function uploadFilesViaApiInternal(
     }
   });
 
-  // Only the files the user picked become attachments; a preview is addressed
-  // by deriving its URL from its original's, never returned as one of its own.
   const urls = pickedAt.map((index) => urlAt[index] as string);
 
-  // The signed PUT cannot carry a size limit, so the server checks the stored
-  // length and removes anything above the per-file or batch ceiling.
   const directReceipts = await finalizeUploads(
     grant,
     stored.filter((key) => !discard.includes(key)),

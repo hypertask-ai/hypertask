@@ -49,25 +49,20 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
   const taskIdentity = useRef(task).current;
   const taskProjectId = taskIdentity?.projectId ?? projectId;
 
-  // --------------- Refs
   const columnsInputRef = useRef<HTMLInputElement>(null)
 
-  // ---------------- state handlers
   const [keyboardControls, enableKeyboardControls] = useState<boolean>(false)
   const [loading, setLoading] = useState<boolean>(false)
   const [modal, _] = useState<boolean>(true);
   const { removeFromListWithStatus, moveItem } = UpdateKanban();
 
-  // ---------------- ColumnsToDisplay 
   const [filteredColumns, setFilteredColumns] = useState<ISection[]>([])
   const [sections, setColumns] = useState<ISection[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } = useHandleMouseGlobal({ setSelectedIndex })
 
-  // --------------- React-Query hook
   const { data: sectionsForProjectTQ, isFetched } = useGetSectionsMoveTask(["moveTaskModal", taskProjectId], taskProjectId)
 
-  // -------------------- input handlers
   const [inputValue, setInputValue] = useState<string>("");
   const handleChange = (e: any) => {
     setInputValue(e.target.value)
@@ -80,7 +75,6 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
   }
 
   const handleToggle = () => {
-    // setModal(!modal)
     moveTaskToColumnHandler(true)
   }
 
@@ -102,7 +96,6 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
           const container = document.getElementById("users-list");
           
           if (element && container) {
-            // Direct scrollTop manipulation - faster than scrollIntoView
             const elementTop = element.offsetTop;
             const containerHeight = container.clientHeight;
             const elementHeight = element.clientHeight;
@@ -115,13 +108,10 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     }
     setLoading(false);
   }, [sectionsForProjectTQ, taskIdentity]);
-  // -------------------- ON MODAL LOAD
   const onOpenHandler = async () => {
-    // setLoading(true)
-    enableKeyboardControls(true) // force focus on input field
+    enableKeyboardControls(true)
   }
 
-  // if clicked in task creating mode
   const handleCreateTaskGloballyClick = (section: ISection) => {
     callback && callback(section)
   }
@@ -245,7 +235,6 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
       ]);
     },
   });
-  // ---------------------- LINK CLICK HANDLER ------------------
 
   const handleLinkClick = useCallback(
     async (section: ISection) => {
@@ -290,18 +279,12 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     ]
   );
 
-  //  ============================= KEYBOARD NAVIGATION HANDLER =============================
 
   const handleKeyDown = (event: any) => {
-    // console.log('im working at least')
     const selectedUrl = filteredColumns[selectedIndex]
-    // ------------------------------ DOWN MOVEMENT ------------------------------
     if (!selectedUrl) return 
     if (event.key === "ArrowDown") {
-      // down
       if (selectedUrl) {
-
-        // ------ at bottom of list
         if (selectedIndex === -1 || selectedIndex === (filteredColumns.length - 1)) {
         } else {
           setSelectedIndex((prev)=>prev+1)
@@ -314,16 +297,10 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
         }
       }
       return true
-      // ------------------------------ UP MOVEMENT ------------------------------
     }
     else if (event.key === "ArrowUp") {
-      // up
       if (selectedUrl) {
-
-        // ------ at top of list
         if (selectedIndex <= 0) {
-          // setSelectedUrl(Columns[Columns.length - 1])
-          // document.getElementById(`task-${Columns[Columns.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
         } else {
           setSelectedIndex(prev=>prev-1)
           document.getElementById(`task_${filteredColumns[selectedIndex - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
@@ -351,7 +328,6 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
     };
   }, [filteredColumns, selectedIndex]);
 
-  // whenever filteredColumns Update, set current url as first
   useEffect(() => {
     setSelectedIndex(0)
   }, [filteredColumns]);
@@ -363,7 +339,6 @@ const MoveToColumn: React.FC<Props> = ({ mode = "Others", moveTaskToColumnHandle
           id="MoveModal"
           isOpen={modal}
           onOpened={onOpenHandler}
-          // autoFocus={false} 
           toggle={handleToggle}
           className={`paletteModalSizing sm:min-w-[560px] sm:top-[24%] ${styles.links_modal}`}>
           <ModalHeaderComp header={title} />

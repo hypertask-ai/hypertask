@@ -1,7 +1,6 @@
 import { useRouter } from "next/navigation"
 import { useEffect, useTransition } from "react"
 
-// Define the type for the observer callback function
 type ObserverCallback = () => void
 
 const createRouteObserver = () => {

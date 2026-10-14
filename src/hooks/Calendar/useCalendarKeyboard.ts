@@ -84,7 +84,6 @@ export function useCalendarKeyboard({
     if (returnIfModalOrInputActive()) return;
     let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
 
-    // Handle Tab key navigation and prevent default focus behavior
     if (matchesShortcut(event, ks.calendar.focus_previous_day)) {
       event.preventDefault();
       shiftFocusHorizontally("left");
@@ -93,7 +92,6 @@ export function useCalendarKeyboard({
       shiftFocusHorizontally("right");
     }
 
-    //I do feel like calling a function to check if it matches the shortcut is a little weird/overkill here. 
     if (matchesShortcut(event, ks.universal_movement.left))
       shiftFocusHorizontally("left");
     else if (matchesShortcut(event, ks.universal_movement.right))
@@ -111,7 +109,6 @@ export function useCalendarKeyboard({
       moveTaskVertically("up");
     else if (matchesShortcut(event, ks.universal_shift.down))
       moveTaskVertically("down");
-    //wdsf
 
     if (matchesShortcut(event, ks.dueDateModal.default) && currentTask >= 0)
       toggleDueDateModal("Update");
@@ -130,7 +127,6 @@ export function useCalendarKeyboard({
       return toggleDueDateModal("Create");
     }
 
-    // [g] press - track for G then T shortcut
     if (event.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastGClickRef.current = now;
@@ -139,7 +135,6 @@ export function useCalendarKeyboard({
       }, globalConstants.gThenKeyDelay);
     }
 
-    // [g] then [t] for go to project shortcut
     if (event.keyCode === KeyCodes.T) {
       const now = new Date().getTime();
       if (
@@ -149,7 +144,6 @@ export function useCalendarKeyboard({
         event.preventDefault();
         lastGClickRef.current = null;
 
-        // Get projectId from current task if available
         if (currentTask >= 0) {
           const task = tasks.find((t) => t.id === currentTask);
           if (task?.projectId) {
@@ -240,7 +234,6 @@ export function useCalendarKeyboard({
     if (event.keyCode === KeyCodes.SPACE) {
       event.preventDefault();
       const projectToToggle = projects[currentProjectCycleIndexRef.current];
-      // ponytail: the cycle index starts at -1, so Space before Ctrl+] has nothing to toggle.
       if (!projectToToggle) return;
       handleProjectToggle(projectToToggle.id, !checkedProjects[projectToToggle.id]);
     }
@@ -252,10 +245,6 @@ export function useCalendarKeyboard({
 
     if (matchesShortcut(event, ks.calendar.go_back)) {
       event.preventDefault();
-      // HTPR-4821: Escape used to call back() unconditionally, so on a tab whose
-      // previous entry is outside the app it walked out of the SPA and left a
-      // blank page. The Navigation API only lists same-origin entries, so a
-      // current index above 0 means there is an in-app page to return to.
       const nav = (window as any).navigation;
       const canGoBackInApp =
         typeof nav?.currentEntry?.index === "number"

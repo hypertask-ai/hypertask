@@ -19,7 +19,6 @@ export const useStarAndPin = () => {
   const queryClient = useQueryClient();
   const { undoAction, performActionAndStoreUndoData } = useUndoContext();
 
-  //----------------------------Fetch functions
   const starTask = async (
     taskId: number,
     projectId: number,
@@ -71,15 +70,6 @@ export const useStarAndPin = () => {
     }
   };
 
-  /**
-   *Function to remove object from cache.
-   *Type var determines the type of starred object to remove
-   *Stores previous data for performing undo
-   *
-   * @param {ISavedContent} contentToRemove
-   * @param {("Comment" | "Task")} type
-   * @return {*}
-   */
   const removeFromStarredContentQuery = async (
     contentToRemove: ISavedContent,
     type: "Comment" | "Task"
@@ -94,14 +84,6 @@ export const useStarAndPin = () => {
       queryKey: ["Saved starred for [userId]:", currentUser.id],
     });
   };
-  /**
-   *Function to add object to cache
-   *Type var determines the type of starred object to add
-   *
-   * @param {ISavedContent} contentToAdd
-   * @param {("Comment" | "Task")} type
-   * @return {*}
-   */
   const addToStarredContentQuery = async (
     contentToAdd: ISavedContent,
     type: "Comment" | "Task"
@@ -109,29 +91,14 @@ export const useStarAndPin = () => {
     queryClient.invalidateQueries({
       queryKey: ["Saved starred for [userId]:", currentUser.id],
     });
-  /**
-   *Undohandler for unstarring task/comment
-   *
-   * @param {ISavedContent} data
-   * @param {string} toastId
-   */
   const undoStarredHandler = async (data: ISavedContent, toastId: string) => {
     await undoAction("UNDO_STAR", data);
     queryClient.refetchQueries({
       queryKey: ["Saved starred for [userId]:", currentUser.id],
     });
     navigate("Refresh");
-    toast.dismiss(toastId); // Dismiss the toast here
+    toast.dismiss(toastId);
   };
-  /**
-   *Function to remove object from cache.
-   *Type var determines the type of starred object to remove
-   *Stores previous data for performing undo
-   *
-   * @param {ISavedContent} contentToRemove
-   * @param {("Personal" | "Team")} type
-   * @return {*}
-   */
   const removeFromPinnedContentQuery = async (
     contentToRemove: ISavedContent,
     type: "Personal" | "Team"
@@ -170,14 +137,6 @@ export const useStarAndPin = () => {
       queryKey: [globalConstants.CommentsTQPrefixKey, contentToRemove.taskId],
     });
   };
-  /**
-   *Function to add object to cache
-   *Type var determines the type of starred object to add
-   *
-   * @param {ISavedContent} contentToAdd
-   * @param {("Personal" | "Team")} type
-   * @return {*}
-   */
   const addToPinnedContentQuery = async (
     contentToAdd: ISavedContent,
     type: "Personal" | "Team"
@@ -207,12 +166,6 @@ export const useStarAndPin = () => {
       queryKey: [globalConstants.CommentsTQPrefixKey, contentToAdd.taskId],
     });
   };
-  /**
-   *Undohandler for unpinning public comment
-   *
-   * @param {ISavedContent} data
-   * @param {string} toastId
-   */
   const undoPinnedHandler = async (data: ISavedContent, toastId: string) => {
     await undoAction("UNDO_PIN", data);
     queryClient.refetchQueries({
@@ -223,7 +176,7 @@ export const useStarAndPin = () => {
     });
 
     navigate("Refresh");
-    toast.dismiss(toastId); // Dismiss the toast here
+    toast.dismiss(toastId);
   };
 
   return {

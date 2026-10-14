@@ -60,13 +60,9 @@ export async function readBoardDocument(route: string, displayCookie: string | u
   };
 }
 
-// React cache dedupes the root and page in this request only. The timeout
-// includes identity, flag and controller reads; a late result is never adopted.
 export const getServerBoardDocument = cache(async (): Promise<BoardDocument | null> => {
   const requestHeaders = await headers();
   const route = requestHeaders.get(BOARD_DOCUMENT_ROUTE_HEADER);
-  // Existing root providers survive client navigation. Only a new document
-  // may initialize them; an RSC prefetch must not replay a seed into live state.
   if (!route || requestHeaders.get("rsc") === "1") return null;
   const cookieStore = await cookies();
   if (!cookieStore.get(BOARD_DISPLAY_COOKIE)?.value) return null;

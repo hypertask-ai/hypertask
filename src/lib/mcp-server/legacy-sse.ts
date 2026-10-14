@@ -18,9 +18,7 @@ import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 import { HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG } from '@/lib/flags/definitions/htpr-7220-legacy-sse-keepalive'
 
-// Kept 20 seconds under maxDuration in src/app/sse/route.ts.
 export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
-// A quiet stream was cut off after about 5 minutes (HTPR-7220).
 export const LEGACY_SSE_KEEPALIVE_MS = 60 * 1000
 
 type RelayMessage = {
@@ -42,7 +40,6 @@ export function isLegacySseRequest(request: Request): boolean {
   return ['/sse', '/message'].includes(new URL(request.url).pathname)
 }
 
-/** Redis routes POSTs to the instance holding the original SSE connection. */
 export async function handleLegacySseRequest(
   request: Request,
   authInfo: AuthInfo,
@@ -121,7 +118,6 @@ export async function handleLegacySseRequest(
     }
 
     const stream = new PassThrough()
-    // The SDK only needs the Node response's writeHead/write/end/close surface.
     const response = Object.assign(stream, { writeHead: () => response })
     const transport = new SSEServerTransport('/message', response as unknown as ServerResponse)
     const server = new McpServer(MCP_SERVER_INFO)
@@ -188,7 +184,6 @@ export async function handleLegacySseRequest(
               rememberFeedbackClient(incoming.authInfo.token, params?.clientInfo?.name, userId)
             }
             if (method === 'tools/list' || method === 'tools/call') {
-              // Resolve per message; flag changes and same-owner credentials must not reuse the opening scope.
               const feedbackEnabled = await aiFeedbackEnabled(userId)
               const available = tools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
               const catalog = observeFeedbackTools(selectMcpTools(available, enabled, {
@@ -223,13 +218,11 @@ export async function handleLegacySseRequest(
     try {
       await subscriber.subscribe(channel)
       await server.connect(transport)
-      // End the stream before Vercel's limit so it closes cleanly and the client reconnects (YPER4-362).
       timer = setTimeout(() => stream.end(), LEGACY_SSE_LIFETIME_MS)
       const keepAliveOn = await isFeatureEnabled(HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG, Number(authInfo.clientId)).catch(() => true)
       if (keepAliveOn && !closed) {
         keepAlive = setInterval(() => {
           if (closed || stream.writableEnded) return
-          // Clients ignore SSE comment lines; the pings keep both Redis connections from going idle.
           stream.write(': keepalive\n\n')
           void subscriber.ping().catch(() => {})
           void publisher.ping().catch(() => {})

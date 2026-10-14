@@ -60,7 +60,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 LoggedById:userId
               }
               createLog(logBody)
-        // =================== CREATE stripe customer 
             const customer = await stripe.customers.create({
                 name: stripeCustomerName(Team.title),
                 metadata: { teamId: Team.id },

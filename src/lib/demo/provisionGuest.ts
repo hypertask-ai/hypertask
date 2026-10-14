@@ -267,9 +267,6 @@ async function provisionGeneratedBoard(
   }: { seedGuestInbox?: boolean; boardKind?: GuestBoardKind } = {},
 ): Promise<ProvisionedGuestBoard> {
   const uniqueIdentifier = getSequentialLetters(`${board.name} demo`);
-  // ponytail: the stable-name controller owns project creation outside the
-  // caller's user transaction; board records are then written sequentially so
-  // task numbers, rankings, labels, priorities, and due dates stay deterministic.
   const project = await createProjectWithStableName({
     ownerId: owner.userId,
     title: board.name,
@@ -413,19 +410,12 @@ async function provisionGeneratedBoard(
   };
 }
 
-// HTPR-4875: the default /demo entry lands on the board immediately, so it gets
-// this skeleton (default columns, starter tasks, no views) and no AI call. Generation
-// runs only when someone describes a project in the board creation assistant.
 const EMPTY_BOARD: DemoBoard = {
   name: "My Board",
   views: [],
   columns: [
     {
       title: "To Do",
-      // Two selling-point seeds; the client still treats a board holding only
-      // these as empty, so the chat keeps offering to build the real board.
-      // The AI board schema has no description field, so the seeds smuggle
-      // theirs past the type and provisionGeneratedBoard picks it up.
       tasks: GUEST_SEED_TASKS.map(({ title, description }) => ({
         title,
         description,
@@ -524,8 +514,6 @@ export async function provisionLearnBoard(
   return provisionGeneratedBoard(LEARN_BOARD, owner, { boardKind: "learn" });
 }
 
-// Demo guests are temporary, auto-created identities, not real account signups.
-// They intentionally do not emit the permanent-account user_signed_up event.
 export async function provisionGuest(purpose: string): Promise<ProvisionedGuest> {
   const board = await boardFor(purpose);
   const guestUuid = randomUUID();
@@ -546,8 +534,6 @@ export async function provisionGuest(purpose: string): Promise<ProvisionedGuest>
         userId: user.id,
         onboardingTourStatus: true,
         onboardingTutorialStatus: true,
-        // HTPR-4303: guests have a throwaway email; mark verified so no
-        // isVerified-gated surface (e.g. the verify-email wall) blocks them.
         isVerified: true,
         notification: true,
         ...(board === EMPTY_BOARD

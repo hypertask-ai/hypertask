@@ -72,9 +72,6 @@ async function boundMcpRequest(request: Request): Promise<Request> {
     request,
     MCP_ATTACHMENT_MAX_REQUEST_BYTES
   )
-  // Rebuild from the URL instead of using the now-consumed request as the
-  // constructor input. The latter works in Undici locally but throws in the
-  // Vercel runtime after readRequestBytesWithCap has drained the body.
   return new Request(request.url, {
     method: request.method,
     headers: request.headers,
@@ -89,7 +86,6 @@ function optionsPortableTools() {
   return portableTools
 }
 
-/** Bound JSON-RPC transport bytes before the MCP handler parses tool arguments. */
 export async function mcpHandler(request: Request): Promise<Response> {
   const timestamp = new Date()
   let telemetryUserId: number | undefined

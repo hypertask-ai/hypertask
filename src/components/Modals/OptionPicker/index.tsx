@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -13,9 +13,6 @@ import { Check } from "lucide-react";
 import { ChangeEvent, useEffect, useMemo, useState } from "react";
 import { ModalBody } from "reactstrap";
 
-// HTPR-4885/4886: the house filterable-list submodal, extracted so recurrence
-// presets and task templates share one keyboard-driven picker instead of each
-// re-implementing the CreateLabel/MoveTaskToBoard pattern.
 
 export interface PickerOption {
   id: string | number | null;
@@ -88,7 +85,6 @@ const OptionPickerModal: React.FC<Props> = ({
       event.preventDefault();
       selectAt(selectedIndex);
     } else if (event.key === "Escape") {
-      // Own the Escape so page-level back handlers (My Tasks) do not also fire.
       event.preventDefault();
       event.stopImmediatePropagation();
       onClose();

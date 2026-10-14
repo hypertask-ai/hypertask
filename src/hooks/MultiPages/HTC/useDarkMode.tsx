@@ -23,7 +23,6 @@ const useDarkMode = () => {
     };
     const onSystemChange = () => {
       syncSystemTheme();
-      // Re-fetch RSC only when SSR must re-read the theme cookie (system mode)
       if (parseCookies().theme === "system") {
         router.refresh();
       }

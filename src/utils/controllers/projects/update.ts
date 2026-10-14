@@ -20,7 +20,6 @@ export async function changeProjectPrefix(
   const prefix = normalizeProjectPrefix(input);
   const accessWhere = taskWriteAccessWhere(currentUser.id, agentId);
   const project = await prisma.$transaction(async (tx) => {
-    // Share task creation's board lock and serialize team-wide prefix claims.
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(9428471::int, ${projectId}::int)`;
     const board = await tx.project.findFirst({
       where: { id: projectId, status: { not: "Deleted" }, ...accessWhere },

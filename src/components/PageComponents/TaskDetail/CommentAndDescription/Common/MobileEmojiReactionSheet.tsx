@@ -3,24 +3,10 @@ import { Suspense, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 
 interface MobileEmojiReactionSheetProps {
-  /** Applies the reaction. Also closes the picker via its own state update. */
   onEmojiSelect: (emoji: any, event?: any) => void;
-  /** Dismiss without picking (backdrop tap / Escape). */
   onClose: () => void;
 }
 
-/**
- * Keyboard-docked, search-first reaction picker for mobile (WhatsApp/Slack
- * pattern, HTPR-4589). Replaces the old floating popup that could not raise the
- * keyboard, so type-to-search was dead. This is a full-width bottom sheet with
- * emoji-mart's search front-and-centre: type a name, results filter live, and
- * Enter inserts the top match; category tabs + the "Frequent" recents row come
- * from emoji-mart itself.
- *
- * `interactive-widget=resizes-content` (see generateViewport in app/layout.tsx)
- * shrinks the layout viewport while the keyboard is up, so `fixed bottom-0`
- * rests directly on top of the keyboard.
- */
 const MobileEmojiReactionSheet = ({
   onEmojiSelect,
   onClose,
@@ -32,8 +18,6 @@ const MobileEmojiReactionSheet = ({
       ? null
       : document.getElementById("portal-root");
 
-  // Close on Escape (hardware keyboard / a11y). Pointer dismissal is the
-  // backdrop; capture phase so it wins before emoji-mart's own key handling.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -46,12 +30,6 @@ const MobileEmojiReactionSheet = ({
     return () => document.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
 
-  // Show a blinking caret in the search field WITHOUT auto-opening the on-screen
-  // keyboard (it covered the sheet and felt jarring). emoji-mart's search lives
-  // in an open shadow root; once it mounts we set inputmode="none" (focused but
-  // no virtual keyboard) and focus it. Tapping the field switches inputmode back
-  // and re-focuses within the gesture, so the keyboard opens on demand for
-  // type-to-search.
   useEffect(() => {
     let frame = 0;
     let attempts = 0;
@@ -60,7 +38,6 @@ const MobileEmojiReactionSheet = ({
     const enableTyping = () => {
       if (!input) return;
       input.inputMode = "search";
-      // A fresh focus inside the tap gesture is what raises the keyboard.
       input.blur();
       input.focus();
       input.removeEventListener("pointerdown", enableTyping);
@@ -91,7 +68,6 @@ const MobileEmojiReactionSheet = ({
 
   return createPortal(
     <>
-      {/* Dim the feed behind the sheet and swallow background taps/scroll. */}
       <div
         aria-hidden="true"
         className="fixed inset-0 z-[9998] bg-black/40"
@@ -114,8 +90,6 @@ const MobileEmojiReactionSheet = ({
               </div>
             }
           >
-            {/* Theme is resolved by the LazyEmojiPickerRaw wrapper. autoFocus
-                is off — the effect above focuses without raising the keyboard. */}
             <LazyEmojiPickerRaw
               autoFocus={false}
               dynamicWidth={true}

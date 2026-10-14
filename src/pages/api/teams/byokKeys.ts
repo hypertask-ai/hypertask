@@ -208,7 +208,6 @@ const handler: NextApiHandler = async (
       return res.status(gate.status).json({ message: gate.message });
     }
 
-    // Branch 1: delete key row
     if (clearSecret === true) {
       try {
         await mutateByokWithSafeModeLock(
@@ -227,8 +226,6 @@ const handler: NextApiHandler = async (
       }
     }
 
-    // HTPR-4839: BYOK is a paid feature. Reads and the delete above stay open so
-    // a downgraded team can still see and remove the key it already stored.
     if (!(await isPaidTeam(teamId))) {
       return res.status(402).json({
         message: "Adding your own API key requires a paid plan.",
@@ -236,9 +233,6 @@ const handler: NextApiHandler = async (
       });
     }
 
-    // Branch 2: custom OpenAI-compatible endpoint. The existing ciphertext column
-    // stores one encrypted, versioned payload so the key and routing metadata remain
-    // atomic without a schema change.
     if (
       provider === "custom" &&
       (apiKey || baseUrl || modelId || typeof gdprCompliant === "boolean")
@@ -318,7 +312,6 @@ const handler: NextApiHandler = async (
       }
     }
 
-    // Branch 3: new/replacement API key — encrypt and save; auto-enable on first create
     const hasKeyPayload =
       typeof apiKey === "string" && apiKey.trim().length > 0;
     if (hasKeyPayload) {
@@ -369,7 +362,6 @@ const handler: NextApiHandler = async (
       }
     }
 
-    // Branch 4: toggle enabled only
     if (typeof enabled === "boolean") {
       try {
         await mutateByokWithSafeModeLock(

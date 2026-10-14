@@ -26,7 +26,6 @@ import { tiptapForwardSlashRoute } from "@/lib/constants/APIRouteConstants";
 import { OPEN_EMOJI_GIF_PICKER_EVENT } from "../../Components/EmojiGifPicker";
 import type { EmojiGifPickerTab } from "../../Components/EmojiGifPicker";
 
-// document.getElementById("create-comment-attachmentUpload")?.click()
 
 interface Command {
   editor: Editor;
@@ -45,8 +44,6 @@ const openEmojiGifPicker = (
   range: any,
   initialTab: EmojiGifPickerTab
 ) => {
-  // No setParagraph(): emoji/GIFs are inline-ish inserts, converting the block
-  // would flatten a list item or heading the user is typing in.
   editor.chain().focus().deleteRange(range).run();
   const position = editor.state.selection.from;
   const coords = editor.view.coordsAtPos(position);
@@ -66,8 +63,6 @@ const openEmojiGifPicker = (
     })
   );
 };
-// Shared runner for the AI slash items that hit our own Flask backend
-// (same shape as Fix Grammar / Improve Readability above).
 const runFlaskSlash = async (
   editor: Editor,
   range: any,
@@ -128,8 +123,6 @@ const runFlaskSlash = async (
   }
 };
 const getSuggestionItems = (query: { query: string; editor: any }) => {
-  // The AI chat "/" menu is skills-only: no formatting/AI-editor commands there.
-  // Skill items are injected by CommandsList (which has the current board id).
   if (query.editor?.storage?.slashCommands?.mode === "ai-chat") return [];
   return [
     {
@@ -495,7 +488,6 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
           .focus()
           .deleteRange(range)
           .command(({ commands }) => {
-            // Move cursor to the end of the document
             commands.setTextSelection(editor.state.doc.content.size);
             return true;
           })
@@ -514,7 +506,6 @@ const getSuggestionItems = (query: { query: string; editor: any }) => {
           .focus()
           .deleteRange(range)
           .command(({ commands }) => {
-            // Move cursor to the end of the document
             commands.setTextSelection(editor.state.doc.content.size);
             return true;
           })

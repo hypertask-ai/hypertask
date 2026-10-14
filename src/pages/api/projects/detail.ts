@@ -11,13 +11,9 @@ import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
         try {
-            // HTPR-7160: this route returned any board to anyone, even logged out.
-            // Require a signed session and scope the query to boards it may read.
             const headers = new Headers(req.headers as Record<string, string>);
             const sessionUser = await getSessionUser(headers);
             if (!sessionUser) return res.status(401).json({ message: "Unauthorized" });
-            // An internal agent hop keeps its agent scope, so a revoked agent
-            // cannot read the board as its human owner.
             const cookieHeader = headers.get("cookie");
             const signed = verifySession(cookieHeader ? parseCookies(cookieHeader).get(SESSION_COOKIE) : undefined);
             const agentId = signed?.id === sessionUser.userId ? signed.agentId : undefined;
@@ -26,7 +22,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 try {
                     retired = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, sessionUser.userId);
                 } catch {
-                    // A failed flag probe must preserve the legacy response.
                 }
                 if (retired) {
                     return res.status(410).json({
@@ -38,45 +33,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             const { projectId } = req.body;
             const response = await projectDetail(projectId, sessionUser.userId, agentId)
             return res.status(response.status).json(response.json)
-            // if (!projectId) {
-            //     return res.status(400).json({ message: "Project id is required" });
-            // }
-            // let project = await prisma.project.findFirst({
-            //     where: {
-            //         id: projectId
-            //     },
-            //     include: {
-            //         tasks: {
-            //             include: {
-            //                 assignees: {
-            //                     include: {
-            //                         user: true
-            //                     }
-            //                 },
-            //                 comments:true,
-
-            //             },
-            //             where: {
-            //                 status: 'Normal'
-            //             },
-            //         },
-            //         section:{
-            //             where:{
-            //                 deleted:false,
-            //                 visibility:true
-            //             },
-            //             orderBy:{
-            //                 ranking:"asc"
-            //             }
-            //         },
-            //         owner: true
-            //     }
-            // })
-            
-            // if (!project) {
-            //     return res.status(400).json({ message: "Project not found" });
-            // }
-            // res.status(200).json(project);
         } catch (error) {
             console.log(error);
             return res.status(400).json({ message: JSON.stringify(error) });

@@ -10,8 +10,6 @@ const sectionGetProjectSections = async (
   currentUserId: number
 ) => {
   try {
-    //We are now fetching sections w.r.t the default sections. By comparing active view sections with default, we return
-    //sections for move column modal.
     const loadedProject = await prisma.project.findFirst({
       where: {
         id: projectId,
@@ -45,8 +43,6 @@ const sectionGetProjectSections = async (
       project?.project_view?.default_view?.board_columns_view;
     const activeView = getViewFromProject(project);
 
-    // Only paid for when the stored default view cannot answer: a board with no
-    // project_view, no default view, or an empty column list.
     const boardSections =
       Array.isArray(defaultColumns) && defaultColumns.length
         ? []
@@ -66,9 +62,6 @@ const sectionGetProjectSections = async (
     };
   } catch (error) {
     console.error("Error:", error);
-    // A 200 here made a server-side crash indistinguishable from "this board
-    // has no columns": the client coerces a non-array body to [] and the move
-    // dialog rendered empty with nothing in the console (HTPR-6259).
     return {
       status: 500,
       json: { error: error instanceof Error ? error.message : String(error) },
@@ -76,5 +69,4 @@ const sectionGetProjectSections = async (
   }
 };
 
-// Run the main function
 export default sectionGetProjectSections;

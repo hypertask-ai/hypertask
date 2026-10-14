@@ -20,7 +20,6 @@ import {
 } from "@/lib/ai/taskWriterDuplicateGuard";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
-// Components
 import AILogo from "@/assets/AILogo.png";
 import {
   ArrowUp,
@@ -37,14 +36,11 @@ import AI_Options from "./AI_OPTIONS";
 import ResponseNavigator from "./ResponseNavigator";
 import AITaskWriterInputArea from "./AITaskWriterInputArea";
 
-// Hooks
 import useAutosizeTextArea from "@/hooks/General/useAutosizeTextarea";
 
-// Constants & Types
 import { IAITaskWriterContainerProps } from "@/models/AI_Task_writer_model";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 
-// Styles
 import styles from "@/styles/tiptap.module.scss";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
@@ -63,7 +59,6 @@ import {
 } from "@/lib/ai/boardMemoryClient";
 import toast from "react-hot-toast";
 
-// Main Component
 const AITaskWriterContainer: React.FC<
   IAITaskWriterContainerProps & {
     autoTrigger?: boolean;
@@ -98,7 +93,6 @@ const AITaskWriterContainer: React.FC<
   onTurnOffTask,
   onTurnOffPermanently,
 }) => {
-  // Context
   const {
     aiMode,
     userPrompt,
@@ -125,9 +119,6 @@ const AITaskWriterContainer: React.FC<
 
   } = useAITaskWriterContext();
 
-  // HTPR-6721: if the writer answers with a "Possible duplicate" note, show and
-  // accept the task the person asked for, with the match as a Related link.
-  // Every other response passes through unchanged.
   const firstBrief = responseHistory[0]?.userPrompt;
   const currentDisplayResponse = useMemo(
     () =>
@@ -136,12 +127,10 @@ const AITaskWriterContainer: React.FC<
   );
 
 
-  // Local state for modal and initialization
   const [showConfirmationModal, setShowConfirmationModal] = useState(triggerConfirmModal ?? false);
   const [isInitializing, setIsInitializing] = useState(autoTrigger);
   const [showTurnOffMenu, setShowTurnOffMenu] = useState(false);
 
-  // Refs
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
   const hasAutoTriggered = useRef(false);
   const hasSeededPrompt = useRef(false);
@@ -152,7 +141,6 @@ const AITaskWriterContainer: React.FC<
   const mobileCreateRequestPendingRef = useRef(false);
   mobilePromptCanFocus.current = !isLoading && !currentDisplayResponse;
 
-  // Hooks
   const isApple = useDeviceContext();
   const isMobile = useContext(MobileViewContext);
   const isMobileCreateFlow = Boolean(isMobile && createTask && mobileCreateTask);
@@ -177,9 +165,6 @@ const AITaskWriterContainer: React.FC<
     mobilePromptMaxHeight,
   );
 
-  // Native autofocus is unreliable when the textarea mounts inside an animated
-  // sheet. Focus during the layout phase while the opening tap still owns user
-  // activation, then put the caret at the end of any seeded prompt.
   useLayoutEffect(() => {
     const isWaitingForSeededPrompt =
       !autoTrigger && Boolean(initialPrompt) && !userPrompt;
@@ -198,9 +183,6 @@ const AITaskWriterContainer: React.FC<
     prompt.focus({ preventScroll: true });
     prompt.setSelectionRange(prompt.value.length, prompt.value.length);
 
-    // The create-task shell also manages focus when its nested sheet opens.
-    // Reconcile once after all opening effects have run so it cannot leave the
-    // caret behind in the task title (HTPR-5331).
     const focusFrame = window.requestAnimationFrame(() => {
       if (!prompt.isConnected) return;
       prompt.focus({ preventScroll: true });
@@ -218,8 +200,6 @@ const AITaskWriterContainer: React.FC<
     userPrompt,
   ]);
 
-  // When the software keyboard changes visualViewport, keep the active prompt
-  // and its toolbar inside the newly visible portion of the sheet.
   useEffect(() => {
     const prompt = textAreaRef.current;
     if (
@@ -242,7 +222,6 @@ const AITaskWriterContainer: React.FC<
     [],
   );
 
-  // Core Functions
   const sendInitialPrompt = useCallback(
     (loadingMessage: string) => {
       if (!initialPrompt) return;
@@ -275,7 +254,6 @@ const AITaskWriterContainer: React.FC<
     );
     if (!promptToUse.trim()) return;
 
-    // Don't send if attachments are still uploading
     if (isUploadingAttachments) {
       console.log("Cannot send while attachments are uploading...", { uploadProgress });
       return;
@@ -319,9 +297,6 @@ const AITaskWriterContainer: React.FC<
     sendInitialPrompt("Drafting a description from your title...");
   }, [isUploadingAttachments, sendInitialPrompt, uploadProgress]);
 
-  // A completed mobile response leaves the composer open for a new request.
-  // Unlike auto-trigger's first request, this always sends exactly what the
-  // user has edited in that composer.
   const handleMobileResend = useCallback(() => {
     if (isLoading || isByokBlocked || isUploadingAttachments || !userPrompt.trim()) return;
 
@@ -332,15 +307,12 @@ const AITaskWriterContainer: React.FC<
     );
   }, [isLoading, isByokBlocked, isUploadingAttachments, userPrompt, sendAIRequest]);
 
-  // Without autoTrigger an initialPrompt is a suggestion: type it into the box
-  // and let the user press send. Only seeds an untouched composer.
   useEffect(() => {
     if (autoTrigger || !initialPrompt || hasSeededPrompt.current) return;
     hasSeededPrompt.current = true;
     setUserPrompt((prev: string) => (prev.trim() ? prev : initialPrompt));
   }, [autoTrigger, initialPrompt, setUserPrompt]);
 
-  // Auto-trigger on mount if requested
   useEffect(() => {
     if (autoTrigger && !hasAutoTriggered.current && initialPrompt) {
       hasAutoTriggered.current = true;
@@ -349,7 +321,6 @@ const AITaskWriterContainer: React.FC<
     }
   }, [autoTrigger, initialPrompt, sendInitialPrompt]);
 
-  // Callback Handlers
   const handleAIOptionCallback = useCallback(
     async (
       optionPrompt:
@@ -438,8 +409,6 @@ const AITaskWriterContainer: React.FC<
     }
 
     const currentResponseItem = getCurrentResponseItem();
-    // The provider adds a completed response to history in its own effect. Wait
-    // for that item so automatic create also carries the response attachments.
     if (
       !currentResponseItem ||
       appliedCreateResponseRef.current === currentResponseItem.id
@@ -459,8 +428,6 @@ const AITaskWriterContainer: React.FC<
       currentResponseItem.attachments,
       projectId ?? undefined,
     ).then((handled) => {
-      // Mobile create has no result sheet. Consume the response only after the
-      // task was created or a stale-board result was safely discarded.
       if (handled) clearHistory();
     });
   }, [
@@ -477,14 +444,12 @@ const AITaskWriterContainer: React.FC<
     projectSections,
   ]);
 
-  // Event Handlers
   const handleInputKeydown = useCallback(
     (e: React.KeyboardEvent) => {
       const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
       if (isLoading || currentDisplayResponse || isRecording) return;
 
-      // Audio shortcuts
       if ((e.shiftKey && cmdControl && e.keyCode === KeyCodes.D) || (e.altKey && e.keyCode === KeyCodes.V)) {
         e.preventDefault();
         document.getElementById("ai-writer-audio-button")?.click();
@@ -497,7 +462,6 @@ const AITaskWriterContainer: React.FC<
 
       if (e.shiftKey) return;
 
-      // Enter to submit
       if (e.keyCode === KeyCodes.ENTER && !showConfirmationModal) {
         e.preventDefault();
         if (isByokBlocked) return;
@@ -520,7 +484,6 @@ const AITaskWriterContainer: React.FC<
     }
   }, [currentDisplayResponse, EscapeHandler, presentation]);
 
-  // Modal Handlers
   const onConfirmDiscard = useCallback(() => {
     setShowConfirmationModal(false);
     setTimeout(EscapeHandler, 0);
@@ -530,7 +493,6 @@ const AITaskWriterContainer: React.FC<
     setShowConfirmationModal(false);
   }, []);
 
-  // Handle Accept from Navigator
   const handleAccept = useCallback(() => {
     const currentItem = getCurrentResponseItem();
     const acceptedContent =
@@ -624,10 +586,6 @@ const AITaskWriterContainer: React.FC<
 
   const toolbarEl = (
       <div className="flex justify-between items-center w-full">
-        {/* On a phone these were 20px glyphs pinned to the extreme bottom-right,
-            the hardest corner to reach one-handed. 44px targets, and the row
-            starts from the left instead (HTPR-5098). Desktop is unchanged. */}
-        {/* HTPR-5331 now centers that preserved 44px row in the thumb zone. */}
         <div
           className={cn(
             "flex ml-auto gap-1 w-full items-center self-end",
@@ -666,11 +624,6 @@ const AITaskWriterContainer: React.FC<
               mobilePrimaryTone={isMobileCreateFlow ? "ai" : undefined}
               dictationCoordinator={dictationCoordinator}
               className={isMobile ? MOBILE_TARGET : undefined}
-              // Empty composer: the filled mic is the primary and sits far
-              // right (clip - spacer - mic, per the approved wireframe). Once
-              // text exists Send takes that slot and the mic joins the clip on
-              // the left. ml-auto rides the .audio-recorder root - the flex
-              // child - so the one mounted instance moves without remounting.
               wrapperClassName={
                 isMobile && !userPrompt.trim() ? "ml-auto" : undefined
               }
@@ -692,10 +645,6 @@ const AITaskWriterContainer: React.FC<
           )}
           {!isLoading && (!isMobile || Boolean(userPrompt.trim())) && (
             <div
-              // The tap target lives on the wrapper so the whole 44px square
-              // sends, not just the 18px glyph inside it. On mobile it appears
-              // only once the prompt has text; empty composers show just attach
-              // and the filled mic, per the approved wireframe (HTPR-5517).
               onClick={onClickHandler}
               role={isMobile ? "button" : undefined}
               tabIndex={isMobile ? 0 : undefined}
@@ -852,13 +801,10 @@ const AITaskWriterContainer: React.FC<
     return () => window.removeEventListener("keydown", onKey);
   }, [isMobile, isRecording, showConfirmationModal, handleEscape]);
 
-  // Don't render if still initializing
   if (isInitializing) {
     return null;
   }
 
-  // Visible controls are the owner-approved HTPR-5890 flow:
-  // https://app.hypertask.ai/page/cmtiiril300000aht4ztpr236
   if (presentation === "description-suggestion" && !isMobile) {
     return (
       <div
@@ -938,7 +884,6 @@ const AITaskWriterContainer: React.FC<
     );
   }
 
-  // Mobile: full bottom sheet (like task Summary) — response scrolls; Accept / actions stay in view
   if (isMobile) {
     return (
       <>
@@ -948,8 +893,6 @@ const AITaskWriterContainer: React.FC<
           onClose={
             isMobileCreateFlow ? mobileCreateTask!.onClose : handleEscape
           }
-          // Reduced-motion sheets skip their opening animation and therefore
-          // do not emit onOpenEnd; onOpenStart is their final focus handoff.
           onOpenStart={() => {
             const prompt = textAreaRef.current;
             if (isLoading || currentDisplayResponse || !prompt) return;
@@ -960,9 +903,6 @@ const AITaskWriterContainer: React.FC<
             const sheet = prompt.closest('[role="dialog"]');
             if (!sheet) return;
             if (getComputedStyle(sheet).visibility !== "hidden") {
-              // With reduced motion the sheet can be visible before this
-              // passive effect runs. Handoff after the current React effect
-              // flush so the create-task title effect cannot reclaim focus.
               queueMicrotask(() => {
                 if (!mobilePromptCanFocus.current || !prompt.isConnected) return;
                 prompt.focus({ preventScroll: true });
@@ -1011,11 +951,6 @@ const AITaskWriterContainer: React.FC<
           detent={isMobileCreateFlow ? "content" : "default"}
           customScroller={!isMobileCreateFlow}
           sheetClassName="!z-[12000]"
-          // dvh tracks the LAYOUT viewport, which does not shrink when the
-          // on-screen keyboard opens, so the keyboard slid up over the writer's
-          // own controls (HTPR-5147). visualViewport does shrink: sit the sheet
-          // on top of the keyboard and cap it to what is actually visible, the
-          // same way MobileBottomSheet already does.
           containerStyle={
             writerViewport
               ? {
@@ -1116,7 +1051,6 @@ const AITaskWriterContainer: React.FC<
     );
   }
 
-  // Render — desktop / non-mobile overlay
   return (
     <>
       <div
@@ -1125,8 +1059,6 @@ const AITaskWriterContainer: React.FC<
         onKeyDown={e => {
           if (e.key === "Escape" && !isRecording && !showConfirmationModal) {
             e.preventDefault();
-            // Stop the ESC from reaching ConfirmModal's document listener,
-            // which would instantly cancel the modal this press just opened
             e.stopPropagation();
             handleEscape();
           }
@@ -1151,7 +1083,6 @@ const AITaskWriterContainer: React.FC<
         </div>
       </div>
 
-      {/* Confirmation Modal */}
       {showConfirmationModal && (
         <ConfirmModal
           header="Discard AI Response?"
@@ -1187,5 +1118,4 @@ const AITaskWriterContainer: React.FC<
 
 export default AITaskWriterContainer;
 
-// Also export the version with provider for easier usage
 export { default as AITaskWriterWithProvider } from './AITaskWriterWithProvider';

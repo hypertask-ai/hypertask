@@ -56,7 +56,6 @@ export async function PATCH(request: NextRequest) {
     if (!body || Array.isArray(body) || typeof body.key !== "string") {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    // Exactly one of mode and keep: a body carrying both would hide which change was intended.
     const setsMode = body.mode !== undefined;
     const setsKeep = body.keep !== undefined;
     if (setsMode === setsKeep) return noStore({ error: "Invalid feature flag" }, 400);

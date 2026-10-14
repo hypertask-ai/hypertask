@@ -51,9 +51,6 @@ const TaskTitle = () => {
   };
 
   useClickOutside(null, shouldConfirmAction, "title");
-  // Opening/closing (or resizing) the AI chat sidebar changes the title's wrap
-  // width; feed that as a resize trigger so the textarea height recomputes and
-  // doesn't stay stuck at the old width, overlapping the body (HTPR-4321).
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
   const aiChatSidebarWidthPx = useRecoilValue(aiChatSidebarWidthPxAtom);
   useAutosizeTextArea(
@@ -63,7 +60,6 @@ const TaskTitle = () => {
     `${showAiChatInterface}:${aiChatSidebarWidthPx}`
   );
 
-  // ---------------------- SAVE TITLE -------------------
   const handleTitleSave = (cmdCtrlEnterPressed?: boolean) => {
     const previousTitle = currentTask?.title ?? _parsedTask.title;
     const taskId = currentTask?.id ?? null;
@@ -92,9 +88,6 @@ const TaskTitle = () => {
         setEditMode(null);
       }
 
-      // Unsaved draft (id -1): the task doesn't exist server-side yet, so a PUT
-      // would 404. Skip the network save + rollback — the create flow persists
-      // it; here we only keep the local/optimistic title.
       if (!taskId || taskId === -1) return;
 
       updateTask(newTask)
@@ -125,10 +118,8 @@ const TaskTitle = () => {
       setConfirm(false);
       if (shouldNavigateBack) navigate("Back");
       else if (!shouldNavigateBack) {
-        // setTimeout(() => {
         focusOn("title-input");
         setEditMode("title");
-        // }, 100);
       }
     } else {
       setEditMode(null);
@@ -141,11 +132,8 @@ const TaskTitle = () => {
       textAreaRef.current.focus();
   }, [editMode]);
 
-  // Neccessary Evil
   useEffect(() => {
     setValue(currentTask?.title ?? _parsedTask.title);
-    // Hydration resets a textarea's DOM value before its ref attaches. Only
-    // accept edits once handlers and this initial title sync are ready.
     setReady(true);
   }, [currentTask?.title, _parsedTask.title]);
 
@@ -170,7 +158,6 @@ const TaskTitle = () => {
         value={value ?? ""}
         onFocus={(e) => {
           e.target.selectionStart = e.target.value.length;
-          //setTrigger(prev=>!prev)
         }}
         onDoubleClick={() => {
           focusOn("title");
@@ -185,7 +172,6 @@ const TaskTitle = () => {
             return;
           }
           if (!_mbl) {
-            // [cmd/ctrl][j]
             if (e.keyCode === 74 && cmdControl) {
               e.preventDefault();
               focusOn("description");

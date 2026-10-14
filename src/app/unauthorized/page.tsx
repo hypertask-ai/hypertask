@@ -20,7 +20,6 @@ const Unauthorized = () => {
         const activeView = getViewFromProject(response?.data)
         let view;
         if(activeView && activeView.type === "Applied")  view = activeView.view.slug
-        // router.replace(`/project?id=${response?.data?.id}`)
         router.replace(`/project?id=${response?.data?.id}${view?`&view=${view}`:''}`)
     }
     

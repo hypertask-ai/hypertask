@@ -1,4 +1,3 @@
-// Types based on your Prisma model
 interface Reaction {
   id: string;
   unified: string;
@@ -14,7 +13,6 @@ interface Reaction {
   userId: number;
 }
 
-// Aggregated reaction data types
 interface ReactionGroup {
   emoji: string;
   unified: string;
@@ -55,7 +53,6 @@ interface CommentWithReactions {
   reactionMetadata?: ReactionMetadata;
 }
 
-// Function to aggregate reactions for vector DB metadata
 function aggregateReactions(reactions?: Reaction[]): AggregatedReactions {
   if (!reactions || reactions.length === 0) {
     return {
@@ -69,15 +66,13 @@ function aggregateReactions(reactions?: Reaction[]): AggregatedReactions {
     };
   }
 
-  // Filter out deleted reactions
   const activeReactions = reactions.filter(reaction => !reaction.isDeleted);
   
-  // Group reactions by emoji/unified
   const reactionGroups: Record<string, ReactionGroup> = {};
   const allReactors = new Set<number>();
   
   activeReactions.forEach(reaction => {
-    const key = reaction.emoji || reaction.unified; // Use emoji if available, fallback to unified
+    const key = reaction.emoji || reaction.unified;
     
     if (!reactionGroups[key]) {
       reactionGroups[key] = {
@@ -85,7 +80,7 @@ function aggregateReactions(reactions?: Reaction[]): AggregatedReactions {
         unified: reaction.unified,
         count: 0,
         userIds: [],
-        names: reaction.names || [] // Store emoji names for search
+        names: reaction.names || []
       };
     }
     
@@ -94,10 +89,8 @@ function aggregateReactions(reactions?: Reaction[]): AggregatedReactions {
     allReactors.add(reaction.userId);
   });
   
-  // Convert to array format
   const reactionSummary = Object.values(reactionGroups);
   
-  // Sort by count (most popular first)
   reactionSummary.sort((a, b) => b.count - a.count);
   
   return {
@@ -105,14 +98,12 @@ function aggregateReactions(reactions?: Reaction[]): AggregatedReactions {
     uniqueReactors: allReactors.size,
     reactionSummary,
     allReactors: Array.from(allReactors),
-    // Additional useful metadata for vector DB
     topReaction: reactionSummary[0] || null,
     reactionTypes: reactionSummary.length,
     hasReactions: reactionSummary.length > 0
   };
 }
 
-// Simplified version for basic vector DB metadata
 function getReactionMetadata(reactions?: Reaction[]): ReactionMetadata {
   const aggregated = aggregateReactions(reactions);
   
@@ -123,7 +114,6 @@ function getReactionMetadata(reactions?: Reaction[]): ReactionMetadata {
     top_reaction: aggregated.topReaction?.emoji || null,
     top_reaction_count: aggregated.topReaction?.count || 0,
     has_reactions: aggregated.hasReactions,
-    // Reaction breakdown as string for search
     reactions_text: aggregated.reactionSummary
       .map(r => `${r.count} ${r.emoji || r.unified}`)
       .join(', '),
@@ -131,7 +121,6 @@ function getReactionMetadata(reactions?: Reaction[]): ReactionMetadata {
   };
 }
 
-// Detailed version with full breakdown
 function getDetailedReactionData(reactions?: Reaction[]): DetailedReactionData {
   const aggregated = aggregateReactions(reactions);
   
@@ -157,13 +146,11 @@ function getDetailedReactionData(reactions?: Reaction[]): DetailedReactionData {
   };
 }
 
-// Example usage with your comment data
 function processCommentReactions(comment: { reactions?: Reaction[] }): ReactionMetadata {
   return getReactionMetadata(comment.reactions);
 }
 
 
-// Export types and functions
 export type {
   Reaction,
   ReactionGroup,

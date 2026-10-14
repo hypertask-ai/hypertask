@@ -26,8 +26,6 @@ import {
 
 export const maxDuration = 700;
 
-// Native clients receive bytes only after both task access and attachment
-// ownership are checked; the durable storage URL never crosses this API boundary.
 export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
@@ -44,8 +42,6 @@ export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   fetchAttachment: safeFetchAttachmentUrl,
   normalizeMime,
   isStorageFetchError: (error) => error instanceof McpAttachmentFetchError,
-  // Only rows that are still unmeasured are repaired, so a concurrent download
-  // or a real upload that recorded a size in the meantime is never overwritten.
   recordMeasuredSize: async (attachmentId, size) => {
     await prisma.attachment.updateMany({
       where: { id: attachmentId, OR: [{ fileSize: null }, { fileSize: '1' }] },
@@ -214,8 +210,6 @@ export async function POST(request: NextRequest) {
             }
           : {}),
       },
-      // Partial rows must reach MCP callers so they do not retry already-linked
-      // objects. A logical failure is still represented by success: false.
       { status: partialAttachments.length > 0 ? 200 : status }
     );
   }

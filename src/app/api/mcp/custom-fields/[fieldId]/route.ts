@@ -5,7 +5,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { validateProjectAccess } from "@/lib/mcp/tasks/services";
 import { deleteCustomField, getCustomFieldById } from "@/utils/controllers/customFields";
 
-/** DELETE /api/mcp/custom-fields/[fieldId] */
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ fieldId: string }> }

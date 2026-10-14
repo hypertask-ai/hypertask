@@ -1,4 +1,3 @@
-// Run with: npx tsx src/app/api/mcp/token/route.test.ts
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { mock } from 'node:test'
@@ -76,7 +75,6 @@ async function demo() {
     cookieValues.nookies_user = JSON.stringify(user)
     cookieValues[SESSION_COOKIE] = signSession(user)
 
-    // The other context's old token has no per-token revocation row or cookie here.
     const oldToken = createMcpToken(user.id, user.email)
     assert.ok(await validateMcpAuth(bearerRequest(oldToken)))
     mock.timers.tick(100)

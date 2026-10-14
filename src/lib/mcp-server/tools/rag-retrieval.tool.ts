@@ -3,10 +3,6 @@ import { RagRetrievalService } from '../lib/services/rag-retrieval.service'
 import { executeWithService } from '../utils/executeWithService'
 import { getRagRetrievalBaseSchema } from '../validations/rag-retrieval.validation'
 
-/**
- * Tool: rag_retrieval
- * Semantically searches tasks and comments on boards the caller can access.
- */
 export const ragRetrievalTool = {
   name: TOOL_METADATA.RAG_RETRIEVAL.name,
   description: TOOL_METADATA.RAG_RETRIEVAL.description,

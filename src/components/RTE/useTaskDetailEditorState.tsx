@@ -1,5 +1,4 @@
 import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
-// Tiptap.tsx
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,8 +85,6 @@ export function useTaskDetailEditorState({
   createNewComment = false,
   handleTaskOptions,
 }: TiptapProps) {
-
-  // Context and state setup
   const {
     parsedTask: taskFromServer,
     focusOn,
@@ -116,7 +113,6 @@ export function useTaskDetailEditorState({
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  // Computed values
   const inboxFlow = searchParams?.get("inboxFlow");
   const currentTask = JSON.parse(taskFromServer);
   const inInbox = currentTask?._count?.notifications > 0;
@@ -128,7 +124,6 @@ export function useTaskDetailEditorState({
   const advanceOnSend = userPreferences.inboxAdvanceOnSend ?? true;
   const draftQueryKey = ["draft for [task,userId]:", currentTask?.id, currentUser?.id];
 
-  // State
   const { editor } = useTiptap({
     mode,
     defaultContent,
@@ -190,11 +185,7 @@ export function useTaskDetailEditorState({
       },
     }))
   );
-  // Debug: Log initial attachments format
-  // Commented this out. Too many console logs when I am typing
-  // console.log("🚀 ~ Initial newCommentAttachments format:", newCommentAttachments);
 
-  // IDs for elements
   const divIds = {
     wrapperId: "main-wrapper-" + id,
     popoverContainer: "popover-wrapper-" + id,

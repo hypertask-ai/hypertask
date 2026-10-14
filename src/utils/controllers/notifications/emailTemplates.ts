@@ -34,23 +34,15 @@ export interface INotificationBody {
   recipientName?: string;
   commentText?: string;
   section?: string;
-  /**
-   * Recipient user id and task id. When both are set the email is bundled into
-   * a digest instead of sent immediately; when either is missing (invites) it
-   * goes out at once.
-   */
   userId?: number;
   taskId?: number;
-  /** Task used for Reply-To when this email must stay outside the digest. */
   replyTaskId?: number;
 }
 
 interface NotificationContent {
   heading: string;
   preview?: string;
-  /** Pre-rendered, already-escaped quote content used instead of `preview`. */
   previewHtml?: string;
-  /** Pre-rendered, already-escaped block used instead of `preview` by digests. */
   listHtml?: string;
   identity?: { name: string; initials: string; subline: string };
   badge?: string;
@@ -185,18 +177,12 @@ export function renderAgentConnectedEmail(client: string, boardId?: number): { s
 }
 
 export interface IDigestEvent {
-  /** Already-phrased actor + action, e.g. "Alice commented". */
   line: string;
-  /** Raw comment HTML, if this event carried one. */
   commentText?: string;
   isMention?: boolean;
   actor?: string;
 }
 
-/**
- * One email for everything that happened on a task while the recipient was
- * away. Reuses the single-notification layout so both stay in step.
- */
 export function renderDigestEmail(
   taskTitle: string,
   link: string,

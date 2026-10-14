@@ -180,8 +180,6 @@ export async function retrieveCustomInstructionFileContext(args: {
       (row) => row.source === BOARD_MEMORY_CONFIG_SOURCE
     );
   } catch {
-    // Memory is optional prompt context. Its status lookup already logs storage
-    // failures, and ordinary custom instructions should remain available.
   }
   const rows = await searchCustomInstructionFiles({
     projectId: args.projectId,
@@ -276,11 +274,9 @@ async function extractBinaryDocumentTextWithOpenAI(
     { type: "file", mediaType, data: new URL(url) },
   ];
   const loadedContext = typeof getAiDefaultModelContext === "function" ? await getAiDefaultModelContext({ projectId: usageContext?.projectId ?? gatewayTags?.projectId, userId: usageContext?.userId ?? gatewayTags?.userId, trustedTeamId: usageContext?.teamId ?? gatewayTags?.teamId }) : { haiku55Enabled: false, byok: undefined };
-  // HTPR-7075: Haiku 5.5 reads images too, so Claude 5.5 mode covers them.
   const defaultContext = isImage && !("backgroundClaudeEnabled" in loadedContext && loadedContext.backgroundClaudeEnabled)
     ? { haiku55Enabled: false, byok: undefined }
     : loadedContext;
-  // HTPR-7075: a team that disabled Anthropic gets no extraction, not another provider.
   if ("anthropicDisabled" in defaultContext && defaultContext.anthropicDisabled) return "";
   const useHaiku = defaultModelKeyFor(defaultContext, CUSTOM_INSTRUCTION_MODEL) === "claude-haiku-5-5";
   const provider = useHaiku ? defaultContext.byok?.provider === "openrouter" ? "openrouter" : "claude" : "openai";

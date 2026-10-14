@@ -59,7 +59,6 @@ export default function IntegrationsComponent() {
             <h1 className="text-display font-bold text-gray-900 mb-2">Integrations</h1>
             <p className="text-gray-600 mb-8">Connect your favorite tools to streamline your workflow</p>
 
-            {/* Success/Error Messages */}
             {message.type && (
               <div className={`mb-6 p-4 rounded-md ${
                 message.type === 'success' 
@@ -89,10 +88,8 @@ export default function IntegrationsComponent() {
               </div>
             )}
 
-            {/* Integrations Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               
-              {/* Slack Integration */}
               <div className="border border-gray-200 rounded-lg p-6 hover:shadow-md transition-shadow">
                 <div className="flex items-center mb-4">
                   <div className="flex-shrink-0">
@@ -123,7 +120,6 @@ export default function IntegrationsComponent() {
                 </button>
               </div>
 
-              {/* Placeholder for future integrations */}
               <div className="border border-gray-200 rounded-lg p-6 opacity-50">
                 <div className="flex items-center mb-4">
                   <div className="flex-shrink-0">
@@ -166,7 +162,6 @@ export default function IntegrationsComponent() {
 
             </div>
 
-            {/* Info Section */}
             <div className="mt-8 bg-blue-50 border border-blue-200 rounded-md p-4">
               <div className="flex">
                 <div className="flex-shrink-0">

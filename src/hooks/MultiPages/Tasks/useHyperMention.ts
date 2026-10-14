@@ -34,7 +34,6 @@ interface IPostHyperMention {
   taskTitle: string;
   previousText?: string;
   sourceCommentId?: number | string;
-  /** Captured at send time so mid-upload navigation cannot swap board BYOK. */
   byokProviderFlags?: ITeamByokApiKey[];
 }
 

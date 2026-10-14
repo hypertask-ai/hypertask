@@ -59,12 +59,10 @@ const SetLinkModal: React.FC<ISetLinkModal> = ({
       if (response.ok) {
         const result: any = await response.json();
 
-        // Filter to only show tasks (type: "task"), exclude peopleHeading, name, projectHeading, project
         const tasks = Array.isArray(result)
           ? result.filter((item: any) => item && item.type === "task")
           : [];
 
-        // Map to ITask format
         const mappedTasks: ITask[] = tasks.map(
           (item: any) =>
             ({

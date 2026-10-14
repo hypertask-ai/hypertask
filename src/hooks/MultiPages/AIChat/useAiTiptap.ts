@@ -44,9 +44,6 @@ const useTiptapForAI = ({
   const autocapUndoRef = useRef(autocapUndo);
   if (autocapUndo) autocapUndoRef.current = true;
   else autocapUndoRef.current = false;
-  // There is no Ctrl key on a phone, so the desktop hint is noise there.
-  // Read through a ref: the editor config is built once on mount, and the
-  // placeholder is a function so it picks up the current value instead.
   const isMobileRef = useRef(false);
   isMobileRef.current = useContext(MobileViewContext);
 
@@ -73,8 +70,6 @@ const useTiptapForAI = ({
       }),
       Highlight.configure({ multicolor: true }),
       Placeholder.configure({
-        // Use a placeholder:
-
         placeholder: () =>
           isMobileRef.current
             ? `@ for context`
@@ -83,19 +78,6 @@ const useTiptapForAI = ({
         emptyNodeClass: "New Comment",
       }),
       Underline.extend({ inclusive: false }),
-      //   Link.configure({
-      //     openOnClick: true,
-      //     autolink: false,
-      //     linkOnPaste: true,
-      //     HTMLAttributes: {
-      //       // Change rel to different value
-      //       // Allow search engines to follow links(remove nofollow)
-      //       // rel: 'noopener noreferrer',
-      //       // Remove target entirely so links open in current tab
-      //       target: "_blank",
-      //     },
-      //     // validate: href => /^https?:\/\//.test(href),
-      //   }),
       LinkableMention.configure({
         HTMLAttributes: {
           class: "mention",
@@ -105,8 +87,6 @@ const useTiptapForAI = ({
           () => projectIdRef.current
         ),
       }),
-      // "/" opens a skills picker (board + personal). Selecting one inserts
-      // "/slug ", which the chat stream route resolves server-side.
       SlashCommands("ai-chat"),
       DisableEnter,
       SafeSplitBlock,
@@ -115,7 +95,6 @@ const useTiptapForAI = ({
         undoCapitalizationEnabled: () => autocapUndoRef.current,
       }),
     ],
-    // content: defaultContent,
     editorProps: writingAssistanceEditorProps,
     immediatelyRender: false,
   });

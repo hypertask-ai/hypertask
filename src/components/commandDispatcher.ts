@@ -295,8 +295,6 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
         break;
       case CommandMode.SetTheme:
       case CommandMode.ToggleDarkMode:
-        // Older clients can retain a command mode while this bundle replaces
-        // the retired theme submenu. Keep those numeric enum values useful.
         openSettings("appearance");
         setShowShortcuts(false);
         boardCloseHandler();
@@ -343,7 +341,6 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
 
       case CommandMode.InviteMember:
         break;
-      // case CommandMode.auc
       case CommandMode.DeleteMessage:
         break;
       case CommandMode.FollowTask:
@@ -510,9 +507,6 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
         break;
       case CommandMode.SwipeThroughUnread:
         break;
-      // Archiving the inbox is destructive, so these open the confirm sheet and
-      // let it run the archive against a preview the person has actually seen.
-      // Handled by the conditional render below — just keep commandMode set.
       case CommandMode.ClearInboxToZero:
       case CommandMode.ArchiveAllReadNotifications:
       case CommandMode.ArchiveReactionNotifications:
@@ -573,8 +567,6 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
         break;
       case CommandMode.BoardVelocity:
       case CommandMode.GotoBoardVelocityReport: {
-        // Fall back to the board id in the URL: silently doing nothing when the
-        // atom has not hydrated reads to the user as a dead command.
         const velocityProjectId =
           _currentProject?.id ??
           Number(pathname?.match(/project-(\d+)/)?.[1] ?? NaN);
@@ -637,8 +629,6 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
         toggleCreateTaskGlobally();
         boardCloseHandler();
         break;
-      // Same task as CreateTask, opened straight into the AI Task Writer — the
-      // palette twin of Ctrl/Cmd+J on the board (HTPR-4903).
       case CommandMode.CreateTaskWithAiWriter:
         toggleCreateTaskGlobally(undefined, {
           defaultEditMode: "Description-ai",
@@ -654,13 +644,6 @@ function dispatchCommandGroup2(context: Context, mode?: CommandMode, action?: st
         return;
       case CommandMode.CreateSnippet:
       case CommandMode.CreateSnippetFromDraft:
-        // Snippets are managed on their own full page. Creating from a draft
-        // hands the editor's content over through sessionStorage, since the
-        // page is a fresh navigation and cannot read the editor behind it.
-        // Read the mode being handled, not the state set moments ago, which
-        // still holds whichever command ran before this one.
-        // An empty draft also clears any handoff an earlier from-draft run
-        // left behind, so a plain Create snippet never inherits it.
         putSnippetDraftHandoff(
           currentUser?.id,
           mode === CommandMode.CreateSnippetFromDraft
@@ -728,17 +711,14 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         GoToOnboarding();
         break;
       case CommandMode.AIChatInterface:
-        //prevent mobile and login page from ever opening
         if (isMbl || pathname?.startsWith("/login")) break;
         setShowAiChatInterface(!showAiChatInterface);
         setAiChatAutoOpenSuppressed(showAiChatInterface);
-        // Opening (current state closed) is an explicit user action.
         if (!showAiChatInterface) setAiChatExplicitOpenAt(Date.now());
         if (showAiChatInterface) setAiChatPinned(false);
         boardCloseHandler();
         break;
       case CommandMode.PinAIChatOpen:
-        //prevent mobile and login page from ever opening
         if (isMbl || pathname?.startsWith("/login")) break;
         setAiChatPinned(!aiChatPinned);
         if (!aiChatPinned) {
@@ -758,7 +738,6 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         boardCloseHandler();
         break;
       case CommandMode.ToggleAIChatView:
-        //prevent mobile
         if (isMbl || !showAiChatInterface) break;
         setIsSidebarMode((prev) => !prev);
         boardCloseHandler();
@@ -826,9 +805,6 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         boardCloseHandler();
         router.push("/pinned");
         return;
-      // Every way of asking for agents lands on the agents page. The enum
-      // members stay (CommandMode is numeric and persisted in client state);
-      // only what they do changed, and their modals no longer render.
       case CommandMode.GoToAgents:
       case CommandMode.ManageAgents:
         boardCloseHandler();
@@ -838,10 +814,6 @@ function dispatchCommandGroup3(context: Context, mode?: CommandMode, action?: st
         boardCloseHandler();
         router.push("/agents/chat");
         return;
-      // Agent Chat is already open when these fire (the palette entries only
-      // show while onAgentChat is true); AgentChatClient owns the roster,
-      // composer, and mention state these actually need, so this just hands
-      // the request off via CustomEvent instead of duplicating that state.
       case CommandMode.AgentChatNextAgent:
         boardCloseHandler();
         dispatchAgentChatCommand("next-agent");
@@ -966,8 +938,6 @@ function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: st
         void sortByStalenessHandler("TimeWithoutComment");
         return;
       case CommandMode.CalendarSettings:
-        // openSettings before closing: closing first unmounts this handler's
-        // host and the navigation never happens (matches BoardSettings above).
         openSettings("calendar");
         boardCloseHandler();
         return;
@@ -997,12 +967,9 @@ function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: st
         boardCloseHandler();
         break;
       case CommandMode.StartKanbanTutorial:
-        // Check if user is on kanban board page
         if (pathname?.startsWith("/project") || pathname?.match(/^\/[^\/]+$/)) {
-          // End any existing tour first to ensure fresh start
           endTour();
           setSelectedTourId(TOUR_IDS.PROJECT);
-          // Pass tour ID directly to ensure correct tour starts
           setTimeout(() => {
             startTour(TOUR_IDS.PROJECT);
           }, 150);
@@ -1015,12 +982,9 @@ function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: st
         }
         break;
       case CommandMode.StartTaskWriterTutorial:
-        // Check if user is on kanban board page
         if (pathname?.startsWith("/project") || pathname?.match(/^\/[^\/]+$/)) {
-          // End any existing tour first to ensure fresh start
           endTour();
           setSelectedTourId(TOUR_IDS.TASK_WRITER);
-          // Pass tour ID directly to ensure correct tour starts
           setTimeout(() => {
             startTour(TOUR_IDS.TASK_WRITER);
           }, 150);
@@ -1045,11 +1009,9 @@ function dispatchCommandGroup4(context: Context, mode?: CommandMode, action?: st
         return;
 
       case CommandMode.CreateCustomField:
-        // handled by conditional render below — just keep commandMode set
         break;
 
       case CommandMode.TaskDescriptionVersions:
-        // The modal below owns loading, inspection, confirmation, and restore.
         break;
 
       default:

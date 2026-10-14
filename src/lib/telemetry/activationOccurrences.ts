@@ -22,7 +22,6 @@ const connectionHistory = {
   OR: [{ log: { startsWith: "cli_token_exchange" } }, { log: { startsWith: "mcp_connected" } }],
 };
 
-// Logs plus a user lock survive cold starts and concurrent serverless requests.
 export function recordActivationOccurrence(
   userId: number,
   event: ActivationEvent,
@@ -36,7 +35,6 @@ export function recordActivationOccurrence(
     if (!(await isActivationEligible(userId))) return;
     const client = postHogClient();
     if (!client) return;
-    // Completion occurrence is the task id: reopen and recomplete never re-fire.
     const marker = `activation:${event}:${occurrence}`;
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
@@ -125,7 +123,6 @@ export function recordAgentConnection(
         if (await tx.logs.findFirst({ where: { LoggedById: userId, log: marker } })) return;
         const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
           { log: { startsWith: "activation:agent_connected:" } },
-          // The status row for this request is not a previous connection.
           { ...connectionHistory, createdAt: { lt: connectedAt } },
         ] } });
         await client.captureImmediate({
@@ -143,7 +140,6 @@ export function recordAgentConnection(
 }
 
 export function recordAuthenticatedConnection(request: Pick<Request, "headers" | "url">, userId: number, token: string, connectedAt?: Date): void {
-  // OAuth connections are recorded at code exchange, not on token refresh/use.
   const decoded = jwt.decode(token);
   if (decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded)) return;
   const userAgent = request.headers.get("user-agent");

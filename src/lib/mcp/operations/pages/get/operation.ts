@@ -55,8 +55,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Canvas pages round-trip as the raw HTML the agent wrote, regardless of the
-    // requested format (markdown of an opaque block would be meaningless).
     const canvas = decodeHtmlCanvas(page.contentHtml)
     const content = canvas != null
       ? canvas

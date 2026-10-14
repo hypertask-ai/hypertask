@@ -1,10 +1,8 @@
 export const generateAIResponse = (userInput: string): Promise<string> => {
     return new Promise((resolve) => {
-      // Simulate AI response after a delay
       setTimeout(() => {
         let response = ""
         
-        // Generate contextual responses based on user input
         const lowercaseInput = userInput.toLowerCase()
         if (lowercaseInput.includes("hello") || lowercaseInput.includes("hi")) {
           response = "Hello! How can I help you with your tasks today?"

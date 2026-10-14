@@ -165,8 +165,6 @@ function formatCsvDuration(seconds: number) {
 }
 
 function csvField(value: string | number) {
-  // Neutralize spreadsheet formula injection (CWE-1236): teammate-controlled
-  // titles/names starting with = + - @ would execute when opened in Excel/Sheets.
   const raw = String(value);
   const safe = /^[=+\-@\t\r\n]/.test(raw) ? `'${raw}` : raw;
   return `"${safe.replaceAll('"', '""')}"`;
@@ -291,8 +289,6 @@ function TimeEntryRow({
         onChange={(event) => onSelect(entry.id, event.target.checked)}
         className="h-4 w-4 shrink-0 accent-hypertasks-purple"
       />
-      {/* The duration opens the same time log as B on the ticket, so a number
-          you want to correct is one click from the place that edits it. */}
       <button
         type="button"
         aria-haspopup="dialog"
@@ -467,8 +463,6 @@ const TimeComp = () => {
   const currentUser = useCurrentUser();
   const currentProject = useRecoilValue(currentProjectAtom);
   const isMbl = useContext(MobileViewContext);
-  // The report had no rail, so the only way out was the Back button
-  // (HTPR-4715).
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
   const currentUserId = Number.isInteger(Number(currentUser?.id))
     ? Number(currentUser.id)
@@ -491,8 +485,6 @@ const TimeComp = () => {
   const group: GroupMode = groupValue === "task" || groupValue === "user" ? groupValue : "day";
   const { data: projectsData = [] } = useGetAllProjectsMinimal(["projects-minimal"]);
   const boards = Array.isArray(projectsData) ? (projectsData as MinimalBoard[]) : [];
-  // Recomputed when the calendar day rolls over, so a page left open overnight
-  // does not keep querying yesterday's "today".
   const todayKey = localDayKey(new Date());
   const ranges = useMemo(
     () => ({
@@ -503,7 +495,7 @@ const TimeComp = () => {
       month: buildRange("month"),
       lastMonth: buildRange("lastMonth"),
     }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [todayKey]
   );
 
@@ -583,9 +575,6 @@ const TimeComp = () => {
     running,
   });
   const entries = report.data?.entries ?? [];
-  // Server-decided: the user filter is only offered when the requester
-  // administers a board in scope; for plain members it can only return
-  // nothing (HTPR-4228).
   const canViewOthers = report.data?.canViewOthers ?? false;
   const pauseTimer = usePauseTimer();
   const resumeTimer = useResumeTimer();
@@ -682,8 +671,6 @@ const TimeComp = () => {
     }
   };
 
-  // Custom is flagged in the URL: deriving it from the dates alone hid the
-  // pickers whenever a hand-picked range happened to match a preset.
   const activeRange: RangeMode =
     searchParams?.get("range") === "custom"
       ? "custom"
@@ -709,8 +696,6 @@ const TimeComp = () => {
     () => new Set()
   );
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
-  // Held here, not in the row: editing an entry re-groups or removes its row,
-  // which would unmount the modal mid-edit.
   const [timeLogTask, setTimeLogTask] = useState<{
     taskId: number;
     ticketId: string;
@@ -927,14 +912,9 @@ const TimeComp = () => {
     <>
       <div className="flex min-h-[100svh] w-full flex-col items-center justify-center overflow-y-auto bg-pageBackground text-white-black">
         <div className="global-view-width relative min-h-[100svh] w-full bg-containerBackground">
-      {/* The rail reads currentUser.id unguarded, and this page can render
-          before the cookie hook resolves. */}
       {appShellRailOn && currentUser && (
         <AppShellRail variant="global" currentUser={currentUser} />
       )}
-      {/* Wrapper div for the rail offset, like all-tasks/archived/calendar:
-          a pl-[calc(...)] on <main> itself loses to sm:px-6 in the v4 CSS
-          order, and the content slides under the rail. */}
       <div
         className={
           appShellRailOn && currentUser ? "pl-[var(--app-shell-rail-w,48px)]" : ""
@@ -1034,8 +1014,6 @@ const TimeComp = () => {
                       return;
                     }
                     if (value === "custom") {
-                      // Seed the pickers with the last 7 days so the report
-                      // stays populated while the dates are being chosen.
                       const start = new Date();
                       start.setDate(start.getDate() - 6);
                       replaceParams({
@@ -1079,8 +1057,6 @@ const TimeComp = () => {
                         const nextFrom = startOfDayIso(event.target.value);
                         replaceParams({
                           from: nextFrom,
-                          // A typed date bypasses the picker's min/max, and
-                          // from > to silently returns nothing.
                           ...(to && nextFrom > to
                             ? { to: endOfDayIso(event.target.value) }
                             : {}),
@@ -1304,9 +1280,6 @@ const TimeComp = () => {
               </div>
             )}
             {report.isLoading && <p className="text-text-light-gray">Loading…</p>}
-            {/* An empty page under a filter you cannot see reads as lost data.
-                The running-only filter arrives from the URL (g then t), so name
-                it when it is what emptied the report (HTPR-4711). */}
             {!report.isLoading && entries.length === 0 && (
               <p className="text-text-light-gray">
                 {running ? (

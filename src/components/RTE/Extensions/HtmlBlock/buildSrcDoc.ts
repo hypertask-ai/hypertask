@@ -1,13 +1,3 @@
-// Build the iframe srcdoc for an HTML block. Two safety layers wrap the agent's
-// raw HTML:
-//   1. The iframe is sandboxed with allow-scripts but NOT allow-same-origin, so
-//      it runs on a unique opaque origin: no access to the app's cookies,
-//      ht_session, localStorage, or parent DOM. Even hostile JS is trapped.
-//   2. A Content-Security-Policy meta blocks network exfiltration (connect-src
-//      'none'), remote/nested frames, external scripts, form posts, and base-uri
-//      tricks. It is emitted FIRST so any CSP the agent adds can only tighten it.
-// A tiny resize script postMessages the content height back to the parent (the
-// only channel that survives the sandbox) so the block auto-sizes.
 
 const CSP = [
   "default-src 'none'",
@@ -43,16 +33,12 @@ export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): 
   let headExtra = "";
   let body = raw;
 
-  // If the agent pasted a full HTML document, flatten it: move its <head> into
-  // our controlled head (our CSP still wins, appearing first) and take its
-  // <body> as the content, so nested <html>/<body> tags don't corrupt render.
   if (/<html[\s>]/i.test(raw) || /<!doctype/i.test(raw)) {
     try {
       const doc = new DOMParser().parseFromString(raw, "text/html");
       headExtra = doc.head ? doc.head.innerHTML : "";
       body = doc.body ? doc.body.innerHTML : raw;
     } catch {
-      // fall back to treating raw as a body fragment
     }
   }
 

@@ -1,13 +1,5 @@
 import jwt from 'jsonwebtoken'
 
-/**
- * The claims used by both OAuth token issuance and consumers.
- *
- * The legacy audience remains the fallback because existing user OAuth tokens
- * were minted with it when JWT_OAUTH_AUDIENCE was not configured. Keeping the
- * value in one module prevents a consumer from silently rejecting tokens that
- * this deployment issued itself.
- */
 export const JWT_OAUTH_ISSUER =
   process.env.JWT_ISSUER || 'https://app.hypertask.ai'
 export const JWT_LEGACY_OAUTH_AUDIENCE = 'http://localhost:3001'

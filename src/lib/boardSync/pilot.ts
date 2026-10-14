@@ -24,7 +24,6 @@ export const getBoardSyncPilotEnabled = (parameter?: string | null): boolean => 
     try {
       storedPreference = window.localStorage.getItem(BOARD_SYNC_PILOT_STORAGE_KEY);
     } catch {
-      // Storage access is optional; the URL/env flag still works.
     }
   }
   return resolveBoardSyncPilotEnabled({
@@ -44,6 +43,5 @@ export const persistBoardSyncPilotPreference = (
   try {
     window.localStorage.setItem(BOARD_SYNC_PILOT_STORAGE_KEY, parameter);
   } catch {
-    // A private browser may deny storage. The current URL still controls this load.
   }
 };

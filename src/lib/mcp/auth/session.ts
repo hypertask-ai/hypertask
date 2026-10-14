@@ -19,25 +19,6 @@ export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
 
-/**
- * Unified authentication for MCP routes
- * Supports both JWT tokens and API keys
- * 
- * JWT Tokens (Recommended):
- * - Stateless, no database lookup needed (faster)
- * - Contains user info in token
- * - Can be longer-lived (30 days) for MCP use case
- * - Already have infrastructure set up
- * 
- * API Keys (Alternative):
- * - Database-backed, can track usage
- * - Can be scoped to permissions
- * - Can have multiple keys per user
- * - Better for service-to-service communication
- * 
- * @param request NextRequest object
- * @returns User + optional agentId, or null if invalid
- */
 export async function validateMcpAuth(
   request: NextRequest,
   options: ValidateMcpAuthOptions = {}
@@ -162,10 +143,6 @@ async function validateApiKey(token: string): Promise<McpAuthContext | null> {
   }
 }
 
-/**
- * Authentication for account-management MCP routes. A regular MCP JWT can
- * bootstrap the first key; subsequent calls may use an htmk_ management key.
- */
 export type ManagementAction = 'read' | 'write' | 'usage:read'
 
 export async function validateManagementAuth(
@@ -204,14 +181,8 @@ export async function validateManagementAuth(
     return managementCtx
   }
 
-  // Usage reports are intentionally management-key-only. Do not let a regular
-  // MCP JWT reach the generic JWT branch when this action is requested.
   if (requiredAction === 'usage:read') return null
 
-  // Management endpoints accept only real MCP tokens (aud mcp-api). The same
-  // JWT_SECRET signs calendar-feed/email-link tokens, and validateJwtToken
-  // keeps a legacy no-audience fallback for old MCP clients - without this
-  // gate any same-secret JWT could mint a persistent management key.
   const unverified = jwt.decode(token) as jwt.JwtPayload | null
   const aud = unverified?.aud
   const audiences = Array.isArray(aud) ? aud : aud ? [aud] : []
@@ -222,8 +193,6 @@ export async function validateManagementAuth(
 
   const ctx = getMcpOperationContext(request)?.auth ?? await validateJwtToken(token)
   if (!ctx) return null
-  // Agent-bound JWTs are data credentials for bots; letting one mint or
-  // revoke keys would escalate a leaked bot token to account admin.
   if (ctx.agentId) {
     console.log('[MCP Auth] Agent tokens cannot access management endpoints')
     return null
@@ -232,10 +201,6 @@ export async function validateManagementAuth(
   return ctx
 }
 
-/**
- * Usage is an account-owner management-key surface, not a general MCP data
- * surface. Keep regular MCP JWTs, data keys, and browser sessions out.
- */
 export async function validateUsageReadAuth(
   request: NextRequest
 ): Promise<McpAuthContext | null> {
@@ -253,9 +218,6 @@ export async function validateManagementOrSessionAuth(
   const managementCtx = await validateManagementAuth(request, requiredAction)
   if (managementCtx) return managementCtx
 
-  // A presented credential is the selected principal. Do not silently upgrade
-  // an invalid, under-scoped, data-key, or agent credential through an ambient
-  // browser session. Session auth is a fallback only when no bearer was sent.
   if (request.headers.has('Authorization')) return null
 
   const { getSessionUser } = await import('@/lib/auth/getSessionUser')

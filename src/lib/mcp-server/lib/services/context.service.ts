@@ -16,7 +16,7 @@ export interface UserContextResponse {
     title: string;
     projectId?: number;
   }>;
-  projects: ProjectListItem[]; // Full project details - combines with list_projects
+  projects: ProjectListItem[];
   permissions: {
     canWriteComments: boolean;
     canReadTasks: boolean;
@@ -31,11 +31,6 @@ export interface UserContextResponse {
   }[];
 }
 
-/**
- * Service for fetching user context including accessible boards and permissions.
- * Following MCP best practice: Outcomes, Not Operations
- * Combines user context with full project list in a single call.
- */
 export class ContextService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -45,7 +40,6 @@ export class ContextService {
     try {
       logger.debug('Fetching user context', { correlationId });
 
-      // Fetch user context from API
       const contextResponse = await this.apiClient.makeRequest<Omit<UserContextResponse, 'projects'>>(
         '/mcp/user/context',
         {
@@ -54,14 +48,12 @@ export class ContextService {
         correlationId
       );
 
-      // Also fetch full project list - combines with list_projects functionality
       const projectService = new ProjectService(this.apiClient);
       const projectsResponse = await projectService.listProjects({
-        status: 'Normal', // Only active projects in context
-        limit: 100, // Get all projects (reasonable limit)
+        status: 'Normal',
+        limit: 100,
       });
 
-      // Log the actual response for debugging
       logger.debug('User context API response', {
         correlationId,
         response: JSON.stringify(contextResponse),
@@ -70,7 +62,6 @@ export class ContextService {
         projectCount: projectsResponse.projects.length,
       });
 
-      // Validate response structure
       if (!contextResponse || !contextResponse.user) {
         logger.error('Invalid user context response', {
           correlationId,
@@ -80,14 +71,7 @@ export class ContextService {
         throw new Error(`Invalid user context response: missing user data. Response: ${JSON.stringify(contextResponse)}`);
       }
 
-      // logger.info('User context fetched successfully', {
-      //   correlationId,
-      //   userId: contextResponse.user.id,
-      //   boardCount: contextResponse.boards?.length || 0,
-      //   projectCount: projectsResponse.projects.length,
-      // });
 
-      // Combine user context with full project details
       return {
         ...contextResponse,
         projects: projectsResponse.projects,

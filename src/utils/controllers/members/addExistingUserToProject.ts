@@ -8,7 +8,6 @@ import createLog from "@/utils/controllers/logs/createLog";
 import { updateTrial } from "@/utils/controllers/members/updateTrial";
 
 export type AddedProjectMember = {
-  /** Project Member row id, or null when the user is the board owner (no Member row). */
   id: number | null;
   userId: number;
   displayName: string | null;
@@ -33,14 +32,6 @@ type JoinMutationResult = {
   error?: string;
 };
 
-/**
- * Add an existing Hypertask user to a project board, creating team membership
- * and syncing seat billing the same way task-share join and invite accept do.
- * Does not send email invites. Idempotent when the user is already a member.
- *
- * Team seat creation and board Member creation run in one billing lock so a
- * failed board add cannot leave a billed seat without project access.
- */
 export async function addExistingUserToProject(
   projectId: number,
   userId: number,
@@ -135,9 +126,6 @@ export async function addExistingUserToProject(
     Boolean(team.stripe_customer_id) && !memberTeamCheck && !ownsTheTeam;
 
   if (needsNewTeamSeat) {
-    // Seat billing runs once after both team and board membership exist
-    // (HTPR-4216). All local membership writes share one Prisma transaction so
-    // a failed board row cannot leave an accepted team seat or stale seat count.
     const { value } = await mutateAndSyncSeatBilling<JoinMutationResult>(
       teamId,
       async (assertHeld) => {
@@ -210,9 +198,6 @@ export async function addExistingUserToProject(
             };
           });
 
-          // Membership already committed inside the transaction. Do not call
-          // assertHeld() here: a lease assertion failure would be caught below
-          // and falsely report that no member was created.
           return {
             value: {
               memberId: joined.memberId,

@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { thumbsUpEmoji } from "@/lib/constants/constants";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -19,25 +19,15 @@ const useDescriptionReactions = ()=>{
     const isApple = useDeviceContext()
     const _parsedTask = useMemo(()=>JSON.parse(parsed_task),[parsed_task])
     const handleClickOutside = (event: any) => {
-      // const emojiWrapper = document.querySelector('.EmojiPickerReact')
-  
-      // const emojiWrapperClick = !!emojiWrapper?.contains(event.target)
-      // if (!emojiWrapperClick) {
         setShowEmojiPickerDescription(false)        
-      // }
   };
   
     const toggleEmojiPickerDescription = () => {
       setShowEmojiPickerDescription(prev=>!prev)
     };
   
-        // ------------------ onEmojiClick Handler
         const emojiClickHandlerDescriptionr = async (emojiData: any) => {
-      
-          // console.log("🚀 ~ emojiClickHandlerDescriptionr ~ emojiData:", emojiData)
           setShowEmojiPickerDescription(false)
-          // if (!_mbl) returnFocusToComment()
-          // let commentId_=commentId?commentId:comments[parseInt(currentId.split("-")[1])].id
           const response = await axios.post("/api/tasks/reactToDescription",{
             descriptionId:_parsedTask.description_.id,
             taskId:currentTask?.id,
@@ -56,14 +46,11 @@ const useDescriptionReactions = ()=>{
               }
             }; 
             
-            // console.log("🚀 ~ emojiClickHandlerDescriptionr ~ updatedTask:", updatedTask)
             setCurrentTask(current => preserveTaskAssigneesChangedDuringFetch(
               current, updatedTask, currentTask.assignees, keepAssignee,
             ));
           }          
           focusOn(descriptionContainerId)
-          // updateCommentsOnReaction(response,parseInt(commentId_.toString()),emojiData)
-          
         }
     const handleKeyDown = (e:any)=>{
         const isInputFocused = [
@@ -94,27 +81,22 @@ const useDescriptionReactions = ()=>{
             if (e.key === "Escape" ) {
                 if (showEmojiPickerDescription) {
                   setShowEmojiPickerDescription(false);
-                  return; // keep focus at the comment it was at
+                  return;
                 }
               }
-         // -------------- [r] for reactions
         if (
             e.keyCode === 82 &&
             document.activeElement?.id === descriptionContainerId &&
             !cmdControl
         ) {
-            // console.log("🚀 ~ handleKeyDown ~ e.key:", e.key)
             e.preventDefault();
             setShowEmojiPickerDescription(true)
-            // document.getElementById(`comment-${currentIndex}`)?.scrollIntoView({behavior:"smooth",block:"center"})
         }
 
     }
         useEffect(() => {
-            // Add event listeners when the component mounts
             document.addEventListener("keydown", handleKeyDown);
         
-            // Remove event listeners when the component unmounts
             return () => {
               document.removeEventListener("keydown", handleKeyDown);
             };

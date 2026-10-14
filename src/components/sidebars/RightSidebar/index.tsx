@@ -57,7 +57,6 @@ const RightSidebar: React.FC<IProps> = ({ _appHandler }) => {
         >
           <SidebarContextProvider _appHandler={_appHandler}>
             <div className="h-fit overflow-y-auto scrollbar-none flex flex-col gap-4 bg-inherit">
-              {/* <CurrentUserSidebar/> */}
               <div className="flex items-center justify-between sticky top-0 z-1 bg-inherit">
                 <span className="text-content font-semibold text-white-black">
                   Settings
@@ -126,7 +125,3 @@ const Notifications = () => {
     </SectionWrapper>
   );
 };
-
-// another approach could be creating a sections array of object, each section containing its correspodning jsx elements in an array.
-// but might lead to limitations, only time will tell. doing a simple one so YOU can deal with it with ease too, not just me
-// I;m not dealing with this :'

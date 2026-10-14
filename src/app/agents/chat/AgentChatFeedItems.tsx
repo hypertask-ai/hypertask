@@ -17,7 +17,6 @@ import type { TAgent } from "../AgentsRegister";
 import { TChatMessage, TProposalAction } from "./agentChatTypes";
 
 
-/** Header status line: a live lease names its ticket, anything else is idle. */
 export function chatStatusText(agent: TAgent): string {
   if (isWorking(agent) && agent.working) {
     return `Working on ${agent.working.ticket}`;
@@ -25,7 +24,6 @@ export function chatStatusText(agent: TAgent): string {
   return "Idle";
 }
 
-/** Prefer the active team board, else the agent's first board (HTPR-6407 mic). */
 export function agentDictationProjectId(
   agent: TAgent | null | undefined,
   teamId: string | null,
@@ -39,13 +37,10 @@ export function agentDictationProjectId(
   return boards[0]?.id ?? null;
 }
 
-/** Roster status dot: green on any proof of life within the last 24h. */
 export function rosterDotClass(agent: TAgent): string {
   return statusOf(agent) === "running" ? "bg-green-500" : "bg-gray-400";
 }
 
-// HTPR-6287: per-agent roster status replaces the flat green/gray dot. Amber
-// is the shared-allowance stop, the only state the owner can act on from here.
 export const rosterStatusDotClass: Record<TChatRosterStatus["kind"], string> = {
   active: "bg-green-500",
   "out-of-tokens": "bg-amber-500",
@@ -77,8 +72,6 @@ export function rosterStatusLine(agent: TAgent, status: TChatRosterStatus, now: 
   }
 }
 
-// Typography for the rendered markdown (paragraphs, links, inline code, code
-// blocks). Shadow-only wells, no borders, per house style.
 export const MARKDOWN_CLASS =
   "break-words [&_p]:my-2 [&_p]:leading-relaxed [&_p:first-child]:mt-0 [&_p:last-child]:mb-0 " +
   "[&_a]:text-hypertasks-purple [&_a]:underline [&_a]:break-all " +
@@ -86,10 +79,6 @@ export const MARKDOWN_CLASS =
   "[&_pre]:bg-hoverCardBackground [&_pre]:rounded-[4px] [&_pre]:p-3 [&_pre]:my-2 [&_pre]:overflow-x-auto " +
   "[&_pre_code]:bg-transparent [&_pre_code]:p-0";
 
-/**
- * The confirmation boundary, on screen. Until Create ticket is pressed the agent
- * has done nothing but write; the card is the only way its request becomes work.
- */
 export function ProposalCard({
   proposal,
   onAction,
@@ -184,7 +173,6 @@ export function MessageBubble({
   message: TChatMessage;
   projectIdForPrefix: TProjectIdForPrefix;
   onProposalAction?: TProposalAction;
-  /** Optimistic bubble whose POST is still in flight. */
   pending?: boolean;
 }) {
   const router = useRouter();
@@ -194,9 +182,6 @@ export function MessageBubble({
       <p className="text-meta text-text-light-gray">{message.content}</p>
     );
   }
-  // Always on: a hover-only timestamp is unreadable on touch and invisible to
-  // a screen reader, and a message with no state at all reads as untrustworthy
-  // (HTPR-6005 QA).
   const timestamp = (
     <div
       className={cn(
@@ -241,8 +226,6 @@ export function MessageBubble({
       </div>
     );
   }
-  // markdownToHtml escapes raw HTML and sanitizes the result, so the string is
-  // safe to inject.
   return (
     <div className="group/msg flex flex-col items-start">
       <div
@@ -478,9 +461,6 @@ export function RosterRow({
           )}
         </span>
       </span>
-      {/* The thread is shared, so a teammate's message is news to this person
-          too. Hidden while the chat is open, because reading it is catching
-          up and the count is about to be zero. */}
       {!selected && (agent.unreadCount ?? 0) > 0 && (
         <span
           aria-label={`${agent.unreadCount} unread`}

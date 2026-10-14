@@ -38,11 +38,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     if (options?.preserveComposer && !searchHandoff?.preserveComposer) return false;
     const preserveComposer = options?.preserveComposer;
 
-    // While a turn is streaming, composer Send/Enter appends to the FIFO queue
-    // instead of starting a second stream (HTPR-5695). Use isTyping (not only
-    // sendInFlight): the in-flight ref still blocks double-sends before the
-    // stream starts, so a deferred+manual race cannot enqueue a duplicate of
-    // the message that is still being prepared.
     if (retryContent === undefined && isTyping) {
       const content = (editor?.getText() ?? "").trim();
       if (!content) return false;
@@ -62,7 +57,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
     if (sendInFlightRef.current) return false;
 
-    //Step 1: Process content and get context
     const htmlContent = retryContent ?? editor?.getHTML() ?? "";
     const editorHtmlForAttachments = retryContent
       ? options?.htmlForAttachments ?? ""
@@ -114,8 +108,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
     );
 
-    // Clear input
-    // editor?.commands.blur();
     if (!preserveComposer) editor?.commands.clearContent();
 
     setIsTyping(true);
@@ -132,7 +124,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     );
     const assistantMessageId = crypto.randomUUID();
 
-    // Add user message to the conversation
     const userMessage: IChatMessage = {
       id: Date.now().toString(),
       content,
@@ -156,9 +147,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       scopedProjectId
     );
 
-    // A task-scoped send (the ticket detail page) must never enter the
-    // project-wide board map, or opening the docked chat on the board later
-    // would resume this ticket's session instead of starting fresh (HTPR-6100).
     if (!isFullScreenChat && taskId === undefined && dockedProjectId !== undefined) {
       setAiChatBoardSessionMap((previousMap) => ({
         ...previousMap,
@@ -166,7 +154,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       }));
     }
 
-    // Prepare the streaming API request payload (auth via Authorization: Bearer)
     const streamId = crypto.randomUUID();
     const payload = {
       message: content,
@@ -180,15 +167,10 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
       model: currentAiOption.model,
       provider: currentAiOption.source,
       default_context: {
-        // My Tasks, the inbox and the calendar span every board. Sending the
-        // board the user happened to visit last would scope their questions to
-        // it, which is the bug this surface field exists to end. A board they
-        // picked deliberately in the scope selector still counts.
         project_id:
           spansAllBoards && !boardScopeIsExplicit ? undefined : scopedProjectId,
         surface,
         surface_path: pathname,
-        // Active View = the saved filtered tab the user is on. Null appliedView means the default (all tasks) view, labelled by the board name.
         view_id: currentProject?.project_view?.user_project_views?.[0]?.appliedView?.id,
         view_name:
           currentProject?.project_view?.user_project_views?.[0]?.appliedView?.title ??
@@ -229,20 +211,14 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         : {}),
     };
 
-    // Set current streaming session for cancellation
     streamingSessionRef.current = session.id;
     streamingAssistantMessageRef.current = assistantMessageId;
     setCurrentStreamingSession(session.id);
     streamingRequestRef.current = streamId;
 
     let assistantPlaceholderAdded = false;
-    // HTPR-6278: the server's refusal message when it rejects the request
-    // outright (busy, rate-limited, unavailable) — shown instead of the
-    // misleading "Connection lost" text.
     let refusalMessage: string | null = null;
     try {
-      // HTPR-7099: under the flag a dropped connection resends the same
-      // reply request (same assistant id) instead of ending at once.
       for (let attempt = 0; ; attempt++) {
         try {
           const response = await fetch(chatRoute, {
@@ -268,8 +244,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
 
           if (!preserveComposer) fileUpload.clearFiles();
 
-          // Create a new assistant message to update incrementally. The same UUID
-          // is sent to the stream route so server persistence is idempotent.
           if (!assistantPlaceholderAdded) {
             const initialAssistantMessage: IChatMessage = {
               id: assistantMessageId,
@@ -290,7 +264,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
           refusalMessage = null;
           break;
         } catch (attemptError) {
-          // A Stop clears the request ref; never resend a stopped reply.
           if (
             !connectionRetry ||
             streamingRequestRef.current !== payload.stream_id ||
@@ -303,7 +276,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
             setTimeout(resolve, CHAT_TRANSPORT_RETRY_DELAYS_MS[attempt]),
           );
           if (streamingRequestRef.current !== payload.stream_id) throw attemptError;
-          // Each network attempt gets its own cancellation identity.
           payload.stream_id = crypto.randomUUID();
           streamingRequestRef.current = payload.stream_id;
         }
@@ -311,8 +283,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
     } catch (error) {
       setAgentStatus(undefined);
       console.error("Error generating AI response:", error);
-      // HTPR-6278: a refused request carries the server's real message in its
-      // body; only a genuine transport failure keeps the connection wording.
       const errorMessage: IChatMessage = {
         id: isDemo
           ? assistantMessageId
@@ -326,9 +296,6 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         sessionId: session.id,
         isDelivered: true,
       };
-      // A transport failure does not mean server generation failed. Keep this
-      // notice outside persistence and under a temporary id so it can never
-      // compete with the durable background reply's UUID.
       if (assistantPlaceholderAdded) {
         updateLastMessageInSessionCache(session.id, errorMessage);
       } else {
@@ -340,14 +307,12 @@ export function createAiChatSend(context: Context, searchHandoff?: { preserveCom
         streamingSessionRef.current = null;
         streamingAssistantMessageRef.current = null;
         streamingRequestRef.current = null;
-        setCurrentStreamingSession(null); // Clear streaming session
+        setCurrentStreamingSession(null);
         console.log("Message has been completed");
       }
     } finally {
       sendInFlightRef.current = false;
       searchHandoff?.onSettled();
-      // Auto-send the next queued follow-up once this turn settles (including
-      // cancel/error). Keep the queue on Stop — only session switches clear it.
       queueMicrotask(() => {
         drainQueuedMessage();
       });

@@ -120,7 +120,6 @@ export async function buildAgentChatBrief({
   agentId: string;
   db?: BriefDatabase;
 }): Promise<AgentWebhookChatBrief> {
-  // The agent board protocol defines current work as this exact named lane.
   const currentAssignment = await db.assignees.findFirst({
     where: {
       agentId,

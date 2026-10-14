@@ -51,8 +51,6 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  // Keep this endpoint signed-cookie-only, even when the dispatch preflight
-  // resolves a Better Auth session. Its retained Pages factory has the same rule.
   const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   if (!session) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
   return route(request, { userId: session.id, source: "legacy", needsBridge: true });

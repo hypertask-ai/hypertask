@@ -27,9 +27,6 @@ const CommentTaskActivity = () => {
   const { comment } = useCommentsContext();
   const _mbl = useContext(MobileViewContext);
 
-  // Provenance (HTPR-4620): who actually made this change. Empty for a person,
-  // the agent id when a managed agent did it. The same reader the writer uses,
-  // so the row and the stored column can never disagree.
   const actingAgentId = activityAgentId(comment.activity) ?? "";
 
   return (
@@ -331,7 +328,6 @@ const TaskAssignedActivity = ({
   );
 };
 
-// ======================= Priority Element
 const TaskPriorityActivity = ({
   activity,
 }: {
@@ -342,7 +338,6 @@ const TaskPriorityActivity = ({
     photoURL: activity.data.fromAgent ? activity.data.fromAgent.photoURL ?? "" : activity.data.fromUser?.photoURL ?? "",
   };
 
-  // if priority was created, from would be missing
   if (activity.data.toPriority?.priority_index === 0) {
     return (
       <>
@@ -354,7 +349,6 @@ const TaskPriorityActivity = ({
     );
   }
 
-  // if priority was created, from would be missing
   if (activity.data.fromPriority?.priority === undefined) {
     return (
       <>
@@ -386,7 +380,6 @@ const TaskPriorityActivity = ({
   }
 };
 
-// ======================= Estimate Activity Element
 const TaskEstimateActivity = ({
   activity,
 }: {
@@ -427,7 +420,6 @@ const TaskEstimateActivity = ({
     );
 };
 
-// ======================= Label Activity Element
 const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
   const fromObj = {
     displayName: activity.data.fromAgent?.displayName ?? activity.data.fromUser?.displayName ?? "",
@@ -463,7 +455,6 @@ const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
     );
   }
 
-  // label removed
   return (
     <>
       <BoldElement>
@@ -478,7 +469,6 @@ const TaskLabelActivity = ({ activity }: { activity: ITaskLabelActivity }) => {
   );
 };
 
-// ======================= TASK ARCHIVED ELEMENT
 const TaskArchivedActivity = ({
   activity,
 }: {

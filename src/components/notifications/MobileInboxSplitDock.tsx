@@ -38,9 +38,6 @@ const MobileInboxSplitDock = ({
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
   const hidden = showAiChatInterface || commentComposerOpen;
 
-  // This dock replaces the regular mobile navigation on Inbox routes. Publish
-  // its real height so the shared app shell reserves exactly the space it uses,
-  // including a device's bottom safe area.
   useLayoutEffect(() => {
     const root = document.documentElement;
     if (hidden) {
@@ -67,8 +64,6 @@ const MobileInboxSplitDock = ({
     };
   }, [hidden]);
 
-  // Keep a URL-selected or keyboard-selected split visible on narrow screens
-  // without moving keyboard focus. Tab and Shift+Tab retain browser order.
   useLayoutEffect(() => {
     const scroller = scrollerRef.current;
     const tab = tabRefs.current[resolvedActiveIndex];

@@ -24,7 +24,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Recognize both lease namespaces so Stop still works after a flag toggle.
     const actingAgent = await loadActingAgent(parsed.data.session_id, user.id);
     const cancellationResult = await requestAiChatCancellation(
       user.id,

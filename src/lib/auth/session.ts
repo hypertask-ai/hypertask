@@ -7,8 +7,6 @@ const TOKEN_PART_PATTERN = /^[A-Za-z0-9_-]+$/
 type SessionPayload = {
   id: number
   email?: string
-  // Optional managed-agent claim for internal MCP→legacy hops. Browser
-  // sessions omit it; an agent JWT is not reinvented here.
   agentId?: string
 }
 
@@ -142,10 +140,6 @@ export function sessionCookieOptions(maxAgeSeconds: number) {
   }
 }
 
-// Better Auth's session cookie is httpOnly, so a legacy login cannot clear it
-// client-side. Left in place it belongs to the PREVIOUS user and the app keeps
-// acting as them (HTPR-4170). Call this from every legacy login response; the
-// bridge then mints a fresh Better Auth session for the new user.
 export function clearBetterAuthSessionCookies(response: {
   cookies: { set: (name: string, value: string, options: Record<string, unknown>) => void }
 }) {

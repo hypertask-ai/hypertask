@@ -1,9 +1,7 @@
-/** Collapse provider whitespace so SSE framing cannot drop part of the transcript. */
 export function normalizeDictationTranscriptForSse(transcript: string): string {
   return transcript.replace(/\s+/g, " ").trim();
 }
 
-/** Collect transcript text from SSE chunks before a single editor insert. */
 export function collectDictationTranscriptFromSse(chunks: string[]): string {
   let pending = "";
   let transcript = "";

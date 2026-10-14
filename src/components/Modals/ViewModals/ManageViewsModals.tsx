@@ -88,7 +88,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         setDisplayedViews(orderedViews)
     },[orderedViews])
 
-    // ================ drag-to-reorder handlers ================
     const handleDragEnd = (result: DropResult) => {
         if (!result.destination || result.source.index === result.destination.index || !currentProject) return
 
@@ -178,7 +177,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
 
     const deleteSelectedView = async (view: IView) => {
         if (!currentProject) return false
-        // Click and keyboard confirmation can arrive before updating re-renders.
         if (deleteViewOnce && deleteInFlightRef.current) return false
         if (updating) {
             toast("Please wait for the previous action to be completed!")
@@ -259,14 +257,12 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         cancelInlineRenameRef.current = false
     }
 
-    // GO BACK HANDLER
     const goBack = () => {
         setEditMode(false)
         setEditView(null);
         setDeleteModal(false)
     }
 
-    // OPEN EDIT COLUMN VIEW
     const openEditView = (view: IView) => {
         if (smartSplitMetadataLoading) {
             toast.error("Smart split details are still loading")
@@ -284,7 +280,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
         setLayoutPreference(view.board_layout ?? null)
     }
 
-    // CONFIRM DELETE
     const confirmDelete = async () => {
         if (!editView) return
         const deleted = await deleteSelectedView(editView)
@@ -317,7 +312,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
     return (
         <ModalContainerCustom
             fade={false}
-            // this is dirty, but i have 100 other tasks to get to
             toggle={()=>{
                 if (!shouldShowDeleteModal)toggle()
             }}
@@ -426,7 +420,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
                                                         ? <span title="Hidden from view tabs -- click to show"><EyeOff size={16} strokeWidth={1.75} className="cursor-pointer hover:text-subheading transition-all text-text-light-gray" onClick={() => toggleViewTabVisibility(view.id)} /></span>
                                                         : <span title="Shown in view tabs -- click to hide"><Eye size={16} strokeWidth={1.75} className="cursor-pointer hover:text-subheading transition-all" onClick={() => toggleViewTabVisibility(view.id)} /></span>
                                                     }
-                                                    {/* Built-ins are code, not rows: they can be reordered and hidden, never renamed or deleted. */}
                                                     {!isBuiltinView(view) && (
                                                         <button
                                                             type="button"
@@ -652,7 +645,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
                                 </p>
                             </fieldset>
 
-                            {/* --------------- DELETE CONFIRM MODAL ------------------- */}
                             {shouldShowDeleteModal && !isEditingDefaultView &&
                                 <ConfirmDialog
                                     id="confirm-delete-view"
@@ -665,7 +657,6 @@ const ManageViews: React.FC<Props> = ({ toggle }) => {
                                 />
                             }
 
-                            {/* ------------------ MODAL FOOTER ----------------- */}
                             <ModalFooter className="flex justify-between px-2 border-black" >
                                 {!isEditingDefaultView ? (
                                     <button

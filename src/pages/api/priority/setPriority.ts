@@ -23,13 +23,10 @@ const handler: NextApiHandler = async (req, res) => {
     if (!taskId || !Priority_Value)
       return res.status(400).json({ message: "Missing Required Task ID" });
 
-    // Only fetch agent if provided
     const agent = agentId
       ? await prisma.agent.findUnique({ where: { id: agentId } })
       : null;
 
-    // HTPR-7163: only someone who may write to the task's board may change
-    // its priority, and every branch below works on this checked task.
     const task = await prisma.task.findFirst({
       where: {
         id: taskId,
@@ -43,7 +40,6 @@ const handler: NextApiHandler = async (req, res) => {
 
     if (!task) return res.status(404).json({ message: "Task not found" });
 
-    // Delete priority if priority_index is 0
     if (priority_index === 0) {
       await prisma.priority.deleteMany({ where: { taskId: task.id } });
       createPriorityActivity({
@@ -55,7 +51,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(200).json({ message: "Successfully deleted" });
     }
 
-    // If there's no priority for this task, create it
     if (!task.priority) {
       const priority = await prisma.priority.create({
         data: {
@@ -79,7 +74,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(200).json(priority);
     }
 
-    // If updating to a new index, update existing, otherwise error
     if (task.priority.priority_index !== priority_index) {
       const updatedPriority = await prisma.priority.update({
         where: { id: task.priority.id },

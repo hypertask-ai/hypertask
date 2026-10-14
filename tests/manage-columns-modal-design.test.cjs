@@ -52,9 +52,9 @@ test("the shared switch keeps button semantics and visible keyboard focus", () =
 });
 
 test("the edit view keeps a 16px horizontal content gutter", () => {
-  const editViewStart = manageColumns.indexOf("One row per setting");
+  const editViewStart = manageColumns.indexOf("<div className=\"flex min-h-[40px] items-center justify-between gap-4 border-b border-light-black-border-1 px-4 py-2\">\n              <label");
   const editViewEnd = manageColumns.indexOf(
-    "DELETE CONFIRM MODAL",
+    "{deleteModal && (\n              <",
     editViewStart,
   );
   assert.ok(editViewStart >= 0, "the edit view marker must exist");

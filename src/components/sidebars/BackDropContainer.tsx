@@ -14,7 +14,6 @@ const BackDropContainer = (
     return (
         <div
             style={{ outline: "none", zIndex: '300' }}
-            // id="boardManager"
             tabIndex={-1}
             className={cn(className, "fixed backdrop h-SVH-full w-screen bg-black bg-opacity-25")}
         >

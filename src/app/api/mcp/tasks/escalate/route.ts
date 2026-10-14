@@ -22,13 +22,6 @@ const ticketFor = (v: unknown): string | null =>
 const MAX_REASON = 2000
 const MAX_SUMMARY = 5000
 
-/**
- * POST /api/mcp/tasks/escalate
- * A stuck agent asks a human for help: posts a flagged escalation comment on the
- * task (which fires the normal owner/assignee/follower notifications) with the
- * reason and a summary of what was already tried, so nothing fails silently.
- * Body: { task_id | ticket_number, project_id?, reason, attempts_summary? }.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -111,14 +104,6 @@ export async function POST(request: NextRequest) {
 
     const html = sanitizeRichHtml(buildEscalationCommentHtml({ reason, attemptsSummary }))
 
-    // createCommentService is the single source of truth for comment + owner/
-    // assignee/follower notifications + email + FCM, so escalating this way reaches
-    // the human through every channel they already receive comments on.
-    // HTPR-4530: the comment already fires comment.created; escalation is a
-    // distinct signal, so board subscribers also get task.escalated. It rides
-    // the comment's own transaction, so the event cannot be lost after the
-    // comment commits, and a retry that hits the comment idempotency path does
-    // not emit a second time.
     const escalatedEvent: WebhookDelivery = {
       event: 'task.escalated',
       data: {

@@ -34,11 +34,6 @@ import {
   setOwnedAgentVisibility,
 } from "@/lib/agents/visibility";
 
-/**
- * The URL carries a readable slug now (/agents/board-maintainer), so every
- * handler resolves whatever it was given back to an id first. Ids still work,
- * which is what keeps old links and API callers running.
- */
 async function resolveAgent(userId: number, ref: string) {
   return resolveOwnedAgent(userId, ref);
 }
@@ -82,8 +77,6 @@ export async function GET(
       heartbeatAt: true,
       mcpTokenJti: true,
       runtimeGeneration: true,
-      // The detail page states which boards the agent works on, the same list
-      // its register card shows.
       members: {
         where: {
           status: "Accepted",
@@ -111,9 +104,6 @@ export async function GET(
     );
   }
 
-  // The register card decides Running/Quiet from the newest of heartbeat and
-  // posted comment, so this page has to read the same pair or the two surfaces
-  // disagree about the same agent.
   const [lastPosted, workingByAgent, accessibleBoards, allMemberships] =
     await Promise.all([
       prisma.comment.aggregate({
@@ -153,9 +143,6 @@ export async function GET(
   );
   const boardIds = members.map(({ project }) => project.id);
   const visibleBoardIds = new Set(boardIds);
-  // An agent can remain a board member after its owner loses access. Runtime
-  // state is therefore filtered through the same owner-visible membership
-  // list as board names and activity before any ticket metadata is returned.
   const runtimeSnapshot = filterRuntimeSnapshotToBoards(
     storedRuntimeSnapshot,
     visibleBoardIds,
@@ -229,8 +216,6 @@ export async function GET(
             : Promise.resolve(null),
         ])
       : [null, 0, 0, 0, 0, null];
-  // Per-column breakdown: one "48 tickets" number hides that the agent can act
-  // on only a few of them, and in which column they sit.
   const eligibleBySection = new Map<string, number>();
   if (boardIds.length > 0 && sourceSections.length > 0) {
     const grouped = await prisma.task.groupBy({
@@ -303,16 +288,10 @@ export async function GET(
     success: true,
     agent: {
       ...agentFields,
-      // The page can canonicalise its own URL from this, so a link built on an
-      // id lands on the readable one.
       slug: resolved?.slug ?? agent.id,
       lastPostedAt: lastPosted._max.createdAt?.toISOString() ?? null,
-      // Same shape the register card reads, from the same lease query.
       working: working ?? null,
       hasMcpToken: Boolean(mcpTokenJti),
-      // Same board shape as /api/agents/owned, team included: the two routes
-      // feed the same TAgent type, so a field one sends and the other drops is
-      // a lie the compiler cannot catch.
       boards: members.map(({ project }) => ({
         id: project.id,
         name: project.title ?? project.name,
@@ -381,8 +360,6 @@ export async function PATCH(
   let existing = looksLikeAgentId(ref) && ref === ref.toLowerCase()
     ? await prisma.agent.findFirst({ where: { id: ref, userId: user.id } })
     : null;
-  // A canonical ID is already ownership-checked. Keep the fallback because a
-  // display name can produce a UUID-shaped slug, and ID matching is case-sensitive.
   if (!existing) {
     const resolved = await resolveAgent(user.id, params.agentId);
     existing = resolved
@@ -449,9 +426,6 @@ export async function PATCH(
     });
   }
 
-  // `revoked` states the wanted result, `revoke` only says "flip it". Two tabs
-  // flipping at once cancel each other out, so the dashboard sends the target
-  // and only the old manage modal still toggles.
   if (body.revoke === true || typeof body.revoked === "boolean") {
     const revokedAt =
       typeof body.revoked === "boolean"
@@ -463,9 +437,6 @@ export async function PATCH(
           : new Date();
     const isReEnabling = Boolean(existing.revokedAt) && revokedAt === null;
     let reenabledToken: string | null = null;
-    // A disabled agent cannot keep authenticating with its destroyed token.
-    // Clear again before re-enabling so an in-flight old-token heartbeat that
-    // raced the disable cannot resurrect its prior queue.
     const clearRuntimeBestEffort = async () => {
       try {
         await clearAgentRuntimeSnapshot(existing.id);
@@ -485,8 +456,6 @@ export async function PATCH(
           { status: 404 },
         );
       }
-      // The prior credential was destroyed when the agent was disabled.
-      // Re-enable with a fresh generation and reveal it in this response only.
       reenabledToken = createMcpToken(
         user.id,
         owner.email,
@@ -556,8 +525,6 @@ export async function PATCH(
       },
     });
     const { mcpTokenHash, mcpTokenJti, ...agentFields } = agent;
-    // The plaintext is not readable back out of the row, so the digest is what
-    // says whether the token this call minted is the one now stored.
     const tokenToReveal =
       isReEnabling &&
       reenabledToken &&
@@ -587,9 +554,6 @@ export async function PATCH(
         { status: 400 },
       );
     }
-    // Archiving files an agent away; it does not switch it off. Keeping the two
-    // independent is what lets a running agent be hidden from the register
-    // without cutting its access mid-task.
     data.archivedAt = body.archived ? (existing.archivedAt ?? new Date()) : null;
   }
   if (typeof body.displayName === "string") {
@@ -639,9 +603,6 @@ export async function PATCH(
     }
   }
   if (body.modelOptionId !== undefined) {
-    // Only a native agent's turns run through the chat route, so a pin on an
-    // external one would persist, display, and do nothing. Same rule as the
-    // instructions above.
     if (existing.runtimeType !== "NATIVE") {
       return NextResponse.json(
         { success: false, error: "Only native agents run on a pinned model" },
@@ -649,18 +610,10 @@ export async function PATCH(
       );
     }
     if (body.modelOptionId === null) {
-      // Back to the team default.
       data.modelOptionId = null;
     } else if (
       typeof body.modelOptionId === "string" &&
-      // Validated against the real option list, not stored as free text: an
-      // unknown id would silently fall through to the default at request time
-      // and the pin would look set while doing nothing.
       getAiModelOptionById(body.modelOptionId) &&
-      // "custom" is not a model, it is "whatever endpoint you configured", and
-      // an agent has nowhere to configure one. Pinned to it, every turn fails
-      // while the agent reads as pinned and healthy. The dashboard hides it;
-      // rejecting it here is what actually stops it.
       !UNPINNABLE_MODEL_OPTION_IDS.has(body.modelOptionId)
     ) {
       data.modelOptionId = body.modelOptionId;
@@ -717,8 +670,6 @@ export async function PATCH(
   });
 
   const { permissions, ...agentFields } = agent;
-  // Recomputed after the write, not taken from the pre-update resolve: a rename
-  // moves the slug, and the page has to send the reader to the new URL.
   const slugs = await ownedAgentSlugs(user.id);
   return NextResponse.json({
     success: true,
@@ -732,13 +683,6 @@ export async function PATCH(
   });
 }
 
-/**
- * Deleting an agent for good, from its own page.
- *
- * Same transaction the MCP route uses, so the two surfaces cannot clean up
- * different things: board memberships and task assignments go with it, and its
- * comments stay (they are history, not the agent).
- */
 export async function DELETE(
   request: NextRequest,
   props: { params: Promise<{ agentId: string }> },

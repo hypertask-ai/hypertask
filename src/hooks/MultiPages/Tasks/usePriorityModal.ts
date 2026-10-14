@@ -42,9 +42,6 @@ export const usePriorityModal = (
         };
         const response = typedWrite ? await typedWrite(body) : await axios.post("/api/priority/setPriority", body);
         if (boardCardFresh) {
-          // Patch the board card at once, as the assignee picker does. A board
-          // refetch here could land after a later size or tag patch and wipe it
-          // (HTPR-7129). A cleared priority answers with a message, not a row.
           try {
             const row = response.data && "priority_index" in response.data ? response.data : undefined;
             updateTaskInCache({ priority: row }, inViewObject.taskId, inViewObject.taskProjectId, inViewObject.sectionId);
@@ -52,9 +49,6 @@ export const usePriorityModal = (
             console.error("HTPR-7129 board card priority patch failed", error);
           }
         } else {
-          // Board cards read priority from ["projectsAll"]; refetch it so the new
-          // priority shows immediately on navigate-back instead of waiting for the
-          // next incidental refetch (30s staleTime / window-focus). HTPR-4139.
           queryClient.refetchQueries({ queryKey: ["projectsAll"] });
         }
         queryClient.refetchQueries({

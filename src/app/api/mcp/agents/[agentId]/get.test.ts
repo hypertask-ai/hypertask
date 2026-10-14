@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/app/api/mcp/agents/[agentId]/get.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 

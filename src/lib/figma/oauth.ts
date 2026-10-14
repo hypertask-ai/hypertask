@@ -8,8 +8,6 @@ import {
 import { FIGMA_API_BASE_URL, FIGMA_SETTINGS_PATH } from "./paths";
 
 export const FIGMA_OAUTH_ATTEMPT_MAX_AGE_SECONDS = 10 * 60;
-// Browsers cap persistent cookies at 400 days; this version should survive
-// normal sessions and change only when Figma authorization changes.
 export const FIGMA_CONNECTION_VERSION_MAX_AGE_SECONDS = 400 * 24 * 60 * 60;
 const ATTEMPT_TTL_MS = FIGMA_OAUTH_ATTEMPT_MAX_AGE_SECONDS * 1000;
 const FIGMA_REQUEST_TIMEOUT_MS = 5000;
@@ -55,10 +53,6 @@ export function getFigmaOAuthConfig(): FigmaOAuthConfig | null {
   const clientId = process.env.FIGMA_CLIENT_ID?.trim();
   const clientSecret = process.env.FIGMA_CLIENT_SECRET?.trim();
   if (clientId && clientSecret) return { clientId, clientSecret };
-  // Connect, callback, and token refresh all read the config here, so one log
-  // covers every entry point and names the variable that is actually absent.
-  // Without it a misconfigured deployment only bounces the user back to
-  // settings and leaves nothing behind explaining why.
   const missing = [
     clientId ? null : "FIGMA_CLIENT_ID",
     clientSecret ? null : "FIGMA_CLIENT_SECRET",
@@ -247,7 +241,6 @@ async function requestToken(
           ? errorData.error.trim().toLowerCase().slice(0, 100)
           : null;
     } catch {
-      // Preserve only the status when Figma does not return an OAuth JSON error.
     }
     throw new FigmaOAuthRequestError(response.status, oauthError);
   }

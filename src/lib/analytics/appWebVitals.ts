@@ -27,9 +27,6 @@ export const metricBelongsToIdentityWindow = (
   if (!identityTransitioned) return true;
   if (observedAt < identityStartedAt) return false;
 
-  // Navigation metrics belong to the document that began before an in-place
-  // login. Only post-transition interaction entries can safely represent the
-  // newly signed-in session without forcing a slower hard navigation.
   if (metric.name.toUpperCase() !== "INP") return false;
   const entries = metric.entries ?? [];
   return (

@@ -48,7 +48,6 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // A failed flag probe must leave the legacy HTTP contract unchanged.
       }
     }
 
@@ -100,7 +99,6 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId)
       } catch {
-        // A failed flag probe must leave the legacy HTTP contract unchanged.
       }
     }
 

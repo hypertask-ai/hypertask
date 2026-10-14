@@ -40,13 +40,6 @@ function verifyWebhook(rawBody: string, request: NextRequest) {
 }
 
 function workflowRef() {
-  // Pinned rather than read from the deployment's own VERCEL_GIT_COMMIT_REF:
-  // whichever deployment happens to receive the PostHog webhook dispatches
-  // the rollback workflow, and workflow_dispatch runs the workflow file as
-  // it exists on the given ref. An ambient, request-time ref would let a
-  // misrouted webhook (or a preview deployment processing it) execute
-  // whatever workflow file lives on an untrusted branch, with production
-  // secrets. A fixed, operator-controlled ref removes that dependency.
   const ref = process.env.POSTHOG_ROLLBACK_GITHUB_REF || "production";
   if (!/^[A-Za-z0-9._/-]{1,200}$/.test(ref)) {
     throw new Error("POSTHOG_ROLLBACK_GITHUB_REF is invalid");
@@ -168,7 +161,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid webhook" }, { status: 401 });
   }
 
-  // Native lifecycle alerts are signed by PostHog, not by the originating SDK.
   const issueAlert = parsePostHogIssueAlert(verified);
   if (issueAlert) {
     const configuration = dispatchConfiguration();
@@ -268,8 +260,6 @@ export async function POST(request: NextRequest) {
   try {
     await commitPostHogAlertClaim(redis, alert, claim);
   } catch (error) {
-    // GitHub accepted the workflow. Returning 503 here would invite PostHog
-    // to send the same rollback dispatch again.
     console.error("[posthog-error-alert] claim commit failed", error);
   }
 

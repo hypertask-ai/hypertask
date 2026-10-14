@@ -48,7 +48,7 @@ export function useCommandsState(context: Context) {
   const rowShortcutsEnabled = useFlag(HTPR_6427_ROW_SHORTCUTS_FLAG);
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG); // HTPR-6461: Remind Me also hides My Tasks
+  const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {
@@ -100,7 +100,6 @@ export function useCommandsState(context: Context) {
     : contextOptions;
 
   const [commandMode, setCommandMode] = useState<CommandMode>(showCommands.mode);
-  // One palette command per preset, all three landing on the same confirm sheet.
   const inboxZeroRules =
     commandMode === CommandMode.ClearInboxToZero
       ? INBOX_ZERO_PRESETS.default
@@ -141,8 +140,6 @@ export function useCommandsState(context: Context) {
   const onMyTasks = !!pathname?.startsWith(globalConstants.myTasksRoute);
   const { startTour, setSelectedTourId, endTour } = useTourContext();
   const [_currentProject, setCurrentProject] = useRecoilState(currentProjectAtom);
-  // My Tasks bulk must use the selection's shared board only. Falling back to
-  // currentProjectAtom would load columns/labels from a previously opened board.
   const bulkActionProjectId = myTasksBulkSelection
     ? bulkProjectId
     : (bulkProjectId ?? _currentProject?.id ?? null);
@@ -301,7 +298,6 @@ export function useCommandsState(context: Context) {
     boardCloseHandler();
   }, [bulkActionProjectId, commandMode, hasBulkSelection]);
 
-  // ---- HTPR-4885/4886/4888: repeat rules, task templates, status updates ----
   const [taskTemplatePicker, setTaskTemplatePicker] =
     useState<TaskTemplatePickerState>({
       projectId: null,

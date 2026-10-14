@@ -17,26 +17,20 @@ export const defaultManageColumnsSettings = {}
 
 
 export const sizeFilterCondition = (task: ITask, value?: IEstimateConstants[]) => {
-  // Check if item's priority index is 0
   let item: ITask | any = { ...task };
   const itemHasNoEstimate = task.estimate ? true : false;
   if (!itemHasNoEstimate) {
     item = { ...item, estimate: { estimate_index: 0 } }
   }
 
-  // Check if there's a priority inside value with an index of 0
   const valueContainsZeroIndex = value?.some(estimate => estimate.estimate_index === item.estimate?.estimate_index);
 
-  // Return true if both conditions are met, false otherwise
   return (valueContainsZeroIndex) ?? false;
 }
 
 export const unreadFilterCondition = (item: ITask, value?: any) =>
   (item.notifications && item.notifications?.length > 0 && item.notifications[0]?.seen === false) ? true : false
 
-// All staleness filters reuse the thresholds behind the card age line, so a
-// filtered board always agrees with the ages the cards show. A task nobody has
-// ever commented on ages from creation, otherwise it could never read as stale.
 const projectStalenessThresholds = (project?: IProject) => ({
   warnDays: project?.staleWarnDays,
   hotDays: project?.staleHotDays,
@@ -116,14 +110,12 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
       return isYesterday;
 
     case "LAST_7_DAYS":
-      // Rolling 7-day window (past 7 days including today)
       const sevenDaysAgo = startOfDay(subDays(today, 6));
       const inLast7Days = taskDate >= sevenDaysAgo && taskDate <= todayEnd;
       console.log("[matchDynamicDateRange] LAST_7_DAYS:", inLast7Days, "sevenDaysAgo:", sevenDaysAgo, "todayEnd:", todayEnd);
       return inLast7Days;
 
     case "LAST_30_DAYS":
-      // Rolling 30-day window (past 30 days including today)
       const thirtyDaysAgo = startOfDay(subDays(today, 29));
       const inLast30Days = taskDate >= thirtyDaysAgo && taskDate <= todayEnd;
       console.log("[matchDynamicDateRange] LAST_30_DAYS:", inLast30Days, "thirtyDaysAgo:", thirtyDaysAgo, "todayEnd:", todayEnd);
@@ -136,15 +128,13 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
       return taskDate >= todayStart && taskDate <= endOfDay(addDays(today, 6));
 
     case "THIS_WEEK":
-      // Full current week (Monday to Sunday)
-      const weekStart = startOfWeek(today, { weekStartsOn: 1 }); // Monday
-      const weekEnd = endOfWeek(today, { weekStartsOn: 1 }); // Sunday
+      const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
       const inThisWeek = taskDate >= weekStart && taskDate <= weekEnd;
       console.log("[matchDynamicDateRange] THIS_WEEK:", inThisWeek, "weekStart:", weekStart, "weekEnd:", weekEnd);
       return inThisWeek;
 
     case "THIS_MONTH":
-      // Full current month (1st to last day of month)
       const monthStart = startOfMonth(today);
       const monthEnd = endOfMonth(today);
       const inThisMonth = taskDate >= monthStart && taskDate <= monthEnd;
@@ -153,7 +143,7 @@ export function matchDynamicDateRange(taskDate: Date, dynamicRange: string): boo
 
     case "ANY":
       console.log("[matchDynamicDateRange] ANY: true");
-      return true; // For "ANY" condition
+      return true;
 
     default:
       console.log("[matchDynamicDateRange] DEFAULT: false");
@@ -168,13 +158,11 @@ export const dateFilterCondition = (
 ) => {
   const { fromDate, toDate, condition, selectedDate, dynamicRange } = value[0];
 
-  // Check if dynamic range is specified
   if (dynamicRange) {
     const taskDate = new Date(item.updatedAt ?? item.createdAt!);
     return matchDynamicDateRange(taskDate, dynamicRange);
   }
 
-  // Static date logic (only runs if no dynamic range)
   const today = new Date();
   const taskDate = new Date(item.updatedAt ?? item.createdAt!);
 
@@ -200,13 +188,11 @@ export const createdAtFilterCondition = (
 ) => {
   const { fromDate, toDate, condition, selectedDate, dynamicRange } = value[0];
 
-  // Check if dynamic range is specified
   if (dynamicRange) {
     const taskDate = new Date(item.createdAt!);
     return matchDynamicDateRange(taskDate, dynamicRange);
   }
 
-  // Static date logic (only runs if no dynamic range)
   const today = new Date();
   const taskDate = new Date(item.createdAt!);
 
@@ -234,21 +220,17 @@ export const dueDateFilterCondition = (
 
   if (dynamicRange === "NO_DUE_DATE") return !item.dueDate;
 
-  // Special handling for "ANY" condition
   if (condition === "ANY") {
     return item.dueDate ? true : false;
   }
 
-  // No due date and not checking for "ANY"
   if (!item.dueDate) return false;
 
   const taskDate = new Date(item.dueDate);
-  // Check if dynamic range is specified
   if (dynamicRange) {
     return matchDynamicDateRange(taskDate, dynamicRange);
   }
 
-  // Static date logic (only runs if no dynamic range)
   const today = new Date();
 
   if (fromDate && toDate) {
@@ -268,17 +250,14 @@ export const dueDateFilterCondition = (
 };
 
 export const priorityFilterCondition = (task: ITask, value: IPrioritiesConstants[]) => {
-  // Check if item's priority index is 0
   let item: ITask | any = { ...task };
   const itemHasNoPriority = task.priority ? true : false;
   if (!itemHasNoPriority) {
     item = { ...item, priority: { priority_index: 0 } }
   }
 
-  // Check if there's a priority inside value with an index of 0
   const valueContainsZeroIndex = value?.some(priority => priority.priority_index === item.priority?.priority_index);
 
-  // Return true if both conditions are met, false otherwise
   return (valueContainsZeroIndex) ?? false;
 };
 
@@ -305,10 +284,6 @@ export const assigneeFilterCondition = (item: ITask, value: any[], _project?: IP
   if (match !== "ALL") {
     return assignees.some(row => value.some(v => assigneeRowMatches(row, v)));
   }
-  // An agent assignment stores the agent's OWNER in userId as well as the agentId. Under ALL that
-  // one row must not satisfy both "assigned to Valentin" and "assigned to Valentin's agent", so a
-  // row with an agentId counts as the agent only — which is also what the card renders. Deciding
-  // per row instead of claiming rows keeps the answer independent of assignee order.
   return value.every(v =>
     "uid" in v
       ? assignees.some(row => row.agentId == null && row.userId === v.id)
@@ -344,21 +319,6 @@ export const getBoardAndUserAppliedFilters = (_currentProject: IProject): IGetBo
 
 }
 
-// export const setFilterIfNoneElseReturn = (projectId:number):IFilterSettings=>{
-//   let filterForThisProject = getFiltersForProject(projectId)
-//   if (!filterForThisProject) setFiltersInLocalStorage(projectId,defaultFilterSettings)
-//   return filterForThisProject??defaultFilterSettings
-// }
-
-// export const upserFilterBoardViewAndReturn = (project:IProject)=>{
-//   let filterForThisProject = getFiltersForProject(project.id)
-//   const { userAppliedView, defaultView } = getBoardAndUserAppliedFilters(project)
-//   const fallbackSorting = userAppliedView??defaultView??defaultFilterSettings
-//   if (!filterForThisProject) setFiltersInLocalStorage(project.id,fallbackSorting)
-//   return filterForThisProject??fallbackSorting
-// }
-
-// will always get some filters and apply them to return filtered sections
 export const getFilteredSections = (
   sections: ISection[],
   project: IProject,
@@ -417,36 +377,7 @@ export const defaultConditions: { [key in TFilter]?: TCondition } = {
   RunningTimer: runningTimerFilterCondition,
   StaleOnBoard: staleOnBoardFilterCondition,
   NotStale: notStaleFilterCondition,
-  // Add more default conditions here as needed
 };
-
-
-// export const setFilterIfNoneElseReturn = (projectId:number):IFilterSettings=>{
-//   let filterForThisProject = getFiltersForProject(projectId)
-
-//   if (!filterForThisProject) setFiltersInLocalStorage(projectId,defaultFilterSettings)
-//   return filterForThisProject??defaultFilterSettings
-// }
-
-// export function getFiltersForProject(projectId:number){
-//     const localStorageId=buildViewId(projectId, "Filters")
-//     return getFromLocalStorage(localStorageId)
-
-//   }
-
-
-// export async function setFiltersInLocalStorage(projectId:number, value:IFilterSettings){
-//     const localStorageId=buildViewId(projectId, "Filters")
-//     await setInLocalStorage(localStorageId, value)
-//     return getFromLocalStorage(localStorageId)
-
-//   }
-
-
-// export function resetAllFiltersInLocalStorage(projectId:number){
-//     setFiltersInLocalStorage(projectId, defaultFilterSettings)
-//   }
-
 
 export function applyFilters(
   sections: ISection[],
@@ -458,87 +389,49 @@ export function applyFilters(
 
  
   if (filters.length === 0) {
-    // console.log("[applyFilters] No filters provided, returning original sections.");
     return sections;
   }
 
-  // Iterate over each section
   return sections.map((section, sectionIdx) => {
-    // // console.log(`[applyFilters] Processing section ${sectionIdx}:`, section);
-
-    // Apply the filters to the items within the section
     const filteredItems = (section.items ?? []).filter((item, itemIdx) => {
-      // // console.log(`[applyFilters]   Checking item ${itemIdx}:`, item);
-
-      // Apply the overall type to all filters
       if (overallType === "ALL") {
         const result = filters.every((filter, filterIdx) => {
-          // console.log(`[applyFilters]     [ALL] Filter ${filterIdx}:`, filter);
-
-          // Check if condition is missing and apply default based on type
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext) ?? false;
-            // console.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
             return res;
           }
-          // If condition is not missing, use the provided condition
           const res = filter.condition(item, filter.searchPayload, project, filter.match, runtimeContext);
-          // console.log(`[applyFilters]       Using custom condition:`, res);
           return res;
         });
-        // console.log(`[applyFilters]   [ALL] Final result for item:`, result);
         return result;
       } else {
-        // overallType === 'OR'
         const result = filters.some((filter, filterIdx) => {
-          // console.log(`[applyFilters]     [OR] Filter ${filterIdx}:`, filter);
-
-          // Check if condition is missing and apply default based on type
           if (!filter.condition) {
             const defaultCondition = defaultConditions[filter.type];
-            // console.log("[applyFilters]  defaultCondition:", defaultCondition)
             const res = defaultCondition?.(item, filter.searchPayload, project, filter.match, runtimeContext);
-            // console.log("[applyFilters]  ~ item:", item)
-            // console.log(`[applyFilters]       Using default condition for type '${filter.type}':`, res);
             return res;
           }
-          // If condition is not missing, use the provided condition
           const res = filter.condition(item, filter.searchPayload, project, filter.match, runtimeContext);
-          // console.log(`[applyFilters]       Using custom condition:`, res);
           return res;
         });
-        // console.log(`[applyFilters]   [OR] Final result for item:`, result);
         return result;
       }
     });
 
-    // console.log(`[applyFilters] Filtered items for section ${sectionIdx}:`, filteredItems);
 
-    // Return the modified section
     return { ...section, items: filteredItems };
   });
 }
 
 
-import { format } from 'date-fns'; // or your date formatting library
+import { format } from 'date-fns';
 
-/**
- * Renders a formatted date range span for dynamic date options
- * @param {Object} option - The option object containing dynamic date properties
- * @param {boolean} option.isDynamic - Whether the option is dynamic
- * @param {string} option.dynamicRange - The dynamic range identifier
- * @param {Function} calculateDynamicDateRange - Function to calculate date range from identifier
- * @param {string} [className] - Optional CSS class for styling
- * @returns {JSX.Element|null} Formatted date range span or null
- */
 export const renderDynamicDateRange = (option: { isDynamic: any; dynamicRange: string; }, calculateDynamicDateRange: (arg0: any) => any, className = "text-text-light-gray text-meta") => {
   if (!option?.isDynamic || !option?.dynamicRange || option.dynamicRange === "ANY") {
     return null;
   }
 
-  // Absence is the value for this filter, so there is no calendar range to
-  // render beneath its human-readable label.
   if (option.dynamicRange === "NO_DUE_DATE") {
     return null;
   }
@@ -559,7 +452,6 @@ export const renderDynamicDateRange = (option: { isDynamic: any; dynamicRange: s
 };
 
 export const formatDateDisplay = (datePayload: any): string => {
-  // Helper to format a single date
   const formatSingleDate = (date: Date | string): string => {
     const d = typeof date === "string" ? new Date(date) : date;
     if (isNaN(d.getTime())) return String(date);
@@ -571,7 +463,6 @@ export const formatDateDisplay = (datePayload: any): string => {
     });
   };
 
-  // Helper to get dynamic range display text (simplified)
   const getDynamicRangeDisplay = (dynamicRange: string): string => {
     const dynamicRangeLabels: Record<string, string> = {
       TODAY: "Today",
@@ -589,27 +480,22 @@ export const formatDateDisplay = (datePayload: any): string => {
     return dynamicRangeLabels[dynamicRange] || dynamicRange;
   };
 
-  // Handle different date payload structures
   if (Array.isArray(datePayload) && datePayload.length > 0) {
     const formattedDates = datePayload.map((item) => {
-      // Check for dynamic range first
       if (item.dynamicRange) {
         return getDynamicRangeDisplay(item.dynamicRange);
       }
 
-      // Handle "ANY" condition
       if (item.condition === "ANY") {
         return "Any date";
       }
 
-      // Date range object
       if (item.fromDate && item.toDate) {
         return `${formatSingleDate(item.fromDate)} - ${formatSingleDate(
           item.toDate
         )}`;
       }
 
-      // Single selected date with condition
       if (item.selectedDate) {
         const dateStr = formatSingleDate(item.selectedDate);
         if (item.condition === "BEFORE") {
@@ -620,11 +506,9 @@ export const formatDateDisplay = (datePayload: any): string => {
         return dateStr;
       }
 
-      // Direct date value
       return formatSingleDate(item);
     });
 
-    // Handle multiple dates display
     if (formattedDates.length > 3) {
       return `${formattedDates.slice(0, 3).join(", ")} +${
         formattedDates.length - 3
@@ -651,7 +535,7 @@ export const sortLabels = (
         currentlyActiveFilters.searchPayload?.flatMap((x: any) => x.id) || []
       );
     }
-    return currentlyActiveFilters?.flatMap((x) => x.id) || []; // Return an empty array if it's not an IFilter
+    return currentlyActiveFilters?.flatMap((x) => x.id) || [];
   };
 
   const updatedLabels = labelsFromTQ?.map((item: ILabel) => {
@@ -660,10 +544,8 @@ export const sortLabels = (
     return item;
   });
 
-  // Sort labels if sort is true
   if (sort) {
     updatedLabels?.sort((a, b) => {
-      // Move checked items to the top
       return (b.check ? 1 : 0) - (a.check ? 1 : 0);
     });
   }
@@ -671,7 +553,6 @@ export const sortLabels = (
   return updatedLabels;
 };
 
-// Helper function to calculate dynamic date ranges
 export const calculateDynamicDateRange = (
   dynamicRange: string
 ): { from: Date; to: Date } | null => {
@@ -695,7 +576,7 @@ export const calculateDynamicDateRange = (
     case "NO_DUE_DATE":
       return null;
     case "THIS_WEEK":
-      const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
       return { from: weekStart, to: now };
     case "THIS_MONTH":
       const monthStart = startOfMonth(now);
@@ -705,14 +586,6 @@ export const calculateDynamicDateRange = (
   }
 };
 
-// Format date range helper
 export const formatDateRange = (fromDate: Date, toDate: Date): string => {
-  // const formatDate = (date: Date) => format(date, "do MMM, yyyy");
-
-  // if (fromDate.toDateString() === toDate.toDateString()) {
-  //   return formatDate(fromDate);
-  // }
-
-  // return `${formatDate(fromDate)} - ${formatDate(toDate)}`;
   return "";
 };

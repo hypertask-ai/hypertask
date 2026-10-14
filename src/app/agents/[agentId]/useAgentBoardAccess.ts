@@ -101,8 +101,6 @@ export function useAgentBoardAccess({
         prev ? { ...prev, archivedAt: updated.archivedAt ?? null } : prev,
       );
       toast.success(archiving_ ? "Agent archived" : "Agent restored");
-      // An archived agent is out of the register, so staying on its page after
-      // filing it away leaves you looking at something you just hid.
       if (archiving_) router.push("/agents?active=archived");
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not archive agent");
@@ -134,8 +132,6 @@ export function useAgentBoardAccess({
     }
   };
 
-  // Same expiry rule the register uses, so a page left open stops spinning at
-  // the same moment the grid does.
   const working = agent && isWorking(agent) ? agent.working : null;
   const runtimeQueue = agent?.operations.queue ?? [];
   const runtimeActive = runtimeQueue.find((item) =>

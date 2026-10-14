@@ -18,18 +18,10 @@ import { getAiModelOptionById } from "@/lib/aiModelOptions";
 import { HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG } from "@/lib/flags/keys";
 import { ensureDefaultAgentsOnAccessibleTeams } from "@/utils/controllers/agents/ensureDefaultTeamAgent";
 
-// An owner can keep an agent on a board they themselves were removed from, so
-// board names are filtered by the caller's own access, not the agent's.
 const MAX_AGENTS = 200;
 
 export const runtime = "nodejs";
 
-/**
- * Unread agent-chat messages per agent for one person. Every thread has its own
- * cutoff -- the reader's own `lastReadAt` -- so this cannot be a plain groupBy
- * over messages; the cutoff has to be joined in per row. Their own messages
- * never count, and neither does anything from before they joined the thread.
- */
 async function unreadChatCounts(userId: number): Promise<Map<string, number>> {
   const rows = await prisma.$queryRaw<{ agentId: string; unread: bigint }[]>`
     SELECT s."agentId" AS "agentId", COUNT(m.id) AS unread
@@ -45,12 +37,6 @@ async function unreadChatCounts(userId: number): Promise<Map<string, number>> {
   return new Map(rows.map((row) => [row.agentId, Number(row.unread)]));
 }
 
-/**
- * Most recent Agent Chat message timestamp per agent, for one person's own
- * thread with that agent. Distinct from `lastCommentByAgent` below, which
- * tracks board comments, not chat messages -- the Agent Chat list needs the
- * latter to reorder on real chat activity (HTPR-6283).
- */
 async function lastChatMessageAtByAgent(userId: number): Promise<Map<string, Date>> {
   const rows = await prisma.$queryRaw<{ agentId: string; lastMessageAt: Date }[]>`
     SELECT s."agentId" AS "agentId", MAX(m."createdAt") AS "lastMessageAt"
@@ -64,15 +50,6 @@ async function lastChatMessageAtByAgent(userId: number): Promise<Map<string, Dat
   return new Map(rows.map((row) => [row.agentId, row.lastMessageAt]));
 }
 
-/**
- * Every agent the signed-in user owns, across every team and board.
- *
- * The sibling routes answer different questions: `/api/agents` lists a single
- * team's agents and `/api/agents/all` a single board's. Neither fits the agents
- * register, which is "my agents" and must not silently show one arbitrary team
- * out of the several a user belongs to. Ownership scoping here also matches
- * `/api/agents/[agentId]`, so a card and its detail page never disagree.
- */
 export async function GET(request: NextRequest) {
   const userId = (await getSessionUser(request.headers))?.userId;
   if (!userId) {
@@ -101,8 +78,6 @@ export async function GET(request: NextRequest) {
       prompt: true,
       modelOptionId: true,
       heartbeatAt: true,
-      // Owner-only endpoint, so the masked tail of the agent's own provider
-      // key belongs on the register card too (HTPR-5389).
       byokApiKeys: {
         where: { enabled: true },
         orderBy: { provider: "asc" },
@@ -127,9 +102,6 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  // "Last acted" is the newest thing the agent actually did. A heartbeat that
-  // found nothing is not an action, so it is not counted here; the detail page
-  // shows that separately.
   const lastComments = agents.length
     ? await prisma.comment.groupBy({
         by: ["agentId"],
@@ -146,8 +118,6 @@ export async function GET(request: NextRequest) {
     ),
   );
 
-  // Its own query over every owned agent, not this capped page: a slug has to
-  // mean the same thing here as it does when the detail route resolves it.
   const slugs = await ownedAgentSlugs(userId);
 
   const workingByAgent = await workingOnByAgent(
@@ -155,10 +125,6 @@ export async function GET(request: NextRequest) {
     userId,
   );
 
-  // The chat-recency aggregate only feeds the live-sort flag. Skip it when
-  // the flag is off so every roster refresh does not pay for unused work
-  // (OCR advisory on HTPR-6283). Unread still runs for private owner chats
-  // even when shared mode is off.
   const liveSortEnabled = await isFeatureEnabled(
     HTPR_6283_AGENT_CHAT_LIVE_SORT_FLAG,
     userId,
@@ -170,21 +136,12 @@ export async function GET(request: NextRequest) {
       : Promise.resolve(new Map<string, Date>()),
   ]);
 
-  // A spent shared AI allowance writes one durable stop notice per native
-  // agent per period, the first time a turn of that agent ends on the stop.
-  // The notice carries the charged team as an invisible stamp, so the stop is
-  // propagated to native agents on exactly that team — the allowance is
-  // funded per team, and board membership is only used where the stamp names
-  // the team outright. External runtimes bring their own key and never hit
-  // the shared allowance.
   const nativeIds = agents
     .filter((agent) => agent.runtimeType === "NATIVE")
     .map((agent) => agent.id);
   const outOfTokensByAgent = new Set<string>();
   if (nativeIds.length > 0) {
     const period = aiAllowancePeriod();
-    // The period start bounds the scan: a notice for this period cannot be
-    // older than the period, and prior periods' notices are dead state.
     const notices = await prisma.notification.findMany({
       where: {
         type: "AgentMessage",
@@ -230,21 +187,12 @@ export async function GET(request: NextRequest) {
       archivedAt: agent.archivedAt?.toISOString() ?? null,
       heartbeatAt: agent.heartbeatAt?.toISOString() ?? null,
       lastPostedAt: lastCommentByAgent.get(agent.id)?.toISOString() ?? null,
-      // Real Agent Chat activity, separate from lastPostedAt's board comments.
       lastChatMessageAt: lastChatMessageByAgent.get(agent.id)?.toISOString() ?? null,
-      // An unexpired task lease is the agent saying "I am on this right now",
-      // which is what the card's spinner reports.
       working: workingByAgent.get(agent.id) ?? null,
-      // Messages in this agent's shared thread that arrived after this person
-      // last caught up. Private to them: it reads their own participant row.
       unreadCount: unreadByAgent.get(agent.id) ?? 0,
       outOfTokens: outOfTokensByAgent.has(agent.id),
       postsToImportant:
         (permissions as AgentScopes | null)?.postsToImportant !== false,
-      // Teams come from the boards, since an agent belongs to its owner rather
-      // than to a team. `members` is already scoped to boards the caller can
-      // see, so "no team" here means "no board you have access to", not "no
-      // boards at all" — do not widen this to the agent's own membership.
       boards: members.map(({ project }) => ({
         id: project.id,
         name: project.title ?? project.name,

@@ -1,15 +1,11 @@
-// Import PrismaClient from the generated Prisma client
 
 
-// Create an instance of PrismaClient
 import prisma from "@/lib/prisma";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 
-// Example usage
 const sectionGetByTask= async (taskId:number, userId:number) => {
   try {
-    // Get Task First
     const task = await prisma.task.findFirst({
         where: {
             id: taskId,
@@ -37,9 +33,6 @@ const sectionGetByTask= async (taskId:number, userId:number) => {
       status:200,
       json:sections
     })
-    // return res.status(200).json(sections);
-    // Get field names of the "Section" model
-    
   } catch (error) {
     console.error('Error:', error);
     return({
@@ -50,5 +43,4 @@ const sectionGetByTask= async (taskId:number, userId:number) => {
 }
 
 
-// Run the main function
 export default sectionGetByTask;

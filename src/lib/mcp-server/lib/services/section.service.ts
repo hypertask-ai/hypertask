@@ -41,10 +41,6 @@ export type SectionCrudResponse =
   | UpdateSectionResponse
   | DeleteSectionResponse;
 
-/**
- * Service for section/column CRUD operations.
- * Single service handling list, get (with tasks), create, update, delete.
- */
 export class SectionService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -126,7 +122,6 @@ export class SectionService {
     const correlationId = generateCorrelationId();
     const includeTasks = params.include_tasks !== false;
 
-    // 1. Get sections to find the section and its title
     const sectionsResponse = await this.apiClient.makeRequest<ListSectionsResponse>(
       `/mcp/projects/${params.project_id}/sections`,
       { method: 'GET' },
@@ -147,7 +142,6 @@ export class SectionService {
       return result;
     }
 
-    // 2. Get tasks in this section (same filter as list_tasks / CLI --section id)
     const limit = params.limit ?? 50;
     const offset = params.offset ?? 0;
     const tasksQuery = new URLSearchParams({
@@ -203,11 +197,6 @@ export class SectionService {
       correlationId
     );
 
-    // logger.info('Section created', {
-    //   correlationId,
-    //   projectId: params.project_id,
-    //   sectionId: response.section.id,
-    // });
 
     return response;
   }
@@ -224,7 +213,6 @@ export class SectionService {
     const body: Record<string, unknown> = {};
     if (params.title !== undefined) body.title = params.title;
     if (params.move_after_section_id !== undefined) body.move_after_section_id = params.move_after_section_id;
-    // null means "clear the flag", so only undefined is omitted.
     if (params.is_done !== undefined) body.is_done = params.is_done;
     if (params.auto_assign !== undefined) body.auto_assign = params.auto_assign;
 
@@ -234,10 +222,6 @@ export class SectionService {
       correlationId
     );
 
-    // logger.info('Section updated', {
-    //   correlationId,
-    //   sectionId: params.section_id,
-    // });
 
     return response;
   }

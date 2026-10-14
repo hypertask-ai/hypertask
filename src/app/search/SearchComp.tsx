@@ -45,7 +45,6 @@ const SearchComp = ({
   const router = useRouter();
   const askAiFullscreenFlagEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const searchParams = useSearchParams();
-  // Native replaceState preserves the draft URL, but Back can reuse older server props.
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
@@ -57,7 +56,6 @@ const SearchComp = ({
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
   const rowHighlightFlagEnabled = useFlag(HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG);
-  // Hides the tab row when the tabs are only "All" plus one board.
   const oneBoardTabsFlagEnabled = useFlag(HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG);
   const commenterFlagEnabled = useFlag(HTPR_6880_SEARCH_COMMENTER_FLAG);
   const labelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
@@ -104,8 +102,6 @@ const SearchComp = ({
   const searchTextClassName =
     "w-full px-4 @md:!px-9 text-subheading font-medium leading-normal rounded-b-[4px] bg-inherit outline-none";
 
-  // Ask AI hands the query to the single general AI chat (auto-sent there via
-  // aiChatPendingPromptAtom) instead of a separate in-search panel.
   function openAskAi(readableQuery?: string) {
     const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
     if (!query || (!layoutEnabled && query.length < 2)) return;
@@ -113,7 +109,6 @@ const SearchComp = ({
       const searchUrl = new URL(window.location.href);
       searchUrl.searchParams.set("searchTerm", inputValue);
       const returnPath = `${searchUrl.pathname}${searchUrl.search}${searchUrl.hash}`;
-      // Draft queries are not in the URL yet; preserve this history entry for Back.
       window.history.replaceState(window.history.state, "", returnPath);
       setAiChatPendingPrompt({ query, fullScreen: true });
       router.push(buildFullScreenChatPath(returnPath));
@@ -137,7 +132,6 @@ const SearchComp = ({
         autoFocus={false}
         className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
       >
-        {/* Below @xl the container is full-width, so clear the fixed back button (ends at x≈96) */}
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
           {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
             autocompleteFlagEnabled ? (
@@ -185,7 +179,6 @@ const SearchComp = ({
                 value={inputValue}
                 onChange={handleChange}
                 onKeyDown={(e) => {
-                  // ArrowDown moves focus from writing mode into the Ask AI row
                   if (e.key === "ArrowDown" && showAskAiRow) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -378,7 +371,6 @@ interface IAskAiRow {
 
 const AskAiRow = ({ query, onSelect }: IAskAiRow) => {
   function handleKeyDown(event: KeyboardEvent<HTMLButtonElement>) {
-    // ArrowUp returns to the search input (writing mode)
     if (event.key === "ArrowUp") {
       event.preventDefault();
       event.stopPropagation();

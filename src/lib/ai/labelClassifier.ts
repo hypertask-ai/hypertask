@@ -144,14 +144,8 @@ export async function applyAiLabelVerdict({
   matchingLabelIds: string[];
   actor: IUser;
   snapshotAt: Date;
-  /**
-   * HTPR-7098: batch results arrive hours later and any edit bumps updatedAt, so a batch verdict is
-   * stale only when the title or description the model saw has changed. Instant path leaves this unset.
-   */
   contentHash?: string;
 }) {
-  // The task may have been edited, moved, or archived while classification
-  // was in flight. Don't let a stale verdict overwrite newer state.
   const currentTask = await prisma.task.findFirst({
     where: { id: taskId, projectId, status: "Normal" },
     select: { updatedAt: true, title: true, description: true, description_: { select: { content: true } } },
@@ -183,8 +177,6 @@ export async function applyAiLabelVerdict({
   const aiLabelIds = activeDefinitions.map(({ labelId }) => labelId);
   const matchingIds = new Set(matchingLabelIds);
   const result = await prisma.$transaction(async (tx) => {
-    // The task can move after the optimistic check above. Lock it and repeat
-    // the board, status, and freshness checks before attaching board labels.
     const lockedTasks = contentHash
       ? await tx.$queryRaw<Array<{ id: number }>>`
       SELECT "id"
@@ -207,8 +199,6 @@ export async function applyAiLabelVerdict({
       return { changed: false, deliveryIds: [] as string[] };
     }
     if (contentHash) {
-      // HTPR-7098: the check before the transaction can be overtaken by an edit, so repeat it on the
-      // locked row. The edit that comes after the lock waits for us and the next classification covers it.
       const locked = await tx.task.findUnique({
         where: { id: taskId },
         select: { title: true, description: true, description_: { select: { content: true } } },
@@ -238,7 +228,6 @@ export async function applyAiLabelVerdict({
     );
     const toRemove = existing.filter(({ labelId }) => !matchingIds.has(labelId));
 
-    // V1 intentionally lets the latest AI verdict win over manual changes.
     for (const labelId of toAdd) {
       const taskLabel = await tx.taskLabel.upsert({
         where: { taskId_labelId: { taskId, labelId } },
@@ -298,18 +287,12 @@ export async function applyAiLabelVerdict({
     try {
       await publishAgentWebhookDeliveries(deliveryIds);
     } catch (error) {
-      // The outbox rows committed with the label mutation. The queue helper
-      // and the scheduled agent-webhook sweep retry publication failures.
       console.warn("[labelClassifier] agent task.updated queue publish failed; outbox sweep will retry", error);
     }
     void broadcastBoardChange(projectId, { originUserId: actor.id });
   }
 }
 
-/**
- * HTPR-7098: one instant classification for a batch item that came back failed, expired or
- * unparsable. Same prompt and the same freshness check as the normal instant path.
- */
 export async function classifyLabelItemInstantly(
   taskId: number,
   projectId: number,
@@ -385,14 +368,10 @@ async function classifyTaskWithDefinitions({
   });
 }
 
-// Fire-and-forget entry points. waitUntil keeps the serverless instance alive
-// until classification finishes (same reason as broadcastBoardChange, HTPR-3999);
-// a bare floating promise dies when the response returns.
 export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
   waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
 }
 
-/** `userId` is the person who created or changed the label; HTPR-7098 checks its flag for the batch path. */
 export function scheduleBackfillAiLabel(labelId: string, userId?: number) {
   waitUntil(backfillAiLabel(labelId, userId).catch(console.error));
 }
@@ -431,10 +410,6 @@ export async function classifyTaskAiLabels(taskId: number, projectId: number) {
   });
 }
 
-/**
- * HTPR-7098: queue the whole backfill as one half-price batch. Returns false (nothing queued) when
- * the flag is off, there is no team key, or the key is the team's own; the caller then runs the instant path.
- */
 async function trySmartLabelBatch(
   userId: number | undefined,
   label: { id: string; prompt: string },

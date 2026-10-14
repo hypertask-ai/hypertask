@@ -19,8 +19,6 @@ import useKanbanViews from "@/hooks/Homepage/Views/useKanbanViews";
 import { areGlobalShortcutsEnabled } from "@/lib/keyboard/globalShortcutRoutes";
 import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 
-// Re-exported for existing importers; the value lives in a leaf module so the
-// jiti-based tests can load AllCommands/shortcuts without this React graph.
 export { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
 import { RAIL_TOGGLE_KEY } from "@/lib/constants/railToggleKey";
 

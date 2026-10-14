@@ -1,7 +1,3 @@
-/**
- * Pure helpers for My Tasks bulk selection (HTPR-6444).
- * Board-scoped actions (assign, label, move) require one projectId.
- */
 
 export type TaskProjectRef = {
   id: number;

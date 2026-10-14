@@ -9,23 +9,9 @@ type PersistAssistantMessageArgs = {
   userId: number;
   content: string;
   linkify: (content: string, userId: number) => Promise<string>;
-  /**
-   * Tri-state: undefined keeps the existing rule (a native agent session
-   * attributes its reply to that agent, a plain AI chat stays unattributed);
-   * an explicit id attributes the reply to that agent (HTPR-6284 routed
-   * @mention turn); explicit null forces unattributed even in an agent
-   * session, e.g. a synthetic failure message the agent never wrote.
-   */
   authorAgentId?: string | null;
 };
 
-/**
- * Stores one completed assistant reply under a client-provided id.
- *
- * The id makes a retried stream idempotent. Ownership is checked before the
- * write and again when reading the stored row, so an id collision can never
- * expose or mutate another session's message.
- */
 export async function persistAssistantMessage({
   db,
   messageId,
@@ -43,7 +29,6 @@ export async function persistAssistantMessage({
   });
   if (!session) return false;
 
-  // Undefined means "decide from the session"; null is a deliberate override.
   const resolvedAuthorAgentId =
     authorAgentId === undefined ? session.agentId : authorAgentId;
 
@@ -65,8 +50,6 @@ export async function persistAssistantMessage({
         content: storedContent,
         role: "assistant",
         isDelivered: true,
-        // A native agent's reply is that agent's. In a plain AI chat there is
-        // no Agent row to point at, so the reply stays unattributed.
         authorAgentId: resolvedAuthorAgentId,
       },
     ],
@@ -94,8 +77,6 @@ export async function persistAssistantMessage({
       },
     });
   } catch (error) {
-    // The reply is already durable. Returning false here would make a connected
-    // client retry through add-message and create a duplicate assistant reply.
     console.error(
       "[ai/chat/stream] session metadata update failed after reply persistence",
       error,

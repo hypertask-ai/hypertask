@@ -79,22 +79,11 @@ export function mergeMobileCreateTaskWriterResult(
   };
 }
 
-/**
- * Extracts task title and description from AI-generated HTML.
- * The AI outputs title in h1#ai-generated-task-title.
- *
- * The "Proposed properties: ..." paragraph is preview chrome, not description
- * text: it belongs in the sidebar fields or nowhere. Accept all already drops
- * it, so a description-only takeover has to drop it too, otherwise the same
- * draft lands with a stray "Proposed properties: Priority Medium, Size M"
- * line depending on which accept the user pressed.
- */
 export function extractTitleAndDescription(htmlString: string) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(htmlString, "text/html");
   const h1Element = doc.getElementById("ai-generated-task-title");
   const rawTitle = h1Element?.textContent?.trim() || null;
-  // HTPR-6721: a duplicate warning is never a task title.
   const title = isDuplicateNoteTitle(rawTitle) ? null : rawTitle;
   doc.querySelectorAll('[id^="ai-generated-task-"]').forEach((element) => {
     element.remove();
@@ -103,7 +92,6 @@ export function extractTitleAndDescription(htmlString: string) {
   return { title, description };
 }
 
-/** Section-like shape for lookup */
 interface ISectionLike {
   id?: number;
   section_title?: string;
@@ -121,32 +109,13 @@ function isPropertyOnlyContent(text: string): boolean {
   return lines.every((line) => PROPERTY_LINE_REGEX.test(line));
 }
 
-// Combined trailing line ("Proposed properties: Priority High, Size S, ...")
-// can list several properties, so it needs more headroom than a single
-// old-style "Priority: High" line.
 const TRAILING_PROPERTY_LINE_MAX_LEN = 400;
 
-// The trailing paragraph is only ever the new combined marker, never a bare
-// "Priority: ..." line (that shape is leading-only chrome). Scoping trailing
-// removal to specifically "Proposed properties" - rather than the full
-// keyword alternation above - keeps a real sentence like "Priority: whatever
-// the reporter says." at the end of a description intact.
 function isProposedPropertiesLine(text: string): boolean {
   const match = text.match(PROPERTY_LINE_REGEX);
   return !!match && match[1].toLowerCase() === "proposed properties";
 }
 
-/**
- * Strips human-readable property metadata (Priority, Size, Status, Tags, etc.)
- * from the HTML when those properties have been extracted. The AI may output
- * both hidden spans and visible text; we remove the visible metadata so it
- * doesn't duplicate the sidebar.
- *
- * Current output (HTPR-5606) puts one combined "Proposed properties: ..."
- * paragraph as the LAST element; older output printed one property per line
- * at the start. Both are stripped, walking in from each end and stopping at
- * the first node with real content.
- */
 function stripPropertyMetadataFromDescription(html: string): string {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
@@ -185,17 +154,6 @@ function stripPropertyMetadataFromDescription(html: string): string {
   return body.innerHTML;
 }
 
-/**
- * Extracts task properties (title, description, priority, size, tags, status) from AI-generated HTML.
- * Used for "Accept ALL" in Task Writer. Properties are optional - AI may omit them.
- *
- * Backend output format (when aiMode === "AiTaskWriter"):
- * - h1#ai-generated-task-title: task title
- * - span#ai-generated-task-priority: priority_index (0-4)
- * - span#ai-generated-task-estimate: estimate_index (0-7)
- * - span#ai-generated-task-tags: comma-separated label IDs
- * - span#ai-generated-task-status: section_id (number)
- */
 export function extractTaskProperties(
   htmlString: string,
   projectLabels?: ILabel[],

@@ -19,7 +19,6 @@ export interface CreateTaskResponse {
     success: boolean;
     idempotent_replayed?: true;
     task: TaskDetail;
-    /** MCP session agent that performed this action */
     agent?: McpAgentSummary;
     message?: string;
 }
@@ -29,7 +28,6 @@ export async function POST(request: NextRequest) {
     const correlationId = request.headers.get('X-Correlation-ID');
 
     try {
-        // Authenticate
         const rateLimited = await checkMcpRateLimit(request);
         if (rateLimited) return rateLimited;
         const ctx = await validateMcpAuth(request);
@@ -49,7 +47,6 @@ export async function POST(request: NextRequest) {
             if (scopeError) return scopeError;
         }
         const user = ctx.user;
-        // Parse and validate request body
         const parsedBody = await readJsonBody<CreateTaskBody>(request);
         if (!parsedBody.ok) return parsedBody.response;
         const body = parsedBody.body;
@@ -104,7 +101,6 @@ export async function POST(request: NextRequest) {
 
         const { project_id, title, description, section_id, priority, estimate, due_date, images, labels, parent_task_id, assignee_ids } = validation.data;
 
-        // Validate project access
         const projectCheck = await validateProjectAccess(project_id, user.id, ctx.agentId);
         if (projectCheck.error) {
             return NextResponse.json(
@@ -122,7 +118,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Get section
         const sectionCheck = await getSectionForTask(project_id, section_id);
         if (sectionCheck.error) {
             return NextResponse.json(
@@ -136,7 +131,6 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // HTPR-7121: name unknown labels, and pass label names on as ids
         let labelIds = labels;
         if (labels && labels.length > 0 && await isFeatureEnabled(HTPR_7121_MCP_NOT_FOUND_DETAIL_FLAG, user.id)) {
             const projectLabels = await prisma.label.findMany({
@@ -159,7 +153,6 @@ export async function POST(request: NextRequest) {
             }
         }
 
-        // Validate parent task exists (a bad client-supplied id must 404, not 500)
         const parentCheck = await validateParentTask(project_id, parent_task_id);
         if (parentCheck.error) {
             return NextResponse.json(

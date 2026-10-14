@@ -106,12 +106,6 @@ export function createResendInboundHandler(dependencies: InboundDependencies) {
       const webhookSender = normalizeSenderEmail(verified.data.from);
       const retrievedSender = normalizeSenderEmail(email.from);
       const accountEmail = normalizeSenderEmail(user.email);
-      // The unguessable signed recipient is the authorization proof. Resend's
-      // receiving API does not expose a documented SPF, DKIM, DMARC, or trusted
-      // envelope result. Matching both From copies to the account is an extra
-      // check that also rejects a forwarded reply token. The address itself
-      // carries an issue day and expires, so a leaked notification grants a
-      // bounded window rather than permanent impersonation.
       if (
         !webhookSender ||
         !retrievedSender ||

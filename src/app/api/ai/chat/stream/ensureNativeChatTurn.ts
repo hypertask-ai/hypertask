@@ -24,7 +24,6 @@ type FindNativeAssistantReplayArgs = {
   userId: number;
 };
 
-/** Returns a durable completed reply without allowing an ID to cross ownership. */
 export async function findNativeAssistantReplay({
   db,
   sessionId,
@@ -51,13 +50,6 @@ export async function findNativeAssistantReplay({
   return { status: "completed", content: stored.content };
 }
 
-/**
- * Creates the native client's server session and stores its human message once.
- *
- * Android owns stable UUIDs in SQLite before the network starts. Accepting those
- * IDs here lets one streaming request make the chat durable without adding a
- * session-creation round trip to the perceived response latency.
- */
 export async function ensureNativeChatTurn({
   db,
   sessionId,
@@ -111,8 +103,6 @@ export async function ensureNativeChatTurn({
       data: { updatedAt: new Date() },
     });
   } catch (error) {
-    // The message is already durable. Metadata freshness must not cause a retry
-    // that could regenerate or duplicate the user's AI turn.
     console.error(
       "[ai/chat/stream] native session metadata update failed after persistence",
       error,

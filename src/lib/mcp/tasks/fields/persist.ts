@@ -18,7 +18,6 @@ import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
 
-// A field update refused with a coded 4xx (see status.ts) keeps that status instead of becoming a 500 (HTPR-7202).
 function isCallerRefusal(error: unknown): error is Error & { status: number; code: string } {
     const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
     return error instanceof Error && typeof status === 'number' && status >= 400 && status < 500 && typeof code === 'string'
@@ -32,16 +31,9 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
             select: actingAgentSelect,
         })
         : null;
-    // Update all tasks in parallel
     const updatePromises: Promise<TaskUpdateResult>[] = tasks.map(
         async (task): Promise<TaskUpdateResult> => {
         try {
-            // The writes below are internal HTTP requests, and the one-shot
-            // lease adoption this request was granted lives in AsyncLocalStorage,
-            // which does not survive a new request. Without a real lease row the
-            // internal call fences itself out and the whole update fails. So
-            // spend the adoption here, in-process, and let the internal requests
-            // find the live lease it creates.
             const actingAgentId = ctx.agentId
             if (actingAgentId) {
                 await prisma.$transaction((tx) =>
@@ -56,7 +48,6 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
 
             await updateTaskSection(context, task);
             await updateTaskStatus(context, task);
-            // 3. Other fields (title, description, due_date): use single endpoint
             const dueDateValue = hasDueDate
                 ? (requestBody.due_date === null ? null : new Date(requestBody.due_date!.trim()))
                 : undefined
@@ -84,7 +75,6 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
         }
     })
 
-    // Wait for all updates to complete (using allSettled to handle partial failures)
     const updateResults = await Promise.all(updatePromises)
     const updatedTaskIds = updateResults
         .filter(result => result.success)
@@ -95,10 +85,8 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
         console.warn(`[MCP Update Task] ${failedTasks.length} task(s) failed to update:`, failedTasks)
     }
 
-    // If all tasks failed, return an error
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
-        // A coded caller status wins only when no failure is an unclassified server error.
         const isCoded = (failure: (typeof failedTasks)[number]) => failure.status !== undefined && failure.code !== undefined
         const linkFailure = failedTasks.every(isCoded) ? failedTasks[0] : undefined
         throw new UpdateTaskPersistenceError(
@@ -112,7 +100,6 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
         )
     }
 
-    // Fetch complete tasks with all relations for MCP response format
     const updatedTasks = await prisma.task.findMany({
         where: { id: { in: updatedTaskIds } },
         include: taskDetailInclude(user.id)
@@ -128,8 +115,6 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
 
     console.log('[MCP Update Task] Tasks updated successfully:', updatedTaskIds)
 
-    // Wait for every delivery attempt before returning success. Otherwise the
-    // serverless request can finish before external CLI/MCP changes are emitted.
     await broadcastTaskUpdates(updatedTasks, user.id)
 
     const mappedTasks = updatedTasks.map((task) => mapTaskToDetail(task, user.id))
@@ -144,7 +129,6 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     const mcpResponse: UpdateTaskResponse = {
         success: true,
         tasks: mappedTasks,
-        // Backward compatibility: include single task field when only one task is updated
         ...(mappedTasks.length === 1 ? { task: mappedTasks[0] } : {}),
         message,
         ...(failedTasks.length

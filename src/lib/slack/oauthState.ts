@@ -2,8 +2,6 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 
 const STATE_TTL_MS = 10 * 60 * 1000;
 
-// HTPR-7157: the signed state is bound to the browser that started the install.
-// Its nonce is also in this HttpOnly cookie; the callback needs both to match.
 export const SLACK_OAUTH_ATTEMPT_COOKIE = "ht_slack_oauth_attempt";
 export const SLACK_OAUTH_ATTEMPT_MAX_AGE_SECONDS = STATE_TTL_MS / 1000;
 

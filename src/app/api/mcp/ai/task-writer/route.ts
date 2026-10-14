@@ -18,18 +18,8 @@ import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-// Vercel default is 10s; a task-writer run with retrieval routinely needs more.
 export const maxDuration = 300;
 
-// Same harness as the in-app AI Task Writer / Write with AI (the browser hits
-// src/app/api/ai/task-writer/route.ts and shares prepareTaskWriterRun), but
-// authenticated with the MCP bearer token and answered as one JSON blob instead
-// of an SSE stream, so the hypertask CLI and MCP tools can call it.
-// `/slug` skill invocation works here exactly as it does in the UI: put the
-// token in the prompt and the resolver injects that skill's body.
-// .strict() on purpose: this endpoint has no attachment fields yet, and silently
-// stripping an images64/pdfs64 payload would run the request without the file the
-// caller was asking about. Better to reject the unknown key.
 const requestSchema = z
   .object({
     project_id: z.coerce.number().int().positive(),
@@ -41,10 +31,6 @@ const requestSchema = z
     custom_instructions: z.string().optional().default(""),
   })
   .strict();
-// No model param on purpose: selectTaskWriterModel derives the model from the
-// team's AI settings and the caller's personal per-feature preference, exactly
-// as it does for the in-app writer. A request-level override would silently
-// diverge from what the same user gets in the UI.
 
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
@@ -103,20 +89,12 @@ export async function POST(request: NextRequest) {
       ...selected.settings,
     });
 
-    // The streaming route filters invented <img> tags chunk by chunk; one pass
-    // over the finished text is the same filter for a non-streamed response.
     const filtered = allowedImgSrcs
       ? filterOneImagePass(text, allowedImgSrcs).emit
       : text;
-    // Task-writer output carries the title/priority/size markers the UI pulls
-    // out when you accept a response. Split them here so a CLI caller can write
-    // the same fields instead of pasting the markers into the description.
-    // Write-with-AI output is plain comment HTML and has no markers.
     const properties =
       input.mode === "task_writer"
         ? extractTaskWriterProperties(filtered, {
-            // HTPR-6721: if the model answers with a duplicate note, the task
-            // keeps the title the caller asked for, never "Possible duplicate".
             fallbackTitle:
               input.task_title.trim() || taskTitleFromBrief(input.prompt),
           })

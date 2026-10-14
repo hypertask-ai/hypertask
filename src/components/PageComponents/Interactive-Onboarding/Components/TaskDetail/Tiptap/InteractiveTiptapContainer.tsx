@@ -41,7 +41,6 @@ const TipTapMainContainer = ({ activeScene, editor, type }: IProps) => {
       tabIndex={0}
     >
       <TipTapEditor editor={editor} activeScene={activeScene} type={type} />
-      {/* ================== attachment button ============= */}
       <AttachmentsUpload
         filesFromParent={[]}
         trigger={false}
@@ -68,7 +67,6 @@ const TipTapEditor = ({
   activeScene: ITutorialAtom;
   type: "comment" | "description";
 }) => {
-  //the true/false (in our stars) in the parent div's classname is stack.
   const { handleCommentInput } = useTutorialContext();
   const isClickDisabled = activeScene.index === 5;
   return (

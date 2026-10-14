@@ -26,10 +26,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             if (!task) {
               return res.status(404).json({ message: "Task not found" });
             }
-            // const response = await addFollower(userId, title )
-            // const followers = await prisma.follower.findMany({
                 
-            //   });
               const followersRaw = await prisma.follower.findMany({
                   where: { taskId: taskId },
                   select: {
@@ -39,17 +36,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                     agentId: true,
                     mentionById: true,
                     mentionAt: true,
-                    // The follower list renders as an avatar plus a name (AssigneeCard in
-                    // MainPageComponents/index.tsx reads photoURL and displayName, nothing
-                    // else), so that is all this returns. It used to send whole User rows,
-                    // email included, which made an unauthenticated request keyed on an
-                    // autoincrement task id an enumerable address book (HTPR-3708).
                     user: { select: { id: true, displayName: true, photoURL: true } },
                     agent: { select: { id: true, displayName: true, photoURL: true } },
                   },
                 });
 
-              // Filter out agent if task was created by agent, otherwise filter out user if created by user
               let followers = followersRaw;
               if (task?.agentId) {
                 followers = followersRaw.filter((f) => f.agentId !== task.agentId);

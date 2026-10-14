@@ -20,10 +20,6 @@ import { useGetAllProjectLabels } from '@/hooks/MultiPages/useGetAllProjectLabel
 import { getSmartSplitLabel } from '@/lib/smartSplits'
 import { useBoardStartup } from '@/lib/contexts/boardStartupContext'
 
-// Pills for fast switching between saved views without opening the "Manage
-// Views" modal (G then V). The app-shell rail wraps across rows so every split
-// remains visible. The legacy bar scrolls horizontally instead.
-// Mirrors the view list + active-view logic of ViewsForBoardModal.
 interface IProps {
   project: IProject
   forceShow?: boolean
@@ -53,17 +49,11 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
   const [dropTargetId, setDropTargetId] = useState<string | null>(null)
 
   const defaultViewId = project.project_view?.default_view_id
-  // A built-in selection lives only in client state. Saved/default ids remain
-  // the persistence fallback and never receive a synthetic id.
   const activeViewId = getActiveBoardViewId(project, activeBuiltinViews)
 
-  // Native HTML5 drag, not a dnd library: hello-pangea/dnd only reorders within
-  // a single row, so it cannot move a wrapped rail pill to an earlier row.
   const moveView = useCallback((sourceId: string, targetId: string) => {
     if (sourceId === targetId || targetId === defaultViewId || sourceId === defaultViewId) return
 
-    // Reorder ids across the COMPLETE ordered list, not the rendered pills, so
-    // hidden / empty views keep their relative position.
     const order = orderedViews.map((view) => view.id)
     const sourceIndex = order.indexOf(sourceId)
     const targetIndex = order.indexOf(targetId)
@@ -74,8 +64,6 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
     void saveMyViewOrder(order)
   }, [defaultViewId, orderedViews, saveMyViewOrder])
 
-  // Track whether the pill row overflows its viewport, to show/hide the
-  // desktop edge-scroll arrows. Mobile relies on native touch scroll instead.
   useEffect(() => {
     const el = scrollerRef.current
     if (!el || isMbl || appShellRail) return
@@ -93,9 +81,6 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
     }
   }, [appShellRail, isMbl, renderedViews])
 
-  // A scrolling bar can leave the active pill parked off-screen after a load,
-  // which reads as "no view is selected" (HTPR-5097). The wrapped rail already
-  // keeps every pill visible, so it never needs horizontal repositioning.
   useEffect(() => {
     if (appShellRail) return
     const scroller = scrollerRef.current
@@ -105,8 +90,6 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
     scroller.scrollTo({ left: Math.max(0, centred), behavior: 'auto' })
   }, [activeViewId, appShellRail, renderedViews.length])
 
-  // A single-view board has nothing to switch between — unless the rail
-  // layout forces the bar, where the lone default pill is the board title.
   if (renderedViews.length < 2 && !forceShow) return null
 
   const scrollBy = (delta: number) => scrollerRef.current?.scrollBy({ left: delta, behavior: 'smooth' })
@@ -178,8 +161,6 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                           appShellRail
                           ? cn(
                               '!cursor-default relative group flex h-8 max-w-full min-w-0 items-center justify-start gap-1 whitespace-nowrap pr-[15px] text-content transition-opacity',
-                              // Dim non-active views so the active one pops; the
-                              // home board is marked by its house icon, not a backdrop.
                               isActive
                                 ? 'text-white-black'
                                 : 'text-text-light-gray opacity-90 hover:opacity-100'
@@ -217,8 +198,6 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                             {!isBuiltinView(view) && view.visibility === ViewVisibility.Private && (
                               <Lock size={11} strokeWidth={1.75} className="self-center text-text-light-gray" />
                             )}
-                            {/* Gear lives INSIDE the last pill so it can only wrap
-                                together with a pill, never alone onto its own row. */}
                             {!isMbl && index === renderedViews.length - 1 && (
                               <span
                                 role="button"
@@ -253,10 +232,7 @@ const ViewTabsBar: React.FC<IProps> = ({ project, forceShow = false, appShellRai
                 )
               })}
             </div>
-            {/* The legacy header owns its ManageViews instance. The rail has no
-                ViewsHeaderKanban, so it owns the single instance here. */}
             {appShellRail && showManageViewsModal && <ManageViews toggle={toggleManageViewsModal} />}
-            {/* g-then-v jump-to-view modal: the legacy header mounts its own; the rail shell mounts it here. */}
             {appShellRail && showViewsModal && <ViewsForBoard toggle={toggleViewsModal} project={project} />}
             {!appShellRail && canScrollRight && (
               <button

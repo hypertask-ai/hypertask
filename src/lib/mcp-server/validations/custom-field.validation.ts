@@ -1,6 +1,5 @@
 import { z } from 'zod';
 
-/** Input for listing the custom fields defined on one board. */
 export function getListCustomFieldsBaseSchema() {
   return z
     .object({
@@ -18,10 +17,6 @@ export type ListCustomFieldsInput = z.infer<
   typeof ListCustomFieldsInputSchema
 >;
 
-/**
- * Base object for FastMCP tool parameters. The execution schema below enforces
- * that callers identify the field by exactly one supported method.
- */
 export function getSetCustomFieldValueBaseSchema() {
   return z
     .object({

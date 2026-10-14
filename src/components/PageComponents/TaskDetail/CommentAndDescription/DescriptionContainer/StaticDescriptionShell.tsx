@@ -28,12 +28,6 @@ export type DescriptionIntentProps = {
   onKeyDownCapture: () => void;
 };
 
-/**
- * HTPR-7091: what a ticket's read-only description looks like, drawn without
- * the editor. The class names copy TiptapMainContainer and TiptapEditor for the
- * read-only description, so the editor takes over in the same place at the
- * same size.
- */
 export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: boolean }) {
   const content = useMemo(() => toEditorHtml(html), [html]);
   const text = (
@@ -42,7 +36,6 @@ export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: bo
         contentEditable={false}
         translate="no"
         className="tiptap ProseMirror"
-        // The editor adds these rules for .ProseMirror when it starts, so the copy sets them itself.
         style={PROSEMIRROR_ROOT_STYLE}
         dangerouslySetInnerHTML={{ __html: content }}
       />
@@ -87,7 +80,6 @@ export function StaticDescriptionBody({ html, isMbl }: { html: string; isMbl: bo
   );
 }
 
-/** The description's wrapper from TaskDetailEditorPanels plus the static body. */
 export default function StaticDescriptionShell({
   html,
   isMbl,
@@ -100,7 +92,6 @@ export default function StaticDescriptionShell({
   const router = useRouter();
   const inboxFlow = useSearchParams()?.get("inboxFlow");
 
-  // Same as the editor wrapper: a task link opens in the app, not a new page.
   const onClickCapture = (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target;
     if (!(target instanceof Element)) return;

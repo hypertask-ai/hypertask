@@ -272,8 +272,6 @@ export async function acceptAgentRuntimeHeartbeat(input: {
     data: { heartbeatAt: now },
   });
   if (heartbeat.count !== 1) {
-    // A newer concurrent heartbeat wins; only a revoked or replaced runtime
-    // turns this accepted snapshot into a missing-agent response.
     const currentAgent = await input.db.agent.findFirst({
       where: heartbeatWhere,
       select: { id: true },

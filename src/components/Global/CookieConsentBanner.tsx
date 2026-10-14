@@ -8,12 +8,8 @@ import { getCookieConsent, setCookieConsent } from "@/lib/cookieConsent";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 
-// HTPR-4883: mirrors ChatGPT's anonymous-session cookie banner. Guests only —
-// signed-in users have already agreed to Terms/Privacy at signup.
 const CookieConsentBanner = () => {
   const [shouldRender, setShouldRender] = useState(false);
-  // Taller targets on a phone only: this is the first thing a mobile visitor
-  // touches and its close X measured 16x16 (HTPR-5142). Desktop is unchanged.
   const _mbl = useContext(MobileViewContext);
 
   useEffect(() => {
@@ -33,8 +29,6 @@ const CookieConsentBanner = () => {
       aria-label="Cookie consent"
       className="fixed left-1/2 z-[200] w-[calc(100%-24px)] max-w-[600px] -translate-x-1/2 rounded-[5px] bg-modalBackground p-4 text-white-black shadow-customshadow-2"
       style={{
-        // 72px clears the bottom bar, which is ~47px tall for guests once its
-        // CTA buttons replace the keyboard tips (HTPR-4883).
         bottom: "calc(var(--mobile-dock-h, 0px) + 72px + env(safe-area-inset-bottom))",
       }}
     >

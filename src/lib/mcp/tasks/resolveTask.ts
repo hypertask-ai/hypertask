@@ -11,10 +11,6 @@ export class TaskIdentifierAmbiguityError extends Error {
   }
 }
 
-/**
- * Resolve a task by MCP identifier with project access rules
- * (human owner/member or agent board membership).
- */
 export async function findTaskByIdentifier(
   user: { id: number },
   options: {
@@ -57,7 +53,6 @@ export async function findTaskByIdentifier(
   }
   if (matches.length) return matches[0];
 
-  // A real ticket wins even when it is inaccessible to this caller.
   const liveTask = await prisma.task.findFirst({
     where: { ...identityWhere, status: { not: 'Deleted' } },
     select: { id: true },
@@ -96,14 +91,6 @@ export async function findTaskByIdentifier(
   return tasks[0] ?? null;
 }
 
-/**
- * Turn any MCP task identifier into a numeric id, applying NO project scope.
- *
- * For routes that already run their own access check and only need to accept a
- * ticket number in addition to a raw id. Resolving here and leaving the check
- * where it is means adding the friendlier identifiers cannot quietly widen or
- * narrow who is allowed to read the task.
- */
 export async function resolveTaskIdOnly(options: {
   task_id?: number | null;
   ticket_number?: string | null;

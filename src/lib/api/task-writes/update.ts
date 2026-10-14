@@ -9,7 +9,6 @@ import { extractTaskReferencesFromCommentText } from "@/utils/controllers/commen
 import { addRelatedTasks } from "@/utils/controllers/tasks/addRelatedTasks";
 import { taskWriteRoute } from "./route";
 
-// Preserve legacy truthiness checks and all unknown task fields, not a new API policy.
 const schema = z.custom<{ newTask: Record<string, any>; agentId?: unknown }>(
   (body) => !!(body as { newTask?: { id?: unknown } } | null)?.newTask?.id,
 );

@@ -13,13 +13,6 @@ function parsePositiveInteger(raw: string | null): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null
 }
 
-/**
- * GET /api/mcp/tasks/mine
- *
- * Everything assigned to the caller across every board they can see, grouped
- * per board, with exact totals. Same set and same shape the AI chat's
- * hypertask_my_tasks tool returns, so the CLI, MCP and the chat agree.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

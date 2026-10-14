@@ -4,7 +4,7 @@ import type { PersistedClient } from "@tanstack/react-query-persist-client";
 const NEVER_PERSIST_QUERY_KEYS = [
   "projectsAll",
   "boardTasks",
-  "cached-task-detail", // A reload must use the authorized server route, not a prior navigation seed.
+  "cached-task-detail",
   "projectLabels",
   "chat-sessions",
   "comments",
@@ -78,8 +78,6 @@ export const limitPersistedClientWithinBudget = (
     }
   };
 
-  // Preserve resumable mutations first, then spend the remaining budget on
-  // the newest successful queries.
   keepWithinBudget(client.clientState.mutations, keptMutations);
   keepWithinBudget(queries, keptQueries);
 

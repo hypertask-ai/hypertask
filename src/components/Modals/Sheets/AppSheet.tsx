@@ -12,7 +12,6 @@ const SheetScrollerContext = React.createContext<{
   onScrollPosition: (position: ScrollPosition) => void;
 } | null>(null);
 
-/** Use inside an `AppSheet` with `customScroller` for a fixed header or footer. */
 export const SheetScroller = ({
   className,
   ...props
@@ -55,34 +54,22 @@ export interface AppSheetProps extends RootSheetProps {
   children: React.ReactNode;
   aboveSlot?: React.ReactNode;
   ariaLabel?: string;
-  /** Optional id of visible title element (preferred over ariaLabel when set). */
   labelledBy?: string;
   showHandle?: boolean;
-  /**
-   * When true (default), `Sheet.Header` uses the library drag indicator.
-   * When false with `showHandle`, use `handleRowClassName` + `handleBarClassName`.
-   */
   defaultLibraryHeader?: boolean;
   panelClassName?: string;
   bodyClassName?: string;
   customScroller?: boolean;
   backdropClassName?: string;
-  /** Applied to `Sheet.Header` (library, custom, or collapsed). */
   headerClassName?: string;
-  /** When `showHandle` and not `defaultLibraryHeader`: row wrapper around the pill. */
   handleRowClassName?: string;
-  /** When `showHandle` and not `defaultLibraryHeader`: drag pill. */
   handleBarClassName?: string;
-  /** When not `showHandle`: inner node inside `Sheet.Header`. */
   headerCollapsedInnerClassName?: string;
   zIndex?: number | string;
   detent?: SheetDetent;
   disableScrollLocking?: boolean;
-  /** `className` on the root `Sheet` (portal wrapper). */
   sheetClassName?: string;
-  /** Merged after `zIndex` unless `zIndex` is overridden here. */
   sheetStyle?: React.CSSProperties;
-  /** Passed to `Sheet.Container`. */
   containerStyle?: React.CSSProperties;
 }
 

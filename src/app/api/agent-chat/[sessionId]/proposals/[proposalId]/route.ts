@@ -15,20 +15,8 @@ import {
 
 export const runtime = "nodejs";
 
-// A confirm that dies mid-flight (timeout, redeploy) leaves CONFIRMED with no
-// task. After this long another confirm may take it over; below it, a second
-// click is a duplicate and must not create a second ticket.
-// ponytail: fixed 60s lease. Swap for a claim token if confirms ever run longer.
 const CONFIRM_LEASE_MS = 60_000;
 
-/**
- * POST /api/agent-chat/[sessionId]/proposals/[proposalId]
- *
- * The confirmation boundary. `confirm` creates exactly one board ticket for a
- * proposal the agent made in chat; `dismiss` keeps the conversation going and
- * creates nothing. Every right is rechecked here, live: the proposal's stored
- * board and column are ids to verify, never permission to act.
- */
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string; proposalId: string }> }
@@ -98,9 +86,6 @@ export async function POST(
         select: chatTicketProposalSelect,
       });
     const fail = async (message: string, status: number) => {
-      // Only the claim this request holds may be released. An unguarded write
-      // would reopen a proposal a second tab dismissed, or wipe the ticket off
-      // one that finished while these live rechecks were still running.
       await prisma.chatTicketProposal.updateMany({
         where: { id: proposal.id, status: "CONFIRMED", taskId: null },
         data: {
@@ -143,15 +128,12 @@ export async function POST(
       );
     }
     if (proposal.status === "CONFIRMED" && proposal.taskId) {
-      // Already done: the second click returns the same ticket.
       return NextResponse.json({
         success: true,
         proposal: serializeChatTicketProposal(proposal),
       });
     }
 
-    // One conditional write decides who creates the ticket. A losing click
-    // matches no row and returns the winner's state instead of creating a second.
     const claimed = await prisma.chatTicketProposal.updateMany({
       where: {
         id: proposal.id,
@@ -178,8 +160,6 @@ export async function POST(
       });
     }
 
-    // Rights are rechecked now, not trusted from when the agent proposed: board
-    // access can be revoked and the agent's role narrowed in between.
     const projectCheck = await validateProjectAccess(
       proposal.targetProjectId,
       userId,
@@ -223,20 +203,11 @@ export async function POST(
       return fail(error?.message || "Could not create the ticket", 500);
     }
 
-    // taskId is unique and only attaches while it is null, so a lease takeover
-    // that raced the original confirm cannot leave two tickets on the board.
-    // ponytail: the create and this attach are two statements, so a process
-    // that dies between them leaves one ticket no proposal points at, and the
-    // lease takeover then creates a second. Recording the ticket id before the
-    // create (or creating it in the same transaction) closes that window.
     const attached = await prisma.chatTicketProposal.updateMany({
       where: { id: proposal.id, taskId: null },
       data: { taskId: task.id },
     });
     if (attached.count === 0) {
-      // ponytail: a plain status write rather than the archive controller, so
-      // this skips the activity row and notifications. Fine for a ticket the
-      // board never should have seen; use updateTaskSingle if that changes.
       await prisma.task.update({
         where: { id: task.id },
         data: { status: "Archive", archivedAt: new Date() },

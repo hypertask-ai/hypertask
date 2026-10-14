@@ -24,8 +24,6 @@ export default async function Page() {
     return redirect("/login");
   }
   const userObj: IUser = JSON.parse(userObjString.value);
-  // The chosen range lives on the account so every device opens the same view.
-  // Null (never chosen) falls back to the Last-7-days default.
   const setting = await prisma.userSetting.findUnique({
     where: { userId: userObj.id },
     select: { allTasksDateRange: true },

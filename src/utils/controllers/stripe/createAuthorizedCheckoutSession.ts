@@ -50,7 +50,6 @@ const normalCheckoutPriceIds = new Set(
     .filter(validConfiguredPriceId),
 );
 
-// The legacy trial surface uses one explicitly configured live monthly price.
 const trialCheckoutPriceIds = new Set(
   [process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID].filter(
     validConfiguredPriceId,
@@ -295,10 +294,6 @@ function checkoutParams(
   };
 }
 
-/**
- * Creates checkout only from a signed user's owned team and server-derived
- * billing data. Client fields are selectors/hints, never billing authority.
- */
 export async function createAuthorizedCheckoutSession(
   userId: number,
   rawBody: unknown,
@@ -340,8 +335,6 @@ export async function createAuthorizedCheckoutSession(
   const stripe = getStripeInstance();
 
   return withTeamCheckoutReservation(teamId, async (reservation) => {
-    // Ownership and every billing field are loaded only after acquiring the
-    // cross-instance checkout lock. Client hints never survive this recheck.
     const team = await prisma.team.findUnique({
       where: { id: teamId },
       select: {
@@ -408,8 +401,6 @@ export async function createAuthorizedCheckoutSession(
       attempt?.state === "prepared" &&
       !desiredMatches(attempt.desired, desired)
     ) {
-      // No Stripe call can precede the durable in-flight transition. A
-      // prepared attempt abandoned before that transition is safe to rotate.
       await reservation.clear();
       attempt = null;
     }
@@ -422,8 +413,6 @@ export async function createAuthorizedCheckoutSession(
       );
       if (!recoveredSession) {
         try {
-          // The prior lease owner may still complete this call. Retrying its
-          // exact parameters and key settles one Stripe operation safely.
           recoveredSession = await createStripeCheckout(
             checkoutParams(attempt, team.title ?? "Hypertask team"),
             { idempotencyKey: attempt.idempotencyKey },
@@ -524,8 +513,6 @@ export async function createAuthorizedCheckoutSession(
           billingDesiredMatches(attempt.desired, desired) &&
           sessionBillingMatchesDesired(attemptSession, desired)
         ) {
-          // Preserve the matching terminal session until the reservation TTL
-          // expires. A lost response then reconciles instead of creating anew.
           await reservation.write({
             ...attempt,
             sessionId: attemptSession.id,
@@ -613,8 +600,6 @@ export async function createAuthorizedCheckoutSession(
         reservation.assertHeld,
       );
       attempt = createCheckoutAttempt(desired);
-      // Persist the unique attempt and idempotency key before Stripe. If the
-      // process fails after Stripe succeeds, a retry reuses this exact key.
       await reservation.write(attempt);
     }
 
@@ -630,8 +615,6 @@ export async function createAuthorizedCheckoutSession(
         { idempotencyKey: attempt.idempotencyKey },
       );
     } catch (error) {
-      // Network/API ambiguity keeps the attempt and stable key for safe retry.
-      // A definitive rejection created no session, so rotate immediately.
       if (isDefinitiveStripeFailure(error)) {
         await reservation.clear();
         throw error;

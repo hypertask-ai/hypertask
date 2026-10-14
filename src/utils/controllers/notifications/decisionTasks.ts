@@ -4,11 +4,6 @@ import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7092_DECISIONS_FLAG } from "@/lib/flags/keys";
 import { pickDecisionTaskIds, type DecisionMentionComment } from "@/lib/inboxDecisions";
 
-/**
- * HTPR-7092: tasks in this user's inbox that wait on their yes or no. Gated on the
- * server: with the flag off this returns an empty set and the Decisions split never
- * exists. Two queries, whatever the number of rows.
- */
 export async function getDecisionTaskIds(
   userId: number,
   inboxWhere: Prisma.NotificationWhereInput,

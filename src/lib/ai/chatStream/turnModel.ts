@@ -44,8 +44,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   let usageProjectId: number | null = null;
   let actingAgent: Awaited<ReturnType<typeof loadActingAgent>> = null;
   let teamProviderSettings: unknown;
-  // External agents are chatted with from Agent Chat, not this native stream.
-  // Checked before any provider or model work so the turn never starts.
   if (body.session_id) {
     const chatAgent = await prisma.chatSession.findFirst({
       where: { id: body.session_id, userId: dbUser.id },
@@ -60,9 +58,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
   }
   try {
     const requestedProjectId = body.default_context?.project_id;
-    // Global chat pages intentionally omit a board. Reuse the session's board
-    // when possible, then fund an ordinary account chat from the strongest
-    // team the user can access. This keeps every provider key lookup attributed.
     const chatTeamContext = await resolveChatTeamContext({
       userId: dbUser.id,
       requestedProjectId,
@@ -112,14 +107,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       gatewayTags.teamId ? undefined : planGateProjectId,
       gatewayTags.teamId,
     );
-    // Loaded here rather than alongside the skills below, because the model
-    // this turn runs on depends on it and that is decided before the stream
-    // opens. A failure surfaces through this block's catch as a stream error,
-    // which is what we want: never silently fall back to the human's identity.
     actingAgent = await loadActingAgent(body.session_id, dbUser.id);
-    // An agent with its own provider credential runs on that account, so the
-    // key lookup has to know which agent is acting before it resolves a key
-    // (HTPR-5389). Server-derived from the session, never request input.
     keyLookupContext = { ...keyLookupContext, agentId: actingAgent?.id ?? null };
     let hasEligibleByokCredential = false;
     if (storePlanId === "BYOK") {
@@ -147,10 +135,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
       defaultContext.haikuDefaultEnabled,
     );
-    // An agent pinned to a model runs its own turns on it, which is the point
-    // of pinning: a sweeper on a cheap model, a coordinator on an expensive
-    // one. An explicit choice in the request still wins, so switching model
-    // inside the agent's chat keeps working.
     const modelOptionIdForTurn = resolveAgentModelPin({
       requestedModelOptionId: body.modelOptionId,
       requestedModel: body.model,

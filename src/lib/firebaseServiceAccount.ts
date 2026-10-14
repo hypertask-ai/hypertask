@@ -1,11 +1,3 @@
-// Loads the Firebase Admin service-account credential from the
-// FIREBASE_SERVICE_ACCOUNT_B64 env var (base64-encoded service-account JSON).
-//
-// This credential used to live in a committed src/service_key.json file, which
-// meant a live production admin key was sitting in git history. It was rotated
-// and moved to an env var for security (HTPR-3810). Set the env var to the
-// base64 of the service-account JSON on every environment that needs Firebase
-// Admin (Vercel production + preview, and your local .env for dev).
 
 type FirebaseServiceAccount = {
   project_id: string;
@@ -16,9 +8,6 @@ type FirebaseServiceAccount = {
 
 let cached: FirebaseServiceAccount | undefined;
 
-// Returns `any` to match the shape firebase-admin's cert() expects at
-// runtime (it accepts the raw snake_case service-account JSON), mirroring the
-// original `require('@/service_key.json')` which was also untyped.
 export function getFirebaseServiceAccount(): any {
   if (cached) return cached;
 

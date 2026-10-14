@@ -27,9 +27,6 @@ export interface HelloResponse {
   conventionsTruncated: boolean;
 }
 
-/**
- * Service for fetching the self-orienting welcome map for a new MCP client.
- */
 export class HelloService {
   constructor(private readonly apiClient: IApiClient) {}
 

@@ -1,17 +1,11 @@
 import prisma from '@/lib/prisma'
 
-/**
- * Cleans up expired OAuth authorization codes from the database
- * Should be run periodically (e.g., via cron job or scheduled task)
- * 
- * @returns Number of codes deleted
- */
 export async function cleanupExpiredOAuthCodes(): Promise<number> {
   try {
     const result = await prisma.oAuthAuthorizationCode.deleteMany({
       where: {
         expires_at: {
-          lt: new Date() // Delete codes that have expired
+          lt: new Date()
         }
       }
     })
@@ -24,12 +18,6 @@ export async function cleanupExpiredOAuthCodes(): Promise<number> {
   }
 }
 
-/**
- * Cleans up used OAuth authorization codes older than 1 hour
- * These are codes that were successfully exchanged but kept for audit purposes
- * 
- * @returns Number of codes deleted
- */
 export async function cleanupUsedOAuthCodes(): Promise<number> {
   try {
     const oneHourAgo = new Date()
@@ -39,7 +27,7 @@ export async function cleanupUsedOAuthCodes(): Promise<number> {
       where: {
         used: true,
         createdAt: {
-          lt: oneHourAgo // Delete used codes older than 1 hour
+          lt: oneHourAgo
         }
       }
     })
@@ -52,11 +40,6 @@ export async function cleanupUsedOAuthCodes(): Promise<number> {
   }
 }
 
-/**
- * Runs both cleanup operations
- * 
- * @returns Object with counts of deleted codes
- */
 export async function cleanupAllOAuthCodes(): Promise<{
   expired: number
   used: number

@@ -1,7 +1,3 @@
-/**
- * Structured logging utility
- * Logs to stderr only (MCP requirement - stdout reserved for JSON-RPC)
- */
 
 export type LogLevel = 'error' | 'warn' | 'info' | 'debug';
 
@@ -42,7 +38,6 @@ class Logger {
       ...meta,
     };
 
-    // Log to stderr as JSON (structured logging)
     const logLine = JSON.stringify(entry);
     console.error(logLine);
   }
@@ -63,9 +58,6 @@ class Logger {
     this.log('debug', message, meta);
   }
 
-  /**
-   * Log tool invocation for audit trail
-   */
   logToolInvocation(
     toolName: string,
     correlationId: string,
@@ -82,9 +74,6 @@ class Logger {
     });
   }
 
-  /**
-   * Log authentication/authorization events
-   */
   logAuthEvent(event: 'auth_success' | 'auth_failure' | 'authz_denied', correlationId?: string, details?: Record<string, unknown>): void {
     this.warn(`Auth event: ${event}`, {
       correlationId,
@@ -92,9 +81,6 @@ class Logger {
     });
   }
 
-  /**
-   * Sanitize inputs to remove sensitive data before logging
-   */
   private sanitizeInputs(inputs: Record<string, unknown>): Record<string, unknown> {
     const sanitized: Record<string, unknown> = {};
     const sensitiveKeys = ['jwtToken', 'token', 'password', 'secret', 'authorization', 'apiKey'];
@@ -111,5 +97,4 @@ class Logger {
   }
 }
 
-// Export singleton logger instance
 export const logger = new Logger();

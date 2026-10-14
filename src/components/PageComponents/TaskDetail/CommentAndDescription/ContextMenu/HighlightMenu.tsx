@@ -51,7 +51,7 @@ type MainArgs = {
 function HighlightMenu({
   target,
   menu,
-  offset = 2, // This offset now determines the gap between the menu and the top of the highlight
+  offset = 2,
   styles,
   allowedPlacements,
   zIndex = 999999999,
@@ -72,12 +72,8 @@ function HighlightMenu({
   const { refs, floatingStyles, context } = useFloating({
     open: !!menuOpen,
     strategy: "fixed",
-    placement: "top", // Keep "top" so the arrow points down from the menu
+    placement: "top",
     middleware: [
-      // This middlewareOffset value determines how far the floating element is placed from the reference.
-      // A positive offset for "top" placement moves it *away* from the reference (i.e., further up).
-      // A negative offset would move it *closer* to the reference (i.e., further down, possibly overlapping).
-      // We are primarily controlling 'top' via getFloatingStylesOverride, but this still impacts arrow positioning relative to the menu.
       middlewareOffset(offset + ARROW_HEIGHT + borderWidth),
       middlewareArrow({
         element: arrowRef,
@@ -129,7 +125,6 @@ function HighlightMenu({
   const menuContent = menuOpen && selection && (
     <FloatingFocusManager context={context} modal={false} initialFocus={-1}>
       <div
-        // Contact hovercards can disable body pointer events while this portal is open.
         className="Popover"
         ref={refs.setFloating}
         style={stableLayout && instantTicketOpen ? { ...getFloatingStylesOverride(), pointerEvents: "auto" } : getFloatingStylesOverride()}

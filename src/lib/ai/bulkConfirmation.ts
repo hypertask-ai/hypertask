@@ -34,9 +34,6 @@ async function recordPreview(
   return "preview" as const;
 }
 
-// Model guidance cannot prove that a user approved a write, so the token proves
-// an earlier request issued the exact preview. Store failures stay closed because
-// an unavailable security gate must never authorize the write.
 export async function requireCrossMessageConfirmation({
   userId,
   sessionId,

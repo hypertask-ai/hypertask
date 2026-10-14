@@ -2,16 +2,6 @@ import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/t
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
-/**
- * @fileoverview
- * Shared AI Task Writer / Write with AI harness.
- *
- * Everything between "here is a prompt" and "call the model" lives here so the
- * browser route (SSE, src/app/api/ai/task-writer/route.ts) and the CLI route
- * (JSON, src/app/api/mcp/ai/task-writer/route.ts) produce identical output for
- * the same input: same feature gate, same model selection, same /skill
- * resolution, same retrieved context, same prompt parts.
- */
 
 import { z } from "zod";
 
@@ -93,7 +83,6 @@ export const taskWriterRequestSchema = z.object({
   taskIds: z.array(z.coerce.number().int()).optional().default([]),
   taskDescription: z.string().optional().default(""),
   taskTitle: z.string().optional().default(""),
-  /** User-authored briefs only; used for board search when research is on. */
   userRetrievalTexts: z.array(z.string()).max(20).optional().default([]),
   byokProviderFlags: z.array(byokProviderFlagSchema).optional().default([]),
   existingTaskId: z.number().int().positive().optional(),
@@ -110,7 +99,6 @@ export const tasksOutputSchema = z.object({
 
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
 
-/** Thrown when the team has switched this AI feature off. Callers map it to 403. */
 export class AiFeatureDisabledError extends Error {
   constructor() {
     super("This AI feature is turned off for your team");
@@ -118,7 +106,6 @@ export class AiFeatureDisabledError extends Error {
   }
 }
 
-/** Thrown for legacy requests to the removed automatic description draft. */
 export class AutoDescriptionSuggestionsDisabledError extends Error {
   constructor() {
     super("Automatic description suggestions are turned off");
@@ -126,7 +113,6 @@ export class AutoDescriptionSuggestionsDisabledError extends Error {
   }
 }
 
-/** Thrown when the caller cannot reach the project they asked to write for. */
 export class ProjectAccessError extends Error {
   constructor() {
     super("Project not found or access denied");
@@ -138,19 +124,10 @@ export function missingRequiredFields(body: TaskWriterRequest) {
   return !body.projectId || !body.PROMPT;
 }
 
-/**
- * Can this caller read this board? Owner or member, and for an agent-bound MCP
- * token the agent's own membership, not its owner's broader access.
- */
 export function projectAccessWhere(userId: number, agentId?: string | null) {
   return projectContentAccessWhere(userId, agentId);
 }
 
-/**
- * Resolve the feature gate, model, skills and context for one task-writer run.
- * Returns everything `streamText`/`generateText` needs, so both callers only
- * differ in how they deliver the model output.
- */
 export async function prepareTaskWriterRun(
   body: TaskWriterRequest,
   userId: number,
@@ -175,23 +152,12 @@ export async function prepareTaskWriterRun(
     if (!target || !isEmptyComposeTarget(target)) throw new ProjectAccessError();
   }
 
-  // The retrieval below searches by projectId alone, so membership has to be
-  // proven here. getProjectTeamProviderContext does not: it returns an empty
-  // context for an unreachable project, which reads as "no AI settings" and
-  // sails through the feature gate. Without this check any bearer token could
-  // pull another team's tasks and comments into the prompt by guessing an id.
-  //
-  // Deliberately NOT getProjectWhere: that helper also requires teamId != null,
-  // which is a listing rule, not an authorization rule. A third of all boards
-  // are teamless, and their owners have always been able to run the AI writer
-  // on them.
   const project = await prisma.project.findFirst({
     where: { id: body.projectId, ...projectAccessWhere(userId, agentId) },
     select: { id: true },
   });
   if (!project) throw new ProjectAccessError();
 
-  // Older tabs can still send the removed new-task draft request. Keep it off.
   if (body.requestKind === "auto-description") {
     throw new AutoDescriptionSuggestionsDisabledError();
   }
@@ -218,19 +184,12 @@ export async function prepareTaskWriterRun(
     teamContext,
     taskWriterAgentId: agentId,
   });
-  // Bring AI-chat's /skill invocation to the task writer: a prompt like
-  // "/minimalist-review draft this" strips the token and appends the board
-  // skill's body to the instructions. Same resolver chat/hyper-mentioned use.
   const skillResolution = await resolveSkills(body.PROMPT, {
     userId,
     projectId: body.projectId,
   });
-  // "/foo" alone strips to empty; fall back to the raw prompt so retrieval and
-  // the model query are never blank (the skill body still carries the intent).
   const effectivePrompt = skillResolution.cleanedText || body.PROMPT;
   const boardResearchEnabled = body.aiMode === "AiTaskWriter";
-  // Search uses user-authored text only when research is on. The model still
-  // receives the full conversation prompt via body.PROMPT / effectivePrompt.
   const retrievalQuery = boardResearchEnabled
     ? buildTaskWriterRetrievalQuery({
         prompt: effectivePrompt,
@@ -250,8 +209,6 @@ export async function prepareTaskWriterRun(
     boardTemplates,
     usageTaskId,
   ] = await Promise.all([
-    // Load the referenced/current tickets in full so the writer always sees
-    // them, instead of relying on the semantic search to surface them.
     loadCurrentTaskContext(primaryTaskIds, userId, agentId, {
       projectId: body.projectId,
     }),
@@ -270,7 +227,6 @@ export async function prepareTaskWriterRun(
       ? searchTasks({
           searchQuery: retrievalQuery,
           projectIds: [body.projectId],
-          // Over-fetch so excluding the open ticket still leaves up to 8 peers.
           topK: Math.min(
             TASK_WRITER_RELATED_CANDIDATE_LIMIT + 8,
             TASK_WRITER_RELATED_CANDIDATE_LIMIT +
@@ -349,7 +305,6 @@ export async function prepareTaskWriterRun(
   const splitTasks = body.requestKind === "compose-task" && body.aiMode === "AiTaskWriter" &&
     await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
   const fixedInstructions = researchInstructions ?? baseInstructions;
-  // HTPR-7076: everything below varies per call or flag, so it follows the cached fixed part.
   let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
   if (splitTasks) {
     suffix += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
@@ -369,11 +324,9 @@ export async function prepareTaskWriterRun(
   if (headingLanguageEnabled) {
     suffix += `\n\n${renderPrompt("task-writer-output-language")}`;
   }
-  // HTPR-7123: tell improvements and features apart from bugs, after the cached fixed part.
   let ticketTypeEnabled = false;
   if (body.aiMode === "AiTaskWriter" && (await isFeatureEnabled(HTPR_7123_WRITER_TICKET_TYPE_FLAG, userId))) {
     suffix += `\n\n${TASK_WRITER_TICKET_TYPE_RULE}`;
-    // Ctrl+J creating a new ticket also states the type, so compose can pick the matching column.
     if (body.requestKind === "compose-task" && body.existingTaskId == null) {
       ticketTypeEnabled = true;
       suffix += `\n\n${TASK_WRITER_TICKET_TYPE_MARKER}`;
@@ -391,8 +344,6 @@ export async function prepareTaskWriterRun(
       content: createTaskWriterUserContent(input, files),
     },
   ];
-  // Browser task-writer descriptions carry placeholders; API clients may still
-  // send raw media. In either case, reject image sources absent from the request.
   const allowedImgSrcs =
     body.aiMode === "AiTaskWriter" ? extractImgSrcs(body.taskDescription) : null;
 
