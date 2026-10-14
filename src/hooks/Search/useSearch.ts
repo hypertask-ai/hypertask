@@ -157,7 +157,7 @@ export function useSearch(
       const term = searchTerm.trim();
       if (term.length >= 2 && history.at(-1) !== term) {
         history.push(term);
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {  }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
       }
     }
     setSubmittedQuery(searchTerm.trim());
@@ -494,7 +494,7 @@ export function useSearch(
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {  }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
         setInputValue(previous);
         setExplicitTabIndex(undefined);
         handleStatesOnResponse(searchConfig.responseMessages.default);

@@ -86,7 +86,7 @@ export async function executeToolResult(
     if (/^Error:/i.test(text)) return toolErrorResult(new Error(text))
     let structured: Record<string, unknown> | undefined
     let value: unknown
-    try { value = JSON.parse(text) } catch {  }
+    try { value = JSON.parse(text) } catch {}
     if (value && typeof value === 'object') {
       structured = Array.isArray(value) ? { items: value } : value as Record<string, unknown>
       const failure = structured.data && typeof structured.data === 'object' ? structured.data as Record<string, unknown> : structured

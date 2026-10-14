@@ -48,7 +48,7 @@ export async function createInProcessMcpClient(token: string): Promise<{
       }
       const text = await response.text()
       let data: unknown = text
-      try { data = JSON.parse(text) } catch {  }
+      try { data = JSON.parse(text) } catch {}
       if (!response.ok) {
         const body = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {}
         const message = typeof body.message === 'string' && body.message ? body.message

@@ -143,7 +143,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
           const session = await queryClient.fetchQuery({ ...transcriptOptions(activeSession), staleTime: 0 });
           if (session === null) await evictSession(activeSession);
         }
-      } catch {  }
+      } catch {}
     })();
   }, [ready, activeSession, summaryQuery.dataUpdatedAt]);
 
@@ -221,7 +221,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     try {
       const session = await queryClient.fetchQuery({ ...transcriptOptions(sessionId), staleTime: 0 });
       if (session === null) await evictSession(sessionId);
-    } catch {  }
+    } catch {}
   }, [identity, ready, queryClient]);
 
   useEffect(() => {

@@ -212,7 +212,7 @@ export async function createComposedTask({
           params: { projectId: project.id, sectionId: typedSection.id, position: "top" },
         });
         if (top?.data?.sectionId === typedSection.id && top.data.ranking) placement = { ...top.data, section: typedSection.title };
-      } catch {  }
+      } catch {}
     }
     try {
       const created = await createNewTaskGloballyAPIHandler({

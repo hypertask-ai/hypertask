@@ -384,7 +384,7 @@ export function createUsageTracingMiddleware(context: ModelUsageContext, modelId
           })] : []),
         ]);
       })().catch(() => undefined);
-      try { waitUntil(observation); } catch {  }
+      try { waitUntil(observation); } catch {}
     };
   };
   return {

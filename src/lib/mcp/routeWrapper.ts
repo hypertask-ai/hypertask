@@ -105,11 +105,11 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
       try {
         const result = await legacy(input, ...args)
         if (result instanceof Response) {
-          try { queueRestFailure(request, result.status) } catch {  }
+          try { queueRestFailure(request, result.status) } catch {}
         }
         return result
       } catch (error) {
-        try { queueRestFailure(request, 500) } catch {  }
+        try { queueRestFailure(request, 500) } catch {}
         throw error
       }
     }

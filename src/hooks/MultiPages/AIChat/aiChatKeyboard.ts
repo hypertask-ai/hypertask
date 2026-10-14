@@ -208,7 +208,7 @@ export function createAiChatKeyboard(context: Context) {
       e.preventDefault();
       if (showAiChatInterface) {
         startNewSession();
-        setTimeout(() => { try { editor?.view.dom.focus(); } catch {  } }, 0);
+        setTimeout(() => { try { editor?.view.dom.focus(); } catch {} }, 0);
         return;
       }
     }

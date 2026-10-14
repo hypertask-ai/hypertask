@@ -45,7 +45,7 @@ export function queueRestFailure(request: Request, status: number, auth?: McpAut
           if (session) queueAiFeedback(input, session.userId)
         }
       }).catch(() => {}))
-    } catch {  }
+    } catch {}
   }
 }
 
@@ -75,7 +75,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
       try {
         const text = await tool.execute(args, token, invocation)
         let result: unknown
-        try { result = JSON.parse(text) } catch {  }
+        try { result = JSON.parse(text) } catch {}
         const status = feedbackStatus(result)
         if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
         return text
