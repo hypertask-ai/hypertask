@@ -129,32 +129,51 @@ export function stripComments(source, filename) {
   result.disallowed = disallowed.map((comment) => comment.loc.start.line);
   if (!disallowed.length) return result;
   const handled = new Set();
+  const removedContainers = new Set();
   const edits = [];
   visit(ast, (node) => {
     if (node.type !== "JSXElement" && node.type !== "JSXFragment") return;
-    node.children.forEach((child, index) => {
+    node.children.forEach((child) => {
       if (child.type !== "JSXExpressionContainer" || child.expression.type !== "JSXEmptyExpression") return;
       const comments = ast.comments.filter((comment) => comment.range[0] >= child.range[0] && comment.range[1] <= child.range[1]);
       const rejected = comments.filter((comment) => disallowed.includes(comment));
       if (!rejected.length) return;
       if (rejected.length !== comments.length) return;
       rejected.forEach((comment) => handled.add(comment));
-      const previous = node.children[index - 1];
-      const next = node.children[index + 1];
+      const children = [];
+      for (const sibling of node.children) {
+        if (removedContainers.has(sibling)) continue;
+        const previous = children.at(-1);
+        if (previous?.type === "JSXText" && sibling.type === "JSXText") previous.value += sibling.value;
+        else children.push(sibling.type === "JSXText" ? { ...sibling } : sibling);
+      }
+      const index = children.indexOf(child);
+      const previous = children[index - 1];
+      const next = children[index + 1];
       if (previous?.type === "JSXText" && next?.type === "JSXText" &&
           jsxText(previous.value) + jsxText(next.value) !== jsxText(previous.value + next.value)) {
         result.keptJsx.push(`${filename}:${child.loc.start.line}`);
         return;
       }
+      removedContainers.add(child);
       edits.push({ ...removal(source, ...child.range), text: "" });
       result.removed += rejected.length;
+      result.tsIgnoreRemoved += rejected.filter((comment) => /^\s*@ts-ignore\b/.test(comment.value)).length;
     });
   });
-  for (const comment of disallowed) {
-    if (handled.has(comment)) continue;
-    edits.push(removal(source, ...comment.range));
+  const ordinary = disallowed.filter((comment) => !handled.has(comment));
+  for (let index = 0; index < ordinary.length; index += 1) {
+    const start = ordinary[index].range[0];
+    let end = ordinary[index].range[1];
     result.removed += 1;
-    if (/^\s*@ts-ignore\b/.test(comment.value)) result.tsIgnoreRemoved += 1;
+    if (/^\s*@ts-ignore\b/.test(ordinary[index].value)) result.tsIgnoreRemoved += 1;
+    while (ordinary[index + 1] && /^[\t ]*$/.test(source.slice(end, ordinary[index + 1].range[0]))) {
+      index += 1;
+      end = ordinary[index].range[1];
+      result.removed += 1;
+      if (/^\s*@ts-ignore\b/.test(ordinary[index].value)) result.tsIgnoreRemoved += 1;
+    }
+    edits.push(removal(source, start, end));
   }
   const { output, boundaries } = applyEdits(source, edits);
   result.source = cleanBlankLines(output, boundaries, filename);

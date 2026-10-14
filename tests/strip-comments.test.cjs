@@ -30,6 +30,7 @@ test("removes whole standalone lines, trailing whitespace, and brace-adjacent bl
   assert.equal((await strip("function run() {\r\n\r\n  // explanation\r\n\r\n  return 1;\r\n}\r\n")).source, "function run() {\r\n  return 1;\r\n}\r\n");
   assert.equal((await strip("const value = 1;\n\n// explanation\n")).source, "const value = 1;\n");
   assert.equal((await strip("\n// explanation\n")).source, "");
+  assert.equal((await strip("/* first */ /* second */\nconst value = 1;\n")).source, "const value = 1;\n");
 });
 
 test("separates adjacent tokens and preserves comment newlines that affect ASI", async () => {
@@ -47,6 +48,10 @@ test("deletes JSX comment containers and their empty lines, but retains text-cha
   const { assertEquivalent } = await codemodPromise;
   assert.doesNotThrow(() => assertEquivalent(unsafe, unsafe.replace("{/* explanation */}", "{}"), "src/Test.tsx"));
   assert.equal((await strip("const x = <div>{/* @ts-expect-error reason */}</div>;")).removed, 0);
+  const adjacent = await strip("const x = <div>hello{/* first */}{/* second */}\nworld</div>;");
+  assert.equal(adjacent.removed, 1);
+  assert.equal(adjacent.keptJsx.length, 1);
+  assert.equal((await strip("const x = <div>{/* @ts-ignore stale */}<span /></div>;")).tsIgnoreRemoved, 1);
 });
 
 test("shares the rule allowlist, keeps tool-read JSDoc, and removes ts-ignore", async () => {
