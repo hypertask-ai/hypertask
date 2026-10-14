@@ -58,6 +58,7 @@ function loadPost({ flagOn, knownLabelIds }) {
       buildFieldError: (code, field, message) => ({ success: false, error: message, code, field }),
     },
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
+    "@/utils/controllers/agents/boardMembers": { isAgentOnBoard: async () => true },
     "@/lib/mcp/agents": { getMcpSessionAgentSummary: async () => null },
     "@/lib/flags": { isFeatureEnabled: async () => flagOn },
     "@/lib/prisma": {
