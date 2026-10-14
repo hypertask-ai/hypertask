@@ -1,7 +1,6 @@
 import { z } from 'zod'
 import { getRedis } from '@/lib/redis'
 
-// Absolute end checks reject trailing newlines, which JavaScript's $ anchor accepts.
 export const cliErrorReportSchema = z.object({
   command: z.string().min(1).max(60).regex(/^[a-z0-9-]+(?: [a-z0-9-]+){0,2}(?![\s\S])/),
   error: z.string().regex(/^[A-Za-z][A-Za-z0-9]{0,63}(?![\s\S])/),
