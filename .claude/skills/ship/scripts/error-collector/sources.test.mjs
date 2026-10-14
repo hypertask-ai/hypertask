@@ -250,6 +250,19 @@ test('R4: Vercel live timeout and SSE route go to infra only', () => {
   assert.deepEqual(vercel.parseEvents(rows).map(event => event.board), [4060, 4060, 15, 15]);
 });
 
+test('YPER4-358: dead outgoing board and agent webhooks go to infra, other webhook text stays on 15', () => {
+  const row = { requestPath: '/api/webhooks/qstash', timestamp: '2026-10-14T10:00:00.000Z' };
+  const messages = [
+    '[board-webhook] delivery failed after 8 attempts (HTTP 500)',
+    '[board-webhook] delivery failed after its worker stopped (no response)',
+    '[agent-webhook] delivery failed after 6 attempts (no response)',
+    'GitHub webhook [board-webhook] delivery failed',
+  ];
+  const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
+  assert.deepEqual(events.map(event => event.board), [4060, 4060, 4060, 15]);
+  assert.equal(events[0].message, messages[0]);
+});
+
 test('R6: journal identical errors are bucketed separately across UTC midnight', () => {
   const rows = ['2026-10-13T23:59:59Z', '2026-10-14T00:00:00Z', '2026-10-14T00:00:01Z'].map(ts => ({ _SYSTEMD_UNIT: 'test.service', MESSAGE: 'Failed job 123', __REALTIME_TIMESTAMP: String(Date.parse(ts) * 1000) }));
   const events = journal.parseJournal(rows.map(row => JSON.stringify(row)).join('\n'), context);

@@ -4,6 +4,8 @@ export const name = 'vercel';
 const infra = [
   event => event.message.includes('Vercel Runtime Timeout Error'),
   event => event.route === '/sse',
+  // Outgoing board and agent webhooks that used up every retry (YPER4-358).
+  event => /^\[(board|agent)-webhook\] delivery failed/.test(event.message),
 ];
 
 export function messageParts(message) {

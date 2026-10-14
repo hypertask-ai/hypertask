@@ -130,7 +130,13 @@ export async function deliverAgentWebhook(
     }),
   ]);
 
-  if (!failedPermanently) {
+  if (failedPermanently) {
+    // The only lasting record of a dead delivery: the error collector reads it
+    // from the Vercel log (YPER4-358). No URL or response text, they are the customer's.
+    console.error(
+      `[agent-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : "no response"})`,
+    );
+  } else {
     await queueAgentWebhookDelivery(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000),
