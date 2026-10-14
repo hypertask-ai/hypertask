@@ -1,0 +1,138 @@
+{
+  "vercel": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:20:00.000Z",
+        "requestPath": "/mcp",
+        "message": "{\"message\": \"Failed to get tasks\", \"error\": \"missing task_id\", \"timestamp\": \"2026-10-14T08:20:00Z\", \"correlationId\": \"sample-correlation\"}"
+      }
+    ],
+    "pagination": {
+      "hasMore": false
+    }
+  },
+  "proxy": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:20:00.000Z",
+        "requestPath": "/mcp",
+        "requestMethod": "GET",
+        "httpStatus": 504
+      },
+      {
+        "timestamp": "2026-10-14T08:20:00.000Z",
+        "requestPath": "/scan",
+        "httpStatus": 404
+      }
+    ],
+    "pagination": {
+      "hasMore": false
+    }
+  },
+  "prisma": "PrismaClientValidationError: Invalid `prisma.task.create()` invocation: Argument `ranking`: Invalid value provided. Expected String, provided Int.",
+  "github": {
+    "runs": [
+      {
+        "databaseId": 100,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Deploy",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "production"
+      },
+      {
+        "databaseId": 101,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Scheduled",
+        "event": "schedule",
+        "conclusion": "timed_out",
+        "headBranch": "main"
+      },
+      {
+        "databaseId": 102,
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Other",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "feature"
+      }
+    ],
+    "jobs": [
+      {
+        "name": "Setup",
+        "conclusion": "success"
+      },
+      {
+        "name": "Build",
+        "conclusion": "failure"
+      }
+    ]
+  },
+  "journal": [
+    {
+      "__CURSOR": "first",
+      "__REALTIME_TIMESTAMP": "1791966000000000",
+      "_SYSTEMD_USER_UNIT": "test.service",
+      "MESSAGE": "Failed job 123"
+    },
+    {
+      "__CURSOR": "second",
+      "__REALTIME_TIMESTAMP": "1791966001000000",
+      "_SYSTEMD_USER_UNIT": "test.service",
+      "MESSAGE": "Failed job 456"
+    },
+    {
+      "__CURSOR": "own",
+      "__REALTIME_TIMESTAMP": "1791966000000000",
+      "_SYSTEMD_USER_UNIT": "error-collector.service",
+      "MESSAGE": "failure"
+    }
+  ],
+  "cloudflare": {
+    "data": {
+      "viewer": {
+        "accounts": [
+          {
+            "current": [
+              {
+                "dimensions": {
+                  "scriptName": "ht-slack"
+                },
+                "sum": {
+                  "errors": 3,
+                  "requests": 100
+                }
+              },
+              {
+                "dimensions": {
+                  "scriptName": "api-proxy"
+                },
+                "sum": {
+                  "errors": 0,
+                  "requests": 10000
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "posthog": {
+    "results": [
+      [
+        "issue",
+        2,
+        "2026-10-14 07:00:00",
+        "2026-10-14 08:20:00",
+        "production",
+        "server",
+        "[{\"type\": \"Error\", \"value\": \"PostHog pipeline canary\"}]",
+        "https://app.hypertask.ai/api"
+      ]
+    ],
+    "hasMore": false
+  }
+}

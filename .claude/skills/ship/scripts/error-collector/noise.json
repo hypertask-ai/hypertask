@@ -1,0 +1,95 @@
+[
+  {
+    "id": "scanner-paths",
+    "match": "(?:^|[/\\s])(?:wp-admin(?:/|$)|wp-login\\.php|\\.env(?:[./?\\s]|$)|[^/\\s]*\\.php(?:[/?\\s]|$))",
+    "reason": "Bot and scanner probes for resources this application does not serve"
+  },
+  {
+    "id": "aborted-client",
+    "match": "(?:AbortError|client (?:request )?abort(?:ed)?|request aborted|\\bclient (?:request|closed|disconnected)\\b[^\\n]*(?:ECONNRESET|socket hang up))",
+    "reason": "Clients disconnecting before their response completes"
+  },
+  {
+    "id": "expected-http",
+    "match": "(?:\\b(?:HTTP(?: status)?|status(?: code)?|response(?: status)?)\\s*[:=]?\\s*(?:401|403|404)\\b|\\b(?:401 Unauthorized|403 Forbidden|404 Not Found)\\b)",
+    "reason": "Expected unauthorized, forbidden or missing-resource responses"
+  },
+  {
+    "id": "ssl-mode-warning",
+    "service": "vercel",
+    "match": "Warning: SECURITY WARNING: The SSL modes",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "ai-sdk-warning",
+    "service": "vercel",
+    "match": "(?:Warning: AI SDK Warning|\\[AISDK_DEP_[A-Z_]+\\] DeprecationWarning:)",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "pg-query-deprecation",
+    "service": "vercel",
+    "match": "DeprecationWarning: Calling client\\.query\\(\\) when the client is already executing a query",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "url-parse-deprecation",
+    "service": "vercel",
+    "match": "DeprecationWarning: `url\\.parse\\(\\)` behavior is not standardized",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "aws-sdk-v2-note",
+    "service": "vercel",
+    "match": "NOTE: The AWS SDK for JavaScript \\(v2\\) has reached (?:end-of-support|maintenance mode)",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "console-time-warning",
+    "service": "vercel",
+    "match": "Warning: Label '[^']+' already exists for console\\.time\\(\\)",
+    "reason": "Node/dependency warning emitted on stderr, not a thrown product exception; track upgrades separately."
+  },
+  {
+    "id": "qstash-cancel-404",
+    "service": "vercel",
+    "match": "^\\[Upstash QStash\\] DELETE https://qstash[^\\s]+/messages/[^\\s]+ failed with status 404\\b",
+    "reason": "Cancel of an already-delivered/absent queued message; existing code deliberately absorbs cancellation failure."
+  },
+  {
+    "id": "agent-done-refusal",
+    "service": "vercel",
+    "match": "Authenticated agents cannot archive or delete tasks in Done",
+    "reason": "Expected agent lifecycle authorization guard; error-level logging exaggerates a deliberate refusal."
+  },
+  {
+    "id": "task-create-forbidden",
+    "service": "vercel",
+    "match": "^\\[MCP Create Task\\] Error: Error: Forbidden(?:\\s|$)",
+    "reason": "Expected access denial from client/QA input; catch maps it to 500, so response classification should be corrected."
+  },
+  {
+    "id": "zod-input-validation",
+    "service": "vercel",
+    "match": "^Failed to (?:get tasks|update user profile) \\|\\s*\\[[\\s\\S]*\"code\"\\s*:\\s*\"custom\"[\\s\\S]*(?:must be provided|At least one of)",
+    "reason": "Explicit Zod input validation refused missing required identifiers/profile fields; no product exception should be captured."
+  },
+  {
+    "id": "mcp-info-skills",
+    "service": "vercel",
+    "match": "^Skills listed successfully(?:\\s|$)",
+    "reason": "Successful structured info message goes through console.error; Vercel assigns the outer record level error."
+  },
+  {
+    "id": "posthog-canary",
+    "service": "vercel",
+    "match": "^(?:Error: )?PostHog pipeline canary\\b",
+    "reason": "Deliberate end-to-end canary, not a customer failure."
+  },
+  {
+    "id": "vps-interactive-shell",
+    "service": "vps-journal",
+    "match": "^tmux-spawn-[^:]*\\.scope:",
+    "reason": "Output of an interactive terminal session on the VPS, not a service failure."
+  }
+]
