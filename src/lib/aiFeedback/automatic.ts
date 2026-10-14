@@ -51,6 +51,9 @@ export function queueRestFailure(request: Request, status: number, auth?: McpAut
   }
 }
 
+// McpError subclasses for caller mistakes carry a JSON-RPC code but no HTTP status (HTPR-7202).
+const MCP_ERROR_STATUS: Record<number, number> = { [-32001]: 401, [-32003]: 403, [-32004]: 404, [-32602]: 400 }
+
 function feedbackStatus(value: unknown, depth = 0): number | undefined {
   if (depth >= 4 || !value || typeof value !== 'object') return undefined
   try {
@@ -59,6 +62,8 @@ function feedbackStatus(value: unknown, depth = 0): number | undefined {
       const status = result[key]
       if (typeof status === 'number' && Number.isInteger(status) && status >= 100 && status <= 599) return status
     }
+    const mcpStatus = typeof result.code === 'number' ? MCP_ERROR_STATUS[result.code] : undefined
+    if (mcpStatus) return mcpStatus
     return feedbackStatus(result.data, depth + 1) ?? feedbackStatus(result.error, depth + 1)
   } catch {
     return undefined

@@ -18,6 +18,12 @@ import { updateTaskContract } from './contract';
 import { updateTaskPullRequest } from './pullRequest';
 import { updateTaskAssignees } from './assignees';
 
+// A field update refused with a coded 4xx (see status.ts) keeps that status instead of becoming a 500 (HTPR-7202).
+function isCallerRefusal(error: unknown): error is Error & { status: number; code: string } {
+    const { status, code } = (error ?? {}) as { status?: unknown; code?: unknown }
+    return error instanceof Error && typeof status === 'number' && status >= 400 && status < 500 && typeof code === 'string'
+}
+
 export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks: TaskUpdateTarget[]): Promise<UpdateTaskResponse> {
     const { ctx, user, requestBody, hasDueDate } = context;
     const actingAgent = ctx.agentId
@@ -66,13 +72,13 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
             return { success: true, taskId: task.id }
         } catch (error) {
             console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
-            const linkError = error instanceof PullRequestLinkError ? error : null
+            const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
             return {
                 success: false,
                 taskId: task.id,
                 error: toErrorMessage(error, 'Unknown error'),
-                ...(linkError
-                    ? { status: linkError.status, code: linkError.code }
+                ...(codedError
+                    ? { status: codedError.status, code: codedError.code }
                     : {}),
             }
         }
@@ -92,9 +98,9 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     // If all tasks failed, return an error
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
-        const linkFailure = failedTasks.find(
-            (failure) => failure.status !== undefined && failure.code !== undefined,
-        )
+        // A coded caller status wins only when no failure is an unclassified server error.
+        const isCoded = (failure: (typeof failedTasks)[number]) => failure.status !== undefined && failure.code !== undefined
+        const linkFailure = failedTasks.every(isCoded) ? failedTasks[0] : undefined
         throw new UpdateTaskPersistenceError(
             {
                 success: false,

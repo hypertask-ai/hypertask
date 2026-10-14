@@ -120,6 +120,7 @@ async function withFetch(run) {
     const taskId = body.taskId ?? body.newTask?.id ?? body.task_id
     events().push([path, body, options.method, options.headers])
     if (state.failTaskId === taskId || state.failPath === path) return Response.json({ message: 'Fixture write failed' }, { status: 409 })
+    if (state.denyPath === path) return Response.json({ message: 'Authenticated agents cannot archive or delete tasks in Done', code: 'agent_done_lifecycle_denied' }, { status: 403 })
     const task = state.tasks.find((task) => task.id === taskId)
     if (body.newTask) Object.assign(task, body.newTask)
     return Response.json({ success: true })
@@ -148,6 +149,8 @@ const cases = [
   ['all failed', { task_id: 101, title: 'After' }, { failTaskId: 101 }],
   ['strict side effect failure', { task_id: 101, priority: 2 }, { strict: true, failPath: '/api/priority/setPriority' }],
   ['best effort side effect failure', { task_id: 101, priority: 2 }, { failPath: '/api/priority/setPriority' }],
+  ['agent archive of Done task denied', { task_id: 101, status: 'Archive' }, { denyPath: '/api/tasks/(un)archive' }],
+  ['mixed denied and failed batch', { task_id: [101, 102], status: 'Archive' }, { tasks: [{ id: 101, sectionId: 10, projectId: 15, status: 'Normal' }, { id: 102, sectionId: 10, projectId: 15, status: 'Normal' }], denyPath: '/api/tasks/(un)archive', failTaskId: 102 }],
   ['not found', { task_id: 101, title: 'After' }, { tasks: [] }],
   ['archived move', { task_id: 101, sectionId: 20 }, { tasks: [{ id: 101, projectId: 15, status: 'Archive' }] }],
   ['deleted assignment', { task_id: 101, assignee: [8] }, { tasks: [{ id: 101, projectId: 15, status: 'Deleted' }] }],
@@ -165,6 +168,11 @@ for (const [name, body, extra] of cases) {
       assert.equal(JSON.parse(after.text).success, true)
       assert.ok(after.events.some(([kind]) => kind === 'task'))
     }
+    if (name === 'agent archive of Done task denied') {
+      assert.equal(after.status, 403, after.text)
+      assert.equal(JSON.parse(after.text).code, 'agent_done_lifecycle_denied')
+    }
+    if (name === 'mixed denied and failed batch') assert.equal(after.status, 500, after.text)
     if (name === 'partial failure') {
       assert.equal(JSON.parse(after.text).failed_tasks[0].taskId, 102)
       assert.ok(after.events.some(([kind]) => kind === 'board'))
