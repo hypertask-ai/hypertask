@@ -4,7 +4,17 @@ export type AiLabelDefinition = {
 };
 
 // Models sometimes wrap JSON in a markdown code fence despite instructions.
-const CODE_FENCE = /^```(?:json)?\s*([\s\S]*?)\s*```$/i;
+const CODE_FENCE = /```(?:json)?\s*([\s\S]*?)\s*```/i;
+
+// HTPR-7211: models also add a sentence around the array ("Matching ids: [...]").
+// Fall back to the outermost [...] span; a JSON object reply stays unparsable.
+function extractArrayText(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.startsWith("[") || trimmed.startsWith("{")) return trimmed;
+  const start = trimmed.indexOf("[");
+  const end = trimmed.lastIndexOf("]");
+  return start !== -1 && end > start ? trimmed.slice(start, end + 1) : trimmed;
+}
 
 // Returns null when the model's output isn't a parseable JSON array at all
 // (caller must treat that as "no verdict", not "remove all labels").
@@ -18,7 +28,7 @@ export function parseMatchingLabelIds(
   const unfenced = fenceMatch ? fenceMatch[1] : text;
 
   try {
-    const parsed: unknown = JSON.parse(unfenced);
+    const parsed: unknown = JSON.parse(extractArrayText(unfenced));
     if (!Array.isArray(parsed)) return null;
 
     const allowedIds = new Set(definitions.map(({ labelId }) => labelId));
