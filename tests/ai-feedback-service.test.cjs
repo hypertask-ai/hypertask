@@ -143,6 +143,21 @@ test('creates scrubbed medium-priority report on board 15 Bugs through createTas
   assert.match(options.description, /Kamil/)
 })
 
+test('internal filing rejects caller-selected destinations, task IDs and authors before any storage work', async () => {
+  for (const field of ['projectId', 'taskId', 'creatorId', 'userId', 'trustedCaller']) {
+    await assert.rejects(fileAiFeedback({ ...input, [field]: 6 }, 42), { status: 400 })
+  }
+  assert.equal(prismaCalls, 0)
+  assert.equal(attempts.size, 0)
+  assert.equal(created.length, 0)
+  assert.equal(commentCreates.length, 0)
+  await fileAiFeedback(input, 42)
+  assert.equal(created[0].projectId, 15)
+  assert.equal(created[0].userId, 42)
+  assert.equal(commentCreates[0].creatorId, 42)
+  assert.equal(taskQuery.where.projectId, 15)
+})
+
 test('tally comment is created with the ticket then edited in place by the creation actor, with capped scrubbed names and clients', async () => {
   await fileAiFeedback(input, 42)
   assert.equal(comments.length, 1)
@@ -237,16 +252,41 @@ test('titles use tool, errorCode or status and never exceed 80 characters; uncon
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
 })
 
-test('real Redis quotas and attempts are atomic across clients and storage errors fail closed', async (t) => {
-  const { spawn } = require('node:child_process')
-  const fs = require('node:fs'), os = require('node:os')
-  const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-feedback-redis-'))
-  const socket = path.join(folder, 'redis.sock')
-  const child = spawn('redis-server', ['--port', '0', '--unixsocket', socket, '--save', '', '--appendonly', 'no'], { stdio: ['ignore', 'pipe', 'pipe'] })
-  await new Promise((resolve, reject) => { child.once('error', reject); child.once('exit', () => reject(new Error('Redis exited before readiness'))); child.stdout.on('data', (data) => { if (/ready to accept connections/i.test(String(data))) resolve() }) })
+test('real Redis quotas and attempts are atomic across clients and storage errors fail closed', { timeout: 60000 }, async (t) => {
+  const { spawn, spawnSync, execFileSync } = require('node:child_process')
+  const port = await new Promise((resolve, reject) => {
+    const server = require('node:net').createServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const port = server.address().port
+      server.close(() => resolve(port))
+    })
+  })
+  const args = ['--bind', '127.0.0.1', '--port', String(port), '--save', '', '--appendonly', 'no']
+  const nativeRedis = spawnSync('redis-server', ['--version']).status === 0
+  const container = `ai-feedback-redis-${process.pid}-${port}`
+  const child = nativeRedis
+    ? spawn('redis-server', args)
+    : spawn('docker', ['run', '--rm', '--name', container, '--network', 'host',
+      'ghcr.io/hypertask-ai/ci-redis:7-alpine@sha256:ff02b58f971e7d7d156a1267e283fcbbeee91773b6aa36c49dac28ecfe28eadf',
+      'redis-server', ...args])
+  const exited = new Promise((resolve) => child.once('close', resolve))
+  let one, two
+  t.after(async () => {
+    one?.disconnect(); two?.disconnect()
+    if (nativeRedis) child.kill()
+    else execFileSync('docker', ['rm', '-f', container], { stdio: 'ignore' })
+    await exited
+  })
+  t.diagnostic(`Redis fixture: ${nativeRedis ? 'local binary' : 'disposable Docker container'}`)
+  await new Promise((resolve, reject) => {
+    let output = ''
+    child.once('error', reject)
+    child.once('exit', (code) => reject(new Error(`Redis exited before readiness: ${code}`)))
+    child.stdout.on('data', (data) => { output += data; if (/ready to accept connections/i.test(output)) resolve() })
+  })
   const Redis = require('ioredis')
-  const one = new Redis(socket), two = new Redis(socket)
-  t.after(async () => { one.disconnect(); two.disconnect(); child.kill(); await new Promise((resolve) => child.once('exit', resolve)); fs.rmSync(folder, { recursive: true, force: true }) })
+  one = new Redis(port, '127.0.0.1'); two = new Redis(port, '127.0.0.1')
   const now = 10_000_000
   const results = await Promise.all(Array.from({ length: 30 }, (_, index) => (index % 2 ? one : two).eval(FEEDBACK_QUOTA_SCRIPT, 1, 'test:quota', now, 10, `token-${index}`)))
   assert.equal(results.filter((value) => Number(value) === 1).length, 10)

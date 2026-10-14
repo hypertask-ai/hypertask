@@ -16,6 +16,7 @@ function loadModule(file, stubs) {
   vm.runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require: (id) => {
+      if (id === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper({ ...stubs, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } });
       assert.ok(id in stubs, `Unexpected import: ${id}`);
       return stubs[id];
     },
@@ -106,7 +107,7 @@ for (const operation of ['get', 'versions', 'update', 'archive', 'restore']) {
         '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s },
         '@/utils/controllers/pages/htmlCanvas': { decodeHtmlCanvas: () => null },
       });
-      const request = { nextUrl: new URL('https://example.invalid/?id=10'), json: async () => ({ id: 10, title: 'Updated title', version_id: 5 }) };
+      const request = { headers: new Headers({ Authorization: `Bearer ${require('jsonwebtoken').sign({ userId: 7 }, 'fixture')}` }), nextUrl: new URL('https://example.invalid/?id=10'), json: async () => ({ id: 10, title: 'Updated title', version_id: 5 }) };
       const response = await (route.GET ?? route.POST)(request);
       assert.equal(response.status, board === 1 ? 404 : 200);
       const mutates = ['update', 'archive', 'restore'].includes(operation);
