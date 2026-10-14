@@ -2,7 +2,7 @@ const assert = require('node:assert/strict')
 const { execFileSync } = require('node:child_process')
 const path = require('node:path')
 const git = (...args) => execFileSync('git', args, { encoding: 'utf8' }).trim()
-const expected = 'HTPR-7195 Per-error lock, atomic count, attempt limit before any work'
+const expected = 'HTPR-7195 Repeats update one bot comment, queued retry, renewed lease'
 assert.equal(process.cwd(), '/home/valentin/projects/hypertask-htpr-7195')
 assert.equal(git('branch', '--show-current'), 'htpr-7195-ai-feedback')
 assert.equal(git('log', '-1', '--format=%s'), expected)

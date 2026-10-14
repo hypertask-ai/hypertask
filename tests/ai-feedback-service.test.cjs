@@ -6,31 +6,32 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let enabled, globalEnabled, rows, created, updates, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
+let enabled, globalEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, retryEntries, retryOperations, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
 let bucketCounts, locks, counters, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace
 const redis = {
   set: async (key, value, ...args) => {
-    assert.deepEqual(args, ['EX', key.includes(':lock:') ? 30 : 30 * 86400, 'NX'])
+    assert.deepEqual(args.slice(0, 2), ['EX', key.includes(':lock:') ? 30 : 30 * 86400])
+    assert.ok(args.length === 2 || args[2] === 'NX')
     const store = key.includes(':lock:') ? locks : counters
-    if (store.has(key)) return null
+    if (args[2] === 'NX' && store.has(key)) return null
     store.set(key, value)
     return 'OK'
   },
   incr: async (key) => { const count = Number(counters.get(key) ?? 0) + 1; counters.set(key, count); return count },
   expire: async (key, seconds) => { assert.equal(seconds, 30 * 86400); assert.ok(counters.has(key)); return 1 },
   get: async (key) => counters.get(key),
+  lpop: async (key, limit) => { assert.equal(key, 'ai-feedback:retry'); assert.equal(limit, 5); return retryEntries.splice(0, limit) },
+  multi: () => {
+    const transaction = {
+      rpush: (key, entry) => { assert.equal(key, 'ai-feedback:retry'); retryOperations.push(['rpush', entry]); retryEntries.push(entry); return transaction },
+      ltrim: (key, start, stop) => { assert.equal(key, 'ai-feedback:retry'); assert.deepEqual([start, stop], [-500, -1]); retryOperations.push(['ltrim']); retryEntries = retryEntries.slice(-500); return transaction },
+      expire: (key, ttl) => { assert.equal(key, 'ai-feedback:retry'); assert.equal(ttl, 86400); retryOperations.push(['expire', ttl]); return transaction },
+      exec: async () => [[null, retryEntries.length], [null, 'OK'], [null, 1]],
+    }
+    return transaction
+  },
   eval: async (script, _keys, key, now, limit, token) => {
-    if (script.includes('local acquired')) {
-      const count = await redis.incr(key)
-      await redis.expire(key, 30 * 86400)
-      const acquired = await activeRedis.set(now, limit, 'EX', 30, 'NX')
-      return [count, acquired === 'OK' ? 1 : 0]
-    }
-    if (script.includes('local waiting')) {
-      const count = Number(counters.get(key)) - Number(now) + 1
-      counters.set(key, count)
-      return count
-    }
+    if (script.includes('30000')) return locks.get(key) === now ? 1 : 0
     if (script.includes("redis.call('INCR'")) {
       const count = (attempts.get(key) ?? 0) + 1
       attempts.set(key, count)
@@ -60,6 +61,7 @@ const db = {
     findFirst: async (query) => { assert.deepEqual(query.where, { projectId: 15, value: 'ai-feedback' }); return labelCreated ? { id: 'label-ai' } : null },
     create: async (query) => { assert.deepEqual(query.data, { projectId: 15, value: 'ai-feedback' }); if (labelRace && labelCreated) throw Object.assign(new Error('label already exists'), { code: 'P2002' }); labelCreated++; if (labelError) throw labelError; return { id: 'label-ai' } },
   },
+  comment: { findFirst: async ({ where }) => comments.find((comment) => comment.taskId === where.taskId && comment.creatorId === where.creatorId && comment.agentId === where.agentId && comment.text.includes(where.text.contains)) ?? null },
   description: { findUnique: async ({ where }) => ({ content: rows.find((row) => row.id === where.taskId).description_.content }) },
   task: { findFirst: async (query) => {
     taskQuery = query
@@ -72,25 +74,38 @@ stub('src/lib/prisma.ts', { default: db })
 stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => {
   if (failWrite) throw new Error('write failed')
   created.push(options)
-  const task = { id: created.length, ticketNumber: `HTPR-${7195 + created.length}`, uniqueIndex: 7195 + created.length, status: 'Normal', sectionId: 111, section: 'Bugs', description_: { content: options.description } }
+  const task = { id: created.length, ticketNumber: `HTPR-${7195 + created.length}`, uniqueIndex: 7195 + created.length, status: 'Normal', sectionId: 111, section: 'Bugs', userId: options.userId, description_: { content: options.description } }
   rows.push(task)
   if (partialWriteFailure) { task.description_.content = ''; throw new Error('post-create failure') }
   return { task }
 } })
-stub('src/utils/controllers/description/common-description-create.ts', { default: async (options) => {
+stub('src/utils/controllers/description/common-description-create.ts', { default: async () => { descriptionWrites++; throw new Error('Repeat description write is forbidden') } })
+stub('src/utils/controllers/comments/createCommentService.ts', { createCommentService: async (options) => {
   if (failWrite) throw new Error('write failed')
+  assert.equal(options.creatorId, rows.find((row) => row.id === options.taskId).userId)
+  assert.equal(options.currentUser.id, options.creatorId)
+  commentCreates.push(options)
+  const comment = { id: comments.length + 1, taskId: options.taskId, creatorId: options.creatorId, agentId: null, text: options.text }
+  comments.push(comment)
+  return comment
+} })
+stub('src/utils/controllers/comments/updateCommentService.ts', { updateCommentService: async (options) => {
+  if (failWrite) throw new Error('write failed')
+  const comment = comments.find((row) => row.id === options.commentId)
+  assert.equal(options.userId, comment.creatorId)
   updates.push(options)
-  rows.find((row) => row.id === options.taskId).description_.content = options.content
+  comment.text = options.text
+  return comment
 } })
 stub('src/lib/realtime/server.ts', { broadcastTaskChange: async () => {} })
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false })
-const { fileAiFeedback, bumpFeedbackDescription, aiFeedbackEnabled, FEEDBACK_COUNT_LOCK_SCRIPT, FEEDBACK_RESET_COUNT_SCRIPT } = jiti('../src/lib/aiFeedback/report.ts')
+const { fileAiFeedback, aiFeedbackEnabled, FEEDBACK_RENEW_LEASE_SCRIPT } = jiti('../src/lib/aiFeedback/report.ts')
 const { reserveFeedbackAttempt, reserveFeedbackQuota, FEEDBACK_QUOTA_SCRIPT } = jiti('../src/lib/aiFeedback/rateLimit.ts')
 const { feedbackFingerprint } = jiti('../src/lib/aiFeedback/input.ts')
 const input = { surface: 'mcp', client: 'claude', tool: 'hypertask_tasks', status: 503, errorCode: 'unavailable', error: 'Cannot save "Confidential task description" for customer@example.test' }
 
 test.beforeEach(() => {
-  enabled = true; globalEnabled = false; rows = []; created = []; updates = []; labelCreated = 0; bucketCounts = new Map(); locks = new Map(); counters = new Map(); attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; userQuery = undefined; taskQuery = undefined
+  enabled = true; globalEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; retryEntries = []; retryOperations = []; labelCreated = 0; bucketCounts = new Map(); locks = new Map(); counters = new Map(); attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; userQuery = undefined; taskQuery = undefined
 })
 
 test('creates scrubbed medium-priority report on board 15 Bugs through createTaskCore, never as the reporting account', async () => {
@@ -108,27 +123,36 @@ test('creates scrubbed medium-priority report on board 15 Bugs through createTas
   assert.match(options.description, /Kamil/)
 })
 
-test('same fingerprint across accounts and notes bumps one open report, deduping capped names and clients', async () => {
+test('tally comment is created on first repeat then edited in place by the creation actor, with capped scrubbed names and clients', async () => {
   await fileAiFeedback(input, 42)
+  assert.equal(comments.length, 0)
+  const original = rows[0].description_.content
   const result = await fileAiFeedback({ ...input, note: 'Different context', client: 'cursor' }, 43)
   assert.equal(created.length, 1); assert.equal(result.deduped, true); assert.equal(result.count, 2)
-  assert.match(updates[0].content, /Clients: claude, cursor/)
-  assert.equal(updates[0].creatorId, 6)
-  assert.equal((updates[0].content.match(/Kamil/g) ?? []).length, 1)
-  let content = updates[0].content
-  for (let index = 0; index < 30; index++) content = bumpFeedbackDescription(content, index + 3, `Name ${index}`, `client-${index}`).description
+  assert.equal(commentCreates.length, 1); assert.equal(updates.length, 0)
+  assert.match(comments[0].text, /AI feedback tally: ai-fb-[a-f0-9]{12}/)
+  assert.match(comments[0].text, /Clients: claude, cursor/)
+  assert.equal(comments[0].creatorId, 6)
+  assert.equal((comments[0].text.match(/Kamil/g) ?? []).length, 1)
+  const commentId = comments[0].id
+  for (let index = 0; index < 12; index++) {
+    const originalFind = db.user.findUnique
+    db.user.findUnique = async () => ({ displayName: `Name ${index} & Co <owner>` })
+    try { await fileAiFeedback({ ...input, client: `client-${index}` }, 44) }
+    finally { db.user.findUnique = originalFind }
+  }
+  const content = comments[0].text
+  assert.equal(comments.length, 1); assert.equal(commentCreates.length, 1)
+  assert.equal(updates.length, 12)
+  assert.ok(updates.every((update) => update.commentId === commentId && update.userId === 6))
   assert.equal(content.match(/Reporting display names: ([^<]*)/)[1].split(', ').length, 10)
   assert.equal(content.match(/Clients: ([^<]*)/)[1].split(', ').length, 10)
-  assert.match(content, /Seen 32 times/)
+  assert.match(content, /Seen 14 times/)
+  assert.match(content, /Name 0 &amp; Co/)
+  assert.equal(content.includes('<owner>'), false)
   assert.equal((content.match(/Seen /g) ?? []).length, 1)
-})
-
-test('escaped reporting display names survive dedupe without injecting HTML', () => {
-  const first = bumpFeedbackDescription('<p>Seen 1 times</p>', 2, 'Kamil & Co <owner>', 'claude').description
-  const second = bumpFeedbackDescription(first, 3, 'Kamil & Co <owner>', 'claude').description
-  assert.match(second, /Kamil &amp; Co/)
-  assert.equal(second.includes('<owner>'), false)
-  assert.equal((second.match(/Kamil/g) ?? []).length, 1)
+  assert.equal(rows[0].description_.content, original)
+  assert.equal(descriptionWrites, 0)
 })
 
 test('archived and Done reports do not absorb new reports, including isDone columns with other titles', async () => {
@@ -151,7 +175,7 @@ test('account new and bump quotas are separate, inclusive and reject without wri
   assert.equal(created.length, 10)
   for (let index = 0; index < 30; index++) await fileAiFeedback({ ...input, tool: 'tool-0' }, 42)
   await assert.rejects(fileAiFeedback({ ...input, tool: 'tool-0' }, 42), { status: 429 })
-  assert.equal(updates.length, 30)
+  assert.equal(commentCreates.length + updates.length, 30)
   assert.equal((await fileAiFeedback({ ...input, tool: 'tool-11' }, 43)).count, 1)
 })
 
@@ -160,7 +184,7 @@ test('anonymous reports require Everyone and share one quota for new reports and
   assert.equal(created.length, 0)
   globalEnabled = true
   for (let index = 0; index < 20; index++) await fileAiFeedback(input)
-  assert.equal(created.length, 1); assert.equal(updates.length, 19)
+  assert.equal(created.length, 1); assert.equal(commentCreates.length + updates.length, 19)
   await assert.rejects(fileAiFeedback({ ...input, tool: 'another-tool' }), { status: 429 })
   assert.equal(created.length, 1)
   assert.equal(userQuery, undefined)
@@ -188,7 +212,7 @@ test('titles use tool, errorCode or status and never exceed 80 characters; uncon
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
 })
 
-test('real Redis quotas, attempts, counting and lock reset are atomic across clients and storage errors fail closed', async (t) => {
+test('real Redis quotas, attempts, lease renewal are atomic across clients and storage errors fail closed', async (t) => {
   const { spawn } = require('node:child_process')
   const fs = require('node:fs'), os = require('node:os')
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-feedback-redis-'))
@@ -213,17 +237,38 @@ test('real Redis quotas, attempts, counting and lock reset are atomic across cli
   assert.equal(await reserveFeedbackAttempt(), false)
   await one.expire('ai-feedback:attempt:42', 0)
   assert.equal(await reserveFeedbackAttempt(42), true)
-  const countKey = 'ai-feedback:count:test', lockKey = 'ai-feedback:lock:test'
-  await one.set(countKey, 99)
-  const counted = await Promise.all(Array.from({ length: 12 }, (_, index) => (index % 2 ? one : two).eval(FEEDBACK_COUNT_LOCK_SCRIPT, 2, countKey, lockKey, `owner-${index}`)))
-  assert.equal(counted.filter((result) => result[1] === 1).length, 1)
-  const winner = counted.find((result) => result[1] === 1)
-  assert.equal(winner[0], 100)
-  assert.equal(await one.get(countKey), '111')
-  assert.equal(await one.eval(FEEDBACK_RESET_COUNT_SCRIPT, 1, countKey, winner[0]), 12)
-  assert.equal(await two.get(countKey), '12')
-  assert.ok(await one.ttl(countKey) > 2591990)
-  assert.ok(await one.ttl(lockKey) > 20 && await one.ttl(lockKey) <= 30)
+  const lockKey = 'ai-feedback:lock:test'
+  await one.set(lockKey, 'owner', 'PX', 1000)
+  assert.equal(await one.eval(FEEDBACK_RENEW_LEASE_SCRIPT, 1, lockKey, 'intruder'), 0)
+  assert.ok(await one.pttl(lockKey) <= 1000)
+  assert.equal(await one.eval(FEEDBACK_RENEW_LEASE_SCRIPT, 1, lockKey, 'owner'), 1)
+  assert.ok(await one.pttl(lockKey) > 29900)
+  await two.set(lockKey, 'replacement', 'PX', 1000)
+  assert.equal(await one.eval(FEEDBACK_RENEW_LEASE_SCRIPT, 1, lockKey, 'owner'), 0)
+  assert.equal(await two.get(lockKey), 'replacement')
+  assert.ok(await two.pttl(lockKey) <= 1000)
+  activeRedis = one
+  await fileAiFeedback(input, 45)
+  await fileAiFeedback(input, 45)
+  await fileAiFeedback(input, 45)
+  const durableCountKey = `ai-feedback:count:${feedbackFingerprint(input)}`
+  await one.expire(durableCountKey, 0)
+  assert.equal((await fileAiFeedback(input, 45)).count, 4)
+  assert.equal(await two.get(durableCountKey), '4')
+  assert.match(comments[0].text, /Seen 4 times/)
+  assert.equal(descriptionWrites, 0)
+  const queuedInput = { ...input, tool: 'queued-tool' }
+  const queuedLock = `ai-feedback:lock:${feedbackFingerprint(queuedInput)}`
+  await two.set(queuedLock, 'another-owner', 'EX', 30)
+  await assert.rejects(fileAiFeedback(queuedInput, 46, true), { status: 503 })
+  assert.equal(await one.llen('ai-feedback:retry'), 1)
+  assert.ok(await one.ttl('ai-feedback:retry') > 86390)
+  const queued = JSON.parse((await two.lrange('ai-feedback:retry', 0, -1))[0])
+  assert.equal(queued.input.error, undefined)
+  await two.del(queuedLock)
+  await fileAiFeedback({ ...input, tool: 'drain-trigger' }, 46)
+  assert.equal(await one.llen('ai-feedback:retry'), 0)
+  assert.equal(created.length, 3)
   activeRedis = { eval: async () => { throw new Error('storage unavailable') } }
   await assert.rejects(reserveFeedbackQuota(42, false), /storage unavailable/)
 })
@@ -248,43 +293,24 @@ test('flag storage errors fail closed, and a held fingerprint lock bounds retrie
 })
 
 
-test('two bumps preserve original report and human triage exactly, updating only owned metadata', async () => {
+test('description never written on repeat, including human edits after lookup and exact owned-looking metadata', async () => {
   await fileAiFeedback(input, 42)
-  const original = rows[0].description_.content + '<p>Error: Original technical failure</p><p>Note: Original report context</p>'
-  const triage = '<h2>Human triage</h2><p>Keep customer account details for investigation.</p><p>Original report follow-up.</p>'
-  rows[0].description_.content = triage + original
-    .replace('Reporting display names: Kamil', 'Reporting display names: victim@example.test, Kamil')
-    .replace('Clients: claude', 'Clients: victim@example.test, claude')
-    .replace(/<p>Last seen: [^<]*<\/p>/, '<p>Last seen: 2000-01-01T00:00:00.000Z</p>')
-  const metadata = /<p>(?:Seen \d+ times|Reporting display names: [^<]*|Clients: [^<]*|Last seen: [^<]*)<\/p>/g
-  const reportBody = (triage + original).replace(metadata, '')
+  const human = '\n<h2 data-owner="human">Triage &amp; context</h2>\n<p>Keep  spacing, quotes "exactly", and &#39;entities&#39;.</p>\n<p>Seen 999 times</p><p>Clients: human</p>'
+  const original = rows[0].description_.content
+  onQuota = () => { rows[0].description_.content = original + human; onQuota = undefined }
   for (const count of [2, 3]) {
     const result = await fileAiFeedback({ ...input, client: 'cursor', category: 'slow', note: 'New private prose' }, 43)
     assert.equal(result.count, count)
-    const body = updates.at(-1).content
-    assert.equal(body.replace(metadata, ''), reportBody)
-    assert.equal(body.includes('victim@example.test'), false)
+    assert.equal(rows[0].description_.content, original + human)
+    assert.equal(descriptionWrites, 0)
+    const body = comments[0].text
     assert.equal(body.includes('New private prose'), false)
+    assert.equal(body.includes('Triage'), false)
     assert.match(body, /Clients: claude, cursor/)
-    assert.match(body, /Category: other/)
-    assert.match(body, /Fingerprint: ai-fb-[a-f0-9]{12}/)
     const lastSeen = body.match(/<p>Last seen: ([^<]*)<\/p>/)[1]
     assert.equal(new Date(lastSeen).toISOString(), lastSeen)
-    assert.notEqual(lastSeen, '2000-01-01T00:00:00.000Z')
     assert.equal((body.match(/Last seen:/g) ?? []).length, 1)
   }
-})
-
-test('human-removed metadata lines are appended without changing remaining description', () => {
-  const content = '<p>Original report</p><p>Human investigation</p>'
-  const first = bumpFeedbackDescription(content, 2, 'Kamil', 'claude')
-  assert.equal(first.count, 2)
-  assert.ok(first.description.startsWith(content))
-  for (const label of ['Seen 2 times', 'Reporting display names: Kamil', 'Clients: claude', 'Last seen:']) assert.ok(first.description.includes(label))
-  const second = bumpFeedbackDescription(first.description, 3, 'Kamil', 'cursor')
-  assert.equal(second.count, 3)
-  assert.ok(second.description.startsWith(content))
-  assert.equal((second.description.match(/Last seen:/g) ?? []).length, 1)
 })
 
 test('free text is accepted but never persisted, including unquoted private prose and empty strings', async () => {
@@ -314,7 +340,7 @@ test('overlapping reports with different fingerprints both file, and identical r
   assert.equal(locks.size, 0)
   rows = []; created = []
   const repeated = await Promise.all([fileAiFeedback(input, 44), fileAiFeedback(input, 45)])
-  assert.ok(repeated.every((result) => result.count === 2))
+  assert.deepEqual(repeated.map((result) => result.count), [1, 2])
   assert.deepEqual(repeated.map((result) => result.deduped), [false, true])
   assert.equal(created.length, 1)
   assert.equal(locks.size, 0)
@@ -351,7 +377,7 @@ test('different fingerprints file without waiting for a blocked fingerprint', { 
   assert.equal(locks.size, 0)
 })
 
-test('same-fingerprint contention counts every report even when all bounded retries fail', async () => {
+test('explicit same-fingerprint contention retains bounded 503 and makes no destination or count writes', async () => {
   await fileAiFeedback(input, 42)
   const fingerprint = feedbackFingerprint(input)
   const lockKey = `ai-feedback:lock:${fingerprint}`
@@ -361,11 +387,12 @@ test('same-fingerprint contention counts every report even when all bounded retr
   const results = await Promise.allSettled(Array.from({ length: 4 }, (_, index) => fileAiFeedback(input, 50 + index)))
   assert.ok(results.every((result) => result.status === 'rejected' && result.reason.status === 503))
   assert.equal(prismaCalls, databaseBefore)
-  assert.equal(counters.get(countKey), 5)
+  assert.equal(counters.get(countKey), 1)
+  assert.equal(retryEntries.length, 0)
   locks.delete(lockKey)
   const bump = await fileAiFeedback(input, 42)
-  assert.equal(bump.count, 6)
-  assert.match(updates.at(-1).content, /Seen 6 times/)
+  assert.equal(bump.count, 2)
+  assert.match(comments[0].text, /Seen 2 times/)
 })
 
 test('attempt limit rejects before any Prisma call, flag lookup, fingerprint count or lock, including malformed and anonymous attempts', async () => {
@@ -385,19 +412,6 @@ test('attempt limit rejects before any Prisma call, flag lookup, fingerprint cou
   assert.equal((await fileAiFeedback(input, 43)).success, true)
 })
 
-test('bump re-reads human edits made after dedupe lookup and replaces only owned lines byte for byte', async () => {
-  await fileAiFeedback(input, 42)
-  const human = '\n<h2 data-owner="human">Triage &amp; context</h2>\n<p>Keep  spacing, quotes "exactly", and &#39;entities&#39;.</p>\n'
-  onQuota = () => { rows[0].description_.content += human; onQuota = undefined }
-  const result = await fileAiFeedback(input, 43)
-  assert.equal(result.count, 2)
-  assert.ok(updates[0].content.endsWith(human))
-  assert.equal((updates[0].content.match(/Triage/g) ?? []).length, 1)
-  rows[0].description_.content = rows[0].description_.content.replace('Seen 2 times', 'Seen 999 times')
-  assert.equal((await fileAiFeedback(input, 43)).count, 3)
-  assert.match(updates.at(-1).content, /Seen 3 times/)
-})
-
 test('label creation errors re-read the concurrently created label, and rethrow if none exists', async () => {
   for (const error of [Object.assign(new Error('unique conflict'), { code: 'P2002' }), new Error('ambiguous create failure')]) {
     labelCreated = 0; labelError = error
@@ -415,6 +429,158 @@ test('label creation errors re-read the concurrently created label, and rethrow 
 test('expired lock owner cannot delete a replacement lock in finally', async () => {
   const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
   onQuota = () => locks.set(lockKey, 'replacement-owner')
-  await fileAiFeedback(input, 42)
+  await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
+  assert.equal(created.length, 0)
   assert.equal(locks.get(lockKey), 'replacement-owner')
+})
+
+test('counter re-initialised from the tally comment after expiry, or from one before the first repeat', async () => {
+  await fileAiFeedback(input, 42)
+  const countKey = `ai-feedback:count:${feedbackFingerprint(input)}`
+  counters.delete(countKey)
+  assert.equal((await fileAiFeedback(input, 43)).count, 2)
+  assert.equal((await fileAiFeedback(input, 43)).count, 3)
+  comments[0].text = comments[0].text.replace('Seen 3 times', 'Seen 87 times')
+  counters.delete(countKey)
+  let initialised = false
+  activeRedis = { ...redis,
+    set: async (key, value, ...args) => {
+      if (key === countKey) { assert.equal(value, 87); assert.deepEqual(args, ['EX', 30 * 86400, 'NX']); initialised = true }
+      return redis.set(key, value, ...args)
+    },
+    incr: async (key) => { assert.ok(initialised); return redis.incr(key) },
+  }
+  assert.equal((await fileAiFeedback(input, 44)).count, 88)
+  assert.equal(comments.length, 1)
+  assert.match(comments[0].text, /Seen 88 times/)
+  assert.equal(descriptionWrites, 0)
+})
+
+test('tally lookup never edits a human comment or another agent comment with the same marker', async () => {
+  await fileAiFeedback(input, 42)
+  const marker = `<p>AI feedback tally: ai-fb-${feedbackFingerprint(input).slice(0, 12)}</p>`
+  const human = { id: 50, taskId: rows[0].id, creatorId: 42, agentId: null, text: marker + '<p>Seen 900 times</p>' }
+  const agent = { id: 51, taskId: rows[0].id, creatorId: 6, agentId: 'another-agent', text: marker + '<p>Seen 800 times</p>' }
+  comments.push(human, agent)
+  await fileAiFeedback(input, 43)
+  await fileAiFeedback(input, 44)
+  assert.equal(comments.length, 3)
+  assert.equal(commentCreates.length, 1)
+  assert.equal(updates.length, 1)
+  assert.equal(updates[0].commentId, comments[2].id)
+  assert.equal(human.text, marker + '<p>Seen 900 times</p>')
+  assert.equal(agent.text, marker + '<p>Seen 800 times</p>')
+})
+
+test('queued automatic report is scrubbed and filed on the next explicit call, without counting it twice', async () => {
+  const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  locks.set(lockKey, 'other-owner')
+  await assert.rejects(fileAiFeedback({ ...input, note: 'private note', client: 'CURSOR' }, 42, true), { status: 503 })
+  assert.equal(created.length, 0)
+  assert.equal(counters.size, 0)
+  assert.equal(retryEntries.length, 1)
+  const queued = JSON.parse(retryEntries[0])
+  assert.equal(queued.userId, 42)
+  assert.equal(queued.input.client, 'cursor')
+  assert.equal(queued.input.error, undefined)
+  assert.equal(queued.input.note, undefined)
+  assert.equal(retryEntries[0].includes('private'), false)
+  assert.deepEqual(retryOperations.map((operation) => operation[0]), ['rpush', 'ltrim', 'expire'])
+  locks.delete(lockKey)
+  assert.equal((await fileAiFeedback({ ...input, tool: 'hypertask_hello' }, 43)).success, true)
+  assert.equal(created.length, 2)
+  assert.equal(retryEntries.length, 0)
+  assert.ok(created.every((options) => options.description.includes('Seen 1 times')))
+  assert.equal((await fileAiFeedback(input, 43)).count, 2)
+})
+
+test('retry drain files at most five entries on automatic calls and pushes each failure back once', async () => {
+  for (let index = 0; index < 7; index++) retryEntries.push(JSON.stringify({ input: { ...input, error: undefined, tool: `tool-${index}` }, userId: 42 }))
+  failWrite = true
+  await assert.rejects(fileAiFeedback({ ...input, tool: 'new-tool' }, 43, true), /write failed/)
+  assert.equal(retryEntries.length, 7)
+  assert.equal(retryOperations.filter((operation) => operation[0] === 'rpush').length, 5)
+  assert.deepEqual(retryEntries.map((entry) => JSON.parse(entry).input.tool), ['tool-5', 'tool-6', 'tool-0', 'tool-1', 'tool-2', 'tool-3', 'tool-4'])
+  failWrite = false
+  await fileAiFeedback({ ...input, tool: 'next-tool' }, 43, true)
+  assert.equal(created.length, 6)
+  assert.equal(retryEntries.length, 2)
+})
+
+test('automatic contention caps the retry list at 500 and refreshes the one-day expiry', async () => {
+  for (let index = 0; index < 500; index++) retryEntries.push(JSON.stringify({ input: { surface: 'api', tool: `tool-${index}` }, userId: 42 }))
+  const prior = [...retryEntries]
+  activeRedis = { ...redis, lpop: async () => [] }
+  locks.set(`ai-feedback:lock:${feedbackFingerprint(input)}`, 'other-owner')
+  await assert.rejects(fileAiFeedback(input, 42, true), { status: 503 })
+  assert.equal(retryEntries.length, 500)
+  assert.equal(retryEntries[0], prior[1])
+  assert.deepEqual(retryOperations.at(-1), ['expire', 86400])
+})
+
+test('lease renewal runs every ten seconds, stops writes when the token is lost, and clears its timer in finally', async () => {
+  const originalInterval = global.setInterval, originalClear = global.clearInterval
+  let tick, cleared = false, unrefed = false, release, entered
+  const held = new Promise((resolve) => { release = resolve })
+  const started = new Promise((resolve) => { entered = resolve })
+  const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  const timer = { unref: () => { unrefed = true } }
+  global.setInterval = (callback, milliseconds) => { assert.equal(milliseconds, 10000); tick = callback; return timer }
+  global.clearInterval = (value) => { assert.equal(value, timer); cleared = true }
+  const originalFind = db.task.findFirst
+  db.task.findFirst = async (...args) => { entered(); await held; return originalFind(...args) }
+  const originalEval = redis.eval
+  let renewalCount = 0, renewed
+  activeRedis = { ...redis, eval: async (...args) => {
+    const value = await originalEval(...args)
+    if (args[0].includes('30000')) { renewalCount++; if (renewed) renewed() }
+    return value
+  } }
+  const filing = fileAiFeedback(input, 42)
+  try {
+    await started
+    assert.equal(unrefed, true)
+    await new Promise((resolve) => { renewed = resolve; tick() })
+    assert.equal(renewalCount, 1)
+    assert.equal(locks.has(lockKey), true)
+    locks.set(lockKey, 'replacement-owner')
+    await new Promise((resolve) => { renewed = resolve; tick() })
+    release()
+    await assert.rejects(filing, { status: 503 })
+    assert.equal(renewalCount, 2)
+    assert.equal(created.length, 0)
+    assert.equal(commentCreates.length, 0)
+    assert.equal(updates.length, 0)
+    assert.equal(labelCreated, 0)
+    assert.equal(counters.size, 0)
+    assert.equal(bucketCounts.size, 0)
+    assert.equal(locks.get(lockKey), 'replacement-owner')
+    assert.equal(cleared, true)
+  } finally {
+    release()
+    global.setInterval = originalInterval; global.clearInterval = originalClear; db.task.findFirst = originalFind
+    await filing.catch(() => {})
+  }
+})
+
+test('lease loss before a repeat prevents comment creation and update, and renewal errors fail closed', async () => {
+  await fileAiFeedback(input, 42)
+  const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  const countKey = `ai-feedback:count:${feedbackFingerprint(input)}`
+  for (const hasComment of [false, true]) {
+    if (hasComment) { locks.delete(lockKey); await fileAiFeedback(input, 42) }
+    const before = { creates: commentCreates.length, updates: updates.length, count: counters.get(countKey) }
+    onQuota = () => { locks.set(lockKey, 'replacement-owner'); onQuota = undefined }
+    await assert.rejects(fileAiFeedback(input, 43), { status: 503 })
+    assert.equal(commentCreates.length, before.creates)
+    assert.equal(updates.length, before.updates)
+    assert.equal(counters.get(countKey), before.count)
+  }
+  locks.delete(lockKey)
+  activeRedis = { ...redis, eval: async (...args) => {
+    if (args[0].includes('30000')) throw new Error('Redis unavailable')
+    return redis.eval(...args)
+  } }
+  await assert.rejects(fileAiFeedback(input, 43), { status: 503 })
+  assert.equal(locks.size, 0)
 })

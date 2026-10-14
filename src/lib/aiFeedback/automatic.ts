@@ -10,7 +10,7 @@ export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
     for (const field of ['tool', 'client', 'errorCode'] as const) {
       if (!aiFeedbackSchema.shape[field].safeParse(report[field]).success) delete report[field]
     }
-    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {}))
+    waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId, true)).catch(() => {}))
   } catch {
     // Background scheduling is best effort outside Vercel too.
   }

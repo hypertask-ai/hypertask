@@ -6,7 +6,8 @@ import { aiFeedbackEnabled } from './enabled'
 import { PriorityConstants } from '@/lib/constants/constants'
 import { escapeHtml } from '@/utils/htmlEscape'
 import { createTaskCore } from '@/utils/controllers/tasks/createTaskCore'
-import upsertTaskDescription from '@/utils/controllers/description/common-description-create'
+import { createCommentService } from '@/utils/controllers/comments/createCommentService'
+import { updateCommentService } from '@/utils/controllers/comments/updateCommentService'
 import { broadcastTaskChange } from '@/lib/realtime/server'
 import { aiFeedbackSchema, feedbackFingerprint, scrubFeedbackText, type AiFeedbackInput } from './input'
 import { reserveFeedbackAttempt, reserveFeedbackQuota } from './rateLimit'
@@ -16,18 +17,14 @@ export { aiFeedbackEnabled } from './enabled'
 const PROJECT_ID = 15
 const MAX_REPORTERS = 10
 
-// Increment before acquiring the lock atomically so a new ticket can retain all later arrivals when resetting its count.
-export const FEEDBACK_COUNT_LOCK_SCRIPT = `
-local count = redis.call('INCR', KEYS[1])
-redis.call('EXPIRE', KEYS[1], 2592000)
-local acquired = redis.call('SET', KEYS[2], ARGV[1], 'EX', 30, 'NX')
-return {count, acquired and 1 or 0}
-`
+const RETRY_KEY = 'ai-feedback:retry'
+const COUNT_TTL = 30 * 86400
 
-export const FEEDBACK_RESET_COUNT_SCRIPT = `
-local waiting = tonumber(redis.call('GET', KEYS[1])) - tonumber(ARGV[1])
-redis.call('SET', KEYS[1], 1, 'EX', 2592000)
-return redis.call('INCRBY', KEYS[1], waiting)
+export const FEEDBACK_RENEW_LEASE_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('PEXPIRE', KEYS[1], 30000)
+end
+return 0
 `
 
 export class AiFeedbackError extends Error {
@@ -53,20 +50,10 @@ function reportingNames(content: string, label: string, value?: string): string[
   return [...new Set(values)].slice(0, MAX_REPORTERS)
 }
 
-export function bumpFeedbackDescription(content: string, count: number, displayName?: string, client?: string) {
-  const reporters = reportingNames(content, 'Reporting display names', displayName)
-  const clients = reportingNames(content, 'Clients', client)
-  const metadata: [RegExp, string][] = [
-    [/<p>Seen \d+ times<\/p>/g, `<p>Seen ${count} times</p>`],
-    [/<p>Reporting display names: [^<]*<\/p>/g, reporterLine('Reporting display names', reporters)],
-    [/<p>Clients: [^<]*<\/p>/g, reporterLine('Clients', clients)],
-    [/<p>Last seen: [^<]*<\/p>/g, `<p>Last seen: ${new Date().toISOString()}</p>`],
-  ]
-  let description = content
-  for (const [pattern, line] of metadata) {
-    description = description.match(pattern) ? description.replace(pattern, () => line) : description + line
-  }
-  return { count, description }
+function tallyComment(content: string, marker: string, count: number, displayName?: string, client?: string) {
+  return marker + `<p>Seen ${count} times</p><p>Last seen: ${new Date().toISOString()}</p>` +
+    reporterLine('Reporting display names', reportingNames(content, 'Reporting display names', displayName)) +
+    reporterLine('Clients', reportingNames(content, 'Clients', client))
 }
 
 function description(input: AiFeedbackInput, fingerprint: string, count: number, displayName?: string) {
@@ -81,7 +68,38 @@ function description(input: AiFeedbackInput, fingerprint: string, count: number,
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
-export async function fileAiFeedback(raw: unknown, userId?: number) {
+async function enqueueRetry(input: AiFeedbackInput, userId?: number) {
+  const { note: _note, error: _error, ...structured } = aiFeedbackSchema.parse(input)
+  const redis = await getRedis()
+  const results = await redis.multi()
+    .rpush(RETRY_KEY, JSON.stringify({ input: structured, userId }))
+    .ltrim(RETRY_KEY, -500, -1)
+    .expire(RETRY_KEY, 86400)
+    .exec()
+  const failure = results?.find(([error]) => error)?.[0]
+  if (failure) throw failure
+}
+
+async function drainRetries() {
+  const redis = await getRedis()
+  // Pop the batch first so a failed entry is retried only once per call.
+  const entries = await redis.lpop(RETRY_KEY, 5)
+  for (const entry of entries ?? []) {
+    const { input, userId } = JSON.parse(entry) as { input: AiFeedbackInput; userId?: number }
+    try {
+      await fileReport(input, userId, true)
+    } catch {
+      await enqueueRetry(input, userId)
+    }
+  }
+}
+
+export async function fileAiFeedback(raw: unknown, userId?: number, automatic = false) {
+  await drainRetries()
+  return fileReport(raw, userId, automatic, true)
+}
+
+async function fileReport(raw: unknown, userId?: number, automatic = false, queueOnContention = false) {
   if (!await reserveFeedbackAttempt(userId)) throw new AiFeedbackError(429, 'AI feedback hourly attempt limit reached')
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = aiFeedbackSchema.safeParse(raw)
@@ -95,14 +113,31 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
   const countKey = `ai-feedback:count:${fingerprint}`
   const lockKey = `ai-feedback:lock:${fingerprint}`
   const lockToken = randomUUID()
-  const [incremented, acquired] = await redis.eval(FEEDBACK_COUNT_LOCK_SCRIPT, 2, countKey, lockKey, lockToken) as [number, number]
-  if (!acquired) {
+  if (await redis.set(lockKey, lockToken, 'EX', 30, 'NX') !== 'OK') {
+    if (automatic) {
+      if (queueOnContention) await enqueueRetry(input, userId)
+      throw new AiFeedbackError(503, 'Feedback is busy, try again shortly')
+    }
     for (let attempt = 0; ; attempt++) {
       await setTimeout(250)
       if (await redis.set(lockKey, lockToken, 'EX', 30, 'NX') === 'OK') break
       if (attempt === 18) throw new AiFeedbackError(503, 'Feedback is busy, try again shortly')
     }
   }
+  let leaseLost = false
+  const renewLease = async () => {
+    try {
+      if (Number(await redis.eval(FEEDBACK_RENEW_LEASE_SCRIPT, 1, lockKey, lockToken)) !== 1) leaseLost = true
+    } catch {
+      leaseLost = true
+    }
+  }
+  const checkLease = async () => {
+    if (!leaseLost) await renewLease()
+    if (leaseLost) throw new AiFeedbackError(503, 'Feedback lease lost, try again shortly')
+  }
+  const renewal = setInterval(() => { void renewLease() }, 10_000)
+  renewal.unref()
   try {
     const [project, user, doneSections] = await Promise.all([
       // Feedback submitters need not be members of the internal product board.
@@ -119,7 +154,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
     const section = project?.section[0]
     if (!project?.uniqueIdentifier || !section) throw new AiFeedbackError(503, 'Feedback destination is not configured')
     // Use a service-side actor for all tickets. Only the scrubbed display name is public.
-    const actorId = project.ownerId
     const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
     const existing = await prisma.task.findFirst({
       where: {
@@ -130,28 +164,50 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
         ],
         description_: { is: { content: { contains: marker } } },
       },
-      select: { id: true, ticketNumber: true, uniqueIndex: true },
+      select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, description_: { select: { content: true } } },
     })
+    const actorId = existing?.userId ?? project.ownerId
+    const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
+    const comment = existing ? await prisma.comment.findFirst({
+      where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
+      orderBy: { id: 'asc' }, select: { id: true, text: true },
+    }) : null
+    await checkLease()
     if (!await reserveFeedbackQuota(userId, Boolean(existing))) throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
+    const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
+    await checkLease()
+    if (existing) await redis.set(countKey, storedCount, 'EX', COUNT_TTL, 'NX')
+    else await redis.set(countKey, 0, 'EX', COUNT_TTL)
+    await checkLease()
+    const count = await redis.incr(countKey)
+    await checkLease()
+    await redis.expire(countKey, COUNT_TTL)
     if (existing) {
-      const count = Number(await redis.get(countKey))
-      // Neither the model nor upsert supports a version precondition; the remaining human-edit window is this re-read to write gap.
-      const latest = await prisma.description.findUnique({ where: { taskId: existing.id }, select: { content: true } })
-      const bump = bumpFeedbackDescription(latest?.content ?? '', count, displayName, input.client)
-      await upsertTaskDescription({ taskId: existing.id, creatorId: actorId, actingUserId: actorId, content: bump.description })
+      const text = tallyComment(comment?.text ?? existing.description_?.content ?? '', tallyMarker, count, displayName, input.client)
+      await checkLease()
+      if (comment) {
+        await updateCommentService({ commentId: comment.id, text, userId: actorId })
+      } else {
+        await createCommentService({
+          taskId: existing.id, text, creatorId: actorId, ownerId: existing.userId,
+          currentUser: { id: actorId }, processTaskReferences: false,
+        })
+      }
+      await checkLease()
       void broadcastTaskChange(existing.id).catch(() => {})
-      return receipt(existing, true, bump.count, project.uniqueIdentifier)
+      return receipt(existing, true, count, project.uniqueIdentifier)
     }
     let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
     if (!label) {
       try {
+        await checkLease()
         label = await prisma.label.create({ data: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
       } catch (error) {
         label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
         if (!label) throw error
       }
     }
-    const count = Number(await redis.eval(FEEDBACK_RESET_COUNT_SCRIPT, 1, countKey, incremented))
+    await checkLease()
     const { task } = await createTaskCore({
       title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
       description: description(input, fingerprint, count, displayName),
@@ -161,6 +217,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
     })
     return receipt(task, false, count, project.uniqueIdentifier)
   } finally {
+    clearInterval(renewal)
     await redis.eval("if redis.call('GET', KEYS[1]) == ARGV[1] then return redis.call('DEL', KEYS[1]) end return 0", 1, lockKey, lockToken).catch(() => {})
   }
 }

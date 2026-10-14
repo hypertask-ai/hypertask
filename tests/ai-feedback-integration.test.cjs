@@ -10,7 +10,7 @@ const stub = (file, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 let mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
-let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false
+let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockContention = false, retries = []
 const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
 stub('src/lib/prisma.ts', { default: {
@@ -25,13 +25,26 @@ stub('src/lib/flags.ts', {
   featureFlagCandidateUserIds: async () => mode === 'EVERYONE' ? null : mode === 'OFF' ? [] : [6, 985],
 })
 stub('src/lib/redis.ts', { getRedis: async () => ({
-  set: async (key, value) => { if (key.includes(':client:')) clientNames.set(key, value); return 'OK' },
+  lpop: async (_key, count) => retries.splice(0, count),
+  multi: () => {
+    const transaction = {
+      rpush: (_key, entry) => { retries.push(entry); return transaction },
+      ltrim: () => { retries = retries.slice(-500); return transaction },
+      expire: () => transaction,
+      exec: async () => [[null, 1], [null, 'OK'], [null, 1]],
+    }
+    return transaction
+  },
+  incr: async () => 1,
+  expire: async () => 1,
+  set: async (key, value) => { if (key.includes(':lock:') && lockContention) return null; if (key.includes(':client:')) clientNames.set(key, value); return 'OK' },
   get: async (key) => key.includes(':count:') ? 1 : clientNames.get(key),
   eval: async (script) => script.includes('local acquired') ? [1, 1] : script.includes('local waiting') ? 1 : script.includes("redis.call('INCR'") ? ++attemptCount : script.includes('ZCARD') ? ++quotaCount <= 10 ? 1 : 0 : 1,
   zrem: async () => {},
 }) })
 stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => { if (coreBlock) await coreBlock; if (coreThrow) throw new Error('storage failed'); files.push(options); return { task: { ticketNumber: 'HTPR-7196', uniqueIndex: 7196 } } } })
-stub('src/utils/controllers/description/common-description-create.ts', { default: async () => {} })
+stub('src/utils/controllers/comments/createCommentService.ts', { createCommentService: async () => {} })
+stub('src/utils/controllers/comments/updateCommentService.ts', { updateCommentService: async () => {} })
 stub('src/lib/realtime/server.ts', { broadcastTaskChange: async () => {} })
 stub('src/lib/mcp/auth.ts', {
   extractBearerToken: (header) => header?.replace(/^Bearer /, ''),
@@ -58,7 +71,7 @@ const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/
 const rpcRequest = (method, params) => new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers: { Authorization: 'Bearer fixture', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
 async function drain() { while (pending.length) { const batch = pending.splice(0); await Promise.all(batch) } }
 
-test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false })
+test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockContention = false; retries = [] })
 test.afterEach(drain)
 
 test('REST accepts legitimate agent caller and returns the exact contract without private account fields', async () => {
@@ -307,4 +320,21 @@ test('REST and MCP feedback share the attempt limit before flag evaluation and f
   assert.equal(files.length, 0)
   assert.equal(quotaCount, 0)
   assert.equal(attemptCount, 62)
+})
+
+
+test('automatic observer queues a contended failure and the next explicit call drains it', async () => {
+  lockContention = true
+  queueAiFeedback({ surface: 'mcp', tool: 'hypertask_tasks', status: 503, note: 'private prose', error: 'private error' }, 985)
+  await drain()
+  assert.equal(files.length, 0)
+  assert.equal(retries.length, 1)
+  assert.equal(retries[0].includes('private'), false)
+  lockContention = false
+  const response = await POST(restRequest({ surface: 'api', tool: 'hypertask_hello', status: 500 }))
+  assert.equal(response.status, 200)
+  assert.equal(retries.length, 0)
+  assert.equal(files.length, 2)
+  assert.match(files[0].description, /Tool: hypertask_tasks/)
+  assert.match(files[0].description, /Category: call_failed/)
 })
