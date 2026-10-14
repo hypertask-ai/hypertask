@@ -406,6 +406,7 @@ li{margin:4px 0}
 [hidden]{display:none!important}
 .ranges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
 .ranges button{font:inherit;font-size:14px;color:inherit;background:var(--tile);border:1px solid var(--border-light-gray-thin);border-radius:4px;padding:6px 10px;cursor:pointer}
+@media (max-width:640px){.ranges button{min-width:44px;min-height:44px}}
 .ranges button[aria-pressed="true"]{border-color:var(--color-rich-text-link);color:var(--color-rich-text-link)}
 .ranges button:focus-visible{outline:2px solid var(--color-rich-text-link);outline-offset:2px}
 .delta{font-size:13px;color:var(--color-text-light-gray);margin-top:6px}
@@ -771,6 +772,8 @@ def render(data, now=None):
         '<meta name="viewport" content="width=device-width,initial-scale=1">',
         '<meta http-equiv="refresh" content="900">',
         '<title>Hypertask daily stats</title>',
+        '<link rel="preconnect" href="https://fonts.googleapis.com">',
+        '<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;600&display=swap" rel="stylesheet">',
         f'<style>{CSS}</style></head><body><main><h1>Hypertask daily stats</h1>',
         updated_line(now),
         '<p id="selected-range" class="muted" aria-live="polite">Last 24h (ending at last update)</p>',
