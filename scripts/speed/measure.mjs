@@ -244,7 +244,8 @@ async function measure(shared, browser, profile, index, run) {
       // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
       await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
       await page.locator('.section-container').first().focus();
-      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press('Control+j'), run.actions, 'client', BOARD), false);
+      // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
+      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
       await page.keyboard.press('Escape');
     } catch {
       const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
