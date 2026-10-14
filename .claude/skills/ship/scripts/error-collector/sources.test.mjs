@@ -480,6 +480,8 @@ test('YPER4-360: realtime ignores unrelated warnings and near-matching text; ord
   assert.equal(vercel.parseEvents(rows).length, rows.length);
   assert.ok(vercel.parseEvents(rows).every(event => event.service === 'vercel' && event.board === 15));
   assert.equal(vercel.parseEvents([{ ...row, message: '[realtime] broadcast failed' }], realtime.name).length, 1);
+  const callers = ['[cycle-rollover] realtime broadcast failed', '[tasks/single] task realtime broadcast failed', '[agent-run] runtime run board broadcast failed'];
+  assert.equal(vercel.parseEvents(callers.map(message => ({ ...row, message })), realtime.name).length, callers.length);
 });
 
 test('YPER4-360: realtime query failures/incomplete pages fail closed without exposing provider bodies', async () => {

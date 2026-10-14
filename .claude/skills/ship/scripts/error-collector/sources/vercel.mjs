@@ -1,7 +1,7 @@
 import { key, query } from '../io.mjs';
 
 export const name = 'vercel';
-const realtimeFailure = row => /^\[realtime\] broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
+const realtimeFailure = row => /^\[[\w/-]+\] (?:[\w-]+ )*broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
 const infra = [
   event => event.message.includes('Vercel Runtime Timeout Error'),
   event => event.route === '/sse',
