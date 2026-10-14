@@ -11,9 +11,9 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session) => {
     const req = { body };
-    console.time("getAllProjects API Fetch time");
+    // HTPR-7233: no console timer here. Timer labels are process-wide, so
+    // overlapping requests would end each other's timer and Node would warn.
     const response = await getAllProjectsController(session.userId, session.userId, req.body?.projectId);
-    console.timeEnd("getAllProjects API Fetch time");
     return NextResponse.json(response.json, { status: response.status });
   },
 });
