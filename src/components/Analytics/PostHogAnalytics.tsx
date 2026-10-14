@@ -379,9 +379,13 @@ export default function PostHogAnalytics({
         // other optional integrations bundled by the default entrypoint. The
         // supported slim build keeps capture, identity, web vitals, and guest
         // session recording while removing those dormant modules.
-        const { default: posthog } = await import(
-          "posthog-js/dist/module.slim"
-        );
+        // The slim build ships no extensions, so browser errors were never
+        // captured (YPER4-361). Load only the error tracking bundle with it.
+        const [{ default: posthog }, { ErrorTrackingExtensions }] =
+          await Promise.all([
+            import("posthog-js/dist/module.slim"),
+            import("posthog-js/dist/extension-bundles"),
+          ]);
         if (cancelled) return;
         const identity = latestIdentityRef.current;
         posthog.init(key, {
@@ -398,6 +402,8 @@ export default function PostHogAnalytics({
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
+          __extensionClasses: ErrorTrackingExtensions,
+          capture_exceptions: true,
           // Replay is for watching what demo guests do with the product; a
           // signed-in user's real work is never recorded.
           disable_session_recording: !identity.isGuest,
