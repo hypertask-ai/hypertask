@@ -250,7 +250,7 @@ async function writeSlackTaskDraft(input: {
   return {
     description,
     title:
-      result.output.title.replace(/<[^>]*>/g, "").trim() ||
+      result.output.title.replace(/<[^>]*>/g, "").replace(/[<>]/g, "").trim() ||
       result.output.ask.slice(0, 140).trim(),
   };
 }
