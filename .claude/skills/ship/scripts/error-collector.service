@@ -4,7 +4,7 @@ Description=Collect production errors into grouped bug tickets
 [Service]
 Type=oneshot
 UMask=0077
-Environment="PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="PATH=%h/.local/bin:%h/.local/lib/hypertask/runner-pickup:/usr/local/bin:/usr/bin:/bin"
 Environment="SHIP_SESSION_NAME=Error Collector"
 EnvironmentFile=-%h/.config/hypertask-agents/error-collector.env
 ExecStartPre=/usr/bin/mkdir -p %h/.local/state/error-collector
