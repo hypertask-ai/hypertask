@@ -34,6 +34,11 @@ export function parseEvents(rows, service = name) {
       ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
     };
     if (service === name && infra.some(rule => rule(event))) event.board = 4060;
+    // Resend bounces and failed sends (YPER4-359).
+    if (service === name && event.message.startsWith('[email-event]')) {
+      event.service = 'email';
+      event.board = 4060;
+    }
     return event;
   });
 }
