@@ -98,9 +98,9 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
     // If all tasks failed, return an error
     if (updatedTaskIds.length === 0) {
         const errorMessages = failedTasks.map(ft => ft.error).filter(Boolean)
-        const linkFailure = failedTasks.find(
-            (failure) => failure.status !== undefined && failure.code !== undefined,
-        )
+        // A coded caller status wins only when no failure is an unclassified server error.
+        const isCoded = (failure: (typeof failedTasks)[number]) => failure.status !== undefined && failure.code !== undefined
+        const linkFailure = failedTasks.every(isCoded) ? failedTasks[0] : undefined
         throw new UpdateTaskPersistenceError(
             {
                 success: false,
