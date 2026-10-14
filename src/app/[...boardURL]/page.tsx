@@ -139,8 +139,9 @@ export default async function Page(
     }
   }
 
-  // Now we always have a valid slug - start timing and continue
-  console.time("board");
+  // HTPR-7219: no "board" console timer here. Timer labels are process-wide, so
+  // concurrent requests ended each other's timer and Node warned
+  // "No such label 'board'" on every overlap.
 
   // Ultra-fast validation - only check if user has access to this project
   const titleRequest = resolveBoardRouteTitleRequest(
@@ -161,7 +162,6 @@ export default async function Page(
   }
 
   // View handling and full project loading is now deferred to client-side
-  console.timeEnd("board");
 
   // Always render with valid slug - no redirects means no hook issues!
   const accountId = Number(userObj.id);
