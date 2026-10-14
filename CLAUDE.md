@@ -8,6 +8,7 @@ Never push to, base work on or mirror the archived hypertask-ai/hypertasks repo.
 Access or security fix: add a "still allowed" test next to the "now refused" one (`.claude/reference/workflow.md`).
 New or changed visible UI: wireframe and UX Sign-off before code (`.claude/reference/flags.md`).
 Live QA fails on flagged code: get the flag switched Off first (HT Product Lead), revert second.
+No explanatory code comments: say it in code (a clearer name, a smaller function, an assertion or log message); only tool-read comments stay, enforced in `src/` by `local/no-comments`.
 
 ## Read X when Y
 
