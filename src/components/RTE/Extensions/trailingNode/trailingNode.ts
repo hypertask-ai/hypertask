@@ -2,6 +2,7 @@ import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "prosemirror-state";
 
 
+// @ts-expect-error The untyped nodeEqualsType parameters are implicitly any.
 function nodeEqualsType({ types, node }) {
   return (
     (Array.isArray(types) && types.includes(node.type)) || node.type === types

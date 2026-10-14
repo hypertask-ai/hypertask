@@ -276,6 +276,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       if (filteredSections[i].items.length > 0) {
         const item = filteredSections[i].items[0]
         const sectionEls = document.getElementById("sectionsContainer")!.children;
+        // @ts-expect-error Element does not declare focus on this DOM collection.
         sectionEls[i].focus()
         updateActiveItemAndItemInView(item.id, _currentProject.id, getActiveSection());
         break;
