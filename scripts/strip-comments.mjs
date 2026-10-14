@@ -101,6 +101,7 @@ function applyEdits(source, edits) {
 
 function cleanBlankLines(source, boundaries, filename) {
   const tokens = parseSource(source, filename).tokens;
+  if (!tokens.length && boundaries.length && !source.trim()) return "";
   const edits = [];
   for (const match of source.matchAll(/\r?\n(?:[\t ]*\r?\n)+/g)) {
     const start = match.index;
@@ -114,7 +115,7 @@ function cleanBlankLines(source, boundaries, filename) {
     const beforeClosingBrace = next?.type === "Punctuator" && next.value === "}" &&
       !source.slice(end, next.range[0]).trim();
     const newline = match[0].startsWith("\r\n") ? "\r\n" : "\n";
-    if (afterOpeningBrace || beforeClosingBrace) edits.push({ start, end, text: newline });
+    if (afterOpeningBrace || beforeClosingBrace || end === source.length) edits.push({ start, end, text: newline });
     else if (match[0].split("\n").length - 1 >= 4) edits.push({ start, end, text: newline.repeat(2) });
   }
   return applyEdits(source, edits).output;

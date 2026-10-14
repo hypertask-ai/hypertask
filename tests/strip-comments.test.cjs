@@ -28,6 +28,8 @@ test("removes whole standalone lines, trailing whitespace, and brace-adjacent bl
   assert.equal((await strip("const a = 1;\n\n\n// explanation\n\n\nconst b = 2;\n")).source, "const a = 1;\n\nconst b = 2;\n");
   assert.equal((await strip("const a = 1;\n\n\n\n\nconst b = 2;\n")).source, "const a = 1;\n\n\n\n\nconst b = 2;\n");
   assert.equal((await strip("function run() {\r\n\r\n  // explanation\r\n\r\n  return 1;\r\n}\r\n")).source, "function run() {\r\n  return 1;\r\n}\r\n");
+  assert.equal((await strip("const value = 1;\n\n// explanation\n")).source, "const value = 1;\n");
+  assert.equal((await strip("\n// explanation\n")).source, "");
 });
 
 test("separates adjacent tokens and preserves comment newlines that affect ASI", async () => {
@@ -42,6 +44,8 @@ test("deletes JSX comment containers and their empty lines, but retains text-cha
   const kept = await strip(unsafe);
   assert.equal(kept.source, unsafe);
   assert.deepEqual(kept.keptJsx, ["src/Test.tsx:2"]);
+  const { assertEquivalent } = await codemodPromise;
+  assert.doesNotThrow(() => assertEquivalent(unsafe, unsafe.replace("{/* explanation */}", "{}"), "src/Test.tsx"));
   assert.equal((await strip("const x = <div>{/* @ts-expect-error reason */}</div>;")).removed, 0);
 });
 
