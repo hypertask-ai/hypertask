@@ -12,7 +12,7 @@ import { handleStatelessMcpRequest, MCP_SERVER_INFO, type PortableTool } from '.
 import { selectMcpTools } from './consolidated-tools'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
-import { HTPR_6804_MCP_TOOLS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnabled } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -188,7 +188,7 @@ export async function handleLegacySseRequest(
                 teamScoped: incoming.authInfo.extra?.teamScoped === true,
                 agent: incoming.authInfo.extra?.agent === true,
                 ...(v2 && ctx?.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
-              }, v2), userId)
+              }, v2, enabled && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, userId)), userId)
               const rpcResponse = await withMcpExecutionContext(incoming.authInfo.token, incoming.authInfo.extra?.mcpAuthContext as McpAuthContext | undefined, () => handleStatelessMcpRequest(new Request('http://localhost/mcp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

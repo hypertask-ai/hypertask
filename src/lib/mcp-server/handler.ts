@@ -16,7 +16,7 @@ import { resolvePortableTools } from './listQueryContract'
 import { selectMcpTools } from './consolidated-tools'
 import { isMcpV2Enabled } from '@/lib/mcp/mcpV2'
 import { getAgentRole } from '@/lib/mcp/agents/scopes'
-import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG } from '@/lib/flags'
+import { isFeatureEnabled, HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG } from '@/lib/flags'
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import { NextRequest } from 'next/server'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
@@ -127,9 +127,10 @@ export async function mcpHandler(request: Request): Promise<Response> {
     const feedbackEnabled = await aiFeedbackEnabled(ctx.user.id)
     const resolvedTools = resolvePortableTools(MCP_TOOLS as PortableTool[])
     const availableTools = resolvedTools.filter((tool) => feedbackEnabled || tool.name !== 'hypertask_report_feedback')
+    const consolidated = Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId)
     const portableTools = observeFeedbackTools(selectMcpTools(
       availableTools,
-      Number.isFinite(userId) && await isFeatureEnabled(HTPR_6804_MCP_TOOLS_FLAG, userId),
+      consolidated,
       {
         managementPermissions: authInfo.extra?.managementPermissions as ManagementPermissions | undefined,
         teamScoped: authInfo.extra?.teamScoped === true,
@@ -137,6 +138,7 @@ export async function mcpHandler(request: Request): Promise<Response> {
         ...(v2 && ctx.agentId ? { agentRole: await getAgentRole(ctx) } : {}),
       },
       v2,
+      consolidated && await isFeatureEnabled(HTPR_7203_MCP_FLAT_SCHEMA_FLAG, ctx.user.id),
     ), ctx.user.id)
     if (isLegacySseRequest(working)) {
       return handleLegacySseRequest(working, authInfo, resolvedTools, portableTools)

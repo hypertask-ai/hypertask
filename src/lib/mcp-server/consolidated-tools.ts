@@ -73,6 +73,7 @@ export function selectMcpTools(
   enabled: boolean,
   caller: ToolCaller = {},
   v2 = false,
+  flatSchema = false,
 ): readonly PortableTool[] {
   if (!enabled) {
     if (!v2) return legacyTools
@@ -124,7 +125,19 @@ export function selectMcpTools(
       const properties = baseSchema.properties as Record<string, unknown>
       for (const key of Object.keys(legacyShape)) delete properties[key]
     }
-    const schema = {
+    const properties = baseSchema.properties as Record<string, Record<string, unknown>>
+    const schema = flatSchema ? {
+      ...baseSchema,
+      required: ['action'],
+      properties: {
+        ...properties,
+        input: {
+          type: 'object',
+          description: `${properties.input.description} Fields depend on action; use the variant whose title is the action.`,
+          anyOf: names.map((name) => ({ title: name, ...inputSchema(byName.get(actions[name].tool)!, actions[name]) })),
+        },
+      },
+    } : {
       ...baseSchema,
       oneOf: names.map((name) => {
         const input = inputSchema(byName.get(actions[name].tool)!, actions[name])
