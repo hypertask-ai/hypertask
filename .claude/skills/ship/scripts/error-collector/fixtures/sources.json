@@ -68,6 +68,34 @@
         "name": "Build",
         "conclusion": "failure"
       }
+    ],
+    "docsRuns": [
+      {
+        "databaseId": 100,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Build and Deploy",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "main"
+      },
+      {
+        "databaseId": 103,
+        "createdAt": "2026-10-13T09:00:00Z",
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Scheduled",
+        "event": "schedule",
+        "conclusion": "timed_out",
+        "headBranch": "main"
+      },
+      {
+        "databaseId": 102,
+        "updatedAt": "2026-10-14T08:20:00Z",
+        "workflowName": "Other",
+        "event": "push",
+        "conclusion": "failure",
+        "headBranch": "production"
+      }
     ]
   },
   "journal": [

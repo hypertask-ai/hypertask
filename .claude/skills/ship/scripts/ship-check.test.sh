@@ -298,12 +298,78 @@ DD 1 'FAIL: no release found' RELEASES_FIXTURE='[{"tagName":"v1"}]'
 DD 1 'FAIL: no release found' SHIP_BASE=master
 DD 1 'FAIL: no release found' SHIP_REPO=hypertask-ai/other
 
+# Docs completion gate: isolated bound PR, docs PR and comments, never board-state dependent.
+mkdir -p "$E/docs-bin"
+cat > "$E/docs-bin/gh" <<'MOCK'
+#!/usr/bin/env bash
+case "$1:$2" in
+  pr:view)
+    [[ $* == *'-R hypertask-ai/hypertask'* ]] || exit 1
+    if [[ $* == *'--json title --jq'* ]]; then echo "YPER4-388 [${DOCS_TYPE:-FEATURE}] Fixture"
+    else printf '{"number":888,"title":"YPER4-388 [%s] Fixture","state":"MERGED","mergeCommit":{"oid":"app-merge"},"baseRefName":"production"}\n' "${DOCS_TYPE:-FEATURE}"; fi ;;
+  pr:list)
+    [[ $* == *'-R hypertask-ai/docs --base main --state merged'* && $* == *'YPER4-388 in:title'* ]] || exit 1
+    printf '%s\n' "${DOCS_PRS:-[]}" ;;
+  api:repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs\?*)
+    [[ $2 == *'head_sha=ec45678a2&event=push&per_page=100' ]] || exit 1
+    printf '%s\n' "$RUNS_FIXTURE" ;;
+  api:repos/hypertask-ai/docs/actions/runs/456/jobs\?*) printf '%s\n' "$JOBS_FIXTURE" ;;
+  api:repos/hypertask-ai/hypertask/commits/app-merge/status) echo 'Ignored Build Step' ;;
+  *) exit 1 ;;
+esac
+MOCK
+cat > "$E/docs-bin/hypertask" <<'MOCK'
+#!/usr/bin/env bash
+[[ $1 == comment && $2 == list && $3 == "${DOCS_TICKET:-YPER4-388}" ]] || exit 1
+if [ -n "${DOCS_COMMENTS:-}" ]; then printf '%s\n' "$DOCS_COMMENTS"
+else echo '{"comments":[]}'; fi
+MOCK
+chmod +x "$E/docs-bin/gh" "$E/docs-bin/hypertask"
+mkdir -p "$E/YPER4-388"; echo 888 > "$E/YPER4-388/pr"
+docs_pr='[{"number":42,"title":"YPER4-388 [FEATURE] Fixture docs","state":"MERGED","baseRefName":"main","mergeCommit":{"oid":"ec45678a2"}}]'
+DC() {
+  local want=$1 expected=$2 mode=$3 out got; shift 3
+  if [ "$mode" = guard ]; then
+    out=$(echo '{"tool_input":{"command":"vcc task move YPER4-388 --section \"Done\""}}' | env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check guard 2>&1); got=$?
+  else
+    out=$(env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check docs "${DOCS_TICKET:-YPER4-388}" 2>&1); got=$?
+  fi
+  if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "docs gate $mode: $expected"
+  else bad "docs gate $mode: want $want $expected got $got $out"; fi
+}
+DC 1 'FAIL: [FEATURE] ticket YPER4-388 has no merged and deployed docs PR' docs
+DC 0 'docs ok (docs PR 42)' docs DOCS_PRS="$docs_pr"
+DC 0 'docs ok (not needed for [BUGFIX])' docs DOCS_TYPE=BUGFIX
+DC 1 'FAIL: [IMPROVE]' docs DOCS_TYPE=IMPROVE
+DC 0 'docs ok (docs PR 42)' docs DOCS_TYPE=IMPROVE DOCS_PRS="$docs_pr"
+DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$docs_pr" RUNS_FIXTURE='{"workflow_runs":[]}'
+DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$docs_pr" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"skipped"}]}'
+for change in '.title = "YPER4-3880 [FEATURE] Other"' '.baseRefName = "preview"' '.state = "OPEN"'; do
+  DC 1 'FAIL: [FEATURE]' docs DOCS_PRS="$(jq ".[0] |= ($change)" <<<"$docs_pr")"
+done
+DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS='{"comments":[{"text":"<p><strong>No user-visible change:</strong> internal tooling only.</p>"}]}'
+for text in 'No user-visible change: ' '<p>No user-visible change: &nbsp;</p>' 'Note: No user-visible change: internal tooling'; do
+  DC 1 'FAIL: [FEATURE]' docs DOCS_COMMENTS="$(jq -n --arg text "$text" '{comments:[{text:$text}]}')"
+done
+DC 2 'Merge a docs PR titled with YPER4-388 or post a No user-visible change:' guard
+DC 0 '' guard DOCS_PRS="$docs_pr"
+DC 0 '' guard DOCS_TYPE=BUGFIX
+DC 0 '' guard DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: internal tooling only."}]}'
+DC 2 'Merge a docs PR titled with YPER4-388' guard DOCS_TYPE=IMPROVE
+# Duplicate path: the docs PR is titled with the fixing ticket; the comment exemption stays on the duplicate.
+mkdir -p "$E/YPER4-390"; echo 888 > "$E/YPER4-390/pr"; echo YPER4-388 > "$E/YPER4-390/duplicate-of"
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (docs PR 42)' docs DOCS_PRS="$docs_pr"
+DOCS_TICKET=YPER4-390 DC 1 'titled with YPER4-388' docs
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: duplicate of a docs-free fix."}]}'
+
 # Manual worker deployments must bind the only active version to the full merge SHA.
 mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
 cat > "$E/worker-bin/gh" <<'MOCK'
 #!/usr/bin/env bash
 case "$1:$2" in
-  pr:view) printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
+  pr:view)
+    if [[ $* == *'--json title --jq'* ]]; then echo 'YPER4-999 [INFRA] Fixture'; exit; fi
+    printf '{"number":838,"title":"YPER4-999 [INFRA] Fixture","state":"MERGED","mergeCommit":{"oid":"%s"},"baseRefName":"%s"}\n' "$WORKER_SHA" "$SHIP_BASE" ;;
   release:view) [ -n "${RELEASE_TAG:-}" ] && echo "$RELEASE_TAG" ;;
   release:list) [ "${RELEASE_ERROR:-0}" = 0 ] || exit 1; echo "${RELEASES_FIXTURE:-[]}" ;;
   api:*/compare/*) echo identical ;;
@@ -495,7 +561,7 @@ assert os.environ['SHIP_BASE'] == 'htpr-5009-mdx-write-guard-v2'
 assert os.environ['SHIP_CHECKOUT'] == '/tmp/worker checkout'
 assert os.environ['SHIP_WORKER'] == 'workers/docs agent'
 print(dict(ticket='ticket ok', pr='title ok', merged='merged ok',
-           deployed='deployed ok (worker fixture)', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
+           deployed='deployed ok (worker fixture)', docs='docs ok', done='done ok', cleaned='cleaned ok')[sys.argv[1]])
 ''')
 check.chmod(0o755)
 repo = p / 'gate-repo'
@@ -512,8 +578,9 @@ for _ in range(2):
 ledger = repo / '.unlazy/s-worker-g/GATES.md'
 text = ledger.read_text()
 prefix = "SHIP_REPO=valentinyeo/agent-fleet SHIP_BASE=htpr-5009-mdx-write-guard-v2 SHIP_CHECKOUT='/tmp/worker checkout' SHIP_WORKER='workers/docs agent' "
-assert text.count('  CHECK: ' + prefix) == 6
-assert text.count('automatic-evidence=v1') == 6
+assert text.count('  CHECK: ' + prefix) == 7
+assert text.count('automatic-evidence=v1') == 7
+assert 'YPER4-999.docs:' in text
 for worker in ['/absolute', '../outside', "workers/a';touch bad"]:
     r = subprocess.run(['bash', script, 'YPER4-999'], cwd=repo,
                        env=dict(env, SHIP_WORKER=worker), text=True, capture_output=True)
@@ -1211,7 +1278,7 @@ D dropped YPER4-777 903 >/dev/null && bad "dropped accepted a merged PR" || ok "
 [ ! -e "$E/YPER4-777/dropped" ] && ok "refused dropped writes no record" || bad "refused dropped wrote a record"
 out=$(D dropped YPER4-777 901); [ "$out" = 'recorded YPER4-777 as dropped (PR 901 closed unmerged)' ] && ok "dropped records a closed unmerged PR" || bad "dropped: $out"
 [ "$(cat "$E/YPER4-777/pr")" = 901 ] && [ "$(cat "$E/YPER4-777/dropped")" = 901 ] && ok "dropped binds the PR" || bad "dropped record"
-for x in merged deployed proof; do
+for x in merged deployed proof docs; do
   D $x YPER4-777 | grep -q "$x ok (dropped: PR 901 closed unmerged)" && ok "dropped passes $x" || bad "dropped $x"
 done
 D pr YPER4-777 | grep -q 'title ok' && ok "dropped passes pr" || bad "dropped pr"
@@ -1268,7 +1335,7 @@ N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes (bold opener
 echo '{"success":true,"comments":[{"text":"<p>Resolved without a change: <pre>curl -s x</pre></p>"}]}' > "$NC/comments"
 N nochange YPER4-901 | grep -q 'nochange ok' && ok "nochange passes with a pre block" || bad "nochange pre case"
 # Each must print what its ship-gates EXPECT line matches (pr expects "title ok").
-for x in merged:merged deployed:deployed proof:proof pr:title; do
+for x in merged:merged deployed:deployed proof:proof pr:title docs:docs; do
   N ${x%%:*} YPER4-901 | grep -q "^${x#*:} ok" && ok "nochange passes ${x%%:*}" || bad "nochange ${x%%:*}"
 done
 N cleaned YPER4-901 >/dev/null && bad "nochange cleaned ignored an origin branch" || ok "nochange cleaned fails while an origin branch exists"
