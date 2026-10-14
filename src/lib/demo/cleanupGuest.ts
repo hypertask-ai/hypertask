@@ -5,6 +5,20 @@ import { GUEST_UID_PREFIX } from "./guest";
 
 export const GUEST_MAX_AGE_HOURS = 24;
 
+// HTPR-7209, HTPR-7210: tables with a plain foreign key to Task that the lists
+// below used to miss. Without them task.deleteMany fails and the guest stays.
+async function deleteRemainingTaskChildren(taskIds: number[]): Promise<void> {
+  const inTasks = { in: taskIds };
+  await prisma.drafts.deleteMany({ where: { taskId: inTasks } });
+  await prisma.task_Summary.deleteMany({ where: { taskId: inTasks } });
+  await prisma.customFieldValue.deleteMany({ where: { taskId: inTasks } });
+  await prisma.readStatus.deleteMany({ where: { taskId: inTasks } });
+  await prisma.attachment.deleteMany({ where: { taskId: inTasks } });
+  await prisma.taskRelations.deleteMany({
+    where: { OR: [{ sourceTaskId: inTasks }, { targetTaskId: inTasks }] },
+  });
+}
+
 // Delete one board without touching its guest owner, team, or session. The
 // guest-owner check keeps this helper safe for the regeneration path.
 export async function deleteGuestProjectCascade(
@@ -28,6 +42,9 @@ export async function deleteGuestProjectCascade(
     select: { id: true },
   });
   const taskIds = tasks.map((task) => task.id);
+
+  // ReadStatus also points at notifications, so these go first.
+  await deleteRemainingTaskChildren(taskIds);
 
   // --- task leaves (reactions before the comments they point at)
   await prisma.reaction.deleteMany({ where: { taskId: { in: taskIds } } });
@@ -115,6 +132,8 @@ export async function deleteGuestCascade(userId: number): Promise<void> {
     select: { id: true },
   });
   const taskIds = tasks.map((task) => task.id);
+
+  await deleteRemainingTaskChildren(taskIds);
 
   // --- task/user leaves (reactions before the comments they point at)
   await prisma.reaction.deleteMany({
