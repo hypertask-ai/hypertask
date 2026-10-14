@@ -10,6 +10,7 @@ import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TAS
 import type { IAgent, ILabel, IUser } from "@/models/model";
 import prisma from "@/lib/prisma";
 import { getNextUniqueTaskIndex } from "@/utils/controllers/tasks/getNextUniqueTaskIndex";
+import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
@@ -309,6 +310,14 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
+        // Callers sometimes send a number or nothing; Task.ranking is a string, so place the task last instead of crashing (HTPR-7217).
+        const taskRanking = typeof ranking === "string" && ranking
+          ? ranking
+          : generateRank((await tx.task.findFirst({
+              where: { sectionId: sectionRow.id, projectId, status: "Normal" },
+              orderBy: { ranking: "desc" },
+              select: { ranking: true },
+            }))?.ranking, undefined);
         const body = {
           title: title,
           description: "",
@@ -316,7 +325,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
           userId,
           uniqueIndex: nextUniqueIndex,
           ticketNumber: currentProject?.uniqueIdentifier + "-" + nextUniqueIndex.toString(),
-          ranking,
+          ranking: taskRanking,
           projectId,
           sectionId: sectionRow.id,
           dueDate,
