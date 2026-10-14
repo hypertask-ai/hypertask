@@ -1,6 +1,7 @@
 import { key, query } from '../io.mjs';
 
 export const name = 'vercel';
+const realtimeFailure = row => /^\[realtime\] broadcast failed(?:\s|$)/.test(messageParts(row.message).message);
 const infra = [
   event => event.message.includes('Vercel Runtime Timeout Error'),
   event => event.route === '/sse',
@@ -27,9 +28,9 @@ export function messageParts(message) {
 
 export function parseEvents(rows, service = name) {
   if (!Array.isArray(rows)) throw new Error('invalid Vercel events');
-  return rows.filter(row => service !== 'vercel-5xx' || Number(row.httpStatus) >= 500).map(row => {
+  return rows.filter(row => service === 'realtime' ? realtimeFailure(row) : service === name ? !realtimeFailure(row) : Number(row.httpStatus) >= 500).map(row => {
     const event = {
-      service, board: 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
+      service, board: service === 'realtime' ? 4060 : 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
       // 5xx responses repeat failures the error log already holds: count them, never ticket them.
       ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
     };
@@ -53,7 +54,7 @@ export async function fetchVercel({ since, until, env }, service = name) {
     scope: { ownerId: team, projectIds: [project] },
     select: proxy ? ['projectId', 'requestId', 'deploymentId', 'environment', 'requestPath', 'requestMethod', 'httpStatus', 'route', 'pathType'] : ['projectId', 'requestId', 'deploymentId', 'domain', 'environment', 'requestPath', 'requestMethod', 'source', 'service', 'isSystemLog', 'region', 'runtime', 'level', 'message', 'stream', 'traceId', 'spanId', 'attributes', 'truncated'],
     order: 'desc', limit: 500,
-    filter: proxy ? 'httpStatus >= 500 AND environment:production AND NOT pathType:"background_func"' : 'level:error AND environment:production',
+    filter: proxy ? 'httpStatus >= 500 AND environment:production AND NOT pathType:"background_func"' : service === 'realtime' ? '(level:warning OR level:error) AND environment:production' : 'level:error AND environment:production',
   };
   let calls = 0;
   const unique = new Map();

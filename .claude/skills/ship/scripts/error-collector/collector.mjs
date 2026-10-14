@@ -22,7 +22,7 @@ const diagnostic = text => console.error(`error-collector: ${text}`);
 const FORCED_TEST = /\[ht-forced-test\]/i;
 
 export function isNoise(event) {
-  return NOISE.some(rule => (!rule.service || rule.service === event.service) && rule.regex.test(`${event.message}\n${event.route}`));
+  return NOISE.some(rule => (!rule.service || rule.service === event.service) && !rule.excludeServices?.includes(event.service) && rule.regex.test(`${event.message}\n${event.route}`));
 }
 
 export function redact(text) {
@@ -100,7 +100,7 @@ async function load(root) {
 }
 
 export async function loadSources(names) {
-  const files = names ?? ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon'];
+  const files = names ?? ['vercel', 'vercel-5xx', 'realtime', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon'];
   return files.map(name => ({
     name,
     async fetch(context) {

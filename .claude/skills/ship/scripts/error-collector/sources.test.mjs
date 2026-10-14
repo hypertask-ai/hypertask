@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { collect, loadSources, fingerprint } from './collector.mjs';
+import { collect, loadSources, fingerprint, isNoise } from './collector.mjs';
 import * as vercel from './sources/vercel.mjs';
 import * as proxy from './sources/vercel-5xx.mjs';
+import * as realtime from './sources/realtime.mjs';
 import * as github from './sources/github-actions.mjs';
 import * as journal from './sources/vps-journal.mjs';
 import * as workers from './sources/cloudflare-workers.mjs';
@@ -41,7 +42,7 @@ function fakeCommand(name, source) {
 globalThis.fetch = async () => { throw new Error('NETWORK FORBIDDEN'); };
 
 test('default sources are explicit and fixture stays opt-in', async () => {
-  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon']);
+  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'realtime', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon']);
 });
 
 test('recorded Vercel structured messages lose metadata, preserve error details and request path', () => {
@@ -446,4 +447,76 @@ test('Neon changed stats_reset or any decreasing counter establishes a fresh bas
   counters.rows[0].deadlocks = '3';
   neonHTTP({ slow: { rows: [] }, counters });
   assert.equal((await neon.fetch({ ...context, cursor: baseline.cursor })).events[0].count, 1);
+});
+
+const realtimeFixture = JSON.parse(readFileSync(new URL('./fixtures/realtime.json', import.meta.url)));
+
+test('YPER4-360: realtime reads production warning/error logs, pages and dedupes before selecting broadcast failures', async () => {
+  const first = { ...realtimeFixture.page, pagination: { hasMore: true, nextCursor: 'realtime-page-2' } };
+  const calls = mockHTTP([[200, first], [200, realtimeFixture.page]]);
+  const events = await realtime.fetch(context);
+  assert.equal(calls[0].body.event, 'vercel.log');
+  assert.equal(calls[0].body.filter, '(level:warning OR level:error) AND environment:production');
+  assert.equal(calls[0].headers['x-vercel-observability-query-reason'], 'cli/logs-runtime');
+  assert.equal(calls[0].body.limit, 500);
+  assert.equal(calls[1].body.cursor, 'realtime-page-2');
+  assert.equal(events.length, 2);
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060 && event.count === 1));
+  assert.deepEqual(events.map(event => event.route), ['/api/tasks/single', '/api/mcp/tasks/update']);
+  assert.equal(events[0].ts, realtimeFixture.page.events[0].timestamp);
+  assert.match(events[0].stack, /^at trigger/);
+  assert.equal(fingerprint('realtime', events[0].message), fingerprint('realtime', events[1].message));
+  // Error-level copies belong only to realtime, never both runtime sources.
+  assert.deepEqual(vercel.parseEvents([realtimeFixture.page.events[1]]), []);
+  mockHTTP([[200, realtimeFixture.empty]]);
+  assert.deepEqual(await realtime.fetch(context), []);
+});
+
+test('YPER4-360: realtime ignores unrelated warnings and near-matching text; ordinary runtime errors remain collected', () => {
+  const row = realtimeFixture.page.events[0];
+  const unrelated = ['Other failure', 'prefix [realtime] broadcast failed', '[realtime] broadcast failedness', '[realtime] connected'];
+  const rows = unrelated.map(message => ({ ...row, message }));
+  assert.deepEqual(vercel.parseEvents(rows, realtime.name), []);
+  assert.equal(vercel.parseEvents(rows).length, rows.length);
+  assert.ok(vercel.parseEvents(rows).every(event => event.service === 'vercel' && event.board === 15));
+  assert.equal(vercel.parseEvents([{ ...row, message: '[realtime] broadcast failed' }], realtime.name).length, 1);
+});
+
+test('YPER4-360: realtime query failures/incomplete pages fail closed without exposing provider bodies', async () => {
+  for (const [status, data] of [[401, { error: 'private-provider-body' }], [429, {}], [200, {}], [200, { events: [{ ...realtimeFixture.page.events[0], truncated: true }] }], [200, { ...realtimeFixture.empty, meta: { excludedIntervals: [{}] } }], [200, { ...realtimeFixture.empty, pagination: { hasMore: true } }]]) {
+    mockHTTP([[status, data]]);
+    await assert.rejects(realtime.fetch(context), error => !String(error.stack).includes('private-provider-body'));
+  }
+});
+
+test('YPER4-360: realtime collector groups normalized failures once and keeps its cursor on failure', async () => {
+  const root = join(home, 'realtime-state');
+  const collectorEnv = { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' };
+  fakeCommand('ht', 'console.log(JSON.stringify({ success: true, tasks: [], total: 0 }));');
+  fakeCommand('vcc', 'throw new Error("WRITE FORBIDDEN");');
+  mockHTTP([[200, realtimeFixture.page]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until), sources: [realtime] }), 0);
+  const before = readFileSync(join(root, 'state.json'), 'utf8');
+  const state = JSON.parse(before);
+  assert.equal(state.sources.realtime, until);
+  assert.equal(state.days['2026-10-14'].realtime.errors, 2);
+  assert.equal(Object.keys(state.pending).length, 1);
+  assert.equal(Object.values(state.pending)[0].board, 4060);
+  assert.equal(Object.values(state.pending)[0].count, 2);
+  mockHTTP([[503, {}]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until) + 1000, sources: [realtime] }), 1);
+  assert.equal(readFileSync(join(root, 'state.json'), 'utf8'), before);
+  mockHTTP([[200, realtimeFixture.empty]]);
+  assert.equal(await collect({ env: collectorEnv, now: Date.parse(until) + 1000, sources: [realtime], dryRun: true }), 0);
+  assert.equal(readFileSync(join(root, 'state.json'), 'utf8'), before);
+});
+
+
+test('YPER4-360: failed server-to-Pusher authentication and aborted publishes are errors, not expected client noise', () => {
+  for (const detail of ['HTTP 401 Unauthorized', 'HTTP 403 Forbidden', 'HTTP 404 Not Found', 'AbortError']) {
+    const message = `[realtime] broadcast failed private-board-123 board.changed ${detail}`;
+    assert.equal(isNoise({ service: 'realtime', message, route: '/api/tasks/single' }), false);
+    assert.equal(isNoise({ service: 'vercel', message, route: '/api/tasks/single' }), true);
+  }
+  assert.equal(isNoise({ service: 'realtime', message: '[realtime] broadcast failed [ht-forced-test]', route: '' }), true);
 });
