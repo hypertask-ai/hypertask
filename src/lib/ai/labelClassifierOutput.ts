@@ -7,13 +7,24 @@ export type AiLabelDefinition = {
 const CODE_FENCE = /```(?:json)?\s*([\s\S]*?)\s*```/i;
 
 // HTPR-7211: models also add a sentence around the array ("Matching ids: [...]").
-// Fall back to the outermost [...] span; a JSON object reply stays unparsable.
+// Take the first complete top-level [...] span. Any reply with an object stays unparsable,
+// so an array nested inside one never becomes a verdict.
 function extractArrayText(text: string): string {
   const trimmed = text.trim();
-  if (trimmed.startsWith("[") || trimmed.startsWith("{")) return trimmed;
   const start = trimmed.indexOf("[");
-  const end = trimmed.lastIndexOf("]");
-  return start !== -1 && end > start ? trimmed.slice(start, end + 1) : trimmed;
+  if (start === -1 || trimmed.includes("{")) return trimmed;
+  let depth = 0;
+  let inString = false;
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (inString) {
+      if (ch === "\\") i++;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === "[") depth++;
+    else if (ch === "]" && --depth === 0) return trimmed.slice(start, i + 1);
+  }
+  return trimmed;
 }
 
 // Returns null when the model's output isn't a parseable JSON array at all

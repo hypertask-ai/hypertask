@@ -45,6 +45,13 @@ test("smart-label output tolerates prose around the array (HTPR-7211)", () => {
     ["opportunity"]
   );
   assert.deepEqual(parseMatchingLabelIds("None match.\n[]", definitions), []);
+  assert.deepEqual(parseMatchingLabelIds('["minimal"]\nDone.', definitions), ["minimal"]);
+  assert.deepEqual(parseMatchingLabelIds('["a]b", "minimal"] ok', definitions), ["minimal"]);
+});
+
+test("smart-label output never reads an array nested in an object as a verdict", () => {
+  assert.equal(parseMatchingLabelIds('Result: {"error":[]}', definitions), null);
+  assert.equal(parseMatchingLabelIds('{"ids":["minimal"]} done', definitions), null);
 });
 
 test("smart-label output returns null (not empty) on unparsable model output", () => {
