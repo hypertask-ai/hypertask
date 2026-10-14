@@ -9,6 +9,8 @@ import { getConfig } from '../config/index';
 import {
   createTaskIdentificationArraySchema,
   createTaskIdentificationBaseSchema,
+  taskIdOneOrManySchema,
+  ticketNumberOneOrManySchema,
 } from './common/task-identification';
 import {
   paginationSchema,
@@ -271,8 +273,8 @@ export type LinkTasksInput = z.infer<typeof LinkTasksInputSchema>;
  */
 export function getGetTasksBaseSchema() {
   return createTaskIdentificationBaseSchema().extend({
-    task_id: z.array(z.coerce.number().int().positive()).optional(),
-    ticket_number: z.array(createTaskIdentificationBaseSchema().shape.ticket_number).optional(),
+    task_id: taskIdOneOrManySchema.optional(),
+    ticket_number: ticketNumberOneOrManySchema.optional(),
   });
 }
 
