@@ -16,7 +16,15 @@ export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";
 export const EMBEDDING_DIM = 1536;
 
-const EMBEDDING_BATCH_SIZE = 256;
+// The embedding model rejects any input over 8192 tokens and any empty
+// string with a non-retryable 400, which dropped long pages and image-only
+// comments from search (HTPR-7212, HTPR-7215). Keyword search still indexes
+// the full text; only the vector input is capped. 4000 characters stays under
+// the token limit even for dense text, and 64 of them stay under the
+// per-request token budget.
+export const EMBEDDING_MAX_INPUT_CHARS = 4000;
+const EMBEDDING_EMPTY_INPUT = "(empty)";
+const EMBEDDING_BATCH_SIZE = 64;
 const EMBEDDING_MAX_RETRIES = 5;
 const CUSTOM_INSTRUCTION_CHUNK_SIZE = 1800;
 const CUSTOM_INSTRUCTION_CHUNK_OVERLAP = 200;
@@ -410,14 +418,22 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     throw new Error("TURBOPUFFER_EMBEDDINGS_API_KEY is not set");
   }
 
+  const inputs = texts.map(toEmbeddingInput);
   const embeddings: number[][] = [];
 
-  for (let i = 0; i < texts.length; i += EMBEDDING_BATCH_SIZE) {
-    const batch = texts.slice(i, i + EMBEDDING_BATCH_SIZE);
+  for (let i = 0; i < inputs.length; i += EMBEDDING_BATCH_SIZE) {
+    const batch = inputs.slice(i, i + EMBEDDING_BATCH_SIZE);
     embeddings.push(...(await embedBatchWithRetry(batch, apiKey)));
   }
 
   return embeddings;
+}
+
+export function toEmbeddingInput(text: string): string {
+  return (
+    normalizeWhitespace(text).slice(0, EMBEDDING_MAX_INPUT_CHARS) ||
+    EMBEDDING_EMPTY_INPUT
+  );
 }
 
 // Embed a single batch, retrying transient failures (rate limits, server
