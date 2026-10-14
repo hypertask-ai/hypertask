@@ -246,3 +246,33 @@ test("required contract summary fails for skipped, cancelled, failed or missing 
     }
   }
 });
+
+test("browser smoke retries its build once, only after a Google font download failure", async () => {
+  // YPER4-363: next/font fetches Google fonts at build time and that download flaked.
+  const yaml = require("js-yaml");
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const path = require("node:path");
+  const { spawnSync } = require("node:child_process");
+  const workflow = yaml.load(await source(".github/workflows/ci-tests.yml"));
+  const step = workflow.jobs["browser-smoke"].steps.find((s) => s.name === "Build the local app (no migrations)");
+  const run = (outcomes) => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "yper4-363-"));
+    // Fake npx: each call takes the next outcome (ok, font, other) and counts calls.
+    fs.writeFileSync(path.join(dir, "npx"), `#!/bin/bash
+n=$(( $(cat "${dir}/calls" 2>/dev/null || echo 0) + 1 )); echo $n > "${dir}/calls"
+case "$(sed -n "\${n}p" "${dir}/outcomes")" in
+  ok) echo built; exit 0;;
+  font) echo "TypeError at node_modules/next/dist/compiled/@next/font/dist/google/loader.js" >&2; echo "next/font/google failed" >&2; exit 1;;
+  *) echo "Type error: something else" >&2; exit 1;;
+esac
+`, { mode: 0o755 });
+    fs.writeFileSync(path.join(dir, "outcomes"), outcomes.join("\n") + "\n");
+    const child = spawnSync("bash", ["-c", step.run], { env: { PATH: `${dir}:${process.env.PATH}`, RUNNER_TEMP: dir } });
+    return { status: child.status, calls: Number(fs.readFileSync(path.join(dir, "calls"), "utf8")) };
+  };
+  assert.deepEqual(run(["ok"]), { status: 0, calls: 1 });
+  assert.deepEqual(run(["font", "ok"]), { status: 0, calls: 2 });
+  assert.deepEqual(run(["font", "font"]), { status: 1, calls: 2 });
+  assert.deepEqual(run(["other", "ok"]), { status: 1, calls: 1 });
+});
