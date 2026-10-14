@@ -95,7 +95,9 @@ export default async function Page(
   let stack = false;
   let scrollSetting = "Bottom" as ScrollSetting;
 
-  console.time(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
+  // HTPR-7231: no console timer here. Timer labels are process-wide, so two
+  // requests for the same ticket ended each other's timer and Node warned
+  // "No such label" in the Vercel logs.
   const slug = detailSlug;
 
   // Retain the server snapshot's age even if a prefetched route mounts later.
@@ -147,8 +149,6 @@ export default async function Page(
         shareReadReceipts,
       ),
     };
-
-    console.timeEnd(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   }
 
   // Call the function to fetch sections for all projects and update them
