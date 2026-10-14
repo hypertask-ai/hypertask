@@ -13,6 +13,12 @@ export const ESTIMATE_ALLOWED_VALUES = EstimateConstants.map(
 );
 export const CONTENT_TYPE_ALLOWED_VALUES = ['html', 'markdown'] as const;
 
+// Postgres int4 ids: a larger or fractional number would crash the query with a 500 (HTPR-7226).
+const MAX_DB_ID = 2147483647;
+function isDbId(value: unknown): value is number {
+    return Number.isInteger(value) && (value as number) > 0 && (value as number) <= MAX_DB_ID;
+}
+
 const PRIORITY_VALIDATION_MESSAGE = 'priority must be a number between 0 and 4 or one of: no priority, none, urgent, high, medium, low';
 
 function normalizePriorityLabel(value: string): string {
@@ -52,7 +58,7 @@ export function validateCreateTaskBody(
     dryRun = false
 ): { valid: true; data: CreateTaskBody } | { valid: false; response: NextResponse } {
     // Validate project_id
-    if (!body.project_id || typeof body.project_id !== 'number' || body.project_id <= 0) {
+    if (!isDbId(body.project_id)) {
         return {
             valid: false,
             response: NextResponse.json(
@@ -75,7 +81,7 @@ export function validateCreateTaskBody(
     }
 
     // Validate parent_task_id
-    if (body.parent_task_id !== undefined && (typeof body.parent_task_id !== 'number' || body.parent_task_id <= 0)) {
+    if (body.parent_task_id !== undefined && !isDbId(body.parent_task_id)) {
         return {
             valid: false,
             response: NextResponse.json(
@@ -124,8 +130,24 @@ export function validateCreateTaskBody(
         };
     }
 
+    if (body.description !== undefined && body.description !== null && typeof body.description !== 'string') {
+        return {
+            valid: false,
+            response: NextResponse.json(
+                {
+                    ...buildFieldError('invalid_field', 'description', 'Validation error'),
+                    message: 'description must be a string',
+                    details: { field: 'description', code: 'invalid_type' },
+                    ...(dryRun && { valid: false }),
+                    ...(correlationId && { correlationId })
+                },
+                { status: 400 }
+            )
+        };
+    }
+
     // Validate section_id
-    if (body.section_id !== undefined && (typeof body.section_id !== 'number' || body.section_id <= 0)) {
+    if (body.section_id !== undefined && !isDbId(body.section_id)) {
         return {
             valid: false,
             response: NextResponse.json(
@@ -160,9 +182,7 @@ export function validateCreateTaskBody(
                 )
             };
         }
-        const isValid = body.assignee.every(
-            (id: unknown) => Number.isInteger(id) && (id as number) > 0
-        );
+        const isValid = body.assignee.every(isDbId);
         if (!isValid) {
             return {
                 valid: false,
