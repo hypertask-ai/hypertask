@@ -9,6 +9,13 @@ interface LogEntry {
   [key: string]: unknown;
 }
 
+const consoleWriters: Record<LogLevel, (line: string) => void> = {
+  error: (line) => console.error(line),
+  warn: (line) => console.warn(line),
+  info: (line) => console.info(line),
+  debug: (line) => console.debug(line),
+};
+
 class Logger {
   private logLevel: LogLevel = 'info';
   private levels: Record<LogLevel, number> = {
@@ -38,8 +45,7 @@ class Logger {
       ...meta,
     };
 
-    const logLine = JSON.stringify(entry);
-    console.error(logLine);
+    consoleWriters[level](JSON.stringify(entry));
   }
 
   error(message: string, meta?: Record<string, unknown>): void {
