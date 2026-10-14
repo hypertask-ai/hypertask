@@ -86,8 +86,8 @@ test("rejects and removes malformed Calendar session state", () => {
 
   test("a URL deep link does not suppress session-draft hydration", () => {
     const mountEffect = hookSource.slice(
-      hookSource.indexOf("Shareable URLs:"),
-      hookSource.indexOf("Keep the address bar current"),
+      hookSource.indexOf("useEffect(() => {\n    if (!window"),
+      hookSource.indexOf("useEffect(() => {\n    if (urlStateAppliedRef"),
     );
     assert.ok(mountEffect.length > 0);
     assert.doesNotMatch(

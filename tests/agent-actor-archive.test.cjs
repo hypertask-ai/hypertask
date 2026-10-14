@@ -618,12 +618,12 @@ test("MCP updateTask signs the internal session with ctx.agentId", () => {
   );
 });
 
-test("Done guard documents current-section-only limit", () => {
+test("Done guard checks current task sections only for archive or delete", () => {
   const source = fs.readFileSync(
     path.join(root, "src/lib/mcp/tasks/agentDoneLifecycle.ts"),
     "utf8",
   );
-  assert.match(source, /current section only/i);
-  assert.match(source, /out of Done[\s\S]*archives\/deletes/i);
-  assert.match(source, /not immutable human-final-review/i);
+  assert.match(source, /candidates\.map\(\(task\) => task\.sectionId as number\)/);
+  assert.match(source, /requestedStatus !== 'Archive' && requestedStatus !== 'Deleted'/);
+  assert.match(source, /requestedStatus !== task\.status/);
 });
