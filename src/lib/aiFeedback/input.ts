@@ -1,7 +1,6 @@
 import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
-// Match sk tokens at a boundary: hypertask_ is a tool namespace, not a token prefix.
 const credential = /vck_|httk_|htk_|htmk_|(?:^|[^a-z0-9])[a-z]{2,6}_(?=[a-z0-9_.-]*[a-z])(?=[a-z0-9_.-]*\d)[a-z0-9_.-]{8,}(?![a-z0-9])|eyJ|(?:^|[^a-z0-9])sk[-_]|ghp_|gho_|github_pat_|xox|Bearer|\d{6,}|[^ _\-.\/:]{20,}/i
 const slug = z.string().max(40).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i)
   .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed')
@@ -22,7 +21,6 @@ export type AiFeedbackInput = z.input<typeof aiFeedbackSchema>
 
 export function scrubFeedbackText(value: string): string {
   return value
-    // Decode quote entities before removing segments so HTML cannot hide quotes.
     .replace(/&(?:quot|#34|#x22);/gi, '"')
     .replace(/&(?:apos|#39|#x27);/gi, "'")
     .replace(/"[^"]*(?:"|$)|'[^']*(?:'|$)|`[^`]*(?:`|$)|“[^”]*(?:”|$)|‘[^’]*(?:’|$)/gm, ' ')

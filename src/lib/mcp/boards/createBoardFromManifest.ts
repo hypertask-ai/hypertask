@@ -70,17 +70,11 @@ async function compensateFailedBoard(projectId: number): Promise<void> {
   })
 }
 
-/**
- * Creates a project (board) from a validated manifest: custom columns, labels, starter tasks.
- * On failure after the project exists, soft-deletes tasks and project (no DB schema changes).
- */
 export async function createBoardFromManifest(
   params: CreateBoardFromManifestParams
 ): Promise<CreateBoardFromManifestResult> {
   const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName } = params
 
-  // HTPR-4894: MCP, the CLI and the AI chat tool all create boards through here,
-  // so the free-plan cap lives here rather than in each of them.
   await assertBoardQuota(userId)
 
   let prevRank: string | undefined

@@ -39,7 +39,7 @@ const NotificationComment = (props: Props) => {
             <div className="group">
                 <button 
                     onClick={(e) =>{
-                    e.stopPropagation(); // Prevent the click event from propagating to the parent div
+                    e.stopPropagation();
                     markAsDone()}}
                 >
                     <Check size={15} color={(notification.status) === 'Archive' ? 'green' : '#8E9093'} strokeWidth={1.75} />

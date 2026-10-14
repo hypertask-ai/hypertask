@@ -29,8 +29,6 @@ type DateRange = "today" | "week" | "month" | "all";
 const dateInputClassName =
   "h-9 border-x-0 border-t-0 border-b border-border bg-transparent px-1 text-dense text-white-black outline-none dark:[&::-webkit-calendar-picker-indicator]:invert";
 
-// No shared "no spinner" utility exists in the design system; local to this
-// modal per the wireframe (https://hypertask.app/explorations/za7nkf3).
 const noSpinnerClassName =
   "[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none";
 const durationInputClassName = `${dateInputClassName} w-10 text-right ${noSpinnerClassName}`;
@@ -312,8 +310,6 @@ const TimeLogModal = ({
       contentClassName="h-[85vh] overflow-hidden rounded-[5px] border-0 bg-modalBackground"
       onKeyDownCapture={handleModalKeyDown}
     >
-      {/* Bootstrap's .modal-title ships 1.25rem and the long ticket title wraps
-          into the filter row below; force the app's 16px + one-line truncate. */}
       <ModalHeaderComp
         header={`Time log — ${ticketId} | ${title}`}
         className="px-4"

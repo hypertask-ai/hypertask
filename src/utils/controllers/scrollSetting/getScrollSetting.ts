@@ -11,8 +11,6 @@ const getScrollSetting = async (userid: any) => {
       status: 200,
       res: result,
     };
-
-    // res.status(200).json(comments);
   } catch (error) {
     console.log(error);
     return {

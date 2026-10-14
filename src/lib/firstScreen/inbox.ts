@@ -13,7 +13,6 @@ export function projectInboxFirstScreen({
   split?: string;
   projectId?: string;
 }) {
-  // Categorization annotates rows. Never annotate the caller's request snapshot.
   const rows = notifications.map((row) => ({ ...row }));
   const nowMs = new Date(now).getTime();
   if (!Number.isFinite(nowMs) || new Date(nowMs).toISOString() !== now) throw new Error("Invalid first-screen clock");
@@ -26,7 +25,6 @@ export function projectInboxFirstScreen({
   return { notifications: rows, structuredData, selectedSplit };
 }
 
-// Match the existing local-midnight grouping, including its DST day-length rule.
 export function projectInboxDateGroup(date: string, now: string, timeZone: string): string {
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone, year: "numeric", month: "numeric", day: "numeric", hour: "numeric",
@@ -44,7 +42,6 @@ export function projectInboxDateGroup(date: string, now: string, timeZone: strin
       const sample = calendarDay + delta;
       return calendarDay - (wallTime(sample) - sample);
     });
-    // Native Date chooses the earlier instant in a fold, the later one in a gap.
     const exact = candidates.filter((candidate) => wallTime(candidate) === calendarDay);
     return exact.length ? Math.min(...exact) : Math.max(...candidates);
   };

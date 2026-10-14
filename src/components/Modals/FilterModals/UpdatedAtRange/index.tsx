@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import { Calendar } from "@/components/Common/Calendar";
 import {
   ModalHeaderComp,
@@ -78,13 +78,12 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
           return;
         }
 
-        // Custom calendar selections are always static
         handleClose({
           fromDate: payload.from?.toISOString() ?? null,
           toDate: payload.to?.toISOString() ?? null,
           condition: null,
           selectedDate: payload.from?.toISOString() ?? null,
-          dynamicRange: null, // Static selection
+          dynamicRange: null,
         });
       } else if (selectedScreen === "Sugar") {
         if (!payload.data && payload.display === "Reset") {
@@ -92,7 +91,6 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
           return;
         }
 
-        // Handle dynamic ranges
         if (payload.isDynamic && payload.dynamicRange) {
           handleClose({
             fromDate: null,
@@ -104,7 +102,6 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
           return;
         }
 
-        // Handle static predefined date ranges (for backward compatibility)
         const dateRangeHandlers: Record<string, () => IClosePayload> = {
           Any: () => ({
             fromDate: null,
@@ -123,7 +120,6 @@ const UpdatedAtRangeFilterModal: React.FC<Props> = ({ closeHandler, mode }) => {
             callbackToSwitchScreen("Custom");
           }
         } else {
-          // Static date selection from Sugar
           handleClose({
             fromDate: payload.date,
             toDate: null,
@@ -263,7 +259,6 @@ const SugarDateScreen: React.FC<IScreenProps> = ({
         id="filteredCommandsList"
       >
         {filteredOptions?.map((option, index) => {
-          // Calculate display for dynamic options
           let displayDateRange = option.dateRangeDisplay;
 
           if (

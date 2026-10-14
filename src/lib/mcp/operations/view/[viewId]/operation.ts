@@ -32,13 +32,6 @@ export interface GetViewResponse {
   view: AppliedViewItem;
 }
 
-/**
- * GET /api/mcp/view
- *
- * - Params: viewId, returns the view the user requested.
- *
- * Authentication: Bearer token (JWT or API key) in Authorization header
- */
 export async function GET(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -103,13 +96,11 @@ export async function GET(request: NextRequest, props: { params: Promise<{ viewI
         { status: 404 },
       );
 
-    //We need to also make a safety check if user is able to see this view project wise, and visibility wise
     const userProjects = await prisma.project.findMany({
       where: { status: "Normal", ...getProjectWhere(user.id, ctx.agentId) },
       select: { id: true },
     });
     const projectIds = userProjects.map((p) => p.id);
-    //Check here if user belongs to the project this view resides in
     if (!projectIds.includes(view.project_view.project.id))
       return NextResponse.json(
         {
@@ -119,7 +110,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ viewI
         { status: 403 },
       );
 
-    //Check if requested view belongs to either the user, or is public view in general. The user cannot access someone else's private view
     if (view.owner.id !== user.id && view.visibility === "Private")
       return NextResponse.json(
         {
@@ -200,13 +190,6 @@ function toViewItem(
   };
 }
 
-/**
- * PATCH /api/mcp/view/[viewId] -- rename / re-filter / re-sort a saved board view.
- * Body (all optional): title, visibility ('Public'|'Private'), label_names[],
- * assignee_ids[], match ('ALL'|'ANY'), board_filters, visible_section_ids,
- * sorting_mode, sorting_order, sorting_stack, subtask_setting,
- * board_empty_sections, set_as_default.
- */
 export async function PATCH(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -232,10 +215,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 400 }
       )
     }
-    // match isn't a real Prisma enum column (it lives in the free-form
-    // board_filters JSON blob), so an invalid value here would silently
-    // persist instead of being rejected at the DB layer like visibility/
-    // sorting_mode/sorting_order are.
     if (
       body.match !== undefined &&
       body.match !== 'ALL' &&
@@ -261,7 +240,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
         { status: 400 }
       )
     }
-    // Mirror POST /api/mcp/view (create): title, if provided, can't be blank.
     const title = body.title === undefined ? undefined : String(body.title).trim()
     if (title !== undefined && !title) {
       return NextResponse.json(
@@ -299,9 +277,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ vie
   })(request)
 }
 
-/**
- * DELETE /api/mcp/view/[viewId] -- delete a saved board view.
- */
 export async function DELETE(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

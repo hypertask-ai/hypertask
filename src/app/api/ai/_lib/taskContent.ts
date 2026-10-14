@@ -1,5 +1,3 @@
-// Pure machine noise never worth sending to the model: the
-// "claude --resume <uuid>" session-code comments agents drop on tickets.
 export function isSessionNoise(text: string) {
   return /claude\s+--resume|claude code session/i.test(text);
 }

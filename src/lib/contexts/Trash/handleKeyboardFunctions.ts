@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 "use client"
 import useUpdateTrash from '@/hooks/Trash/useUpdateTrash';
 import { ITask ,IProject} from '@/models/model';
@@ -33,20 +33,15 @@ const HandleKeyboardFunctions  = (tasks:ITask[], project:IProject)=>{
             return true;
           }
   
-          //  [#] 
           if ((!event.ctrlKey&& event.shiftKey && event.keyCode===51)) {
-            // toggleConfirmation();
-            deleteHandler("recover") // recover task with # and don't prompt
+            deleteHandler("recover")
             return true;
           }
   
 
-          // [CTRL]/ [E]
           if (event.ctrlKey && event.shiftKey  && event.keyCode===51){
             deleteHandler("delete")
           }
-
-          // return false;
     }
 
     const toggleConfirmation = ()=>setShowConfirmation(prev=>!prev)
@@ -84,13 +79,11 @@ const HandleKeyboardFunctions  = (tasks:ITask[], project:IProject)=>{
     };
   
     const handleMouseLeave = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
         debounceTimeout.current = null;
         }
 
-        // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
         debounceTimeout.current = setTimeout(() => {
             if (currentHoveredDiv.current !== null && taskRef.current) {
             (taskRef.current as HTMLDivElement)?.blur();
@@ -100,7 +93,6 @@ const HandleKeyboardFunctions  = (tasks:ITask[], project:IProject)=>{
         };
 
     const handleMouseMove = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
             setSelectedIndex(currentHoveredDiv.current?currentHoveredDiv.current:0)
             clearTimeout(debounceTimeout.current);

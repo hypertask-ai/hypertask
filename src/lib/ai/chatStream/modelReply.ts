@@ -29,7 +29,6 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   const { instructions, messages, tools, toolExecutions } = inputs;
 
   const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
-  // HTPR-7075: a Claude 5.5 failure retries on the same model, never on Luna.
   const sameModelRetry = await backgroundClaudeModelEnabled?.(dbUser.id) ?? false;
   state.selected.resolvedModelId = resolveHaikuModelId(state.selected.resolvedModelId, haiku55Enabled);
   const chunks: string[] = [];
@@ -97,13 +96,6 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
           await state.endDeadlineTurn();
           return;
         }
-        // This is the only path that can end the turn with no assistant
-        // message ever persisted (every other exit reaches
-        // persistAssistantMessage, even the empty-completion fallback).
-        // A tool can execute before the model errors out, so callers
-        // that infer "nothing happened" from an absent reply (the
-        // native-agent heartbeat's retry logic) need this flag to avoid
-        // re-sending the same instructions and replaying that write.
         state.send("error", {
           content: userFacingErrorMessage(error, "model-stream"),
           toolsExecuted: toolExecutions.length > 0,
@@ -151,7 +143,6 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
     console.warn(
       `[ai-model-fallback] ${state.selected.resolvedModelId} -> ${previous.model}: ${previous.status}`,
     );
-    // The same model keeps its selection (model, credential, options).
     if (previous.model === state.selected.resolvedModelId) continue;
     const fallbackProvider = previous.model === "gpt-6-luna" ? "openai" : state.selected.provider;
     const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(streamCredential)
@@ -179,14 +170,6 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
 
   if (state.errorSent || state.cancelled) return;
 
-  // GPT-6.1 Sol (especially Instant / low effort) can return an empty completion
-  // on a query it should answer. Retry once at higher effort, then fall back
-  // to a clear message so the user never sees a blank reply. (HTPR-4007)
-  //
-  // SAFETY: only retry when the first attempt ran NO tools. If a tool already
-  // executed (a write like create/update task may have side effects), re-running
-  // the whole agentic loop could duplicate that action, so we skip straight to
-  // the fallback instead.
   let emptyCompletionError: unknown;
   let emptyCompletionRetryFailed = false;
   let reachedStepLimit = false;
@@ -239,8 +222,6 @@ export async function generateModelReply(state: StreamState, inputs: { instructi
   }
   if (state.errorSent) return;
   if (!hasVisibleCompletion(chunks)) {
-    // Count only unrecovered empty completions. A successful retry is
-    // invisible to the user and is not an incident worth ticketing.
     await reportEmptyCompletion(
       emptyCompletionRetryFailed,
       emptyCompletionError

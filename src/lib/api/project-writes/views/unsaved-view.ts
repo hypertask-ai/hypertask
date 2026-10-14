@@ -28,10 +28,6 @@ import {
   withBoardFilterWriteLock,
 } from "@/utils/controllers/projects/views/boardFilterWriteLock";
 
-// ============= simple stuff here
-// 1. user selects the default view.
-// 2. so that means the applied view in user_project_view is now null.
-// 3. LITERALLY THATS IT
 
 const route = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
@@ -42,7 +38,6 @@ const route = taskWriteRoute({
     const req = { body };
     const userId = currentUser.id;
 
-    // lets check if the api request misses info like user, projectid.
 
     const {
       projectId,
@@ -104,15 +99,12 @@ const route = taskWriteRoute({
     try {
       const loadedProjectView = await prisma.project_View.upsert({
         create: {
-          // ... data to create a User_Project_View
           projectId,
         },
         update: {
-          // ... in case it already exists, update
         },
         where: {
           projectId,
-          // ... the filter for the User_Project_View we want to update
         },
         include: {
           default_view: true,
@@ -157,8 +149,6 @@ const route = taskWriteRoute({
         return viewWriteJson({ message: "View is not accessible" }, 403);
       }
 
-      // Older clients do not send board_layout. Preserve the tab/base layout
-      // in that case; only an explicit null means "inherit browser".
       const inheritedBoardLayout = hasBaseViewId
         ? sanitizeBoardLayout(baseView?.board_layout)
         : getSavedBoardLayoutFromActiveView({
@@ -170,9 +160,6 @@ const route = taskWriteRoute({
         req.body,
         inheritedBoardLayout
       );
-      // Same reason as board_layout: a partial caller (an older bundle, a
-      // filter-only save) omits board_show_archived, and coalescing to null
-      // would drop the view's pinned "show archived" choice (HTPR-5540).
       const inheritedShowArchived = hasBaseViewId
         ? baseView?.board_show_archived ?? null
         : user_project_view?.unsavedView?.board_show_archived ??
@@ -198,9 +185,6 @@ const route = taskWriteRoute({
         board_layout: resolvedBoardLayout,
       };
 
-      // A tab pinned away from the user's canonical applied view cannot use the
-      // one persisted unsaved slot without overwriting that other view's work.
-      // The canonical tab still needs the slot so its settings survive reloads.
       if (
         shouldUseTransientTabSettings(
           hasBaseViewId,
@@ -243,7 +227,6 @@ const route = taskWriteRoute({
       const resolvedAppliedViewId =
         hasBaseViewId && baseViewId != null && baseView ? baseView.id : null;
 
-      // =========== creates a new view and adds it against unsaved.
       const createUnsavedViewHandler = async (
         project_view_id: string,
         user_Project_ViewId: string
@@ -290,7 +273,6 @@ const route = taskWriteRoute({
         };
       };
 
-      // ================ if NEW USER_PROJECT_VIEW,
       if (!user_project_view) {
         console.log(
           "------------------------ need to create anew user_project_view ------------ "
@@ -300,7 +282,6 @@ const route = taskWriteRoute({
           projectView.id
         );
 
-        // that means it has no applied view or unsaved, so the first one is the unsaved anyways.
         const { unsavedViewCreated, updated_user_project_view } =
           await createUnsavedViewHandler(
             user_project_view.project_view_id,
@@ -315,15 +296,11 @@ const route = taskWriteRoute({
           unsavedViewCreated
         );
       }
-      // if the user_project_view already exists, we need to check if
-      // it already has unsaved changes.
       else {
         console.log(
           "------------------------ user_project_view already exists,------------ "
         );
         console.log("🚀 ~  user_project_view:", user_project_view);
-        // ============== if there are NO unsaved changes, means we need to ADD it, for sure.
-        // also if the settings are same as the actual default then don't bother please
         if (!user_project_view.unsavedView) {
           const { updated_user_project_view, unsavedViewCreated } =
             await createUnsavedViewHandler(
@@ -340,10 +317,6 @@ const route = taskWriteRoute({
           );
         }
 
-        // ============= if there ARE previous unsaved changes
-        // unsavedView IS PRESENT
-        // then we need to check if the incoming changes are equal to the previously saved.
-        // first check if there's an applied view at all.
         else {
           var shouldDeleteUnsaved: boolean = false;
 
@@ -351,7 +324,6 @@ const route = taskWriteRoute({
             ? baseView
             : user_project_view.appliedView ?? projectView.default_view;
 
-          // New clients compare against their URL-pinned base. Old clients retain the stored applied/default chain.
           if (comparisonView) {
             console.log("============== checking for equality in appliedView");
             const settingsFromDB = {
@@ -372,10 +344,8 @@ const route = taskWriteRoute({
               board_layout: sanitizeBoardLayout(comparisonView.board_layout),
             };
 
-            // ... check equality
             if (isDeepEqual(settingsFromReqBody, settingsFromDB))
               shouldDeleteUnsaved = true;
-            // if equality found, toggle the boolean to true
           } else {
             console.log(
               "there is no default view, so lets compare with defaults. \n"
@@ -383,17 +353,13 @@ const route = taskWriteRoute({
 
             if (isDeepEqual(superDefault, settingsFromReqBody))
               shouldDeleteUnsaved = true;
-
-            // --------- check if there's even an unsaved view
           }
 
-          //===================== if by then, no equality has been found, we're safe to update the unsaved view.
           if (!shouldDeleteUnsaved && user_project_view.unsavedView) {
             console.log(
               "============== no equality found, updating the previous unsaved"
             );
             const unsavedViewId = user_project_view.unsavedView.id;
-            // ... update the unsaved view.
             const updatedView = await withBoardFilterWriteLock(projectId, sanitizedBoardFilters, (tx) => tx.view.update({
               where: {
                 id: unsavedViewId,
@@ -434,7 +400,6 @@ const route = taskWriteRoute({
               },
             });
           }
-          // ==================== equality found.
           else if (shouldDeleteUnsaved && user_project_view.unsavedViewId) {
             console.log(
               "*==================* found equality. lets delete the view: ",

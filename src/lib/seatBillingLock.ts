@@ -35,7 +35,6 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const lockKey = (teamId: string) =>
   `stripe:seat-billing:lock:${createHash("sha256").update(teamId).digest("hex")}`;
 
-/** Serialize one team's Stripe read/compute/write cycle under a renewable lease. */
 export async function withTeamSeatBillingLock<T>(
   teamId: string,
   run: (assertHeld: () => void) => Promise<T>,
@@ -99,7 +98,6 @@ export async function withTeamSeatBillingLock<T>(
     try {
       await redis.eval(RELEASE_SCRIPT, 1, key, token);
     } catch {
-      // The token-owned lease expires by itself; never delete an unknown owner's lock.
     }
   }
 }

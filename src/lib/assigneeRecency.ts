@@ -77,13 +77,9 @@ export const recordRecentAssigneeUse = (
     try {
       storage.setItem(getStorageKey(currentUserId), JSON.stringify(nextKeys));
     } catch {
-      // Assignment still works when storage is unavailable or full.
     }
   };
 
-  // Cross-tab recency is only safe inside an origin-wide lock. Assignment
-  // remains fully functional when Web Locks are unavailable; in that case we
-  // leave the existing order untouched instead of risking a stale overwrite.
   if (!locks) return;
 
   return locks.request(getLockName(currentUserId), commit).catch(() => undefined);

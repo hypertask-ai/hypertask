@@ -15,8 +15,6 @@ import { useAnnouncementMute } from "@/hooks/General/useGetUserPreferences";
 import { prefixUseGetAnnouncements } from "@/hooks/MultiPages/Sidebar/useGetAnnouncements";
 import { useQueryClient } from "@tanstack/react-query";
 
-// Announcements are authored by the owner via the CLI (scripts/announce.mjs).
-// This component is read-only: it lists announcements and marks them read.
 
 const YOUTUBE_URL = "https://www.youtube.com/@hypertasks";
 const X_URL = "https://x.com/hypertasks";
@@ -40,7 +38,6 @@ const shortDate = (iso: string) => {
   });
 };
 
-// ======================================================= Announcements =============================================
 const Announcements: React.FC<IPosts> = ({
   allPosts,
   toggleSidebar,
@@ -72,7 +69,6 @@ const Announcements: React.FC<IPosts> = ({
               : "translate-x-full"
         }`}
       >
-        {/* header */}
         <div className="flex justify-between items-center xs:px-3 sm:px-6 pt-[calc(1.5rem+env(safe-area-inset-top))] pb-3">
           <h2 className="font-semibold text-subheading">Latest Updates 🚀</h2>
           <button
@@ -88,7 +84,6 @@ const Announcements: React.FC<IPosts> = ({
           </button>
         </div>
 
-        {/* list */}
         <div className="flex-1 overflow-y-auto xs:px-3 sm:px-6">
           <AnnouncementPosts
             allPosts={allPosts}
@@ -96,14 +91,12 @@ const Announcements: React.FC<IPosts> = ({
           />
         </div>
 
-        {/* channels */}
         <ChannelsFooter />
       </div>
     </BackDropContainer>
   );
 };
 
-// ====================================================== Posts ==============================================
 export const AnnouncementPosts = ({
   allPosts,
   toggleSidebar,
@@ -114,11 +107,6 @@ export const AnnouncementPosts = ({
   const [currentUser] = useRecoilState(currentUserAtom);
   const queryClient = useQueryClient();
 
-  // Mark read in the cache as well as on the server. The POST is fire-and-forget
-  // and closing the panel used to refetch immediately, so on a slow connection
-  // the GET could answer before the POST committed and cache readAt: null again,
-  // leaving the rocket lit (HTPR-4652). Writing the cache here makes the unread
-  // dot depend on the click, not on the request ordering.
   useEffect(() => {
     const markAllAsRead = async () => {
       if (!allPosts?.length || !currentUser) return;
@@ -151,8 +139,6 @@ export const AnnouncementPosts = ({
   );
 };
 
-// ponytail: every announcement video is a YouTube embed, so the poster comes
-// free from img.youtube.com. Loom/mp4 slides simply get no thumbnail.
 const youtubeThumbnail = (slides?: ISlideAnnouncement[]) =>
   slides?.map((slide) => youtubeThumbnailUrl(slide.mediaURL)).find(Boolean) ??
   null;
@@ -175,7 +161,6 @@ const VideoThumbnail = ({ src }: { src: string }) => (
   </span>
 );
 
-// ======================================================= SinglePost =============================================
 const SinglePost: React.FC<{
   post: IAnnouncement;
   toggleSidebar?: () => void;
@@ -242,7 +227,6 @@ const SinglePost: React.FC<{
   );
 };
 
-// ==================================================== ChannelsFooter =========================================
 const ChannelsFooter = () => (
   <div className="border-t border-border xs:px-3 sm:px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
     <p className="mb-2 text-micro uppercase tracking-wider text-text-light-gray">

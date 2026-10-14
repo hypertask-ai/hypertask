@@ -10,8 +10,6 @@ type EditorComponent = ComponentType<TiptapProps>;
 
 const importEditor = () => import("@/components/RTE/TipTapTaskDetail");
 
-// Flag off: the editor is still its own chunk, but it renders on the server and
-// mounts with the page like before.
 const EagerEditor = dynamic(importEditor);
 
 let loadedEditor: EditorComponent | null = null;
@@ -21,7 +19,6 @@ export function preloadDescriptionEditor(): Promise<EditorComponent> {
   pendingEditor ??= importEditor().then(
     (module) => (loadedEditor = module.default),
     (error) => {
-      // A failed chunk load must not stick: the next mount or edit intent retries.
       pendingEditor = null;
       throw error;
     },
@@ -29,12 +26,6 @@ export function preloadDescriptionEditor(): Promise<EditorComponent> {
   return pendingEditor;
 }
 
-/**
- * HTPR-7091: with `lazy`, the slot shows the description as static HTML (a copy
- * of the editor's read-only markup) until the editor chunk has loaded, then
- * hands over in place. The choice is made once per mount so an open editor is
- * never swapped.
- */
 export default function DescriptionEditorSlot({
   lazy: lazyRequested,
   ...editorProps
@@ -53,7 +44,6 @@ export default function DescriptionEditorSlot({
       (component) => {
         if (liveRef.current) setEditor(() => component);
       },
-      // Stays static and readable; the next edit intent retries the load.
       () => {},
     );
   }, []);

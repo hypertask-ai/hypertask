@@ -120,7 +120,6 @@ export function selectMcpTools(
     }).strict()
     const baseSchema = z.toJSONSchema(parameters, { target: 'draft-7', io: 'input' }) as Record<string, unknown>
     delete baseSchema.$schema
-    // Cached timer clients may still send flat fields; only advertise the new nested form.
     if (sameNameLegacy) {
       const properties = baseSchema.properties as Record<string, unknown>
       for (const key of Object.keys(legacyShape)) delete properties[key]
@@ -171,19 +170,16 @@ export function selectMcpTools(
         let endpointCap: number | undefined
         try {
           if (action.read_only && supportsLimit) {
-            // Validate the caller's limit before replacing it with the endpoint fetch budget.
             const requestedLimit = input.limit === undefined ? args.limit : Number(z.object({ limit: tool.parameters.shape.limit }).parse({ limit: input.limit }).limit)
             const limitSchema = z.toJSONSchema(tool.parameters.shape.limit, { unrepresentable: 'any', io: 'input' }) as { maximum?: number }
             const maximum = limitSchema.maximum ?? 50
             readLimit = Math.min(requestedLimit, args.limit, maximum)
-            // Local windows need a prefix and lookahead; cursor endpoints must not skip an overfetched row.
             const prefix = supportsOffset || cursorPaginated ? 0 : offset
             const lookahead = !supportsOffset && !supportsCursor ? 1 : 0
             input.limit = Math.min(readLimit + prefix + lookahead, maximum)
             if (lookahead) endpointCap = maximum
           }
           if (action.read_only && supportsOffset) input.offset = offset
-          // Validate the selected branch before any REST call; the old implementation retains its refinements.
           const validated = tool.parameters.parse(input)
           const text = await dispatch(action, validated, token, invocation)
           return formatToolResponse(text, args.response_format, action.read_only, readLimit, offset, supportsOffset || cursorPaginated, endpointCap)
@@ -196,8 +192,6 @@ export function selectMcpTools(
       },
     }]
   })
-  // Hidden aliases keep cached tool definitions callable across a flag change.
-  // Preserve their argument and response shapes, including invocation idempotency.
   for (const tool of legacyTools) {
     if (catalog.some((entry) => entry.name === tool.name)) continue
     const actions = definitions.flatMap((definition) => Object.values(definition.actions)).filter((action) => action.tool === tool.name)

@@ -33,7 +33,7 @@ import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { adoptTaskDetailServerSeed, type TaskDetailServerSeed } from "@/lib/taskDetailReads";
 
 interface TaskContextProps {
-  children?: ReactNode; // Add this line to include children
+  children?: ReactNode;
   parsedTask: string;
   serverTaskSeed?: TaskDetailServerSeed;
   allowPerks: boolean;
@@ -41,9 +41,7 @@ interface TaskContextProps {
   _initialStacked: StackedType;
   stack: any;
   scrollSetting: ScrollSetting;
-  /** Public share links use server-rendered comments and a non-virtualized layout */
   isShareView?: boolean;
-  /** Task detail is mounted inside another scrollable surface, such as SwipeUnread. */
   embedded?: boolean;
   cachedNavigation?: boolean;
   scrollElementRef?: RefObject<HTMLDivElement | null>;
@@ -59,7 +57,6 @@ export type ITaskDetailEditMode =
   | "edit-comment"
   | "edit-comment-ai"
   | "description-ai";
-// Define the type for the modal state
 interface GlobalStates extends TaskContextProps {
   secondaryPanelsReady: boolean;
   cachedLayout: boolean;
@@ -198,7 +195,6 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const { authenticatedUserId } = useAuth();
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   useMemo(() => {
-    // Seed before descendants mount read observers, including after flags resolve.
     if (dedupe && !props.embedded && !props.isShareView) adoptTaskDetailServerSeed(queryClient, authenticatedUserId, initialTask, props.serverTaskSeed);
   }, [dedupe, props.embedded, props.isShareView, props.serverTaskSeed, authenticatedUserId, initialTask, queryClient]);
   const taskGlobalStates = useTaskDetailGlobalStates(
@@ -210,15 +206,12 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
     props.scrollElementRef,
     props.cachedNavigation ?? false,
   );
-  // get current task keys
-  // ----------------- CLICKING ON MAIN DIVS TO FORCE FOCUS AND SET EDIT MODE FOR STATE
   const forceOpenEdit = (
     mode: "title" | "description" | "assignees" | "comment" | null
   ) => {
     taskGlobalStates.setEditMode(mode);
   };
 
-  // Combine state and setState into an object
   const modalState: GlobalStates = {
     ...props,
     ...taskGlobalStates,

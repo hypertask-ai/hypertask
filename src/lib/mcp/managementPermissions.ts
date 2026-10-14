@@ -81,7 +81,6 @@ export function hasDataPermission(
   return isPermissionSubset(FULL_DATA_KEY_PERMISSIONS, permissions)
 }
 
-/** Existing full keys predate the usage scope and therefore have no usage entry. */
 export function hasLegacyFullPermissionShape(
   permissions: ManagementPermissions
 ): boolean {
@@ -91,11 +90,6 @@ export function hasLegacyFullPermissionShape(
   )
 }
 
-/**
- * A full key without a usage entry uses the pre-scope permission shape, so it
- * retains access to this narrower read-only surface for compatibility. An
- * explicit usage entry controls the new scope.
- */
 export function hasUsageReadPermission(
   permissions: ManagementPermissions
 ): boolean {

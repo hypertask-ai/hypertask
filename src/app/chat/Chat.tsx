@@ -463,9 +463,7 @@ export default function Chat({ initialSessionId }: ChatProps) {
       sessions.map((session) => session.id)
     );
     void startNewSession();
-    // Cursor into the fresh composer; DOM focus, not the Tiptap command,
-    // which can silently no-op (HTPR-4565).
-    setTimeout(() => { try { editor?.view.dom.focus(); } catch { /* view unmounted */ } }, 0);
+    setTimeout(() => { try { editor?.view.dom.focus(); } catch {  } }, 0);
   };
 
   const handleTogglePinnedSession = (

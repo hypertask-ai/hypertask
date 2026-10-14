@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -48,7 +47,6 @@ export default  async function handler(
       displayName: userRow.displayName ?? undefined,
     } as IUser;
     
-    // ============== post body
     const {taskId,  labelId} = req.body;
     if (!taskId || !labelId ) return res.status(400).json({message:"Missing Required Information"})
     const { projectId, taskLabels, agentWebhookDeliveryIds } =
@@ -61,7 +59,6 @@ export default  async function handler(
       `;
       const task = lockedTasks[0];
       if (!task) throw new LabelAssignmentError("Task not found", 404);
-      // HTPR-7177: only members and the owner of the task's board may change its labels.
       const memberCheck = await validateProjectMemberIds(task.projectId, [userObj.id]);
       if (memberCheck.error || memberCheck.invalidIds?.length) {
         throw new LabelAssignmentError("Forbidden", 403);
@@ -96,7 +93,6 @@ export default  async function handler(
           include: { label: true },
         });
 
-        // Double check if it is already assigned.
         const labelToCheck = await tx.taskLabel.findFirst({
           where: { taskId, labelId },
           include: { label: true },
@@ -130,8 +126,6 @@ export default  async function handler(
           where: { taskId },
           include: { label: true },
         });
-        // This endpoint always toggles one label, so every committed path
-        // changes the set and must publish the matching task.updated event.
         const agentWebhookDeliveryIds = await persistAgentTaskUpdatedWebhook(tx, {
           taskId,
           actor: {
@@ -158,7 +152,6 @@ export default  async function handler(
     }
     
     void broadcastBoardChange(projectId, { originUserId: userObj.id })
-    // HTPR-6281: the open task detail view listens only on the task channel.
     void broadcastTaskChange(Number(taskId), { originUserId: userObj.id })
     return res.status(200).json(taskLabels)
 

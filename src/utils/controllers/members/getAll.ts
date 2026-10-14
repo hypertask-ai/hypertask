@@ -51,7 +51,6 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 
                 
             })
-            // ============== all team members EXCEPT the above if teamMembers is given. 
             if (teamMembers && teamId_){
                 const team = await prisma.team.findUnique({where:{id:teamId_ as string}, include:{
                     googleAccount:true
@@ -60,7 +59,6 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                     id: parseInt(projectId as string),
                 }})
                 console.log("🚀 ~ membersGetAll ~ project:", project)
-                // ========= fetch owner of the team too 
                 const teamOwner = await prisma.user.findUnique({where:{id:team?.googleAccount.userId}})
                 console.log("🚀 ~ membersGetAll ~ teamOwner:", teamOwner)
                 
@@ -97,8 +95,6 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
                 })
                 console.log("🚀 ~ membersGetAll ~ team_members:", team_members)
 
-                // =========== requester is not the owner himself. 
-                // =========== team
                 console.log("🚀 ~ membersGetAll ~ project?.ownerId!==teamOwner.id:", project?.ownerId)
                 if (teamOwner&&teamOwner?.id !== user.id && !members.map(m=>m.userId).includes(teamOwner?.id) && project?.ownerId!==teamOwner.id ) {
                     team_members.push({ id: -1, user: teamOwner });
@@ -107,12 +103,6 @@ const membersGetAll = async (projectId:string|string[], user: { id: number },tea
 
             }
 
-          
-            // console.log("🚀 ~ file: getAll.ts:22 ~ membersGetAll ~ invites:", invites)
-
-            // Extract unique email addresses from invites
-// Extract unique email addresses from all invites
-// Provide an initial type for the emails array
 const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
     invite.emails.forEach((email) => {
       if (!emails.includes(email)) {
@@ -123,7 +113,6 @@ const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
   }, []);
   console.log("🚀 ~ file: getAll.ts:42 ~ membersGetAll ~ allEmails:", allEmails)
   
-  // Filter out emails that match members by email
   const finalUniqueEmails = allEmails.filter((email) => {
     const isEmailInMembers = members.some(
       (member) => member.user.email === email
@@ -142,14 +131,12 @@ const allEmails: string[] = invites.reduce<string[]>((emails, invite) => {
                     teamMembers:team_members
                 }
             })
-            // return res.status(200).json(members);
         } catch (error) {
             console.log(error);
             return({
                 status:500,
                 error:error
             })
-            // res.status(200).json([]);
         }
 
 };

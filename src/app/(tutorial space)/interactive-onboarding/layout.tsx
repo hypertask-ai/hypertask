@@ -12,19 +12,16 @@ export default function TutorialLayout({ children }: { children: ReactNode }) {
   const isMobile = useContext(MobileViewContext);
 
   useEffect(() => {
-    // Show blocking overlay if mobile
     if (isMobile) {
       setShowMobileBlocking(true);
     }
   }, [isMobile]);
 
-  // If mobile, show blocking overlay instead of tutorial
   if (showMobileBlocking) {
     return (
       <InteractiveTutorialMobileBlocking
         onDismiss={() => {
           setShowMobileBlocking(false);
-          // Redirect will happen in the component
         }}
       />
     );

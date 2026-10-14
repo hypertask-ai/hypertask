@@ -8,8 +8,6 @@ import { validateProjectAccess } from '@/lib/mcp/tasks/services'
 import { resolveTaskIdOnly } from '@/lib/mcp/tasks/resolveTask'
 import { htmlToMarkdown } from '@/utils/controllers/pages/htmlToMarkdown'
 
-// GET /api/mcp/tasks/description-versions?task_id=123
-// History of a task's description. Newest version first. Content as markdown.
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -19,9 +17,6 @@ export async function GET(request: NextRequest) {
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
 
-    // Accept the same identifiers as every other task route. Requiring the
-    // internal numeric id forced callers working from a ticket number to make
-    // an extra lookup first, which nothing else here does.
     const params = request.nextUrl.searchParams
     const raw = params.get('task_id')
     const rawIndex = params.get('unique_index')

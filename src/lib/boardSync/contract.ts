@@ -100,8 +100,6 @@ export const createBoardReadModelSnapshot = ({
     tasksById[taskKey] = task;
   }
 
-  // Sections and filteredSections are derived from tasks and the active view.
-  // Recompute them after restore instead of persisting a second source of truth.
   const {
     tasks: _tasks,
     sections: _sections,
@@ -131,11 +129,6 @@ export type BoardReadModelRevocationV1 = {
   revokedAt: string;
 };
 
-/**
- * A denied board is marked by overwriting its snapshot with this stub. It fails
- * snapshot validation, so every read path already treats it as "no snapshot",
- * and the marker is exactly as durable as the data it replaced.
- */
 export const createBoardReadModelRevocation = (
   accountId: number,
   projectId: number,
@@ -147,10 +140,6 @@ export const createBoardReadModelRevocation = (
   revokedAt,
 });
 
-/**
- * Deliberately an explicit shape check, not "fails snapshot validation": a
- * corrupt record must stay overwritable by a fresh snapshot.
- */
 export const isBoardReadModelRevocationV1 = (
   value: unknown,
   expectedAccountId?: number,

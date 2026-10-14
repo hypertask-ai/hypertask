@@ -9,8 +9,6 @@ export type CommentReactionTarget = {
   taskUniqueIndex: number;
 };
 
-// HTPR-7122: isAgent is set when an agent made the reaction; userId is then its owner.
-// agent carries an id and name only when the caller may see that agent.
 type CommentReactionRow = {
   id: string;
   createdAt: string;
@@ -121,8 +119,6 @@ export function createCommentReactionHandler<TContext>(
     try {
       await dependencies.afterChange(target, userId, emoji, active, result, context);
     } catch (error) {
-      // The reaction is already committed. A notification or realtime outage
-      // must not turn a successful, idempotent mutation into a client retry.
       console.error('[comment-reaction] post-commit side effect failed', error);
     }
     return NextResponse.json({ success: true, active, ...result });

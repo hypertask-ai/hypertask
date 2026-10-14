@@ -21,7 +21,6 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   useEffect(() => {
     if (embedded) return;
 
-    // Add event listeners when the component mounts
     document.addEventListener("keydown", handleKeyDown);
     document.addEventListener("keyup", handleKeyUp);
     const path = `/detail/project-${currentTask?.projectId}/${currentTask?.uniqueIndex}`;
@@ -29,7 +28,6 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
       detail: { path, handleKeyDown, ready: currentTask?._count?.notifications !== undefined },
     }));
 
-    // Remove event listeners when the component unmounts
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
       document.removeEventListener("keyup", handleKeyUp);
@@ -50,15 +48,11 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   ]);
 
   useEffect(() => {
-    // Cached navigation revalidates even with stable layout off; an RSC refresh can race Back and trigger Next's MPA fallback.
     getTask(flagReady && !dedupe && !(noLoadingFlash && (cachedLayout || window.history.state?.cachedTaskDetail?.taskId === _parsedTask.id)));
   }, [_currentTask, _parsedTask.id, noLoadingFlash, cachedLayout, dedupe, flagReady]);
 
   useEffect(() => {
     const readinessTask = `${_parsedTask.projectId}:${_parsedTask.id}`;
-    // Embedded views (swipe-unread) don't run this readiness tracking at all,
-    // so non-essential requests there have nothing to wait on - let them fire
-    // immediately rather than never.
     if (embedded) {
       setNonEssentialReady(true);
       return;
@@ -70,12 +64,6 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     let timer: ReturnType<typeof setTimeout> | undefined;
     let observer: MutationObserver | undefined;
     let poll: ReturnType<typeof setInterval> | undefined;
-    // The 30s timer below still publishes the real readiness event (a task
-    // that never reaches the DOM markers - share view, no description editor,
-    // permission-limited, an error state - is a genuine measurement failure
-    // worth keeping). But the non-essential gate has no reason to make AI
-    // suggestions, the share link and the move-task sections wait that long:
-    // fail it open after 3s regardless (HTPR-6047).
     const nonEssentialFallback = setTimeout(
       () => setNonEssentialReady(true),
       3000,
@@ -99,10 +87,6 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
         : measured;
       readinessTaskRef.current = readinessTask;
       if (!timedOut) markTaskDetailPhase(TASK_DETAIL_USABLE_MARK);
-      // HTPR-6047: phase attribution for the gap. Read after the usable mark
-      // above so phase_usable_ms can see it - a timed-out publish never sets
-      // that mark, so phase_usable_ms stays null on that path, matching
-      // exclusion_reason rather than reporting a fake completion time.
       const phaseTimings = readTaskDetailPhaseTimings();
       emitProductPerformanceEvent(
         {
@@ -142,11 +126,6 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
     observer = new MutationObserver(scheduleCheck);
     observer.observe(document.documentElement, { childList: true, subtree: true });
     timer = setTimeout(() => publish(true), TASK_DETAIL_READINESS_MAX_MS);
-    // HTPR-6047: the rAF+MutationObserver path alone can silently lose a
-    // scheduled check across a tab freeze/resume (backgrounding, sleep/wake,
-    // OS-level suspension) - reproduced via CDP Page.setWebLifecycleState.
-    // A plain interval keeps firing across that gap, so it catches
-    // usability even when the primary path drops its pending check.
     poll = setInterval(checkReady, 250);
     scheduleCheck();
     return cleanup;
@@ -155,12 +134,8 @@ export function useTaskDetailReadiness(context: useTaskDetailInitialScrollValue)
   useLayoutEffect(() => {
     updateActiveItemAndItemInView(currentTask?.id ?? null);
     setStickyElementHeight();
-  }, []); // Empty dependency array, so it runs once on mount
+  }, []);
 
-  // Opening/closing the AI chat sidebar resizes the main content and reflows the
-  // title, changing its height. The ResizeObserver can miss the settled height
-  // across that layout swap, leaving the sticky header overlapping the task body
-  // until a reload. Recompute after the toggle's layout settles (rAF).
   useEffect(() => {
     const raf = requestAnimationFrame(() => setStickyElementHeight());
     return () => cancelAnimationFrame(raf);

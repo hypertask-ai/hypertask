@@ -8,7 +8,6 @@ const REQUEST_TIMEOUT_MS = 8000;
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const MAX_EVENTS_PER_READ = 10_000;
 const GOOGLE_CALENDAR_NAME = "Hypertask";
-// Timed tasks occupy one hour because tasks have one due instant, not an end time.
 const TIMED_EVENT_DURATION_MS = 60 * 60 * 1000;
 
 export type GoogleCalendarTask = {
@@ -245,8 +244,6 @@ export async function listGoogleCalendarEvents(
         events.push(item as GoogleEvent);
       }
     }
-    // ponytail: keep a single reconciliation below 10,000 events. If real
-    // calendars reach this ceiling, consume each page through a callback.
     if (events.length > MAX_EVENTS_PER_READ) {
       throw new Error("Google Calendar has too many events to update safely");
     }

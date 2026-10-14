@@ -5,7 +5,6 @@ import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// Body ids are untrusted. A Prisma filter object must never reach a write.
 function finiteInteger(value: unknown): number | null {
     if (typeof value === "number") return Number.isSafeInteger(value) ? value : null;
     if (typeof value === "string" && /^-?\d+$/.test(value)) {
@@ -23,11 +22,9 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     if (!session) return res.status(401).json({ message: "Unauthorized" });
     const projectId = finiteInteger(req.body?.projectId);
     const index = finiteInteger(req.body?.index);
-    // projectId -1 is the "do nothing" reset. 0 is not a board.
     if (projectId === null || projectId === 0 || index === null) {
         return res.status(400).json({message:"Missing Required information"})
     }
-    // Ignore any body userSettingId. The row belongs to the session user.
     const setting = await prisma.userSetting.findUnique({
         where: { userId: session.userId },
         select: { id: true },
@@ -41,10 +38,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         })
         if (!project) return res.status(403).json({ message: "Forbidden" })
     }
-    // =================== adding a favorite
     if (req.method === "POST") {
         try {
-            // just for safety, delete if there is any existing with same params
             const deleted = await prisma.favorites.deleteMany({
                 where:{
                     userSettingId:userSettingId,
@@ -67,12 +62,8 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
         }
     }
 
-    // =================== updating a favorite
     else if (req.method === "PUT") {
         try {
-
-
-            // ============= user clicks DO NOTHING, so only userSettingId and index is given 
             if (projectId ===-1){
                 const deletedFavorite = await prisma.favorites.deleteMany({
                     where:{
@@ -83,7 +74,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
                 return res.status(200).json(deletedFavorite)
             }
             
-            // ========== delete wherever that projectId was before
             const deletedFavorites = await prisma.favorites.deleteMany({
                 where:{
                     projectId:projectId,
@@ -93,7 +83,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             })
             console.log("🚀 ~ file: addEditFavorites.ts:53 ~ consthandler:NextApiHandler= ~ deletedFavorites:", deletedFavorites)
 
-            // =============== update favorite. 
             const updatedFavorite = await prisma.favorites.updateMany({
                 where:{
                     userSettingId:userSettingId,

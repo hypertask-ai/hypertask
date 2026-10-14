@@ -19,7 +19,6 @@ async function loadPublishedReport(): Promise<McpClientEvalReport> {
       return (await response.json()) as McpClientEvalReport;
     }
   } catch {
-    // Fall back to the last committed report when the published branch is empty.
   }
   return latest as McpClientEvalReport;
 }

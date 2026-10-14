@@ -34,10 +34,8 @@ const Section = ({
           "overflow-y-auto w-full sm:pb-20 h-full max-h-inherit scrollbar hover:scrollbar-thumb-gray-500 scrollbar-thumb-[#D3D1CB] scrollbar-track-kanban-column-scrollbar dark:scrollbar-thumb-[#4F5766] scrollbar-corner-button-arrow-disabled"
         }
       >
-        {/*-------------------TITLE AND TASKS */}
         <SectionHeader title={title} taskCount={taskCount} />
 
-        {/* tasks */}
         <div id={`tasks-list-${2}`} className={"w-full px-3 space-y-4 mt-0"}>
           {tasks.map((task, tIndex) => (
             <Task
@@ -50,7 +48,6 @@ const Section = ({
             />
           ))}
 
-          {/**--------------------------------------Bottom New Task Button */}
           {showBottomButton && (
             <div className="h-[32px]">
               <div className="group scale-100 hover:bg-hover-active w-full mt-[16px] py-2 rounded flex justify-center">

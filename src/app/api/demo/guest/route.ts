@@ -30,8 +30,6 @@ const RATE_LIMIT_WINDOW_MS = 60 * 60 * 1000;
 const RATE_LIMIT_MAX_GUESTS = 5;
 const RATE_LIMIT_MAX_REGENERATIONS = 3;
 
-// ponytail: this per-instance Map is intentionally naive. Upgrade to Upstash
-// when anonymous traffic needs a shared rate limit across serverless instances.
 const guestCreationsByIp = new Map<string, number[]>();
 const boardRegenerationsByGuest = new Map<number, number[]>();
 
@@ -83,13 +81,6 @@ function consumeBoardRegeneration(userId: number): {
   return { allowed: true, retryAfter: 0 };
 }
 
-// HTPR-4303: on Better-Auth-enabled deployments (prod + previews) the board's
-// first render hits BA-gated APIs, and the client-side legacy->BA bridge in
-// useAuth fires too late (fire-and-forget after mount) -> 401s -> the prod
-// build throws to the route error boundary. Mint the BA session server-side
-// through the existing tested /bridge-session endpoint so the guest lands
-// fully authenticated, exactly like a real login. Returns false on failure so
-// callers can fail loud instead of redirecting to a crashing board.
 async function appendBetterAuthCookies(
   origin: string,
   legacyToken: string,
@@ -101,7 +92,6 @@ async function appendBetterAuthCookies(
     const bridged = await auth.handler(
       new Request(new URL("/api/auth/bridge-session", origin), {
         method: "POST",
-        // origin must be a trusted origin or Better Auth rejects the POST.
         headers: { cookie: `${SESSION_COOKIE}=${legacyToken}`, origin },
       }),
     );
@@ -114,8 +104,6 @@ async function appendBetterAuthCookies(
       return false;
     }
     for (const cookie of bridged.headers.getSetCookie()) {
-      // The bridge sub-request carries no cookies, so the legacy plugin's
-      // theme default would override this route's amoled. Ours wins.
       if (cookie.startsWith("theme=")) continue;
       response.headers.append("set-cookie", cookie);
     }
@@ -143,7 +131,6 @@ function setGuestCookies(
     maxAge: GUEST_SESSION_TTL_SECONDS,
     path: "/",
   });
-  // Onboarding runs on AMOLED: true black is the look the demo sells.
   response.cookies.set("theme", "amoled", {
     httpOnly: false,
     secure: process.env.NODE_ENV === "production",
@@ -213,8 +200,6 @@ async function existingGuestResponse(
     boardUrl: payload.boardUrl,
     uniqueIdentifier: payload.uniqueIdentifier,
   });
-  // Returning guests may predate the BA mint (or the BA session expired);
-  // the bridge is a no-op when a matching BA session already exists.
   const legacyToken = request.cookies.get(SESSION_COOKIE)?.value;
   if (
     legacyToken &&
@@ -233,9 +218,6 @@ async function existingGuestResponse(
 }
 
 export async function POST(request: NextRequest) {
-  // A real account must never be provisioned a guest: setGuestCookies would
-  // overwrite their session and silently sign them out. getSessionUser, not the
-  // legacy cookie alone, because a Better Auth session outlives ht_session.
   const sessionUser = await getSessionUser(request.headers);
   if (sessionUser) {
     const user = await prisma.user.findUnique({
@@ -278,8 +260,6 @@ export async function POST(request: NextRequest) {
   if (existingGuest && !purpose) {
     return existingGuestResponse(request, existingGuest);
   }
-  // HTPR-4875: no purpose = the default /demo entry, which provisions an empty
-  // board with no AI generation. A purpose still has to be a real description.
   if (purpose && purpose.length < 3) {
     return NextResponse.json({ error: "purpose too short" }, { status: 400 });
   }
@@ -306,9 +286,6 @@ export async function POST(request: NextRequest) {
 
     try {
       const board = await provisionGuestBoard(purpose, existingGuest.owner);
-      // HTPR-4999: keep the previous boards. The first (seeded) board holds the
-      // CLI/MCP onboarding tasks and the guest should be able to switch back;
-      // the 24h guest cleanup cron still removes everything.
       return existingGuestResponse(request, board);
     } catch (error) {
       if (error instanceof DemoBoardGenerationUnavailableError) {

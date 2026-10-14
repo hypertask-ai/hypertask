@@ -49,18 +49,6 @@ export const HYPERTASKS_STORAGE_PUBLIC_BASE_URL =
 
 let client: S3 | null = null;
 
-/**
- * S3-compatible client for Hypertasks uploads. Set
- * R2_ENDPOINT/R2_UPLOAD_KEY/R2_UPLOAD_SECRET/R2_UPLOAD_BUCKET/R2_PUBLIC_BASE_URL
- * to activate R2; existing S3 files must be copied over and stored URLs rewritten
- * as a separate migration.
- *
- * On Vercel the AWS default credential chain has nothing to find (no instance
- * role, and AWS_ACCESS_KEY_ID is a reserved env name there), so explicit S3 keys
- * are passed via S3_UPLOAD_KEY/S3_UPLOAD_SECRET when present. Without them it
- * falls back to the default chain (EC2 instance IAM role, ~/.aws/credentials
- * locally).
- */
 export function getHypertasksS3Client(): S3 {
   if (!client) {
     if (HYPERTASKS_STORAGE_IS_R2) {
@@ -96,12 +84,6 @@ export function getHypertasksS3Client(): S3 {
 
 let presignClient: S3Client | null = null;
 
-/**
- * SDK v3 client, used only to pre-sign uploads. The v2 presigner refuses
- * ContentLength outright, while v3 can put content-length into the signature,
- * which is what makes storage itself reject a body larger than the one the
- * ticket was issued for (HTPR-5524 review).
- */
 export function getHypertasksPresignClient(): S3Client {
   if (!presignClient) {
     presignClient = HYPERTASKS_STORAGE_IS_R2

@@ -22,8 +22,6 @@ export const onRequestError: Instrumentation.onRequestError = async (
     return;
   }
 
-  // Next 16.3 reports an RSC response cancelled by navigation as a render
-  // failure. The exact context keeps real stream and route errors visible.
   if (isExpectedClientAbortedRscPayload(error, context)) return;
 
   try {

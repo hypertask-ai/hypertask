@@ -14,22 +14,6 @@ function positiveInteger(value: string | null): number | null {
     return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null
 }
 
-/**
- * GET /api/mcp/inbox/list
- *
- * Returns inbox data that mirrors the app inbox view.
- *
- * Without agent JWT (flat):
- * { success, structuredData, notifications }
- *
- * With agent JWT (separate user + agent inboxes):
- * {
- *   success,
- *   agent: { id, displayName, photoURL? },
- *   user: { structuredData, notifications },
- *   agentInbox: { structuredData, notifications }
- * }
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
     let userObj: {id: number, email: string} | null = null

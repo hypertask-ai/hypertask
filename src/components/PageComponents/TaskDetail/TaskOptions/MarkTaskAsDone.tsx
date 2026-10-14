@@ -41,9 +41,6 @@ const MarkTaskAsDone = (
     const stopArchiveEnterPropagation = (
       event: KeyboardEvent<HTMLButtonElement>,
     ) => {
-      // TaskDetailComp's legacy document handler manually activates the old
-      // focusable wrapper on Enter. This is now a native button, so keep that
-      // handler from toggling the task a second time after the native click.
       if (event.key === "Enter") event.stopPropagation();
     };
 
@@ -65,7 +62,6 @@ const MarkTaskAsDone = (
             <div
               className="h-8 w-8 flex items-center justify-center bg-back-button rounded-full group"
             >
-              {/* Fill the circle: a button sized to the icon leaves the visible ring dead to the thumb. */}
               <button
                 id="markAsDone"
                 aria-label={archiveLabel}

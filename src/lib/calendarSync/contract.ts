@@ -82,8 +82,6 @@ const normalizeCalendarTaskForSnapshot = (value: unknown): unknown =>
   isRecord(value)
     ? {
         ...value,
-        // The application model represents an unset start date as undefined,
-        // while the persisted contract uses an explicit nullable field.
         startDate: value.startDate ?? null,
       }
     : value;

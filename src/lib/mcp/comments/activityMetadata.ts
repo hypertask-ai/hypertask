@@ -5,10 +5,6 @@ export interface ActivityEntryMetadata {
   activity: Prisma.JsonValue | null
 }
 
-/**
- * Preserve the raw activity payload returned by the app comment endpoint while
- * adding an explicit discriminator for API callers.
- */
 export function withActivityMetadata<T extends object>(
   entry: T,
   activity: Prisma.JsonValue | null

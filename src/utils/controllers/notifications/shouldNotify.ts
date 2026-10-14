@@ -39,8 +39,6 @@ interface NotificationSettingRow {
   notificationPreference: string | null;
 }
 
-// Pure variant for callers that already batch-loaded the settings row (the FCM
-// device filter), so they don't pay one query per user.
 export function resolveNotificationChannelPreference(
   userSetting: NotificationSettingRow,
   type: NotificationType,
@@ -65,10 +63,6 @@ export function resolveNotificationChannelPreference(
   if (preference === "all") return true;
   if (preference === "nothing") return false;
 
-  // "direct" means aimed at you personally. Being added as a follower is not,
-  // so it stays out: the old code had two contradictory readings of "direct"
-  // and this keeps the stricter one, which is what users picking "Only
-  // @mentions" actually asked for.
   return type === "Mentioned" || type === "Assigned";
 }
 

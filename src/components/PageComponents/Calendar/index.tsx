@@ -25,14 +25,10 @@ import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import { IUser } from "@/models/model";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import AppShellRail from "@/components/PageComponents/Kanban/HeaderComponents/AppShellRail";
-// Keep the command center in the page bundle: a pull-down must mount and focus
-// its input during the committing touchend, before mobile user activation ends.
 import HypertasksCommands from "@/components/commands";
 import MobileCalendar from "./MobileCalendar";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 
-// React.lazy waits for an open intent before requesting these closed-only
-// dialogs. next/dynamic would emit route preload hints for them at startup.
 const CalendarDueDateModal = lazy(
   () => import("@/components/Modals/Calendar/calendar.modal"),
 );
@@ -43,18 +39,17 @@ const AllFilterHTC = lazy(
   () => import("@/components/Modals/FilterModals/SelectFilters/FilterHTC"),
 );
 
-// Array of 10 different colors for checkboxes
 const checkboxColors = [
-  "#3b82f6", // blue-500
-  "#a855f7", // purple-500
-  "#ec4899", // pink-500
-  "#f97316", // orange-500
-  "#22c55e", // green-500
-  "#06b6d4", // cyan-500
-  "#eab308", // yellow-500
-  "#ef4444", // red-500
-  "#6366f1", // indigo-500
-  "#14b8a6", // teal-500
+  "#3b82f6",
+  "#a855f7",
+  "#ec4899",
+  "#f97316",
+  "#22c55e",
+  "#06b6d4",
+  "#eab308",
+  "#ef4444",
+  "#6366f1",
+  "#14b8a6",
 ];
 
 const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
@@ -111,17 +106,14 @@ const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [isApple, toggleShowCommands]);
 
-  // Calculate selected count
   const selectedCount = useMemo(() => {
     return Object.values(checkedProjects).filter(Boolean).length;
   }, [checkedProjects]);
 
-  // Check if filtering is active (project filters)
   const isFiltering = useMemo(() => {
     return selectedCount > 0 || Object.values(checkedProjects).some(Boolean);
   }, [selectedCount, checkedProjects]);
 
-  // Active task filters for read-only display (from calendarTaskFilters)
   const activeTaskFilterLabels = useMemo(() => {
     const formatFilterValue = (values: string[]) =>
       values.length <= 2
@@ -496,7 +488,6 @@ const FilterLabel = ({
       <ColoredCheckbox
         checked={checked}
         onChange={(checked) => {
-          // onChange(checked);
         }}
         color={checkboxColor}
         id={label}

@@ -26,8 +26,6 @@ const themePreferences = new Set<ThemePreference>(
   themeOptions.map(({ value }) => value),
 );
 
-// The retired light/dark cookie values remain valid inputs so existing users
-// keep their saved preference after the palette labels change.
 export const normalizeThemePreference = (
   theme?: string,
 ): ThemePreference | undefined => {
@@ -59,8 +57,6 @@ export const resolveThemePreference = (
   return theme;
 };
 
-// Installed PWAs keep the initial document color for their native title bar.
-// Prefer dark until the pre-paint script can resolve an unpinned system theme.
 export const resolveInitialThemeColor = (
   theme: ThemePreference | undefined,
 ): string =>

@@ -12,7 +12,6 @@ export const ChatScopeChip = forwardRef<HTMLButtonElement, ComponentPropsWithout
 }>(function ChatScopeChip({ kind, label, mobile = false, isOpen, compose = false, ...props }, ref) {
   const composeBoardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   if (compose && !composeBoardChipEnabled) return null;
-  // Compose keeps the compact chip; on phones it only grows to a 44px tap target.
   const chatMobile = mobile && !compose;
   const iconSize = compose ? 14 : 13;
   return (

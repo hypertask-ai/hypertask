@@ -1,7 +1,3 @@
-/**
- * First-line tool blurbs for progressive disclosure.
- * Each line states what the tool returns and stays under 100 characters.
- */
 import { buildToolName } from './mcp-standards'
 
 export const TOOL_SUMMARIES: Record<string, string> = {

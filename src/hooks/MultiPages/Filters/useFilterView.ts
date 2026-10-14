@@ -1,4 +1,4 @@
-/* eslint-disable react/jsx-key */
+
 import { FilterCommandMode } from "@/models/Filters/enums";
 import { IFilterCommandList, TFilter } from "@/models/Filters/model";
 import { useRecoilValue } from "@/lib/state";

@@ -40,12 +40,9 @@ const BottomBarInSidebar = ()=>{
 
             </div>
             <div className="flex items-center justify-between ">
-                {/* <img src={logo.src} alt="logo" /> */}
 
                 <Image
                     src={effectiveTheme ?(effectiveTheme!=="dark"? commandImageDark:logo):logo}
-                    // className="my-4 px-6 h-[28px] w-auto "
-                    // style={{ objectFit: "contain" }}
                     alt=""
 
                 />

@@ -85,9 +85,7 @@ export interface SectionListItem {
   visibility: boolean;
   deleted: boolean;
   ranking: string;
-  /** Tickets here are finished. null means no explicit setting: fall back to the column name. */
   isDone?: boolean | null;
-  /** Numeric user ID, agent UUID, or null when no rule is set. */
   autoAssign: number | string | null;
   taskCount: number;
 }
@@ -142,9 +140,6 @@ export interface ListLabelsResponse {
 
 type ProjectApiResponse = Record<string, unknown>;
 
-/**
- * Service for project operations - listing projects and sections.
- */
 export class ProjectService {
   constructor(private readonly apiClient: IApiClient) {}
 
@@ -152,7 +147,6 @@ export class ProjectService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = ListProjectsInputSchema.parse(params);
 
       logger.debug('Listing projects', {
@@ -163,7 +157,6 @@ export class ProjectService {
         offset: validatedInput.offset,
       });
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
 
       if (validatedInput.status) {
@@ -198,7 +191,6 @@ export class ProjectService {
         response,
       });
 
-      // Add pagination metadata following MCP best practices
       const offset = validatedInput.offset || 0;
       const limit = validatedInput.limit || response.limit || response.projects.length;
       const paginationMetadata = buildPaginationMetadata({
@@ -208,12 +200,6 @@ export class ProjectService {
         itemsCount: response.projects.length,
       });
 
-      // logger.info('Projects listed successfully', {
-      //   correlationId,
-      //   resultCount: response.projects.length,
-      //   total: response.total,
-      //   hasMore: paginationMetadata.has_more,
-      // });
 
       return {
         ...response,
@@ -362,7 +348,6 @@ export class ProjectService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = ListSectionsInputSchema.parse(params);
 
       logger.debug('Listing sections', {
@@ -371,13 +356,11 @@ export class ProjectService {
         includeHidden: validatedInput.include_hidden,
       });
 
-      // Determine project ID (board_id is alias for project_id)
       const projectId = validatedInput.project_id;
       if (!projectId) {
         throw new Error('Either project_id or board_id must be provided');
       }
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
       if (validatedInput.include_hidden !== undefined) {
         queryParams.append('include_hidden', String(validatedInput.include_hidden));
@@ -392,11 +375,6 @@ export class ProjectService {
         correlationId
       );
 
-      // logger.info('Sections listed successfully', {
-      //   correlationId,
-      //   projectId: response.projectId,
-      //   sectionCount: response.sections.length,
-      // });
 
       return response;
     } catch (error) {
@@ -540,7 +518,6 @@ export class ProjectService {
         correlationId
       );
 
-      // HTPR-3035: Security — refuse to return members if backend returned wrong project
       const responseProjectId = response?.projectId ?? (response as any)?.project_id;
       if (responseProjectId != null && Number(responseProjectId) !== validatedInput.project_id) {
         logger.error('Project members response projectId mismatch (HTPR-3035)', {
@@ -554,11 +531,6 @@ export class ProjectService {
         );
       }
 
-      // logger.info('Project members listed successfully', {
-      //   correlationId,
-      //   projectId: response.projectId,
-      //   memberCount: response.members.length,
-      // });
 
       return response;
     } catch (error) {
@@ -586,7 +558,6 @@ export class ProjectService {
         projectId: validatedInput.project_id,
       });
 
-      //Update this to send payload please
       const response = await this.apiClient.makeRequest<AddProjectMemberResponse>(
         `/mcp/projects/${validatedInput.project_id}/members`,
         {
@@ -596,7 +567,6 @@ export class ProjectService {
         correlationId
       );
 
-      // HTPR-3035: Security — refuse to return members if backend returned wrong project
       const responseProjectId = response?.projectId ?? (response as any)?.project_id;
       if (responseProjectId != null && Number(responseProjectId) !== validatedInput.project_id) {
         logger.error('Project member response projectId mismatch (HTPR-3035)', {

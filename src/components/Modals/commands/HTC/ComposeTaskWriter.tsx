@@ -158,7 +158,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         field.setSelectionRange(start, end, direction);
         caret.current = null;
       }
-      // The phone sheet's entry animation can reject the first focus call.
       if (mobile && document.activeElement !== field && ++tries < 30) requestAnimationFrame(focus);
     };
     focus();
@@ -209,7 +208,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const send = async () => {
     if (!enabled || sending.current || pendingImages.current > 0 || dictating || !text.trim()) return;
     sending.current = true;
-    // Keep the window the same size while the progress steps replace the composer.
     setWritingHeight(showProgress ? composer.current?.offsetHeight : undefined);
     setWriting(true);
     setStage(null);
@@ -267,7 +265,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         await refreshTaskDetailQueryCache({ queryClient, taskId: task.id, fetchTask: async () => task });
         if (!mounted.current) return;
         updateTaskInCache(task, task.id, task.projectId, task.sectionId);
-        // Board quick-add can open a regular detail provider, not the cached view.
         const context = taskContextRef.current;
         if (context?.currentTask?.id === task.id && context.currentTask.projectId === task.projectId) {
           const syncContent = !shouldPreserveTaskEditorContent(context);
@@ -286,7 +283,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
           createTaskGlobally({ task: createdTask, sectionId: createdTask.sectionId!, position: "top" });
         }
       } else if (!existingTaskId) createTaskGlobally({ task, sectionId: task.sectionId!, position: "top" });
-      // The phone form's history cleanup must finish before opening the task and chat.
       if (mobile && newTaskWindow) await onCreated();
       setIntro({ taskId: task.id, content: composeTaskAssistantMessage(task.ticketNumber ?? `${project.uniqueIdentifier ?? "TASK"}-${task.uniqueIndex}`, writerFailed, Boolean(existingTaskId), splitTasksEnabled && splitResult ? { tasks: splitResult, failedTitles } : undefined, writerFailureReason) });
       updateActiveItemAndItemInView(task);
@@ -302,12 +298,10 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
     } finally {
       sending.current = false;
       if (mounted.current) setWriting(false);
-      // The palette can outlive Compose when the feature flag turns off.
       onBusyChange(false);
     }
   };
 
-  // A lazy thumbnail must not suspend the modal portal and remount its draft.
   const attachments = fileItems.length > 0 && (
     <Suspense fallback={null}>
       <ImageGallery files={fileItems} images={[]} allowDelete shouldUpload={false} mode="others" variant="chat"
@@ -334,7 +328,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
         <div ref={composer} className="p-2">
           <div className="flex w-full flex-col rounded-[5px] bg-ai-tiptap px-3 py-2">
             {newTaskWindow && attachments && (mobile ? attachments : (
-              // Reserve space for the textarea, actions and footer without clipping their tooltips.
               <div className="max-h-[max(6rem,calc(65dvh-20rem))] overflow-y-auto">{attachments}</div>
             ))}
             <AiComposerTextarea

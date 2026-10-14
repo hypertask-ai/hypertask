@@ -1,5 +1,5 @@
 export const AI_CHAT_ALERT_WINDOW_MS = 15 * 60_000;
-export const AI_CHAT_ALERT_MAX_ATTEMPTS = 4; // Initial delivery plus three retries.
+export const AI_CHAT_ALERT_MAX_ATTEMPTS = 4;
 export const AI_CHAT_ALERT_RETRY_MS = [60_000, 120_000, 240_000] as const;
 
 export type AlertEnvironment = "production" | "preview";
@@ -35,7 +35,6 @@ export function incidentTransition(
 ): "open" | "breaching" | "healthy" | "recover" | "none" {
   if (isAlertBreach(kind, metrics)) return incident ? "breaching" : "open";
   if (!incident) return "none";
-  // The minimum volume applies to opening, not to hiding an ongoing breach.
   if (metrics.requestCount > 0 && (
     kind === "error_rate"
       ? metrics.errorCount / metrics.requestCount > 0.05

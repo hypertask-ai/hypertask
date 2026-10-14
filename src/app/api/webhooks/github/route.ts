@@ -105,7 +105,6 @@ function repositoryParts(fullName: unknown) {
     : null;
 }
 
-// YPER4-299: a merged follow-up PR must not pull a finished ticket back to QA.
 async function isTaskInDoneColumn(task: WebhookTask): Promise<boolean> {
   if (task.sectionId === null) return false;
   let current: { section_title: string; isDone: boolean | null } | null;
@@ -115,7 +114,6 @@ async function isTaskInDoneColumn(task: WebhookTask): Promise<boolean> {
       select: { section_title: true, isDone: true },
     });
   } catch (error) {
-    // Fail open: keep today's move-to-QA behaviour rather than retry the delivery.
     console.warn(
       `[GitHub webhook] Could not read the section of task ${task.id}.`,
       error,
@@ -203,8 +201,6 @@ async function moveTaskForPullRequest(
     },
   );
   if (moveResult.status === 409) {
-    // The PR link is already durable. The active writer owns the task's next
-    // section; failing here only produces manual redeliveries and duplicate comments.
     console.warn(
       `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
     );
@@ -243,7 +239,6 @@ async function reconcileMergedPullRequestAssignees(
   task: WebhookTask,
 ): Promise<boolean> {
   let changed = false;
-  // The task move is already durable; optional cleanup must not invite retries.
   try {
     const currentTask = await prisma.task.findUnique({
       where: { id: task.id },
@@ -706,8 +701,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Legacy ticket handling remains below for repositories whose PR could not
-    // be linked to a task by the first-class synchronization path.
     if (!ticketId) {
       return NextResponse.json(
         { success: true, ignored: "No ticket reference found" },
@@ -761,11 +754,6 @@ export async function POST(request: NextRequest) {
       commentText = `<p><strong>${commentLead}</strong> <a href="${pullRequest.html_url}">#${pullRequest.number} ${escapedTitle}</a></p>`;
     }
 
-    // ponytail: read-then-write, not a DB unique constraint. Two genuinely
-    // concurrent redeliveries of the same event could both pass this check
-    // and both post. GitHub redelivers sequentially in practice, so this is
-    // accepted; upgrade path if that ever changes is a unique index on
-    // (taskId, commentLead-derived key).
     const existingComment = await prisma.comment.findFirst({
       where: {
         taskId: task.id,
@@ -853,8 +841,6 @@ export async function POST(request: NextRequest) {
           currentUser,
           null,
           {
-            // The signature and PR-author checks above authorize this event.
-            // currentUser is the synthetic bot, which is on no board.
             trustedCaller: true,
             taskMovedActivity: {
               sendNotification: () =>
@@ -870,8 +856,6 @@ export async function POST(request: NextRequest) {
         );
 
         if (moveResult.status === 409) {
-          // The linked PR remains authoritative while the active writer chooses
-          // the task's next section. A failed delivery invites duplicate comments.
           console.warn(
             `[GitHub webhook] Task ${task.id} has an active write; its automatic move to ${targetSectionName} was skipped.`,
           );
@@ -885,7 +869,6 @@ export async function POST(request: NextRequest) {
           await broadcastBoardChange(task.projectId, {
             originUserId: generalConfig.hyperAiId,
           });
-          // HTPR-6281: the open task detail view listens only on the task channel.
           await broadcastTaskChange(task.id, {
             originUserId: generalConfig.hyperAiId,
           });
@@ -901,12 +884,6 @@ export async function POST(request: NextRequest) {
     const assignmentsChanged = pullRequest.merged
       ? await reconcileMergedPullRequestAssignees(task)
       : false;
-    // HTPR-6281: reconcile-then-broadcast. When the merge both moved the task
-    // and changed assignments, the move-branch event above fired before the
-    // reconcile, so this extra task event carries the assignment change.
-    // ponytail: two near-identical blocks because the !moved one edits code
-    // HTPR-5974 landed 5 days ago and revert-guard blocks deleting it; merge
-    // them into one block after the 14-day guard window expires.
     if (assignmentsChanged && moved) {
       try {
         await broadcastTaskChange(task.id, {
@@ -924,7 +901,6 @@ export async function POST(request: NextRequest) {
         await broadcastBoardChange(task.projectId, {
           originUserId: generalConfig.hyperAiId,
         });
-        // HTPR-6281: the open task detail view listens only on the task channel.
         await broadcastTaskChange(task.id, {
           originUserId: generalConfig.hyperAiId,
         });

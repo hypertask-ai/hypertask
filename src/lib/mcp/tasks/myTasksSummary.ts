@@ -17,7 +17,6 @@ export interface MyTasksSummaryOptions {
   includeTasks?: boolean;
   limit?: number;
   now?: Date;
-  /** Injectable for tests, same convention as the inboxZero helpers. */
   db?: typeof prisma;
 }
 
@@ -47,12 +46,6 @@ export interface MyTasksSummary {
   boards: MyTasksSummaryBoard[];
 }
 
-/**
- * Everything assigned to a person across every board they can see, grouped per
- * board. Counts are always the TRUE totals (a groupBy, not a page), so a 300
- * task workload never reads as "you have 50" just because the row cap is 50.
- * This is the same set the /my-tasks page shows.
- */
 export async function getMyTasksSummary({
   userId,
   agentId = null,
@@ -90,9 +83,6 @@ export async function getMyTasksSummary({
   };
   if (projectIds.length === 0) return empty;
 
-  // Tasks store a denormalized section TITLE, not an id, so done columns are
-  // matched by their exact stored title. doneColumnTitles() lowercases, which
-  // would never match Task.section, hence the local pass over the real rows.
   const sections = await db.section.findMany({
     where: { projectId: { in: projectIds }, deleted: false },
     select: { projectId: true, section_title: true, isDone: true },
@@ -109,9 +99,6 @@ export async function getMyTasksSummary({
     inDoneColumn.push({ projectId: id, section: { in: titles } });
   }
 
-  // total counts every assigned task, exactly what the /my-tasks page shows.
-  // Overdue additionally drops finished work: a task sitting in a Done column
-  // is not late, and the app's Overdue split excludes it the same way.
   const overdueClause: Prisma.TaskWhereInput = {
     dueDate: { lt: now },
     ...(inDoneColumn.length ? { NOT: { OR: inDoneColumn } } : {}),
@@ -164,8 +151,6 @@ export async function getMyTasksSummary({
           projectId: true,
           priority: { select: { Priority_Value: true } },
         },
-        // Overdue and dated work first so the cap drops undated tasks rather
-        // than the ones with a deadline.
         orderBy: [
           { dueDate: { sort: "asc", nulls: "last" } },
           { updatedAt: "desc" },
@@ -203,7 +188,6 @@ export async function getMyTasksSummary({
           }
         : {}),
     }))
-    // Boards carrying overdue work first, then the biggest piles.
     .sort((a, b) => b.overdue - a.overdue || b.total - a.total);
 
   return {

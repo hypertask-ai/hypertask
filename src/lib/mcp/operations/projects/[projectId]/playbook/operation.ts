@@ -18,10 +18,6 @@ function parseProjectId(raw: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
-/**
- * GET /api/mcp/projects/:projectId/playbook
- * Returns the board's playbook (working rules + definition-of-done), or null.
- */
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -63,11 +59,6 @@ export async function GET(
   })(request)
 }
 
-/**
- * PUT /api/mcp/projects/:projectId/playbook
- * Sets the board's playbook. Any board member/owner (agent included) may set it.
- * Body: { definition_of_done?: string[], working_rules?: string, notes?: string }.
- */
 export async function PUT(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }
@@ -100,8 +91,6 @@ export async function PUT(
       )
     }
 
-    // Scope the write to a project the caller can access - updateMany with the
-    // access filter means a non-member's request updates 0 rows (treated as 404).
     const result = await prisma.project.updateMany({
       where: { id: projectId, status: 'Normal', ...getProjectWhere(ctx.user.id, ctx.agentId) },
       data: { playbook: parsed.value as Prisma.InputJsonValue },

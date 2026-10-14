@@ -21,15 +21,12 @@ const useHypertasksRecoilStates = () => {
         setCreateTaskModal((prev)=>({show:!prev.show,column_payload,defaultEditFocus, duplicate }))
     }
 
-    // ========== closes all major modals 
     const GlobalProvidersEscapeHandler = ()=>{
         setTimeout(() => {
             resetShortcuts();
             resetshowSidebar();
             resetShowCommands();
             resetshowBoardManager();
-            // resetCreateTaskGlobally()
-            // resetCreateTaskGlobally()
           }, 10);
     }
     return {

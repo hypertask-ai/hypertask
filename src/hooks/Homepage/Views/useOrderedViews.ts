@@ -10,10 +10,7 @@ import { HTPR_7092_DECISIONS_FLAG } from '@/lib/flags/keys'
 
 const localOrderMigrations = new Set<number>()
 
-// Saved views AND built-ins in one ordered list: built-ins are draggable and
-// manageable like any other view, they just default to the end of the order.
 const useOrderedViews = (project: IProject | null): BoardView[] => {
-  // HTPR-7092: the Decisions view exists only while its flag is on.
   const decisionsEnabled = useFlag(HTPR_7092_DECISIONS_FLAG)
   const viewOrder = useRecoilValue(viewTabsOrderAtom)
   const optimisticViewOrder = useRecoilValue(optimisticViewTabsOrderAtom)
@@ -28,8 +25,6 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
     ? undefined
     : optimisticViewOrder[projectId] ?? userServerOrder ?? projectDefaultOrder ?? localOrder
 
-  // One-time migration path for the HTPR-4200 localStorage preference. Once a
-  // server order/default exists this branch can never overwrite it.
   useEffect(() => {
     if (
       projectId === undefined ||
@@ -48,7 +43,6 @@ const useOrderedViews = (project: IProject | null): BoardView[] => {
 
   const allViews = useMemo(() => {
     const all = project?.project_view?.allViews ?? []
-    // Drop the live "unsaved" pseudo-view; keep the default view first.
     const context = buildBuiltinViewContext(project)
     const views: BoardView[] = [
       ...all.filter((view) => view.id !== unsavedViewId),

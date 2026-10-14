@@ -55,7 +55,6 @@ const generatedBoardSchema = z.object({
           .array(
             z.object({
               title: z.string().min(1).max(160),
-              // OpenAI strict structured outputs require every property to be required
               description: z.string().max(1000),
               priority: z.enum(priorityValues),
             })
@@ -314,8 +313,6 @@ export async function POST(request: NextRequest) {
   }
 
   const produceBoard = async () => {
-    // HTPR-4894: checked before both creation branches. The AI path's catch
-    // falls back to createSampleBoard, which does not enforce this cap itself.
     if (await isBoardLimitReached(user.id)) {
       throw new BoardGenerationRequestError(403, FREE_BOARD_LIMIT_MESSAGE);
     }

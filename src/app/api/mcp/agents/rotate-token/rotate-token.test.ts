@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/app/api/mcp/agents/rotate-token/rotate-token.test.ts
 import assert from 'node:assert/strict'
 import { NextRequest } from 'next/server'
 
@@ -161,8 +159,6 @@ async function demo() {
     assert.equal(managementUpdate?.data.mcpTokenExpiresAt, null)
     assert.equal(managementUpdate?.data.revokedAt, null)
 
-    // The row keeps only the digest now, so the test tracks what was written
-    // rather than a plaintext it could read back.
     let stored: { mcpTokenHash: string; mcpTokenJti: string } | null =
       null as { mcpTokenHash: string; mcpTokenJti: string } | null
     let updateNumber = 0

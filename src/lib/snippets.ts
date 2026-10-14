@@ -1,7 +1,5 @@
 import type { Editor } from "@tiptap/core";
 
-// Type alias, not an interface: Prisma's InputJsonValue needs an implicit
-// index signature, which interfaces don't get.
 export type ISnippet = {
   id: string;
   title: string;
@@ -11,15 +9,8 @@ export type ISnippet = {
 
 export const OPEN_COMMENT_SNIPPET_EVENT = "hypertask:open-comment-snippet";
 
-// Creating a snippet from the current draft navigates to the snippets page, so
-// the editor's content is handed over through sessionStorage rather than props.
-// Read once and cleared, so a later visit starts empty.
 const SNIPPET_DRAFT_HANDOFF_KEY = "snippet-draft-handoff";
 
-// sessionStorage is scoped to the tab, not to the account, so the handoff
-// carries the user it was written for. A tab reused after logout, or an
-// interrupted navigation, must not drop one account's draft into another's
-// editor.
 export const putSnippetDraftHandoff = (
   userId: number | undefined,
   html: string

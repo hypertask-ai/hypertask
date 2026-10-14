@@ -27,7 +27,6 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    // HTPR-6401: a poisoned query cache once handed findIndex a number.
     if (Array.isArray(favorites) && pathname?.startsWith("/project")) {
       const currId = searchParams?.get("id");
       const currIndex = favorites.findIndex(
@@ -38,7 +37,6 @@ const useGlobalProvider = (secondaryStartupEnabled = true) => {
     }
   }, [favorites, pathname, searchParams]);
 
-  // ------- on favorites update
   useEffect(() => {
     setFavorites(Array.isArray(favoritesTQ) ? favoritesTQ : []);
   }, [favoritesTQ]);

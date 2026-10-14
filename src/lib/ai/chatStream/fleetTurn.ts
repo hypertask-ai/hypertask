@@ -21,10 +21,6 @@ import type { StreamState } from "./streamState";
 export async function routeAgentMention(state: StreamState, resolvedBody: ChatRequest) {
   const { body, dbUser, heartbeatExecutionId, userMessagePersisted, actingAgent, streamId, streamLease } = state;
 
-  // HTPR-6284: a single @<agent> mention routes the whole turn to that
-  // fleet agent and the assistant model loop below is skipped. Anything
-  // else — no or several mentions, attachments, no board context, a
-  // native agent's own session, the flag off — falls through unchanged.
   const mentionDecision = decideAgentMentionRouting({
     routingEnabled: await isFeatureEnabled(
       HTPR_6284_AGENT_MENTION_ROUTING_FLAG,
@@ -45,9 +41,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
   if (mentionDecision.route) {
     const routedBoardId = Number(body.default_context?.project_id);
     let routedAgent: { id: string; displayName: string } | null = null;
-    // Same proven-access rule the hypertask_ask_agent tool applies: the
-    // board comes from the client, so the caller's access is proven
-    // before its agents are reachable.
     if (await getAccessibleAgentBoard(routedBoardId, dbUser.id)) {
       const boardAgents = await getBoardAgentMembers(
         routedBoardId,
@@ -56,8 +49,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
       const memberRow = boardAgents.find(
         (candidate) => candidate.agent.id === mentionDecision.agentId,
       );
-      // getBoardAgentMembers already filters revoked, archived and
-      // invisible agents, so a found row is an active visible agent.
       if (memberRow) {
         routedAgent = {
           id: memberRow.agent.id,
@@ -90,8 +81,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
         await state.endDeadlineTurn();
         return true;
       }
-      // Deadline wins over the generic cancelled branch: both abort the
-      // provider signal, and only the deadline path runs its cleanup.
       if (state.cancelled || state.providerAbort.signal.aborted) {
         state.recordTurnOutcome("cancelled");
         if (heartbeatExecutionId && !state.heartbeatExecutionTerminal) {
@@ -109,10 +98,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
         fleet.success || fleet.error === "aborted"
           ? null
           : `<p>${escapeHtml(routedAgent.displayName)} could not be reached just now. Try again in a moment.</p>`;
-      // The bridge answer is the agent's own words; keep it verbatim
-      // (escaped, plain paragraphs) instead of paraphrasing it through
-      // the model. ponytail: once the bridge guarantees an HTML reply,
-      // render it as-is behind sanitizeAiHtml.
       const replyHtml = fleet.success
         ? fleet.answer
           .split(/\n{2,}/)
@@ -120,8 +105,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
           .join("")
         : failureMessage;
 
-      // Tell the client who is answering before the first content frame,
-      // so attribution lands on this message and nothing after it.
       if (fleet.success) {
         state.send("agent", {
           agentId: routedAgent.id,
@@ -161,8 +144,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
             userId: dbUser.id,
             content: chunks.join(""),
             linkify: linkifyTicketRefs,
-            // The reply (or the failure sentence) is this agent's turn,
-            // except a failure sentence, which the agent never wrote.
             authorAgentId: fleet.success ? routedAgent.id : null,
           });
         } catch (error) {
@@ -223,8 +204,6 @@ export async function routeAgentMention(state: StreamState, resolvedBody: ChatRe
       });
       return true;
     }
-    // Not routable (agent gone from the board): the assistant turn below
-    // is exactly the pre-HTPR-6284 behavior for that mention.
   }
   return false;
 }

@@ -14,10 +14,6 @@ export class BoardLimitReachedError extends Error {
   }
 }
 
-// Statuses that mean "this subscription is done, nothing is being paid for".
-// Mirrors TERMINAL_SUBSCRIPTION_STATUSES in controllers/users/resetUserAccount.ts;
-// deliberately NOT the shorter set in planGate.ts, which keeps `Free` rows around
-// to map their priceId to a plan kind.
 const TERMINAL_SUBSCRIPTION_STATUSES = new Set<string>([
   "Free",
   "Expired",
@@ -25,7 +21,6 @@ const TERMINAL_SUBSCRIPTION_STATUSES = new Set<string>([
   "incomplete_expired",
 ]);
 
-/** HTPR-4894: the whole rule, as one testable line. */
 export function isOverFreeBoardLimit(
   ownedBoards: number,
   hasPaidPlan: boolean,
@@ -33,12 +28,6 @@ export function isOverFreeBoardLimit(
   return !hasPaidPlan && ownedBoards >= FREE_BOARD_LIMIT;
 }
 
-/**
- * Teams the user owns OR belongs to. Membership counts: someone invited onto a paid
- * team creates boards billed to that team, so capping them at 3 would break a paid
- * workspace. Comped teams (internal allowlist, or compedUntil in the future) count
- * as paid, otherwise the owner's own account gets locked out at 3 boards.
- */
 export async function hasPaidPlan(userId: number): Promise<boolean> {
   const teams = await prisma.team.findMany({
     where: {
@@ -69,7 +58,6 @@ export async function isBoardLimitReached(userId: number): Promise<boolean> {
   return isOverFreeBoardLimit(ownedBoards, paid);
 }
 
-/** Throwing variant for shared creators whose callers already map errors to responses. */
 export async function assertBoardQuota(userId: number): Promise<void> {
   if (await isBoardLimitReached(userId)) {
     throw new BoardLimitReachedError();

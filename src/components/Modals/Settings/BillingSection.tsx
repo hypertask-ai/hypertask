@@ -88,8 +88,6 @@ const BillingSection = () => {
       ? "Loading"
       : formatMoney(upcomingInvoice?.amountDue, upcomingInvoice?.currency)
     : "Free Plan";
-  // Full list price (before any negotiated coupon). For normal teams this
-  // equals the amount due; for a discounted team it's the real account size.
   const fullPrice = hasPaidPlan
     ? billingLoading
       ? "Loading"

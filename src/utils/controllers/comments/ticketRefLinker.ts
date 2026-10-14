@@ -1,22 +1,7 @@
-/**
- * Pure HTML text-transform helpers for HTPR-3953: finding and linkifying
- * plain-text Hypertask ticket references (e.g. HTPR-1234) inside an HTML
- * fragment, without touching refs already inside an <a> tag.
- *
- * Kept dependency-free (no DB, no path aliases) so it stays unit-checkable
- * (see ticketRefLinker.check.ts). The DB-backed wrapper that resolves refs to
- * projects lives in linkifyTicketRefs.ts.
- */
 
 const TICKET_REF_PATTERN = /\b[A-Z][A-Z0-9]{1,9}-\d{1,6}\b/g;
 
-/**
- * Splits html into tag/text tokens and flags which tokens sit inside an
- * existing <a>...</a>, so ticket refs are only ever matched/replaced in text
- * nodes that aren't already part of a link.
- */
 function splitHtmlTags(html: string): string[] {
-  // Linear equivalent of html.split(/(<[^>]+>)/g); the regex is quadratic on runs of "<".
   const tokens: string[] = [];
   let textStart = 0;
   let i = html.indexOf("<");
@@ -27,7 +12,6 @@ function splitHtmlTags(html: string): string[] {
       i = html.indexOf("<", i + 1);
       continue;
     }
-    // [^>]+ stops at the first ">", and the leftmost "<" before it starts the match.
     tokens.push(html.slice(textStart, i), html.slice(i, close + 1));
     textStart = close + 1;
     i = html.indexOf("<", textStart);
@@ -54,7 +38,6 @@ function tokenizeHtml(html: string) {
   return { tokens, insideAnchor };
 }
 
-/** Collects unique ticket refs from text nodes, skipping tags and existing links. */
 export function findLinkableTicketRefs(html: string): string[] {
   if (!html) return [];
   const { tokens, insideAnchor } = tokenizeHtml(html);
@@ -68,7 +51,6 @@ export function findLinkableTicketRefs(html: string): string[] {
   return Array.from(refs);
 }
 
-/** Wraps refs present in refToProjectId with an anchor; leaves everything else untouched. */
 export function applyTicketRefLinks(
   html: string,
   refToProjectId: Map<string, number>
@@ -82,10 +64,6 @@ export function applyTicketRefLinks(
         const projectId = refToProjectId.get(match);
         if (projectId === undefined) return match;
         const uniqueIndex = match.slice(match.lastIndexOf("-") + 1);
-        // data-ai-linkified marks this as a machine-generated link (not a
-        // human-authored one), so extractTaskReferencesFromCommentText can
-        // skip it and avoid creating a permanent TaskRelations row for every
-        // incidental ticket mention in an AI response.
         return `<a href="/detail/project-${projectId}/${uniqueIndex}" data-ai-linkified="1">${match}</a>`;
       });
     })
@@ -97,13 +75,6 @@ export interface ResolvedTicketRef {
   projectId: number;
 }
 
-/**
- * Collapses resolved rows into a ticketNumber -> projectId map, dropping any
- * ticketNumber that resolves to more than one distinct project. ticketNumber
- * is only unique per-team, and a user's accessible projects can span teams,
- * so the same ref string can legitimately match multiple tasks. A wrong link
- * is worse than no link, so ambiguous refs are left as plain text.
- */
 export function buildUnambiguousRefMap(
   rows: ResolvedTicketRef[]
 ): Map<string, number> {
@@ -123,13 +94,6 @@ export function buildUnambiguousRefMap(
   return refToProjectId;
 }
 
-/**
- * Stamps data-ai-linkified="1" onto every task-detail anchor in an
- * AI-generated HTML fragment that doesn't already carry it. The model itself
- * is prompted to emit detail links, and those model-authored anchors must get
- * the same relation-extraction exemption as the ones this module generates —
- * otherwise an incidental AI mention still creates a permanent TaskRelation.
- */
 export function markAiDetailAnchors(html: string): string {
   if (!html) return html;
   return html.replace(

@@ -39,13 +39,10 @@ const UserPreferenceSidebar = ({
   variant = "task-page",
 }: {
   ToggleComponent?: ComponentType<ToggleSwitchProps>;
-  // Which slice of the preferences to render. Both slices share the same
-  // query + POST plumbing, they just live in different settings sections.
   variant?: "task-page" | "inbox";
 } = {}) => {
   const queryClient = useQueryClient();
   const { data, isFetching } = useGetUserPreferences();
-  // HTPR-6177: hide the control while automatic drafting is owner-only.
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
   const autoDescriptionUpdateQueue = useRef(Promise.resolve());
   const autoDescriptionUpdateVersion = useRef(0);

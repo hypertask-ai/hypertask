@@ -42,10 +42,7 @@ export const pinProjectViewToUrl = (project: IProject, viewSlug?: string | null)
 
   if (userProjectView) {
     const appliedOrDefaultView = userProjectView.appliedView ?? projectView.default_view
-    // Tabs pinned to the same view intentionally share one unsaved working context.
     if (targetView && appliedOrDefaultView?.id === targetView.id) return project
-    // The default sentinel shares its base's unsaved working context. Clearing
-    // it hid Save-view on canonical view=default links (HTPR-5900).
     if (
       !targetView &&
       !userProjectView.appliedView &&
@@ -56,7 +53,6 @@ export const pinProjectViewToUrl = (project: IProject, viewSlug?: string | null)
   const isDefaultView = !targetView ||
     targetView.id === projectView.default_view_id ||
     targetView.id === projectView.default_view?.id
-  // The synthesized row intentionally omits DB row fields consumers never read.
   const userProjectViewOverride = (
     userProjectView
       ? {

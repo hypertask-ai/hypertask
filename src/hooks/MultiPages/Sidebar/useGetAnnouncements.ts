@@ -21,12 +21,7 @@ export const useGetAnnouncements = (
           : { queryKey: [prefixUseGetAnnouncements, userId, "hydrating"], enabled: false }),
         
         initialData:initialData??[],
-        // The empty seed is a placeholder, not a fresh server response. Keep it
-        // stale so releasing the startup gate always loads announcements.
         initialDataUpdatedAt: 0,
-        // HTPR-4879: same fix as the sidebar. Announcements are published by a
-        // cron every couple of days, and marking one read writes the cache
-        // directly, so nothing here needs second-by-second freshness.
         staleTime: 5 * 60_000,
         refetchOnWindowFocus:false,
 

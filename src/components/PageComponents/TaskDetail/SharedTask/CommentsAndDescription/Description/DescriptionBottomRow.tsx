@@ -22,7 +22,6 @@ const SharedDescriptionReactions = () => {
   const _mbl = useContext(MobileViewContext);
   const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
 
-  // ============================== MOBILE
   if (_mbl && editMode !== "description") {
     return (
       <div
@@ -42,7 +41,7 @@ const SharedDescriptionReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
 
         <DescriptionEmojiButton
@@ -55,7 +54,6 @@ const SharedDescriptionReactions = () => {
     );
   }
 
-  // ============================ DESKTOP
   else
     return (
       <div className={`flex items-baseline gap-1 mr-1 mt-3`}>
@@ -73,7 +71,7 @@ const SharedDescriptionReactions = () => {
             </>
           )
 
-          // eslint-disable-next-line react/jsx-key
+
         )}
         {currentTask?.description_?.reactions &&
           currentTask?.description_?.reactions.length > 0 && (

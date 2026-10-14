@@ -3,9 +3,6 @@ import { z } from 'zod';
 export function getUpdateProfileBaseSchema() {
   return z
     .object({
-      // Empty string is allowed on both fields: the route reads it as "leave
-      // this one alone", so rejecting it here would make the tool stricter
-      // than the endpoint it wraps.
       displayName: z
         .string()
         .trim()
@@ -17,9 +14,6 @@ export function getUpdateProfileBaseSchema() {
       photoURL: z
         .string()
         .trim()
-        // One refine that never throws. new URL('') raises rather than
-        // returning a validation failure, and a union alternative does not
-        // shield a refine that throws.
         .refine((value) => {
           if (value === '') return true;
           try {

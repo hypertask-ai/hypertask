@@ -94,15 +94,6 @@ const getMyTasks = async (
         priority: true,
         estimate: true,
         ...(includeCachedDescription ? { description_: { select: { content: true } } } : {}),
-        // HTPR-5024: this used to be include: { user: true, agent: true },
-        // which serialises the whole User row (uid, stripe_customer_id,
-        // accountId, the token timestamps and the rest) for every co-assignee
-        // on every task. The avatars need four fields. Kept as include so the
-        // Assignees scalars
-        // (userId, agentId, taskId) still come through: the My Tasks built-in
-        // view filters on assignee.userId, and dropping it would empty the page.
-        // agent.userId is deliberate: the assignee modal cannot remove an agent
-        // without it (HTPR-5090).
         assignees: {
           where: {
             OR: [
@@ -111,9 +102,6 @@ const getMyTasks = async (
             ],
           },
           include: {
-            // email stays: several avatar/initials fallbacks use it when a
-            // user has no displayName. It is one short column against the
-            // nine this select drops.
             user: {
               select: {
                 id: true,

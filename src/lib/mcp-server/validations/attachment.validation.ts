@@ -28,10 +28,6 @@ const httpUrlString = z
     }
   }, { message: 'url must be a valid HTTP(S) URL without credentials' });
 
-/**
- * Each file is either inline base64 or a URL for the server to ingest (fetched server-side).
- * Exactly one of `data` or `url` must be set.
- */
 export const AttachmentFileSchema = z
   .object({
     filename: z
@@ -168,23 +164,15 @@ export const inlineAttachmentsSchema = attachmentFilesSchema
     `Files to attach after the operation succeeds. Each file needs filename, content_type, and exactly one of data (base64 bytes; ${MCP_ATTACHMENT_MAX_INLINE_BYTES} decoded bytes total) or url (HTTP(S), for files up to 15 MB).`
   );
 
-/**
- * Base input for attach_files MCP tool (ZodObject only — FastMCP cannot register ZodEffects as parameters).
- * Full validation with refines: use AttachFilesInputSchema.parse() in execute and in AttachmentService.
- */
 export function getAttachFilesBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
-      // z.coerce: agents sometimes send comment_id as a string (HTPR-3099 MCP)
       comment_id: z.coerce.number().int().positive().optional(),
       files: attachmentFilesSchema,
     })
     .strict();
 }
 
-/**
- * POST /mcp/tasks/attachments — identify task + optional comment + one or more files.
- */
 export const AttachFilesInputSchema = getAttachFilesBaseSchema()
   .refine(
     (data) => {

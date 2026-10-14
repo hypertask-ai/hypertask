@@ -27,7 +27,6 @@ type Props = {
   snoozeEnabled?: boolean;
 };
 
-/** Board-agnostic FilterHTC host for My Tasks (static import keeps feature-flag-gate coverage). */
 export default function MyTasksKanbanFilterModal({
   settings,
   onChange,

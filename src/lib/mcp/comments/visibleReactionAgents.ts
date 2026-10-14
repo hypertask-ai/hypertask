@@ -2,8 +2,6 @@ import prisma from '@/lib/prisma'
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import type { VisibleReactionAgents } from '@/lib/mcp/comments/reactionResponse'
 
-// HTPR-7122: names of the agents behind agent reactions, with the same visibility
-// rule as an agent's comment. A hidden agent reads as "Private agent".
 export async function loadVisibleReactionAgents(
   agentIds: string[],
   userId: number,

@@ -11,7 +11,6 @@ const route = taskWriteRoute({
   schema: z.custom<{ parsedTaskId: number }>((body) => Number.isInteger((body as any)?.parsedTaskId) && (body as any).parsedTaskId >= 0),
   validationMessage: "Missing required information",
   operation: async ({ parsedTaskId }, session) => {
-    // Capture the board before the row is gone so we can refresh it for everyone.
     const deletedTask = await prisma.task.findFirst({
       where: {
         id: parsedTaskId,

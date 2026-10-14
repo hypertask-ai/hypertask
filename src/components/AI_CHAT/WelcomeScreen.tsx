@@ -1,4 +1,3 @@
-// components/WelcomeScreen.tsx
 import { useAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"
 import { usePathname } from "next/navigation"
 import { useEffect, useMemo, useState } from "react"
@@ -20,8 +19,6 @@ type TaskSessionSummary = {
   updatedAt: string;
 };
 
-// Suggestions when the chat is opened on a specific ticket. {ref} is the
-// human-readable id (e.g. "INNE-230"), falling back to "this ticket".
 const TICKET_QUERIES = (ref: string) => [
   `Summarize ${ref}`,
   `Write my next reply on ${ref}`,
@@ -52,8 +49,6 @@ const DEMO_QUERIES = [
   "What looks blocked or at risk?",
 ];
 
-// Shown instead of DEMO_QUERIES while a guest's board is still empty: there is
-// nothing to ask about yet, so the examples describe projects to build.
 const BOARD_BUILD_EXAMPLES = [
   "Launch a marketing campaign",
   "Build a SaaS MVP",
@@ -81,20 +76,16 @@ export const WelcomeScreen = () => {
     useAiChatContext();
   const pathname = usePathname();
   const hydrated = useHydrated();
-  // HTPR-4303: guests live on the real board, not /demo — key off identity.
   const isDemo = (pathname?.startsWith("/demo") ?? false) || isGuestCookieUser();
   const isFullScreenChat = pathname?.startsWith("/chat") ?? false;
   const inViewObject = useRecoilValue(inViewObjectAtom);
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
-  // Board data lives on currentProjectAtom (projectSectionsAtom is never written).
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const taskSummaryAction = taskSummaryActionFor(taskId);
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"
     : null;
-  // Off the task-detail page this atom is always false, so only gate on it
-  // there - a board/inbox-opened chat isn't waiting on anything (HTPR-6047).
   const taskDetailNonEssentialReady = useRecoilValue(
     taskDetailNonEssentialReadyAtom
   );
@@ -139,8 +130,6 @@ export const WelcomeScreen = () => {
   const suggestions = useMemo(() => {
     if (!hydrated) return SUGGESTED_QUERIES_POOL.slice(0, QUERIES_TO_SHOW);
 
-    // ponytail: demo prompts stay fixed so anonymous visitors immediately see
-    // the four read-only project-management jobs this v1 chat can do.
     if (isDemo) return DEMO_QUERIES;
 
     if (ticketRef) {
@@ -155,7 +144,6 @@ export const WelcomeScreen = () => {
       ?.filter((section) => !section.deleted)
       .map((section) => ({
         ...section,
-        // HTPR-6947: a column can arrive before its tasks are loaded.
         items: (section.items ?? []).filter(
           (task) => !task.status || task.status === "Normal"
         ),
@@ -224,9 +212,6 @@ export const WelcomeScreen = () => {
     currentProject?.name,
   ]);
 
-  // HTPR-4882: on a guest's still-empty board this screen IS the board-creation
-  // assistant. Resolved in an effect rather than in render because it reads the
-  // guest cookie and the viewport, which the server pass cannot see.
   const [boardBuild, setBoardBuild] = useState(false);
   useEffect(() => {
     setBoardBuild(isGuestBoardBuild(currentProject));
@@ -306,9 +291,6 @@ export const WelcomeScreen = () => {
     );
   }
 
-  // The examples and anything typed in the composer both run through
-  // handleSendMessage, which builds the board while it is empty, so the guest
-  // has one input rather than two.
   if (boardBuild)
     return (
       <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">

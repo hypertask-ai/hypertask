@@ -4,9 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import LoadingSpinner1 from "@/components/LoadingSpinners/LoadingSpinner1";
 
-// HTPR-4875: /demo lands straight on a board. Sending no purpose means an empty
-// board for a new visitor, and the board they already have for a returning
-// guest. AI generation happens only in the Ctrl+K board creation assistant.
 
 const DemoBoardPage = ({ retryNetworkErrors }: { retryNetworkErrors: boolean }) => {
 
@@ -40,10 +37,6 @@ const DemoBoardPage = ({ retryNetworkErrors }: { retryNetworkErrors: boolean }) 
       if (!response.ok || !data.boardUrl) {
         throw new Error(data.error || "Could not create your demo board");
       }
-      // Hard navigation, not router.push: the guest session cookies were set by
-      // this fetch response, and a client-side transition races the app shell
-      // that already booted without a user ("Something went wrong" on first
-      // load). A full load boots the board with the session in place.
       window.location.assign(data.boardUrl);
     } catch (caught) {
       setError(
@@ -55,8 +48,6 @@ const DemoBoardPage = ({ retryNetworkErrors }: { retryNetworkErrors: boolean }) 
   }, [retryNetworkErrors]);
 
   useEffect(() => {
-    // React 18 strict mode mounts twice; provisioning twice would burn the
-    // per-IP guest rate limit.
     if (started.current) return;
     started.current = true;
     void provisionBoard();

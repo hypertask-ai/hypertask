@@ -12,8 +12,6 @@ import { resetUserAccount } from "@/utils/controllers/users/resetUserAccount";
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
-// HTPR-4854: self-serve account wipe. The user can only ever delete their own
-// account, so the target id comes from the session cookie and never the body.
 export async function POST(request: Request) {
   const user = await getServerCookieUser();
   if (!user) {

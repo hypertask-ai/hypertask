@@ -6,7 +6,6 @@ import { LazyEmojiPicker, preloadEmojiResources } from "@/utils/emojiLoader";
 import CommentEmojiTooltip from "./CommentEmojiTooltip";
 import { getFixedOverlayPosition } from "@/lib/emojiPickerPosition";
 
-// ===================================== COMMENT OPTIONS COMPONENTS =======================
 const EmojiOptionsComp = ({
   showEmojiPickerAtComment,
   handleClickOutside,
@@ -23,7 +22,7 @@ const EmojiOptionsComp = ({
   emojiTrigger: React.MutableRefObject<HTMLDivElement | null>;
 }) => {
   const pickerRef = useRef<HTMLDivElement>(null);
-  const [isHovered, setIsHovered] = useState(false); // State to track hover
+  const [isHovered, setIsHovered] = useState(false);
 
   const [pickerPosition, setPickerPosition] = useState({ top: 0, left: 0 });
   const [portalRoot, setPortalRoot] = useState<HTMLElement | null>(null);
@@ -58,13 +57,11 @@ const EmojiOptionsComp = ({
     };
   }, []);
 
-  // Add this useEffect to calculate position when picker opens
   useEffect(() => {
     if (
       showEmojiPickerAtComment?.show &&
       showEmojiPickerAtComment?.commentId === i
     ) {
-      // Small delay to ensure the trigger ref is available
       setTimeout(() => {
         calculatePickerPosition();
       }, 100);
@@ -73,17 +70,12 @@ const EmojiOptionsComp = ({
 
   useEffect(() => {
     return () => {
-      // When THIS Comment component unmounts, ensure its emoji picker is hidden.
-      // This prevents the portal from lingering in the DOM.
-      // We check if the currently shown picker belongs to this commentId
-      // before attempting to hide it.
       handleClickOutside(undefined);
     };
   }, [i]);
 
   useEffect(() => {
     if (isHovered) {
-      // Start preloading with a slight delay to avoid unnecessary loads
       const timer = setTimeout(() => {
         preloadEmojiResources();
       }, 200);
@@ -95,20 +87,18 @@ const EmojiOptionsComp = ({
       {showEmojiPickerAtComment &&
         portalRoot &&
         createPortal(
-          <div // This is your .emoji-picker-wrapper equivalent
-            className="emoji-picker-portal-container" // Use a more descriptive class name
+          <div
+            className="emoji-picker-portal-container"
             style={{
               position: "fixed",
               top: pickerPosition.top,
               left: pickerPosition.left,
-              zIndex: 9999, // Ensure it's on top of everything
-              // Add any other base styling for your picker container
+              zIndex: 9999,
             }}
           >
-            {/* The absolute positioned div that holds the picker */}
             <div
-              className={`absolute left-0 z-50`} // z-50 from Tailwind should be high enough if zIndex on parent is 9999
-              ref={pickerRef} // If you need a ref on this internal div
+              className={`absolute left-0 z-50`}
+              ref={pickerRef}
             >
               <LazyEmojiPicker
                 perLine={6}
@@ -144,7 +134,7 @@ const EmojiOptionsComp = ({
             toggleEmojiPicker(i);
             calculatePickerPosition();
           }}
-          onMouseEnter={() => setIsHovered(true)} // Set isHovered to true on mouse enter
+          onMouseEnter={() => setIsHovered(true)}
           onMouseLeave={() => setIsHovered(false)}
          strokeWidth={1.75}/>
         {isHovered && <CommentEmojiTooltip anchorElement={emojiTrigger.current} />}

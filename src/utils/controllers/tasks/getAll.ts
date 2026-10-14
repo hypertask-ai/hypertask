@@ -33,10 +33,6 @@ const tasksGetAll = async (
                 where: {
                     projectId: projectIdNum,
                     status: 'Normal',
-                    // Scope to projects the requesting user owns or is a member of, so a
-                    // caller cannot read another tenant's board by passing an arbitrary
-                    // projectId (HTPR-3962). Mirrors the getProjectWhere scoping used by
-                    // the MCP task routes and the archived-tasks loader.
                     project: getProjectWhere(userIdNum),
                 },
                 select: {
@@ -135,14 +131,12 @@ const tasksGetAll = async (
                 status:200,
                 json:tasks.map(stripForeignTaskRelations)
             })
-            // return res.status(200).json(tasks);
         } catch (error) {
             console.log(error);
             return({
                 status:200,
                 json:[]
             })
-            // return res.status(200).json([]);
         }
    
 };

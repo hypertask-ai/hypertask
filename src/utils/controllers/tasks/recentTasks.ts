@@ -19,7 +19,6 @@ const PROJECT_QUERY_CONCURRENCY = 6;
 const DAY_IN_MILLISECONDS = 24 * 60 * 60 * 1000;
 const HOUR_IN_MILLISECONDS = 60 * 60 * 1000;
 
-// Range values are labels, not day counts ("24" is 24 hours, not 24 days).
 const RANGE_DURATION_MS: Record<Exclude<AllTasksDateRange, "all">, number> = {
   "24": 24 * HOUR_IN_MILLISECONDS,
   "7": 7 * DAY_IN_MILLISECONDS,
@@ -34,7 +33,7 @@ const updatedAtFilterForRange = (dateRange: AllTasksDateRange) =>
 
 const emptyResult = () => ({
   All: {
-    All: [] as ITask[], // All tasks tab
+    All: [] as ITask[],
   },
   tabs: ["All"],
 });
@@ -157,12 +156,7 @@ const getRecentTasks = async (
       };
     }
 
-    // One recent slice PER PROJECT rather than a single global slice. A single
-    // global `take` let the busiest board consume the whole budget, which erased
-    // quieter boards' splits from the view entirely (HTPR-5539).
     const include = recentTaskInclude(userId);
-    // Bounded concurrency: a workspace with many boards would otherwise start
-    // one heavy findMany per board at once and exhaust the connection pool.
     const projectBatches: (typeof projects)[] = [];
     for (let i = 0; i < projects.length; i += PROJECT_QUERY_CONCURRENCY) {
       projectBatches.push(projects.slice(i, i + PROJECT_QUERY_CONCURRENCY));
@@ -194,8 +188,6 @@ const getRecentTasks = async (
     }
 
     if (mode === "DueDate") {
-      // The global and per-board limits must not hide a due task assigned to
-      // this user. One extra bounded query supplies the personal tab directly.
       const myDueDatesTasks = (await prisma.task.findMany({
         take: RECENT_TASKS_ALL_LIMIT,
         where: {

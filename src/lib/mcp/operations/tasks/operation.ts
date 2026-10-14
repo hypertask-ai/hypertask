@@ -32,7 +32,6 @@ import {
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
 
-/** Minimal parent task info for MCP responses (when this task is a subtask). */
 export interface ParentTaskSummary {
   id: number
   ticketNumber?: string
@@ -84,10 +83,6 @@ export interface ListTasksResponse {
   total: number
   limit: number
   offset: number
-  /**
-   * Opaque cursor for the next page, or null when there are no more rows.
-   * A full first page also returns this.
-   */
   nextCursor: string | null
   metadata?: {
     projectCount?: number
@@ -95,11 +90,9 @@ export interface ListTasksResponse {
   }
 }
 
-/** Matches `Label.id` (Prisma `@default(uuid())`). Plain digits kept for backwards compatibility. */
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-/** Name of the first date filter whose value is not a parseable date, so it answers 400 instead of crashing Prisma. */
 function findInvalidDateParam(params: Record<string, string | undefined>): string | null {
   for (const [name, value] of Object.entries(params)) {
     if (value && !parseUpdatedSince(value)) return name
@@ -157,20 +150,10 @@ function parseNonNegativeIntegerParam(searchParams: URLSearchParams, name: strin
   return { ok: true, value }
 }
 
-/**
- * GET /api/mcp/tasks
- *
- * Lists tasks with comprehensive filtering options.
- * Results are automatically limited to boards/projects the user has access to.
- *
- * Also supports getting a single task by ticket_number:
- * GET /api/mcp/tasks?ticket_number=DEV-1&project_id=1
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: {id: number, email: string} | null = null
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -179,7 +162,6 @@ export async function GET(request: NextRequest) {
     }
     const user = ctx.user;
     userObj = user
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const query = Object.fromEntries(searchParams)
     console.log('[MCP] tasks', {
@@ -187,8 +169,6 @@ export async function GET(request: NextRequest) {
       query,
     })
 
-    // Accept the aliases used by the low-level ht helper and CLI. Canonical
-    // snake_case wins when callers accidentally supply more than one form.
     const projectIdResult = parsePositiveIntegerParam(
       searchParams,
       'project_id',
@@ -205,9 +185,6 @@ export async function GET(request: NextRequest) {
     const offsetResult = parseNonNegativeIntegerParam(searchParams, 'offset', 0)
     if (!offsetResult.ok) return offsetResult.response
 
-    // Opt-in cursor pagination. When `cursor=` is present it overrides `offset`.
-    // Legacy (flag off) walks id-ascending. Flag on keeps the requested sort
-    // and still returns nextCursor on a full first page.
     const cursorParam = searchParams.get('cursor')
     const cursorId = cursorParam
       ? decodeCursor(cursorParam) ?? parseNumericCursor(cursorParam)
@@ -220,7 +197,6 @@ export async function GET(request: NextRequest) {
     }
     const usesCursor = cursorParam !== null
 
-    // Check for different task identification methods
     const taskIdParam = searchParams.get('task_id')
     const taskIds = taskIdParam ? taskIdParam.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id)) : null
     const ticketNumberParam = searchParams.get('ticket_number')
@@ -229,10 +205,8 @@ export async function GET(request: NextRequest) {
     const uniqueIndex = uniqueIndexParam ? (isNaN(parseInt(uniqueIndexParam)) ? null : parseInt(uniqueIndexParam)) : null
     const projectIdForLookup = projectIdResult.value
 
-    // Validate that only one identification method is used
     const methodCount = [!!taskIds, !!ticketNumbers, !!uniqueIndex].filter(Boolean).length
     if (methodCount === 0) {
-      // Continue with list tasks logic (no single task lookup)
     } else if (methodCount > 1) {
       console.warn('[MCP] tasks', {
         reason: 'multiple_identification_methods',
@@ -261,7 +235,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Handle single task lookups (consolidated with OR)
     if (methodCount > 0) {
       const orConditions: any[] = []
 
@@ -277,7 +250,6 @@ export async function GET(request: NextRequest) {
         orConditions.push(ticketCondition)
       }
 
-      // Handle legacy single ticket_number (not array)
       const legacyTicketNumber = searchParams.get('ticket_number')
       if (legacyTicketNumber && !ticketNumbers) {
         const ticketCondition: any = { ticketNumber: legacyTicketNumber }
@@ -343,7 +315,6 @@ export async function GET(request: NextRequest) {
           )
         }
 
-        // Legacy format: if single ticket_number (not array), return single task object
         if (legacyTicketNumber && !ticketNumbers && tasks.length === 1) {
           return NextResponse.json({
             success: true,
@@ -358,7 +329,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Continue with list tasks logic
     const projectId = projectIdForLookup
     const boardId = boardIdResult.value
 
@@ -451,7 +421,6 @@ export async function GET(request: NextRequest) {
       return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
     }
 
-    // Get user's accessible projects
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: 'Normal',
@@ -472,13 +441,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Build where clause
     const where: any = {
       projectId: { in: accessibleProjectIds },
       status
     }
 
-    // Filter by project/board
     if (projectId || boardId) {
       const targetId = projectId || boardId
       if (accessibleProjectIds.includes(targetId!)) {
@@ -497,14 +464,12 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by section
     if (sectionId) {
       where.sectionId = sectionId
     } else if (section) {
       where.section = section
     }
 
-    // Filter by assignee
     if (assignedTo) {
       if (assignedTo === 'me') {
         where.assignees = { some: { userId: user.id } }
@@ -518,17 +483,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by priority
     if (priorityFilter.length) {
       const byIndex = { priority: { priority_index: { in: priorityFilter } } }
-      // A task never given a priority has no Priority row; "none" (0) must match it too.
-      // AND keeps this OR apart from the search OR below.
       where.AND = priorityFilter.includes(0)
         ? [{ OR: [byIndex, { priority: { is: null } }] }]
         : [byIndex]
     }
 
-    // Filter by due date
     if (hasDueDate !== undefined) {
       if (hasDueDate) {
         where.dueDate = { not: null }
@@ -543,7 +504,6 @@ export async function GET(request: NextRequest) {
       where.dueDate = { ...where.dueDate, gte: new Date(dueDateAfter) }
     }
 
-    // Filter by labels: ids match TaskLabel.labelId (numeric legacy + UUID Label.id); else label.value
     if (labelsParam.length > 0) {
       const trimmed = labelsParam.map(l => l.trim()).filter(l => l.length > 0)
       const labelIds = trimmed.filter(isLabelIdParam)
@@ -561,12 +521,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by creator
     if (createdBy) {
       where.userId = createdBy
     }
 
-    // Filter by updated/created since
     if (updatedSince) {
       where.updatedAt = { gte: new Date(updatedSince) }
     }
@@ -574,7 +532,6 @@ export async function GET(request: NextRequest) {
       where.createdAt = { gte: new Date(createdSince) }
     }
 
-    // Filter by comments
     if (hasComments !== undefined) {
       if (hasComments) {
         where.comments = { some: {} }
@@ -583,7 +540,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by attachments
     if (hasAttachments !== undefined) {
       if (hasAttachments) {
         where.attachments = { some: {} }
@@ -592,7 +548,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search filter
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
@@ -616,7 +571,6 @@ export async function GET(request: NextRequest) {
       Object.assign(where, prWhere)
     }
 
-    // Keep the requested sort with a stable id tie-breaker across cursor pages.
     const orderBy: any[] = []
     if (sortBy === 'createdAt') {
       orderBy.push({ createdAt: sortOrder }, { id: 'asc' })
@@ -634,10 +588,8 @@ export async function GET(request: NextRequest) {
       orderBy.push({ updatedAt: 'desc' }, { id: 'asc' })
     }
 
-    // Count the full match set before applying the cursor window.
     const total = await prisma.task.count({ where })
 
-    // Get tasks
     const tasks = await prisma.task.findMany({
       where,
       select: {
@@ -738,17 +690,14 @@ export async function GET(request: NextRequest) {
       },
       orderBy,
       take: limit,
-      // Use cursor+skip so the requested sort is preserved across pages.
       ...(cursorId
         ? { cursor: { id: cursorId }, skip: 1 }
         : { skip: usesCursor ? 0 : offset }),
     })
 
-    // Get metadata counts
     const uniqueProjects = new Set(tasks.map(t => t.projectId))
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
-    // Transform to response format
     const taskList: TaskListItem[] = tasks.map(task => {
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
@@ -803,7 +752,6 @@ export async function GET(request: NextRequest) {
       ? projectRows(presentedTasks as Array<Record<string, unknown>>, listQuery.fields)
       : presentedTasks
 
-    // A full page returns nextCursor so clients can start paging.
     const nextCursor =
       tasks.length === limit
         ? encodeCursor(tasks[tasks.length - 1].id)
@@ -814,8 +762,6 @@ export async function GET(request: NextRequest) {
       tasks: projectedTasks as TaskListItem[],
       total,
       limit,
-      // Cursor mode ignores offset entirely, so report 0 rather than echoing a
-      // value that was never applied.
       offset: usesCursor ? 0 : offset,
       nextCursor,
       ...(listQuery?.fields.length

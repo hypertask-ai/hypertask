@@ -1,4 +1,3 @@
-// import { performTaskDelete, performTaskUpdate, performTaskCreate } from '../utils/api';
 
 import { toggleStarPin } from "@/lib/constants/APIRouteConstants"
 import { realtimeEchoHeaders } from "@/lib/realtime/client"
@@ -9,20 +8,13 @@ import axios from "axios";
 import globalAPIHandlers from "../api/global";
 
 export async function undoTaskDelete(data: any) {
-  // Call the necessary API function to undo task deletion
-  // performTaskCreate(data);
-  // here we weill run the api to update the task again
   await globalAPIHandlers.archiveTask(data.id, "Normal")
 }
 
 export function undoTaskUpdate(data: any) {
-  // Call the necessary API function to undo task update
-  // performTaskUpdate(data);
 }
 
 export function undoTaskCreate(data: any) {
-  // Call the necessary API function to undo task creation
-  // performTaskDelete(data);
 }
 
 
@@ -35,7 +27,6 @@ export async function UndoInboxArchive(data:any){
       body: JSON.stringify({ notificationIds: data.notificationIds })
     });
   } else if (data.isBulkOperation) {
-        // Handle bulk undo
         const { notificationIds } = data;
         
         const response = await fetch('/api/notifications/(un)archiveBulk', {
@@ -43,7 +34,7 @@ export async function UndoInboxArchive(data:any){
             headers: { 'Content-Type': 'application/json', ...realtimeEchoHeaders() },
             body: JSON.stringify({
                 notificationIds,
-                status: 'Normal' // or whatever status indicates unarchived
+                status: 'Normal'
             })
         });
 
@@ -73,19 +64,6 @@ export async function UndoPin (data: any) {
   });
 }
 
-
-// (default, input classname)
-
-/**
- * merges two classnames
- * (defaultClassName, incoming className)
- * @export
- * @param {...ClassValue[]} inputs
- * @return {*} 
- */
-// tailwind-merge can't type custom tokens: it read text-meta (a fontSize token) and
-// text-icon-dark-gray (a color) as the same group and dropped one. Declare our
-// fontSize + borderWidth tokens so cn() never discards them against color classes.
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {

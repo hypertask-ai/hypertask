@@ -61,7 +61,6 @@ interface KanbanTaskCardProps {
   selectionMode?: boolean;
 }
 
-/** The board card body without a required drag-and-drop context. */
 const KanbanTaskCard = ({
   task,
   project,

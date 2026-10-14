@@ -10,8 +10,6 @@ export type BoardTasksPayload = {
     allViews: IView[];
 }
 
-// Compute sections / firstTask / filteredSections from project.tasks (mutates project).
-// Boards with no tasks loaded yet come back with empty sections until hydrated.
 export const hydrateBoardSections = (project:IProject):IProject => {
     const { _sections, firstTask } = getCurrentProject(project) as {
         _sections: ISection[];
@@ -26,10 +24,6 @@ export const hydrateBoardSections = (project:IProject):IProject => {
     return project
 }
 
-// A board is hydrated once its tasks are loaded, plus its allViews when it has a
-// project_view (project_view is optional in the schema; a board without one has
-// no allViews to load, so tasks alone means hydrated; requiring allViews there
-// would loop the hydrate effect on every render).
 export const isBoardPayloadHydrated = (project:IProject):boolean =>
     Boolean(project.tasks) && (!project.project_view || Array.isArray(project.project_view.allViews))
 
@@ -47,9 +41,6 @@ export const hydrateBoardWithPayload = (project:IProject, payload:BoardTasksPayl
     })
 }
 
-// Side cache of a board's tasks/views, keyed per board. Filled by the background
-// prefetch WITHOUT touching ["projectsAll"], so warming other boards never
-// disturbs the board the user is currently looking at.
 export const BOARD_TASKS_KEY = (projectId:number, userId:number) =>
     ["boardTasks", userId, projectId] as const
 

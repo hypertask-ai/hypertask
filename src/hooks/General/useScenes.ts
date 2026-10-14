@@ -918,46 +918,6 @@ export const useScene = ({ sceneState, isApple }: IScene) => {
             active: sceneState.scene27.jPressed,
             index: 1,
           },
-          // {
-          //   type: "text",
-          //   content: ",",
-          // },
-          // {
-          //   type: "key",
-          //   content: "SHIFT",
-          //   active: sceneState.scene27.shiftPressed,
-          //   index: 0,
-          // },
-          // {
-          //   type: "text",
-          //   content: "+",
-          // },
-          // {
-          //   type: "key",
-          //   content: "J",
-          //   active: sceneState.scene27.jPressed,
-          //   index: 1,
-          // },
-          // {
-          //   type: "text",
-          //   content: ", then",
-          // },
-          // {
-          //   type: "key",
-          //   content: "SHIFT",
-          //   active: sceneState.scene27.shiftPressed,
-          //   index: 0,
-          // },
-          // {
-          //   type: "text",
-          //   content: "+",
-          // },
-          // {
-          //   type: "key",
-          //   content: "K",
-          //   active: sceneState.scene27.jPressed,
-          //   index: 1,
-          // },
         ],
       },
       28: {

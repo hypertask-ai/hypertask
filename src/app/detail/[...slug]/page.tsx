@@ -52,8 +52,6 @@ export async function generateMetadata(props: any): Promise<Metadata> {
 
 export default async function Page(
   props: {
-    // slug is a catch-all segment, so it is a string[] — it was typed `string`,
-    // which typechecks by accident because indexing a string yields characters.
     params: Promise<{
       any: any; slug: string[]
     }>;
@@ -63,9 +61,6 @@ export default async function Page(
   const searchParams = await props.searchParams;
   const params = await props.params;
 
-  // No ticket number in the URL: send them to the board rather than query for
-  // task NaN, which Prisma rejects outright (HTPR-4838). Done before any other
-  // await so nothing has started streaming.
   if (/^[A-Za-z0-9][A-Za-z0-9_-]*-\d+$/.test(params.slug?.[1] ?? "")) {
     const user = await requireServerCookieUser();
     if (await isFeatureEnabled(HTPR_6868_TICKET_PREFIX_FLAG, user.id)) {
@@ -81,7 +76,6 @@ export default async function Page(
   }
 
   console.log(params)
-  // const _user = getCookie("user")
   const userObj = await requireServerCookieUser();
   var initialMap: any = {};
   var comments: any[] | any = [];
@@ -91,14 +85,12 @@ export default async function Page(
   let lastReadAt: Date | null = null;
   let agentRunActivities: Awaited<ReturnType<typeof listTaskAgentRunActivities>> = [];
 
-  // Extract and parse hash
   let stack = false;
   let scrollSetting = "Bottom" as ScrollSetting;
 
   console.time(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   const slug = detailSlug;
 
-  // Retain the server snapshot's age even if a prefetched route mounts later.
   const commentsUpdatedAt = currentDate.getTime();
   const [taskResult, commentsJson, userPreferences] = await Promise.all([
     fetchTaskDetail(params.slug[0], params.slug[1], userObj.id),
@@ -151,7 +143,6 @@ export default async function Page(
     console.timeEnd(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   }
 
-  // Call the function to fetch sections for all projects and update them
   return (
     <>
       <TasksProvider
@@ -164,17 +155,6 @@ export default async function Page(
         serverTaskSeed={{ userId: userObj.id, taskId: task.id, projectId: slug.projectId, uniqueIndex: slug.uniqueIndex, updatedAt: currentDate.getTime() }}
         scrollSetting={scrollSetting}
       >
-        {/*
-          FollowersProvider used to sit outside Suspense while TaskDetail sat
-          inside it. TaskDetail's own dynamic() imports (NewCommentComponent,
-          TaskMovement, etc.) suspend on their JS chunk, so TaskDetail's mount
-          — and its priority/estimate/labels hooks — landed a full commit
-          later than FollowersProvider's. That missed the one-tick same-commit
-          window getTaskDetailMeta relies on to coalesce all four fields into
-          one /api/tasks/detailMeta request (HTPR-3708), so followers'
-          request fired on its own (HTPR-6047). Both inside the same boundary
-          now mount together.
-        */}
         <Suspense fallback={<>Loading...</>}>
           <FollowersProvider>
             <TaskDetail

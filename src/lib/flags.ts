@@ -13,8 +13,6 @@ import {
   HTPR_7042_NEON_WORK_AVOIDANCE_FLAG,
 } from "@/lib/flags/keys";
 
-// Re-exported so server code keeps importing keys from here. Client components must
-// import "@/lib/flags/keys" directly: flag evaluation uses server-only Prisma and caches.
 export * from "@/lib/flags/keys";
 export type { FeatureFlagKind } from "@/lib/flags/definitions";
 export function withFeatureFlagSnapshot<T>(run: () => T): T {
@@ -29,7 +27,6 @@ async function withFlagModeInvalidation<T>(write: () => Promise<T>): Promise<T> 
 }
 
 export const FEATURE_FLAG_OWNER_USER_ID = 6;
-// Board writes are never attributed to the owner alone.
 export const FEATURE_FLAG_SWEEP_AGENT_ID = "85b985ac-afe8-41a3-a1ac-d9549a9310c7";
 const FEATURE_FLAG_OWNER = {
   userId: FEATURE_FLAG_OWNER_USER_ID,
@@ -41,7 +38,6 @@ export const FEATURE_FLAG_QA_USER = {
   email: "valentin@hypertask.ai",
 } as const;
 
-// Hide and reject retired flags without changing stored rows needed by older deployments.
 export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-5913-consistent-comment-shortcuts",
   "htpr-6160-inbox-archive-cluster",
@@ -77,8 +73,6 @@ export const RETIRED_FEATURE_FLAG_KEYS = new Set([
   "htpr-6320-ai-observability",
   "htpr-6673-capture-user-signed-up-in-posthog",
 ]);
-// Old tabs read these infra flags as enabled; keep them until old deployments and tabs expire.
-// Existing product retirement dates: remove htpr-6072 after 2026-10-06, htpr-6254 and htpr-6035 after 2026-10-16, htpr-6166 after 2026-10-20.
 const RETIRED_CLIENT_FEATURE_FLAGS = {
   "htpr-5913-consistent-comment-shortcuts": true,
   "htpr-6091-feature-flags": true,
@@ -109,7 +103,6 @@ const RETIRED_CLIENT_FEATURE_FLAGS = {
 } as const;
 
 export const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);
-// HTPR-6128 explicitly exempts this bootstrap mode: gating flag infrastructure by itself is circular.
 export const FEATURE_FLAG_MODES = [
   "OWNER_ONLY",
   "OWNER_AND_QA",
@@ -191,8 +184,6 @@ const FEATURE_FLAG_ROW_SELECT = {
 } as const;
 
 export const FEATURE_FLAG_TICKET_PROJECT_ID = 15;
-// Serialises the read-decide-write in setFeatureFlagMode. Without it two fast clicks can both read
-// the old mode, and an OFF write landing after an EVERYONE write leaves EVERYONE on a stale date.
 const FEATURE_FLAG_MODE_LOCK_NAMESPACE = 6193;
 const FEATURE_FLAG_TICKET_BASE = "https://app.hypertask.ai/detail/project-15";
 export const FEATURE_FLAG_ADMIN_URL = "https://app.hypertask.ai/admin/flags";
@@ -242,9 +233,6 @@ export function featureFlagModeEnabled(
   return false;
 }
 
-// HTPR-6192: a feature flag with no stored row is on for the owner and QA, never owner-only,
-// so the QA agent can verify a feature before Valentin looks at it. Choosing Only me stays possible,
-// but it has to be set on the admin page on purpose.
 const DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA";
 const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
@@ -279,7 +267,6 @@ async function loadRawFlagModes(): Promise<RawFlagMode[] | null> {
       ?? defaultFeatureFlagMode(HTPR_7042_NEON_WORK_AVOIDANCE_FLAG);
     if (mode !== "EVERYONE") return null;
     if (!cached) {
-      // A reader started before an admin write must not refill its invalidated snapshot.
       await flagCacheCommand(redis.eval(`
         if (redis.call('GET', KEYS[1]) or '0') == '0'
           and (redis.call('GET', KEYS[2]) or '0') == ARGV[1] then
@@ -304,10 +291,6 @@ async function rawFlagModes(): Promise<RawFlagMode[] | null> {
 }
 
 
-/**
- * The user ids a flag can possibly be on for, or null when it is on for
- * everyone. A coarse prefilter only: isFeatureEnabled still decides per user.
- */
 export async function featureFlagCandidateUserIds(
   key: string,
   db: FeatureFlagDatabase = prisma,
@@ -458,10 +441,6 @@ export async function setFeatureFlagMode(
         })
       : null;
 
-    // HTPR-6193: entering EVERYONE restarts the 14-day removal countdown and unlinks the ticket
-    // filed for the previous release. Re-filing is still suppressed while the old ticket is open
-    // or Keep is on, both by the sweep. Staying on EVERYONE keeps the original date, so
-    // re-pressing Everyone cannot extend the clock.
     const entersEveryone = mode === "EVERYONE" && (stored?.mode !== "EVERYONE" || !stored.releasedAt);
     const release = entersEveryone ? { releasedAt: new Date(), removalTaskId: null } : {};
 
@@ -485,10 +464,6 @@ export async function setFeatureFlagMode(
   return withFeatureFlagMetadata(row, await loadFeatureFlagTicketTitles([key]));
 }
 
-/**
- * Pauses or resumes removal for one flag. Keep never moves `releasedAt`, so turning it off
- * resumes the countdown from the original release date, as HTPR-6193 asks.
- */
 export async function setFeatureFlagKeep(key: string, keep: boolean): Promise<FeatureFlagRow> {
   if (!validFeatureFlagKey(key)) throw new FeatureFlagInputError("Invalid feature flag");
   if (RETIRED_FEATURE_FLAG_KEYS.has(key)) throw new FeatureFlagInputError("Unknown feature flag");

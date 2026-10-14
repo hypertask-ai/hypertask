@@ -5,7 +5,6 @@ import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
 
 export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
-  // Keep imports, flag evaluation and storage entirely off the response path.
   try {
     const report = { ...input, category: input.category ?? (input.status === 401 ? 'auth_failed' : input.errorCode === 'empty-tools-list' ? 'empty_result' : 'call_failed') }
     for (const field of ['tool', 'client', 'errorCode'] as const) {
@@ -13,12 +12,10 @@ export function queueAiFeedback(input: AiFeedbackInput, userId?: number): void {
     }
     waitUntil(import('./report').then(({ fileAiFeedback }) => fileAiFeedback(report, userId)).catch(() => {}))
   } catch {
-    // Background scheduling is best effort outside Vercel too.
   }
 }
 
 export function feedbackRouteTemplate(pathname: string): string {
-  // Route names come from a build-time registry, never caller-provided path segments.
   const { MCP_FEEDBACK_ROUTE_TEMPLATES } = require('./routes') as typeof import('./routes')
   for (const template of MCP_FEEDBACK_ROUTE_TEMPLATES) {
     const parts = template.split('/')
@@ -48,11 +45,10 @@ export function queueRestFailure(request: Request, status: number, auth?: McpAut
           if (session) queueAiFeedback(input, session.userId)
         }
       }).catch(() => {}))
-    } catch { /* Scheduling must never change the original response. */ }
+    } catch {  }
   }
 }
 
-// McpError subclasses for caller mistakes carry a JSON-RPC code but no HTTP status (HTPR-7202).
 const MCP_ERROR_STATUS: Record<number, number> = { [-32001]: 401, [-32003]: 403, [-32004]: 404, [-32602]: 400 }
 
 function feedbackStatus(value: unknown, depth = 0): number | undefined {
@@ -79,12 +75,11 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
       try {
         const text = await tool.execute(args, token, invocation)
         let result: unknown
-        try { result = JSON.parse(text) } catch { /* Legacy responses can be plain text. */ }
+        try { result = JSON.parse(text) } catch {  }
         const status = feedbackStatus(result)
         if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
         return text
       } catch (error) {
-        // Schema rejections inside a tool are the caller's input mistake, not a crash (HTPR-7207).
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
         throw error

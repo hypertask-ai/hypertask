@@ -15,8 +15,6 @@ const FileDragOverlay: React.FC<FileDragOverlayProps> = ({
   customClassName,
 }) => {
   const [isDragging, setIsDragging] = useState(false);
-  // The drop listener is registered once, so read the handler through a ref —
-  // capturing it in the closure freezes whichever callback existed at mount.
   const dropCallbackRef = useRef(dropCallbackHandler);
   dropCallbackRef.current = dropCallbackHandler;
   const dragCounter = useRef(0);

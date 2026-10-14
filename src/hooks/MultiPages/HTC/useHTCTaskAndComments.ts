@@ -64,22 +64,18 @@ const useHTCTaskAndComments = ({
   const { removeParentTask } = useRemoveParentTask();
   const { goToProjectShortcut } = useProjectQuery();
 
-  //----------------- TASK FUNCTIONS
 
-  // --------------------------- Speech to text handler
   const commentAudioSpeechToText = () => {
     if (callbackHandler) callbackHandler(undefined, "SpeechToText");
     boardCloseHandler();
   };
 
-  // --------------------------- Follow Task
   const followTaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "FollowTask");
     else _activeItem && addFollowerKanban(_activeItem);
     boardCloseHandler();
   };
 
-  // --------------------------- Unfollow task
   const unFollowTaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "UnfollowTask");
     else _activeItem && removeFollowerKanban(_activeItem);
@@ -258,7 +254,6 @@ const useHTCTaskAndComments = ({
 
   const removeSubtaskHandler = () => {
     if (callbackHandler) callbackHandler(undefined, "RemoveSubtask");
-    // boardCloseHandler();
   };
 
   const removeParentHandler = () => {
@@ -303,29 +298,9 @@ const useHTCTaskAndComments = ({
       boardCloseHandler();
     }
   };
-  /**
-   *@todo need to add remove handler for anywhere other than task page.
-   *
-   */
   const removeNotificationHandler = async () => {
     if (callbackHandler) callbackHandler(undefined, "ArchiveTaskNotification");
     else {
-      // if (!inViewObject.taskId) return;
-      // task.notifications && undoInboxArchive(task.notifications[0]);
-      // const taskToReturn = {
-      //   notifications: [],
-      //   _count: {
-      //     notifications: 0,
-      //     comments: 0,
-      //   },
-      // };
-      // updateTaskInCache(
-      //   taskToReturn,
-      //   inViewObject.taskId,
-      //   inViewObject.taskProjectId,
-      //   inViewObject.sectionId,
-      //   _currentProject
-      // );
     }
     boardCloseHandler();
   };
@@ -337,7 +312,6 @@ const useHTCTaskAndComments = ({
       _currentProject &&
       inViewObject.sectionId
     ) {
-      //   deleteItem(inViewObject.taskId, inViewObject.sectionId)
       await removeFromListWithStatus(
         inViewObject.sectionId,
         _currentProject.id,
@@ -347,12 +321,10 @@ const useHTCTaskAndComments = ({
     }
     boardCloseHandler();
     if (pathname?.startsWith("/detail") && callbackHandler) {
-      // Keep the registered Undo alive even when the task was opened by deep link.
       if (deleteTaskUndo && response && _currentProject && inViewObject.sectionId) {
         navigate("Replace", `/project?id=${_currentProject.id}`);
       } else navigate("Back");
     }
-    // goToProjectShortcut(_currentProject?.id!);
   };
 
   const setDueDateCallback = (date: Date | undefined) => {
@@ -374,7 +346,6 @@ const useHTCTaskAndComments = ({
         if (task)
           toggleCreateTaskGlobally(undefined, undefined, {
             ...task,
-            // the `description` scalar is always "" — real body lives on description_
             description: task.description_?.content || task.description,
             pickBoard,
           });
@@ -385,7 +356,6 @@ const useHTCTaskAndComments = ({
       });
   };
 
-  //----------------- COMMENT FUNCTIONS
   const commentFunctionHandler = (
     type:
       | "EditComment"

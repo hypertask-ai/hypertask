@@ -18,11 +18,6 @@ export function createInboxArchiveTool(context: ToolContext) {
       }),
       execute: withToolErrors(async (input) => {
         sendStatus("hypertask_inbox_archive");
-        // The inbox shows one row per task, so archiving a row has to take its
-        // siblings with it or the task reappears and the archive looks broken.
-        // The UI route deletes those siblings; archiving them instead keeps the
-        // task out of the inbox without destroying notifications nobody asked
-        // to lose.
         const notifications = await prisma.notification.findMany({
           where: { id: { in: input.notification_ids }, userId: user.id },
           select: { taskId: true },
@@ -38,8 +33,6 @@ export function createInboxArchiveTool(context: ToolContext) {
               id: { notIn: input.notification_ids },
               taskId: { in: taskIds },
               userId: user.id,
-              // An owned agent's notifications carry the owner's userId, so
-              // without this the user's archive would empty their agent's inbox.
               agentId: null,
               status: "Normal",
             },

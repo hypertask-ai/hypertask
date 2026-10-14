@@ -8,17 +8,8 @@ import { useTourStatus } from './useTourStatus';
 import { TourId, TOUR_IDS } from '../types';
 import { tourSteps } from '../config/steps';
 
-// react-joyride is 102 KB and 84% of it never executes on the board: the board
-// route loads zero tour steps, so <Joyride> renders null while the whole module
-// is still downloaded, parsed and evaluated on first paint (HTPR-4508).
-// Loading it dynamically means the chunk only arrives when a tour actually runs.
-// ssr:false because Joyride measures live DOM targets and cannot render server-side.
 const Joyride = dynamic(() => import('react-joyride'), { ssr: false });
 
-// STATUS/ACTIONS/EVENTS are plain string constants in react-joyride, but importing
-// them as values would pull the whole module back into the initial chunk and undo
-// the dynamic import above. Inlined here instead; tests/joyride-constants.test.cjs
-// asserts these still match the library so a version bump cannot drift them silently.
 const STATUS = { FINISHED: 'finished', SKIPPED: 'skipped' } as const;
 const ACTIONS = { PREV: 'prev' } as const;
 const EVENTS = { STEP_AFTER: 'step:after', TARGET_NOT_FOUND: 'error:target_not_found' } as const;
@@ -36,7 +27,7 @@ interface UseTourReturn {
 
 interface UseTourParams {
   tourId?: TourId;
-  currentUser:  any | null; // Allow IUser or HUser (from useAuth)
+  currentUser:  any | null;
 }
 
 export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourParams): UseTourReturn {
@@ -47,10 +38,8 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
   const [currentTourId, setCurrentTourId] = useState<TourId>(tourId);
   const pathname = usePathname();
   
-  // Get tour status tracking hooks
   const tourStatus = useTourStatus({ tourId: currentTourId });
   
-  // Update currentTourId when tourId prop changes (from context)
   useEffect(() => {
     if (tourId && tourId !== currentTourId) {
       setCurrentTourId(tourId);
@@ -59,7 +48,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
 
   const loadStepsForRoute = useCallback((route: string): void => {
     if (tourSteps[route]) {
-      // Filter steps to only include those with valid targets
       const validSteps = tourSteps[route].filter((step) => {
         if (step.target === 'body') return true;
         const element = document.querySelector(step.target as string);
@@ -77,7 +65,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
     }
   }, []);
 
-  // Auto-load tour steps when route changes (only if not in middle of component tour)
   useEffect(() => {
     if (tourContext === 'route' && !run) {
       const route = pathname?.split('/').filter(Boolean)[0] || 'home';
@@ -89,7 +76,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
     setTourContext('component');
 
     if (tourSteps[componentId]) {
-      // Filter steps to only include those with valid targets
       const validSteps = tourSteps[componentId].filter((step) => {
         if (step.target === 'body') return true;
         const element = document.querySelector(step.target as string);
@@ -104,7 +90,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
 
       console.log(`✅ Loaded ${validSteps.length} tour steps for component: ${componentId}`);
 
-      // Start the tour for this component if steps were added
       if (validSteps.length > 0) {
         setTimeout(() => {
           setRun(true);
@@ -116,18 +101,14 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
   }, []);
 
   const startTour = useCallback((tourIdOverride?: TourId): void => {
-    // Reset tour state first to ensure fresh start
     setRun(false);
     setStepIndex(0);
     setTourContext('route');
     
-    // Use the override tour ID if provided, otherwise use current tour ID or route-based tour
     const route = pathname?.split('/').filter(Boolean)[0] || 'project';
     
-    // Determine which tour to start
     let tourKey: string;
     
-    // Priority: tourIdOverride > tourId prop > currentTourId > route-based
     if (tourIdOverride && tourSteps[tourIdOverride]) {
       tourKey = tourIdOverride;
     } else if ((currentTourId === TOUR_IDS.TASK_WRITER || tourId === TOUR_IDS.TASK_WRITER) && tourSteps[TOUR_IDS.TASK_WRITER]) {
@@ -144,11 +125,8 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       setCurrentTourId(tourKey as TourId);
       loadStepsForRoute(tourKey);
       
-      // Mark that user has started viewing this tour
-      // This sets the _hasSeenAnyTour flag to prevent auto-showing tours
       tourStatus.markTourStarted();
       
-      // Small delay to ensure steps are loaded, state is reset, and DOM is ready
       setTimeout(() => {
         setRun(true);
       }, 150);
@@ -176,7 +154,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
     setRun(false);
     setTourContext('component');
     
-    // Small delay to ensure modal is fully rendered
     setTimeout(() => {
       loadStepsForComponent('create-task-modal');
     }, 300);
@@ -194,7 +171,6 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
       setStepIndex(0);
       setTourContext('route');
       
-      // Mark tour as completed or skipped in database
       if (status === STATUS.FINISHED) {
         console.log('✅ Tour completed:', currentTourId);
         tourStatus.markComplete();
@@ -205,15 +181,12 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
     } else if (type === EVENTS.STEP_AFTER || type === EVENTS.TARGET_NOT_FOUND) {
       const nextStepIndex = index + (action === ACTIONS.PREV ? -1 : 1);
       
-      // Special handling for task-writer tour
       if (currentTourId === 'task-writer' && tourContext === 'route') {
-        // Step 1 -> Step 2: Wait for modal to open (handled by interaction listeners)
         if (index === 0 && action !== ACTIONS.PREV) {
           console.log('⏸️ Task Writer Tour: Waiting for create task modal to open');
           setRun(false);
           return;
         }
-        // Step 2 -> Step 3: Wait for CTRL+J (handled by interaction listeners)
         if (index === 1 && action !== ACTIONS.PREV) {
           console.log('⏸️ Task Writer Tour: Waiting for CTRL+J to open AI writer');
           setRun(false);
@@ -221,10 +194,7 @@ export function useTour({ tourId = TOUR_IDS.TASK_WRITER, currentUser }: UseTourP
         }
       }
       
-      // If we're on the "create task button" step and moving forward
-      // The tour will pause here and resume when modal opens via continueTourInModal
       if (tourContext === 'route' && index === steps.length - 1 && action !== ACTIONS.PREV) {
-        // User clicked the create button, pause tour
         console.log('⏸️ Pausing tour - waiting for modal to open');
         setRun(false);
         return;

@@ -77,8 +77,6 @@ export const buildAuthorizedLocalPublication = ({
   authorizedProjectIds: number[];
   current?: ProjectsAllWithIndex;
   payload: BoardSyncPayloadV1;
-  // HTPR-7129: edits made in a ticket patch the in-memory board while the
-  // board is unmounted, so its saved snapshot is older. Keep the memory copy.
   keepHydratedCache?: boolean;
 }): AuthorizedLocalPublication | null => {
   if (
@@ -116,9 +114,6 @@ export const buildAuthorizedLocalPublication = ({
     };
   }
 
-  // Network cache present before this authorization is only display history.
-  // The caller's update-count guard has already stopped any newer network
-  // publication, so let the freshly authorized local payload replace it.
 
   const existingProject =
     currentIndex >= 0 ? authorizedCurrentProjects![currentIndex] : undefined;
@@ -184,9 +179,6 @@ export const publishPreparedLocalBoard = async ({
       accountId: startingScope.accountId,
       projectId: startingScope.projectId,
     }) ||
-    // A revocation whose IndexedDB deletion failed leaves the snapshot on
-    // disk. It must never paint again until the delete succeeds or the
-    // network authorizes this board afresh.
     isBoardRevocationTombstoned(startingScope.accountId, proof.projectId)
   ) {
     return false;
@@ -204,8 +196,6 @@ export const publishPreparedLocalBoard = async ({
       projectId: currentScope.projectId,
     }) ||
     !payload ||
-    // Revocation tombstones the entry only after its delete attempts settle,
-    // which can land while this read is still in flight.
     isBoardRevocationTombstoned(currentScope.accountId, proof.projectId)
   ) {
     return false;
@@ -239,16 +229,11 @@ export const publishPreparedLocalBoard = async ({
     keepHydratedCache,
   });
   if (!publication) return false;
-  // A second proof for the same route still has an available local fallback.
-  // Report success without writing again so transient board-payload failures
-  // keep the already-painted snapshot on screen.
   if (!claimPublication(authorizedKey)) return true;
 
   queryClient.setQueryData(
     PROJECTS_ALL_QUERY_KEY,
     publication.projectsData,
-    // The local snapshot is display data, not a reusable authorization result.
-    // Keep it stale so it can never suppress a later network proof.
     { updatedAt: 0 },
   );
   onPublished?.(publication);
@@ -270,10 +255,6 @@ export const usePreparedBoardReadModel = ({
   queryClient: QueryClient;
   onLocalBoardPublished?: (accountId: number, projectId: number) => void;
 }) => {
-  // Deliberately exclude viewSurface. An in-place Board/Table toggle reuses
-  // already-published project data and is not an IndexedDB route restore.
-  // Including it would mix near-zero toggles into cold-entry readiness and let
-  // a later focus refresh restart the long-lived timer this metric is fixing.
   const activeKey =
     enabled && accountId > 0 && projectId != null
       ? `${accountId}:${projectId}`
@@ -326,13 +307,6 @@ export const usePreparedBoardReadModel = ({
     const traceScope = getBoardReadinessTraceScope();
     markBoardReadinessPhase("localReadStart", traceScope);
     const promise = (async () => {
-      // HTPR-5927: no marker means no snapshot has ever been written in this
-      // browser, so there is nothing IndexedDB can offer -- skip both the
-      // databases() enumeration and the keyed open, and let the network path
-      // run alone (same as the /speed lab's "without local DB" variant on a
-      // first-ever visit). A marker just means "may exist" -- the keyed open
-      // below already handles a false positive (cleared store, stale marker)
-      // the same way it always has: it finds nothing and returns null.
       if (!hasBoardReadModelMarker()) return null;
       const { readBoardReadModel } =
         await import("@/lib/boardSync/indexedDbReadModel");
@@ -348,7 +322,6 @@ export const usePreparedBoardReadModel = ({
     return promise;
   }, []);
 
-  // A ref, so a late flag load never restarts the route-entry publication.
   const keepHydratedCacheRef = useRef(false);
   keepHydratedCacheRef.current = useFlag(HTPR_7129_BOARD_CARD_FRESH_AFTER_ESCAPE_FLAG);
   const authorizeAndPublishLocalBoard = useCallback(
@@ -375,14 +348,8 @@ export const usePreparedBoardReadModel = ({
     [prepareLocalRead, queryClient],
   );
 
-  // Start the account-scoped read before React Query subscribes. A matching
-  // snapshot publishes as soon as IndexedDB resolves. Network authorization
-  // still runs and can revoke this display-only proof.
   useLayoutEffect(() => {
     const generation = ++localProofGenerationRef.current;
-    // Route re-entry gets a fresh publication claim. Keeping the previous key
-    // would refuse the new entry's write and report success with nothing
-    // published.
     publishedLocalKeyRef.current = null;
     if (!activeKey) {
       preparedRef.current = null;
@@ -415,9 +382,6 @@ export const usePreparedBoardReadModel = ({
 
   const cancelPreparedLocalPublication = useCallback(() => {
     localProofGenerationRef.current += 1;
-    // Cancelling means the published payload is being purged. Release the
-    // claim or a later re-authorization of this same route would report
-    // success without writing anything back.
     publishedLocalKeyRef.current = null;
   }, []);
 

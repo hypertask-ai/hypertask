@@ -69,9 +69,9 @@ const BOARD_15_GITHUB_REPOSITORIES = new Set([
 ]);
 
 const BOARD_15_PULL_REQUEST_AUTHOR_IDS = new Set([
-  "3296316", // valentinyeo
-  "340644717", // hypertask-runners[bot]
-  "49699333", // dependabot[bot]
+  "3296316",
+  "340644717",
+  "49699333",
 ]);
 
 export function isAuthorizedPullRequestAuthor(

@@ -22,11 +22,6 @@ export function trackToolSetExecutions(
     trackedTool.execute = async (...args: unknown[]) => {
       const release = await recordToolStart?.(name);
       try {
-        // An agent-attributed task write is fenced and must hold the task's
-        // lease, the one MCP clients take through POST /mcp/tasks/lease/claim.
-        // Chat never claimed one, so an agent's moves, edits, archives and
-        // description publishes were rejected as though another agent owned the
-        // ticket. Human conversations pass no actor and are untouched.
         const result = await withAdoptedAgentMutationLease(
           prisma,
           leaseActor ?? {},
@@ -45,8 +40,6 @@ export function trackToolSetExecutions(
           try {
             await release();
           } catch (error) {
-            // A write may already be committed. Fence cleanup must never turn
-            // that success into a retryable tool failure; Redis TTL is backup.
             console.error("[ai/chat/stream] tool fence cleanup failed", error);
           }
         }
@@ -56,15 +49,6 @@ export function trackToolSetExecutions(
   return tools;
 }
 
-/**
- * LLMs pad tool calls with empty values for fields they were never asked to change:
- * a request to swap one tag arrives as {add_labels:["AI"], remove_labels:["old"], labels:[], description:""}.
- * Because `[]` and `""` are not `undefined`, the tools read that padding as intent and
- * wipe the task's labels and description. An omitted field and a "clear this field"
- * instruction are indistinguishable once the model pads, so the safe reading is
- * "field not supplied". Clearing is still reachable through the explicit paths
- * (remove_labels for tags, due_date: null for dates).
- */
 export function dropEmptyPadding<T extends Record<string, unknown>>(
   input: T,
   fields: (keyof T)[]
@@ -80,7 +64,6 @@ export function dropEmptyPadding<T extends Record<string, unknown>>(
   return cleaned;
 }
 
-/** Wraps a tool's execute so an unhandled throw becomes a tool-visible error instead of aborting the whole chat turn. */
 export function withToolErrors<T extends (...args: any[]) => Promise<any>>(fn: T): T {
   return (async (...args: Parameters<T>) => {
     try {

@@ -118,9 +118,6 @@ const EmojiGifPicker = ({
         onClose();
         return;
       }
-      // Tab toggles Emoji|GIF. Handled here in the capture phase (not on the
-      // popover's onKeyDown) so it fires before emoji-mart's own input can
-      // swallow the keypress, keeping the switch symmetric from both tabs.
       if (event.key === "Tab") {
         event.preventDefault();
         event.stopPropagation();
@@ -190,8 +187,6 @@ const EmojiGifPicker = ({
     };
   }, [activeTab, query]);
 
-  // Only GIFs with a thumbnail can render, so index/navigate/insert against
-  // this filtered list to keep the keyboard highlight in sync with the grid.
   const renderableGifs = useMemo(
     () =>
       gifs.filter(
@@ -200,12 +195,10 @@ const EmojiGifPicker = ({
     [gifs]
   );
 
-  // Reset the keyboard highlight whenever the result set changes.
   useEffect(() => {
     setHighlightedIndex(0);
   }, [renderableGifs]);
 
-  // Keep the highlighted cell visible as arrows move through the grid.
   useEffect(() => {
     gifButtonRefs.current[highlightedIndex]?.scrollIntoView({ block: "nearest" });
   }, [highlightedIndex]);
@@ -213,8 +206,6 @@ const EmojiGifPicker = ({
   const handleGifSearchKeyDown = (
     event: ReactKeyboardEvent<HTMLInputElement>
   ) => {
-    // While a new query is loading the grid is hidden but `renderableGifs`
-    // still holds the previous results, so ignore keys to avoid a stale insert.
     if (isLoading || renderableGifs.length === 0) return;
 
     const move = (delta: number) => {
@@ -226,8 +217,6 @@ const EmojiGifPicker = ({
       });
     };
 
-    // Left/Right only navigate the grid when the caret sits at the matching
-    // edge of the query, so mid-string typo fixes still move the text cursor.
     const caret = event.currentTarget.selectionStart ?? 0;
     const caretEnd = event.currentTarget.selectionEnd ?? 0;
     const hasSelection = caret !== caretEnd;
@@ -347,7 +336,6 @@ const EmojiGifPicker = ({
         </div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* Borderless input over a bottom divider, same as the Ctrl+K palette */}
           <label className="flex shrink-0 items-center gap-2.5 border-b border-light-black-border-1 px-3">
             <span className="sr-only">Search GIFs</span>
             <Search
@@ -411,8 +399,7 @@ const EmojiGifPicker = ({
                       }`}
                       onClick={() => selectGif(gif)}
                     >
-                      {/* Giphy thumbnails are remote animated assets, so Next Image is not applicable here. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      { }
                       <img
                         src={thumbnail}
                         alt={gif.title || "GIF"}

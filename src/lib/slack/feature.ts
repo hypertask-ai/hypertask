@@ -25,7 +25,6 @@ export async function isSlackAppEnabled(
   if (!slackUserId) return installEnabled;
   const disconnectedUserId = await getSlackAutoLinkDisabledUserId(install.id, slackUserId);
   if (disconnectedUserId) return isFeatureEnabled(HTPR_6817_SLACK_APP_FLAG, disconnectedUserId);
-  // Resolve first-contact matches before choosing behavior, not after an action.
   const actor = await resolveSlackActor(slackTeamId, slackUserId);
   return actor
     ? isFeatureEnabled(HTPR_6817_SLACK_APP_FLAG, actor.user.id)

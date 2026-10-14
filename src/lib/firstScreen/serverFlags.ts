@@ -1,7 +1,6 @@
 import { featureFlagsForUser } from "@/lib/flags";
 import type { FirstScreenFlags } from "./contract";
 
-// The caller must supply the verified signed account, never the profile cookie id.
 export async function getFirstScreenFlagSeed(
   accountId: number,
   keys: readonly string[],

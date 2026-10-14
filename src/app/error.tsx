@@ -1,4 +1,4 @@
-'use client' // Error components must be Client Components
+'use client'
 
 import { useEffect } from 'react'
 import { useSignout } from '@/hooks/MultiPages/HTC/useSignout'
@@ -13,10 +13,8 @@ export default function Error({
   const { handleHardReset } = useSignout()
 
   useEffect(() => {
-    // Log the error to an error reporting service
     console.error('Root page error:', error)
     
-    // Log additional error details
     if (typeof window !== 'undefined') {
       console.error('Error details:', {
         message: error.message,
@@ -32,10 +30,8 @@ export default function Error({
   const handleHardResetAndReload = async () => {
     try {
       await handleHardReset()
-      // The handleHardReset already redirects to /login
     } catch (err) {
       console.error('Error during hard reset:', err)
-      // Fallback: force reload to login page
       if (typeof window !== 'undefined') {
         window.location.href = '/login'
       }
@@ -47,7 +43,6 @@ export default function Error({
       reset()
     } catch (err) {
       console.error('Error during reset:', err)
-      // Fallback: reload the page
       if (typeof window !== 'undefined') {
         window.location.reload()
       }
@@ -63,7 +58,6 @@ export default function Error({
           An error occurred while loading the application. This usually requires a fresh start.
         </p>
         
-        {/* Show error details in development or for debugging */}
         {process.env.NODE_ENV === 'development' && error && (
           <details className="mb-4 w-full">
             <summary className="text-content text-muted-foreground cursor-pointer hover:text-foreground">

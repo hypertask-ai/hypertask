@@ -179,11 +179,6 @@ export async function upsertAgentWebhook(input: {
     throw new AgentWebhookInputError("active must be a boolean", "active");
   }
 
-  // The agent row exists before a subscription is created, so its stable ID is
-  // also a lock key for the create path. Reading the current subscription only
-  // after this transaction-scoped lock prevents concurrent first-time
-  // configure calls from generating two secrets and returning the losing one.
-  // Explicit rotations are serialized in the same order they commit.
   const transactionLockId = crypto
     .createHash("sha256")
     .update(`agent-webhook:${input.agentId}`)
@@ -191,9 +186,6 @@ export async function upsertAgentWebhook(input: {
     .readBigInt64BE(0);
   const { subscription, rotateSecret, secret } = await prisma.$transaction(
     async (tx) => {
-      // Execute the lock for its side effect. `$executeRaw` does not deserialize
-      // PostgreSQL's void result, and the transaction releases the lock even if
-      // validation or the upsert throws.
       await tx.$executeRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(${transactionLockId})`,
       );
@@ -309,7 +301,6 @@ export async function manageAgentWebhook(input: {
       AGENT_RUN_FEATURE_FLAG,
       input.userId,
     );
-    // Replay includes recorded payloads only for run events, never comment or chat text.
     const availableEvents = availableAgentWebhookEvents(runsEnabled);
     const eventDefinitions = availableAgentWebhookEventDefinitions(runsEnabled);
     return {

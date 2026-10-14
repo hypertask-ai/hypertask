@@ -55,10 +55,6 @@ export function getMyTasksSplitIndex(
   return sectionIndex === -1 ? 0 : sectionIndex + 1;
 }
 
-/**
- * Same calendar rules as My Tasks due-date filters: Overdue is before the
- * start of today, not "due earlier this afternoon".
- */
 export function isMyTasksOverdue(
   dueDate: Date | string | null | undefined,
   now: Date = new Date(),
@@ -123,7 +119,6 @@ export function classifyMyTasksTimeBucket(
   return "Later";
 }
 
-/** Board-tab overdue counts. Time grouping still tabs by board, not by bucket. */
 export function splitTabOverdueCounts(
   groupBy: string,
   tasks: MyTasksBoardTask[],
@@ -142,7 +137,6 @@ export function splitTabOverdueCounts(
   return [sectionCounts.reduce((sum, count) => sum + count, 0), ...sectionCounts];
 }
 
-/** Pure time grouping for My Tasks when a saved view asks for groupBy time. */
 export function groupMyTasksByTime(
   tasks: MyTasksBoardTask[],
   now: Date = new Date(),
@@ -173,7 +167,6 @@ export function groupMyTasksByTime(
   };
 }
 
-/** Pure cross-board grouping used by the My Tasks controller and its tests. */
 export function groupMyTasksByBoard(
   tasks: MyTasksBoardTask[],
   now: Date = new Date()

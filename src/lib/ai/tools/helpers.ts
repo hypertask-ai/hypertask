@@ -41,7 +41,6 @@ export const commentInclude = (userId: number, projectId: number) => ({
       id: true,
       emoji: true,
       userId: true,
-      // HTPR-7122: set when an agent reacted; userId is then its owner, not the reactor.
       agentId: true,
     },
   },
@@ -55,9 +54,6 @@ export function sanitizeForJson<T>(value: T): T {
   ) as T;
 }
 
-// Every rich-text value the chat persists (comments, drafts, descriptions) goes through
-// here first. Asking the model for HTML is not enough — it drifts back to markdown and
-// the raw asterisks end up in the comment (HTPR-4687), so the conversion is forced.
 export async function getAccessibleProjectIds(userId: number) {
   const projects = await prisma.project.findMany({
     where: {
@@ -81,7 +77,6 @@ export async function assertAccessibleProject(userId: number, projectId: number)
   return Boolean(project);
 }
 
-/** Builds an IUser-shaped object for activity/notification helpers that require one. */
 export function buildActivityUser(userObj: {
   id: number;
   email?: string | null;
@@ -101,20 +96,6 @@ export function buildActivityUser(userObj: {
   };
 }
 
-/**
- * When this ChatSession targets a native agent, loads its prompt so the model
- * can be instructed to act as that agent, and its id so the write tools can
- * attribute the mutations they make to the agent instead of the human user.
- * Ownership is re-checked here (not just trusted from session creation) since
- * this is the boundary that decides whose identity mutations are stamped with.
- */
-/**
- * No try/catch: a query error here is indistinguishable from "this session
- * has an agent" (we simply don't know yet), so swallowing it to null would
- * silently attribute a real agent's writes to the human on a DB hiccup.
- * Errors propagate to the existing top-level stream catch, same as every
- * other lookup in this request (dbUser, task context, etc).
- */
 export async function loadActingAgent(
   sessionId: string | undefined,
   userId: number
@@ -148,7 +129,6 @@ export async function loadActingAgent(
   });
 }
 
-/** Creates, updates, or clears a task's Priority row and logs the activity (mirrors src/pages/api/priority/setPriority.ts). */
 export async function applyPriorityUpdate(
   taskId: number,
   priorityValue: string,
@@ -227,7 +207,6 @@ export async function applyPriorityUpdate(
   return { error: null };
 }
 
-/** Creates, updates, or clears a task's Estimate row and logs the activity (mirrors src/pages/api/estimate/setEstimate.ts). */
 export async function applyEstimateUpdate(
   taskId: number,
   estimateIndex: number,
@@ -336,11 +315,8 @@ export function mapTaskSearchItem(task: any, userId: number) {
     task_id: task.id,
     ticketNumber: task.ticketNumber || undefined,
     uniqueIndex: task.uniqueIndex,
-    // Ready-made board-relative link. Use this verbatim for links; never build
-    // the path from `id` (global DB id, not the ticket number).
     url: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
     title: task.title,
-    // Descriptions carry inline base64 images for the same reason comments do.
     description: stripInlineDataUris(task.description),
     boardId: task.projectId,
     boardTitle: task.project.title || "",
@@ -352,11 +328,6 @@ export function mapTaskSearchItem(task: any, userId: number) {
   };
 }
 
-// A comment written in the editor can carry an image inline as a base64 data
-// URI. Those are megabytes of text, and the model was being handed them whole,
-// which is what produced "prompt is too large" whenever a comment held a
-// screenshot (HTPR-3494). The image itself is still reachable through the
-// comment's attachments, so the model loses nothing by seeing a marker here.
 export const stripInlineDataUris = (html: string) =>
   typeof html === "string"
     ? html.replace(/\bdata:[^;,\s"')]+;base64,[A-Za-z0-9+/=]+/g, "[inline image]")
@@ -398,7 +369,6 @@ export function mapCommentToResponse(comment: any, userId: number, projectId: nu
       id: reaction.id,
       emoji: reaction.emoji,
       userId: reaction.userId,
-      // HTPR-7122: an agent made it, never the owner in userId; it is not their approval.
       ...(reaction.agentId ? { isAgent: true } : {}),
     })),
   };
@@ -532,7 +502,6 @@ export function deriveChatAttachmentFilename(
       }
     }
   } catch {
-    // Fall through to a deterministic filename; URL validity is enforced below.
   }
 
   return `attachment-${index + 1}${CHAT_ATTACHMENT_EXTENSION_BY_MIME[normalizeMime(contentType)] || ""

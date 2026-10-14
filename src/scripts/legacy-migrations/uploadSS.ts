@@ -15,19 +15,16 @@ export const uploadImageToS3= async(base64:any,fileName:any)=> {
   const type = base64.split(';')[0].split('/')[1];
   const params = {
     Bucket: HYPERTASKS_S3_BUCKET,
-    ContentType: `image/${type}`, // required. Notice the back ticks
-    // ContentEncoding: 'base64', // required
+    ContentType: `image/${type}`,
 
-    Key: `tasks/${fileName}.png`, // Specify the desired path and filename    const result = await s3.upload(params).promise();
-    Body: base64Data, // The file content (e.g., obtained from an HTML input element)
-    
+    Key: `tasks/${fileName}.png`,
+    Body: base64Data,
   };
-  // console.log("params ==>",params)
 
   try {
     const result = await s3.upload(params).promise();
     console.log('File uploaded successfully:', result.Location);
-    return getHypertasksStoragePublicUrl(params.Key); // Returns the URL of the uploaded file
+    return getHypertasksStoragePublicUrl(params.Key);
   } catch (error) {
     console.error('Error uploading file:', error);
     throw error;
@@ -43,7 +40,7 @@ export const uploadAttachmentsToS3= async(files:File[], taskId:number):Promise<a
     });
 
     const uploadResults = await Promise.all(uploadPromises);
-    return uploadResults.map(x=>x.source); // Returns an array of URLs of the uploaded files
+    return uploadResults.map(x=>x.source);
   } catch (error) {
     console.error('Error uploading files:', error);
     throw error;
@@ -60,7 +57,7 @@ export const uploadSingleAttachment = async(file:File,taskId:number,)=>{
 
   const params = {
     Bucket: HYPERTASKS_S3_BUCKET,
-    ContentType: file.type, // Use the correct content type based on the file type
+    ContentType: file.type,
     Key: `tasks/task-${taskId}/attachments/${timenow+fileName}`,
     Body: Body,
   };
@@ -69,7 +66,6 @@ export const uploadSingleAttachment = async(file:File,taskId:number,)=>{
   return getHypertasksStoragePublicUrl(params.Key);
 }
 
-// AI_Custom_Instructions_id is there just to accommodate the RAG custom instruction uploads
 export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:any, AI_Custom_Instructions_id?:number)=>{
 
   const s3 = getHypertasksS3Client();
@@ -81,20 +77,19 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
 
   const params = {
     Bucket: HYPERTASKS_S3_BUCKET,
-    ContentType: file.type, // Use the correct content type based on the file type
+    ContentType: file.type,
     Key: `tasks/attachments/${timenow+fileName}`,
     Body: Body,
   };
   console.log("🚀 ~ uploadSingleAttachmentTrackProgress ~ params:", params)
- // Wrap the AWS SDK's upload method in a Promise
  const uploadPromise = new Promise((resolve, reject) => {
   s3.upload(params, function(err: any, data: any) {
     if (err) {
       console.log('There was an error uploading your file: ', err);
-      reject(err); // Reject the promise if there's an error
+      reject(err);
     } else {
       console.log('Successfully uploaded file.', data);
-      resolve(data); // Resolve the promise with the data
+      resolve(data);
     }
   }).on('httpUploadProgress', async function(progress) {
     let progressPercentage = Math.round(progress.loaded / progress.total * 100);
@@ -111,12 +106,9 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
   });
   });
     
-  // Wait for the upload to complete, why isnt it called like uploadPromise()
   await uploadPromise;
   const publicUrl = getHypertasksStoragePublicUrl(params.Key);
   console.log("🚀 ~ uploadSingleAttachmentTrackProgress ~ result:", publicUrl)
-  // if the AI_Custom_Instructions_id is present that means it needs to be uploaded to the AI_CUSTON_INSTRUCTION
-  // so lets call a server action here.
   if (AI_Custom_Instructions_id) {
     uploadedFileFromRAG = await uploadAttachmentToAICustomInstruction({
       fileSize,
@@ -125,8 +117,6 @@ export const uploadSingleAttachmentTrackProgress = async(file:File, callback?:an
       type:file.type,
       AI_Custom_Instructions_id
     })
-    
-    // console.log("🚀 ~ result ~ result:", result)
   }
   return {
     source:publicUrl,

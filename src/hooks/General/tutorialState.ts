@@ -28,7 +28,6 @@ import useFunnelCookies from "../MultiPages/useFunnelCookies";
 
 export const useTutorialState = () => {
   const [currentUser, setCurrentUser] = useRecoilState(currentUserAtom);
-  // Provide a dummy user for display purposes only
   const displayUser: IUser = currentUser ?? {
     id: 0,
     displayName: "You",
@@ -95,7 +94,6 @@ export const useTutorialState = () => {
     sceneState,
     isApple,
   });
-  // Funnel user detection
   const {
     isFunnelUser,
     isLoggedIn,

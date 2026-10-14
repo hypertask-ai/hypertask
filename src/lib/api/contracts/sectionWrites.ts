@@ -6,7 +6,6 @@ export const createSectionBodySchema = z.object({
   title: z.string(),
   ranking: z.string().optional(),
 });
-// Delete sends the full cached section; rename and reorder send only their patch.
 export const updateSectionBodySchema = z.object({
   userId: id.optional(),
   sectionId: id.optional(),
@@ -32,10 +31,8 @@ export const createSectionResponseSchema = z.looseObject({
   section: sectionResponseSchema,
   project_view: z.looseObject({ id: z.string(), projectId: id }).nullable(),
 });
-// Next strips the service's JSON on 204; Axios exposes the empty wire body as "".
 export const updateSectionResponseSchema = z.union([sectionResponseSchema, z.literal("")]);
 export const sectionWriteErrorSchema = z.looseObject({ message: z.string() });
-// Creation can pass through a raw service error on 500.
 export const sectionCreateServerErrorSchema = z.looseObject({});
 
 export type CreateSectionBody = z.input<typeof createSectionBodySchema>;

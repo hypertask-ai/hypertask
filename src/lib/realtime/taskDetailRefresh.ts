@@ -24,9 +24,6 @@ type RealtimeTaskStaleness = RealtimeTaskIdentity & {
 export function shouldRefetchTaskDetail({
   event,
 }: TaskDetailRealtimeRefreshInput): boolean {
-  // A comment advances lastCommentAt, while a task change can advance
-  // sectionChangedAt. Both fields feed the staleness row, including when the
-  // event came from another tab owned by the same user.
   return event === COMMENT_EVENT || event === TASK_EVENT;
 }
 
@@ -34,9 +31,6 @@ export function shouldSyncTaskDetailContent(
   event: string,
   preserveEditorContent: boolean
 ): boolean {
-  // Comment events update metadata such as lastCommentAt, but must not replace
-  // an unsaved description or attachment draft in the open editor. Generic
-  // task events may sync content only while the editor has no active draft.
   return event === TASK_EVENT && !preserveEditorContent;
 }
 
@@ -73,9 +67,6 @@ export function mergeRealtimeTaskDetail<T extends RealtimeTaskStaleness>(
 
   if (!isSameTask || includeTaskContent) return fetchedTask;
 
-  // Apply remote task changes while retaining every representation of the
-  // locally edited description. In particular, preserving description_ keeps
-  // its attachment array stable for the editor synchronization effects.
   return {
     ...fetchedTask,
     description: currentTask.description,
@@ -103,7 +94,6 @@ export function preserveTaskAssigneesChangedDuringFetch<
   assigneesAtFetchStart: T["assignees"],
   keepAssignee: boolean,
 ): T {
-  // A read can start after the optimistic toggle but before its write commits.
   return keepAssignee &&
     currentTask &&
     currentTask.id === fetchedTask.id &&
@@ -126,11 +116,6 @@ type TaskDetailQueryClient = {
   invalidateQueries: (opts: { queryKey: unknown[] }) => Promise<unknown>;
 };
 
-/**
- * Side-panel priority / estimate / labels each keep their own react-query key
- * (HTPR-3708). A task:changed refetch used to update only ["task-", id], so the
- * open detail panel kept showing the mount-time snapshot (HTPR-6281 QA).
- */
 export async function seedTaskDetailSatelliteCaches<
   T extends TaskDetailSatelliteFields,
 >(
@@ -155,11 +140,9 @@ export async function seedTaskDetailSatelliteCaches<
   if ("estimate" in task) {
     queryClient.setQueryData(["estimate", taskId], task.estimate ?? null);
   }
-  // getTask does not include taskLabels; force the labels query to refetch.
   await queryClient.invalidateQueries({ queryKey: ["taskLabels", taskId] });
 }
 
-/** Cancel stale react-query fetches before writing a realtime task payload. */
 export async function refreshTaskDetailQueryCache<T extends TaskDetailSatelliteFields>({
   queryClient,
   taskId,

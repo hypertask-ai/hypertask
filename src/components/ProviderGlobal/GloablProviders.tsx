@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 "use client";
 import {
   lazy,
@@ -22,7 +22,6 @@ import { useInboxEFirstPressQueue } from "@/hooks/useInboxEFirstPressQueue";
 import { IProject } from "@/models/model";
 import CachedTaskDetailNavigation from "@/components/PageComponents/TaskDetail/CachedTaskDetailNavigation";
 
-// import { getAllProjectsMinimal, getAllTeamsForLSidebar } from "@/utils/api/Homepage";
 import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
   showBoardManagerAtom,
@@ -201,9 +200,6 @@ import {
 import useAppShellSurfaceShortcuts from "@/hooks/Homepage/useAppShellSurfaceShortcuts";
 import { boardContextFromPath, buildSearchUrl } from "@/lib/searchArchive";
 
-// React.lazy is intentional here. next/dynamic emits route preload hints for
-// rendered boundaries, which fetched these chunks while the chat was closed.
-// The chat runtime should not be requested until an open intent or /chat route.
 type AIChatLayoutModule = typeof import("../AI_CHAT/AI_Chat_Layout");
 type ChatRuntimeModule = {
   default: (typeof import("@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"))["ChatRuntime"];
@@ -268,15 +264,11 @@ import {
   shouldShowMobileBoardControls,
 } from "@/lib/boardStartup/mobileControls";
 import { shouldEnableSecondaryStartup } from "@/lib/boardStartup/secondaryRequests";
-// const CreateTaskGlobally = dynamic(()=>import("@/components/Modals/CreateTaskGloballyModal"),{ssr:false})
 
 const preventEscapeOnCommandModes: CommandMode[] = [
   CommandMode.AICustomInstruction,
 ];
 
-// Routes where an announcement must never pop: sign-up/-in, onboarding and the
-// public/marketing pages. Everywhere else in the app is fair game, so a user who
-// lives in the Inbox still sees the announcement.
 const NO_INTERRUPTION_ROUTES = [
   "/login",
   "/invite",
@@ -289,9 +281,6 @@ const NO_INTERRUPTION_ROUTES = [
   "/full-plan-confirmation",
 ];
 
-// Session chat restoration belongs to signed-in workspaces only. Keep the
-// intent unconsumed on auth/onboarding/system routes so a later navigation to a
-// board can still restore it without loading the chat runtime over those pages.
 const NO_CHAT_RESTORE_ROUTES = [
   ...NO_INTERRUPTION_ROUTES,
   "/interactive-onboarding",
@@ -314,8 +303,7 @@ export default function GlobalProvider({
   children: ReactNode;
   authenticatedUserId: number | null;
 }) {
-  // ------------------------ context & hooks
-  useMobileToastAutoDismiss(); // PERT-92: resume stuck dismiss timers after a tap
+  useMobileToastAutoDismiss();
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
@@ -383,7 +371,6 @@ export default function GlobalProvider({
     _currentProject,
   } = useGlobalProvider(secondaryStartupEnabled);
 
-  // ------------------------ global state / recoil
   const {
     resetShowCommands,
     toggleShowCommands,
@@ -392,7 +379,6 @@ export default function GlobalProvider({
     GlobalProvidersEscapeHandler,
   } = useHypertasksRecoilStates();
 
-  // ------------------------ centralized UI state management
   const {
     toggleAIChatInterface,
     openAIChatInterface,
@@ -408,8 +394,6 @@ export default function GlobalProvider({
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
   const setShowAiChatInterface = useSetRecoilState(showAIChatInterfaceAtom);
-  // Settings is the full-screen /settings page now; the old right sidebar is
-  // retired (nothing opens it — the render below is left dormant).
   const { openSettings } = useSettingsNavigation();
 
   const [showBoardManager] = useRecoilState(showBoardManagerAtom);
@@ -424,8 +408,6 @@ export default function GlobalProvider({
     announcementSlideAtom,
   );
   const [showCommands] = useRecoilState(showCommandsAtom);
-  // The Ctrl+K palette can also open the account switcher (commands.tsx);
-  // yield to it so the modal never double-mounts.
   useEffect(() => {
     if ((showCommands as { show?: boolean })?.show) {
       setShowAccountSwitcher(false);
@@ -461,14 +443,8 @@ export default function GlobalProvider({
     showAiChatInterface;
   useEffect(() => {
     if (!isTaskDetailPage) return;
-    // The provider starts during render; start its sibling layout as soon as the
-    // loading fallback commits instead of waiting for the provider to resolve.
     void Promise.all([loadChatRuntime(), loadAIChatLayout()]).catch(() => {});
   }, [isTaskDetailPage]);
-  // https://app.hypertask.ai/detail/project-15/5424: clear both legacy and
-  // user-scoped tutorial state without ever loading the disabled runtime. This
-  // prevents a returning tab from reviving the overlay after the entry points
-  // and routes have been closed.
   useEffect(() => {
     if (!currentUser?.id) return;
     window.sessionStorage.removeItem(
@@ -478,15 +454,10 @@ export default function GlobalProvider({
     delete document.documentElement.dataset.learnTutorial;
   }, [currentUser?.id]);
 
-  // Mount on the first real chat intent, then latch for the rest of the page
-  // session so closing the panel does not destroy an unsent draft or stream.
   useEffect(() => {
     if (isFullScreenChat || showAiChatInterface) setChatRuntimeMounted(true);
   }, [isFullScreenChat, showAiChatInterface]);
 
-  // Restore the desktop reload state before ChatProvider exists. This used to
-  // live inside the expensive provider and therefore forced it to mount just
-  // to discover that chat was closed.
   useEffect(() => {
     if (
       hasAttemptedChatRestoreRef.current ||
@@ -501,8 +472,6 @@ export default function GlobalProvider({
     if (!aiChatAutoOpenSuppressed && readChatOpenForSession()) {
       setChatRuntimeMounted(true);
       setShowAiChatInterface(true);
-      // Restoring after a reload is auto-open, not a user action: the panel
-      // must mount without stealing the cursor (HTPR-6317).
       setAiChatExplicitOpenAt(null);
     }
   }, [currentUser?.id, aiChatAutoOpenSuppressed, pathname, setShowAiChatInterface, setAiChatExplicitOpenAt]);
@@ -512,8 +481,6 @@ export default function GlobalProvider({
     writeChatOpenForSession(showAiChatInterface);
   }, [showAiChatInterface]);
 
-  // Control+Q must still open the chat before its provider/listeners exist.
-  // Once mounted, ChatProvider owns the established two-way focus behavior.
   useEffect(() => {
     if (shouldMountChatRuntime || isFullScreenChat) return;
     const openChatFromFocusShortcut = (event: KeyboardEvent) => {
@@ -529,18 +496,15 @@ export default function GlobalProvider({
     };
   }, [isFullScreenChat, openAIChatInterface, shouldMountChatRuntime]);
 
-  // ------------------------ app state
   const [announcements, setAnnouncements] = useState<IAnnouncement[]>([]);
   const [showAnnouncementBanner, setShowAnnouncementBanner] = useState<
     IAnnouncement | undefined
   >();
 
-  // ------------------------ refs
   const lastgClick = useRef<number | null>(null);
   const teamCycleSeq = useRef(0);
   const autoInterruptedIds = useRef<Set<number>>(new Set());
 
-  // ------------------------ data fetching
   const { data: allTeamsForCycle } = useGetAllTeamsMinimal(
     currentUser?.id ?? null,
     undefined,
@@ -561,35 +525,20 @@ export default function GlobalProvider({
     },
   );
 
-  // "Latest updates" is hosted here, once, so every entry point (the rail
-  // rocket, the floating gear stack and the Ctrl+K "What's new" command) opens
-  // the same panel on every route. The rail sits at
-  // x=48px, so the panel slides in from the left next to it; everywhere else
-  // (mobile, rail off) it comes from the right.
-  // No refetch on close: the panel marks the cache read when it opens, and a
-  // GET that overtakes the in-flight mark-read POST would restore readAt: null
-  // and re-light the rocket (HTPR-4652).
   const appShellRailOn = useRecoilValue(appShellRailAtom) && !mbl;
   useClickOutside(
     null,
     closeAnnouncements,
     "announcements-component-container",
   );
-  // The host never unmounts, so without this the panel would follow the user
-  // across every route change. Route change = dismiss, as it did when each
-  // surface owned its own copy.
   useEffect(() => {
     closeAnnouncements();
   }, [pathname, closeAnnouncements]);
 
-  // Command-palette modals live in a global atom, so one left open on a task
-  // detail reopens itself on the next route (the share sheet reappearing on the
-  // calendar). Leaving the page dismisses whatever was open.
   useEffect(() => {
     resetShowCommands();
   }, [pathname, resetShowCommands]);
 
-  // HTPR-6476: Agent Chat with an agent open owns the whole phone screen.
   const agentChatMobileFullscreenAtomOn = useRecoilValue(
     agentChatMobileFullscreenAtom,
   );
@@ -608,8 +557,6 @@ export default function GlobalProvider({
     commentComposerOpen,
     agentChatHidesMobileShell,
   });
-  // Pull-to-command follows the shell, not the dock, so it stays live on detail
-  // even though the dock is gone (this also keeps pull-to-refresh disabled).
   const enableMobilePullDownCommand =
     showMobileTabBar &&
     !commentComposerOpen &&
@@ -623,7 +570,6 @@ export default function GlobalProvider({
   const mobilePullCommandVisible =
     enableMobilePullDownCommand && mobileBoardControlsReady;
 
-  // ------------------------ shortcuts / routing helpers
   const { goToProjectShortcut } = useProjectQuery();
   const queryClient = useQueryClient();
   useInboxEFirstPressQueue(queryClient);
@@ -632,11 +578,9 @@ export default function GlobalProvider({
     ...globalConstants.multipleKeys,
   };
 
-  // ------------------------ trial settings
   const { allowShowSettings, showTrialModal, setShowTrialModal } =
     useGlobalPathCheck(currentUser);
 
-  // ------------------------ email verification check
   const { showEmailVerificationModal, setShowEmailVerificationModal } =
     useEmailVerificationModal();
 
@@ -718,9 +662,6 @@ export default function GlobalProvider({
         );
       },
       onShortcut: (action) => {
-        // The legacy bubble-phase handler still tracks the first `g` for
-        // unrelated single-key behavior. Consume that pending state before
-        // capture-phase navigation so a trailing key cannot navigate twice.
         lastgClick.current = null;
         globalGShortcutNavigateRef.current(action);
       },
@@ -739,18 +680,14 @@ export default function GlobalProvider({
   );
 
   const handleKeyPress = async (e: KeyboardEvent) => {
-    // console.log("🚀 ~ handleKeyPress ~ e GLOBAL PROVIDER:", e.keyCode)
     if (showTrialModal || showEmailVerificationModal) return;
     var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
 
-    // Reserve the platform's documented favorite-board modifier.
     if (isFavoriteBoardShortcut(e, isApple)) {
       e.preventDefault();
     }
 
     if (!areGlobalShortcutsEnabled(pathname)) return;
-    // switch between favorite boards. Checked before the input/editor guards below so it
-    // stays global: it has to work from search, AI chat, or any focused input.
     if (favorites && !pathname?.startsWith("/project")) {
       if (isFavoriteBoardShortcut(e, isApple)) {
         e.preventDefault();
@@ -793,7 +730,6 @@ export default function GlobalProvider({
       controller[e.keyCode].pressed = true;
     }
 
-    // [g] press
     if (e.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastgClick.current = now;
@@ -802,7 +738,6 @@ export default function GlobalProvider({
       }, globalConstants.gThenKeyDelay);
     }
 
-    // Check if both [g] and [t] for running timers
     if (e.keyCode === KeyCodes.T) {
       const now = new Date().getTime();
       if (
@@ -813,7 +748,6 @@ export default function GlobalProvider({
         navigate("Timers");
       }
     }
-    // Check if both [g] and [h] for reminders
     if (e.keyCode === KeyCodes.H) {
       const now = new Date().getTime();
       if (
@@ -824,7 +758,6 @@ export default function GlobalProvider({
         navigate("Reminders");
       }
     }
-    // Check if both [g] and [i] for inbox
     if (e.keyCode === KeyCodes.I) {
       const now = new Date().getTime();
       if (
@@ -836,7 +769,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [;] for snippets
     if (
       e.keyCode === KeyCodes.SEMICOLON &&
       !e.shiftKey &&
@@ -854,7 +786,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [s] for starred page
     if (e.keyCode === KeyCodes.S) {
       const now = new Date().getTime();
       if (
@@ -865,7 +796,6 @@ export default function GlobalProvider({
         navigate("Starred");
       }
     }
-    // Check if both [g] and [p] for pinned page
     if (e.keyCode === KeyCodes.P) {
       const now = new Date().getTime();
       if (
@@ -877,7 +807,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [e] for task Archive
     if (e.keyCode === KeyCodes.E) {
       const now = new Date().getTime();
       if (
@@ -889,7 +818,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [r] for inbox archives
     if (e.keyCode === KeyCodes.R) {
       const now = new Date().getTime();
       if (
@@ -901,7 +829,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [shift] and [3] for trash ('3' is 51)
     if (e.shiftKey && e.keyCode === KeyCodes.THREE) {
       const now = new Date().getTime();
       if (
@@ -913,7 +840,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [a] to go to Inbox All
     if (e.keyCode === KeyCodes.A) {
       const now = new Date().getTime();
       if (
@@ -925,7 +851,6 @@ export default function GlobalProvider({
       }
     }
 
-    // Check if both [g] and [m] to go to My Tasks
     if (
       e.keyCode === KeyCodes.M &&
       !cmdControl &&
@@ -966,11 +891,6 @@ export default function GlobalProvider({
       }
     }
 
-    // [g] then [b] for the board. Time tracking took [g][t], which used to be
-    // the board chord, so the board needs its own again (HTPR-4714).
-    // A focused <select> swallows letters as native typeahead, and the guard
-    // above only covers input/textarea, so the report page's dropdowns would
-    // navigate away mid-selection.
     if (
       e.keyCode === KeyCodes.B &&
       !cmdControl &&
@@ -995,12 +915,6 @@ export default function GlobalProvider({
             .split("|&|")[0]
             ?.replace("project-", ""),
         );
-        // Only boards still in the user's list: a deleted board or revoked
-        // membership would otherwise land on Unauthorized.
-        // The global list can still belong to the previous account while the
-        // startup gate is closed after an account switch. Keep the
-        // intent-driven authorization list account-scoped so this shortcut can
-        // never navigate with another account's cached boards.
         const availableBoards = currentUser?.id
           ? await queryClient
               .fetchQuery<IProject[]>({
@@ -1026,7 +940,6 @@ export default function GlobalProvider({
       }
     }
 
-    // [b]
     if (
       e.keyCode === KeyCodes.B &&
       (pathname?.startsWith("/search") ||
@@ -1039,8 +952,6 @@ export default function GlobalProvider({
         pathname?.startsWith("/drafts") ||
         pathname?.startsWith("/inbox") ||
         pathname?.startsWith("/calendar") ||
-        // Every route that shows the app-shell rail advertises Ctrl+B on the
-        // board-switcher tooltip, so the shortcut must fire there too (HTPR-4835).
         pathname?.startsWith("/all-tasks") ||
         pathname?.startsWith("/time") ||
         pathname?.startsWith("/report") ||
@@ -1054,11 +965,6 @@ export default function GlobalProvider({
       }
     }
 
-    // [Alt+Shift+ArrowDown/Up] cycle teams (HTPR-6036). In Agent Chat it
-    // changes the roster's team filter; everywhere else with the app-shell
-    // rail (the same routes Ctrl+B applies to) it jumps to the first board
-    // of the next/previous team, in the exact order the Ctrl+B board
-    // switcher's "Teams" list uses.
     if (
       e.altKey &&
       e.shiftKey &&
@@ -1121,7 +1027,6 @@ export default function GlobalProvider({
       }
     }
 
-    // =============== [c] for creating task any page except kanban or login page, run this.
     if (isGlobalCreateTaskShortcut(e, pathname)) {
       const now = new Date().getTime();
       if (
@@ -1137,22 +1042,14 @@ export default function GlobalProvider({
         e.preventDefault();
         toggleCreateTaskGlobally();
       }
-      // // cmd/ctrl [j] for creating task
-      // else if (e.keyCode === KeyCodes.J && document?.activeElement?.tagName !== "INPUT" && cmdControl && !(e.shiftKey)) {
-      //   e.preventDefault();
-      //   toggleCreateTaskGlobally(undefined,{defaultEditMode:"Description-ai", defaultFocus:"Description"})
-      // }
     }
 
-    // handle backslash "\" — opens the full-screen Settings page
     if (e.keyCode === KeyCodes.BACKSLASH && !cmdControl && !e.shiftKey) {
       e.preventDefault();
       if (!currentUser) return;
       openSettings();
     }
 
-    // [ctrl][shift][?]
-    // We need to edit this to update right
     if (
       (e.keyCode === KeyCodes.FORWARD_SLASH ||
         ((e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.O) &&
@@ -1165,12 +1062,10 @@ export default function GlobalProvider({
       e.preventDefault();
       toggleAIChatInterface();
     }
-    // [shift][?]
     if (e.keyCode === KeyCodes.FORWARD_SLASH && e.shiftKey && !cmdControl) {
       e.preventDefault();
       toggleKeyboardShortcuts();
     }
-    // "/" for search (ignore if already on search)
     if (
       e.keyCode === KeyCodes.FORWARD_SLASH &&
       !cmdControl &&
@@ -1195,9 +1090,6 @@ export default function GlobalProvider({
     }
   };
 
-  // const trialModalCallback = () => {
-  //   setShowTrialModal(false);
-  // };
 
   const markAllAsRead = async () => {
     if (announcements?.length > 0 && currentUser) {
@@ -1208,8 +1100,6 @@ export default function GlobalProvider({
     }
   };
 
-  // Closing ONE announcement must not clear the unread state of the others: the
-  // slides modal can now open on its own, not only from the (mark-all) sidebar.
   const markAnnouncementRead = (announcementId: number) => {
     if (!currentUser) return;
     const readAt = new Date().toISOString();
@@ -1245,11 +1135,6 @@ export default function GlobalProvider({
     if (showAccouncementSlide || showAnnouncementBanner || showTrialModal)
       return;
 
-    // Pick the newest unread one that actually interrupts. Selecting the newest
-    // unread of ANY level would let a later note bury an unseen banner forever.
-    // Only an EXPLICITLY published level may interrupt: everything already in the
-    // database predates the ladder and stays sidebar-only, preserving the
-    // deliberate "no auto-popup" behaviour it shipped with.
     const next = announcementList.find((announcement) => {
       if (announcement.readAt) return false;
       const level = getExplicitLevel(announcement.announcement.body);
@@ -1259,8 +1144,6 @@ export default function GlobalProvider({
         (announcement.announcement.body.slides?.length ?? 0) > 0
       );
     });
-    // A set, not a high-water mark: an older unread banner must still get its turn
-    // after a newer one is dismissed.
     if (!next || autoInterruptedIds.current.has(next.announcementId)) return;
     autoInterruptedIds.current.add(next.announcementId);
 
@@ -1271,11 +1154,8 @@ export default function GlobalProvider({
     }
   };
 
-  // ------- on announcements update
   useEffect(() => {
     triggerAnnouncementInterruption(announcementsTQ);
-    // showAccouncementSlide/showAnnouncementBanner are deps so that an interruption
-    // arriving while another one is open is retried once that one closes.
   }, [
     announcementsTQ,
     pathname,
@@ -1288,7 +1168,6 @@ export default function GlobalProvider({
     if (showAccouncementSlide) setShowAnnouncementBanner(undefined);
   }, [showAccouncementSlide]);
 
-  // Close AI Chat when on login page (e.g. persisted state, session expired)
   useEffect(() => {
     if (pathname?.startsWith("/login") && showAiChatInterface) {
       closeAIChatInterface();
@@ -1296,11 +1175,9 @@ export default function GlobalProvider({
   }, [pathname, showAiChatInterface, closeAIChatInterface]);
 
   useEffect(() => {
-    // Add event listeners when the component mounts
     document.addEventListener("keydown", handleKeyPress);
     document.addEventListener("keyup", handleKeyUp);
 
-    // Remove event listeners when the component unmounts
     return () => {
       document.removeEventListener("keydown", handleKeyPress);
       document.removeEventListener("keyup", handleKeyUp);
@@ -1321,7 +1198,6 @@ export default function GlobalProvider({
     showTrialModal,
   ]);
 
-  // ================= set current project's index when url changes
 
   return (
     <div className="scrollbar-none text-white-black">
@@ -1399,10 +1275,6 @@ export default function GlobalProvider({
           <BottomSettingsQuickTips announcements={announcements} />
         </div>
       )}
-      {/* Guest CTAs on every non-board surface. The board, inbox and calendar
-          mount their own copy inside their header rows; everywhere else has
-          no header row to join, so this floats top-right instead of adding a
-          bar. */}
       {appShellRailOn &&
         !pathname?.startsWith("/project") &&
         !pathname?.startsWith("/inbox") &&
@@ -1485,8 +1357,6 @@ export default function GlobalProvider({
                 ) : undefined
               }
             >
-              {/* The navigation component gates itself; inserting its wrapper
-                  when flags resolve would remount the already-rendered board. */}
               <CachedTaskDetailNavigation accountId={authenticatedUserId}>
                 {children}
               </CachedTaskDetailNavigation>

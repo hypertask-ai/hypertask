@@ -38,7 +38,6 @@ export type MyTasksViewConfig = {
   boardIds: number[] | null;
   filters: {
     priorityIds: number[];
-    // Label.id is a UUID in this schema; numeric ids remain accepted for old/test data.
     labelIds: Array<string | number>;
     sizeIds: number[];
     sectionIds: number[];
@@ -47,31 +46,16 @@ export type MyTasksViewConfig = {
     createdRange: MyTasksDateRange | null;
     updatedRange: MyTasksDateRange | null;
     showDone: boolean;
-    /** HTPR-6461: when true, include tasks snoozed past now. Default false. */
     showSnoozed?: boolean;
   };
-  /** Kanban-parity filters (HTPR-6447). Absent on older saved views. */
   filterSettings?: SerializableFilterSettings | null;
   sort: {
     field: MyTasksSortField;
     direction: "asc" | "desc";
   };
-  /** Optional so older saved views keep working. Flag-off UI ignores this and stays on board. */
   groupBy?: MyTasksGroupBy;
-  /**
-   * Visible My Tasks table columns, in display order. Optional so older views
-   * keep working; parse always recognizes the field even when the UI flag is off.
-   */
   tableVisibleColumns?: string[];
-  /**
-   * Relationship scopes for the My Tasks query (HTPR-6457). Always parsed so
-   * flag-off saves do not wipe a stored choice.
-   */
   scopes?: MyTasksScope[];
-  /**
-   * Board used by My Tasks quick-add (HTPR-6460). Optional so older views keep
-   * working; null means unset and the UI asks once.
-   */
   defaultBoardId?: number | null;
 };
 
@@ -197,11 +181,6 @@ const groupByValue = (value: unknown): MyTasksGroupBy | undefined =>
     ? (value as MyTasksGroupBy)
     : undefined;
 
-/**
- * Flag-off always returns board. Flag-on uses the saved value, or time when
- * the field is missing so My Tasks defaults to a personal to-do layout.
- * This does not depend on the saved-views flag: 6455 is enough.
- */
 export function effectiveMyTasksGroupBy(
   config: Pick<MyTasksViewConfig, "groupBy">,
   flagEnabled: boolean,
@@ -210,10 +189,6 @@ export function effectiveMyTasksGroupBy(
   return config.groupBy ?? "time";
 }
 
-/**
- * Server `isFeatureEnabled` covers the first paint. Client `useFlag` is false
- * until /api/flags loads, which is why QA still photographed board groups.
- */
 export function myTasksTimeGroupOn(
   serverEnabled: boolean,
   clientEnabled: boolean,
@@ -232,7 +207,6 @@ const KNOWN_CONFIG_KEYS = new Set([
   "defaultBoardId",
 ]);
 
-/** Positive board id, or null when unset / invalid. */
 export function parseMyTasksDefaultBoardId(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= 0) {
@@ -266,7 +240,6 @@ const parseFilterSettings = (
 };
 
 
-/** Visible columns for My Tasks. Missing field uses today's default snapshot. */
 export function effectiveMyTasksTableVisibleColumns(
   config: Pick<MyTasksViewConfig, "tableVisibleColumns">,
 ): string[] {
@@ -281,7 +254,6 @@ const tableVisibleColumnsValue = (value: unknown): string[] | undefined => {
   return normalizeMyTasksTableVisibleColumns(value);
 };
 
-/** Returns a complete, safe config for persisted JSON or untrusted API input. */
 export function parseMyTasksViewConfig(json: unknown): MyTasksViewConfig {
   const value = isRecord(json) ? json : {};
   const filters = isRecord(value.filters) ? value.filters : {};

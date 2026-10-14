@@ -34,8 +34,6 @@ export async function GET(request: NextRequest) {
       })
     : [];
   const canViewOthers = reportsEnabled && adminProjectIds.length > 0;
-  // A stale "user" URL parameter must not turn the report empty for a plain
-  // member (no UI to clear it), so the filter only applies with the scope.
   const entries = await listReport(auth.userId, {
     ...parsed.filters,
     ...(canViewOthers ? {} : { filterUserIds: undefined }),

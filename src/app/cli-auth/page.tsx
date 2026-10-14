@@ -144,15 +144,8 @@ function CliAuthContent() {
           shell.location.href = callbackUrl;
           delivered = true;
         } catch {
-          /* cross-origin or blocked */
         }
       }
-      // if (!delivered) {
-      //   const w = window.open(callbackUrl, CLI_CALLBACK_WINDOW_NAME);
-      //   if (!w) {
-      //     // Pop-up blocked or unavailable — user copies from the page below; no full-page nav.
-      //   }
-      // }
     } catch (err) {
       const orphan = callbackShellRef.current;
       callbackShellRef.current = null;
@@ -160,7 +153,6 @@ function CliAuthContent() {
         try {
           orphan.close();
         } catch {
-          /* ignore */
         }
       }
       console.error('Failed to generate CLI auth code', err);
@@ -172,10 +164,6 @@ function CliAuthContent() {
 
   const handleAllow = () => {
     if (!currentUser) return;
-    // callbackShellRef.current = window.open(
-    //   'about:blank',
-    //   CLI_CALLBACK_WINDOW_NAME
-    // );
     void runAuthorize();
   };
 

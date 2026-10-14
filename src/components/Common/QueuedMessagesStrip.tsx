@@ -1,8 +1,5 @@
 import { X } from "lucide-react";
 
-// Shared with AI Chat's composer (AI_Tiptap_Container.tsx), which had its own
-// copy of this markup before Agent Chat needed the same "follow-ups queued
-// while a reply is in flight" strip (HTPR-6038).
 export function QueuedMessagesStrip({
   items,
   onRemove,

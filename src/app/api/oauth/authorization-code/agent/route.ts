@@ -17,7 +17,6 @@ async function getCurrentUserFromCookies() {
   }
 }
 
-// For binding or clearing the agent_id on a pending OAuth authorization code (right before token exchange)
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await loadCurrentUser(request.headers, true).catch(() => null);
@@ -26,7 +25,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const user = restCompat && currentUser
@@ -41,7 +39,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {

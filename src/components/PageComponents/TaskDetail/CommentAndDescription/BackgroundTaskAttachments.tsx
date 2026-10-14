@@ -19,15 +19,12 @@ import {
 function PendingImage({ file }: { file: File }) {
   const imageRef = useRef<HTMLImageElement>(null);
   useEffect(() => {
-    // HTPR-6264: a HEIC uploads as itself, so the tile paints the JPEG copy
-    // made when the file was picked rather than a photo the browser cannot
-    // decode.
     const url = URL.createObjectURL(settledPreviewFor(file) ?? file);
     if (imageRef.current) imageRef.current.src = url;
     return () => URL.revokeObjectURL(url);
   }, [file]);
   return (
-    // eslint-disable-next-line @next/next/no-img-element
+
     <img
       ref={imageRef}
       alt=""
@@ -37,11 +34,8 @@ function PendingImage({ file }: { file: File }) {
 }
 
 function PendingAttachment({ upload }: { upload: CreateTaskUploadSnapshot }) {
-  // HTPR-6254: a HEIC from a Mac is an "image/" the browser cannot decode, so
-  // its object URL paints a broken icon. Show the paperclip tile instead.
   const isImage =
     isBrowserRenderableImage(upload.file.type, upload.file.name) ||
-    // A HEIC with a decoded copy is a picture again (HTPR-6264).
     settledPreviewFor(upload.file) !== null;
   const failed = upload.status === "upload-failed" || upload.status === "link-failed";
 

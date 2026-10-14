@@ -76,10 +76,6 @@ function sanitizeFilterEntry(entry: unknown): unknown {
   return changed ? sanitized : entry;
 }
 
-/**
- * Reduces persisted board filters to the fields used by filter matching and UI rendering.
- * Clean inputs retain their original reference.
- */
 export function sanitizeBoardFilters<T>(boardFilters: T): T {
   if (!isRecord(boardFilters)) return boardFilters;
 
@@ -122,8 +118,6 @@ export function sanitizeViewBoardFilters<T>(view: T): T {
     : { ...view, board_filters: boardFilters }) as T;
 }
 
-// Project stored pointers before deriving settings. The FK alone does not
-// guarantee that a view is still visible or even belongs to this container.
 export function projectVisibleViewRelations<T>(projectView: T, userId: number | undefined, publicOnly = false): T {
   if (!isRecord(projectView)) return projectView;
   const visible = (view: unknown, draft = false) => isRecord(view) &&

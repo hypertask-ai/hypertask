@@ -8,8 +8,6 @@ export function isExpectedClientAbortedRscPayload(
   error: unknown,
   context: RequestErrorContext | null | undefined,
 ) {
-  // These are the exact fields emitted by the reproducible Next 16.3 bug.
-  // Broader matching could hide an application error with the same message.
   if (!context) return false;
 
   return (

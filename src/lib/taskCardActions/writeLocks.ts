@@ -2,8 +2,6 @@ import type { Prisma } from '@prisma/client'
 import prisma from '@/lib/prisma'
 
 const TASK_STAR_LOCK_CLASS = 1_446_420_611
-// Reminder delivery and every TaskMovedToInbox writer must serialize on the
-// same task identity or a concurrent restore can undo an explicit archive.
 export const TASK_INBOX_REMINDER_LOCK_CLASS = 1_446_420_610
 
 async function withTaskWriteLock<T>(

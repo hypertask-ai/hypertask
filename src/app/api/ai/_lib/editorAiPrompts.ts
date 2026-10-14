@@ -7,12 +7,6 @@ export const NVC_STYLE_RULE = renderPrompt("nvc-style-rule");
 
 export const HOUSE_OUTPUT_STYLE = renderPrompt("house-output-style", (NVC_STYLE_RULE));
 
-// HTPR-5606: the authoring style for the AI Task Writer and Write with AI.
-// Same two skill files as the Improve button, verbatim, plus the two rules
-// that only matter when the model AUTHORS rather than rewrites: it must not
-// write content the brief never gave it, and it must not drop content the
-// brief did give it. A demo run on INNE-1576 invented 95 words of German and
-// English subheadlines the source never contained; that is what these stop.
 export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL));
 
 export function createPromptForTiptapForwardSlash(
@@ -127,10 +121,6 @@ export function createTaskWriterPromptParts(args: {
   const instructions = createKanbanSystemPrompt(promptMode);
 
   const reminderParts: string[] = [];
-  // Board custom instructions apply in every AI entry point, WriteWithAI
-  // included. A board sets policy there ("never claim disease prevention in ad
-  // copy"), and policy that holds in one entry point but not another is a
-  // compliance footgun, not a feature (HTPR-4356).
   const customInstructions = args.customInstructions
     ? `<CUSTOM_INSTRUCTION>${args.customInstructions}</CUSTOM_INSTRUCTION>`
     : "";
@@ -158,9 +148,6 @@ export function createTaskWriterPromptParts(args: {
       reminderParts.join("\n") +
       "\n</system-reminder>\n\n"
     : "";
-  // Retrieved ticket text is user-authored data. Keep it in the user message,
-  // below the actual system instructions, so a comment cannot become policy by
-  // imitating one of the prompt's XML-like delimiters.
   const retrievedContext = args.retrievedContext
     ? wrapTaskWriterContext(args.retrievedContext) + "\n\n"
     : "";

@@ -65,7 +65,6 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   const activeSummary = historySessions.find((session) => session.id === activeSession);
 
   const bumpSummary = (sessionId: string, patch: Partial<ChatSessionSummary>) => {
-    // Cancel snapshots before optimistic writes; infinite-query refetch owns all loaded pages.
     void queryClient.cancelQueries({ queryKey: summaryKey });
     const transcript = queryClient.getQueryData<Transcript>(transcriptKey(sessionId));
     queryClient.setQueryData<History>(summaryKey, (old) => {
@@ -110,7 +109,6 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       if (!incoming || incoming.userId !== user.id) return null;
       const local = queryClient.getQueryData<Transcript>(key);
       const pendingIds = new Set(local?.pendingMessageIds);
-      // Keep writes/acks made after this server snapshot started, even if now acknowledged.
       for (const message of local?.messages ?? []) {
         if (message !== before?.messages.find((row) => row.id === message.id) ||
             (before?.pendingMessageIds?.includes(message.id) && !incoming.messages.some((row) => row.id === message.id))) pendingIds.add(message.id);
@@ -136,8 +134,6 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
 
   useEffect(() => {
     if (!ready || !activeSession) return;
-    // Wait for an older in-flight snapshot before checking the new server version.
-    // Optimistic recency writes keep dataUpdatedAt unchanged, so only server refreshes trigger this.
     void (async () => {
       try {
         if (transcriptQuery.isFetching) await queryClient.fetchQuery(transcriptOptions(activeSession));
@@ -147,7 +143,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
           const session = await queryClient.fetchQuery({ ...transcriptOptions(activeSession), staleTime: 0 });
           if (session === null) await evictSession(activeSession);
         }
-      } catch { /* React Query exposes failures and retries on the next refresh. */ }
+      } catch {  }
     })();
   }, [ready, activeSession, summaryQuery.dataUpdatedAt]);
 
@@ -222,11 +218,10 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     setCreating(false);
     setInitializationError(false);
     setActiveSession(sessionId);
-    // Explicit reopen revalidates even a fresh cache (another tab may have written).
     try {
       const session = await queryClient.fetchQuery({ ...transcriptOptions(sessionId), staleTime: 0 });
       if (session === null) await evictSession(sessionId);
-    } catch { /* Transient errors keep an already loaded transcript usable. */ }
+    } catch {  }
   }, [identity, ready, queryClient]);
 
   useEffect(() => {
@@ -279,7 +274,6 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       const pending = new Set(old.pendingMessageIds);
       let index = old.messages.findIndex((row) => row.id === message.id);
       if (index < 0 && updateLastMessage) {
-        // A refresh can append a remote turn after the streaming placeholder.
         for (let i = old.messages.length - 1; i >= 0; i--) {
           if (old.messages[i].role === "assistant" && pending.has(old.messages[i].id)) { index = i; break; }
         }
@@ -342,10 +336,9 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
     return session?.id === activeRef.current && session.userId === user.id ? session : undefined;
   }, [identity, ready, queryClient]);
 
-  // Stable so the history dropdown's open effect runs once per open, not on every render.
   const refreshHistorySessions = useCallback(async () => {
     if (ready) await queryClient.refetchQueries({ queryKey: summaryKey, type: "active", stale: true });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [ready, queryClient, user?.uid, user?.id]);
 
   const isSessionPending = ready && !currentSession && !initializationError && (summaryQuery.isLoading || transcriptQuery.isFetching || creating || (!activeSession && summaryQuery.isSuccess));

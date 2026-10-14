@@ -32,10 +32,8 @@ import { TModelProvider } from "@/lib/constants/constants.js";
 import type { TByokProviderKey } from "@/lib/aiProviders";
 import type { StorePlanKind } from "@/lib/planFromStripePriceId";
 
-/** Matches Prisma enum `ChatRole`. */
 export type IChatRole = "human" | "assistant";
 
-/** Mirrors Prisma `ChatSession`. */
 export interface IChatSession {
   id: string;
   createdAt: Date;
@@ -48,7 +46,6 @@ export interface IChatSession {
   messages: IChatMessage[];
 }
 
-/** Mirrors Prisma `ChatMessage`. */
 export interface IChatMessage {
   id: string;
   createdAt: Date;
@@ -58,9 +55,7 @@ export interface IChatMessage {
   session?: IChatSession;
   isDelivered: boolean;
   attachments?: IAttachment[];
-  /** SSE `event: status` steps shown as stacked tool-call rows above the reply */
   statusSteps?: string[];
-  /** Set when the reply came from a fleet agent routed by an @mention (HTPR-6284). */
   authorAgent?: { displayName: string } | null;
 }
 
@@ -214,7 +209,6 @@ export interface IUrl {
   TaskId: number;
   Attachment?: boolean;
   attachmentType?: string;
-  /** Real byte size of the uploaded file. Undefined when the caller never measured it. */
   fileSize?: number;
   projectId?: number;
   ticketNumber?: string;
@@ -225,7 +219,6 @@ export interface ICreateTaskUrl {
   urlString: string;
   Attachment?: boolean;
   attachmentType?: string;
-  /** Real byte size of the uploaded file. Undefined when the caller never measured it. */
   fileSize?: number;
 }
 export interface TaskSections {
@@ -234,7 +227,6 @@ export interface TaskSections {
   next?: TaskSections | null;
 }
 
-/** Public slice of `TeamByokApiKey` (no ciphertext). Included on team payloads when loaded. */
 export interface ITeamByokApiKey {
   provider: TByokProviderKey;
   enabled: boolean;
@@ -261,9 +253,7 @@ export interface ITeam {
   team_activity: {
     hasCompletedTrial: boolean;
   };
-  /** Present when team is loaded with BYOK metadata (e.g. projects getAll). */
   byokApiKeys?: ITeamByokApiKey[];
-  /** HTPR-2572: signups on these domains auto-join the team. */
   allowedEmailDomains?: string[];
 }
 
@@ -315,7 +305,6 @@ export interface IProject {
   _count?: {
     section: number;
     tasks: number;
-    // Sidebar agent indicator: count of agent members (agentId != null).
     members?: number;
   };
   project_view?: IProjectView;
@@ -424,7 +413,6 @@ export interface IAssignees {
   agent?: IAgent;
   agentAssignerId?: string;
   agentAssigner?: IAgent;
-  /** Never serialized to clients; use ITask.currentUserSnoozeUntil. */
   snoozeUntil?: string | null;
 }
 
@@ -441,7 +429,6 @@ export interface IAgent {
   createdAt: string;
   revokedAt: string | null;
   userId: number;
-  /** Invite modal: on board vs available to add */
   type?: "boardAgent" | "addableAgent";
   boards?: { id: number; name: string }[];
   lastPostedAt?: string | null;
@@ -449,9 +436,6 @@ export interface IAgent {
   permissions?: Record<string, unknown> | null;
   postsToImportant?: boolean;
   assigned?: boolean;
-  // Client-only: the plaintext key a mint or rotate response just returned,
-  // held in page state so it can be copied. No route ever sends it back, and
-  // nothing stores it, so this is the one moment it can be read.
   mcpToken?: string | null;
   hasMcpToken?: boolean;
   mcpTokenExpiresAt?: string | null;
@@ -472,7 +456,6 @@ export interface IComment {
   creator?: IUser;
   agentId?: string;
   agent?: IAgent;
-  /** Snapshot shown when the managed agent that authored the comment was deleted. */
   agentDisplayName?: string | null;
   seen?: number[];
   project?: IProject;
@@ -517,9 +500,7 @@ export interface ITaskPullRequest {
 
 export interface ITask {
   assignees?: IAssignees[];
-  /** HTPR-6461: caller's person assignment id for My Tasks snooze. */
   currentUserAssignmentId?: number | null;
-  /** HTPR-6461: caller's snooze-until ISO; never other users' values. */
   currentUserSnoozeUntil?: string | null;
   notifications?: INotification[];
   title: string;
@@ -683,21 +664,13 @@ export interface INotification {
   type: NotificationType;
   computedSplit?: string;
   activeNotificationTypes?: NotificationType[];
-  /** Event types on this task that only an agent produced (no human authored them). */
   agentOnlyTypes?: NotificationType[];
-  /** Event types on this task authored only by agents muted from Important. */
   mutedTypes?: string[];
-  /** Set when a snooze returned this row; a returned snooze is always addressed to you. */
   returnedFromReminders?: boolean | null;
-  /** HTPR-7092: the task has an unanswered Question comment that @mentions this user. */
   isDecision?: boolean;
-  /** Direct response to this user after they explicitly invoked an agent. */
   directReply?: boolean;
-  /** Active event types backed by a direct response on this task. */
   directReplyTypes?: NotificationType[];
-  /** HTPR-7096: server-set; keeps an agent mention out of Important (not a Question, or already answered). */
   quietImportant?: boolean;
-  /** When the display-swapped earning event (mention/comment) happened. */
   earnedAt?: string;
   comment?: IComment;
   commentId?: number;
@@ -723,7 +696,6 @@ export interface INotification {
   fromAgent?: IAgent;
   recentActors?: { displayName: string; photoURL: string | null }[];
   staleNudgeDays?: number;
-  /** AgentMessage only: the agent's free-text body, no related entity to derive it from. */
   message?: string | null;
 }
 
@@ -789,9 +761,7 @@ export interface CreateCheckoutParams {
 export interface IHasSubscriptionCheck {
   monthly: boolean;
   yearly: boolean;
-  /** Tier from the active Stripe subscription line item. */
   activeStorePlan: StorePlanKind;
-  /** Billing interval for that line item. */
   activeBillingInterval: "month" | "year" | null;
 }
 
@@ -830,14 +800,12 @@ export interface IGoogleAccount {
   id: string;
   userId: number;
   stripe_customer_id: string;
-  // user User      @relation(fields: [userId], references: [id])
   subscriptionPlans: any[];
   teams: ITeam[];
   members: any[];
   projects: IProject[];
 }
 
-// tasks playlist model
 export interface ITasksPlaylist {
   id?: number;
   uniqueIndex: number;
@@ -876,9 +844,9 @@ export interface IAttachment {
   fileSize?: string | null;
   commentId?: number;
   descriptionId?: string;
-  comment?: IComment; // Assuming you have a Comment model
+  comment?: IComment;
   taskId?: number;
-  task?: ITask; // Assuming you have a Task model
+  task?: ITask;
   chatMessageId?: string;
   chatMessage?: IChatMessage;
   AI_Custom_Instructions_id?: number;
@@ -948,19 +916,14 @@ export interface IDraft {
 }
 
 export interface IProjectsAll {
-  /** Account that owns this global query payload. Reject it after account changes. */
   accountId?: number;
-  /** Distinguishes an authenticated server bootstrap from local task hydration. */
   dataOrigin?: "network" | "indexeddb";
   projectsCompleteness?: "active-board-only" | "all-authorized";
   serverDocumentGeneration?: string;
-  /** Exact scoped request that produced this network payload. */
   networkRequestScopeKey?: string;
   networkRequestGeneration?: number;
   networkRequestId?: string;
-  /** Whether the requested active board received its task payload. */
   activeBoardPayloadLoaded?: boolean;
-  /** Whether fresh authorization published a usable local active board. */
   authorizedLocalBoardPublished?: boolean;
   updatedProjects: IProject[];
   notificationsCount: {
@@ -1007,7 +970,7 @@ export interface ITaskSummary {
   updatedAt?: Date;
   content: string;
   taskId: number;
-  task: ITask; // Assuming you have an interface for the Task model
+  task: ITask;
 }
 
 export type TDeviceTypes = "Windows" | "MacOS";
@@ -1153,7 +1116,6 @@ export interface IAllCommands {
     isArchived: boolean;
     hasNotifications: boolean;
     isKanban: boolean;
-    /** HTPR-6461: My Tasks surface; shows Remind me so the date also hides the row. */
     isMyTasks?: boolean;
     hasSubtasks: boolean;
     hasParent: boolean;

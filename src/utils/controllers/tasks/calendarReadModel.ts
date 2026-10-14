@@ -61,10 +61,6 @@ export const getCalendarReadModel = async ({
   projects: CalendarProjectV1[];
   authorizationRevision: string;
 }> => {
-  // Projects and tasks are independent reads (the task query already scopes
-  // access via its own `project: { is: ... } }` filter below, so it doesn't
-  // need the projects query's ids first) — run them concurrently rather than
-  // paying two round trips back to back.
   const [projects, tasks] = await Promise.all([
     prisma.project.findMany({
       where: calendarAccessibleProjectWhere(userId),
@@ -206,9 +202,6 @@ export const getCalendarReadModel = async ({
     projects.map((project) => project.id),
   );
 
-  // The two reads run without a shared snapshot, so an access change between
-  // them could yield tasks for a project absent from `projects`. The projects
-  // read is authoritative: drop any task outside its id set.
   const authorizedProjectIds = new Set(projects.map((project) => project.id));
   const authorizedTasks = tasks
     .filter(

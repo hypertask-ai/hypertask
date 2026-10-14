@@ -1,4 +1,3 @@
-  // ==================== SETTINGS SCREEN
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -54,11 +53,9 @@ import Stripe from "stripe";
         }
     }
 
-    // ===================== toggle confirmation modal
     const toggleConfirmationModal = ()=>{
       setConfirmCancelSubscription((prev)=>!prev)
     }
-    // ===================== confirm cancel 
     const confirmCancel = async()=>{
       setConfirmingCancel(true)
       try {
@@ -76,7 +73,6 @@ import Stripe from "stripe";
         console.log("🚀 ~ file: Pricing.tsx:305 ~ confirmCancel ~ error:", error)
         
       }
-      // 
       setConfirmingCancel(false)
 
     }
@@ -85,20 +81,17 @@ import Stripe from "stripe";
       <>
         <div className="min-w-[683px] pl-4 mt-[2.5rem]">
 
-          {/* =============== TEAM NAME ===============  */}
           <div className="flex flex-col  pb-8">
             <h2 className="text-heading font-semibold">Team Name</h2>
             
-            {/* =============== change team name =========== */}
             <div className="flex gap-[6rem] py-2 text-content font-medium">
                 <span>Name</span> 
                 <span>{team.title}</span>
-                <span onClick={toggleTeamNameChange} className="text-[#8c9aea] cursor-pointer font-bold">Change Team Name</span> {/* Add the change button here and a modal to get the info and confirm the changes.  */}
+                <span onClick={toggleTeamNameChange} className="text-[#8c9aea] cursor-pointer font-bold">Change Team Name</span> {}
             </div>
           </div>
 
 
-          {/* ================== PAYMENT & BILLING  ================== */}
           <div className="flex flex-col">
             <h2 className="text-heading mb-[22px] font-semibold"> Payment & Billing</h2>
             
@@ -110,25 +103,21 @@ import Stripe from "stripe";
                     <span className="capitalize">{invoices.length>0?invoices[0].cardDetails?.type:"Free Plan"}</span>
                   </div>
 
-                  {/* ============= billing interval */}
                   <div className={`flex gap-5 py-2 text-content font-medium`}>
                     <span className="w-[120px]">Billing Cycle</span>
                     <span className="capitalize">{team.subscriptionPlan?team.subscriptionPlan[0].interval:"Free Plan"}</span>
                   </div>
 
-                  {/* ============= Renewal at */}
                   <div className={`flex gap-5 py-2 text-content font-medium`}>
                     <span className="w-[120px]">Renewal</span>
                     <span>{upcomingInvoices?convertTimestampToFormattedDate(upcomingInvoices.created):"Free Plan"}</span>
                   </div>
 
-                  {/* ============= Billing Contact */}
                   <div className={`flex gap-5 py-2 text-content font-medium`}>
                     <span className="w-[120px]">Billing Contact</span>
                     <span>{customer.email?customer.email:"Not added yet"}</span>
                   </div>
 
-                  {/* ============= Cancel Plan */}
                   <div className={`flex gap-5 py-2 `}>
                     <span className="w-[120px]">Cancel plan</span>
                     <span className="w-[180px]"></span>
@@ -148,7 +137,6 @@ import Stripe from "stripe";
         </div>
 
         <>
-        {/* ================================ change team modal ================== */}
           {
           changeTeamNameModalShow && 
             <Modal  fade={false} isOpen={changeTeamNameModalShow} toggle={toggleTeamNameChange} 
@@ -211,7 +199,6 @@ import Stripe from "stripe";
                   </>
 
                   :
-                  // ================== add loader here
                   <>
                     <ModalBody className="bg-[#333B47] items-center gap-3 flex flex-col">
                       <p className="font-bold">
@@ -225,7 +212,6 @@ import Stripe from "stripe";
           </Modal>
           }
       </>
-      // ============ main container
     )
   }
 

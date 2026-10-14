@@ -44,7 +44,6 @@ export const useTutorialKeyboard = (context: TutorialContext) => {
     updateScene,
   } = context;
 
-  //------------------------------------------------KEY HANDLERS
   const keyUpSceneHandlers: TSceneHandler = useMemo(
     () => ({
       scene3: (e: KeyboardEvent) => {
@@ -224,7 +223,6 @@ export const useTutorialKeyboard = (context: TutorialContext) => {
       if (controller[e.keyCode]) {
         controller[e.keyCode].pressed = true;
       }
-      //exit statement
       var cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
       if (
         isLoggedIn &&

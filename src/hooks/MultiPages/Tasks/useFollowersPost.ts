@@ -57,8 +57,6 @@ const useFollowers = (task: ITask) => {
         taskId,
         mentionedBy: currentUser.id,
         taskTitle: task?.title,
-        //Just letting ya'll know commentId is almost never provided to this function. The API might be getting it from somewhere else.
-        //I just refactored and styled this page. I didn't fix it because it was out of my work scope.
         taskLink: path + `?commentId=${commentId}`,
         commentId,
         projectId: task.projectId,
@@ -69,7 +67,7 @@ const useFollowers = (task: ITask) => {
         sender: currentUser?.displayName,
         taskTitle: task?.title,
         taskLink: path,
-        mentionType: "mention", // to differentiate from follower emails
+        mentionType: "mention",
         taskId: task?.id,
       });
     } catch (error) {
@@ -77,10 +75,7 @@ const useFollowers = (task: ITask) => {
     }
   };
 
-  /** Adds agent as follower; Mentioned notification is created server-side in createFollower */
   async function handleAgentMention(agentId: string, taskId: number) {
-    //I think we need to make this function seperate of the others perhaps.
-    //Fuck it I'll duplicate it for now. This is in useCreateTaskModalstates and here
     try {
       const response = await axios.post("/api/follower/createFollower", {
         agentId,

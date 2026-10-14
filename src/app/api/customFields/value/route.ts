@@ -12,12 +12,6 @@ import {
   upsertCustomFieldValue,
 } from "@/utils/controllers/customFields";
 
-/**
- * POST /api/customFields/value
- * Upserts (or clears) a custom field value on a task.
- * Body: { fieldId, taskId, value }
- * Empty/null value deletes the row.
- */
 export async function POST(request: NextRequest) {
   try {
     const cookieStore = await cookies();
@@ -28,7 +22,6 @@ export async function POST(request: NextRequest) {
       try {
         restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
       } catch {
-        // Flag lookup failure preserves the legacy entry path.
       }
     }
     const { isValid, user } = restCompat && currentUser
@@ -41,7 +34,6 @@ export async function POST(request: NextRequest) {
 
     let body: Awaited<ReturnType<typeof request.json>>;
     if (restCompat) {
-      // Capture once: preserve accepted non-objects and the original parse error/fallback.
       let jsonError: unknown;
       const result = await readJsonBody<typeof body>({
         json: async () => {
@@ -70,7 +62,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify the task belongs to a project the user is a member of
     const task = await prisma.task.findUnique({
       where: { id: parseInt(taskId) },
       select: { projectId: true },
@@ -79,8 +70,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Task not found" }, { status: 404 });
     }
 
-    // Owner-or-member, same predicate as the MCP twin route (validateProjectAccess) —
-    // a bare Member lookup 403s a board OWNER who has no Member row (HTPR-3805).
     const project = await prisma.project.findFirst({
       where: { id: task.projectId, ...getProjectWhere(user.id) },
       select: { id: true },

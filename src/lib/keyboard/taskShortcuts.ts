@@ -56,9 +56,7 @@ export function getTaskShortcutAction(
 ): TaskShortcutAction | null {
   if (event.repeat) return null;
 
-  // Block plain-key actions when either modifier is held (avoids Ctrl+A on Mac).
   const anyCommandModifier = event.ctrlKey || event.metaKey;
-  // Archive/share stay platform-native: Command on Apple, Control elsewhere.
   const nativeCommandModifier = isApple ? event.metaKey : event.ctrlKey;
 
   if (

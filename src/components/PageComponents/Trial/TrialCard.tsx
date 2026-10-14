@@ -46,7 +46,6 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
               </span>
             )}
         </div>
-        {/* ================ price and period ================ */}
         <div className="flex items-center justify-between my-[9px]">
           <span className="text-display sm:text-display">{plan.types[selectedTime].price}</span>
           <span className="text-content sm:text-subheading text-[#777C85] ">
@@ -68,7 +67,6 @@ const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
           Begin Hypertask Trial
         </div>
 
-        {/*-------------------- SWTICH BETWEEN PLANS -------------------- */}
         {plan.id === "AI" && (
           <div className="flex rounded-full justify bg-[#363A40] mt-[15px] transition-all duration-100 ">
             {plan.types.map((item, index) => (

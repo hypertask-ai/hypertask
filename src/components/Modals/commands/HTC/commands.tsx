@@ -110,7 +110,6 @@ const Commands = (props: Props) => {
   const composeEnabled = composeTaskWriterEnabled && !props.isDemo && !props.isInteractive;
   const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
   const isCompose = composeEnabled && showCommands.paletteTab === "compose";
-  // Ctrl+K and Ctrl+J replace the palette state, so remember the form's handoff while the palette stays open.
   const composeProjectRef = useRef<IProject | undefined>(undefined);
   const composeOnCreatedRef = useRef<(() => void | Promise<void>) | undefined>(undefined);
   if (!showCommands.show) {
@@ -130,8 +129,6 @@ const Commands = (props: Props) => {
   const [, setTableTitleWrap] = useRecoilState(tableTitleWrapAtom);
   const calendarSettings = useRecoilValue(calendarSettingsAtom);
   const pathname = usePathname();
-  // Applying these off the calendar is a no-op: the calendar hydrates its
-  // settings from the applied saved view on mount and overwrites them.
   const onCalendar = !!pathname?.startsWith("/calendar");
   const onAgentChat = !!pathname?.startsWith("/agents/chat");
   const onMyTasks = !!pathname?.startsWith(myTasksRoute);
@@ -143,7 +140,6 @@ const Commands = (props: Props) => {
     []
   );
   let getCommands = getAllCommands;
-  // Keep the label gate in the component body so CI can trace UI coverage.
   if (agentLogNameEnabled) {
     getCommands = getAgentLogCommands;
   }
@@ -153,7 +149,6 @@ const Commands = (props: Props) => {
   );
   const includeTicketPrefixCommand = useCallback(() => true, []);
   let isTicketPrefixCommandVisible = excludeTicketPrefixCommand;
-  // Keep the runtime gate in the component body so CI can trace UI coverage.
   if (ticketPrefixEnabled) {
     isTicketPrefixCommandVisible = includeTicketPrefixCommand;
   }
@@ -214,7 +209,6 @@ const Commands = (props: Props) => {
       scopeCommand = {
         key: "myTasksScope",
         name: "Scope",
-        // Keep the board row's mobile icon; selection is handled by key below.
         commandMode: CommandMode.GoToBoard,
         keywords: "scope boards project select filter my tasks",
       };
@@ -302,7 +296,6 @@ const Commands = (props: Props) => {
       commandMode: CommandMode.Command,
       keywords: "table title wrap truncate multiline single line",
     });
-    // Comment context puts both Comment and Task groups ahead of the board list
     const boardsInsertIndex = contextOptions?.commentOptions ? 2 : 1;
     const commandGroups = [
       ...registryGroups.slice(0, boardsInsertIndex),
@@ -362,7 +355,6 @@ const Commands = (props: Props) => {
         : commandGroups;
 
     const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    // HTPR-6861: the open page's own actions lead the palette on phones.
     const rankedGroups = mobilePageBackRowEnabled && pageActions
       ? [{
           group: `This page (Version ${pageActions.version})`,
@@ -420,13 +412,11 @@ const Commands = (props: Props) => {
     setSelectedCommand,
   } = useHTC(allCommands_, emptyQueryCommands, !isMobile);
   const hoveredCommand = useRef<CommandIdentity | null>(null);
-  // const blurTimeout = useRef<NodeJS.Timeout | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
   const commandRef = useRef<HTMLDivElement>(null);
   const lastgClick = useRef<number | null>(null);
 
   const [modal, setModal] = useState<boolean>(isOpen);
-  // console.log("🚀 ~ Commands ~ modal:", modal)
   const [first, setfirst] = useState(false);
 
   const onKeyChangeRef = useRef(onKeyChange);
@@ -435,14 +425,6 @@ const Commands = (props: Props) => {
     (input: HTMLInputElement | null) => {
       inputRef.current = input;
       if (!input || (!isMobile && !focusProxy)) return;
-      // The palette lives in a bottom sheet (react-modal-sheet). While the sheet
-      // plays its enter animation the input is not yet focusable, so a single
-      // focus() during the opening commit (or one frame later) silently no-ops
-      // (verified on prod: the input never gains focus, so the mobile keyboard
-      // never opens and the keyboard-aware sheet never lifts, reading as "stuck
-      // at the bottom"). Re-focus every frame until it takes; the earliest
-      // frames are still inside the iOS user-activation window that pops the
-      // keyboard. Stops the moment focus lands or the input unmounts.
       let tries = 0;
       const focusUntilLanded = () => {
         const el = inputRef.current;
@@ -452,8 +434,6 @@ const Commands = (props: Props) => {
         const selectionStart = proxy?.selectionStart ?? null;
         const selectionEnd = proxy?.selectionEnd ?? null;
         if (transferring) {
-          // Read at the successful focus attempt, not chunk resolution: typing
-          // can continue in the proxy while the bottom sheet animates in.
           el.value = proxy.value;
           onKeyChangeRef.current({ target: proxy } as React.ChangeEvent<HTMLInputElement>);
         }
@@ -582,7 +562,6 @@ const Commands = (props: Props) => {
 
   useEffect(() => {
     return () => {
-      // Clear the debounceTimeout when the component unmounts
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
@@ -667,7 +646,6 @@ const Commands = (props: Props) => {
       const target = event.target as HTMLElement;
       if (composeBoardChipEnabled && isCompose && target.matches("[data-compose-task-writer] textarea") &&
           document.querySelector("[data-compose-board-chip]")) return;
-      // Leave attachment dialogs, mic controls and other focus traps alone.
       if (!target.matches('#htc-mobile-search, #htc-search, [data-compose-task-writer] textarea, [aria-label="Commands mode"] [role="tab"]')) return;
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -772,11 +750,6 @@ const Commands = (props: Props) => {
         backdrop={isInteractive?false:true}
         keyboard={false}
         className={`paletteModalSizing sm:top-[24%] sm:min-w-[560px] sm:max-h-fit ${styles.links_modal} ${isInteractive ? "relative group" : ""}`}
-        // The palette is centred by auto margins inside a viewport-wide fixed box, so with
-        // the AI chat panel open it centred on the window and ran underneath the panel
-        // (159px of overlap on a 914px-wide window). Padding the box by the panel width
-        // makes it centre on the space actually available. The variable is published by
-        // AI_Chat_Sidebar and is 0px whenever the panel is closed or on mobile.
         modalClassName="pr-[var(--ht-ai-sidebar-width,0px)]"
         contentClassName={composeTaskWriterEnabled && !isDemo && !isInteractive ? "rounded-[5px] overflow-visible" : "rounded-[5px] overflow-hidden"}
       >

@@ -30,8 +30,6 @@ export function useAgentDetailState(props: IProp) {
   const [togglePending, setTogglePending] = useState(false);
   const [tokenBusy, setTokenBusy] = useState(false);
   const [savingModel, setSavingModel] = useState(false);
-  // A native agent can carry its own provider key, so its turns bill that
-  // provider account instead of the team's shared key (HTPR-5389).
   const [providerKey, setProviderKey] = useState<{
     provider: string;
     maskedKey: string | null;

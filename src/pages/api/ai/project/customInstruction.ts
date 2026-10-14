@@ -65,12 +65,9 @@ export default async function handler(
         if (!session) {
           return res.status(401).json({ message: "Unauthorized" });
         }
-        // delete an attachment
         const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
         const projectId = validateIntegerParam(req.query.projectId, 'projectId', res);
-        // const fileId = validateIntegerParam(req.query.fileIdToRemove, 'fileIdToRemove', res);
 
-        // Early return if validation failed
         if (fileId === null || projectId === null) {
             return res.status(422).json({message:"Must be an integer"});
         }
@@ -105,7 +102,6 @@ export default async function handler(
           return res.status(401).json({ message: "Unauthorized" });
         }
 
-        // lets create a fuckin view shall we. and now lets lets lets add a view
         try {
 
             const { projectId, customInstruction, modelSelected, modelOptionId } = req.body
@@ -131,14 +127,12 @@ export default async function handler(
                 : undefined;
 
             var customInstructions;
-            // lets first find out if the customInstruction exists or not.
             customInstructions = await prisma.aI_Custom_Instructions.findFirst({
                 where: {
                     projectId,
                     project: getProjectWhere(session.userId),
                 }
             })
-            // ============ if doesn't exist, create it
             if (!customInstructions) {
                 customInstructions = await prisma.aI_Custom_Instructions.create({
                     data: {
@@ -151,7 +145,6 @@ export default async function handler(
                 })
             }
 
-            // =========== if exists, then update it.
             else {
                 const currentTime = new Date()
                 customInstructions = await prisma.aI_Custom_Instructions.update({

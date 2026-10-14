@@ -1,7 +1,6 @@
 import prisma from '@/lib/prisma';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
-// Helper function to find tasks by different identification methods
 export async function findTasksByIdentifier(
     user: { id: number },
     options: {
@@ -48,12 +47,6 @@ export async function findTasksByIdentifier(
         return []
     }
 
-    // Resolve tasks the same way move/get do (see resolveTask.ts): explicit
-    // task_id / ticket_number lookups must reach Deleted-status tasks too, so a
-    // soft-deleted ticket can still be archived/restored. Only the unique_index
-    // arm excludes Deleted (its own condition above). Without this, a Deleted
-    // task resolved to no rows, the response omitted `task`, and the CLI/MCP
-    // null-deref'd on `.ticketNumber` (HTPR-3801).
     const tasks = await prisma.task.findMany({
         where: {
             OR: orConditions,

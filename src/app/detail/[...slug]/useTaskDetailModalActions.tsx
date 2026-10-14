@@ -16,18 +16,8 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
   const { showPriorityModal, currentTask, setShowPriorityModal, queryClient, activeItem, setShowRemindMeModal, searchParams, navigateToNextTask, showEstimateModal, setShowEstimateModal, setCurrentTask, setShowDueDateModal, setShowRemoveSubtaskModal, onGoback, navigate, _parsedTask, setCurrentProject, followers, currentUser, followerKeyPrefix, removeRelation } = getContext();
 
-
-  //  ===================================================================================================
-  //  ============================================= API HANDLER FUNCTIONS ===============================
-  //  ===================================================================================================
-
-  // ----------------------- [PRESS P] || [CLICK ON Priority] (set Priority)
   const togglePriorityModal = (refresh?: boolean) => {
     const { updateActiveItemAndItemInView } = getContext();
-    // Label clicks reach here without the keyboard handler's pointer update,
-    // and the modal writes/refetches via inViewObject/activeItem. Re-point
-    // them at the open task before showing, so the pick can't hit a stale
-    // task after board hovers or in-detail navigation (HTPR-3731).
     if (!showPriorityModal && currentTask)
       updateActiveItemAndItemInView(currentTask.id);
     setShowPriorityModal((prev) => !prev);
@@ -40,20 +30,13 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const toggleRemindMeModal = async (refresh?: boolean) => {
     setShowRemindMeModal((prev) => !prev);
     if (refresh) {
-      // No router.refresh() here: navigateToNextTask queues router.replace to
-      // the next task and a refresh's completing transition restores the old
-      // URL, cancelling the advance (same bug as Ctrl+E, HTPR-4234). A snooze
-      // always leaves the task page (HTPR-4595): next task when the playlist
-      // has one, otherwise back to where the user came from.
       const inboxFlow = searchParams?.get("inboxFlow");
       navigateToNextTask(true, true, true, "forceNavigate", inboxFlow);
     }
   };
 
-  // ----------------------- [PRESS S] || [CLICK ON Priority] (set Priority)
   const toggleEstimateModal = (refresh?: boolean) => {
     const { updateActiveItemAndItemInView } = getContext();
-    // Same stale-pointer guard as togglePriorityModal (HTPR-3731).
     if (!showEstimateModal && currentTask)
       updateActiveItemAndItemInView(currentTask.id);
     setShowEstimateModal((prev) => !prev);
@@ -65,8 +48,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
 
   const setDueDateCallback = (date: Date | undefined) => {
     if (!currentTask) return;
-    // setDueDateApiHandler(date, currentTask?.id!)
-    // @ts-ignore
+    // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
     setCurrentTask((old) => ({ ...old, dueDate: date }));
   };
 
@@ -80,7 +62,6 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     return setShowRemoveSubtaskModal((prev) => !prev);
   };
 
-  // ----------------------- [PRESS #] (delete task)
   const deleteTask = async (state: boolean) => {
     const { toggleDeleteModal } = getContext();
     if (!currentTask || !state) return;
@@ -95,11 +76,10 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
       }
       if (dedupe && currentUser?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id, { status: taskDetailConfig.taskStatus.deleted });
       console.log("🚀 ~ deleteTask ~ response:", response);
-      // @ts-ignore
+      // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
       await queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.projectsAll] });
       if (!deleteTaskUndo || !undoToastSettings.single) toast(taskDetailConfig.toastMessages.taskDeleted);
-      // History Back can reload a deep link's previous document and lose Undo.
       if (deleteTaskUndo) navigate("Replace", `/project?id=${currentTask.projectId}`);
       else onGoback();
     } catch (error: any) {
@@ -110,18 +90,13 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
     }
   };
 
-  // ---------------------- GET TASK
   const getTask = async (refresh = true) => {
-    // Cached Inbox detail already revalidates via its task query. A mount refresh can replay the source URL after E advances.
     if (refresh && !(inboxEFirstPress && window.history.state?.cachedTaskDetail &&
       new URLSearchParams(window.location.search).get("inboxFlow") === "true")) {
       navigate(taskDetailConfig.navigation.refresh);
     }
     if (_parsedTask && _parsedTask.id !== taskDetailConfig.taskIds.newTask) {
       setCurrentProject(_parsedTask.project);
-      // setCurrentTask(task)
-      // setComments(task.comments)
-      // setValue(`${_parsedTask?.title}`);
     }
   };
 
@@ -142,7 +117,6 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
           .then((response) => {
             if (response.status === taskDetailConfig.httpStatus.ok) {
               if (dedupe && currentUser?.id && currentTask?.id) refreshTaskDetailReadAfterWrite(queryClient, currentUser.id, currentTask.id);
-              // getFollowerById();
               queryClient.refetchQueries({
                 queryKey: [followerKeyPrefix, currentTask?.id],
               });
@@ -157,7 +131,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const removeRelationHandler = async (relationId: number) => {
     const response = await removeRelation(relationId);
     if (response) {
-      // @ts-ignore
+      // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((prev) => {
         return {
           ...prev,

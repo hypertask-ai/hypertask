@@ -8,10 +8,6 @@ const invokeDueDate = async (payload: {
   projectId: number;
 }) => {
   const { taskId, projectId } = payload;
-  // Atomically claim the notification in one UPDATE ... RETURNING, mirroring the
-  // sweep (src/pages/api/queues/sweep.ts). The dueDate <= now() predicate is the
-  // stale-message guard: a delayed message for an old due date cannot fire after
-  // the task was rescheduled into the future or archived/deleted.
   const claimed = await prisma.$queryRaw<ClaimedDueDateRow[]>`
     UPDATE "Task"
     SET "dueDateNotifiedAt" = now()
@@ -29,13 +25,6 @@ const invokeDueDate = async (payload: {
   return "invoked";
 };
 
-/**
- * Creates the TaskOverdue notification for the task creator + assignees. Both callers
- * (invokeDueDate above and the sweep, src/pages/api/queues/sweep.ts) atomically claim
- * the task by setting dueDateNotifiedAt BEFORE calling this, so it deliberately does
- * NOT touch the marker itself: a blind marker write here would clobber a concurrent
- * setDueDate reset (user re-scheduling the due date) and suppress the re-notify.
- */
 export const createDueDateOverdueNotifications = async (
   taskId: number,
   projectId: number,

@@ -34,9 +34,6 @@ export async function GET(request: NextRequest) {
     userParam === "me" ? ctx.user.id : parsePositiveInteger(userParam ?? null);
   const runningParam = params.get("running")?.trim().toLowerCase();
 
-  // Resolve the task filter the same way the other time endpoints do, so
-  // callers can pass a ticket ID, unique index, or task ID (not just the raw
-  // internal DB id).
   const taskParam = params.get("task")?.trim();
   let taskId: number | undefined;
   if (taskParam) {

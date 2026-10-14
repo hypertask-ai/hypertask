@@ -147,7 +147,6 @@ const deleteCalendarReadModel = async (
     await complete;
     if (!operationCanRun(startedGeneration)) return;
   } catch {
-    // Corruption cleanup is best-effort. The authoritative request still runs.
   } finally {
     closeDatabase(database);
   }

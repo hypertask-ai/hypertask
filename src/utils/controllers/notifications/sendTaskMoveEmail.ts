@@ -14,8 +14,6 @@ const sendTaskMoveEmail = async(
         
     }
 ) => {
-
-    // FETCH REQUEST BODY
     const { senderName, taskTitle, taskLink,newSectionTitle, emailTo } = req;
     try {
             await sendEmail({

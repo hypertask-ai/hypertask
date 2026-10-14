@@ -45,8 +45,6 @@ export function HtmlCanvasFrame({
     <iframe
       ref={iframeRef}
       srcDoc={srcDoc}
-      // allow-scripts WITHOUT allow-same-origin: unique opaque origin, no
-      // access to app cookies / ht_session / localStorage / parent DOM.
       sandbox="allow-scripts"
       title={title}
       scrolling="no"

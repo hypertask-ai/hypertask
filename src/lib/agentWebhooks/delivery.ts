@@ -131,8 +131,6 @@ export async function deliverAgentWebhook(
   ]);
 
   if (failedPermanently) {
-    // The only lasting record of a dead delivery: the error collector reads it
-    // from the Vercel log (YPER4-358). No URL or response text, they are the customer's.
     console.error(
       `[agent-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : "no response"})`,
     );
@@ -170,7 +168,6 @@ export async function deliverAgentWebhook(
   };
 }
 
-/** Republish due rows that were stranded by a QStash publish failure. */
 export async function sweepAgentWebhookDeliveries(limit = 100): Promise<number> {
   const now = new Date();
   const staleBefore = new Date(now.getTime() - PROCESSING_LEASE_MS);

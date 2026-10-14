@@ -115,14 +115,10 @@ const readinessRouteEntryId = useMemo(
   () => createBoardReadinessRouteEntryId(),
   [boardAccessKey],
 )
-// Revocation runs async work. This ref tells a settling revocation whether the
-// board it denied is still the rendered one.
 const boardAccessKeyRef = useRef(boardAccessKey)
 useLayoutEffect(() => {
   boardAccessKeyRef.current = boardAccessKey
 }, [boardAccessKey])
-// Route rendering can be interrupted. Only a committed layout may replace the
-// document-wide trace and clear the previous route's performance marks.
 const readinessTraceScope = useCommittedBoardReadinessTrace({
   accountId: user.id,
   projectId: requestedProjectId,
@@ -141,8 +137,6 @@ const [networkAccess, setNetworkAccess] = useState<{
   generation: 0,
   requestId: document?.scope.generation ?? null,
 })
-// Resolve the browser preference during the first render so the prepared
-// IndexedDB read can start in the first layout-effect pass.
 const [syncedBoardPilotEnabled, setSyncedBoardPilotEnabled] = useState(() =>
   getBoardSyncPilotEnabled(pilotParameter),
 )
@@ -179,8 +173,6 @@ const markLocalBoardPublished = useCallback(
           )
         : undefined
     if (!localProject) return
-    // Publish the authorized project atom in the same React batch as access.
-    // SectionComp then reconciles the target once with matching global state.
     setRouteCurrentProject(pinProjectToUrlView(localProject, currentView))
     setBoardAccess((current) =>
       current.key === boardAccessKey &&
@@ -244,17 +236,12 @@ const revokeActiveBoard = useCallback(
         currentBoardKey: boardAccessKeyRef.current,
         revocationKey,
       })
-    // Cancelling bumps a shared generation, so a denial that is no longer the
-    // rendered board must not cancel the board the user has since opened.
     if (isCurrent()) cancelPreparedLocalPublication()
     setBoardAccess((current) =>
       current.key === revocationKey
         ? { key: current.key, status: "denied" }
         : current,
     )
-    // Dedupe per proof, not per board: a second denial carries its own
-    // currency check, so reusing the first proof's promise would replay a
-    // stale one.
     const proofKey = `${revocationKey}:${authorization.requestId}`
     if (boardRevocationRef.current?.key === proofKey) {
       return boardRevocationRef.current.promise
@@ -267,8 +254,6 @@ const revokeActiveBoard = useCallback(
       router,
       isCurrent,
     })
-    // A stale revocation resolves without redirecting. Releasing the memo lets
-    // a later denial of the same board redirect instead of reusing it.
     const entry = { key: proofKey, promise }
     boardRevocationRef.current = entry
     void promise
@@ -345,15 +330,11 @@ const {
       projectId === requestedProjectId &&
       authorization.isCurrent()
     if (!authorizationMatchesRoute) return false
-    // Fresh proof for this board lifts any revocation marker left behind.
     void clearRevokedBoardMarker(authorization.accountId, projectId)
 
     const authorizationProof: BoardAuthorizationProof = {
       ...authorization,
       projectId,
-      // This response proves the requested board only. Restricting the local
-      // publication prevents stale metadata for other boards from appearing
-      // before /getAll completes account-wide reconciliation.
       authorizedProjectIds: [projectId],
     }
     latestBoardAuthorizationProofRef.current =
@@ -416,10 +397,6 @@ const {
             authorizedProjectIds: projectIds,
           }
         : null
-    // Fresh authorization is also the revocation boundary for the local
-    // snapshot. Sanitize IndexedDB-origin metadata immediately—even when the
-    // requested board is denied—so no other cache consumer can retain titles
-    // or task data for boards the account can no longer access.
     const localCache = queryClient.getQueryData<IProjectsAll>(
       PROJECTS_ALL_QUERY_KEY,
     )
@@ -451,9 +428,6 @@ const {
       }
     }
     const switcherKey = MOBILE_BOARD_SWITCHER_QUERY_KEY(authorization.accountId)
-    // Abort any response authorized before this proof. TanStack cancellation
-    // synchronously signals the request before the promise settles, preventing
-    // an older response from repopulating metadata after the purge below.
     const switcherCancellation = queryClient.cancelQueries(
       {
         queryKey: switcherKey,
@@ -470,9 +444,6 @@ const {
         queryClient.setQueryData(switcherKey, authorizedSwitcherProjects)
       }
     }
-    // A cancelled active QueryObserver becomes idle; refetchOnMount does not
-    // rerun while the sheet remains mounted. Restart active observers after
-    // the stale response is aborted and its previous cache has been purged.
     void switcherCancellation
       .then(() =>
         queryClient.invalidateQueries({
@@ -530,9 +501,6 @@ const currentBoardAccessStatus =
   boardAccess.key === boardAccessKey ? boardAccess.status : "pending";
 const activeBoardPayloadUnavailable =
   projectsErrorCause instanceof ActiveBoardPayloadUnavailableError;
-// Read the cache first: local publication writes it before its access callback,
-// so that callback's React batch can render the target without waiting for the
-// query observer's scheduled notification.
 const cachedQueryData =
   queryClient.getQueryData<IProjectsAll>(PROJECTS_ALL_QUERY_KEY)
 const queryData: IProjectsAll | undefined =
@@ -571,9 +539,6 @@ const hasAccountOwnedNetworkData =
 const networkQueryPublished =
   hasAccountOwnedNetworkData && !dataFetching && !projectsError;
 
-// This render is React Query's observer publication boundary: the network
-// result is already stored and has now reached its subscribed route. Keep the
-// mark synchronous so query-to-commit includes React's remaining render work.
 if (networkQueryPublished) {
   markBoardNetworkQueryPublished(readinessTraceScope)
 }
@@ -583,8 +548,6 @@ useEffect(() => {
 }, [networkQueryPublished, readinessTraceScope]);
 
 useEffect(() => {
-  // A warm react-query result may not run queryFn. Release the secondary
-  // startup lane once that cached critical board result is ready as well.
   if (!dataFetching && (fetchedData || projectsError)) {
     if (!isMblForChat) releaseSecondaryStartup();
   }
@@ -682,9 +645,6 @@ useEffect(() => {
   const cached = queryClient.getQueryData<IProjectsAll>(PROJECTS_ALL_QUERY_KEY)
   if (cached?.accountId !== user.id || cached.dataOrigin !== "indexeddb") return
 
-  // The URL kill switch must remove an already-hydrated local payload, not
-  // merely prevent the next IndexedDB read. Reset also refetches this active
-  // query through the authoritative network path.
   void queryClient.resetQueries({
     queryKey: PROJECTS_ALL_QUERY_KEY,
     exact: true,
@@ -701,16 +661,10 @@ useSyncedBoardReadModel({
   networkReady: hasAccountOwnedNetworkData && !dataFetching && !projectsError,
 })
 
-// HTPR-4303: anonymous guests always get the chat open on board load — it's
-// half the demo pitch. HTPR-4998: their manual close no longer suppresses it
-// (the persisted flag made the chat look broken forever after one close);
-// closing still works within the page until the next board load.
-// Find project index client-side
 const projectIndex = useMemo(() => {
-  if (!data?.updatedProjects || !slugs) return -1; // Return -1 if no data yet
+  if (!data?.updatedProjects || !slugs) return -1;
   const targetId = parseInt(slugs);
   const index = data.updatedProjects.findIndex((project: any) => project.id.toString() === targetId.toString());
-  // If project not found, return -1 (will be handled in render)
   return index >= 0 ? index : -1;
 }, [data?.updatedProjects, slugs]);
 
@@ -743,9 +697,6 @@ useEffect(() => {
 
 const projectsForSection = useMemo(() => {
   if (!data?.updatedProjects) return []
-  // pinProjectToUrlView returns a new active-project object when it needs an
-  // override. A shallow list copy is sufficient; serializing every board and
-  // active task here duplicated the largest startup payload on the main thread.
   const projects = [...data.updatedProjects]
   if (projectIndex >= 0 && projects[projectIndex]) {
     projects[projectIndex] = pinProjectToUrlView(projects[projectIndex], currentView)
@@ -794,10 +745,7 @@ export function useLandingBoardHydration(context: useLandingBoardHydrationContex
   const setAiChatAutoOpenSuppressed = useSetRecoilState(aiChatAutoOpenSuppressedAtom)
 
 
-// Pinning always opens chat. Otherwise, the default setting opens it unless
-// a manual close suppressed auto-open or the board is shown on mobile.
 useEffect(() => {
-  // The state adapter exposes SSR defaults until this consumer has hydrated.
   if (
     !hydrated ||
     isMblForChat ||
@@ -806,7 +754,7 @@ useEffect(() => {
       (!openAiChatByDefault || aiChatAutoOpenSuppressed))
   ) return;
   setShowAiChatInterface(true);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
 }, [
   hydrated,
   slugs,
@@ -816,9 +764,6 @@ useEffect(() => {
   isMblForChat,
 ])
 
-// HTPR-3805: explicit shared-link surfaces always win. An inherited surface may
-// paint from IndexedDB first, then reconcile once from authoritative metadata.
-// If the user switches surface in between, preserve that newer manual choice.
 useEffect(() => {
   if (!pinnedProject) return
   const origin = data?.dataOrigin === "indexeddb" ? "indexeddb" : "network"
@@ -874,12 +819,8 @@ useEffect(() => {
   surfaceInitializationKey,
 ])
 
-// Canonicalize id, view, and one-shot flags in one replace. Keep surface exactly
-// as navigation supplied it: materializing a saved/browser layout here would
-// turn inherited state into an explicit override on the next view switch.
 useEffect(() => {
   if (!searchParams || !slugs || surfaceInitializedFor !== surfaceInitializationKey) return;
-  // A cold cached open keeps this board mounted until the viewer chunk is ready.
   if (window.location.pathname.startsWith("/detail/") && window.history.state?.cachedTaskDetail) return;
   const currentProject = data?.updatedProjects?.[projectIndex]
   const allViews = currentProject?.project_view?.allViews
@@ -889,11 +830,6 @@ useEffect(() => {
     !isBoardPayloadHydrated(currentProject) &&
     hydrationFailedProjectId !== currentProject.id
   )
-  // A bare board URL needs project metadata to resolve its default/applied
-  // view. Replacing while that request is active commits only the surface,
-  // then a second render commits the view and produces another RSC navigation.
-  // If the request terminates without view metadata, continue with a stable
-  // default below so URL cleanup and welcome handling cannot deadlock.
   if (!currentProject || (!viewMetadataReady && (dataFetching || waitingForBoardHydration))) return;
   const urlId = searchParams.get('id');
   const params = new URLSearchParams(searchParams.toString());
@@ -901,7 +837,6 @@ useEffect(() => {
 
   if (params.get("welcome_ai") === "1" && !welcomeAiHandledRef.current) {
     welcomeAiHandledRef.current = true;
-    // A welcome link is an explicit ask for the chat; focus the composer.
     setAiChatAutoOpenSuppressed(false);
     setAiChatExplicitOpenAt(Date.now());
     setShowAiChatInterface(true);
@@ -912,10 +847,8 @@ useEffect(() => {
     shouldReplaceUrl = true;
   }
 
-  // Check if URL ID is missing, empty, or doesn't match the resolved slug
   if (!urlId || urlId === '' || urlId === 'undefined' || urlId === 'null' || urlId !== slugs.toString()) {
     params.set('id', slugs.toString());
-    // Keep view param if it exists
     if (currentView) {
       params.set('view', currentView);
     }
@@ -958,40 +891,29 @@ useEffect(() => {
   }
 }, [slugs, searchParams, router, pathname, currentView, setShowAiChatInterface, data?.updatedProjects, dataFetching, projectIndex, surfaceInitializedFor, surfaceInitializationKey, hydrationFailedProjectId]);
 
-// Retry fetching projects if project not found (might be a race condition with instant signup)
 const retryCountRef = useRef(0)
-const MAX_RETRIES = 3 // Maximum number of retry attempts
+const MAX_RETRIES = 3
 
 useEffect(() => {
   if (!dataFetching && data?.updatedProjects && projectIndex === -1 && slugs) {
     if (retryCountRef.current < MAX_RETRIES) {
       retryCountRef.current += 1
       console.log(`⚠️ Project not found in list, retrying fetch... (attempt ${retryCountRef.current}/${MAX_RETRIES})`, { slugs, projectCount: data.updatedProjects.length })
-      // Retry after a short delay to allow database to sync
       const retryTimer = setTimeout(() => {
         refetchProjects()
       }, 1000)
       return () => clearTimeout(retryTimer)
     } else {
-      // Max retries reached - project likely doesn't exist or user doesn't have access
       console.error(`❌ Project not found after ${MAX_RETRIES} retries. Redirecting to homepage.`, { slugs })
-      // Reset retry counter for next navigation
       retryCountRef.current = 0
       setProjectLookupFailed(true)
-      // Redirect to homepage or show error
       router.push('/')
     }
   } else if (projectIndex >= 0) {
-    // Project found - reset retry counter
     retryCountRef.current = 0
   }
 }, [dataFetching, data?.updatedProjects, projectIndex, slugs, refetchProjects, router])
 
-// HTPR-3811: getAll ships boards WITHOUT their tasks/allViews. Whichever board is active
-// (projectIndex / ?id=) must have its board payload hydrated, or it renders empty. Load
-// just that one board's payload lazily — reusing the background-prefetched side
-// cache when warm — and merge them into the projectsAll blob. One board per
-// switch; never re-fetches the whole getAll.
 useEffect(() => {
   const proj = data?.updatedProjects?.[projectIndex]
   if (!proj) return
@@ -1001,7 +923,7 @@ useEffect(() => {
     setHydrationFailedProjectId((failedId) => failedId === proj.id ? null : failedId)
     return
   }
-  if (hydratingRef.current === proj.id) return     // hydrate in flight
+  if (hydratingRef.current === proj.id) return
   hydratingRef.current = proj.id
   let retryTimer: ReturnType<typeof setTimeout> | undefined
   ;(async () => {
@@ -1051,7 +973,6 @@ const retryBoardHydration = () => {
   setHydrationRetryToken((token) => token + 1)
 }
 
-//Whenever project is updated via views, fetch sorting mode
 const activeSortingMode: TBoardSortingViewMode = useMemo(()=>{
   const currentSortMode = getActiveSortingModeFromProject(pinnedProject);
   return currentSortMode;
@@ -1120,25 +1041,21 @@ const  LandingPage= ({
     queryClient, setHydrationRetryToken, hydrationRetryToken,
   });
 
-// Update previousBoard cookie whenever user lands on a project
 useEffect(() => {
   console.log("🪵 ~ Project data fetched", !!data)
   if (data?.updatedProjects && data.updatedProjects[projectIndex] && slugs) {
     const currentProject = data.updatedProjects[projectIndex];
     const activeView = getViewFromProject(currentProject);
     
-    // Determine the view to store in cookie
-    let viewToStore = currentView; // Use URL view parameter if present
+    let viewToStore = currentView;
     if (!viewToStore && activeView && activeView.type === "Applied") {
-      viewToStore = activeView.view.slug ?? null; // Fallback to project's active view
+      viewToStore = activeView.view.slug ?? null;
     }
     
-    // Format: project-{id}|&|{view}
     const cookieValue = `project-${slugs}|&|${viewToStore || ''}`;
     
-    // Update the previousBoard cookie
     nookies.set(null, "previousBoard", cookieValue, {
-      maxAge: 600 * 60 * 24 * 7, // 1 week
+      maxAge: 600 * 60 * 24 * 7,
       path: "/",
     });
     
@@ -1146,11 +1063,10 @@ useEffect(() => {
   }
 }, [data?.updatedProjects, projectIndex, slugs, currentView]);
 
-// Defer subscription check to not block initial render
 useDeferredSubscriptionCheck({
   teamId: data?.updatedProjects[projectIndex]?.teamId ? Number(data.updatedProjects[projectIndex].teamId) : undefined,
   enabled: secondaryStartupEnabled && !!data?.updatedProjects[projectIndex]?.teamId,
-  delay: 1500 // Check after 1.5 seconds
+  delay: 1500
 });
 
 useEffect(() => {
@@ -1284,15 +1200,11 @@ function renderLandingSection(context: ReturnType<typeof useLandingSection>, con
   _currentUser, _activeSortingMode,
   } = context;
 
-
-
-// Render user datas
 return (
   <>
   <div
      id="kanban-page-container"
      className={appShellRailOn ? `app-shell-rail-on ${showQuickTips ? "app-shell-quick-tips-on" : ""} flex flex-col gap-[16px] [overflow-anchor:none]` : " flex flex-col gap-[16px] [overflow-anchor:none]"}
-    //  style={{height:'97.5svh'}}
      >
           <KanbanModalsProvider>
             {appShellRailOn ? (
@@ -1315,16 +1227,11 @@ return (
                       <ViewTabsBar project={_currentProject} forceShow appShellRail />
                     </div>
                     <ShellViewControls project={_currentProject} />
-                    {/* Guest CTAs ride this existing row so they never push the
-                        board down; the rail keeps its own copy. */}
                     <GuestAuthLinks />
                   </div>
                 )}
               </BoardDocumentBoundary>
             ) : isMbl ? (
-              // Mobile runs the global app shell instead: MobileTopBar owns the
-              // title, board/view switching and settings; the splits row and
-              // tab bar own navigation. Spacing comes from the shell wrapper.
               null
             ) : (
               <BoardDocumentBoundary fallback={<div className="h-[48px]" aria-label="Loading Board controls" />}>
@@ -1355,7 +1262,6 @@ return (
             />
           )}
 
-          {/* {showBoardManager && <LeftSidebar teams={teams!} />} */}
           <div
             ref={kanbanContainerRef}
             id="kanban-sections-container"
@@ -1413,11 +1319,6 @@ export function useLandingSectionReadiness(context: Pick<SectionCompProps & Retu
 
 useLayoutEffect(() => {
   if (!boardReadinessTraceScope) return;
-  // HTPR-6072: belt-and-suspenders on top of the useLayoutEffect re-sync
-  // above - a readiness sample must never be taken while local state (the
-  // currentProject this render actually used) still lags the routed
-  // project. If they disagree, this frame is transitional; skip it rather
-  // than mark or complete a trace against it.
   if (_currentProject?.id !== _allProjects[_projectIndex]?.id) return;
   const readinessCompletion = readinessCompletionRef.current;
   markBoardReadinessPhase("firstBoardCommit", boardReadinessTraceScope);

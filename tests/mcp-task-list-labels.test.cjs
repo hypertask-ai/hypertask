@@ -65,8 +65,8 @@ test("the MCP task list applies the shared query, filter, fields contract", () =
 });
 
 test("the MCP task list selects labels in the paginated task query", () => {
-  const listQueryStart = routeSource.indexOf("// Get tasks");
-  const listQueryEnd = routeSource.indexOf("// Get metadata counts");
+  const listQueryStart = routeSource.lastIndexOf("const tasks = await prisma.task.findMany({");
+  const listQueryEnd = routeSource.indexOf("const uniqueProjects = new Set(tasks.map");
   assert.notEqual(listQueryStart, -1);
   assert.notEqual(listQueryEnd, -1);
 
@@ -238,14 +238,14 @@ test("task responses expose the permanent-delete deadline", () => {
 });
 
 test("the paginated task list selects and serializes the permanent-delete deadline", () => {
-  const listQueryStart = routeSource.indexOf("// Get tasks");
-  const listQueryEnd = routeSource.indexOf("// Get metadata counts", listQueryStart);
+  const listQueryStart = routeSource.lastIndexOf("const tasks = await prisma.task.findMany({");
+  const listQueryEnd = routeSource.indexOf("const uniqueProjects = new Set(tasks.map", listQueryStart);
   const listResponseStart = routeSource.indexOf(
-    "// Transform to response format",
+    "const taskList: TaskListItem[] = tasks.map",
     listQueryEnd,
   );
   const listResponseEnd = routeSource.indexOf(
-    "// A full page returns nextCursor",
+    "const presentedTasks = taskList.map",
     listResponseStart,
   );
   assert.notEqual(listQueryStart, -1);

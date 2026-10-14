@@ -46,18 +46,13 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
     const isControlled = onSortChange !== undefined
     const replaceSingleLevel = kanbanReuseEnabled && isControlled && maxLevels === 1
 
-    // ---------------- refs
     const currentHoveredDiv = useRef<number | null>(null);
     const teamRef = useRef<HTMLDivElement>(null);
     const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
-    // Serializes the view writes. Add/remove/direction each fire their own request, and two in
-    // flight at once can land out of order, leaving the board on an older level set than the
-    // popover shows. Chaining keeps click order, so the last click is the last write.
     const writeQueue = useRef<Promise<unknown>>(Promise.resolve());
     const activeSortingView = sort?.mode ?? getActiveSortingModeFromProject(_currentProject)
     const activeSortingOrder = sort?.order ?? getActiveSortingOrderFromProject(_currentProject)
 
-    // ---------------- state handlers
     const [keyboardControls, enableKeyboardControls] = useState<boolean>(false)
     const [keyword, setKeyword] = useState('');
     const [loading, setLoading] = useState<boolean>(false);
@@ -87,7 +82,6 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
         setKeyword(e.target.value);
     }
     const handleToggle = () => {
-        // setModal(!modal)
         closeHandler()
 
     }
@@ -132,13 +126,10 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
         persistLevels(nextLevels)
     }
 
-    // -------------------- ON MODAL LOAD
     const onOpenHandler = async () => {
-        // setLoading(true)
-        enableKeyboardControls(true) // force focus on input field  
+        enableKeyboardControls(true)
     }
 
-    // ==================== set priority api handler
     const setPriorirty = async (sorting_mode: SortingMode | ExtraMode) => {
         try {
             if (sorting_mode === "Manual") {
@@ -149,8 +140,6 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
             const sorting_order: SortingOrder = (ascendingSortingModes.has(sorting_mode) || extraModes.some((option) => option.id === sorting_mode))
                 ? "Ascending"
                 : "Descending"
-            // Stay open after adding a level: stacking is the point, and closing would force a
-            // reopen for every tie-breaker. Manual (above) is terminal, so it still closes.
             setKeyword('')
             await persistLevels(
                 [...(replaceSingleLevel ? [] : levels), { mode: sorting_mode, order: sorting_order }],
@@ -162,14 +151,9 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
         }
     }
 
-    // ================================ handle key down
     const handleKeyDown = (e: KeyboardEvent) => {
         const index = filteredPriorities.findIndex(item => item === selectedPriority)
 
-        // if (e.key === 'Enter' && filteredPriorities.length > 0) {
-        //     console.log("i had submitted bro this is dangerous")
-        //     // createBoard(title, selectedPriority.id, selectedPriority.googleAccountId)
-        // }
         if (e.key === "Tab") {
             e.preventDefault()
             if (!levels.length) return
@@ -181,19 +165,14 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
             return
         }
         if (e.key === "Enter") {
-            // set the priority.
-            // send true to the closhandler
             if (selectedPriority) setPriorirty(selectedPriority)
         }
         if (e.key === "j" || e.key === "ArrowDown") {
             if (selectedPriority) {
                 if (index === -1 || index === (filteredPriorities.length - 1)) {
-                    // setSelectedPriority(filteredPriorities[0])
-                    // document.getElementById(`inbox-${_notifications[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedPriority(filteredPriorities[index + 1])
                     scrollToRow(index+1)
-                    // document.getElementById(`command-${index + 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 }
 
             }
@@ -214,12 +193,9 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
         if (e.key === "k" || e.key === "ArrowUp") {
             if (selectedPriority) {
                 if (index <= 0) {
-                    // setSelectedInbox(_notifications[_notifications.length - 1])
-                    // document.getElementById(`inbox-${_notifications[_notifications.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 } else {
                     setSelectedPriority(filteredPriorities[index - 1])
                     scrollToRow(index-1)
-                    // document.getElementById(`command-${index - 1}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                 }
 
             }
@@ -232,13 +208,11 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
           ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
     const handleMouseLeave = () => {
-        // Clear any existing debounceTimeout
         if (debounceTimeout.current) {
             clearTimeout(debounceTimeout.current);
             debounceTimeout.current = null;
         }
 
-        // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
         debounceTimeout.current = setTimeout(() => {
             if (currentHoveredDiv.current !== null && teamRef.current) {
                 (teamRef.current as HTMLDivElement)?.blur();
@@ -249,7 +223,6 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
 
     useEffect(() => {
         return () => {
-            // Clear the debounceTimeout when the component unmounts
             if (debounceTimeout.current) {
                 clearTimeout(debounceTimeout.current);
             }
@@ -264,7 +237,6 @@ const BoardPriorityMode = <ExtraMode extends string = never,>(props: Props<Extra
     }, [document.activeElement, keyword, selectedPriority, filteredPriorities, levels]);
 
     useEffect(() => {
-        // console.log("🚀 ~ useEffect ~ filteredPriorities_:")
         const filteredPriorities_ = priorityModes.filter((priority) =>
             (priority === "Manual" || !levels.some((level) => level.mode === priority)) &&
             (replaceSingleLevel || levels.length < maxLevels || priority === "Manual") &&

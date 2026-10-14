@@ -19,11 +19,6 @@ import {
   type TaskWithBlockingRelations,
 } from "@/utils/controllers/tasks/attachOpenBlockingTasks";
 
-/**
- * Tasks/views for one board in the BoardTasksPayload client contract. The
- * server projection is intentionally narrower than task detail: hydration
- * restores the full board model from metadata + this payload. See HTPR-3811.
- */
 const getBoardTasks = async (
   project_id: any,
   user_id: any,
@@ -38,7 +33,6 @@ const getBoardTasks = async (
 
     const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
 
-    // Access guard: only owners/members of the board may read its board payload.
     const project = await prisma.project.findFirst({
       where: { id: projectId, status: "Normal", ...getProjectWhere(userId) },
       select: {

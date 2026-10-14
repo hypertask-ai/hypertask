@@ -38,7 +38,6 @@ export async function GET(request: NextRequest) {
       rawTaskId !== null ||
       rawTicketNumber !== null ||
       rawUniqueIndex !== null
-    // Without unique_index, project_id keeps its established project-list meaning.
     const hasProjectIdentifier =
       rawProjectId !== null && rawUniqueIndex === null
 

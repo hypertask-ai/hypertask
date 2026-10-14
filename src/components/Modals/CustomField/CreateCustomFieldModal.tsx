@@ -53,7 +53,6 @@ const CreateCustomFieldModal = ({ closeHandler }: Props) => {
         return;
       }
 
-      // step === "type"
       if (e.keyCode === KeyCodes.ARROW_DOWN) {
         e.preventDefault();
         setSelectedIndex((prev) =>
@@ -75,7 +74,7 @@ const CreateCustomFieldModal = ({ closeHandler }: Props) => {
   }, [step, name, selectedIndex, submitting]);
 
   async function submitField(type: CustomFieldType) {
-    if (submitting || !name.trim()) return; // no-name unreachable via UI: the name step requires it first
+    if (submitting || !name.trim()) return;
     if (!currentProject?.id) {
       setError("Couldn't resolve this board — reload and retry");
       return;

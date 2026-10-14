@@ -1,8 +1,3 @@
-/**
- * Comment-related validation schemas
- * 
- * Validations for: add_comment, get_comments
- */
 
 import { z } from 'zod';
 import { getConfig } from '../config/index';
@@ -36,10 +31,6 @@ const replyToInvocationIdSchema = z.coerce
   .optional()
   .describe('For agent replies, the agent Mentioned notification ID that invoked the agent. Use this when the mention was in the task description, which has no comment ID. Routes the answer to the requester\'s Important inbox.');
 
-/**
- * Schema for a single mention in add_comment
- * Required when text contains @DisplayName - resolves to user_id for notifications
- */
 export const mentionSchema = z.object({
   user_id: z.coerce.number().int().positive('user_id must be a positive integer'),
   display_name: z.string().min(1, 'display_name cannot be empty'),
@@ -47,10 +38,6 @@ export const mentionSchema = z.object({
 
 export type MentionInput = z.infer<typeof mentionSchema>;
 
-/**
- * Schema for add_comment tool input
- * Validates task identification and comment text
- */
 export function getAddCommentInputSchema() {
   const baseSchema = createTaskIdentificationBaseSchema().extend({
     text: z
@@ -121,9 +108,6 @@ export function getAddCommentInputSchema() {
 export const AddCommentInputSchema = getAddCommentInputSchema();
 export type AddCommentInput = z.infer<typeof AddCommentInputSchema>;
 
-/**
- * Schema for update_comment tool input.
- */
 export function getUpdateCommentBaseSchema() {
   return z
     .object({
@@ -145,9 +129,6 @@ export function getUpdateCommentBaseSchema() {
 export const UpdateCommentInputSchema = getUpdateCommentBaseSchema();
 export type UpdateCommentInput = z.infer<typeof UpdateCommentInputSchema>;
 
-/**
- * Schema for delete_comment tool input.
- */
 export function getDeleteCommentBaseSchema() {
   return z
     .object({
@@ -162,10 +143,6 @@ export function getDeleteCommentBaseSchema() {
 export const DeleteCommentInputSchema = getDeleteCommentBaseSchema();
 export type DeleteCommentInput = z.infer<typeof DeleteCommentInputSchema>;
 
-/**
- * Base schema for add_comment tool (without refine validation)
- * Used for FastMCP parameter validation, refine is checked in execute
- */
 export function getAddCommentBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
@@ -187,33 +164,19 @@ export function getAddCommentBaseSchema() {
     .strict();
 }
 
-/**
- * Sanitize comment text input
- * - Strip leading/trailing whitespace
- * - Normalize line endings
- */
 export function sanitizeCommentText(text: string): string {
   return text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 }
 
-/**
- * Validate and sanitize add_comment input
- */
 export function validateAndSanitizeAddCommentInput(input: unknown): AddCommentInput {
-  // First validate with Zod
   const validated = AddCommentInputSchema.parse(input);
 
-  // Then sanitize the text field
   return {
     ...validated,
     text: sanitizeCommentText(validated.text),
   };
 }
 
-/**
- * Base schema for get_comments tool (without refine validation)
- * Used for FastMCP parameter validation
- */
 export function getGetCommentsBaseSchema() {
   return withListQuerySchema(
     createTaskIdentificationBaseSchema().merge(paginationSchema),
@@ -228,10 +191,6 @@ export function getGetCommentsBaseSchema() {
     .strict();
 }
 
-/**
- * Schema for get_comments tool input (with refine validation)
- * Either task_id or ticket_number must be provided
- */
 export function getGetCommentsInputSchema() {
   const baseSchema = getGetCommentsBaseSchema();
 
@@ -278,10 +237,6 @@ export function getGetCommentsInputSchema() {
 export const GetCommentsInputSchema = getGetCommentsInputSchema();
 export type GetCommentsInput = z.infer<typeof GetCommentsInputSchema>;
 
-/**
- * Base schema for add_comment tool (without superRefine)
- * Used for FastMCP parameter validation - must be ZodObject for tool registration
- */
 export function getAddCommentCrudBaseSchema() {
   return createTaskIdentificationBaseSchema()
     .extend({
@@ -316,10 +271,6 @@ export function getAddCommentCrudBaseSchema() {
     .strict();
 }
 
-/**
- * Add comment CRUD input schema with action-based validation (superRefine)
- * Used in execute for full validation
- */
 export function getAddCommentCrudInputSchema() {
   return getAddCommentCrudBaseSchema().superRefine((data, ctx) => {
       const { action, task_id, ticket_number, project_id, unique_index, comment_id, text, content_type, attachments, reply_to_comment_id, reply_to_invocation_id } = data;
@@ -431,10 +382,6 @@ export function getAddCommentCrudInputSchema() {
 export const AddCommentCrudInputSchema = getAddCommentCrudInputSchema();
 export type AddCommentCrudInput = z.infer<typeof AddCommentCrudInputSchema>;
 
-/**
- * Validate and sanitize add_comment CRUD input
- * Returns validated input for the appropriate action
- */
 export function validateAndSanitizeAddCommentCrudInput(input: unknown): AddCommentCrudInput {
   const validated = AddCommentCrudInputSchema.parse(input);
 

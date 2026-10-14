@@ -2,18 +2,6 @@ import { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } from "@/lib/aiAllowancePolicy";
 
 const HEARTBEAT_TURN_SUFFIX = /\n<!--ht-heartbeat:v1:([A-Za-z0-9_-]+)-->\s*$/;
 
-/**
- * Set only when a streamed turn ended on the allowance error event, carrying
- * the allowance period that actually rejected so a caller can deduplicate
- * against it rather than a clock of its own.
- *
- * Matching that sentence anywhere in the body would also match the model
- * repeating it in its own reply, which inbox text can provoke, forging a "your
- * agent is paused" notice. Streamed content is JSON-escaped inside its `data:`
- * line, so it cannot fake the `event: error` line that has to sit immediately
- * above. `periodKey` is null when an older deployment streamed the stop without
- * one; the caller then falls back to its own claim period.
- */
 export const streamStoppedOnSpentAllowance = (
   streamBody: string,
 ): { periodKey: string | null; teamId: string | null } | null => {

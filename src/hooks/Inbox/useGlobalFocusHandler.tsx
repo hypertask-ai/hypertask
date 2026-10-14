@@ -160,7 +160,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     }
   };
 
-  // =============== up handler
   const moveIdxUp = (currentSplitOverride?: INotification[]) => {
     let currentSplit = currentSplitOverride;
     if (!currentSplit) {
@@ -172,21 +171,17 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
 
     if (selectedNotification) {
       if (globalFocus.currIdx <= 0) {
-        // setSelectedInbox(_notifications[inboxTaskIndex - 1])
-        // document.getElementById(`inbox-${_notifications[_notifications.length - 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       } else {
         setGlobalFocus((prev) => ({ ...prev, currIdx: prev.currIdx - 1 }));
-        // setSelectedInbox(_notifications[indexToGoTo])
 
         const activeElement = document.getElementById(
           `inbox-${selectedNotification.id}`,
-        ); //?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        );
         activeElement && scrollToCenterIfNearTop(activeElement);
       }
     } else {
       if (currentSplit.length > 0) {
         setGlobalFocus((prev) => ({ ...prev, currIdx: 0 }));
-        // setSelectedInbox(_notifications[_notifications.length - 1])
         const lastEl = currentSplit[0];
         document
           .getElementById(`inbox-${lastEl.id}`)
@@ -195,7 +190,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     }
   };
 
-  // ============== down handler
   const moveIdxDown = async (currentSplitOverride?: INotification[]) => {
     const _notifications: INotificationsFromTQ | undefined =
       queryClient.getQueryData(resolvedQueryKey);
@@ -209,23 +203,16 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     );
     if (!currentSplit) return;
     if (selectedNotification) {
-      // const index = _notifications.findIndex((notification)=>notification.id===_notifications[inboxTaskIndex].id)
-      // const indexToGoTo=index + 1
-      // console.log("🚀 ~ file: index.tsx:103 ~ handleKeyDown ~ index:", index)
       if (globalFocus.currIdx === currentSplit.length - 1) {
-        // inboxTaskIndex&&setSelectedInbox(__notifications[inboxTaskIndex])
-        // document.getElementById(`inbox-${_notifications[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       } else {
         setGlobalFocus((prev) => ({ ...prev, currIdx: prev.currIdx + 1 }));
         const activeElement = document.getElementById(
           `inbox-${currentSplit[globalFocus.currIdx + 1]?.id}`,
-        ); //?.scrollIntoView({ behavior: 'smooth', inline: "nearest"  })
+        );
         activeElement && scrollToCenterIfNearBottom(activeElement);
-        // document.getElementById(`inbox-${_notifications[index + 1].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
       }
     } else {
       if (currentSplit.length > 0) {
-        // setSelectedInbox(_notifications[0])
         setGlobalFocus((prev) => ({ ...prev, currIdx: 0 }));
         document
           .getElementById(`inbox-${currentSplit[0].id}`)
@@ -234,8 +221,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     }
   };
 
-  // ================== REMOVE element from subarrays of notification
-  //This function is updating the notification list from the cache. This is whats displayed in the inbox comp
   const removeElementFromState = (
     elementToRemove: INotification | any,
     undoHandler: any,
@@ -279,7 +264,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     const newState = cachePayload.notifications;
     console.timeEnd("StartingProcess");
 
-    //Update split moved within removeElementFromState
     updateActiveSplitView(
       prevTabLength,
       currentSplitName,
@@ -287,16 +271,11 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       !!elementToRemove,
     );
 
-    // On /detail pages an archive/snooze queues router.replace to the next
-    // task; a refresh here races that replace and can restore the old URL,
-    // parking the user on the snoozed task (HTPR-4234/HTPR-4570). The inbox
-    // list is client-cache driven (updated above), so only refresh off-detail.
     if (!pathname?.startsWith("/detail")) router.refresh();
 
     return newState;
   };
 
-  //After removing the notification from archive, this sets the check for notification as archived in the backend
   const archiveHandler = async (
     notification: INotification | any,
     index: number,
@@ -330,7 +309,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     return true;
   };
 
-  // update InView
   const updateInView = async () => {
     const _notifications: INotificationsFromTQ | undefined =
       await queryClient.getQueryData(resolvedQueryKey);
@@ -356,14 +334,12 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     );
     if (archivableNotifications.length === 0) return;
 
-    // Prepare bulk data for API
     const notificationIds = archivableNotifications.map((notification) => ({
       taskId: notification.taskId,
       userId: currentUser.id,
       notificationId: parseInt(notification.id),
     }));
 
-    // Store undo data for bulk operation
     const bulkUndoData = {
       notifications: archivableNotifications,
       notificationIds,
@@ -377,10 +353,8 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       undoHandler,
     );
 
-    // Remove all notifications from UI state
     bulkRemoveElementsFromState(archivableNotifications);
 
-    // The server-confirmed refetch is the only path that persists IndexedDB.
     try {
       await bulkArchiveHandler(notificationIds, mode);
     } finally {
@@ -436,7 +410,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     );
     if (archivableIds.length === 0) return;
 
-    // Bulk archive API call
     typedBulkArchive ? await typedBulkArchive({
       notificationIds: archivableIds,
       status: "Archive",
@@ -470,7 +443,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
 
     setGlobalFocus({ currSplit: newValue, currIdx: newCurrIdx });
 
-    // Scroll the inbox item at newCurrIdx into view when preserving index
     if (options?.preserveCurrIdx && currentSplit.length > 0) {
       const item = currentSplit[newCurrIdx];
       if (item) {
@@ -496,16 +468,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
     }
   };
 
-  /**
- *Keeps track of active split. If there arent any notifications in the active split
- then just move to the next split if any. If there are notifications in the split, then stay there even if order of splits change when 
- getting from getInboxTabs
- *
- * @param {number} prevTabLength
- * @param {string} currentSplitName
- * @param {(INotificationsFromTQ | undefined)} newNotifications
- * @param {boolean} elementsExist
- */
   const updateActiveSplitView = (
     prevTabLength: number,
     currentSplitName: string,
@@ -525,7 +487,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
       let currentSplitIndex: number | undefined = undefined;
       try {
         if (newNotifications.structuredData.tabs.length <= prevTabLength) {
-          //we need to find the new global currSplit for the new tabs that we get.
           try {
             const newCurrSplitIndex =
               newNotifications.structuredData.tabs.findIndex(
@@ -534,8 +495,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
               );
             if (newCurrSplitIndex !== -1) {
               currentSplitIndex = newCurrSplitIndex;
-              // When staying on same split after archiving, preserve focus index
-              // so focus doesn't jump to first element (HTPR-3650)
               const isSameSplit = newCurrSplitIndex === globalFocus.currSplit;
               navigateTabs(newCurrSplitIndex, newNotifications, {
                 preserveCurrIdx: isSameSplit,
@@ -551,14 +510,11 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
           ];
 
         if (globalFocus.currIdx >= 0) {
-          // ======= if the current split's length is now 0, find next available split or stay on current split
           if (!currentSplit || currentSplit.length === 0) {
-            // Try to find the next split with notifications, starting from current split
             let nextSplitWithData = -1;
             const totalSplits =
               newNotifications?.structuredData?.data.length || 0;
 
-            // First, try to find a split with data starting from current split
             for (let i = globalFocus.currSplit; i < totalSplits; i++) {
               if (
                 newNotifications?.structuredData?.data[i] &&
@@ -569,7 +525,6 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
               }
             }
 
-            // If no split found forward, try backward from current split
             if (nextSplitWithData === -1) {
               for (let i = globalFocus.currSplit - 1; i >= 0; i--) {
                 if (
@@ -589,19 +544,15 @@ const useGlobalFocusHandler = (queryKey?: readonly unknown[]) => {
             if (nextSplitWithData !== -1) {
               navigateTabs(nextSplitWithData, newNotifications);
             } else {
-              // All splits are empty, stay on current split with index 0
               navigateTabs(globalFocus.currSplit, newNotifications);
             }
           }
 
-          // ======= if there's still elements left, continue as usual :)
           else if (
             globalFocus.currIdx >= 0 &&
             globalFocus.currIdx < currentSplit.length - 1
           ) {
-            //Do nothing here
           } else if (globalFocus.currIdx === currentSplit.length - 1) {
-            // If we were on the last item, move to the previous item in the same split
             setGlobalFocus((prev) => ({
               ...prev,
               currIdx: Math.max(0, prev.currIdx - 1),

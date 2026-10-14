@@ -68,7 +68,6 @@ const HypertasksCommands = dynamic(() => import("@/components/commands"), {
   ssr: false,
 });
 
-// ProseMirror adds src-less separator images after inline nodes; they are not media.
 const isPageGalleryImage = (image: HTMLImageElement) =>
   Boolean(image.getAttribute("src")) && isContentCarouselImage(image);
 
@@ -164,7 +163,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
 
   useEffect(() => {
     if (!galleryEnabled) return;
-    // Canvas frames have opaque origins, so only accept messages from this page's frames.
     const handleMessage = (event: MessageEvent) => {
       const frames = contentRef.current?.querySelectorAll<HTMLIFrameElement>(".ht-html-block iframe");
       const frame = Array.from(frames ?? []).find((item) => item.contentWindow === event.source);
@@ -190,7 +188,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         runtime: window,
       });
     } catch {
-      // Direct Page visits still have the canonical task replacement below.
     }
   }, [taskHref]);
 
@@ -334,7 +331,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       void returnToTask();
     };
 
-    // Suggestion plugins get first refusal, before ProseMirror's Escape fallback.
     const escapePluginKey = new PluginKey("pageEscapeBlur");
     editor?.registerPlugin(new Plugin({
       key: escapePluginKey,
@@ -346,7 +342,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
       },
     }));
 
-    // Let editor and document-level layer handlers consume Escape first.
     window.addEventListener("keydown", handleKeyDown);
     return () => {
       editor?.unregisterPlugin(escapePluginKey);
@@ -448,7 +443,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               <button
                 type="button"
                 onClick={() => void returnToTask()}
-                // Same control as Settings "Back to app"; 44px phone target.
                 className={cn(
                   MOBILE_TARGET,
                   "min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none",

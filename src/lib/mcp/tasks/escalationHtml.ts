@@ -1,10 +1,5 @@
 import { escapeHtml } from '@/utils/helperFunctions/escapeHtml'
 
-/**
- * Render an agent escalation as a Tiptap-safe HTML comment: a clear heading, the
- * reason, and (optionally) a summary of what was already tried. All caller text
- * is escaped — an agent's reason/summary is untrusted input.
- */
 export function buildEscalationCommentHtml(input: {
   reason: string
   attemptsSummary?: string

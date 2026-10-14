@@ -1,5 +1,3 @@
-// Type-only: a value import here would pull react-joyride's 102 KB runtime back
-// into the initial chunk, defeating the dynamic import in useTour.tsx (HTPR-4508).
 import type { Step } from 'react-joyride';
 import { CLASS_NAME_CONSTANTS, TOUR_TARGET_CONSTANTS } from '@/lib/configs/general.config';
 import React from 'react';
@@ -9,9 +7,6 @@ export type TourStepsConfig = {
   [key: string]: Step[];
 };
 
-/**
- * Helper component to display keyboard shortcuts nicely
- */
 const KbdShortcut: React.FC<{ keys: string[] }> = ({ keys }) => (
   <span className="inline-flex items-center gap-1">
     {keys.map((key, index) => (
@@ -30,12 +25,7 @@ const CommandModifier = () => {
   return <KBDElement content={isApple ? 'Cmd' : 'Ctrl'} />;
 };
 
-/**
- * Tour step definitions organized by tour ID
- * Each tour can have multiple steps that guide users through features
- */
 export const tourSteps: TourStepsConfig = {
-  // Main Kanban Board Tour
   project: [
     {
       target: TOUR_TARGET_CONSTANTS.inviteTeamButton,
@@ -91,7 +81,6 @@ export const tourSteps: TourStepsConfig = {
     },
   ],
 
-  // Create Task Modal Tour - triggered when modal opens
   'create-task-modal': [
     {
       target: TOUR_TARGET_CONSTANTS.titleInputModal,
@@ -116,7 +105,6 @@ export const tourSteps: TourStepsConfig = {
     },
   ],
   
-  // Keyboard Shortcuts Tour
   shortcuts: [
     {
       target: 'body',
@@ -139,7 +127,6 @@ export const tourSteps: TourStepsConfig = {
     },
   ],
 
-  // Task Detail Tour
   'task-detail': [
     {
       target: '.task-card',
@@ -155,7 +142,6 @@ export const tourSteps: TourStepsConfig = {
     },
   ],
 
-  // Task Writer Magic Tour - Interactive 3-step tour
   'task-writer': [
     {
       target: TOUR_TARGET_CONSTANTS.createNewTaskButton,

@@ -226,7 +226,6 @@ export const sweepCycleRollovers = async (
   limit: number = CYCLE_SWEEP_BATCH,
   avoidRepeatedWork = false,
 ): Promise<number> => {
-  // Date-only deadlines must still run on the first tick of a new UTC day.
   const gateKey = `sweep:cycles:${dateOnly(utcDate(now))}`;
   let redis: Awaited<ReturnType<typeof getRedis>> | undefined;
   if (avoidRepeatedWork) {
@@ -249,7 +248,6 @@ export const sweepCycleRollovers = async (
     ORDER BY c."endDate" ASC
     LIMIT ${batch}
   `;
-  // Only a confirmed empty scan can skip work; backlogs and failures keep their cadence.
   if (candidates.length === 0) await redis?.set(gateKey, "empty", "EX", 600).catch(() => undefined);
 
   let moved = 0;

@@ -31,7 +31,7 @@ const route = taskWriteRoute({
       const params = {
         Bucket: HYPERTASKS_S3_BUCKET,
         Key: key,
-        Expires: 60, // URL expiration in seconds
+        Expires: 60,
         ResponseContentDisposition: `attachment; filename=${encodeURIComponent(fileName.toString())}`,
       };
 

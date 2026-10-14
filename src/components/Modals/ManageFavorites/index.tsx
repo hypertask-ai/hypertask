@@ -14,8 +14,7 @@ import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { ModalContainerCustom, ModalHeaderComp } from "@/components/Common/CommonModalComponents";
 interface IProps {
 
-    onClose: any; // Change 'any' to the specific function type if possible
-
+    onClose: any;
   }
 
   
@@ -24,17 +23,13 @@ interface IProps {
       
     const queryClient = useQueryClient();   
     useEffect(()=>{},[])
-    // dummmy data
     const [currentUser,_] = useRecoilState(currentUserAtom);
 
-    // =================== react query
     const {data:favoritesTQ}  = useGetAllFavorites(currentUser.UserSettingId)
     const {data:allTeamsTQ} = useGetAllTeamsMinimal(currentUser.id)
 
-    // =================== refs
     const dropdownRef = useRef<HTMLUListElement>(null)
 
-    // =================== state handlers
 
     const [favorites, setFavorites] = useState(favoritesTQ??[])
     const [modal, setModal] = useState<boolean>(true);
@@ -42,10 +37,8 @@ interface IProps {
     const [selectedIndex, setSelectedIndex] = useState<number|null>(null)
     const [dropdownOpen, setDropdownOpen] = useState(false);
 
-    // ---------------------- MODAL CLOSE HANDLER -----------------
     const toggle = () => {
         setModal(false)
-        // setAssignKeyword("")
         onClose()
       };
 
@@ -68,12 +61,9 @@ interface IProps {
         
     }
 
-    // ======================= update favorites.
     const setNewFavorite = async(projectId:number|null, projectTitle?:string,index?:number)=>{
-        // close dropdown
         setDropdownOpen(false)
         setSelectedIndex(null)
-        // if projectId exists, means we have to add or edit te favorite 
         if (projectId){
             const existingIndex = favorites?.findIndex((fav: { index: number }) => fav.index === index);
                 
@@ -84,12 +74,9 @@ interface IProps {
                 }
                 console.log("🚀 ~ file: index.tsx:95 ~ setFavorites ~ body:", body)
                 if (existingIndex !== -1) {
-                  // ============== If the item already exists, update it
-                  // -------------- POST API
                   await axios.put("/api/favorites/addEditFavorites",body) 
                   
                 } else {
-                    // If the item doesn't exist, add it
                   await axios.post("/api/favorites/addEditFavorites",body)
                     
                 }
@@ -101,7 +88,6 @@ interface IProps {
     
     }
 
-    // ========================== CLOSE Button
     const closeBtn = (
         <X size={18} strokeWidth={1.75} className="close cursor-pointer text-display transition-all " onClick={toggle} />
     );  
@@ -110,7 +96,6 @@ interface IProps {
         console.log("🚀 ~ file: index.tsx:77 ~ handleClickOutside ~ event.target:", event.target)
     
         if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-            // Clicked outside the dropdown, close it
             const isInsideDropdown = event.target.closest('.dropdown');    
             console.log("🚀 ~ file: index.tsx:122 ~ handleClickOutside ~ isInsideDropdown:", isInsideDropdown)
             if (!isInsideDropdown) {
@@ -120,26 +105,19 @@ interface IProps {
         }
     };
     
-    // ========================== USE EFFECTS
 
-    // ------- on teams update 
     useEffect(()=>{
-        // handleSideBarTeams()
         setTeams(allTeamsTQ)
       },[allTeamsTQ])
   
-    // ------- on favorites update
     useEffect(()=>{
         setFavorites(favoritesTQ)
       },[favoritesTQ])
  
 
       useEffect(() => {
-    
-        // Attach the event listener
         document.addEventListener("mousedown", handleClickOutside);
     
-        // Clean up the event listener on component unmount
         return () => {
           document.removeEventListener('mousedown', handleClickOutside);
         };
@@ -163,16 +141,13 @@ interface IProps {
                       {Array.from({ length: 10 }, (_, index) => (
                         <>
                         
-                        {/* // Each iteration corresponds to an index from 0 to 9 */}
                             <div className="mx-1.5 flex h-[36px] items-center justify-between rounded-sm px-3 text-dense">
 
-                                {/* =================== CTRL + INDEX ============== */}
                                 <KeyElement
                                     ctrlCmd={!isApple?"ALT":"CTRL"}
                                     index={index}
                                     />
 
-                                {/* ==================== SELECT DROPDOWN ================= */}
                                 <div 
                                     
                                     id="dropdownSelectors"
@@ -250,7 +225,6 @@ const TeamsDropDown = (
                 
             },[])
 
-// ============================================== frontend code 
     return (
         <ul
             ref={dropdownRef}

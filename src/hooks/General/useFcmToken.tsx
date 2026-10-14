@@ -17,9 +17,6 @@ const useFcmToken = () => {
 
   useGetPushNotificationStatus(token)
 
-  // The FCM service worker runs under its own scope and can't navigate our
-  // windows, so on a notification click it focuses this window and posts the
-  // deep link here. Navigate the open app to the task (scrolls to the comment).
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
     const onMessage = (event: MessageEvent) => {
@@ -31,7 +28,6 @@ const useFcmToken = () => {
     return () => navigator.serviceWorker.removeEventListener("message", onMessage);
   }, []);
 
-  // asks the browser for permission
     const retrieveToken = async () => {
       try {
             if (typeof window !== 'undefined' && 'serviceWorker' in navigator && currentUser?.id) {
@@ -39,27 +35,19 @@ const useFcmToken = () => {
             import('firebase/messaging'),
             import('@/firebase'),
           ]);
-          // Browsers without Push/SW support throw messaging/unsupported-browser (HTPR-4727)
           if (!(await isSupported())) return;
           const messaging = getMessaging(app);
           
-          // Retrieve the notification permission status
           const result = await window.Notification.requestPermission();
           console.error("🚀 ~  useFcmToken ~ retrieveToken ~ result:", result)
           setNotificationPermissionStatus(result);
 
-          // Check if permission is granted before retrieving the token
           if (result === 'granted') {
             const currentToken = await getToken(messaging, {
               vapidKey:
                 process.env.NEXT_PUBLIC_VAPID_KEY,
             });
             
-            // permission is granted and the token has been retrieved, 
-            // set the following:
-            // 1: setFcmData( fcmToken, permissionStatus)
-            // 2: Add the device into DB.
-            // 3: get the push status and setFcmData(statusToggleFromDB)
             if (currentToken) {
               setTokenAndGetPushStatus(currentToken, result)
               return currentToken
@@ -70,7 +58,6 @@ const useFcmToken = () => {
               );
             }
           }
-          // if not, reset the queryClient, and reset SetData as well
           else resetData(result)
         }
       } catch (error) {
@@ -99,7 +86,6 @@ const useFcmToken = () => {
     const getPushStatus = async (tokenToCheck:string) => {
       if (tokenToCheck) {
         const response = await fetchPushNotificationStatus(tokenToCheck)
-        // setStatusToggleLocal(response.sendNotifications ? "true" : "false")
         setFcmData((prev)=>({...prev, statusToggleFromDB:response?.sendNotifications ? "true" : "false"}))
       }
     }

@@ -8,22 +8,15 @@ import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { HYPERTASKS_STORAGE_PUBLIC_BASE_URL } from "@/lib/storage/hypertasksS3";
 import { NextRequest, NextResponse } from "next/server";
 
-// Product board where all in-app feedback lands (HTPR-5646): the dedicated
-// feedback board (2101) had its own drain agent, which was deleted, so
-// feedback now goes straight into the one queue that's still being worked.
 const FEEDBACK_PROJECT_ID = 15;
 const FEEDBACK_SECTION_TITLE = "Bugs";
 const FEEDBACK_LABEL_VALUE = "user-feedback";
-const FEEDBACK_PRIORITY_INDEX = 1; // Urgent, see PriorityConstants
+const FEEDBACK_PRIORITY_INDEX = 1;
 const MAX_FEEDBACK_LENGTH = 5000;
-// The feedback form now submits Tiptap HTML, which is bulkier than the plain
-// text it replaces (tags, pasted-image <img> markup) - give that path more room.
 const MAX_FEEDBACK_HTML_LENGTH = 20000;
 const MAX_TITLE_LENGTH = 80;
 const MAX_CONTEXT_LENGTH = 300;
 const FEEDBACK_KINDS = ["Bug", "Idea", "Question", "Praise"] as const;
-// The picker accepts image/*, so the link can be any of these. The HEAD check
-// below is what actually decides; this just rejects the obvious .html case early.
 const IMAGE_EXTENSIONS = [".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif"];
 const IMAGE_CONTENT_TYPES = [
   "image/png",
@@ -52,8 +45,6 @@ function isOwnStorageUrl(value: string) {
       !url.password &&
       url.host === storageUrl.host &&
       (!storagePath || url.pathname.startsWith(`${storagePath}/`)) &&
-      // Same host is not enough: the generic upload endpoint accepts any file, so
-      // an .html upload would become a trusted-looking "Screenshot" link.
       IMAGE_EXTENSIONS.some((extension) =>
         url.pathname.toLowerCase().endsWith(extension)
       )
@@ -63,9 +54,6 @@ function isOwnStorageUrl(value: string) {
   }
 }
 
-// The .png suffix is the attacker's to choose: the upload endpoint stores the
-// client's Content-Type verbatim, so a file named x.png can still be served as
-// text/html. Ask the object what it actually is before we link it.
 async function servesAnImage(value: string) {
   try {
     const response = await fetch(value, {
@@ -73,9 +61,6 @@ async function servesAnImage(value: string) {
       redirect: "error",
       signal: AbortSignal.timeout(5000),
     });
-    // An allowlist, not startsWith("image/"): image/svg+xml is an image type that
-    // executes script when opened, and the upload endpoint stores whatever
-    // Content-Type the client sends, so SVG bytes named .png would otherwise pass.
     const contentType = (response.headers.get("content-type") || "")
       .toLowerCase()
       .split(";")[0]
@@ -86,11 +71,6 @@ async function servesAnImage(value: string) {
   }
 }
 
-// No server-safe HTML sanitizer lives in this repo yet: the one library that
-// exists (isomorphic-dompurify, via sanitizeAiHtml) pulls in jsdom and has
-// previously crashed a nodejs API route at module load (see toStoredHtml.ts).
-// This is a narrow, targeted strip rather than a general sanitizer: no
-// <script>, no inline event handlers, no javascript: URIs.
 function sanitizeFeedbackHtml(html: string): string {
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
@@ -98,8 +78,6 @@ function sanitizeFeedbackHtml(html: string): string {
     .replace(/(href|src)(\s*=\s*)("|')\s*javascript:[^"']*\3/gi, '$1$2$3#$3');
 }
 
-// Tiptap serializes an empty editor as "<p></p>"; mirrors isFeedbackTextEmpty
-// in FeedbackForm.tsx, which the client already uses to disable submission.
 function isEmptyFeedbackHtml(html: string): boolean {
   return html.replace(/<p>\s*<\/p>/gi, "").trim().length === 0;
 }
@@ -156,8 +134,6 @@ export async function POST(request: NextRequest) {
     );
   }
   const text = typeof body?.text === "string" ? body.text.trim() : "";
-  // The editor sends Tiptap HTML (starts with a tag); older/plain callers still
-  // send bare text. Each path gets its own length ceiling and emptiness check.
   const isHtml = text.startsWith("<");
   const textIsEmpty = isHtml ? isEmptyFeedbackHtml(text) : !text;
   const maxLength = isHtml ? MAX_FEEDBACK_HTML_LENGTH : MAX_FEEDBACK_LENGTH;
@@ -219,7 +195,6 @@ export async function POST(request: NextRequest) {
         where: { id: session.userId },
         select: { id: true, displayName: true, email: true },
       }),
-      // ponytail: This deliberately skips getProjectWhere because submitters are not members of the internal product board.
       prisma.project.findFirst({
         where: { id: FEEDBACK_PROJECT_ID, status: "Normal" },
         select: {
@@ -255,8 +230,6 @@ export async function POST(request: NextRequest) {
         })
       ).id;
 
-    // Titles need plain text: HTML tags in the first line would otherwise show
-    // up literally (e.g. "Bug: <p>Something broke</p>").
     const titleSource = isHtml
       ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       : text;
@@ -273,14 +246,11 @@ export async function POST(request: NextRequest) {
       sectionId: section.id,
       sectionTitle: section.section_title,
       projectIdentifier: project.uniqueIdentifier,
-      // ponytail: Submitters cannot access the destination board, so per-user task drafts would be orphaned.
       createDrafts: false,
       labelIds: [labelId],
       priorityIndex: FEEDBACK_PRIORITY_INDEX,
     });
 
-    // Assign the board owner + members so new feedback lands in their inbox
-    // through the standard Assigned notification pipeline (inbox + push + email).
     const members = await prisma.member.findMany({
       where: {
         projectId: FEEDBACK_PROJECT_ID,
@@ -305,13 +275,6 @@ export async function POST(request: NextRequest) {
         if (result.status !== 200) {
           throw new Error(`assign failed with status ${result.status}`);
         }
-        // The assign pipeline deliberately skips self-assign notifications, but
-        // feedback must reach the inbox even when a board recipient submits it.
-        // TaskMovedToInbox, not Assigned: the inbox drops Assigned rows whose actor
-        // is the reader (inboxConfig.selfTriggeredHidden), so a self-authored one is
-        // written and filtered straight back out. TaskMovedToInbox is the type that
-        // config deliberately keeps for "a task landed in your own inbox", which is
-        // exactly what this is.
         if (recipientId === user.id) {
           const assign = (result.json as any).body?.find(
             (a: any) => a.userId === user.id && !a.agentId

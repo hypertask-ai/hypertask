@@ -55,9 +55,7 @@ export interface CommentItem {
   createdAt: string
   editedAt: string | null
   editedBy: { userId: number; agentId: string | null; isAgent?: true } | null
-  /** Present only when include_activity=true so callers can distinguish row kinds. */
   type?: 'comment' | 'activity'
-  /** Raw activity payload, matching the app comment endpoint. Present only when include_activity=true. */
   activity?: Prisma.JsonValue | null
   creatorId?: number
   creator?: {
@@ -66,14 +64,13 @@ export interface CommentItem {
     displayName?: string
   }
   agent?: McpAgentSummary
-  /** Preserved display name when the comment's managed agent was deleted. */
   agent_display_name?: string
   attachments?: Array<{
     id: number
     fileName: string
     fileType: string
     fileSize: number | string
-    fileSource: string // URL to the attachment
+    fileSource: string
   }>
   reactions?: McpCommentReaction[]
 }
@@ -100,16 +97,9 @@ export interface AddCommentRequest {
   text: string
   content_type?: 'html' | 'markdown'
   project_id?: number
-  images?: string[] // Array of S3 image URLs
-  /** Optional: when MCP sends plain text like "@John Doe", pass mentions to convert to HTML and trigger notifications */
+  images?: string[]
   mentions?: McpMentionInput[]
-  /** Source comment ID when an authenticated agent directly answers a request. */
   reply_to_comment_id?: number
-  /**
-   * Durable invocation token when an authenticated agent directly answers a
-   * request: the agent's `Mentioned` notification ID. Use this for description
-   * mentions, which have no source comment.
-   */
   reply_to_invocation_id?: number
 }
 
@@ -117,7 +107,6 @@ export interface AddCommentResponse {
   success: boolean
   url: string
   idempotent_replayed?: true
-  /** MCP session agent that performed this action */
   agent?: McpAgentSummary
   comment: {
     id: number
@@ -138,7 +127,6 @@ export interface AddCommentResponse {
   }
 }
 
-// Shared comment include structure
 const commentInclude = (userId: number, projectId: number) => ({
   creator: {
     select: {
@@ -162,8 +150,6 @@ const commentInclude = (userId: number, projectId: number) => ({
   reactions: commentReactionInclude
 })
 
-// Helper function to map comment to response format. Activity-inclusive responses
-// retain the app endpoint's raw activity payload and add an explicit row type.
 function mapCommentToResponse(
   comment: any,
   userId: number,
@@ -231,17 +217,9 @@ function applyDurableCommentAttribution<T extends object>(
   })
 }
 
-/**
- * GET /api/mcp/comments
- *
- * Gets all user comments for a specific task. Activity logs (assignments, moves, etc.) are excluded
- * unless include_activity=true. Activity-inclusive history matches the app endpoint's chronological order.
- * Supports pagination and sorting by creation date for the default comments-only response.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -249,7 +227,6 @@ export async function GET(request: NextRequest) {
       return await mcpUnauthorizedResponse(request)
     }
     const user = ctx.user;
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
     const taskId = searchParams.get('task_id') ? parseInt(searchParams.get('task_id')!) : null
     const ticketNumber = searchParams.get('ticket_number') || undefined
@@ -266,7 +243,6 @@ export async function GET(request: NextRequest) {
     if (parsedListQuery.error) return parsedListQuery.error
     const listQuery = parsedListQuery.listQuery
 
-    // Validate task identifier
     const validation = validateTaskIdentifier({ task_id: taskId, ticket_number: ticketNumber, unique_index: uniqueIndex, project_id: projectId })
     if (!validation.valid) {
       return NextResponse.json(
@@ -278,7 +254,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Find task
     const task = await findTaskByIdentifier(
       user,
       {
@@ -300,7 +275,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Keep the existing comments-only filter unless activity was explicitly requested.
     const commentWhere: Prisma.CommentWhereInput = includeActivity
       ? { taskId: task.id }
       : { taskId: task.id, activity: { equals: Prisma.DbNull } }
@@ -345,13 +319,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Count the same row set returned below so pagination metadata stays accurate.
     const total = await prisma.comment.count({
       where: commentWhere
     })
 
-    // History reads oldest-first, like the app endpoint, unless the caller asked
-    // for an order explicitly. An explicit sort_order always wins over shared sort.
     const sortField = listQuery?.sortBy === 'id' ? 'id' : 'createdAt'
     const effectiveSortOrder = requestedSortOrder
       ? (requestedSortOrder as 'asc' | 'desc')
@@ -384,7 +355,6 @@ export async function GET(request: NextRequest) {
       task.projectId
     )
 
-    // Transform to response format
     const commentList: CommentItem[] = comments.map((comment) =>
       mapCommentToResponse(comment, user.id, task.projectId, includeActivity, reactionAgents)
     ).map((mapped, index) =>
@@ -424,15 +394,9 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/comments
- *
- * Adds a comment to a task.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -444,7 +408,6 @@ export async function POST(request: NextRequest) {
       if (scopeError) return scopeError
     }
     const user = ctx.user;
-    // Parse request body
     const parsedBody = await readJsonBody<AddCommentRequest>(request)
     if (!parsedBody.ok) return parsedBody.response
     const body = parsedBody.body
@@ -505,8 +468,6 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    // Both identify the same invocation. Accepting two conflicting pointers
-    // would let one reply claim a request it was not answering.
     if (
       reply_to_invocation_id !== undefined &&
       reply_to_comment_id !== undefined
@@ -540,7 +501,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate input
     if (!text || typeof text !== 'string' || text.trim().length === 0) {
       return NextResponse.json(
         {
@@ -580,7 +540,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate task identifier
     const validation = validateTaskIdentifier({ task_id, ticket_number, unique_index, project_id })
     if (!validation.valid) {
       return NextResponse.json(
@@ -592,7 +551,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate ticket_number format if provided
     if (ticket_number && !/^[a-zA-Z0-9_-]+$/.test(ticket_number)) {
       return NextResponse.json(
         {
@@ -607,7 +565,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate images (optional array of S3 URLs)
     if (images !== undefined) {
       if (!Array.isArray(images)) {
         return NextResponse.json(
@@ -623,7 +580,6 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Validate each image URL is a string and looks like a URL
       for (let i = 0; i < images.length; i++) {
         const imageUrl = images[i]
         if (typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
@@ -640,7 +596,6 @@ export async function POST(request: NextRequest) {
           )
         }
 
-        // Basic URL validation (should start with http:// or https://)
         if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
           return NextResponse.json(
             {
@@ -692,7 +647,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Find task
     const task = await findTaskByIdentifier(
       user,
       {
@@ -718,7 +672,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get task owner for the API call
     const taskWithOwner = await prisma.task.findUnique({
       where: { id: task.id },
       select: { userId: true, projectId: true, uniqueIndex: true }
@@ -770,7 +723,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Get user object for createCommentService (needs id, email, displayName, photoURL)
     const userObj = await prisma.user.findUnique({
       where: { id: user.id },
       select: {
@@ -791,19 +743,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Sanitize text (trim and normalize line endings)
     let sanitizedText = formatRichTextInput(
       text.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n'),
       content_type
     )
 
-    // Convert plain text @mentions to HTML when mentions array is provided (MCP format)
     if (mentions && mentions.length > 0) {
       sanitizedText = convertPlainTextMentionsToHtml(sanitizedText, mentions)
     }
 
-    // Resolve any remaining plain "@Name" / "@<id>" tokens against project
-    // members so CLI/MCP callers don't have to hand-write mention spans (HTPR-3783).
     sanitizedText = await resolveTextMentions(
       sanitizedText,
       taskWithOwner.projectId,
@@ -901,7 +849,6 @@ export async function POST(request: NextRequest) {
           imageUrls
         )
 
-        // Fetch comment with attachments for response
         const commentWithAttachments = await prisma.comment.findUnique({
           where: { id: comment.id },
           include: commentInclude(user.id, task.projectId)

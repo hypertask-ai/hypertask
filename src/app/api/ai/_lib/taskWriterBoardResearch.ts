@@ -1,9 +1,4 @@
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-/**
- * HTPR-6363: board research helpers for the AI task writer.
- * Pure formatting and prompt rules live here so shared TASK_AUTHORING_STYLE
- * stays untouched.
- */
 
 import type {
   TurbopufferCommentRow,
@@ -18,7 +13,6 @@ export const TASK_WRITER_MAX_TASK_CONTEXT_ROWS = 35;
 export const TASK_WRITER_RETRIEVAL_QUERY_LIMIT = 4000;
 export const TASK_WRITER_STYLE_EXAMPLE_LIMIT = 3;
 
-/** Appended for the AI task writer. */
 export const TASK_WRITER_BOARD_RESEARCH_RULES = renderPrompt("task-writer-board-research-rules");
 
 function escapePlain(value: string) {

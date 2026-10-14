@@ -6,14 +6,12 @@ const useSetStickyHeight = () => {
   const observerRef = useRef<ResizeObserver | null>(null);
 
   const setStickyElementHeight = () => {
-    // Use the ref instead of getElementById to avoid conflicts with multiple instances
     const title_containerEl = dynamicElementRef.current;
     const dynamicElementHeight = title_containerEl?.offsetHeight;
     dynamicElementHeight && setDynamicTopValue(dynamicElementHeight);
   };
 
   useEffect(() => {
-    // Use the ref instead of getElementById to avoid conflicts with multiple instances
     const title_containerEl = dynamicElementRef.current;
 
     if (!title_containerEl) return;
@@ -24,7 +22,6 @@ const useSetStickyHeight = () => {
 
     observerRef.current.observe(title_containerEl);
 
-    // Cleanup on unmount
     return () => {
       if (observerRef.current) {
         observerRef.current.disconnect();

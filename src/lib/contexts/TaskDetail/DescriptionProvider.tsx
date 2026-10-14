@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 "use client";
 import { useContext, createContext, Dispatch, SetStateAction } from "react";
 import { IAttachment, IComment, IUser, StackedType } from "@/models/model";
@@ -6,7 +6,6 @@ import useDescriptionAndCommentsStates from "@/hooks/Task Detail/CommentAndDescr
 import useDescriptionReactions from "@/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions";
 import { IUploadingDescription } from "@/models/model";
 
-// ========================================================================
 
 interface IShow {
   commentId: number;

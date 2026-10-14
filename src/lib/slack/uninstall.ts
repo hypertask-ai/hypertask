@@ -1,11 +1,6 @@
-// HTPR-4857: Slack uninstall/revoke cleanup. Slack's Marketplace review requires
-// a real deletion story: when the app is removed from a workspace (or its bot
-// token is revoked), everything we stored for that install must go. Cascades
-// take the watched-thread checkpoints and user links with the install row.
 
 import { decryptSecret } from "@/lib/crypto/byokCipher";
 
-// Minimal DB surface so tests can run without Prisma.
 export type SlackInstallRow = {
   id: string;
   botUserId: string;
@@ -35,7 +30,6 @@ export type SlackInstallDb = {
 
 export type SlackRevocationEvent = {
   type?: string;
-  // tokens_revoked payload: Slack sends user IDs, not secret token strings.
   tokens?: {
     oauth?: string[];
     bot?: string[];
@@ -59,8 +53,6 @@ export type SlackRevocationResult =
 
 type BotTokenMatch = boolean | "undecryptable";
 
-// Slack documents tokens.bot as bot user IDs. Accept those, and still accept
-// a leaked xoxb string if one ever appears.
 function botTokenRevoked(
   revokedBotIds: string[],
   install: SlackInstallRow,
@@ -71,8 +63,6 @@ function botTokenRevoked(
     const decrypted = decryptSecret(install.encryptedBotToken);
     return revokedBotIds.includes(decrypted);
   } catch (error) {
-    // Indeterminate: do not delete, and do not pretend this was a foreign
-    // token. The events route returns 500 so Slack retries.
     console.error("Slack install token could not be decrypted", error);
     return "undecryptable";
   }
@@ -99,8 +89,6 @@ export async function deleteSlackInstallForRevocation(
   if (!install) return "unknown_workspace";
 
   if (event.type === "tokens_revoked") {
-    // Only the bot's own revocation ends the install; a member's user OAuth
-    // token being revoked does not invalidate it.
     const botMatch = botTokenRevoked(event.tokens?.bot ?? [], install);
     if (botMatch === "undecryptable") return "skipped_undecryptable";
     if (!botMatch) return "skipped_not_bot";
@@ -108,13 +96,6 @@ export async function deleteSlackInstallForRevocation(
     return "skipped_not_bot";
   }
 
-  // The event can lag a fast uninstall/reinstall cycle; never delete a row
-  // written after the event happened. The predicate makes check and delete
-  // one atomic statement, so a reinstall racing the event is safe. Real Slack
-  // deliveries always carry a timestamp; without one we skip and wait for the
-  // retry rather than risk deleting a fresh reinstall. Residual edge: an
-  // uninstall in the same second the row was written leaves the row until
-  // Slack retries; deleting fresh installs would be worse.
   const eventTsSeconds = Number(
     event.event_ts ?? envelope.event_time ?? Number.NaN,
   );

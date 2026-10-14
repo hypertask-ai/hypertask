@@ -82,7 +82,6 @@ export function createUpdateCommentTool(context: ToolContext) {
           return { success: false, error: mentionError };
         }
 
-        // Mentions first, then convert — see hypertask_add_comment for why.
         let sanitizedText = input.text.trim();
         if (input.mentions?.length) {
           sanitizedText = convertPlainTextMentionsToHtml(

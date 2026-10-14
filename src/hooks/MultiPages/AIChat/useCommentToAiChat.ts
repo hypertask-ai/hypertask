@@ -10,19 +10,6 @@ import {
 import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
 
-/**
- * Shared logic for piping a comment or the whole ticket into the AI chat, used
- * by the Ctrl+K comment/ticket commands and the mouse-hover "Summarize"
- * affordance.
- *
- * - copyCommentToAiChat: opens the chat and inserts the comment into the
- *   current input so the user can add their own question. Does not send.
- * - summarizeComment: opens the chat, drops the comment in with a summarize
- *   instruction, and sends it. The summary streams back into the chat.
- * - summarizeTicket: opens the chat and sends a summarize prompt. The chat
- *   already carries the ticket via default_context.task_id on detail pages, so
- *   the model reads the description + comments itself.
- */
 export function useCommentToAiChat() {
   const {
     editor,
@@ -36,9 +23,6 @@ export function useCommentToAiChat() {
     aiChatAutoOpenSuppressedAtom
   );
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
-  // Synchronous re-entry lock: isTyping only flips true after an await inside
-  // handleSendMessage, so a fast double-trigger could fire two sends in that
-  // gap. This blocks re-entry until the send settles.
   const sendingRef = useRef(false);
   const isTypingRef = useRef(isTyping);
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -47,11 +31,6 @@ export function useCommentToAiChat() {
   chatHistoryReadyRef.current = chatHistoryReady;
   handleSendMessageRef.current = handleSendMessage;
 
-  // The chat editor is built lazily now (HTPR-4508), so it can still be null
-  // at the moment one of these commands fires from the board or a ticket. These
-  // paths used to bail out on `!editor`, which after the deferral meant the
-  // command silently did nothing at all, not even opening the chat. Open first,
-  // then wait for the editor to arrive before touching it.
   const editorRef = useRef(editor);
   editorRef.current = editor;
   const withEditor = async (fn: (e: Editor) => void, timeoutMs = 5000) => {
@@ -122,9 +101,6 @@ export function useCommentToAiChat() {
       openChat();
       if (!(await waitForSession())) return;
       if (isTypingRef.current) return;
-      // The chat already scopes to this ticket via default_context.task_id on
-      // detail pages, so we only send the instruction; the model reads the
-      // description + comments itself and the user keeps chatting in-thread.
       await handleSendMessageRef.current?.(
         "Summarize this ticket, its description and the key points from the comments, concisely."
       );

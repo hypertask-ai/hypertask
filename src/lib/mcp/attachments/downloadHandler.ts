@@ -23,17 +23,9 @@ export type AttachmentDownloadDependencies<TContext> = {
   fetchAttachment: (url: string, signal: AbortSignal) => Promise<DownloadedAttachment>;
   normalizeMime: (value: string) => string;
   isStorageFetchError: (error: unknown) => boolean;
-  /** Optional: persist a size discovered on download for rows that never recorded one. */
   recordMeasuredSize?: (attachmentId: number, size: number) => Promise<void>;
 };
 
-// Editor uploads once stored a hardcoded "1" instead of the real byte count, so
-// a stored 1 means "never measured", not "one byte". Those rows cannot be
-// integrity-checked; they are repaired with the real length on first download.
-//
-// Known limitation: a genuine one-byte upload also reads as unmeasured, so
-// one-byte files skip the length check and are simply rewritten with their true
-// size. Removing that gap needs a separate measured flag, not a size sentinel.
 const LEGACY_UNMEASURED_SIZE = 1;
 
 type StoredSize =
@@ -43,21 +35,11 @@ type StoredSize =
 
 function readStoredSize(value: string | number | bigint | null): StoredSize {
   if (value === null || value === undefined) return { kind: 'unmeasured' };
-  // A stored string has to be the exact canonical decimal the writer produces.
-  // '01', ' 1 ' and '1e0' all read as 1 through Number(), which would classify
-  // them as the legacy sentinel while the repair path only rewrites '1', so
-  // they would skip the length check forever.
   if (typeof value === 'string' && !/^(0|[1-9]\d*)$/.test(value)) {
     return { kind: 'invalid' };
   }
   const size = Number(value);
-  // A stored size that is not a plain non-negative integer is corrupt metadata.
-  // Serving those bytes unchecked would silently drop the integrity guarantee,
-  // so they fail closed instead of being mistaken for an unmeasured row.
   if (!Number.isSafeInteger(size) || size < 0) return { kind: 'invalid' };
-  // Known ceiling: a genuine one-byte attachment is indistinguishable from the
-  // legacy sentinel, so it is served and re-measured rather than length-checked.
-  // Distinguishing them needs a measured flag on the row, tracked separately.
   if (size === LEGACY_UNMEASURED_SIZE) return { kind: 'unmeasured' };
   return { kind: 'measured', size };
 }
@@ -130,13 +112,10 @@ export function createAttachmentDownloadHandler<TContext>(
         );
       }
 
-      // Repaired only once the bytes have passed every other check, so a
-      // rejected download never writes its length back to the row.
       if (stored.kind === 'unmeasured' && dependencies.recordMeasuredSize) {
         try {
           await dependencies.recordMeasuredSize(attachmentId, fetched.buffer.length);
         } catch (error) {
-          // Serving the bytes matters more than repairing the stored size.
           console.error('[MCP attachment size repair]', error);
         }
       }

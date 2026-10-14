@@ -107,8 +107,6 @@ export async function handleRotateAgentTokenRequest(
     where: {
       id: agentId,
       userId: ctx.user.id,
-      // Native agents run on the in-app loop under the user's own session;
-      // they have no external MCP client, so no token to rotate.
       runtimeType: 'EXTERNAL',
       ...agentScope,
     },

@@ -1,5 +1,5 @@
 /* eslint-disable jsx-a11y/alt-text */
-/* eslint-disable @next/next/no-img-element */
+
 import { settledPreviewFor } from "@/lib/media/heicToJpeg";
 import React, { useState, useEffect, useCallback } from "react";
 import { Modal, ModalBody, Container } from "reactstrap";
@@ -16,9 +16,6 @@ type GalleryAttachment = {
 };
 
 const SingleFileInputPreview = dynamic(()=>import("./SingleFileInputPreview"))
-// import SingleFileInputPreview from "./SingleFileInputPreview";
-
-
 
 interface IProps {
   images: any;
@@ -39,13 +36,9 @@ const ImageGallery = (props: IProps) => {
   const { files, mode, callbackAttachments, onUploadFailed, onUploadPendingChange, allowDelete, handleRemove, shouldUpload, variant = "default", backgroundTaskUploads = false } = props
   const [isModalOpen, setModalOpen] = useState(false);
   const [files_, setFiles] = useState<any[]>(files ?? [[]]);
-  // console.log("🚀 ~ ImageGallery ~ files_:", files_)
-  // console.log("🚀 ~ ImageGallery ~ files:", files)
   const [selectedFile, setSelectedFile] = useState<null | any>(null);
   const [canSave,setUploadingStateCreateTaskModal ] = useRecoilState(uploadingStateCreateTaskModalAtom)
-  // console.log("🚀 ~ ImageGallery ~ canSave:", canSave)
   const [uploadedFiles, setUploadedFiles] = useState<any[]>([]);
-  // console.log("🚀 ~ ImageGallery ~ uploadedFiles:", uploadedFiles)
   
 
   const toggleModal = () => setModalOpen(prev=>!prev);
@@ -75,7 +68,6 @@ const ImageGallery = (props: IProps) => {
     (attachmentReturned:any) => {
       console.log("ran")
       if (uploadedFiles.length===files_.length) return
-      // here we will send back ALL THE STRINGS
       setUploadedFiles((prev)=>[...prev, attachmentReturned])
     },
     [files_.length, uploadedFiles.length],
@@ -151,8 +143,6 @@ const ImageGallery = (props: IProps) => {
               id="topSection"
               className=" flex items-center  w-full  justify-center gap-2"
             >
-              {/* ============ left download button ================ */}
-              {/* ============ center  text================= */}
               <div
                 id="center"
                 className="center-container  max-w-[85%] sm:min-w-[600px] flex justify-center items-center gap-2"
@@ -171,7 +161,6 @@ const ImageGallery = (props: IProps) => {
                 </h1>
               </div>
 
-              {/* ============ right Cross ================== */}
               <svg
                 onClick={toggleModal}
                 className="close-button cursor-pointer"
@@ -190,14 +179,11 @@ const ImageGallery = (props: IProps) => {
             <div className="d-flex h-full items-center justify-content-center ">
               {selectedFile.type.startsWith("image/") ? (
                 <img
-                  // style={{width:"100%",  objectFit:"contain"}}
                   loading="lazy"
                   className="image-fluid object-contain carousel-image max-w-[84vw] max-h-[84%]"
                   src={
                     selectedFile.source
                       ? selectedFile.source
-                      // HTPR-6264: show the decoded copy of a HEIC, not the
-                      // file itself, which no browser here can paint.
                       : URL.createObjectURL(
                           settledPreviewFor(selectedFile) ?? selectedFile
                         )
@@ -218,7 +204,6 @@ const ImageGallery = (props: IProps) => {
               )}
             </div>
 
-            {/* // src={"https://www.africau.edu/images/default/sample.pdf"} /> */}
           </ModalBody>
         </Modal>
       )}

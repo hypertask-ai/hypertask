@@ -1,7 +1,3 @@
-/**
- * HTPR-7098: collects finished gateway batches and applies each result exactly as the instant
- * path would have (Slack comment, smart label verdict), then logs half-price usage.
- */
 import { logAiUsage } from "@/app/api/ai/_lib/aiUsage";
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import { modelCostUsd, modelPricing } from "@/app/api/ai/_lib/sharedAllowance";
@@ -45,18 +41,15 @@ export async function collectBatches(nowMs = Date.now()) {
     where: {
       OR: [
         { status: "pending" },
-        // A run that died or timed out mid-apply: apply again (every apply step is safe to repeat).
         { status: "applying", claimedAt: { lt: new Date(nowMs - APPLY_RECLAIM_MS) } },
       ],
     },
-    // Never-checked rows first, then the least recently checked, so a stuck row cannot starve the rest.
     orderBy: { lastCheckedAt: { sort: "asc", nulls: "first" } },
     take: MAX_BATCHES_PER_RUN,
   });
   let completed = 0;
   let cancelled = 0;
   for (const batch of pending) {
-    // maxDuration is 300s; stop claiming new batches when about a minute is left.
     if (Date.now() - nowMs > MAX_RUN_MS) break;
     try {
       const result = await collectOne(batch, nowMs);
@@ -81,14 +74,12 @@ async function planBatch(batch: BatchRow, itemIds: string[], stale: boolean): Pr
   const state = await gatewayBatchState(gatewayKey, batch.gatewayBatchId);
   if (state === "pending") {
     if (!stale) return "waiting";
-    // Gateway batches end within 24h. Past 25h, stop waiting and fall back.
     await cancelGatewayBatch(gatewayKey, batch.gatewayBatchId).catch((error) =>
       console.error(`AI batch ${batch.id} cancel failed`, error),
     );
     return { outcomes: allFailed, finalStatus: "cancelled" };
   }
   if (state === "failed") {
-    // The batch as a whole failed but items may still have results: apply those, fail the rest.
     const outcomes = await gatewayBatchOutcomes(gatewayKey, batch.gatewayBatchId, itemIds).catch(() => allFailed);
     return { outcomes, finalStatus: "completed" };
   }
@@ -96,7 +87,6 @@ async function planBatch(batch: BatchRow, itemIds: string[], stale: boolean): Pr
 }
 
 async function collectOne(batch: BatchRow, nowMs: number): Promise<"waiting" | "completed" | "cancelled"> {
-  // Mark the look first so a row that keeps erroring moves to the back of the queue.
   await prisma.aiBatch.update({ where: { id: batch.id }, data: { lastCheckedAt: new Date() } });
   const items = (batch.items ?? {}) as Record<string, unknown>;
   const itemIds = Object.keys(items);
@@ -106,15 +96,12 @@ async function collectOne(batch: BatchRow, nowMs: number): Promise<"waiting" | "
   try {
     plan = await planBatch(batch, itemIds, stale);
   } catch (error) {
-    // Past the 25 hour limit an error is final: cancel and release the work instead of looping forever.
     if (!stale) throw error;
     console.error(`AI batch ${batch.id} is stale and errored; cancelling`, error);
     plan = { outcomes: outcomesForItems(itemIds, []), finalStatus: "cancelled" };
   }
   if (plan === "waiting") return "waiting";
 
-  // Claim before applying so an overlapping cron run cannot apply the same results twice.
-  // "applying" rows whose claim is over 15 minutes old are taken again; every apply step is safe to repeat.
   const claimed = await prisma.aiBatch.updateMany({
     where: {
       id: batch.id,
@@ -178,7 +165,6 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
     const item = items[outcome.id] as SlackSummaryBatchItem;
     const release = { id: item.threadId, summaryBatchId: batch.id };
     try {
-      // Already applied (or released) by an earlier pass of this batch: post nothing a second time.
       const marked = await prisma.slackWatchedThread.findUnique({
         where: { id: item.threadId },
         select: { lastSummarizedTs: true, summaryBatchId: true },
@@ -196,7 +182,6 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
         where: { id: { in: item.taskIds }, status: { not: "Deleted" }, project: { teamId: batch.teamId } },
         select: { id: true, projectId: true, userId: true },
       });
-      // A bad item is summarized once through the instant path (never batched again).
       const result = await slackHtmlWithInstantFallback(outcome, item, async () => {
         const watched = await prisma.slackWatchedThread.findUnique({
           where: { id: item.threadId },
@@ -217,7 +202,6 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
         });
       });
       if (result.type === "failed") {
-        // Same as the cron on a failure: leave the summarized mark alone and report it.
         console.error(`Slack batch item and instant fallback failed for thread ${item.threadId}`);
         await prisma.slackWatchedThread.updateMany({ where: release, data: { summaryBatchId: null } });
         continue;
@@ -225,7 +209,6 @@ async function applySlackBatch(batch: BatchRow, items: Record<string, unknown>, 
       if (result.type === "comment") {
         const delivered = new Set(item.deliveredTaskIds ?? []);
         for (const task of tasks) {
-          // A re-applied batch (crash or timeout) must not comment twice on a task it already reached.
           if (delivered.has(task.id)) continue;
           await createCommentService({
             text: result.html,
@@ -287,10 +270,6 @@ async function applyLabelBatch(batch: BatchRow, items: Record<string, unknown>, 
   }
 }
 
-/**
- * A run that died after claiming a batch would leave its threads marked pending forever.
- * Release marks whose batch is gone, or was finished more than an hour ago.
- */
 async function releaseOrphanedSlackThreads(nowMs: number): Promise<number> {
   const marked = await prisma.slackWatchedThread.findMany({
     where: { summaryBatchId: { not: null } },

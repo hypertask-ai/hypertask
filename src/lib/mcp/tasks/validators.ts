@@ -51,7 +51,6 @@ export function validateCreateTaskBody(
     correlationId: string | null,
     dryRun = false
 ): { valid: true; data: CreateTaskBody } | { valid: false; response: NextResponse } {
-    // Validate project_id
     if (!body.project_id || typeof body.project_id !== 'number' || body.project_id <= 0) {
         return {
             valid: false,
@@ -74,7 +73,6 @@ export function validateCreateTaskBody(
         };
     }
 
-    // Validate parent_task_id
     if (body.parent_task_id !== undefined && (typeof body.parent_task_id !== 'number' || body.parent_task_id <= 0)) {
         return {
             valid: false,
@@ -91,7 +89,6 @@ export function validateCreateTaskBody(
         };
     }
 
-    // Validate title
     if (!body.title || typeof body.title !== 'string' || body.title.trim().length === 0) {
         return {
             valid: false,
@@ -124,7 +121,6 @@ export function validateCreateTaskBody(
         };
     }
 
-    // Validate section_id
     if (body.section_id !== undefined && (typeof body.section_id !== 'number' || body.section_id <= 0)) {
         return {
             valid: false,
@@ -142,7 +138,6 @@ export function validateCreateTaskBody(
     }
 
 
-    // Validate assignee (optional array of positive integer user IDs, e.g. [12, 34])
     let assignee_ids: number[] = [];
     if (body.assignee !== undefined && body.assignee !== null) {
         if (!Array.isArray(body.assignee)) {
@@ -182,7 +177,6 @@ export function validateCreateTaskBody(
     }
 
 
-    // Validate priority
     let priority = 0;
     if (body.priority !== undefined) {
         const parsedPriority = parsePriorityIndex(body.priority);
@@ -210,7 +204,6 @@ export function validateCreateTaskBody(
         priority = parsedPriority.value;
     }
 
-    // Validate estimate
     if (body.estimate !== undefined) {
         if (typeof body.estimate !== 'number' || body.estimate < 0 || body.estimate > 7) {
             return {
@@ -258,7 +251,6 @@ export function validateCreateTaskBody(
         }
     }
 
-    // Validate due_date (optional ISO 8601 date or datetime)
     if (body.due_date !== undefined && body.due_date !== null) {
         if (typeof body.due_date !== 'string' || body.due_date.trim().length === 0) {
             return {
@@ -293,7 +285,6 @@ export function validateCreateTaskBody(
         }
     }
 
-    // Validate labels (optional array of label IDs)
     if (body.labels !== undefined) {
         if (!Array.isArray(body.labels)) {
             return {
@@ -351,7 +342,6 @@ export function validateCreateTaskBody(
         };
     }
 
-    // Validate images (optional array of S3 URLs)
     if (body.images !== undefined) {
         if (!Array.isArray(body.images)) {
             return {
@@ -369,7 +359,6 @@ export function validateCreateTaskBody(
             };
         }
 
-        // Validate each image URL is a string and looks like a URL
         for (let i = 0; i < body.images.length; i++) {
             const imageUrl = body.images[i];
             if (typeof imageUrl !== 'string' || imageUrl.trim().length === 0) {
@@ -388,7 +377,6 @@ export function validateCreateTaskBody(
                 };
             }
 
-            // Basic URL validation (should start with http:// or https://)
             if (!imageUrl.startsWith('http://') && !imageUrl.startsWith('https://')) {
                 return {
                     valid: false,
@@ -427,7 +415,6 @@ export function validateCreateTaskBody(
     };
 }
 
-/** Parse MCP `assignee` CSV into user ids (matches create-task validation). */
 export function parseAssigneeIds(raw: string): { ok: true; ids: number[] } | { ok: false; message: string } {
     const parts = raw
         .split(",")

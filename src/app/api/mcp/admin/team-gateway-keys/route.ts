@@ -245,8 +245,6 @@ export async function POST(request: NextRequest) {
             );
           }
         } catch {
-          // Preserve unreadable rows. Provisioning must never delete a secret
-          // unless it exactly matches the platform key being migrated.
         }
       }
     }

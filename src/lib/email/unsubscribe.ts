@@ -1,17 +1,5 @@
 import crypto from "crypto";
 
-// HTPR-4164: Gmail and Yahoo's 2024 bulk-sender rules want a one-click
-// List-Unsubscribe once volume passes ~5k/day, and notification volume gets
-// there. Missing it costs inbox placement for every email we send.
-//
-// It is also the only stop path that works for someone who cannot log in. Invite
-// mail goes to people with no account, and the footer's "Notification settings"
-// link is useless to them.
-//
-// Deliberately its own HMAC rather than the app JWT: this token is handed to
-// mail providers, who fetch the URL unattended to validate one-click. It must
-// grant exactly one power — silence this address — and nothing else, so it can
-// never be confused for a session.
 
 const SEPARATOR = ".";
 
@@ -28,8 +16,6 @@ function sign(payload: string): string {
     .digest("base64url");
 }
 
-/** Token proving the holder was mailed at this address. No expiry: an unsubscribe
- *  link has to keep working in a mailbox someone opens months later. */
 export function createUnsubscribeToken(userId: number, email: string): string {
   const payload = Buffer.from(
     JSON.stringify({ uid: userId, email: email.trim().toLowerCase() })
@@ -47,7 +33,6 @@ export function verifyUnsubscribeToken(
   const [payload, signature] = parts;
 
   const expected = sign(payload);
-  // Constant-time: a length mismatch would throw in timingSafeEqual.
   if (
     signature.length !== expected.length ||
     !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected))
@@ -73,11 +58,6 @@ export function unsubscribeUrl(userId: number, email: string): string {
   )}`;
 }
 
-/**
- * Headers that make a mail client show its own native Unsubscribe button.
- * List-Unsubscribe-Post is what makes it ONE-click: the provider POSTs the URL
- * itself instead of sending the human to a landing page.
- */
 export function unsubscribeHeaders(
   userId: number | null | undefined,
   email: string | null | undefined

@@ -10,7 +10,6 @@ import { sendEmail } from '@/lib/email/sendEmail'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
 import { SESSION_COOKIE } from '@/lib/auth/session'
 
-// Separate audience for verification tokens
 const JWT_VERIFICATION_AUDIENCE = process.env.JWT_VERIFICATION_AUDIENCE || 'email-verification'
 
 const JWT_ISSUER = process.env.JWT_ISSUER || 'hypertask'
@@ -27,16 +26,12 @@ function getJwtSecret() {
   return jwtSecret
 }
 
-// HTPR-4815: a login-token helper lived here and minted a credential that was
-// handed straight back to an unauthenticated caller. Deleted rather than
-// left unused, so nobody wires it back into a response. Logging in still happens
-// the only safe way: through the verification link emailed below.
 
 function createVerificationToken(email: string) {
   const jti = crypto.randomUUID()
   const payload = { sub: email }
   const token = jwt.sign(payload, getJwtSecret(), {
-    expiresIn: '30m', // Longer expiry for verification
+    expiresIn: '30m',
     issuer: JWT_ISSUER,
     audience: JWT_VERIFICATION_AUDIENCE,
     jwtid: jti,
@@ -125,7 +120,6 @@ export async function POST(request: NextRequest) {
     const normalizedEmail = email.trim().toLowerCase()
     console.log('📧 Instant signup for:', normalizedEmail)
 
-    // Check rate limiting
     const rateLimitCheck = VerificationCodeService.isRateLimited(normalizedEmail)
     if (rateLimitCheck.limited) {
       return NextResponse.json(
@@ -138,17 +132,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // HTPR-7159: the same Gmail-aware lookup updateUsers() uses, so a dot, +suffix
-    // or googlemail.com spelling of an existing account takes the early return too.
     const existingUser = await findUserByEmail(normalizedEmail)
 
-    // HTPR-4815: this route is unauthenticated, so for an address that already
-    // has an account every line below runs on behalf of a stranger. updateUsers()
-    // overwrites displayName with the email local-part and marks the interactive
-    // tutorial complete, which means anyone could vandalise an account just by
-    // POSTing its email. An existing user needs none of it: they already have an
-    // account, so the only thing owed to them is the sign-in link, which reaches
-    // the real owner's mailbox and nobody else.
     if (existingUser) {
       try {
         await sendVerificationEmail(
@@ -162,29 +147,22 @@ export async function POST(request: NextRequest) {
       } catch (emailError) {
         console.error('⚠️ Failed to send verification email:', emailError)
       }
-      // Deliberately the same body as the new-account path: telling an
-      // unauthenticated caller which addresses already exist is free account
-      // enumeration.
       return NextResponse.json({
         success: true,
         message: 'Account created successfully! Please check your email to verify your account.',
       })
     }
 
-    // Create user in database with isVerified: false
-    // For instant signup, skip both interactive tutorial and onboarding
-    // User will see verification modal instead
     const userUpdateResult = await updateUsers(
       normalizedEmail,
       {
-        // Only reached when there is no existing account, so always a fresh uid.
         uid: `email_${crypto.randomUUID()}`,
         displayName: normalizedEmail.split('@')[0],
         photoURL: undefined,
       },
-      true, // shouldSkipInteractive - skip interactive tutorial
-      true, // skipOnboarding - skip onboarding (user will see verification modal instead)
-      false, // isVerified: false for instant signup
+      true,
+      true,
+      false,
       signupAttributionFromHeaders(
         request.headers,
         'email',
@@ -216,59 +194,37 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Complete onboarding step 1 for instant signup users
-    // This creates team, project, and sets up all prerequisites
     if (userUpdateResult.res.isNewUser) {
       try {
         console.log('🚀 Completing onboarding step 1 for instant signup user')
         const onboardingResult = await provisionFirstWorkspace(
           userData as any,
           request.cookies.get(SESSION_COOKIE)?.value,
-          'MyTeam', // Default team title
-          'MyBoard', // Default board title
-          companySizeOptions[0], // Default: "Just me"
-          companyRoleOptions[0] // Default: "Founder or leadership team"
+          'MyTeam',
+          'MyBoard',
+          companySizeOptions[0],
+          companyRoleOptions[0]
         )
         console.log('✅ Onboarding step 1 completed:', onboardingResult)
       } catch (onboardingError) {
         console.error('⚠️ Failed to complete onboarding step 1:', onboardingError)
-        // Don't fail the request - user can still use the app
-        // The onboarding can be completed later if needed
       }
     }
 
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
     console.log('📊 UTM Data for instant signup:', utmParams)
 
-    // Generate verification token (separate from login token)
     const verificationToken = createVerificationToken(normalizedEmail)
 
-    // Build verification link with UTM parameters - point to dedicated verification page
     const baseVerificationUrl = `${process.env.NEXT_PUBLIC_BASEURL ?? 'https://app.hypertask.ai'}/verify-email`
     const verificationLink = buildVerificationLinkWithUTM(baseVerificationUrl, verificationToken, utmParams as Record<string, string | undefined>)
 
-    // Send verification email (only link, no code)
     try {
       await sendVerificationEmail(normalizedEmail, verificationLink)
     } catch (emailError) {
       console.error('⚠️ Failed to send verification email:', emailError)
-      // Don't fail the request if email fails - user can still verify later
     }
 
-    // HTPR-4815: this route is unauthenticated and accepts ANY email, including
-    // one that already has an account (it reuses that user's uid above). It used
-    // to return a ready-to-use email-link token — plus the same token again
-    // inside loginUrl — so POSTing a victim's address handed the caller a working
-    // login for them: full account takeover from an email address alone.
-    //
-    // The token only ever reaches the real user through the verification email
-    // sent above, so it must never appear in this response. The user object and
-    // isNewUser go too: to an unauthenticated caller they are account enumeration
-    // and a PII leak for any address you care to guess.
-    //
-    // Nothing consumed them. The one caller (src/app/login/EmailAuth/useEmailAuth.ts,
-    // the Better Auth account-recovery path) reads only `success` and shows
-    // "check your email", so this is not a user-visible change.
     const response = NextResponse.json({
       success: true,
       message: 'Account created successfully! Please check your email to verify your account.',

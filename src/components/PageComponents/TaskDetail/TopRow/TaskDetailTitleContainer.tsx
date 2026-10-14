@@ -27,7 +27,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
-    // Check initial scroll position
     handleScroll();
 
     return () => {
@@ -58,8 +57,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
           </>
         }
       >
-        {/* --------------------------- TASK SUMMARY --------------------------- */}
-        {/* Mobile reserves its summary slot; desktop must not add space for an absent summary. */}
         {cachedLayout && (_mbl || hasSummary) ? (
           <div data-task-summary-slot className={_mbl ? "h-10 w-full shrink-0" : "h-[21px] w-full shrink-0"}>
             {summary}
@@ -72,7 +69,6 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
           onClick={toggleDueDate}
         />
 
-        {/* --------------------------- PARENT TASK INFO ------------------------------ */}
         {
           !_mbl && <SubTaskLink parentTask={currentTask?.parentTask} projectId={currentTask?.projectId} />
         }

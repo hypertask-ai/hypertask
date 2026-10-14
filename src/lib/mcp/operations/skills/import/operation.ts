@@ -13,9 +13,6 @@ import prisma from "@/lib/prisma";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// MCP mirror of src/app/api/ai/skills/import/route.ts - import SKILL.md packs
-// from GitHub via the CLI / MCP tools. dry_run returns the parsed skills without
-// writing so a caller can preview before importing.
 const importSchema = z.object({
   url: z.string().url(),
   scope: z.enum(["user", "project"]),

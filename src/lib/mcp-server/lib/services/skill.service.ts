@@ -47,10 +47,6 @@ export interface DeleteSkillResponse {
   success: boolean;
 }
 
-/**
- * Service for listing, retrieving, creating, updating, deleting, and importing skills.
- * Validates input and makes API requests.
- */
 export class SkillService {
   constructor(private readonly apiClient: IApiClient) {}
 

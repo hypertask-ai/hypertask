@@ -56,7 +56,6 @@ const AllFilterHTC: React.FC<Props> = ({
   const currentUser = useRecoilValue(currentUserAtom);
   const setCalendarTaskFilters = useSetRecoilState(calendarTaskFiltersAtom);
   const myTasksFilters = useMyTasksFilterController();
-  // Always called (hook rules). My Tasks / Calendar ignore these write paths.
   const kanbanFilters = useFilters();
 
   const addFilter = async (type: TFilter, value: any) => {

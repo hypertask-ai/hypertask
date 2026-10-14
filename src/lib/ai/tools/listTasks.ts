@@ -110,10 +110,6 @@ export function createListTasksTool(context: ToolContext) {
         if (input.created_by) where.userId = input.created_by;
         if (input.updated_since) where.updatedAt = { gte: new Date(input.updated_since) };
         if (input.created_since) where.createdAt = { gte: new Date(input.created_since) };
-        // Only filter when explicitly TRUE. The chat model reflexively fills every
-        // optional param with a default `false`, which under `!== undefined` became a
-        // restrictive "has NONE" filter and silently dropped tasks that do have
-        // comments/attachments (e.g. it reported 0 due dates on boards that had them).
         if (input.has_comments === true) {
           where.comments = { some: {} };
         }
@@ -207,7 +203,6 @@ export function createListTasksTool(context: ToolContext) {
               task_id: task.id,
               ticketNumber: task.ticketNumber || undefined,
               uniqueIndex: task.uniqueIndex,
-              // Use this verbatim for links; never build the path from `id`.
               url: `/detail/project-${task.projectId}/${task.uniqueIndex}`,
               title: task.title,
               description: mapTaskDescriptionContent(task),

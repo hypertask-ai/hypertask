@@ -38,10 +38,7 @@ const AIEnhanceActionButton: React.FC<IProps> = ({
           loading ? "font-semibold text-icon-dark-gray " : "hover:bg-hypertasks-ai-purple/10 font-bold text-icon-dark-gray hover:border-purple-800"
         )}
       >
-        {/* <span className="relative inline-flex items-center"> */}
-        {/* <Pencil size={14} className="opacity-90" strokeWidth={1.75} /> */}
         <Sparkles size={16} className="opacity-80 " strokeWidth={1.75} />
-        {/* </span> */}
         <span className="whitespace-nowrap">{label}</span>
       </button>
       <style jsx>{`

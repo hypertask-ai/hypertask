@@ -6,7 +6,6 @@ import { useFirstScreenSurface } from '@/lib/firstScreen/SurfaceContext';
 import Tooltip from '@/components/Common/Tooltip';
 import { INotification, ITask } from '@/models/model';
 import React, { useContext, useRef, useState } from 'react'
-// import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useNotificationContext } from '@/lib/contexts/NotificationContext';
 import { cn } from '@/utils/undoActions/helperFuncs';
 import { inboxConfig, systemDefinedSplits } from '@/lib/configs/inbox.config';
@@ -41,8 +40,6 @@ export const TaskMetaChips: React.FC<{ task: ITask; showDueDate?: boolean }> = (
 
     if (!dueDate && !task.priority && !task.estimate && labels.length === 0) return null;
 
-    // ponytail: chips keep their own width so the preview truncates first; the group
-    // is capped so a long label set can never crowd the timestamp.
 
     return (
         <div className="flex shrink-0 items-center gap-1 overflow-hidden md:max-w-[180px]">
@@ -98,14 +95,10 @@ const RenderMessageTag: React.FC<IRenderMessageTag> = ({ notification, selectedS
     const badgeRef = useRef<HTMLSpanElement>(null)
     const [rect, setRect] = useState<DOMRect | null>(null)
 
-    // Early return for system-defined splits
     if (systemDefinedSplits.includes(selectedSplit)) return null
 
     const { type } = notification
 
-    // "@" marks a personal mention (or being added as a follower); "!" marks an
-    // otherwise-important update (comment, assignment, reminder, overdue, ...).
-    // Filled square badge so it reads as a status indicator, not a data label.
     let symbol: string | null = null
     let hint = ""
     if (["Mentioned", 'AddedToFollowerInTask'].includes(type)) {
@@ -161,7 +154,6 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
         task.waitingOnUserId === notification?.userId;
     const flipMentionHierarchy = notification?.type === "Mentioned" && Boolean(notification.commentId) && Boolean(notification.task);
 
-    // md:min-w keeps the title readable: the preview yields space before it does.
     const defaultClassName = "truncate flex-1 flex-column sm:flex-initial md:min-w-[180px]"
 
     return (
@@ -178,12 +170,10 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
                     notification && <RenderMessageTag isIbxSlctd={isIbxSlctd} notification={notification} selectedSplit={selectedSplit} />
                 }
 
-                {/* ================== duedate label ============== */}
                 {!hideDueDate && task?.dueDate && (
                     <DueDateLabel
                         flexBasis={false}
                         fontSize={11}
-                        // fontWeight={500}
                         dueDate={task.dueDate}
                         overdue={isOverdue}
                         className={cn(inboxConfig.bulkSelectionStyling.taskLabels(isIbxSlctd))}
@@ -209,7 +199,6 @@ const TitleContainer: React.FC<ITitleContainer> = ({ notification, className, ta
                         }
                     </span>
                     <span
-                        // 
                         className={cn(
                             inboxConfig.bulkSelectionStyling.taskTitle(isIbxSlctd),
                             'xs:whitespace-pre-wrap sm:whitespace-nowrap',

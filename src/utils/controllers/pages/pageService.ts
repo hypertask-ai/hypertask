@@ -33,8 +33,6 @@ export function renderPageContent({
   content: string
   contentType: PageContentType
 }): { html: string; text: string } {
-  // Canvas: wrap the raw agent HTML into one opaque block (rendered only inside
-  // the sandboxed iframe) and index its stripped text for RAG/search.
   if (contentType === 'html_canvas') {
     return {
       html: sanitizeRichHtml(wrapHtmlCanvas(content)),
@@ -152,8 +150,6 @@ export async function createPage({
       }
     }
 
-    // No snapshot on create: the Page row itself is version 1 (the current
-    // state). DocVersion only records *past* versions, written on each mutation.
     return tx.page.create({
       data: {
         ...(title === undefined ? {} : { title }),
@@ -193,8 +189,6 @@ export async function getPage(args: GetPageArgs & { userId?: number }) {
       }),
     },
     include: {
-      // HTPR-6509: the page viewer links back to the task and MCP pages/get
-      // echoes these five fields; nothing reads the rest of the task row.
       task: {
         select: {
           id: true,
@@ -256,7 +250,6 @@ export async function updatePage({
       : mergePageContent({
           currentHtml: current.contentHtml,
           content,
-          // Canvas type is encoded in contentHtml; ordinary pages have no stored type.
           contentType: contentType ?? (
             decodeHtmlCanvas(current.contentHtml) !== null ? 'html_canvas' : 'markdown'
           ),
@@ -265,9 +258,6 @@ export async function updatePage({
 
     await createPageSnapshot(tx, current, { userId, agentId, note })
 
-    // Optimistic lock: guard the write on the version we read. If a concurrent
-    // writer bumped it between our read and here, count === 0 -> conflict, so
-    // two racing updates can never silently clobber each other's content.
     const result = await tx.page.updateMany({
       where: { id, version: current.version },
       data: {
@@ -354,7 +344,6 @@ export async function searchPages({
     },
     orderBy: { updatedAt: 'desc' },
   })
-  // HTPR-7154: report the board the task is on now, not the page's stored copy.
   return pages.map(({ task, ...page }) => ({ ...page, projectId: task.projectId }))
 }
 

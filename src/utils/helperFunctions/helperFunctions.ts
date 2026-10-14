@@ -1,7 +1,5 @@
 
 export { type ISplit, type InboxTabMeta, type InboxStructuredDataCompact, type InboxStructuredDataExpanded, type InboxQueryPayload, resolveInboxStructuredData, buildInboxQueryCache, expandInboxApiResponse, getInboxTabs } from "./inboxHelpers";
-// reorder them whenever it works for now
-// reorder them whenever it works for now
 import { IProject, ISection, ITask, preSelectParamPricing, QueryParams } from "@/models/model";
 import { getPricingSettingsPath } from "@/lib/pricingSettingsPaths";
 import sortByStringParam from "../sortByParam";
@@ -15,27 +13,20 @@ import { planUploadFile } from "@/lib/media/heicToJpeg";
 
 import { TBoardSortingViewMode, TBoardSortingViewOrder } from "@/models/Views/model";
 
-
-
-// ponytail: tieBreakByRanking defaults to true so every existing caller keeps today's behaviour.
-// Stacked sorting passes false for non-final levels, because ranking is unique per task: left on,
-// it always returns non-zero and the secondary/tertiary levels would never get a say.
 export function sortByPriorityAndRankingOrder(order: SortingOrder, tieBreakByRanking = true) {
   return function sortByPriorityAndRanking(a: any, b: any) {
     if (a.priority && !b.priority) {
-      return -1; // a comes first
+      return -1;
     }
     if (!a.priority && b.priority) {
-      return 1; // b comes first
+      return 1;
     }
 
-    // Both have priority or no priority, compare priority_index
     const final =
       order === "Ascending"
         ? (b.priority?.priority_index || 0) - (a.priority?.priority_index || 0)
         : (a.priority?.priority_index || 0) - (b.priority?.priority_index || 0);
 
-    // If estimate_index is the same, compare by ranking
     if (final === 0 && tieBreakByRanking) {
       return (a.ranking || "").localeCompare(b.ranking || "");
     }
@@ -47,19 +38,17 @@ export function sortByPriorityAndRankingOrder(order: SortingOrder, tieBreakByRan
 export function sortBySizeAndRankingOrder(order: SortingOrder, tieBreakByRanking = true) {
   return function sortBySizeAndRanking(a: any, b: any) {
     if (a.estimate && !b.estimate) {
-      return -1; // a comes first
+      return -1;
     }
     if (!a.estimate && b.estimate) {
-      return 1; // b comes first
+      return 1;
     }
 
-    // Both have estimate or no estimate, compare estimate_index
     const final =
       order === "Descending"
         ? (b.estimate?.estimate_index || 0) - (a.estimate?.estimate_index || 0)
         : (a.estimate?.estimate_index || 0) - (b.estimate?.estimate_index || 0);
 
-    // If estimate_index is the same, compare by ranking
     if (final === 0 && tieBreakByRanking) {
       return (a.ranking || "").localeCompare(b.ranking || "");
     }
@@ -70,18 +59,13 @@ export function sortBySizeAndRankingOrder(order: SortingOrder, tieBreakByRanking
 
 export function sortByCreatedAtOrder(order: SortingOrder) {
   return function sortByCreatedAt(a: any, b: any) {
-    // If 'createdAt' is missing in 'a' but exists in 'b', 'b' comes first
     if (!a.createdAt && b.createdAt) return -1;
-    // If 'createdAt' is missing in 'b' but exists in 'a', 'a' comes first
     if (a.createdAt && !b.createdAt) return 1;
-    // If neither has a 'createdAt', maintain original order
     if (!a.createdAt && !b.createdAt) return 0;
 
-    // Both have 'createdAt', sort from oldest to latest
     const dateA = new Date(a.createdAt);
     const dateB = new Date(b.createdAt);
 
-    //depends on order
     const final =
       order === "Ascending"
         ? dateA.getTime() - dateB.getTime()
@@ -93,18 +77,13 @@ export function sortByCreatedAtOrder(order: SortingOrder) {
 
 export function sortByUpdatedAtOrder(order: SortingOrder) {
   return function sortByUpdatedAt(a: any, b: any) {
-    // If 'createdAt' is missing in 'a' but exists in 'b', 'b' comes first
     if (!a.updatedAt && b.updatedAt) return -1;
-    // If 'createdAt' is missing in 'b' but exists in 'a', 'a' comes first
     if (a.updatedAt && !b.updatedAt) return 1;
-    // If neither has a 'createdAt', maintain original order
     if (!a.updatedAt && !b.updatedAt) return 0;
 
-    // Both have 'createdAt', sort from oldest to latest
     const dateA = new Date(a.updatedAt);
     const dateB = new Date(b.updatedAt);
 
-    //depends on order
     const final =
       order === "Ascending"
         ? dateA.getTime() - dateB.getTime()
@@ -149,8 +128,6 @@ export function sortByLastCommentAtOrder(order: SortingOrder) {
 
 export function sortByAssigneeOrder(order: SortingOrder) {
   return function sortByAssignee(a: ITask, b: ITask) {
-    // Agent first, then user: an agent assignment also carries its owner in `user`, and the card
-    // renders the agent, so keying on the user would sort by a name nobody can see.
     const assigneeA = a.assignees?.[0]?.agent?.displayName || a.assignees?.[0]?.user?.displayName;
     const assigneeB = b.assignees?.[0]?.agent?.displayName || b.assignees?.[0]?.user?.displayName;
 
@@ -180,10 +157,6 @@ export function sortByTicketNumberOrder(order: SortingOrder) {
 
 export function sortByDueDateOrder(order: SortingOrder) {
   return function sortByDueDate(a: any, b: any) {
-    // console.log("🚀 ~ sortByDueDate ~ b:", b);
-    // console.log("🚀 ~ sortByDueDate ~ a:", a);
-
-    // Items without a dueDate should always be placed last
     const hasDueDateA = !!a.dueDate;
     const hasDueDateB = !!b.dueDate;
 
@@ -191,7 +164,6 @@ export function sortByDueDateOrder(order: SortingOrder) {
     if (hasDueDateA && !hasDueDateB) return -1;
     if (!hasDueDateA && !hasDueDateB) return 0;
 
-    // Both have dueDate, sort based on order
     const dateA = new Date(a.dueDate).getTime();
     const dateB = new Date(b.dueDate).getTime();
 
@@ -200,14 +172,11 @@ export function sortByDueDateOrder(order: SortingOrder) {
 }
 
 
-// Helper function to compare if two dates are on the same day
 export function isSameDay(dateA?: Date | undefined, dateB?: Date | undefined) {
   if (!dateA && !dateB) return true;
 
-  // If one of the dates is missing, tasks should not be moveable
   if (!dateA || !dateB) return false;
 
-  // If both dates exist, check if they are on the same day
   const dayA = new Date(dateA);
   const dayB = new Date(dateB);
 
@@ -218,13 +187,11 @@ export function isSameDay(dateA?: Date | undefined, dateB?: Date | undefined) {
   );
 }
 
-// ================= enter a project and get back the correct sorting according to the set view mode
 export const comparatorForSortingMode = (
   mode: TBoardSortingViewMode,
   order: TBoardSortingViewOrder,
   tieBreakByRanking = true
 ): ((a: ITask, b: ITask) => number) | null => {
-  // Durations grow as timestamps age, so their order is the inverse of timestamp order.
   const invertOrder = (value: TBoardSortingViewOrder): TBoardSortingViewOrder =>
     value === "Ascending" ? "Descending" : "Ascending"
 
@@ -265,8 +232,6 @@ export const buildSortComparator = (
   levels: { mode: TBoardSortingViewMode; order: TBoardSortingViewOrder }[]
 ): ((a: ITask, b: ITask) => number) | null => {
   const comparators = levels
-    // Only the final level may fall back to ranking; earlier levels must be able to
-    // report a tie so the level below them decides.
     .map(({ mode, order }, index) => comparatorForSortingMode(mode, order, index === levels.length - 1))
     .filter((comparator): comparator is (a: ITask, b: ITask) => number => comparator !== null)
 
@@ -282,9 +247,6 @@ export const buildSortComparator = (
 }
 
 export const returnSortedItems = (filterItems:ITask[], project:IProject) => {
-  // check if the board has a user applied view. otherwise the default view.
-  // user_project_views basically has ALL the user_project_views.
-  // We know that since we're only getting one from backend, we are safe to check the 0 index. but add type safety anyways
   const boardAppliedSortingModeView = getActiveSortingModeFromProject(project)
   const boardAppliedSortingOrderView = getActiveSortingOrderFromProject(project)
 
@@ -298,34 +260,27 @@ export const returnSortedItems = (filterItems:ITask[], project:IProject) => {
   return itemsToSort.slice().sort(cmp)
 }
 
-// Usage:
 
 export const getCurrentProject = (_currentProject:IProject) => {
     if(!_currentProject) return 
       if (_currentProject.section) {
         let _sections: ISection[] = []
         let focusontask :ITask|null=null;
-        // const sectionsReturned = syncChangesForColumns(_currentProject)?.filter(x=>x.visibility)??[] //upsertBoardColumnsViewAndReturn(_currentProject)?.filter(x=>x.visibility)??[]
-        const sectionsReturned = getActiveColumnsViewFromProject(_currentProject)?.filter(x=>x.visibility)??[] //upsertBoardColumnsViewAndReturn(_currentProject)?.filter(x=>x.visibility)??[]
+        const sectionsReturned = getActiveColumnsViewFromProject(_currentProject)?.filter(x=>x.visibility)??[]
 
-        // console.log("🚀 ~ getCurrentProject ~ sectionsReturned:", sectionsReturned)
         for (var i = 0; i < sectionsReturned.length; i++) {
           const section = sectionsReturned[i];
-          // console.log("🚀 ~ file: Homepage.tsx:125 ~ getCurrentProject ~ section:", section)
           var filterItems:ITask[];
           if (_currentProject.tasks!==undefined && _currentProject.tasks!==null ) {
             filterItems = _currentProject?.tasks.filter((item: ITask) => item.sectionId === section.id)
-            // const response = await commentsGetCountByTask(taskIds)
 
             let itemsToSort = returnSortedItems(filterItems, _currentProject)
          
 
-          // To get First Task Details
           if (itemsToSort.length>0 && focusontask===null) focusontask=itemsToSort[0];
             _sections.push({ section_title: section.section_title,sectionId:section.id, visibility:section.visibility?section.visibility:true, items: itemsToSort, id: section.id })
           }
         }
-        // console.log("🚀 ~ getCurrentProject ~ _sections:", _sections)
         return {_sections: _sections, firstTask:focusontask}
       }
       return []
@@ -360,14 +315,10 @@ export const getCurrentProject = (_currentProject:IProject) => {
 
 export  const convertToPlain=(html:string)=>{
     if (typeof window!=="undefined"){
-
-      // Create a new div element
       var tempDivElement = document.createElement("div");
 
-      // Set the HTML content with the given value
       tempDivElement.innerHTML = html;
 
-      // Retrieve the text property of the element 
       return tempDivElement.textContent || tempDivElement.innerText || "";
     }
    
@@ -379,10 +330,8 @@ export function getParamsFromString(requestString:string){
       
       const queryParams: QueryParams = {};
     if (queryString) {
-        // Split the query string into individual key-value pairs
         const keyValuePairs = queryString.split('&');
       
-        // Iterate through the key-value pairs and store them in the object
         keyValuePairs.forEach((pair) => {
           const [key, value] = pair.split('=');
           queryParams[key] = decodeURIComponent(value);
@@ -417,25 +366,13 @@ export const emptyDescription = `<html><head></head><body><p></p></body></html>`
 
 
 export function scrollToCenterIfNearBottom(activeElement:HTMLElement, thresholdPercentage = 10) {
-  // Calculate the position of the active element
   const elementRect = activeElement.getBoundingClientRect();
   const elementBottom = elementRect.bottom;
 
-  // Calculate the distance from the bottom of the screen
   const distanceToBottom = window.innerHeight - elementBottom;
 
-  // Calculate the dynamic threshold based on a percentage of the viewport height
   const threshold = (window.innerHeight * thresholdPercentage) / 100;
-  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ threshold:", threshold)
-  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom:", distanceToBottom)
-  // console.log("🚀 ~ scrollToCenterIfNearBottom ~ distanceToBottom < threshold:", distanceToBottom < threshold)
-  // Check if the element is close to the bottom
   if (distanceToBottom < threshold) {
-    // Calculate the desired scroll position to center the element
-    // const scrollPosition = elementRect.top - window.innerHeight / 2 + elementRect.height / 2;
-    // console.log("🚀 ~ file: helperFunctions.ts:136 ~ scrollToCenterIfNearBottom ~ scrollPosition:", scrollPosition)
-
-    // Scroll to the desired position
     activeElement.scrollIntoView({behavior:"smooth",block:"center" })
   }
 }
@@ -443,40 +380,29 @@ export function scrollToCenterIfNearBottom(activeElement:HTMLElement, thresholdP
 
 
 export function scrollToCenterIfNearTop(activeElement:HTMLElement, thresholdPercentage = 2) {
-  // Calculate the position of the active element
   const elementRect = activeElement.getBoundingClientRect();
   const elementTop = elementRect.top;
 
-  // Calculate the distance from the top of the screen
   const distanceToTop = elementTop;
 
-  // Calculate the dynamic threshold based on a percentage of the viewport height
   const threshold = (window.innerHeight * thresholdPercentage) / 100;
 
-  // Check if the element is close to the top
   if (distanceToTop < threshold) {
-    // Calculate the desired scroll position to center the element
     const scrollPosition = elementRect.top - window.innerHeight / 2 + elementRect.height / 2;
 
-    // Scroll to the desired position
     activeElement.scrollIntoView({behavior:"smooth", block:"center"})
 
   }
 }
 export function scrollToCenterIfNear(activeElement: HTMLElement, thresholdPercentage = 24): void {
-  // Calculate the position of the active element
   const elementRect = activeElement.getBoundingClientRect();
 
-  // Calculate the distance from both left and right edges
   const distanceToLeft = elementRect.left;
   const distanceToRight = window.innerWidth - elementRect.right;
 
-  // Calculate the dynamic threshold based on a percentage of the viewport size
   const threshold = (window.innerWidth * thresholdPercentage) / 100;
 
-  // Check if the element is close to either edge
   if (distanceToLeft < threshold || distanceToRight < threshold) {
-    // Scroll to the desired position
     console.log("scrolling to center")
     activeElement.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
   }
@@ -484,20 +410,15 @@ export function scrollToCenterIfNear(activeElement: HTMLElement, thresholdPercen
 
 
 export function convertTimestampToDate(timestamp: number): Date {
-  return new Date(timestamp * 1000); // Convert seconds to milliseconds
+  return new Date(timestamp * 1000);
 }
 
 export function calculateRemainingTime (subscribedAt:Date){
-
-  // User subscription date
-  // const currentDate: Date = new Date('2024-12-01T11:00:25'); // Subscription started on Nov 29, 2023
-  const currentDate: Date = new Date(); // Use the current date
+  const currentDate: Date = new Date();
   const months:number = (getMonthDifference(
     subscribedAt, currentDate)
   );
-  //indexing for months in getMonthDifference is 0 [January]...and so on
   console.log("🚀 ~ calculateRemainingTime ~ 12-months:", 11-months)
-  // const returnPriceId:string = yearlyPriceIds[13-months]
   return 11-months
 }
 
@@ -511,12 +432,6 @@ function getMonthDifference(startDate:Date, endDate:Date) {
 }
 
 
-// HTPR-6254: this gates the pre-upload resize, which runs the file through a
-// canvas. A canvas can only draw what the browser can decode, so handing it a
-// HEIC from a Mac produced a WEBP of nothing, and worse, imageResizer's promise
-// has no reject path, so a decode that never fires onload left the attach
-// hanging forever. Only resize formats the browser can actually read; anything
-// else uploads untouched, which is also what makes it downloadable later.
 export const isImage = (file: File): boolean => {
   return isBrowserRenderableImage(file.type, file.name);
 };
@@ -524,12 +439,6 @@ export const isImage = (file: File): boolean => {
 export const processFiles = async (files: FileList, startingId: number) => {
     const  newFileItems: FileItem[] = await Promise.all(
       Array.from(files).map(async (original, index) => {
-        // HTPR-6264: a HEIC is decoded here, before anything else looks at it,
-        // so the optimistic tile has a JPEG copy to paint. The file itself is
-        // deliberately left alone: it is what gets uploaded, what the
-        // attachment is named after and what the user downloads again later.
-        // The decode is cached per file, so the upload layer reuses this one
-        // rather than doing it a second time.
         const { file } = await planUploadFile(original);
         if (isImage(file)) {
           if (file.size / (1024 ** 2) > 2) {
@@ -548,13 +457,6 @@ export const processFiles = async (files: FileList, startingId: number) => {
     );
     return newFileItems
   }
-/**
- *Function to crop an image file
- * Specifically for user profiles to be more rounded shaped.
- *
- * @param {File} file
- * @return {*}  {Promise<Blob>}
- */
 export const cropToCircle = (file: File): Promise<Blob> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -602,9 +504,9 @@ export const convertFileToBase64 = (file: any) => {
     console.log("🚀 ~ convertFileToBase64 ~ file:", file)
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
-      reader.onload = () => resolve(reader.result); // Returns the Base64 string
+      reader.onload = () => resolve(reader.result);
       reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file); // Start reading the file
+      reader.readAsDataURL(file);
     });
 }
 
@@ -612,9 +514,8 @@ import { getFileTypeFromUrl, IMAGE_FALLBACK_MIME } from "./getFileTypeFromUrl";
 export { getFileTypeFromUrl };
 
 export const getFileTypeFromBase64 = (base64: string): string | null => {
-  // Check if the string is a valid Base64 data URL
   const matches = base64.match(/^data:(.+?);base64,/);
-  return matches ? matches[1] : null; // Returns MIME type (e.g., "image/png")
+  return matches ? matches[1] : null;
 }
 
 export const blobToBase64 = function (url: string) {
@@ -663,13 +564,10 @@ export async function imageResizer  (file:File)  {
 }
 
 export function convertTimestampToFormattedDate(timestamp: number): string {
-  // Convert timestamp to milliseconds
   const milliseconds = timestamp * 1000;
 
-  // Create a Date object using the timestamp
   const date = new Date(milliseconds);
 
-  // Get the formatted date string (e.g., "January 3, 2024")
   const formattedDate = date.toLocaleDateString('en-US', {
     month: 'long',
     day: 'numeric',
@@ -698,7 +596,7 @@ export function debounce<T extends (...args: any[]) => any>(func: T, delay: numb
 
   return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
     const context = this;
-    const capturedArgs = args; // capture the current arguments
+    const capturedArgs = args;
 
     clearTimeout(timeoutId);
     timeoutId = setTimeout(() => func.apply(context, capturedArgs), delay);
@@ -750,7 +648,6 @@ export function selectPElementWithDataPlaceholderInDiv(divId:string) {
             return pWithPlaceholder;
         }
       
-        //Updated it this way so that it adds to p even if there isnt a new line.
         const anyPElement = div.querySelector('p');
         if (anyPElement) {
             return anyPElement;
@@ -760,7 +657,6 @@ export function selectPElementWithDataPlaceholderInDiv(divId:string) {
 }
 
 
-// wed, feb 28 2024 at 14:37GMT
 export function formatDateToGMT(date: Date) {
   const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -792,24 +688,17 @@ export function formatDateToGMT(date: Date) {
 const classNamesToReturnFrom = ["modal-open","ProseMirror ProseMirror-focused",undefined]
 
 
-// Your debounce function
 export function throttle<T extends (...args: any[]) => void>(func: T, wait: number) {
   let waiting = false;
   const preventKeys =["ArrowDown", "ArrowUp","ArrowLeft","ArrowRight",  "Tab"]
   return function (this: ThisParameterType<T>, ...args: Parameters<T>) {
     const notCtrlR = (args[0].ctrlKey && args[0].keyCode!==82)
-    // ponytail: a bare modifier keydown (Shift/Ctrl/Alt/Meta) must NOT open the throttle
-    // window. The `waiting` flag is shared across keys, so a chord like Shift+F whose second
-    // keydown (F) lands <wait ms after the Shift keydown gets swallowed by `if (waiting) return`.
-    // That is PERT-35: "Shift+F only works on the second try" on fast keyboards. Modifier-only
-    // keydowns match no shortcut here anyway, so skipping them is safe.
     const modKey = args[0] && args[0].keyCode
     if (modKey === 16 || modKey === 17 || modKey === 18 || modKey === 91 || modKey === 93) return
     if (waiting) {
       return;
     }
     if (returnIfModalOrInputActive()) return
-    // if (args[0].shiftKey|| notCtrlR || args[0].key ==="ArrowUp" || args[0].altKey|| preventKeys.includes(args[0].key)) event?.preventDefault()
     
     waiting = true;
 
@@ -821,23 +710,16 @@ export function throttle<T extends (...args: any[]) => void>(func: T, wait: numb
 }
 
 
-// Function to get a random element from an array
 export function getRandomElement(array:any[]) {
   const randomIndex = Math.floor(Math.random() * array.length);
   return array[randomIndex];
 }
 
-
-
-
-// Function to clean the title by removing spaces and non-alphabetical characters
 export function cleanTitle(title:string) {
   return title.replace(/[^a-zA-Z]/g, '').toLowerCase();
  }
-// Function to generate a deterministic 4-letter identifier from the title
 export function getSequentialLetters(title:string) {
   const cleanedTitle = cleanTitle(title);
-  // Ensure there are at least 4 characters
   if (cleanedTitle.length < 4) {
     return "Not enough characters";
   }
@@ -877,18 +759,11 @@ export function removeFromLocalStorage(key:string) {
 export const json = (param: any): any => {
   return JSON.stringify(
     param,
-    (key, value) => (typeof value === "bigint" ? parseInt(value.toString()) : value) // return everything else unchanged
+    (key, value) => (typeof value === "bigint" ? parseInt(value.toString()) : value)
   );
 };
 
 
-/**
- * For making sure keydown operations do not conflict with other elements
- *
- * @export
- * @param {boolean} [exludeModal=false]
- * @return {*} 
- */
 export function returnIfModalOrInputActive(exludeModal = false) {
   const classNamesToReturnFrom = [
     "modal-open",
@@ -896,7 +771,6 @@ export function returnIfModalOrInputActive(exludeModal = false) {
     "backdrop",
     undefined,
   ];
-  // Check if the modal is open or if the carousel container exists
   const isInputFocused = [
     "input",
     "textarea",
@@ -907,7 +781,6 @@ export function returnIfModalOrInputActive(exludeModal = false) {
     document.activeElement?.closest(".ProseMirror")
   );
 
-  // Check if the active element is a descendant of chatwindow
   const isInsideChatWindow = Boolean(
     document.activeElement?.closest(".chatwindow")
   );
@@ -916,7 +789,6 @@ export function returnIfModalOrInputActive(exludeModal = false) {
     document.getElementById("carousel-container");
   const tipTapClassName: string = "tiptap ProseMirror ProseMirror-focused";
 
-  // Check if the active element has certain roles or IDs
   const activeElementConditions =
     document?.activeElement?.role === "dialog" ||
     document?.activeElement?.id === "modalButtons" ||
@@ -926,7 +798,6 @@ export function returnIfModalOrInputActive(exludeModal = false) {
 
   const isModalOpen = document.getElementsByClassName("modal show").length > 0;
 
-  // Check if the active element's class name matches any in the array
   const classNameMatch = classNamesToReturnFrom.includes(
     document?.activeElement?.className
   );
@@ -965,15 +836,6 @@ export  const checkFreemiumDuration = (userJoinedAt: Date) => {
     else return false;
   };
 
-/**
- * Determines if a user should see the trial modal.
- * A user should see the trial modal if:
- * 1. They have not redeemed their trial (trialStatus is false)
- * 2. At least 14 days have passed since they joined
- * 
- * @param user - User object with UserSetting and joinedAt
- * @returns true if user should see trial modal, false otherwise
- */
 export const shouldShowTrialModal = (user: any): boolean => {
   if (!user || !user.UserSetting) return false;
 
@@ -985,7 +847,6 @@ export const shouldShowTrialModal = (user: any): boolean => {
   return !user.UserSetting.trialStatus && differenceInMilliseconds >= fourteenDaysInMilliseconds;
 };
 
-/** True if the user may open /trial (voluntary upgrade). Distinct from compelled flow in shouldShowTrialModal. */
 export const canAccessTrialPage = (user: any): boolean => {
   if (!user || !user.UserSetting) return false;
   return !user.UserSetting.trialStatus;
@@ -1003,59 +864,30 @@ export const getDaysLeftFreemium = (userJoinedAt: Date): number => {
   return daysLeft;
 };
 
-// export const isDeepEqual = (obj1: any, obj2: any) => {
-//   if (obj1 === obj2) return true;
-//   if (typeof obj1 !== "object" || typeof obj2 !== "object" || obj1 == null || obj2 == null) return false;
-
-//   const keys1 = Object.keys(obj1);
-//   const keys2 = Object.keys(obj2);
-
-//   if (keys1.length !== keys2.length) return false;
-
-//   for (let key of keys1) {
-//       if (!keys2.includes(key)) return false;
-//       if (typeof obj1[key] === 'object' && typeof obj2[key] === 'object') {
-//           if (!isDeepEqual(obj1[key], obj2[key])) return false;
-//       } else if (obj1[key] !== obj2[key]) {
-//           return false;
-//       }
-//   }
-
-//   return true;
-// };
-
 export function isDeepEqual(obj1: any, obj2: any): any {
   if (obj1 === obj2) return true;
 
-  // Check if both are null
   if (obj1 === null || obj2 === null) return obj1 === obj2;
 
-  // If types are different, objects are not equal
   if (typeof obj1 !== typeof obj2) return false;
 
-  // Check for arrays
   if (Array.isArray(obj1) && Array.isArray(obj2)) {
     if (obj1.length !== obj2.length) return false;
     
     return obj1.every((elem, index) => isDeepEqual(elem, obj2[index]));
   }
 
-  // Check for objects
   if (typeof obj1 === "object" && typeof obj2 === "object") {
     const keys1 = Object.keys(obj1);
     const keys2 = Object.keys(obj2);
 
-    // If objects don't have the same number of keys, they're not equal
     if (keys1.length !== keys2.length) return false;
 
-    // Check if every key in obj1 is present in obj2
     if (!keys1.every(key => keys2.includes(key))) return false;
 
-    // Recursively check all values
     return keys1.every(key => isDeepEqual(obj1[key], obj2[key]));
   }
 
-  // For primitives and all other types, return strict equality
   return obj1 === obj2;
 }
 
@@ -1066,12 +898,9 @@ export const processImagesForHyperMention = async (htmlText: string, attachments
     let processedAttachments: { fileName: string, url: string, mimeType: string }[] = [];
     let countBase64 = 0;
 
-    // Process inline images
     for (const img of imgTags) {
       const url = img.src;
       if (url.startsWith("https://files.hypertask.app")) {
-        // Same CORS trap as the task writer: only the URL travels on, so read the MIME
-        // type off the file name rather than fetching the file (HTPR-4735).
         const mimeType = getFileTypeFromUrl(url, IMAGE_FALLBACK_MIME);
         const fileName = url.substring(url.lastIndexOf("/") + 1);
         processedAttachments.push({ fileName, url, mimeType });
@@ -1101,7 +930,6 @@ export const processImagesForHyperMention = async (htmlText: string, attachments
     return processedAttachments;
 }
 
-/** Returns true if focus is on an AI Chat button, link, or inside the AI Chat UI (sidebar or popover) */
 export const isAIChatElementFocused = () => {
   const el = document.activeElement as HTMLElement | null
   if (!el) return false

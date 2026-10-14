@@ -16,12 +16,6 @@ export const EMBEDDING_MODEL = "openai/text-embedding-3-small";
 const EMBEDDINGS_ENDPOINT = "https://ai-gateway.vercel.sh/v1/embeddings";
 export const EMBEDDING_DIM = 1536;
 
-// The embedding model rejects any input over 8192 tokens and any empty
-// string with a non-retryable 400, which dropped long pages and image-only
-// comments from search (HTPR-7212, HTPR-7215). Keyword search still indexes
-// the full text; only the vector input is capped. 4000 characters stays under
-// the token limit even for dense text, and 64 of them stay under the
-// per-request token budget.
 export const EMBEDDING_MAX_INPUT_CHARS = 4000;
 const EMBEDDING_EMPTY_INPUT = "(empty)";
 const EMBEDDING_BATCH_SIZE = 64;
@@ -258,10 +252,6 @@ type SearchTasksParams = {
   status?: SearchStatus | null;
   projectId?: number | null;
   topK?: number;
-  // Skip the embedding call and run keyword-only (BM25). The embedding is a
-  // ~700ms network round-trip, so latency-sensitive typeaheads (the search box,
-  // @mentions) pass this to stay instant for exact title-style lookups. Hybrid
-  // vector search stays on for latency-tolerant callers (MCP/AI).
   keywordOnly?: boolean;
 };
 
@@ -436,10 +426,6 @@ export function toEmbeddingInput(text: string): string {
   );
 }
 
-// Embed a single batch, retrying transient failures (rate limits, server
-// errors, network blips) with exponential backoff. A whole failed batch was
-// crashing the backfill because the caller would then upsert vector-less rows
-// into a cosine namespace, which Turbopuffer rejects.
 async function embedBatchWithRetry(
   batch: string[],
   apiKey: string
@@ -478,7 +464,6 @@ async function embedBatchWithRetry(
       const error = new Error(
         `OpenAI embeddings request failed (${response.status}): ${responseText}`
       );
-      // Retry rate limits and server errors; fail fast on other client errors.
       if (response.status === 429 || response.status >= 500) {
         lastError = error;
         continue;
@@ -550,9 +535,6 @@ export async function upsertTaskRowsToTurbopuffer(
     "turbopuffer task upsert"
   );
 
-  // The namespace is cosine (vector-required); a vector-less write is rejected.
-  // If embeddings are unavailable, skip rather than crash — the row can be
-  // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
     console.error(
       `turbopuffer task upsert skipped: embeddings unavailable for ${rows.length} row(s)`
@@ -612,9 +594,6 @@ export async function upsertCommentRowsToTurbopuffer(
     "turbopuffer comment upsert"
   );
 
-  // The namespace is cosine (vector-required); a vector-less write is rejected.
-  // If embeddings are unavailable, skip rather than crash — the row can be
-  // reindexed later. Backfill logs surface any gap.
   if (!hasVectors) {
     console.error(
       `turbopuffer comment upsert skipped: embeddings unavailable for ${rows.length} row(s)`
@@ -673,7 +652,6 @@ export async function upsertPageRowsToTurbopuffer(
   } as any);
 }
 
-// Runs every time a task is archived/unarchived or task metadata changes.
 export async function upsertAllCommentsToTurbopuffer(taskId: number) {
   try {
     const allComments = await prisma.comment.findMany({
@@ -692,7 +670,6 @@ export async function upsertAllCommentsToTurbopuffer(taskId: number) {
   }
 }
 
-// Runs every time a task is permanently deleted.
 export async function deleteManyCommentsInTurbopuffer(taskId: number) {
   try {
     const allComments = await prisma.comment.findMany({
@@ -840,10 +817,6 @@ export async function searchTasks({
         turbopuffer
           .namespace(turbopufferNamespaces.task.name)
           .query({
-            // include_attributes must live INSIDE each sub-query: with RRF
-            // multi-query, a top-level include_attributes is ignored and the
-            // fused rows come back with only ids, so every attribute is
-            // undefined and the results get filtered out downstream.
             queries: [
               {
                 rank_by: ["vector", "ANN", queryVector],
@@ -913,7 +886,6 @@ export async function searchComments({
       const response = await turbopuffer
         .namespace(turbopufferNamespaces.comment.name)
         .query({
-          // include_attributes must live INSIDE each sub-query (see searchTasks).
           queries: [
             {
               rank_by: ["vector", "ANN", queryVector],
@@ -1138,9 +1110,6 @@ async function ensureNamespaceSchema(
   schemaRow: Record<string, unknown> & { id: string }
 ) {
   const ns = turbopuffer.namespace(namespace);
-  // Seed a real vector so the namespace is created with the cosine metric that
-  // live upserts use. Without a vector + distance_metric the namespace defaults
-  // to euclidean, and later cosine writes fail with a metric mismatch.
   const seedVector = new Array(EMBEDDING_DIM).fill(0);
   seedVector[0] = 1;
   await ns.write({
@@ -1474,6 +1443,5 @@ export function convertToPlain(htmlString: string = "") {
 }
 
 export function searchPreviewText(htmlString: string = "") {
-  // Keep the index encoded; decode once on reads, after stripping source tags.
   return new TextNode(convertToPlain(htmlString)).text;
 }

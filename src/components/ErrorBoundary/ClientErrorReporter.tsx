@@ -68,7 +68,6 @@ export async function handleClientRejection(
           return
         }
       } catch {
-        // Report the original chunk failure instead of creating another rejection.
       }
       environment.releaseRecovery(environment.href)
     } else if (attempt !== null) {
@@ -79,22 +78,12 @@ export async function handleClientRejection(
   environment.report(payload)
 }
 
-// Catches crashes that ESCAPE React's error boundaries — async throws, event
-// handlers, and unhandled promise rejections. Boundaries only catch render-phase
-// throws, so this window-level listener is what surfaces the crashes that
-// otherwise leave a user on a blank screen with nothing logged.
 export default function ClientErrorReporter() {
   useEffect(() => {
     const chunkRecoveriesInFlight = new Set<string>()
 
     const onError = (e: ErrorEvent) => {
-      // instrumentation-client captures public-share hydration failures before
-      // React starts, with the pre-hydration DOM mutations attached. Avoid
-      // filing the same Error object again without those diagnostics.
       if (wasShareHydrationErrorReported(e.error)) return
-      // Benign browser quirk (Chrome/Safari), not an app bug: fires when a
-      // ResizeObserver callback doesn't finish within one animation frame.
-      // https://bugs.chromium.org/p/chromium/issues/detail?id=809574
       if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
         return
       }

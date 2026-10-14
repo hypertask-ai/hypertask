@@ -11,7 +11,7 @@ export const allowedCommentPatterns = [
   /^\/[/\*]\s*(?:webpackChunkName|webpackIgnore|webpackPrefetch|webpackPreload|webpackMode|turbopackIgnore)\b/,
   /^\/[/\*]\s*(?:@vite-ignore|[\#@]__PURE__|\#__NO_SIDE_EFFECTS__)\b/,
   /^\/[/\*]\s*@(?:jsxImportSource|jsx)\b/,
-  /^\/[/\*]\s*(?:prettier-ignore|istanbul ignore|c8 ignore|v8 ignore|biome-ignore)\b/,
+  /^\/[/\*]\s*(?:prettier-ignore|istanbul ignore|c8 ignore|v8 ignore|biome-ignore|trufflehog:ignore)\b/,
   /^\/[/\*]\s*@(?:vitest-environment|jest-environment|refresh reset)\b/,
   /^\/[/\*]\s*#\s*sourceMappingURL\s*=/,
   /^\/\*\*[\s\S]*?@(?:deprecated|type|typedef|template|satisfies|overload)\b/,

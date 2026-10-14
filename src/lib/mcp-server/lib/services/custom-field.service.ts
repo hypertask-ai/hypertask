@@ -19,7 +19,6 @@ export interface CustomFieldOption {
   color?: string;
 }
 
-/** JSON shape returned by GET /api/mcp/custom-fields. */
 export interface CustomFieldDefinition {
   id: string;
   projectId: number;
@@ -48,7 +47,6 @@ export interface CustomFieldValue {
   updatedAt: string;
 }
 
-/** JSON shape returned by POST /api/mcp/custom-fields/value. */
 export interface SetCustomFieldValueResponse {
   success: true;
   taskId: number;
@@ -61,7 +59,6 @@ export interface SetCustomFieldValueResponse {
   deleted?: true;
 }
 
-/** Thin MCP client for the shared custom-field routes used by the CLI. */
 export class CustomFieldService {
   constructor(private readonly apiClient: IApiClient) {}
 

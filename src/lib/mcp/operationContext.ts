@@ -20,7 +20,6 @@ export function getMcpExecutionContext(token: string): McpAuthContext | undefine
   return context?.token === token ? context.auth : undefined
 }
 
-// Only in-process requests receive this binding. HTTP headers cannot supply it.
 export function bindMcpOperationContext(
   request: Request,
   auth: McpAuthContext,

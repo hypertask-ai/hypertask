@@ -24,7 +24,6 @@ const managementApiKeyPlugin = apiKey({
   defaultPrefix: 'htmk_',
   enableSessionForAPIKeys: false,
   requireName: true,
-  // MCP routes already enforce the shared per-token Redis rate limit.
   rateLimit: {
     enabled: false,
   },
@@ -41,11 +40,6 @@ const managementApiKeyPlugin = apiKey({
   },
 })
 
-// This configuration only creates user-owned keys. Marking the polymorphic
-// plugin field as a user reference lets Better Auth convert our serial User.id
-// to/from its string API representation and matches the Prisma cascade relation.
-// This mutates undocumented plugin internals, so @better-auth/api-key is pinned
-// to an exact version in package.json — re-verify this shape on every bump.
 Object.assign(managementApiKeyPlugin.schema.apikey.fields.referenceId, {
   references: {
     model: 'User',
@@ -140,14 +134,6 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
-  // Vercel preview deployments serve from *.vercel.app while BETTER_AUTH_URL
-  // stays app.hypertask.ai, so the origin check 403s every POST there. Trust
-  // the deployment's own host on previews only; production stays strict.
-  // demo.hypertask.ai is the isolated-cookie host for the anonymous demo
-  // (HTPR-4303); its guest bridge-session POSTs must not be origin-rejected.
-  // Cookies are host-only, so this host still cannot touch an app.hypertask.ai
-  // session. app.hypertask.ai/staging listed explicitly so the array never
-  // narrows the origins production already trusts.
   trustedOrigins:
     process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
       ? [
@@ -178,9 +164,6 @@ export const auth = betterAuth({
       image: 'photoURL',
       createdAt: 'joinedAt',
     },
-    // uid is a legacy NOT NULL column filled by the create.before hook below;
-    // without this declaration the adapter strips unknown fields and the
-    // insert fails with "Argument uid is missing".
     additionalFields: {
       uid: {
         type: 'string',
@@ -191,19 +174,11 @@ export const auth = betterAuth({
   },
   session: {
     modelName: 'BetterAuthSession',
-    // 30-day rolling login. Default is 7 days, which had users re-authenticating
-    // roughly weekly. expiresIn sets the lifetime; updateAge refreshes the token
-    // on each day of use so active users effectively stay logged in.
     expiresIn: 60 * 60 * 24 * 30,
     updateAge: 60 * 60 * 24,
   },
   account: {
     modelName: 'BetterAuthAccount',
-    // emailVerified was backfilled 2026-07-11 (HTPR-4159): 860/995 users, the
-    // rest are instant-signups who never proved email ownership. The default
-    // requireLocalEmailVerified gate now correctly blocks linking a Google
-    // account onto an unverified local account (pre-registration takeover);
-    // those users fall back to the legacy Google flow unchanged.
     accountLinking: {
       trustedProviders: ['google'],
     },
@@ -242,10 +217,6 @@ export const auth = betterAuth({
               displayName: user.name,
               photoURL: user.image,
               stripeCustomerNameEmail: user.email,
-              // HTPR-5639: honour the one config both signup paths share.
-              // Hardcoding false sent every Google / passkey / magic-link
-              // signup through the /onboarding wizard while email-code signups
-              // went straight to the board.
               shouldSkipInteractive: authConfig.onboarding.shouldSkipInteractive,
               skipOnboarding: authConfig.onboarding.skipOnboarding,
               isVerified: true,
@@ -270,22 +241,17 @@ export const auth = betterAuth({
     database: {
       generateId: 'serial',
     },
-    // Vercel terminates TLS ahead of us; the client IP arrives in these
-    // headers. Without this, rate limiting counts everyone as one IP.
     ipAddress: {
       ipAddressHeaders: ['x-forwarded-for', 'x-real-ip'],
     },
   },
-  // HTPR-4146: apiKey defaults to process.env.BETTER_AUTH_API_KEY.
   plugins: [
     dash(),
     managementApiKeyPlugin,
     bridgeSessionPlugin(),
     multiSession(),
-    // ponytail: Passkeys are origin-bound, so Vercel previews cannot register or use them; production only.
     passkey({
       rpName: 'Hypertask',
-      // rpID defaults to baseURL host (app.hypertask.ai); origin pinned for defense.
       origin: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
       schema: { passkey: { modelName: 'Passkey' } },
     }),
@@ -293,7 +259,6 @@ export const auth = betterAuth({
       sendMagicLink: async ({ email, url }) => {
         await sendMagicLinkEmail(email, url)
       },
-      // A DB leak must not expose clickable login links (dashboard insight).
       storeToken: 'hashed',
     }),
     emailOTP({
@@ -304,7 +269,6 @@ export const auth = betterAuth({
       },
       disableSignUp: true,
       otpLength: 6,
-      // Same rationale as storeToken above.
       storeOTP: 'hashed',
     }),
     legacyCookiePlugin(),

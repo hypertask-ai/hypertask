@@ -1,12 +1,5 @@
-// keyboard-handler.ts
 
-/**
- * Keyboard key codes mapping
- * Note: keyCode is deprecated in favor of KeyboardEvent.key and KeyboardEvent.code
- * but still widely used for compatibility
- */
 export const KeyCodes = {
-  // Letters (uppercase values - will work for both cases in keydown/keyup)
   A: 65,
   B: 66,
   C: 67,
@@ -34,7 +27,6 @@ export const KeyCodes = {
   Y: 89,
   Z: 90,
 
-  // Numbers (top row)
   ZERO: 48,
   ONE: 49,
   TWO: 50,
@@ -46,7 +38,6 @@ export const KeyCodes = {
   EIGHT: 56,
   NINE: 57,
 
-  // Numpad
   NUMPAD_0: 96,
   NUMPAD_1: 97,
   NUMPAD_2: 98,
@@ -63,7 +54,6 @@ export const KeyCodes = {
   NUMPAD_DECIMAL: 110,
   NUMPAD_DIVIDE: 111,
 
-  // Function keys
   F1: 112,
   F2: 113,
   F3: 114,
@@ -77,7 +67,6 @@ export const KeyCodes = {
   F11: 122,
   F12: 123,
 
-  // Navigation
   ARROW_LEFT: 37,
   ARROW_UP: 38,
   ARROW_RIGHT: 39,
@@ -87,7 +76,6 @@ export const KeyCodes = {
   HOME: 36,
   END: 35,
 
-  // Special keys
   BACKSPACE: 8,
   TAB: 9,
   ENTER: 13,
@@ -101,35 +89,29 @@ export const KeyCodes = {
   DELETE: 46,
   INSERT: 45,
   
-  // Windows key / Command key
   META_LEFT: 91,
   META_RIGHT: 93,
   WINDOWS: 91,
   COMMAND: 91,
 
-  // Context Menu key
   CONTEXT_MENU: 93,
 
-  // Punctuation and symbols
-  // Note: These can vary between browsers and keyboard layouts
-  SEMICOLON: 186,     // ; :
-  EQUALS: 187,        // = +
-  COMMA: 188,         // , <
-  MINUS: 189,         // - _
-  PERIOD: 190,        // . >
-  FORWARD_SLASH: 191, // / ?
-  BACKTICK: 192,      // ` ~
-  OPEN_BRACKET: 219,  // [ {
-  BACKSLASH: 220,     // \ |
-  CLOSE_BRACKET: 221, // ] }
-  SINGLE_QUOTE: 222,  // ' "
+  SEMICOLON: 186,
+  EQUALS: 187,
+  COMMA: 188,
+  MINUS: 189,
+  PERIOD: 190,
+  FORWARD_SLASH: 191,
+  BACKTICK: 192,
+  OPEN_BRACKET: 219,
+  BACKSLASH: 220,
+  CLOSE_BRACKET: 221,
+  SINGLE_QUOTE: 222,
 } as const;
 
-// Type for the key codes
 export type KeyCode = typeof KeyCodes[keyof typeof KeyCodes];
 
 export const KeyValues = {
-  // Letters
   A: ['a', 'A'],
   B: ['b', 'B'],
   C: ['c', 'C'],
@@ -157,7 +139,6 @@ export const KeyValues = {
   Y: ['y', 'Y'],
   Z: ['z', 'Z'],
 
-  // Special keys
   ENTER: ['Enter'],
   SPACE: [' '],
   TAB: ['Tab'],
@@ -174,7 +155,6 @@ export const KeyValues = {
   META: ['Meta'],
 } as const;
 
-// Helper type for key names
 export type KeyName = keyof typeof KeyCodes;
 export type KeyValueName = keyof typeof KeyValues;
 

@@ -3,7 +3,6 @@ import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } fr
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
-// Tiptap.tsx
 import { useEffect, useLayoutEffect } from "react";
 import toast from "react-hot-toast";
 import useClickOutside from "@/hooks/MultiPages/useClickOutside";
@@ -34,16 +33,11 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   const setCommands = useSetRecoilState(showCommandsAtom);
 
   useEffect(() => {
-    // Ctrl/Cmd+J changes the parent edit mode after this editor has already
-    // mounted. Keep the local writer surface in sync for descriptions and
-    // existing comments as well as the new-comment composer.
     setShouldShowAITaskWriter(shouldTriggerAiTaskWriter && !newTaskWindow);
   }, [mode, shouldTriggerAiTaskWriter, newTaskWindow]);
 
   const insertReply = (block: ScrollLogicalPosition = "start", behavior: ScrollBehavior = "smooth") => {
     if (reply) {
-      // ponytail: quote starts with an inline mention, so it would glue onto whatever
-      // the user already typed. Insert a real text node (HTML leading spaces get trimmed).
       const $from = editor?.state.selection.$from;
       const textBefore = $from ? $from.parent.textBetween(0, $from.parentOffset) : "";
       if (textBefore && !/\s$/.test(textBefore)) {
@@ -140,16 +134,11 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
   }, [id, newTaskWindow, setCommands]);
 
-  // Ctrl+K "Suggest reply": generate a draft reply into this comment composer.
-  // The editor's update listener persists it as the user's private Comment
-  // draft; publishing stays manual via the normal send/delete affordances.
   useEffect(() => {
     if (mode !== "create-comment") return;
 
     const suggestReplyHandler = async () => {
       if (!editor || !currentTask?.id || suggestReplyAbortRef.current) return;
-      // Never overwrite an existing draft — the user must send or discard it
-      // first, otherwise Suggest reply would silently destroy their text.
       const composerSnapshot = editor.getHTML().trim();
       if (composerSnapshot && composerSnapshot !== "<p></p>") {
         toast("Send or delete the current comment draft first.");
@@ -171,8 +160,6 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
         if (response.status !== 200 || !response.data?.html) {
           throw new Error(response.data?.error ?? "No suggestion returned");
         }
-        // The composer stayed editable while generating; if the user typed in
-        // the meantime, don't replace what they wrote.
         if (editor.getHTML().trim() !== composerSnapshot) {
           toast.dismiss(loadingToast);
           toast("You started typing — the suggestion was not inserted.");
@@ -188,8 +175,6 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
         toast.dismiss(loadingToast);
         toast.success("Reply draft ready — review, edit, then send or delete.");
       } catch (error) {
-        // Navigating away from the task aborts the request on purpose; still
-        // clear the loading toast so it can't linger.
         toast.dismiss(loadingToast);
         if (!axios.isCancel(error)) {
           toast.error("Could not generate a reply suggestion");
@@ -203,10 +188,9 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     window.addEventListener(AI_SUGGEST_REPLY_EVENT, suggestReplyHandler as EventListener);
     return () => {
       window.removeEventListener(AI_SUGGEST_REPLY_EVENT, suggestReplyHandler as EventListener);
-      // A stale suggestion for a previous task must never land in a new one.
       suggestReplyAbortRef.current?.abort();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [mode, editor, currentTask?.id]);
 
   useEffect(() => {

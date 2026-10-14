@@ -1,9 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { withQstashSignature } from "@/lib/qstash";
 import { upsertTasksByTeamIdHandler } from "./upsertAllTasksByTeamIdInvoke"
-// import generateSummaryAfterUpsertionQueue from "../AiSummary/generateSummaryAfterUpsertionQueue"
-// import { subMinutes } from "date-fns"
-// import generateSummaryAfterUpsertionReminder from "../AiSummary/generateSummaryAfterUpsertionReminder"
 
 async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
@@ -11,7 +8,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     console.log("🚀 ~ executing job:", job)
 
     if (await upsertTasksByTeamIdHandler(job.teamId) === "Success") {
-      // generateSummaryAfterUpsertionReminder(job.teamId)
       return res.status(200).json({ ok: true });
     }
     else {
@@ -19,7 +15,6 @@ async function handler(req: NextApiRequest, res: NextApiResponse) {
     }
   } catch (error) {
     console.log("🚀 ~ error:", error)
-    // Return 200 so QStash does not retry an error we have already handled/logged.
     return res.status(200).json({ ok: false });
   }
 }

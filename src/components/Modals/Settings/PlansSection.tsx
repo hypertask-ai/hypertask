@@ -68,9 +68,6 @@ const PlansSection = () => {
     }
   }, [searchParams]);
 
-  // Teams created via /api/teams/create have no stripe_customer_id (only the
-  // onboarding path sets one). The old /pricing page provisioned it on load;
-  // without this, checkout has no customer and upgrading is impossible.
   useEffect(() => {
     if (!isOwner || !team?.id || team.stripe_customer_id) return;
     let cancelled = false;

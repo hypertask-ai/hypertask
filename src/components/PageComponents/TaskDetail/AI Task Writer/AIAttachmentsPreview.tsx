@@ -34,7 +34,6 @@ const AIAttachmentsPreview: React.FC<AITaskWriterAttachmentsProps> = ({
 
   if (attachments.length === 0) return null;
 
-  // Convert AI attachments to IAttachment format for carousel
   const convertToCarouselFormat = (aiAttachments: IAIAttachment[]): IAttachment[] => {
     return aiAttachments.map((attachment, index) => ({
       id: parseInt(attachment.id) || index,
@@ -105,7 +104,6 @@ const AIAttachmentsPreview: React.FC<AITaskWriterAttachmentsProps> = ({
           >
             <div className='ai-task-writer-attachment items-center w-full p-2 h-full flex flex-col rounded-md bg-[#27292D] text-white-black justify-end relative'>
               
-              {/* Remove button */}
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -119,10 +117,8 @@ const AIAttachmentsPreview: React.FC<AITaskWriterAttachmentsProps> = ({
                 <X size={14} className="ai-task-writer-attachment-remove-icon text-white"  strokeWidth={1.75}/>
               </button>
 
-              {/* Thumbnail */}
               {renderThumbnail(attachment, index)}
               
-              {/* File name */}
               <span className="ai-task-writer-attachment-name py-2 text-center text-white text-dense overflow-hidden h-[30px] w-[60px] line-clamp-1">
                 {attachment.file.name}
               </span>
@@ -131,7 +127,6 @@ const AIAttachmentsPreview: React.FC<AITaskWriterAttachmentsProps> = ({
         ))}
       </div>
 
-      {/* Carousel */}
       {isCarouselOpen && (
         <AttachmentCarousel
           attachments={carouselAttachments}

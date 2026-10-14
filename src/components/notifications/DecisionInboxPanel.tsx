@@ -24,10 +24,6 @@ const waitedFor = (iso: string) => {
   return `${days} day${days === 1 ? "" : "s"}`;
 };
 
-/**
- * HTPR-7072: everything waiting on the signed-in person's decision. Rows come
- * from ticket state on the server, so answering on the ticket clears the row.
- */
 const DecisionInboxPanel = ({ userId }: { userId: number }) => {
   const enabled = useFlag(HTPR_7072_DECISION_INBOX_FLAG);
   const { data } = useQuery({
