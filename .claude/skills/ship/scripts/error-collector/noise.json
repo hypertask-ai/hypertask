@@ -97,5 +97,17 @@
     "service": "github-actions",
     "match": "^Outside PR guard failed\\b",
     "reason": "The guard runs on PRs, which this source never collects; on production it only runs as a manual dry run, whose failure the person who started it already sees (YPER4-364)."
+  },
+  {
+    "id": "browser-resize-observer",
+    "service": "browser",
+    "match": "ResizeObserver loop (?:limit exceeded|completed with undelivered notifications)",
+    "reason": "Browser layout warning reported as an error; harmless and not caused by a failing feature."
+  },
+  {
+    "id": "browser-cross-origin-script",
+    "service": "browser",
+    "match": "^(?:Error: )?Script error\\.?(?:\\n|$)",
+    "reason": "Cross-origin script error the browser hides all details of, so there is nothing to fix from it."
   }
 ]
