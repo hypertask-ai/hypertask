@@ -1,4 +1,5 @@
 import { waitUntil } from '@vercel/functions'
+import { ZodError } from 'zod'
 import { aiFeedbackSchema, type AiFeedbackInput } from './input'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import type { PortableTool } from '@/lib/mcp-server/stateless-http'
@@ -83,7 +84,8 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         if (status && status >= 500) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-server-error' }, userId)
         return text
       } catch (error) {
-        const status = feedbackStatus(error) ?? 500
+        // Schema rejections inside a tool are the caller's input mistake, not a crash (HTPR-7207).
+        const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
         queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
         throw error
       }

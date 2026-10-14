@@ -263,6 +263,16 @@ test('thrown MCP caller errors keep their HTTP meaning instead of filing as 500 
   assert.match(files[1].description, /HTTP status: 400/)
 })
 
+test('schema rejections thrown inside a tool file as 400, not a 500 crash (HTPR-7207)', async () => {
+  const schema = z.object({ task_id: z.array(z.number()) })
+  const tools = observeFeedbackTools([
+    { name: 'hypertask_tasks', description: 'bad input', parameters: z.object({}), execute: async (args) => { schema.parse(args); return '{}' } },
+  ], 985)
+  await assert.rejects(tools[0].execute({ task_id: 'HTPR-1' }, 'fixture'), z.ZodError)
+  await drain()
+  assert.equal(files.length, 1)
+  assert.match(files[0].description, /HTTP status: 400/)
+})
 
 test('an empty real MCP catalog reports even when deferred discovery helpers prevent a literally empty wire list', async () => {
   registeredTools.length = 0
