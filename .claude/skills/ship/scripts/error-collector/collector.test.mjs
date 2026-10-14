@@ -367,6 +367,15 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
 
+check('reporting', 'outside PR guard dry runs are noise, other workflow failures are errors (YPER4-364)', () => withHarness(async h => {
+  const ci = { service: 'github-actions', board: 4060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
+  h.events([event({ ...ci, message: 'Outside PR guard failed: outside-pr-guard' }), event({ ...ci, message: 'CI Tests failed: browser-smoke' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].noise, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
+}));
+
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
   h.events([event({ message: 'database ECONNRESET' }), event({ message: 'client request ECONNRESET' })]);
   await h.run();
