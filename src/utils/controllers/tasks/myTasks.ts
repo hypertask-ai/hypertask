@@ -79,6 +79,7 @@ const getMyTasks = async (
           { OR: scopeOr },
         ],
       },
+      omit: { description: true, descriptionJson: true },
       include: {
         project: {
           select: {

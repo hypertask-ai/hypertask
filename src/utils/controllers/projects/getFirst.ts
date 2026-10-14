@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
 
-const getFirst = async (userId:number) => {
+const getFirst = async (userId:number, { withTasks = false }: { withTasks?: boolean } = {}) => {
         try {
             if (!userId) {
                 return({
@@ -24,9 +24,8 @@ const getFirst = async (userId:number) => {
                     json:{ message: "User not found" }
                 })
             }
-            // No `tasks`: callers read only the board's id, columns and views, and
-            // loading every task with its description took over a second (YPER4-388).
             const projectInclude = {
+                ...(withTasks ? { tasks: true } : {}),
                 section: true,
                 ai_custom_instructions: true,
                 project_view: getProjectViewInclude({ currentUserId: userId }),

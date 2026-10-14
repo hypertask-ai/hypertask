@@ -120,7 +120,7 @@ export async function leaveTeam(
 
     console.log("🤔 ~ Team exit status: TEAM SEATS DECREMENTED.");
 
-    const firstProject = await getFirst(userId);
+    const firstProject = await getFirst(userId, { withTasks: true });
     return {
       status: 200,
       json: { message: "Success", firstProject },
