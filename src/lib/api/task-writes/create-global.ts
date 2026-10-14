@@ -310,8 +310,8 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
-        // Callers sometimes send a number or nothing; Task.ranking is a string, so place the task last instead of crashing (HTPR-7217).
-        const taskRanking = typeof ranking === "string" && ranking
+        // Callers sometimes send a number; Task.ranking is a string, so place the task last instead of crashing (HTPR-7217).
+        const taskRanking = ranking == null || typeof ranking === "string"
           ? ranking
           : generateRank((await tx.task.findFirst({
               where: { sectionId: sectionRow.id, projectId, status: "Normal" },

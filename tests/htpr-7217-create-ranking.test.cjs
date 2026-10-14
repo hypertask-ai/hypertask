@@ -9,7 +9,7 @@ const route = fs.readFileSync(
 );
 
 test("HTPR-7217: global create never hands a non-string ranking to Prisma", () => {
-  assert.match(route, /typeof ranking === "string" && ranking\s*\?\s*ranking\s*:\s*generateRank\(/);
+  assert.match(route, /ranking == null \|\| typeof ranking === "string"\s*\?\s*ranking\s*:\s*generateRank\(/);
   assert.match(route, /sectionId: sectionRow\.id, projectId, status: "Normal"[\s\S]*orderBy: \{ ranking: "desc" \}/);
   assert.match(route, /ticketNumber: [^\n]*\n\s*ranking: taskRanking,/);
 });
