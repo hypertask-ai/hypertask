@@ -195,7 +195,7 @@ export async function cancelJobById(jobId: string, path: string): Promise<void> 
   const messageId = await redis.get(key);
   if (!messageId) return;
   try {
-    await getQstashClient().messages.delete(messageId);
+    await getQstashClient().messages.cancel([messageId]);
   } catch {
     // already delivered or gone — nothing to cancel
   }

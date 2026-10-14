@@ -41,7 +41,7 @@ The whole run has a twelve-minute deadline, below the unit's fourteen-minute lim
 
 ## State and retries
 
-Private `~/.local/state/error-collector/state.json` is atomically replaced and fsynced. It has `sources` timestamp cursors, optional `sourceCursors` payloads, `fingerprints` ticket records, durable `pending` groups, rolling-hour `created` reservations, per-ticket `activities`, and UTC `days`/`summaries` retained for fourteen days. Pending counts and routes accumulate without recounting successful windows. `newGroups` counts newly observed kinds, even if held by the cap.
+Private `~/.local/state/error-collector/state.json` is atomically replaced and fsynced. It has `sources` timestamp cursors, optional `sourceCursors` payloads, `fingerprints` ticket records, durable `pending` groups, redacted trailing-hour `noiseWindows`, rolling-hour `created` reservations, per-ticket `activities`, and UTC `days`/`summaries` retained for fourteen days. Pending counts and routes accumulate without recounting successful windows. `newGroups` counts newly observed kinds, even if held by the cap.
 
 All three task statuses (Normal, Archive, Deleted) are searched with a project filter and pagination before creation. Only exact description markers are adopted. Deleted matches never receive activity. Failed/incomplete searches fail closed. Creation attempts reserve a cap slot **before** the external write: an ambiguous failure conservatively consumes a slot for one hour, and the pending group reconciles its marker next run. This prevents a failed receipt or interrupted process from causing a ticket flood. As with the watcher, there is no cross-system exactly-once transaction; a complete successful search is required before retrying an unresolved create.
 
@@ -49,6 +49,8 @@ Known-group counts and routes accumulate until at most one activity per ticket p
 
 Sample text, stacks, routes and titles are redacted before reporting or persistence; HTML is escaped and stacks are capped at forty lines. Command output and source exceptions are never logged. `noise.json` rules operate on the raw message and route and can be scoped by service; scanner paths, client aborts and explicit expected 401/403/404 responses are preseeded.
 
+
+Warning rules explicitly opted in with `alert: true` stay out of error totals and ordinary error grouping, but more than 50 matches of one rule for one service within a rolling hour file one source-fix ticket. `ERROR_COLLECTOR_NOISE_HOURLY_LIMIT` overrides that threshold. The trailing hour persists across collection passes; repeats reuse the service/rule fingerprint and existing activity, cap and retry paths. Scanner traffic, expected HTTP responses, client aborts, agent refusals and forced tests never alert.
 
 ## Forced test errors (YPER4-384)
 

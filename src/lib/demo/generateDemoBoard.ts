@@ -1,4 +1,4 @@
-import { createGateway, generateObject } from "ai";
+import { createGateway, generateText, Output } from "ai";
 import { z } from "zod";
 
 import { backgroundClaudeModelEnabled } from "@/app/api/ai/_lib/planGate";
@@ -97,9 +97,9 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
   const claude = await backgroundClaudeModelEnabled(null);
   // The demo key routes Claude through the Gateway on purpose, to keep anonymous spend isolated; this predates HTPR-7075.
   const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
-  const { object } = await generateObject({
+  const { output } = await generateText({
     model,
-    schema: BoardSchema,
+    output: Output.object({ schema: BoardSchema }),
     // Luna's completion budget includes reasoning as well as the board JSON.
     maxOutputTokens: 4096,
     maxRetries: 2,
@@ -111,5 +111,5 @@ export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
     prompt: `Board purpose: ${purpose}`,
   });
 
-  return ensureMinimumDueDates(object);
+  return ensureMinimumDueDates(output);
 }

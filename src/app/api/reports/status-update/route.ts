@@ -26,7 +26,7 @@ import {
   aiUsageProviderForCredential,
 } from "@/app/api/ai/_lib/modelProvider";
 import { escapeHtml } from "@/utils/helperFunctions/escapeHtml";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -241,9 +241,9 @@ export async function POST(request: NextRequest) {
       provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
       feature: "summary",
     });
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema: statusSchema,
+      output: Output.object({ schema: statusSchema }),
       maxRetries: 2,
       maxOutputTokens: 900,
       providerOptions: providerOptionsForAiModel(model, "status-update", {
@@ -271,7 +271,7 @@ Write the status update:
 - risks: tickets sitting still, piling up, or otherwise worth attention.`,
     });
 
-    const bodyHtml = renderStatusHtml(result.object, {
+    const bodyHtml = renderStatusHtml(result.output, {
       boardTitle,
       generatedAt: now,
       verdict,
@@ -294,7 +294,7 @@ Write the status update:
       projectId,
       slug: STATUS_SLUG,
       title,
-      description: result.object.headline,
+      description: result.output.headline,
       bodyHtml,
     };
 
@@ -312,7 +312,7 @@ Write the status update:
     return NextResponse.json({
       success: true,
       url: getReportUrl(projectId, STATUS_SLUG),
-      headline: result.object.headline,
+      headline: result.output.headline,
     });
   } catch (error) {
     console.log("🚀 ~ status-update ~ error:", error);

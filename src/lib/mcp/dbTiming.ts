@@ -32,6 +32,17 @@ export function createMcpTimingPool(config: PoolConfig): Pool {
   const connections = new WeakMap<ClientBase, number>()
 
   class TimingClient extends Client {
+    private queryTail = Promise.resolve()
+
+    query: Client['query'] = (...args: any[]): any => {
+      const run = () => super.query.apply(this, args as Parameters<Client['query']>)
+      if (args.some(arg => typeof arg === 'function') || typeof args[0]?.submit === 'function') return run()
+      // Prisma can issue concurrent transaction queries on this one pg client.
+      const result = this.queryTail.then(run)
+      this.queryTail = result.then(() => undefined, () => undefined)
+      return result
+    }
+
     connect(): Promise<Client>
     connect(callback: ConnectCallback): void
     connect(callback?: ConnectCallback): Promise<Client> | void {

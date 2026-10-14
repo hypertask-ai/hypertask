@@ -353,6 +353,185 @@ check('reporting', 'cap override including zero and invalid cap', () => withHarn
   h.env.ERROR_COLLECTOR_HOURLY_CAP = 'invalid'; await assert.rejects(h.run());
 }));
 
+check('reporting', 'noise alert threshold plans exactly one ticket above the limit, not at it', async () => {
+  for (const count of [50, 51]) await withHarness(async h => {
+    h.events(Array.from({ length: count }, (_, i) => event({ service: 'vercel', message: `Warning: SECURITY WARNING: The SSL modes detail ${i}`, route: `/route/${i % 2}`, ts: new Date(NOW - 30 * 60000 + i * 1000).toISOString() })));
+    const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW};`);
+    h.env.NODE_OPTIONS = `--import=${clock}`;
+    const planned = h.cli('--once', '--sources', 'fixture', '--dry-run');
+    assert.equal(planned.status, 0, planned.stderr);
+    assert.equal((planned.stdout.match(/"create"/g) ?? []).length, count > 50 ? 1 : 0);
+    if (count > 50) {
+      assert.match(planned.stdout, /SSL configuration warning repeated 51 times in one hour/);
+      assert.match(planned.stdout, /warning on stderr/);
+      assert.match(planned.stdout, /Fix it at the source/);
+      assert.match(planned.stdout, /\/route\/0, \/route\/1/);
+    }
+    assert.equal(existsSync(h.statePath), false);
+    assert.ok(h.calls().every(call => call.name === 'ht' && call.args[0] === 'GET'));
+  });
+});
+
+check('reporting', 'noise alert rolling windows reject spread matches and combine collection passes without recounting', async () => {
+  await withHarness(async h => {
+    h.events(Array.from({ length: 120 }, (_, i) => event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', ts: new Date(NOW - 4 * HOUR + i * 2 * 60000).toISOString() })));
+    await h.run();
+    assert.equal(creates(h).length, 0);
+    assert.equal(h.state().days['2026-10-14'].vercel.noise, 120);
+    assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+    assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 0);
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 30 })]);
+    await h.run();
+    assert.equal(creates(h).length, 0);
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes changed sample', route: '/other', count: 21, ts: new Date(NOW + HOUR / 2).toISOString() })]);
+    await h.run({ now: NOW + HOUR / 2 });
+    assert.equal(creates(h).length, 1);
+    assert.match(creates(h)[0].description, /Occurrences in one hour: 51/);
+    assert.equal(Object.values(h.state().fingerprints)[0].total, 51);
+    await h.run({ now: NOW + HOUR / 2 + 1000 });
+    assert.equal(Object.values(h.state().fingerprints)[0].total, 51);
+    assert.equal(h.state().days['2026-10-14'].vercel.noise, 51);
+    h.events([]); await h.run({ now: NOW + 2 * HOUR });
+    assert.deepEqual(h.state().noiseWindows, {});
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 30, ts: new Date(NOW - HOUR).toISOString() }), event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 21, ts: new Date(NOW).toISOString() })]);
+    await h.run(); assert.equal(creates(h).length, 0);
+  });
+});
+
+check('reporting', 'noise alert opt-ins are explicit, never alert expected responses or forced tests, and respect service scope', () => withHarness(async h => {
+  const rules = JSON.parse(readFileSync(join(HERE, 'noise.json')));
+  assert.deepEqual(rules.filter(rule => rule.alert).map(rule => rule.id), ['ssl-mode-warning', 'ai-sdk-warning', 'pg-query-deprecation', 'url-parse-deprecation', 'aws-sdk-v2-note', 'console-time-warning', 'qstash-cancel-404']);
+  const messages = ['HTTP 404', 'Authenticated agents cannot archive or delete tasks in Done', 'Warning: SECURITY WARNING: The SSL modes [ht-forced-test]', 'AbortError'];
+  h.events(messages.map(message => event({ service: 'vercel', message, count: 500 })));
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(h.state().pending, {});
+  assert.deepEqual(h.state().noiseWindows, {});
+  // Warning rules only match their configured service; an ordinary error on another service keeps ordinary grouping.
+  h.events([event({ service: 'other', message: 'Warning: SECURITY WARNING: The SSL modes', ts: new Date(NOW + 1000).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.match(creates(h)[0].description, /Count in window: 1/);
+}));
+
+check('reporting', 'noise alert second run reuses its ticket via activity, and cold state adopts the exact marker', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+  await h.run();
+  const fp = createHash('sha256').update('noise|vercel|ssl-mode-warning').digest('hex').slice(0, 16);
+  assert.equal(Object.keys(h.state().fingerprints)[0], fp);
+  const ticket = h.state().fingerprints[fp].ticket;
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes different details', route: '/new-route', count: 60, ts: new Date(NOW + 6 * HOUR).toISOString() })]);
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 1);
+  assert.match(activities(h, ticket)[0].args[3], /^60 more since .*?, 111 total,/);
+  assert.match(activities(h, ticket)[0].args[3], /\/new-route/);
+  rmSync(h.statePath);
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 2);
+  assert.ok(h.calls().filter(call => call.name === 'ht').every(call => call.args[1].includes(`error-fingerprint%3A${fp}`)));
+}));
+
+check('reporting', 'noise alert overrides, pending cap, retry reconciliation and sample redaction', async () => {
+  await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = '100';
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+    await h.run(); assert.equal(creates(h).length, 0);
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = 'invalid'; await assert.rejects(h.run());
+  });
+  await withHarness(async h => {
+    h.env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT = '1'; h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+    h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes password=fixture-password', route: '/safe?token=fixture-token', stack: 'Authorization: Basic fixture-credential', count: 2 })]);
+    await h.run();
+    assert.equal(creates(h).length, 0); assert.equal(Object.keys(h.state().pending).length, 1);
+    h.env.ERROR_COLLECTOR_HOURLY_CAP = '1'; h.config({ ambiguousCreate: true });
+    await h.run({ now: NOW + 1000 });
+    assert.equal(creates(h).length, 1); assert.equal(Object.keys(h.state().pending).length, 1);
+    h.config({}); await h.run({ now: NOW + 2000 });
+    assert.equal(creates(h).length, 1); assert.deepEqual(h.state().pending, {});
+    const text = JSON.stringify(h.calls()) + readFileSync(h.statePath, 'utf8');
+    for (const value of ['fixture-password', 'fixture-token', 'fixture-credential']) assert.ok(!text.includes(value));
+    assert.match(creates(h)[0].description, /Redacted sample/);
+  });
+  await withHarness(async h => {
+    h.events([event({ service: 'vercel', message: '[Upstash QStash] DELETE https://qstash.invalid/messages/fixture failed with status 404', count: 51 })]);
+    await h.run(); assert.equal(creates(h).length, 1);
+    assert.match(creates(h)[0].description, /QStash cancellation warning/);
+    assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+  });
+});
+
+check('reporting', 'noise alert each opted-in warning uses its own rule fingerprint, not an ordinary error group', () => withHarness(async h => {
+  const messages = [
+    'Warning: SECURITY WARNING: The SSL modes',
+    'Warning: AI SDK Warning: unsupported setting',
+    'DeprecationWarning: Calling client.query() when the client is already executing a query',
+    'DeprecationWarning: `url.parse()` behavior is not standardized',
+    'NOTE: The AWS SDK for JavaScript (v2) has reached end-of-support',
+    "Warning: Label 'fixture' already exists for console.time()",
+    '[Upstash QStash] DELETE https://qstash.invalid/messages/fixture failed with status 404',
+  ];
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '10';
+  h.events(messages.map(message => event({ service: 'vercel', message, count: 51 })));
+  await h.run();
+  assert.equal(creates(h).length, messages.length);
+  assert.equal(new Set(creates(h).map(call => call.description.match(/error-fingerprint:([a-f0-9]+)/)[1])).size, messages.length);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 0);
+  assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 0);
+  assert.equal(h.state().days['2026-10-14'].vercel.noise, messages.length * 51);
+}));
+
+check('reporting', 'noise alert fingerprints cannot merge into ordinary message grouping', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 }), event({ service: 'vercel', message: 'noise-rule:ssl-mode-warning' })]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().days['2026-10-14'].vercel.errors, 1);
+  assert.equal(h.state().days['2026-10-14'].vercel.newGroups, 1);
+  assert.ok(h.state().fingerprints[fingerprint('vercel', 'noise-rule:ssl-mode-warning')]);
+}));
+
+check('reporting', 'noise alert dry run preserves existing state and only plans repeat activity', () => withHarness(async h => {
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51 })]);
+  await h.run();
+  const ticket = Object.values(h.state().fingerprints)[0].ticket;
+  const before = readFileSync(h.statePath);
+  const callsBefore = h.calls().length;
+  const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW + 6 * HOUR};`);
+  h.env.NODE_OPTIONS = `--import=${clock}`;
+  h.events([event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes', count: 51, ts: new Date(NOW + 6 * HOUR).toISOString() })]);
+  const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
+  assert.equal(result.status, 0, result.stderr);
+  assert.ok(!result.stdout.includes('"create"'));
+  assert.ok(result.stdout.includes(`"activity","add","${ticket}"`));
+  assert.deepEqual(readFileSync(h.statePath), before);
+  assert.deepEqual(readdirSync(dirname(h.statePath)), ['state.json']);
+  assert.ok(h.calls().slice(callsBefore).every(call => call.name === 'ht' && call.args[0] === 'GET'));
+}));
+
+check('reporting', 'noise alert fixture dry run prints the planned ticket for 120 SSL warnings without writing', () => withHarness(async h => {
+  const clock = join(h.home, 'clock.mjs'); writeFileSync(clock, `Date.now = () => ${NOW};`);
+  h.env.NODE_OPTIONS = `--import=${clock}`;
+  const rows = Array.from({ length: 120 }, (_, i) => event({ service: 'vercel', message: 'Warning: SECURITY WARNING: The SSL modes require explicit configuration', route: '/api/fixture', stack: '', ts: new Date(NOW - 30 * 60000 + i * 1000).toISOString() }));
+  h.events(rows);
+  assert.equal(rows.reduce((sum, row) => sum + (row.count ?? 1), 0), 120);
+  assert.ok(Date.parse(rows.at(-1).ts) - Date.parse(rows[0].ts) < HOUR);
+  const result = h.cli('--once', '--sources', 'fixture', '--dry-run');
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal((result.stdout.match(/"create"/g) ?? []).length, 1);
+  assert.match(result.stdout, /SSL configuration warning repeated 120 times in one hour/);
+  assert.match(result.stdout, /Occurrences in one hour: 120/);
+  assert.match(result.stdout, /"errors":0,"noise":120,"newGroups":0/);
+  assert.equal(existsSync(dirname(h.statePath)), false);
+  assert.ok(h.calls().every(call => call.name === 'ht' && call.args[0] === 'GET'));
+  console.log(result.stdout.trim());
+  console.log('SSL fixture planned ticket verified');
+}));
+
 check('reporting', 'noise counted per service and day, no tickets; daily summary once after 06 or forced', () => withHarness(async h => {
   const noise = [event({ route: '/wp-admin/' }), event({ route: '/.env' }), event({ route: '/index.php' }), event({ message: 'AbortError' }), event({ message: 'request aborted' }), event({ message: 'HTTP 401' }), event({ message: 'status: 403' }), event({ message: '404 Not Found', service: 'api' })];
   h.events(noise); await h.run(); assert.equal(creates(h).length, 0); assert.equal(activities(h).length, 0);

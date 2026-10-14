@@ -1,7 +1,7 @@
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
@@ -221,9 +221,9 @@ async function writeSlackTaskDraft(input: {
     provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "summary",
   });
-  const result = await generateObject({
+  const result = await generateText({
     model,
-    schema: taskDraftSchema,
+    output: Output.object({ schema: taskDraftSchema }),
     maxRetries: 2,
     maxOutputTokens: 1_200,
     providerOptions: providerOptionsForAiModel(model, "summary", {
@@ -237,21 +237,21 @@ async function writeSlackTaskDraft(input: {
   });
 
   const bullets = [
-    ...result.object.contextBullets,
-    ...result.object.technicalDetails,
+    ...result.output.contextBullets,
+    ...result.output.technicalDetails,
   ]
     .map((bullet) => `<li>${escapeHtml(bullet.trim())}</li>`)
     .join("");
   const description =
-    `<p><strong>${escapeHtml(sentenceCase(result.object.ask))}</strong></p>` +
+    `<p><strong>${escapeHtml(sentenceCase(result.output.ask))}</strong></p>` +
     `<ul>${bullets}</ul>` +
     `<p><a href="${escapeHtml(input.permalink)}">Open Slack thread</a></p>`;
 
   return {
     description,
     title:
-      result.object.title.replace(/<[^>]*>/g, "").trim() ||
-      result.object.ask.slice(0, 140).trim(),
+      result.output.title.replace(/<[^>]*>/g, "").trim() ||
+      result.output.ask.slice(0, 140).trim(),
   };
 }
 

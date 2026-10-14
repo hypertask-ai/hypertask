@@ -21,8 +21,14 @@ const diagnostic = text => console.error(`error-collector: ${text}`);
 // Tests that throw an error on purpose put this marker in its message (YPER4-384).
 const FORCED_TEST = /\[ht-forced-test\]/i;
 
+function noiseRule(event) {
+  const text = `${event.message}\n${event.route}`;
+  const matches = NOISE.filter(rule => (!rule.service || rule.service === event.service) && rule.regex.test(text));
+  return matches.find(rule => rule.id === 'forced-test') ?? matches.find(rule => rule.alert) ?? matches[0];
+}
+
 export function isNoise(event) {
-  return NOISE.some(rule => (!rule.service || rule.service === event.service) && rule.regex.test(`${event.message}\n${event.route}`));
+  return Boolean(noiseRule(event));
 }
 
 export function redact(text) {
@@ -54,6 +60,10 @@ export function normalize(text, route = false) {
 // One kind of error is one ticket, whichever routes it shows up on; the ticket lists the routes.
 export function fingerprint(service, message) {
   return createHash('sha256').update(`${service}|${normalize(message)}`).digest('hex').slice(0, 16);
+}
+
+function noiseFingerprint(service, id) {
+  return createHash('sha256').update(`noise|${service}|${id}`).digest('hex').slice(0, 16);
 }
 
 function command(name, args, env, input) {
@@ -125,6 +135,10 @@ function merge(group, event) {
 }
 
 function description(group, fp) {
+  if (group.noiseRule) {
+    const fields = [ ['Service', group.service], ['Warning', group.normalized], ['Occurrences in one hour', group.hourlyCount], ['Hour ending', group.hourLastSeen], ['Routes', group.routes.join(', ')], ['Redacted sample', group.message] ];
+    return `<p><strong>${html(group.service)} emitted ${html(group.normalized)} ${group.hourlyCount} times within one hour.</strong></p><p>This is a warning on stderr, not a thrown product error. Fix it at the source rather than hiding the warning.</p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack)}</pre><p>error-fingerprint:${fp}</p>`;
+  }
   const fields = [ ['Service', group.service], ['Routes', group.routes.join(', ')], ['Count in window', group.count], ['First seen', group.firstSeen], ['Last seen', group.lastSeen], ['Sample message', group.message] ];
   return `<p><strong>${html(group.service)} is failing: ${html(group.normalized)}. This happened ${group.count} times in the collected window.</strong></p><ul>${fields.map(([key, value]) => `<li>${key}: ${html(value)}</li>`).join('')}</ul><pre>${html(group.stack.split('\n').slice(0, 40).join('\n'))}</pre><p>error-fingerprint:${fp}</p>`;
 }
@@ -177,6 +191,9 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   state.coverage ??= {};
   const cap = Number(env.ERROR_COLLECTOR_HOURLY_CAP ?? 5);
   if (!Number.isSafeInteger(cap) || cap < 0) throw new Error('invalid hourly cap');
+  const noiseLimit = Number(env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT ?? 50);
+  if (!Number.isSafeInteger(noiseLimit) || noiseLimit < 0) throw new Error('invalid noise hourly limit');
+  state.noiseWindows ??= {};
   const stats = (date, service) => {
     state.days[date] ??= {};
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
@@ -188,6 +205,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     } catch { diagnostic('run deadline reached; remaining sources deferred'); break; }
     try {
       const groups = new Map();
+      const warnings = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
       const until = iso(now);
@@ -206,16 +224,23 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const boards = new Map();
       for (const event of events) {
         if (event.ticket === false) continue;
-        const fp = fingerprint(event.service, event.message, event.route);
+        const rule = noiseRule(event);
+        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
         const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? boards.get(fp);
         if (board == null) boards.set(fp, event.board);
         else event.board = board;
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
-        if (isNoise(event)) {
+        const rule = noiseRule(event);
+        if (rule) {
           counts.noise += event.count;
           if (FORCED_TEST.test(`${event.message}\n${event.route}`)) diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
+          if (rule.alert && event.ticket !== false) {
+            const fp = noiseFingerprint(event.service, rule.id);
+            if (!warnings.has(fp)) warnings.set(fp, { rule, events: [] });
+            warnings.get(fp).events.push({ board: event.board, service: event.service, ts: event.ts, count: event.count, message: redact(event.message).slice(0, 4000), route: redact(event.route), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000) });
+          }
           continue;
         }
         counts.errors += event.count;
@@ -223,6 +248,26 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         const fp = fingerprint(event.service, event.message, event.route);
         if (!groups.has(fp)) groups.set(fp, { board: event.board, service: event.service, normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
+      }
+      for (const [fp, warning] of warnings) {
+        const events = [...(state.noiseWindows[fp] ?? []), ...warning.events].sort((a, b) => a.ts.localeCompare(b.ts));
+        let start = 0;
+        let count = 0;
+        let peak = 0;
+        let lastSeen;
+        for (let end = 0; end < events.length; end++) {
+          count += events[end].count;
+          while (Date.parse(events[start].ts) <= Date.parse(events[end].ts) - HOUR) count -= events[start++].count;
+          if (count > peak) { peak = count; lastSeen = events[end].ts; }
+        }
+        // Keep only the trailing hour for thresholds spanning collection passes.
+        state.noiseWindows[fp] = events.filter(event => Date.parse(event.ts) > now - HOUR);
+        if (peak <= noiseLimit && !state.fingerprints[fp] && !state.pending[fp]) continue;
+        const fresh = state.fingerprints[fp] || state.pending[fp] ? warning.events : events;
+        const sample = fresh[0];
+        const group = { board: sample.board, service: sample.service, noiseRule: warning.rule.id, normalized: warning.rule.name, message: sample.message, stack: sample.stack, routes: [], count: 0, firstSeen: sample.ts, lastSeen: sample.ts, hourlyCount: peak, hourLastSeen: lastSeen };
+        for (const event of fresh) merge(group, event);
+        groups.set(fp, group);
       }
       const prior = state.coverage[source.name];
       const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
@@ -259,7 +304,8 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
           pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
           pending.routes = [...new Set([...pending.routes, ...group.routes])];
-        } else { state.pending[fp] = group; stats(day(group.firstSeen), group.service).newGroups++; }
+          if (group.noiseRule && group.hourlyCount > pending.hourlyCount) { pending.hourlyCount = group.hourlyCount; pending.hourLastSeen = group.hourLastSeen; }
+        } else { state.pending[fp] = group; if (!group.noiseRule) stats(day(group.firstSeen), group.service).newGroups++; }
       }
       state.sources[source.name] = until;
       if (!Array.isArray(fetched)) (state.sourceCursors ??= {})[source.name] = cursor;
@@ -269,6 +315,10 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   }
   if (dryRun) console.log(`DRY-RUN counts ${JSON.stringify(state.days)}`);
   if (!succeeded) return 1;
+  for (const [fp, events] of Object.entries(state.noiseWindows)) {
+    state.noiseWindows[fp] = events.filter(event => Date.parse(event.ts) > now - HOUR);
+    if (!state.noiseWindows[fp].length) delete state.noiseWindows[fp];
+  }
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
@@ -291,7 +341,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
           // Reserve before create; ambiguous failures still consume cap until reconciled.
           state.created.push(iso(now));
           await checkpoint();
-          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'prod-error', '--priority', 'high', '--title', `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
+          const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'prod-error', '--priority', 'high', '--title', group.noiseRule ? `${group.service}: ${group.normalized} repeated ${group.hourlyCount} times in one hour` : `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
           if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
           else found = { ticket: ticketRef(payload(output).task), deleted: false };
           state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, lastActivityAt: iso(now) };

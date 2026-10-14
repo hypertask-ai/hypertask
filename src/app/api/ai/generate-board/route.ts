@@ -1,7 +1,7 @@
 import { reportError } from "@/lib/errors/reportError";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { NextRequest, NextResponse } from "next/server";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import prisma from "@/lib/prisma";
@@ -226,9 +226,9 @@ async function generateBoardManifest({
   const selected = await selectOnboardingBoardModel(team, user.id);
   const priorityList = priorityValues.join(", ");
 
-  const { object } = await generateObject({
+  const { output } = await generateText({
     model: selected.model,
-    schema: generatedBoardSchema,
+    output: Output.object({ schema: generatedBoardSchema }),
     maxRetries: 1,
     providerOptions: selected.providerOptions,
     abortSignal,
@@ -238,7 +238,7 @@ async function generateBoardManifest({
     prompt: renderPrompt("generate-board-prompt-2", (team.title || "Untitled team"), (prompt), (priorityList)),
   });
 
-  return toBoardManifest(object);
+  return toBoardManifest(output);
 }
 
 async function createSampleBoard({

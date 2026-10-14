@@ -276,7 +276,7 @@ test("real SDK returns structured and short text output rather than exhausting t
   const { createAnthropic } = require("@ai-sdk/anthropic");
   const { z } = require("zod");
   const schema = z.object({ questions: z.array(z.string()) });
-  for (const mode of ["object", "legacy-object", "text"]) {
+  for (const mode of ["object", "text"]) {
     let body;
     const h = harness({ anthropicFactory: (config) => createAnthropic({
       ...config,
@@ -294,14 +294,9 @@ test("real SDK returns structured and short text output rather than exhausting t
       },
     }) });
     const input = { model: h.makeModel(), prompt: "fixture", maxOutputTokens: mode === "text" ? 160 : 500, maxRetries: 0 };
-    if (mode === "legacy-object") {
-      const result = await ai.generateObject({ ...input, schema });
-      assert.deepEqual(result.object.questions, ["What is next?"]);
-    } else {
-      const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
-      if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
-      else assert.equal(result.text, "A short summary");
-    }
+    const result = await ai.generateText({ ...input, ...(mode === "object" ? { output: ai.Output.object({ schema }) } : {}) });
+    if (mode === "object") assert.deepEqual(result.output.questions, ["What is next?"]);
+    else assert.equal(result.text, "A short summary");
     assert.equal(body.thinking.type, "disabled");
     assert.equal(body.output_config.effort, "low");
     assert.equal(body.max_tokens, input.maxOutputTokens);
@@ -847,7 +842,7 @@ test("board memory automatic fallback learns on Luna when Haiku is unavailable, 
       "@/app/api/ai/_lib/byokKeys": { ...api, getAiDefaultModelContext: async () => ({ haiku55Enabled: enabled, plan: "Pro", hasByok: true, byok: enabled ? { provider: "claude", credential: "fixture-claude" } : undefined }) },
       "@/app/api/ai/_lib/modelProvider": h.api,
       "@/lib/ai/prompts/registry": { renderPrompt: () => "fixture prompt" },
-      ai: { generateObject: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { object: { facts: ["Keep ticket titles concise"] } }; } },
+      ai: { Output: ai.Output, generateText: async ({ model, providerOptions }) => { await model.doGenerate({ ...params, providerOptions }); return { output: { facts: ["Keep ticket titles concise"] } }; } },
       "@/app/api/ai/_lib/customInstructions": { assertProjectAccess: async () => ({ id: 15, teamId: "fixture-team" }), ProjectAccessError: class extends Error {} },
       "@/app/api/ai/_lib/boardMemoryContract": contract,
       "@/app/api/ai/_lib/boardMemoryGuards": {

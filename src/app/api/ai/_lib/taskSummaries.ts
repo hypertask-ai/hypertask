@@ -1,7 +1,7 @@
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { generateObject, NoObjectGeneratedError } from "ai";
+import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 
@@ -466,9 +466,9 @@ async function generateTaskSummary(args: {
     feature: "summary",
   });
   try {
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema: taskSummaryResultSchema,
+      output: Output.object({ schema: taskSummaryResultSchema }),
       system: renderPrompt("task-summaries-system-2"),
       prompt: renderPrompt("task-summaries-prompt-3", (args.title), (args.ticketNumber), (args.description || "(empty)"), (formatSources(args.sources))),
       maxRetries: 2,
@@ -482,9 +482,9 @@ async function generateTaskSummary(args: {
     });
 
     return {
-      summary: result.object.summary.trim() || "Not enough content for summary",
+      summary: result.output.summary.trim() || "Not enough content for summary",
       descriptionGoodEnough:
-        Boolean(args.description) && result.object.descriptionGoodEnough,
+        Boolean(args.description) && result.output.descriptionGoodEnough,
     };
   } catch (error) {
     if (!NoObjectGeneratedError.isInstance(error)) throw error;

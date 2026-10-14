@@ -9,6 +9,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { isApiKeyAuthLookup, withApiKeyExpiryGuard } from '@/lib/apiKeyExpiry'
 import { trackPrismaQuery } from '@/lib/queryCountTracker'
 import { createMcpTimingPool, mcpDbTimings } from '@/lib/mcp/dbTiming'
+import { normalizeDbConnectionString } from '@/lib/dbConnectionString'
 
 // HTPR-4119: Prisma 7 requires a driver adapter, the query engine no longer
 // connects from a schema-declared url. Build the adapter inside the singleton
@@ -42,7 +43,7 @@ const prismaClientSingleton = () => {
   // only. Keeping the client-side connection open longer removes that
   // re-handshake on the common case where the next request lands within 5min.
   const adapter = new PrismaPg(createMcpTimingPool({
-    connectionString: process.env.DATABASE_URL as string,
+    connectionString: normalizeDbConnectionString(process.env.DATABASE_URL),
     idleTimeoutMillis: 5 * 60_000,
     keepAlive: true,
   }), { disposeExternalPool: true })
