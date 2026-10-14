@@ -91,7 +91,7 @@ export async function POST(request: NextRequest) {
             return validation.response;
         }
 
-        if (body.description !== undefined && body.description.trim().length === 0) {
+        if (typeof body.description === 'string' && body.description.trim().length === 0) {
             return NextResponse.json(
                 {
                     ...buildFieldError('invalid_field', 'description', 'Description cannot be empty'),
