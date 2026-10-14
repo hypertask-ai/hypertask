@@ -236,6 +236,109 @@ test('GitHub uses bearer REST or gh api fallback without executing PR code', asy
   await assert.rejects(createGithub({ env, fetchImpl: async () => response({}, 401) })('repos/fixture/repo/pulls/1'), /HTTP 401/);
 });
 
+test('GitHub GET retries transient HTTP failures then succeeds', async () => {
+  const { createGithub } = await gate;
+  for (const status of [502, 429]) {
+    let calls = 0;
+    const waits = [];
+    const github = createGithub({ env, sleep: async (ms) => waits.push(ms), fetchImpl: async () => {
+      calls++;
+      return calls === 1 ? response({}, status) : response({ ok: true });
+    } });
+    assert.deepEqual(await github('repos/fixture/repo/pulls/1'), { ok: true });
+    assert.equal(calls, 2);
+    assert.deepEqual(waits, [1000]);
+  }
+});
+
+test('GitHub GET retries a network failure then succeeds', async () => {
+  const { createGithub } = await gate;
+  let calls = 0;
+  const github = createGithub({ env, sleep: async () => {}, fetchImpl: async () => {
+    calls++;
+    if (calls === 1) throw new Error('network timeout');
+    return response({ ok: true });
+  } });
+  assert.deepEqual(await github('repos/fixture/repo/pulls/1'), { ok: true });
+  assert.equal(calls, 2);
+});
+
+test('GitHub GET does not retry HTTP 404', async () => {
+  const { createGithub } = await gate;
+  let calls = 0;
+  const github = createGithub({ env, sleep: () => assert.fail('must not wait'), fetchImpl: async () => {
+    calls++;
+    return response({}, 404);
+  } });
+  await assert.rejects(github('repos/fixture/repo/pulls/1'), /HTTP 404/);
+  assert.equal(calls, 1);
+});
+
+test('GitHub POST does not retry HTTP 502', async () => {
+  const { createGithub } = await gate;
+  let calls = 0;
+  const github = createGithub({ env, sleep: () => assert.fail('must not wait'), fetchImpl: async () => {
+    calls++;
+    return response({}, 502);
+  } });
+  await assert.rejects(github('repos/fixture/repo/statuses/sha', { method: 'POST', body: { state: 'success' } }), /HTTP 502/);
+  assert.equal(calls, 1);
+});
+
+test('GitHub GET rejects after three HTTP 503 failures', async () => {
+  const { createGithub } = await gate;
+  let calls = 0;
+  const waits = [];
+  const github = createGithub({ env, sleep: async (ms) => waits.push(ms), fetchImpl: async () => {
+    calls++;
+    return response({}, 503);
+  } });
+  await assert.rejects(github('repos/fixture/repo/pulls/1'), /HTTP 503/);
+  assert.equal(calls, 3);
+  assert.deepEqual(waits, [1000, 3000]);
+});
+
+test('reconcile logs a sanitized HTTP reason after persistent GitHub GET failure', async () => {
+  const { createGithub, run } = await gate;
+  const fixture = apiFixture({ prs: [pr(1), pr(2)] });
+  const output = [];
+  let failedReads = 0;
+  const github = createGithub({ env, sleep: async () => {}, fetchImpl: async (url, options) => {
+    const endpoint = url.replace('https://api.github.com/', '');
+    if (endpoint === 'repos/fixture/repo/pulls/1') {
+      failedReads++;
+      return response({ message: 'sensitive response body' }, 502);
+    }
+    return response(await fixture.github(endpoint, options));
+  } });
+  assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: (line) => output.push(JSON.parse(line)) }), 2);
+  assert.equal(failedReads, 3);
+  assert.deepEqual(output[0], {
+    pr: 1, state: 'error', description: 'Could not read or publish UX signoff status; left untouched', reason: 'GitHub API returned HTTP 502',
+  });
+  assert.deepEqual(fixture.calls.filter((call) => call.method === 'POST').map((call) => call.endpoint), [`repos/fixture/repo/statuses/${pr(2).head.sha}`]);
+});
+
+test('reconcile error reasons allow only safe GitHub messages and missing head SHA', async () => {
+  const { run } = await gate;
+  for (const [message, reason] of [
+    ['GitHub API returned no list', 'GitHub API returned no list'],
+    ['No PR head SHA to publish', 'No PR head SHA to publish'],
+    ['GitHub API returned HTTP 502: sensitive response body', 'unexpected error'],
+    [`network error with ${env.GH_TOKEN}`, 'unexpected error'],
+  ]) {
+    const fixture = apiFixture();
+    const output = [];
+    const github = (endpoint, options) => {
+      if (endpoint === 'repos/fixture/repo/pulls/1') throw new Error(message);
+      return fixture.github(endpoint, options);
+    };
+    assert.equal(await run(['--reconcile'], { env, github, fetchImpl: commentsFetch, log: (line) => output.push(JSON.parse(line)) }), 2);
+    assert.equal(output[0].reason, reason);
+    assert.ok(fixture.calls.every((call) => call.method !== 'POST'));
+  }
+});
+
 test('read-only CLI prints success or failure and never posts statuses', async () => {
   const { run } = await gate;
   for (const [title, expected] of [['HTPR-1 [BUGFIX] Repair', 0], ['HTPR-1 [FEATURE] UI', 1]]) {

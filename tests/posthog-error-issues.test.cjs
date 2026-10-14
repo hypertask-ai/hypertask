@@ -229,6 +229,25 @@ test("non-production-only issues skip after the full retry window without board 
   assert.match(JSON.parse(calls[7].options.body).query.query, /ht_environment = 'production'/);
 });
 
+test("forced test errors marked [ht-forced-test] are skipped without board writes; unmarked errors still file (YPER4-384)", async () => {
+  const { handlePostHogAlert } = await import("../.github/scripts/posthog-error-alert.mjs");
+  const { readProductionIssue } = await import(script);
+  const fetchFor = (message, calls) => async (url, options = {}) => {
+    calls.push({ url, options });
+    if (url.includes("/issues/")) return response({ id: ID, name: "Error" });
+    if (url.includes("/query/")) return response({ results: [row(1, 0, message)] });
+    throw new Error(`unexpected write ${url}`);
+  };
+  const calls = [];
+  const result = await handlePostHogAlert(signedPayload(), lagOptions({ fetchImpl: fetchFor("Error: [ht-forced-test] YPER4-384 forced browser test 1", calls), wait: async () => {} }));
+  assert.equal(result.action, "skip");
+  assert.match(result.reason, /forced test/i);
+  assert.ok(calls.every((call) => !/\/tasks\//.test(call.url)));
+  const real = await readProductionIssue(fetchFor("Error: YPER4-377 forced browser test 1", []), "fixture", ID, { wait: async () => {} });
+  assert.equal(real.action, undefined);
+  assert.equal(real.message, "Error: YPER4-377 forced browser test 1");
+});
+
 test("lag dispatches attempts 2 and 3 with the unchanged signed payload and no ticket", async () => {
   const { handlePostHogAlert, verifyPostHogPayloadSignature } = await import("../.github/scripts/posthog-error-alert.mjs");
   const payload = signedPayload();
