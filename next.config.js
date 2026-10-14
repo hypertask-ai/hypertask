@@ -45,6 +45,10 @@ const nextConfig = {
   // The sanitizer's jsdom is pinned in npm overrides to avoid requiring ESM in
   // serverless runtimes where Node's optional require(esm) support is disabled.
   serverExternalPackages: ["isomorphic-dompurify", "jsdom"],
+  // The public onboarding page reads this markdown relative to process.cwd().
+  outputFileTracingIncludes: {
+    "/wiki/agents": ["./src/app/wiki/agents/agents.md"],
+  },
   productionBrowserSourceMaps: true,
   reactStrictMode: false,
   images: {

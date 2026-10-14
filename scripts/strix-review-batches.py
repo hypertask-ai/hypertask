@@ -65,7 +65,7 @@ def _resume_run(state, scope_key):
 
 
 def review_priority(name):
-    if name.startswith(("docs/", "openwiki/", ".claude/")) or name.endswith(".md"):
+    if name.startswith(("docs/", ".claude/")) or name.endswith(".md"):
         return 4, name
     if name.startswith(("src/lib/auth/", "src/lib/mcp", "src/app/oauth/", "src/app/mcp/",
                         "src/app/api/auth/", "src/app/api/mcp/", "src/pages/api/auth/")) or name == "src/proxy.ts":

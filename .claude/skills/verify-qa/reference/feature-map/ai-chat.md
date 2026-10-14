@@ -10,7 +10,7 @@ The AI chat panel on a board or task (native chat, `src/app/api/ai/`, flag
 `agent-browser`, headless, `?realtime=on`. Send a message, wait for a reply,
 and check which model actually answered if the ticket names one (the model
 picker sends a stable `modelOptionId`; see
-`https://hypertask.app/wiki/feature-map` for the current option list).
+`src/lib/aiModelOptions.ts` for the current option list).
 
 ## What usually breaks
 
