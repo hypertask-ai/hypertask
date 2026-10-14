@@ -40,6 +40,16 @@ export function parseEvents(rows, service = name) {
       event.service = 'email';
       event.board = 4060;
     }
+    // CLI metadata stays out of the fingerprint so failures group across releases and OSes.
+    if (service === name && event.message.startsWith('[cli-error]')) {
+      event.service = 'cli';
+      event.board = 15;
+      const metadata = event.message.match(/ (v[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)? (?:linux|macos|windows|other))$/);
+      if (metadata) {
+        event.message = event.message.slice(0, -metadata[0].length);
+        event.stack = [metadata[1], event.stack].filter(Boolean).join('\n');
+      }
+    }
     return event;
   });
 }
