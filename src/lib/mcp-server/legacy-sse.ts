@@ -16,9 +16,12 @@ import { HTPR_6804_MCP_TOOLS_FLAG, HTPR_7203_MCP_FLAT_SCHEMA_FLAG, isFeatureEnab
 import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
+import { HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG } from '@/lib/flags/definitions/htpr-7220-legacy-sse-keepalive'
 
 // Kept 20 seconds under maxDuration in src/app/sse/route.ts.
 export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
+// A quiet stream was cut off after about 5 minutes (HTPR-7220).
+export const LEGACY_SSE_KEEPALIVE_MS = 60 * 1000
 
 type RelayMessage = {
   replyChannel: string
@@ -146,10 +149,12 @@ export async function handleLegacySseRequest(
     register(initialTools)
     let closed = false
     let timer: ReturnType<typeof setTimeout> | undefined
+    let keepAlive: ReturnType<typeof setInterval> | undefined
     const cleanup = () => {
       if (closed) return
       closed = true
       if (timer) clearTimeout(timer)
+      if (keepAlive) clearInterval(keepAlive)
       request.signal.removeEventListener('abort', cleanup)
       disconnect()
       void server.close().catch(() => {})
@@ -220,6 +225,16 @@ export async function handleLegacySseRequest(
       await server.connect(transport)
       // End the stream before Vercel's limit so it closes cleanly and the client reconnects (YPER4-362).
       timer = setTimeout(() => stream.end(), LEGACY_SSE_LIFETIME_MS)
+      const keepAliveOn = await isFeatureEnabled(HTPR_7220_LEGACY_SSE_KEEPALIVE_FLAG, Number(authInfo.clientId)).catch(() => true)
+      if (keepAliveOn && !closed) {
+        keepAlive = setInterval(() => {
+          if (closed || stream.writableEnded) return
+          // Clients ignore SSE comment lines; the pings keep both Redis connections from going idle.
+          stream.write(': keepalive\n\n')
+          void subscriber.ping().catch(() => {})
+          void publisher.ping().catch(() => {})
+        }, LEGACY_SSE_KEEPALIVE_MS)
+      }
       if (request.signal.aborted) cleanup()
       return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
         headers: {
