@@ -54,7 +54,7 @@ Warning rules explicitly opted in with `alert: true` stay out of error totals an
 
 ## Forced test errors (YPER4-384)
 
-A test that throws an error on purpose in production puts `[ht-forced-test]` in the error message, for example `throw new Error("[ht-forced-test] YPER4-384 forced browser test 1")`. The collector counts it as noise for every source and prints `skipped forced test error`; the native PostHog issue writer (`.github/scripts/posthog-error-issues.mjs`) returns `skip` and files nothing. An error without the marker still becomes a ticket. The nightly `PostHog pipeline canary` keeps its own rule: it must file and then close its ticket to prove the pipeline works.
+A test that throws an error on purpose in production puts `[ht-forced-test]` in the error message, for example `throw new Error("[ht-forced-test] YPER4-384 forced browser test 1")`. The collector counts it as noise for every source and prints `skipped forced test error`; the native PostHog issue writer (`.github/scripts/posthog-error-issues.mjs`) returns `skip` and files nothing. An error without the marker still becomes a ticket. CLI error reports only allow a plain error name, so a live check of `/api/mcp/cli-error` sends the error name `HtForcedTest` instead (YPER4-396): the collector skips `[cli-error] <command>: HtForcedTest` the same way, and any other CLI error name still files. The nightly `PostHog pipeline canary` keeps its own rule: it must file and then close its ticket to prove the pipeline works.
 
 ## Live read paths and bounds
 

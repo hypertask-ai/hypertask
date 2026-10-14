@@ -98,8 +98,8 @@
   },
   {
     "id": "forced-test",
-    "match": "\\[ht-forced-test\\]",
-    "reason": "A test threw this error on purpose and marked it [ht-forced-test] (YPER4-384); every source skips it."
+    "match": "\\[ht-forced-test\\]|^\\[cli-error\\] [a-z0-9 -]+: HtForcedTest(?:\\s|$)",
+    "reason": "A test threw this error on purpose and marked it [ht-forced-test] (YPER4-384), or sent a CLI report with error name HtForcedTest (YPER4-396); every source skips it."
   },
   {
     "id": "posthog-canary",
