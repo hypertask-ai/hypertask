@@ -57,7 +57,7 @@ const archiveProject = async(projectId:number, userId:number) =>{
           projectId: project.id,
         }
       })
-      const firstProject = await getFirst(userId)
+      const firstProject = await getFirst(userId, { withTasks: true })
       console.log("🚀 ~ file: archiveProject.ts:55 ~ archiveProject ~ updated_project:", updated_project)
       return ({
         status:200,

@@ -18,6 +18,13 @@ for (const role of ["Member", "Admin"]) {
   });
 }
 
+test("renaming a board does not load every task row (YPER4-388)", async () => {
+  const h = harness({ ownerId: 6 });
+  assert.equal((await h.patch("Renamed")).status, 200);
+  assert.equal(h.updates.length, 1);
+  assert.equal(h.updates[0].include?.tasks, undefined, "rename must not include the board's tasks");
+});
+
 test("board owner can rename a legacy teamless board", async () => {
   const h = harness({ ownerId: 6 });
   assert.equal((await h.patch("Owner rename")).status, 200);

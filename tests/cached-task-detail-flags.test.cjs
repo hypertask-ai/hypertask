@@ -75,6 +75,7 @@ for (const state of [false, true, "failure"]) {
     else flagRead.resolve(enabled);
     await myTasksResult;
     assert.equal("description_" in myTasksArgs.include, enabled);
+    assert.deepEqual(myTasksArgs.omit, { description: true, descriptionJson: true }, "YPER4-388: My Tasks must not load every task description");
     if (enabled) assert.deepEqual(myTasksArgs.include.description_, { select: { content: true } });
   });
 

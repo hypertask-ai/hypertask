@@ -62,7 +62,7 @@ const leaveProject = async (projectId:number, userId:number) => {
                 }
             })
 
-            const firstProject = await getFirst(userId)
+            const firstProject = await getFirst(userId, { withTasks: true })
 
             return({
                 status:200,

@@ -67,12 +67,13 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
   const updates = [];
   const reindexed = [];
   const scheduled = [];
+  const reads = [];
   let committed = false;
   let transactions = 0;
   const prisma = {
     project: {
       findFirst: async ({ where }) => rows.find(row => matches(row, where)) ?? null,
-      findUnique: async () => board,
+      findUnique: async args => { reads.push(args); return board; },
       update: async ({ where, data }) => {
         assert.ok(matches(board, where));
         events.push("project");
@@ -120,7 +121,7 @@ function writes({ enabled = true, ownerId = 6, boards = [], failSql = false, los
       upsertAllCommentsToTurbopuffer: async id => { assert.ok(committed); reindexed.push(["comments", id]); },
     },
   });
-  return { board, aliases, sql, events, updates, reindexed, scheduled, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
+  return { board, aliases, sql, events, updates, reindexed, scheduled, reads, prisma, controller, transactions: () => transactions, update: value => controller.default(15, "Board", undefined, value, { id: 6 }) };
 }
 
 for (const input of ["", "A", "ABCDEF", "1AB", "A-B", "A B", "ÉB", "AB_", 42, {}, null]) {
@@ -152,6 +153,11 @@ test("unique prefix permits deleted boards, other teams and the same board", asy
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal((await f.update("NEW")).status, 200);
   assert.equal(f.aliases.length, 1);
+});
+test("prefix change reads only task ids for the search reindex (YPER4-388)", async () => {
+  const f = writes();
+  assert.equal((await f.update("NEW")).status, 200);
+  assert.deepEqual(f.reads.map(args => args.include), [{ tasks: { select: { id: true } } }]);
 });
 test("permission rejection and changed access write nothing", async () => {
   for (const options of [{ ownerId: 9 }, { loseAccess: true }]) {
