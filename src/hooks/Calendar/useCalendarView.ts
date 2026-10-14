@@ -191,7 +191,6 @@ function useCalendarState({
     if (viewChangeQueued) {
       urlBaselineSyncPending.current = true;
     }
-
   }, []);
 
   useEffect(() => {

@@ -1,6 +1,6 @@
 ## Claude Code and Codex sessions
 
-Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md). The wiki at [https://hypertask.app/wiki](https://hypertask.app/wiki) and `openwiki/` are technical references.
+Start with `/ship`, [CLAUDE.md](CLAUDE.md), and the skill map at [.claude/skills/INDEX.md](.claude/skills/INDEX.md).
 
 Valentin's own Claude Code and Codex sessions follow the same workflow:
 
@@ -8,7 +8,7 @@ Valentin's own Claude Code and Codex sessions follow the same workflow:
 - Board content goes only through approved CLI, MCP or app API surfaces. Never use Prisma, SQL, or a database client for ticket content, even for reads.
 - Before coding on a ticket, claim it with `vcc comment add`, then move it to **In Progress** with `vcc task move`.
 - The same session fixes, opens the PR, merges once required checks are green, watches the deploy, verifies live with `.claude/skills/verify-qa/SKILL.md`, and closes the ticket only after verification passes.
-- Read [the CI reference](https://hypertask.app/wiki/deployment) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
+- Read [the CI reference](docs/ci.md) and `docs/ci-policy.yml` before changing workflows, runners, rulesets, previews, or deploy checks.
 - Helpers follow the token ladder (Valentin, 2026-10-10): CODEX mode `hax --provider=codex --model=gpt-6.1-sol --effort=high --no-session -p "<task>"`, CLAUDE mode the Agent tool (`sonnet` builds, `haiku` lookups) inside the session. The owning session remains responsible through live verification and close. A helper never writes to a Hypertask board (no claim, comment, move, assign, page, activity); it reports to its runner, and vcc refuses its writes.
 
 ## CLI and MCP repositories
@@ -29,23 +29,11 @@ For model and reasoning-effort selection, use Codex `/intensity` when available.
 
 Sessions must clean up after shipping: after the PR is merged into `production`, production is health-checked, and the worktree is clean and unused, record its absolute path and branch and remove only your own unused worktree and merged branch from another cwd. Never delete your own active cwd, another session's worktree, a dirty worktree, or an open-PR branch.
 
-## OpenWiki
-
-This repository has documentation located in the /openwiki directory.
-
-Start here:
-- [OpenWiki quickstart](openwiki/quickstart.md)
-- [Claude project guide](CLAUDE.md)
-
-OpenWiki includes repository overview, architecture notes, workflows, domain concepts, operations, integrations, testing guidance, and source maps.
-
-When working in this repository, read `CLAUDE.md` and `.claude/skills/INDEX.md` first, then follow the relevant OpenWiki links for architecture, workflow, domain, operation, and testing notes.
-
 ## Hypertask Ticket Access
 
 Hard rule: never read or write Hypertask ticket content directly through Prisma, raw SQL, database clients, or production database access. This includes "read-only" ticket lookups. Tickets, comments, inbox items, and task mutations must go through the product interface or approved CLIs/API surfaces so auth, permissions, activity, notifications, and side effects stay intact.
 
-Use **`hypertask`** for ticket reads and **`vcc`** for all board writes on this VPS (full native Zig CLI; see [openwiki/hypertask-cli.md](openwiki/hypertask-cli.md)):
+Use **`hypertask`** for ticket reads and **`vcc`** for all board writes on this VPS (full native Zig CLI; see the "Ticket comments" section below):
 
 ```bash
 hypertask status
@@ -59,7 +47,6 @@ The CLI binaries currently available on the dev machine are:
 - `hypertask` - native Hypertask CLI (Zig, `hypertask 0.2.0 (zig)`); talks to `/api/mcp/*` and reads `~/.hypertask/config.json`.
 - `vcc` - board-write command for Valentin's Claude Code and Codex sessions, using identity "Valentins Claude Code". Use it for every ticket, comment, assignment and move; the plain `hypertask` CLI is read-only for sessions.
 - `ht` - low-level MCP helper (`ht METHOD /mcp/path [json-body]`).
-- `openwiki` - repo documentation CLI; use headless `openwiki -p "..."` / `openwiki --update -p "..."`.
 - `zsb` - browser automation/debugging CLI for the active remote browser/tab.
 
 A hidden `htz -> hypertask` symlink remains for old scripts. Do not use `htz` in new commands or docs.
@@ -88,7 +75,7 @@ Signal: **Claimed. comment + In Progress = in flight, do not touch.** Abdul self
 
 ## Repository Workflow
 
-Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
+Follow the branch/deploy model from `CLAUDE.md` and `docs/ci.md`:
 
 - Production is Vercel project `hypertasks-prod`, deployed from the `production` branch to `app.hypertask.ai`.
 - New work branches off `origin/production`; PRs target `production`, never `main`.
@@ -103,7 +90,7 @@ Follow the branch/deploy model from `CLAUDE.md` and `openwiki/deployment.md`:
 
 ## CI contract
 
-Read the [canonical CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
+Read the [canonical CI contract](docs/ci.md) before changing workflows, runner services, rulesets, required checks, or preview behavior. App CI runs on GitHub-hosted `ubuntu-latest` runners (the repository is public, so hosted minutes are free). Preview verification is opt-in: use the automatic branch preview only when requested or justified by runtime risk. Do not treat it as a merge gate, and do not create extra preview deploys. Do not add a VPN runner or another host implicitly.
 
 ## Reuse existing UI (enforced)
 
@@ -133,7 +120,7 @@ One AI model per class: a new model version replaces the old one in the same cha
 ## Feature flags for new user-facing behavior
 
 - Every new feature, screen, control, shortcut, API route, or deliberate behavior/design change requires one ticket-specific feature flag.
-- Add one client-safe file in `src/lib/flags/definitions/`, named `<flag-key>.ts`, exporting its key constant and a default definition (including `releaseRisk` with `risk` and `reason` for flags shipped from 2026-10-11). Add nothing to shared keys, definitions, risk maps or test lists. `npm` entry points generate the gitignored `index.generated.ts`; never commit it. Existing imports from `keys.ts`, `definitions.ts` and `flags.ts` stay unchanged. Put new per-flag tests in their own test file. See [the registry reference](openwiki/feature-flags.md).
+- Add one client-safe file in `src/lib/flags/definitions/`, named `<flag-key>.ts`, exporting its key constant and a default definition (including `releaseRisk` with `risk` and `reason` for flags shipped from 2026-10-11). Add nothing to shared keys, definitions, risk maps or test lists. `npm` entry points generate the gitignored `index.generated.ts`; never commit it. Existing imports from `keys.ts`, `definitions.ts` and `flags.ts` stay unchanged. Put new per-flag tests in their own test file. See [the registry reference](docs/feature-flags.md).
 - Name the key after the ticket, for example `htpr-6091-feature-flags`; never reuse a flag for another feature.
 - New feature and improvement flags default to **Owner + QA**, so Valentin and the QA account can judge the change in the real app (HTPR-6192 deleted the old Only-me default; `DEFAULT_FEATURE_FLAG_MODE` in `src/lib/flags.ts` is the source of truth). Developers never release a feature flag to Everyone; Valentin changes the mode at `/admin/flags`.
 - When live QA FAILs on code behind a flag, switch that flag Off on /admin/flags first (seconds, no deploy), then repair. Only Valentin's login can open that page: a runner sends the flag key and the failure to the HT Product Lead session with SendMessage at once, and it switches the flag Off. A revert PR is the second step, not the first. (Valentin, 2026-10-03)

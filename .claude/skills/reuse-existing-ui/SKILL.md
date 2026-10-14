@@ -5,7 +5,7 @@ description: Any ticket that adds or changes UI, before writing a line of code
 
 # reuse-existing-ui
 
-Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. The app repo is `~/projects/hypertask-oss`. Its own style rules live in `reference/style-guide.md` and `reference/typography.md` (copied from `~/projects/hypertasks/openwiki/`); the twelve behavioural rules that back step 4 live in `reference/karpathy-rules.md`.
+Use before `fix-bug` or `ship-feature-behind-flag` on any ticket touching UI. The app repo is `~/projects/hypertask-oss`. Its own style rules live in `reference/style-guide.md` and `reference/typography.md` (the canonical visual contracts); the twelve behavioural rules that back step 4 live in `reference/karpathy-rules.md`.
 
 ## Steps
 

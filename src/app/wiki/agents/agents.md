@@ -7,10 +7,10 @@ This is the shared operating guide for every agent provider. The provider may ch
 ## Start here
 
 1. Read `AGENTS.md` and this page before making changes.
-2. Read the relevant OpenWiki page for the code you will touch.
-3. Read the [CI contract](https://hypertask.app/wiki/deployment) before changing workflows, runners, rulesets, previews, or deploy checks.
+2. Read the relevant code in `src/app/`, `src/pages/api/`, `src/utils/controllers/`, and `src/lib/`, plus the references in `docs/` and `.claude/skills/`.
+3. Read the [CI contract](https://github.com/hypertask-ai/hypertask/blob/production/docs/ci.md) before changing workflows, runners, rulesets, previews, or deploy checks.
 4. Use an individual Hypertask agent identity. Never copy another agent's token or credentials.
-5. For board ops on this VPS, prefer the native **`hypertask`** CLI — see [Hypertask CLI usage](hypertask-cli.md).
+5. For board ops on this VPS, prefer the native **`hypertask`** CLI — see [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments).
 
 ## Board protocol
 
@@ -95,7 +95,7 @@ Do not run `hypertask login --token` / `hypertask login --token` with an agent J
 
 The managed agent must still be a member of board 15. Check access with `hypertask --token "$HYPERTASKS_AGENT_TOKEN" project members 15` before changing a ticket.
 
-Full runbook (usage + how to extend the Zig CLI): [Hypertask CLI usage](hypertask-cli.md).
+Full runbook (usage + how to extend the Zig CLI): [Hypertask CLI usage](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments).
 
 This only changes **Hypertask board operations**. It does not change the GitHub account used by `git`, `gh`, pull requests, commits, or pushes. Those use the coding session's separate GitHub credentials.
 
@@ -104,7 +104,7 @@ This only changes **Hypertask board operations**. It does not change the GitHub 
 - Work from `/home/valentin/projects/hypertask-oss`, the clean-history clone of public `hypertask-ai/hypertask`.
 - Branch from `origin/production`; open pull requests against `production`. `main` is kept in lockstep with production, not used as the PR base.
 - The former private repo (`valentinyeo/hypertasks`, now `hypertask-ai/hypertasks`) is a frozen archive whose history contains a 2023 `.env` commit with live secrets. Never push to it, mirror it, or base public work on it.
-- `AGENTS.md`, `CLAUDE.md`, `openwiki/`, and `.env.local` are untracked via `.git/info/exclude` and copied into fresh worktrees by the worker runtime.
+- `AGENTS.md`, `CLAUDE.md`, `docs/`, and `.claude/skills/` are versioned with the code. Keep `.env.local` untracked.
 - Preserve unrelated dirty worktree changes. Never use `git stash`, broad resets, or destructive cleanup.
 - Read the relevant architecture and workflow docs before editing code.
 - Run focused tests and inspect `git diff --check` before handing work off.
@@ -144,7 +144,7 @@ For model selection, Codex has the equivalent `/intensity` skill. It recommends 
 
 ## Low-trust producer handoff
 
-The full local directive is [`openwiki/low-trust-agents.md`](low-trust-agents.md). Read it before producing a pull request with DeepSeek/Pi or another lower-confidence session.
+The full local directive is [low-trust producer directive below](#low-trust-producer-handoff). Read it before producing a pull request with DeepSeek/Pi or another lower-confidence session.
 
 DeepSeek/Pi and other lower-confidence producer sessions may create code and pull requests, but they must not merge or enable auto-merge. After opening a PR, the producer itself must:
 
@@ -157,10 +157,10 @@ The board column is a queue, not a GitHub merge gate; both the board status and 
 
 ## Canonical references
 
-- Human-readable onboarding: [https://hypertask.app/wiki/agents](https://hypertask.app/wiki/agents)
-- Human-readable CI contract: [https://hypertask.app/wiki/deployment](https://hypertask.app/wiki/deployment)
+- Human-readable onboarding: [https://app.hypertask.ai/wiki/agents](https://app.hypertask.ai/wiki/agents)
+- Human-readable CI contract: [docs/ci.md](https://github.com/hypertask-ai/hypertask/blob/production/docs/ci.md)
 - Live runner and queue status: [https://hypertask.app/ci](https://hypertask.app/ci)
 - Visual release flow: [https://hypertask.app/pipeline](https://hypertask.app/pipeline)
-- Local CLI runbook: `openwiki/hypertask-cli.md`
+- Local CLI runbook: [AGENTS.md, Ticket comments](https://github.com/hypertask-ai/hypertask/blob/production/AGENTS.md#ticket-comments)
 - Model/effort recommendation: `/intensity` in Codex, or the provider's equivalent
-- Low-trust producer directive: [`openwiki/low-trust-agents.md`](low-trust-agents.md)
+- Low-trust producer directive: [low-trust producer directive below](#low-trust-producer-handoff)

@@ -88,7 +88,6 @@ export default async function Page(
   let stack = false;
   let scrollSetting = "Bottom" as ScrollSetting;
 
-  console.time(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   const slug = detailSlug;
 
   const commentsUpdatedAt = currentDate.getTime();
@@ -139,8 +138,6 @@ export default async function Page(
         shareReadReceipts,
       ),
     };
-
-    console.timeEnd(`🤔 ~ TDP Fetch for ${params.slug[0]}/${params.slug[1]}`)
   }
 
   return (

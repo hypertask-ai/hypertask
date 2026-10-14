@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, "..");
 const read = (relativePath) =>
   fs.readFileSync(path.join(root, relativePath), "utf8");
 
-const guide = read("openwiki/style-guide.md");
+const guide = read(".claude/skills/reuse-existing-ui/reference/style-guide.md");
 const guideLines = guide.split(/\r?\n/);
 const themeNames = ["amoled", "graphite", "porcelain", "dia"];
 const themes = Object.fromEntries(
@@ -148,6 +148,6 @@ test("the reference composer still implements the documented geometry", () => {
 
 test("the long-form design reference points to the canonical guide", () => {
   const design = read("docs/DESIGN.md");
-  assert.match(design, /canonical visual contract.*openwiki\/style-guide\.md/i);
+  assert.match(design, /canonical visual contract.*\.claude\/skills\/reuse-existing-ui\/reference\/style-guide\.md/i);
   assert.doesNotMatch(design, /single source of truth for what Hypertask looks like/i);
 });

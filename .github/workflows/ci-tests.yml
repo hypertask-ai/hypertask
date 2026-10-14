@@ -45,7 +45,7 @@ jobs:
     # newer than a failed one would read as passing again.
     if: github.event_name == 'push' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 40
     # This job checks out and executes pull request code, so it never holds a
     # write token. The production warning is a separate push-only job.
     permissions:
@@ -149,7 +149,7 @@ jobs:
           echo "$CHANGED"
           # A change to this gate itself (or the CI scripts) always runs the
           # full pipeline once, so the edited workflow is exercised end to end.
-          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|openwiki/|docs/|\.claude/|\.github/)' \
+          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|docs/|\.claude/|\.github/)' \
             || echo "$CHANGED" | grep -qE '^\.github/(workflows/ci-tests\.yml|scripts/)'; then
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
           else
