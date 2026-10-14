@@ -273,6 +273,14 @@ test('YPER4-358: dead outgoing board and agent webhooks go to infra, other webho
   assert.equal(events[0].message, messages[0]);
 });
 
+test('YPER4-359: email event prefix routes to email/infra, embedded text stays on vercel/15', () => {
+  const row = { requestPath: '/api/webhooks/resend-events', timestamp: until };
+  const messages = ['[email-event] email.bounced (Permanent, General)', 'other [email-event] text'];
+  const events = vercel.parseEvents(messages.map(message => ({ ...row, message })));
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['email', 4060], ['vercel', 15]]);
+  assert.deepEqual(events.map(event => event.message), messages);
+});
+
 test('R6: journal identical errors are bucketed separately across UTC midnight', () => {
   const rows = ['2026-10-13T23:59:59Z', '2026-10-14T00:00:00Z', '2026-10-14T00:00:01Z'].map(ts => ({ _SYSTEMD_UNIT: 'test.service', MESSAGE: 'Failed job 123', __REALTIME_TIMESTAMP: String(Date.parse(ts) * 1000) }));
   const events = journal.parseJournal(rows.map(row => JSON.stringify(row)).join('\n'), context);
