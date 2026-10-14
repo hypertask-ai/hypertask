@@ -473,13 +473,6 @@
       "matches": {
         "api": ["^POST /api/mcp/cli-error$"]
       },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-4060/356",
-          "expires": "2026-11-12",
-          "entries": ["POST /api/mcp/cli-error"]
-        }
-      },
       "exclusions": {
         "mcp": "Only the CLI binary reports its own crashes; MCP clients already have hypertask_report_feedback.",
         "cli": "The CLI calls this endpoint automatically after a failed command; it is not a user command.",

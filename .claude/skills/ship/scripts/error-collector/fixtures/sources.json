@@ -192,5 +192,24 @@
         }
       ]
     }
+  },
+  "cli": {
+    "events": [
+      {
+        "timestamp": "2026-10-14T08:20:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] task create: ApiFailure (HTTP 503) v0.2.0 linux"
+      },
+      {
+        "timestamp": "2026-10-14T08:21:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] task create: ApiFailure (HTTP 503) v0.3.1-beta.2+abc macos"
+      },
+      {
+        "timestamp": "2026-10-14T08:22:00.000Z",
+        "requestPath": "/api/mcp/cli-error",
+        "message": "[cli-error] login: NoToken v0.3.1 windows"
+      }
+    ]
   }
 }

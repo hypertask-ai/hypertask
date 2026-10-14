@@ -294,6 +294,40 @@ test('YPER4-359: email event prefix routes to email/infra, embedded text stays o
   assert.deepEqual(events.map(event => event.message), messages);
 });
 
+test('YPER4-356: CLI error logs route to cli/15 and group across versions and OSes', async () => {
+  const events = vercel.parseEvents(fixtures.cli.events);
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['cli', 15], ['cli', 15], ['cli', 15]]);
+  assert.deepEqual(events.map(event => event.message), [
+    '[cli-error] task create: ApiFailure (HTTP 503)',
+    '[cli-error] task create: ApiFailure (HTTP 503)',
+    '[cli-error] login: NoToken',
+  ]);
+  assert.deepEqual(events.map(event => event.stack), ['v0.2.0 linux', 'v0.3.1-beta.2+abc macos', 'v0.3.1 windows']);
+  assert.equal(fingerprint(events[0].service, events[0].message, events[0].route), fingerprint(events[1].service, events[1].message, events[1].route));
+  assert.notEqual(fingerprint(events[0].service, events[0].message, events[0].route), fingerprint(events[2].service, events[2].message, events[2].route));
+  const calls = mockHTTP([[200, { events: fixtures.cli.events, pagination: { hasMore: false } }]]);
+  assert.deepEqual(await vercel.fetch(context), events);
+  assert.equal(calls[0].body.filter, 'level:error AND environment:production');
+});
+
+test('YPER4-356: only a leading CLI prefix routes to cli; metadata and existing frames stay in stack', () => {
+  const row = { requestPath: '/api/mcp/cli-error', timestamp: until };
+  const events = vercel.parseEvents([
+    { ...row, message: 'other [cli-error] text v0.2.0 linux' },
+    { ...row, message: '[cli-error] login: NoToken v0.2.0 other\n    at caller (file:1)' },
+    { ...row, message: '[cli-error] malformed without metadata' },
+    { ...row, message: '[cli-error] task create: ApiFailure (HTTP 500) v0.2.0 linux' },
+  ]);
+  assert.deepEqual(events.map(event => [event.service, event.board]), [['vercel', 15], ['cli', 15], ['cli', 15], ['cli', 15]]);
+  assert.equal(events[0].message, 'other [cli-error] text v0.2.0 linux');
+  assert.equal(events[1].message, '[cli-error] login: NoToken');
+  assert.equal(events[1].stack, 'v0.2.0 other\nat caller (file:1)');
+  assert.equal(events[2].message, '[cli-error] malformed without metadata');
+  assert.equal(events[2].stack, '');
+  assert.equal(events[3].message, '[cli-error] task create: ApiFailure (HTTP 500)');
+  assert.deepEqual(vercel.parseEvents([{ ...row, message: fixtures.cli.events[0].message, httpStatus: 503 }], proxy.name).map(event => event.service), ['vercel-5xx']);
+});
+
 test('R6: journal identical errors are bucketed separately across UTC midnight', () => {
   const rows = ['2026-10-13T23:59:59Z', '2026-10-14T00:00:00Z', '2026-10-14T00:00:01Z'].map(ts => ({ _SYSTEMD_UNIT: 'test.service', MESSAGE: 'Failed job 123', __REALTIME_TIMESTAMP: String(Date.parse(ts) * 1000) }));
   const events = journal.parseJournal(rows.map(row => JSON.stringify(row)).join('\n'), context);
