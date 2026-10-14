@@ -116,6 +116,29 @@ print('premerge-evidence: success (fixture)')
         path = self.root / 'published'
         return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
+    def test_one_off_pr_failures_retry_and_only_repeated_failures_fail_the_unit(self):
+        self.production.write_text('''#!/usr/bin/env python3
+import os, pathlib, sys
+if sys.argv[2] == '999' and (pathlib.Path(os.environ['POSTER_TEST_ROOT']) / 'pr-999-broken').exists():
+    print('FAIL: premerge status requires an open production PR with a full head sha; no status posted')
+    sys.exit(1)
+print('premerge-evidence: success (fixture)')
+''')
+        (self.root / 'pr-999-broken').touch()
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(self.sweep().returncode, 0)
+        third = self.sweep()
+        self.assertEqual(third.returncode, 1, third.stderr)
+        cache = json.loads((self.state / 'cache.json').read_text())
+        self.assertEqual(cache['999'], {'misses': 3})
+        self.assertEqual(cache['998']['state'], 'SUCCESS')
+        (self.root / 'pr-999-broken').unlink()
+        self.assertEqual(self.sweep().returncode, 0)
+        self.assertEqual(json.loads((self.state / 'cache.json').read_text())['999']['state'], 'SUCCESS')
+        (self.root / 'pr-999-broken').touch()
+        (self.root / 'head').write_text('b' * 40)
+        self.assertEqual(self.sweep().returncode, 0)
+
     def test_fetch_each_sweep_and_invalidate_every_pr_immediately(self):
         self.assertEqual(self.sweep().returncode, 0)
         first = json.loads((self.state / 'cache.json').read_text())
