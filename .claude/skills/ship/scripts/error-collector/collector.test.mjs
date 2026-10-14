@@ -371,6 +371,21 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
 
+check('reporting', 'errors marked [ht-forced-test] are skipped for every source, unmarked ones still file (YPER4-384)', () => withHarness(async h => {
+  h.events([
+    event({ message: 'Error: [ht-forced-test] YPER4-384 forced server test 1' }),
+    event({ service: 'browser', message: 'Error: [ht-forced-test] YPER4-384 forced browser test 2' }),
+    event({ service: 'github-actions', board: 4060, route: '', message: 'Smoke failed [ht-forced-test]' }),
+    event({ message: 'Error: YPER4-377 forced browser test 3' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14'].web.noise, 1);
+  assert.equal(h.state().days['2026-10-14'].browser.noise, 1);
+  assert.equal(h.state().days['2026-10-14']['github-actions'].noise, 1);
+  assert.equal(h.state().days['2026-10-14'].web.errors, 1);
+}));
+
 check('reporting', 'outside PR guard dry runs are noise, other workflow failures are errors (YPER4-364)', () => withHarness(async h => {
   const ci = { service: 'github-actions', board: 4060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
   h.events([event({ ...ci, message: 'Outside PR guard failed: outside-pr-guard' }), event({ ...ci, message: 'CI Tests failed: browser-smoke' })]);

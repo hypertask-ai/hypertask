@@ -18,6 +18,8 @@ const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
+// Tests that throw an error on purpose put this marker in its message (YPER4-384).
+const FORCED_TEST = /\[ht-forced-test\]/i;
 
 export function isNoise(event) {
   return NOISE.some(rule => (!rule.service || rule.service === event.service) && rule.regex.test(`${event.message}\n${event.route}`));
@@ -211,7 +213,11 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
-        if (isNoise(event)) { counts.noise += event.count; continue; }
+        if (isNoise(event)) {
+          counts.noise += event.count;
+          if (FORCED_TEST.test(`${event.message}\n${event.route}`)) diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
+          continue;
+        }
         counts.errors += event.count;
         if (event.ticket === false) continue;
         const fp = fingerprint(event.service, event.message, event.route);
