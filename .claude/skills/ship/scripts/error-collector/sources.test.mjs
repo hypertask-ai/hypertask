@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
@@ -182,7 +183,7 @@ test('summary-only event never enters fingerprints/pending, search or tickets, e
   assert.ok(messages.some(line => line.includes('"errors":5')));
 });
 
-test('every h1 group replays through core: precisely REAL/INFRA pending and every NOISE skipped', async () => {
+test('every h1 group replays through core: REAL/INFRA pending, noise stays noise with opted-in hourly alerts', async () => {
   const groups = JSON.parse(readFileSync(new URL('./fixtures/h1-groups.json', import.meta.url)));
   const root = join(home, 'replay-state');
   const rules = JSON.parse(readFileSync(new URL('./noise.json', import.meta.url)));
@@ -195,7 +196,18 @@ test('every h1 group replays through core: precisely REAL/INFRA pending and ever
   await collect({ env: { ...env, ERROR_COLLECTOR_STATE_DIR: root, ERROR_COLLECTOR_HOURLY_CAP: '0' }, now: Date.parse(until), sources: [{ name: 'research', fetch: async () => groups }] });
   const state = JSON.parse(readFileSync(join(root, 'state.json')));
   const expected = [...new Set(groups.filter(group => group.classification !== 'NOISE').map(group => fingerprint(group.service, group.message, group.route)))].sort();
-  assert.deepEqual(Object.keys(state.pending).sort(), expected);
+  assert.deepEqual(Object.keys(state.pending).filter(fp => !state.pending[fp].noiseRule).sort(), expected);
+  const alerts = new Map();
+  for (const group of groups.filter(group => group.classification === 'NOISE')) {
+    const rule = rules.find(rule => rule.alert && (!rule.service || rule.service === group.service) && new RegExp(rule.match, 'i').test(`${group.message}\n${group.route}`));
+    if (!rule) continue;
+    const fp = createHash('sha256').update(`noise|${group.service}|${rule.id}`).digest('hex').slice(0, 16);
+    if (!alerts.has(fp)) alerts.set(fp, []);
+    alerts.get(fp).push(group);
+  }
+  const expectedAlerts = [...alerts].filter(([, events]) => events.some(end => events.filter(event => Date.parse(event.ts) > Date.parse(end.ts) - 3600000 && event.ts <= end.ts).reduce((count, event) => count + event.count, 0) > 50)).map(([fp]) => fp).sort();
+  assert.deepEqual(Object.keys(state.pending).filter(fp => state.pending[fp].noiseRule).sort(), expectedAlerts);
+  assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.errors, 0), groups.filter(group => group.classification !== 'NOISE').reduce((sum, group) => sum + group.count, 0));
   assert.equal(Object.values(state.days).reduce((sum, day) => sum + day.vercel.noise, 0), noiseCount);
   // Positive control ensures the noise assertion rejects a real error.
   assert.ok(!rules.some(rule => new RegExp(rule.match, 'i').test('guest cleanup failed Foreign key constraint violated')));

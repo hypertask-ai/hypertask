@@ -3,7 +3,7 @@ import { defaultModelKeyFor } from "@/lib/aiModelOptions";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 import { z } from "zod";
 
 import { getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
@@ -198,9 +198,9 @@ export async function learnBoardMemoryFromSignal(args: {
       provider: aiUsageProviderForCredential(provider, gatewayApiKey),
       feature: "custom-instructions",
     });
-    const result = await generateObject({
+    const result = await generateText({
       model,
-      schema: learnedFactsSchema,
+      output: Output.object({ schema: learnedFactsSchema }),
       maxRetries: 2,
       maxOutputTokens: 500,
       providerOptions: gatewayProviderOptionsForModel(
@@ -230,7 +230,7 @@ export async function learnBoardMemoryFromSignal(args: {
         }
 
         const facts = normalizeLearnedMemoryFacts(
-          result.object.facts,
+          result.output.facts,
           latestState.memories.map((memory) => memory.content),
         ).slice(
           0,

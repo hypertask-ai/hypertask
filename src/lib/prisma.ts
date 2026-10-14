@@ -6,6 +6,7 @@ import { PrismaPg } from '@prisma/adapter-pg'
 import { isApiKeyAuthLookup, withApiKeyExpiryGuard } from '@/lib/apiKeyExpiry'
 import { trackPrismaQuery } from '@/lib/queryCountTracker'
 import { createMcpTimingPool, mcpDbTimings } from '@/lib/mcp/dbTiming'
+import { normalizeDbConnectionString } from '@/lib/dbConnectionString'
 
 const RELATION_OPS = new Set([
   "findMany",
@@ -21,7 +22,7 @@ const RELATION_OPS = new Set([
 
 const prismaClientSingleton = () => {
   const adapter = new PrismaPg(createMcpTimingPool({
-    connectionString: process.env.DATABASE_URL as string,
+    connectionString: normalizeDbConnectionString(process.env.DATABASE_URL),
     idleTimeoutMillis: 5 * 60_000,
     keepAlive: true,
   }), { disposeExternalPool: true })

@@ -1,7 +1,7 @@
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
-import { generateObject } from "ai";
+import { generateText, Output } from "ai";
 
 import { getTeamGatewayApiKey } from "@/app/api/ai/_lib/byokKeys";
 import {
@@ -107,9 +107,9 @@ export async function buildSlackThreadSummaryComment(
     provider: haikuByok ? aiUsageProviderForCredential(haikuByok.provider, haikuByok.credential) : systemModel.provider,
     feature: "summary",
   });
-  const result = await generateObject({
+  const result = await generateText({
     model,
-    schema: slackSummarySchema,
+    output: Output.object({ schema: slackSummarySchema }),
     maxRetries: 2,
     maxOutputTokens: 400,
     providerOptions: providerOptionsForAiModel(model, "summary", {
@@ -121,7 +121,7 @@ export async function buildSlackThreadSummaryComment(
     prompt: slackSummaryPrompt(transcript),
   });
 
-  return renderSlackSummaryComment(result.object, participants, permalink);
+  return renderSlackSummaryComment(result.output, participants, permalink);
 }
 
 export async function loadSlackThreadSource(
