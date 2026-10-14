@@ -17,6 +17,9 @@ import type { ManagementPermissions } from '@/lib/mcp/managementPermissions'
 import type { McpAuthContext } from '@/lib/mcp/auth/types'
 import { withMcpExecutionContext } from '@/lib/mcp/operationContext'
 
+// Kept 20 seconds under maxDuration in src/app/sse/route.ts.
+export const LEGACY_SSE_LIFETIME_MS = 780 * 1000
+
 type RelayMessage = {
   replyChannel: string
   body: unknown
@@ -215,7 +218,8 @@ export async function handleLegacySseRequest(
     try {
       await subscriber.subscribe(channel)
       await server.connect(transport)
-      timer = setTimeout(cleanup, 800 * 1000)
+      // End the stream before Vercel's limit so it closes cleanly and the client reconnects (YPER4-362).
+      timer = setTimeout(() => stream.end(), LEGACY_SSE_LIFETIME_MS)
       if (request.signal.aborted) cleanup()
       return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>, {
         headers: {
