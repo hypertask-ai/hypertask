@@ -278,8 +278,9 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
     try { write('vcc', ['activity', 'add', CONTROL, `${held} error groups held back by the hourly cap`]); }
     catch { diagnostic('held-back notice failed'); }
   }
-  const today = day(now);
-  const yesterday = day(now - DAY);
+  // Summarise the last full UTC day against the day before: a partial morning would hide every spike.
+  const today = day(now - DAY);
+  const yesterday = day(now - 2 * DAY);
   if (summary || new Date(now).getUTCHours() >= 6) {
     const services = new Set(Object.values(state.days).flatMap(counts => Object.keys(counts)));
     for (const service of services) {

@@ -356,13 +356,16 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   h.events(noise); await h.run(); assert.equal(creates(h).length, 0); assert.equal(activities(h).length, 0);
   assert.equal(h.state().days['2026-10-14'].web.noise, 7);
   h.events([event({ message: 'Unexpected internal 500 error', count: 2, ts: new Date(NOW + 1000).toISOString() })]);
-  await h.run({ now: NOW + 1000, summary: true });
+  await h.run({ now: NOW + 1000 });
   assert.equal(creates(h).length, 1);
-  assert.equal(activities(h, 'YPER4-354').length, 2);
+  assert.equal(activities(h, 'YPER4-354').length, 0);
+  // The summary covers the last full UTC day, so 2026-10-14 is reported on the 15th.
+  h.events([]); await h.run({ now: NOW + DAY, summary: true });
   assert.ok(activities(h).some(c => c.args[3] === 'web: 2 errors (yesterday 0), 1 new kinds, 7 noise'));
-  h.events([]); await h.run({ now: NOW + HOUR }); await h.run({ now: NOW + HOUR, summary: true });
-  assert.equal(activities(h, 'YPER4-354').length, 2);
-  await h.run({ now: NOW + DAY + HOUR });
+  const posted = activities(h, 'YPER4-354').length;
+  await h.run({ now: NOW + DAY + 2 * HOUR }); await h.run({ now: NOW + DAY + 2 * HOUR, summary: true });
+  assert.equal(activities(h, 'YPER4-354').length, posted);
+  await h.run({ now: NOW + 2 * DAY + 2 * HOUR });
   assert.ok(activities(h).some(c => c.args[3] === 'web: 0 errors (yesterday 2), 0 new kinds, 0 noise'));
 }));
 
@@ -378,21 +381,22 @@ check('reporting', 'spike threshold, delivery target/id and fallback log; counts
   for (const count of [49, 50, 60, 61]) await withHarness(async h => {
     const state = { version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: {} };
     for (let i = 1; i <= 16; i++) state.days[new Date(NOW - i * DAY).toISOString().slice(0, 10)] = { web: { errors: 20, noise: 0, newGroups: 0 } };
-    h.seed(state); h.events([event({ count })]); await h.run({ summary: true });
+    h.seed(state); h.events([event({ count, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
     const deliveries = h.calls().filter(c => c.name === 'runner-deliver');
     assert.equal(deliveries.length, count > 60 ? 1 : 0);
     if (deliveries.length) { assert.deepEqual(deliveries[0].args, ['ht-product-lead']); assert.equal(deliveries[0].id, 'error-collector:2026-10-14:web'); assert.match(deliveries[0].input, /SPIKE/); }
-    assert.equal(Object.keys(h.state().days).length, 14);
-    assert.ok(h.state().days['2026-10-01']); assert.equal(h.state().days['2026-09-30'], undefined);
+    assert.equal(Object.keys(h.state().days).length, 13);
+    assert.ok(h.state().days['2026-10-02']); assert.equal(h.state().days['2026-10-01'], undefined);
   });
   await withHarness(async h => {
-    rmSync(join(h.home, 'bin/runner-deliver')); h.events([event({ count: 50 })]); await h.run({ summary: true });
+    rmSync(join(h.home, 'bin/runner-deliver')); h.events([event({ count: 50, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
     const path = join(dirname(h.statePath), 'spikes.log'); assert.match(readFileSync(path, 'utf8'), /SPIKE.*web: 50 errors/); assert.equal(statSync(path).mode & 0o777, 0o600);
   });
 });
 
 check('reporting', 'dry-run plans create/activity/summary/spike and never changes state or performs writes', () => withHarness(async h => {
-  h.events([event({ count: 50, ts: new Date(Date.now() - 1000).toISOString() })]);
+  // Yesterday (UTC) inside the 24-hour window, so the forced summary of the last full day sees it.
+  h.events([event({ count: 50, ts: new Date(Date.now() - DAY + 60000).toISOString() })]);
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
@@ -423,9 +427,9 @@ check('reporting', 'dry-run plans one held-back notice without writes', () => wi
 
 check('reporting', 'summary failure retries; secret detector rejects positive controls', () => withHarness(async h => {
   h.events([event({ count: 50 })]); h.config({ activityFail: true }); await h.run({ summary: true });
-  assert.equal(h.state().summaries['2026-10-14'], undefined);
+  assert.equal(h.state().summaries['2026-10-13'], undefined);
   h.config({}); h.events([]); await h.run({ now: NOW + 1000, summary: true });
-  assert.equal(h.state().summaries['2026-10-14'].web, true);
+  assert.equal(h.state().summaries['2026-10-13'].web, true);
   const secret = 'password=fake-secret';
   const oracle = text => assert.ok(!text.includes('fake-secret'), 'fixture secret detected');
   assert.throws(() => oracle(secret)); oracle(redact(secret));
@@ -463,6 +467,7 @@ check('reporting', 'summary-only events are counted but never searched, ticketed
   assert.deepEqual(h.state().pending, {});
   assert.equal(h.state().days['2026-10-14'].posthog.errors, 9);
   assert.equal(h.state().days['2026-10-14'].posthog.newGroups, 0);
+  h.events([]); await h.run({ now: NOW + DAY, summary: true });
   assert.ok(activities(h).some(call => call.args[3] === 'posthog: 9 errors (yesterday 0), 0 new kinds, 0 noise'));
 }));
 
