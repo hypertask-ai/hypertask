@@ -1,6 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import { getRedis } from '@/lib/redis'
 
+export const FEEDBACK_ATTEMPT_SCRIPT = `
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('EXPIRE', KEYS[1], 3600) end
+return count
+`
+
+export async function reserveFeedbackAttempt(userId?: number): Promise<boolean> {
+  const redis = await getRedis()
+  return Number(await redis.eval(FEEDBACK_ATTEMPT_SCRIPT, 1, `ai-feedback:attempt:${userId ?? 'anonymous'}`)) <= 60
+}
+
 // Sliding windows, atomically shared by Vercel instances. Denied calls consume no slot.
 export const FEEDBACK_QUOTA_SCRIPT = `
 redis.call('ZREMRANGEBYSCORE', KEYS[1], '-inf', ARGV[1] - 3600000)

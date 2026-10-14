@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { z } from 'zod'
 
 // Match sk tokens at a boundary: hypertask_ is a tool namespace, not a token prefix.
-const credential = /htk_|htmk_|eyJ|(?:^|[^a-z0-9])sk[-_]|ghp_|gho_|github_pat_|xox|Bearer|\d{6,}|[^ _\-.\/:]{20,}/i
+const credential = /vck_|httk_|htk_|htmk_|(?:^|[^a-z0-9])[a-z]{2,6}_(?=[a-z0-9_.-]*[a-z])(?=[a-z0-9_.-]*\d)[a-z0-9_.-]{8,}(?![a-z0-9])|eyJ|(?:^|[^a-z0-9])sk[-_]|ghp_|gho_|github_pat_|xox|Bearer|\d{6,}|[^ _\-.\/:]{20,}/i
 const slug = z.string().max(40).regex(/^[a-z0-9]+(?:[._-][a-z0-9]+)*$/i)
   .refine((value) => !credential.test(value), 'Credential-shaped values are not allowed')
 export const aiFeedbackSchema = z.object({
@@ -31,7 +31,7 @@ export function scrubFeedbackText(value: string): string {
     .replace(/\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.)[^\s<>]+/gi, ' ')
     .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, ' ')
     .replace(/\d{5,}/g, ' ')
-    .replace(/\b(?:Bearer\s+\S+|(?:htk_|htmk_|eyJ)[\w.-]+)\b/gi, ' ')
+    .replace(/\b(?:Bearer\s+\S+|(?:vck_|httk_|htk_|htmk_|eyJ)[\w.-]+)\b/gi, ' ')
     .replace(/\u2014/g, '-')
     .replace(/\s+/g, ' ')
     .trim()

@@ -35,7 +35,7 @@ const feedbackTool = {
 
 // Exercise the actual route, auth wrapper and transports; only product data,
 // credential validation and flag storage are replaced with local fixtures.
-function loadRoutes() {
+function loadRoutes(feedbackRedis: Redis, background: Promise<unknown>[]) {
   const cache = new Map<string, any>()
   function load(file: string): any {
     if (cache.has(file)) return cache.get(file)
@@ -46,6 +46,8 @@ function loadRoutes() {
     loaded.filename = file
     loaded.paths = (Module as any)._nodeModulePaths(path.dirname(file))
     loaded.require = (request: string) => {
+      if (request === '@/lib/redis') return { getRedis: async () => feedbackRedis }
+      if (request === '@vercel/functions') return { waitUntil: (job: Promise<unknown>) => background.push(job) }
       if (request === '@/lib/telemetry/mcpSseAnalytics') return { recordLegacyMcpRequest: () => {} }
       if (request === './tools') return { MCP_TOOLS: [echoTool, feedbackTool] }
       if (request === './consolidated-tools') return {
@@ -170,6 +172,8 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
   const previousUrl = process.env.REDIS_URL
   process.env.REDIS_URL = `redis://127.0.0.1:${port}`
   let inspector: Redis | undefined
+  let feedbackRedis: Redis | undefined
+  const background: Promise<unknown>[] = []
   const streams: Array<ReturnType<typeof frames>> = []
   try {
     await new Promise<void>((resolve, reject) => {
@@ -181,8 +185,9 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
       redis.once('error', reject)
       redis.once('exit', (code) => reject(new Error(`Redis exited ${code}`)))
     })
-    const first = loadRoutes()
-    const second = loadRoutes()
+    feedbackRedis = new Redis(process.env.REDIS_URL!)
+    const first = loadRoutes(feedbackRedis, background)
+    const second = loadRoutes(feedbackRedis, background)
     for (const bearer of [null, 'wrong-token']) {
       for (const [route, url, method, body] of [
         [first.sse, '/sse', 'GET', undefined],
@@ -339,6 +344,8 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
     await aborted.next()
     controller.abort()
     assert.equal((await aborted.reader.read()).done, true)
+    while (background.length) await Promise.all(background.splice(0))
+    await feedbackRedis.quit()
     inspector = new Redis(process.env.REDIS_URL!)
     const clients = await inspector.client('LIST') as string
     assert.equal(clients.trim().split('\n').length, 1, 'Redis subscribers and publishers must be released')
@@ -350,6 +357,7 @@ test('actual routes preserve legacy SSE across instances and support MCP 2 strea
     else process.env.REDIS_URL = previousUrl
     await Promise.all(streams.map((stream) => stream.reader.cancel().catch(() => {})))
     inspector?.disconnect()
+    feedbackRedis?.disconnect()
     if (redis.pid && redis.exitCode === null && redis.signalCode === null) {
       const stopped = new Promise((resolve) => redis.once('exit', resolve))
       redis.kill('SIGTERM')

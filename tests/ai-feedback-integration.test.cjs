@@ -9,7 +9,7 @@ const stub = (file, exports) => {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
-let mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0
+let mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
 let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false
 const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
@@ -26,8 +26,8 @@ stub('src/lib/flags.ts', {
 })
 stub('src/lib/redis.ts', { getRedis: async () => ({
   set: async (key, value) => { if (key.includes(':client:')) clientNames.set(key, value); return 'OK' },
-  get: async (key) => clientNames.get(key),
-  eval: async (script) => script.includes('ZCARD') ? ++quotaCount <= 10 ? 1 : 0 : 1,
+  get: async (key) => key.includes(':count:') ? 1 : clientNames.get(key),
+  eval: async (script) => script.includes('local acquired') ? [1, 1] : script.includes('local waiting') ? 1 : script.includes("redis.call('INCR'") ? ++attemptCount : script.includes('ZCARD') ? ++quotaCount <= 10 ? 1 : 0 : 1,
   zrem: async () => {},
 }) })
 stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => { if (coreBlock) await coreBlock; if (coreThrow) throw new Error('storage failed'); files.push(options); return { task: { ticketNumber: 'HTPR-7196', uniqueIndex: 7196 } } } })
@@ -58,7 +58,7 @@ const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/
 const rpcRequest = (method, params) => new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers: { Authorization: 'Bearer fixture', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
 async function drain() { while (pending.length) { const batch = pending.splice(0); await Promise.all(batch) } }
 
-test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false })
+test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false })
 test.afterEach(drain)
 
 test('REST accepts legitimate agent caller and returns the exact contract without private account fields', async () => {
@@ -257,7 +257,7 @@ test('unmatched REST 5xx failures use a content-free fallback and query strings 
 
 test('REST rejects credential-shaped structured fields with 400 and still accepts legitimate callers', async () => {
   for (const field of ['tool', 'client', 'errorCode']) {
-    for (const value of ['htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
+    for (const value of ['vck_secret123', 'httk_secret123', 'abc_x7Yz9QwE', 'htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
       const response = await POST(restRequest({ surface: 'cli', [field]: value }))
       assert.equal(response.status, 400)
       assert.match((await response.json()).error, /Credential-shaped/)
@@ -270,7 +270,7 @@ test('REST rejects credential-shaped structured fields with 400 and still accept
 })
 
 test('automatic reports drop credential-shaped fields, retain safe fields and still file in background', async () => {
-  for (const value of ['htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
+  for (const value of ['vck_secret123', 'httk_secret123', 'abc_x7Yz9QwE', 'htk_secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'aB7cD9eF2g' + 'H4jK6mN8pQ']) {
     queueAiFeedback({ surface: 'mcp', tool: value, client: value, errorCode: value, status: 503 }, 985)
     await drain()
     const report = files.at(-1).description
@@ -280,7 +280,7 @@ test('automatic reports drop credential-shaped fields, retain safe fields and st
     assert.match(report, /HTTP status: 503/)
     assert.match(report, /Category: call_failed/)
   }
-  assert.equal(files.length, 3)
+  assert.equal(files.length, 6)
 })
 
 test('MCP input schema documents free-text non-storage and the optional category contract', async () => {
@@ -294,4 +294,17 @@ test('MCP input schema documents free-text non-storage and the optional category
   assert.match(reportFeedbackTool.parameters.shape.error.description, /never stored/)
   assert.match(reportFeedbackTool.description, /never stored/)
   assert.equal(reportFeedbackTool.parameters.parse({}).category, 'other')
+})
+
+
+test('REST and MCP feedback share the attempt limit before flag evaluation and filing', async () => {
+  attemptCount = 60
+  mode = 'OFF'
+  const response = await POST(restRequest({ surface: 'api' }))
+  assert.equal(response.status, 429)
+  assert.match((await response.json()).error, /attempt limit/)
+  await assert.rejects(reportFeedbackTool.execute({}, 'fixture'), { status: 429 })
+  assert.equal(files.length, 0)
+  assert.equal(quotaCount, 0)
+  assert.equal(attemptCount, 62)
 })

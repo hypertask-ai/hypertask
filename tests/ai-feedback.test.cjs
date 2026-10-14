@@ -17,6 +17,7 @@ test('scrubber removes escaped quotes, URLs, emails, credentials and unclosed ex
   assert.equal(scrubFeedbackText(' failed \n user@example.test www.example.test https://example.test/a <img src="secret"> Bearer htk_supersecret '), 'failed')
   assert.equal(scrubFeedbackText('x'.repeat(600)), 'x'.repeat(300))
   assert.equal(scrubFeedbackText('one\t two\nthree'), 'one two three')
+  assert.equal(scrubFeedbackText('Failure vck_secret123 httk_secret123'), 'Failure')
 })
 
 test('validation rejects unknown content fields, malformed structured fields and non-HTTP statuses', () => {
@@ -73,7 +74,7 @@ test('ticket flag defaults to Owner + QA as a feature, supports Off and permits 
 
 
 test('structured fields reject token prefixes, JWTs, long runs and numeric identifiers while legitimate slugs still work', () => {
-  const secrets = ['htk_secret123', 'htmk_' + 'secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'sk-secret', 'sk_secret', 'ghp_secret', 'gho_secret', 'github_pat_secret', 'xoxb-secret', 'Bearer-secret', 'error-123456', 'aB7cD9eF2g' + 'H4jK6mN8pQ', 'tool-htk_secret123', 'tool-sk_secret']
+  const secrets = ['vck_secret123', 'httk_secret123', 'abc_x7Yz9QwE', 'abc_x7.Yz9QwE', 'abcdef_x7Yz9QwE', 'ab_x7Yz9QwE', 'tool-abc_x7Yz9QwE', 'htk_secret123', 'htmk_' + 'secret123', 'eyJ' + 'hbGciOiJIUzI1NiJ9.payload', 'sk-secret', 'sk_secret', 'ghp_secret', 'gho_secret', 'github_pat_secret', 'xoxb-secret', 'Bearer-secret', 'error-123456', 'aB7cD9eF2g' + 'H4jK6mN8pQ', 'tool-htk_secret123', 'tool-sk_secret']
   for (const field of ['tool', 'client', 'errorCode']) {
     for (const value of secrets) {
       assert.equal(aiFeedbackSchema.safeParse({ surface: 'mcp', [field]: value }).success, false, `${field}: ${value}`)

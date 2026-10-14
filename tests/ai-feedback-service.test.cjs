@@ -7,25 +7,50 @@ const stub = (file, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 let enabled, globalEnabled, rows, created, updates, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
-let bucketCounts, lock, activeRedis
+let bucketCounts, locks, counters, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace
 const redis = {
-  set: async (_key, token) => { if (lock) return null; lock = token; return 'OK' },
+  set: async (key, value, ...args) => {
+    assert.deepEqual(args, ['EX', key.includes(':lock:') ? 30 : 30 * 86400, 'NX'])
+    const store = key.includes(':lock:') ? locks : counters
+    if (store.has(key)) return null
+    store.set(key, value)
+    return 'OK'
+  },
+  incr: async (key) => { const count = Number(counters.get(key) ?? 0) + 1; counters.set(key, count); return count },
+  expire: async (key, seconds) => { assert.equal(seconds, 30 * 86400); assert.ok(counters.has(key)); return 1 },
+  get: async (key) => counters.get(key),
   eval: async (script, _keys, key, now, limit, token) => {
+    if (script.includes('local acquired')) {
+      const count = await redis.incr(key)
+      await redis.expire(key, 30 * 86400)
+      const acquired = await activeRedis.set(now, limit, 'EX', 30, 'NX')
+      return [count, acquired === 'OK' ? 1 : 0]
+    }
+    if (script.includes('local waiting')) {
+      const count = Number(counters.get(key)) - Number(now) + 1
+      counters.set(key, count)
+      return count
+    }
+    if (script.includes("redis.call('INCR'")) {
+      const count = (attempts.get(key) ?? 0) + 1
+      attempts.set(key, count)
+      return count
+    }
     if (script.includes('ZCARD')) {
+      if (onQuota) onQuota()
       const entries = (bucketCounts.get(key) ?? []).filter((entry) => entry.now > now - 3600000)
       bucketCounts.set(key, entries)
       if (entries.length >= Number(limit)) return 0
       entries.push({ now, token })
       return 1
     }
-    if (lock === now) lock = undefined
+    if (locks.get(key) === now) locks.delete(key)
     return 1
   },
-  zrem: async (key, token) => bucketCounts.set(key, (bucketCounts.get(key) ?? []).filter((entry) => entry.token !== token)),
 }
 stub('src/lib/redis.ts', { getRedis: async () => activeRedis })
-stub('src/lib/flags.ts', { isFeatureEnabled: async () => { if (failFlag) throw new Error('flag storage failed'); return enabled }, featureFlagCandidateUserIds: async () => { if (failFlag) throw new Error('flag storage failed'); return globalEnabled ? null : [6, 985] } })
-stub('src/lib/prisma.ts', { default: {
+stub('src/lib/flags.ts', { isFeatureEnabled: async () => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return enabled }, featureFlagCandidateUserIds: async () => { flagCalls++; if (failFlag) throw new Error('flag storage failed'); return globalEnabled ? null : [6, 985] } })
+const db = {
   user: { findUnique: async (query) => { userQuery = query; return { displayName: 'Kamil <Admin> customer@example.test' } } },
   project: {
     findFirst: async () => configured ? { ownerId: 6, uniqueIdentifier: 'HTPR', section: [{ id: 111, section_title: 'Bugs' }] } : null,
@@ -33,13 +58,17 @@ stub('src/lib/prisma.ts', { default: {
   section: { findMany: async () => [{ id: 222, section_title: 'Done' }, { id: 333, section_title: 'Shipped' }] },
   label: {
     findFirst: async (query) => { assert.deepEqual(query.where, { projectId: 15, value: 'ai-feedback' }); return labelCreated ? { id: 'label-ai' } : null },
-    create: async (query) => { assert.deepEqual(query.data, { projectId: 15, value: 'ai-feedback' }); labelCreated++; return { id: 'label-ai' } },
+    create: async (query) => { assert.deepEqual(query.data, { projectId: 15, value: 'ai-feedback' }); if (labelRace && labelCreated) throw Object.assign(new Error('label already exists'), { code: 'P2002' }); labelCreated++; if (labelError) throw labelError; return { id: 'label-ai' } },
   },
+  description: { findUnique: async ({ where }) => ({ content: rows.find((row) => row.id === where.taskId).description_.content }) },
   task: { findFirst: async (query) => {
     taskQuery = query
-    return rows.find((row) => row.status === query.where.status && ![222, 333].includes(row.sectionId) && !['Done', 'Shipped'].includes(row.section) && row.description_.content.includes(query.where.description_.is.content.contains)) ?? null
+    const row = rows.find((row) => row.status === query.where.status && ![222, 333].includes(row.sectionId) && !['Done', 'Shipped'].includes(row.section) && row.description_.content.includes(query.where.description_.is.content.contains))
+    return row ? { ...row, description_: { ...row.description_ } } : null
   } },
-} })
+}
+for (const model of Object.values(db)) for (const [name, execute] of Object.entries(model)) model[name] = async (...args) => { prismaCalls++; return execute(...args) }
+stub('src/lib/prisma.ts', { default: db })
 stub('src/utils/controllers/tasks/createTaskCore.ts', { createTaskCore: async (options) => {
   if (failWrite) throw new Error('write failed')
   created.push(options)
@@ -55,12 +84,13 @@ stub('src/utils/controllers/description/common-description-create.ts', { default
 } })
 stub('src/lib/realtime/server.ts', { broadcastTaskChange: async () => {} })
 const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') }, cache: false })
-const { fileAiFeedback, bumpFeedbackDescription, aiFeedbackEnabled } = jiti('../src/lib/aiFeedback/report.ts')
-const { reserveFeedbackQuota, FEEDBACK_QUOTA_SCRIPT } = jiti('../src/lib/aiFeedback/rateLimit.ts')
+const { fileAiFeedback, bumpFeedbackDescription, aiFeedbackEnabled, FEEDBACK_COUNT_LOCK_SCRIPT, FEEDBACK_RESET_COUNT_SCRIPT } = jiti('../src/lib/aiFeedback/report.ts')
+const { reserveFeedbackAttempt, reserveFeedbackQuota, FEEDBACK_QUOTA_SCRIPT } = jiti('../src/lib/aiFeedback/rateLimit.ts')
+const { feedbackFingerprint } = jiti('../src/lib/aiFeedback/input.ts')
 const input = { surface: 'mcp', client: 'claude', tool: 'hypertask_tasks', status: 503, errorCode: 'unavailable', error: 'Cannot save "Confidential task description" for customer@example.test' }
 
 test.beforeEach(() => {
-  enabled = true; globalEnabled = false; rows = []; created = []; updates = []; labelCreated = 0; bucketCounts = new Map(); lock = undefined; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; userQuery = undefined; taskQuery = undefined
+  enabled = true; globalEnabled = false; rows = []; created = []; updates = []; labelCreated = 0; bucketCounts = new Map(); locks = new Map(); counters = new Map(); attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; userQuery = undefined; taskQuery = undefined
 })
 
 test('creates scrubbed medium-priority report on board 15 Bugs through createTaskCore, never as the reporting account', async () => {
@@ -86,7 +116,7 @@ test('same fingerprint across accounts and notes bumps one open report, deduping
   assert.equal(updates[0].creatorId, 6)
   assert.equal((updates[0].content.match(/Kamil/g) ?? []).length, 1)
   let content = updates[0].content
-  for (let index = 0; index < 30; index++) content = bumpFeedbackDescription(content, `Name ${index}`, `client-${index}`).description
+  for (let index = 0; index < 30; index++) content = bumpFeedbackDescription(content, index + 3, `Name ${index}`, `client-${index}`).description
   assert.equal(content.match(/Reporting display names: ([^<]*)/)[1].split(', ').length, 10)
   assert.equal(content.match(/Clients: ([^<]*)/)[1].split(', ').length, 10)
   assert.match(content, /Seen 32 times/)
@@ -94,8 +124,8 @@ test('same fingerprint across accounts and notes bumps one open report, deduping
 })
 
 test('escaped reporting display names survive dedupe without injecting HTML', () => {
-  const first = bumpFeedbackDescription('<p>Seen 1 times</p>', 'Kamil & Co <owner>', 'claude').description
-  const second = bumpFeedbackDescription(first, 'Kamil & Co <owner>', 'claude').description
+  const first = bumpFeedbackDescription('<p>Seen 1 times</p>', 2, 'Kamil & Co <owner>', 'claude').description
+  const second = bumpFeedbackDescription(first, 3, 'Kamil & Co <owner>', 'claude').description
   assert.match(second, /Kamil &amp; Co/)
   assert.equal(second.includes('<owner>'), false)
   assert.equal((second.match(/Kamil/g) ?? []).length, 1)
@@ -136,7 +166,7 @@ test('anonymous reports require Everyone and share one quota for new reports and
   assert.equal(userQuery, undefined)
 })
 
-test('flag-off and invalid input never write or consume quota; failed writes keep reservations to bound partially committed reports', async () => {
+test('flag-off and invalid input consume attempts but never write or consume filing quota; failed writes keep reservations', async () => {
   enabled = false
   assert.equal(await aiFeedbackEnabled(42), false)
   await assert.rejects(fileAiFeedback(input, 42), { status: 404 })
@@ -146,7 +176,7 @@ test('flag-off and invalid input never write or consume quota; failed writes kee
   failWrite = true
   await assert.rejects(fileAiFeedback(input, 42), /write failed/)
   assert.equal([...bucketCounts.values()].flat().length, 1)
-  assert.equal(lock, undefined)
+  assert.equal(locks.size, 0)
   failWrite = false
   assert.equal((await fileAiFeedback(input, 42)).count, 1)
 })
@@ -158,7 +188,7 @@ test('titles use tool, errorCode or status and never exceed 80 characters; uncon
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
 })
 
-test('real Redis Lua quota is atomic across clients, rolling for an hour and storage errors fail closed', async (t) => {
+test('real Redis quotas, attempts, counting and lock reset are atomic across clients and storage errors fail closed', async (t) => {
   const { spawn } = require('node:child_process')
   const fs = require('node:fs'), os = require('node:os')
   const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-feedback-redis-'))
@@ -174,25 +204,46 @@ test('real Redis Lua quota is atomic across clients, rolling for an hour and sto
   assert.equal(await one.zcard('test:quota'), 10)
   assert.equal(await one.eval(FEEDBACK_QUOTA_SCRIPT, 1, 'test:quota', now + 3599999, 10, 'too-soon'), 0)
   assert.equal(await one.eval(FEEDBACK_QUOTA_SCRIPT, 1, 'test:quota', now + 3600000, 10, 'next-hour'), 1)
+  activeRedis = one
+  const attemptResults = await Promise.all(Array.from({ length: 70 }, () => reserveFeedbackAttempt(42)))
+  assert.equal(attemptResults.filter(Boolean).length, 60)
+  assert.ok(await one.ttl('ai-feedback:attempt:42') > 3590)
+  assert.equal(await reserveFeedbackAttempt(43), true)
+  for (let index = 0; index < 60; index++) assert.equal(await reserveFeedbackAttempt(), true)
+  assert.equal(await reserveFeedbackAttempt(), false)
+  await one.expire('ai-feedback:attempt:42', 0)
+  assert.equal(await reserveFeedbackAttempt(42), true)
+  const countKey = 'ai-feedback:count:test', lockKey = 'ai-feedback:lock:test'
+  await one.set(countKey, 99)
+  const counted = await Promise.all(Array.from({ length: 12 }, (_, index) => (index % 2 ? one : two).eval(FEEDBACK_COUNT_LOCK_SCRIPT, 2, countKey, lockKey, `owner-${index}`)))
+  assert.equal(counted.filter((result) => result[1] === 1).length, 1)
+  const winner = counted.find((result) => result[1] === 1)
+  assert.equal(winner[0], 100)
+  assert.equal(await one.get(countKey), '111')
+  assert.equal(await one.eval(FEEDBACK_RESET_COUNT_SCRIPT, 1, countKey, winner[0]), 12)
+  assert.equal(await two.get(countKey), '12')
+  assert.ok(await one.ttl(countKey) > 2591990)
+  assert.ok(await one.ttl(lockKey) > 20 && await one.ttl(lockKey) <= 30)
   activeRedis = { eval: async () => { throw new Error('storage unavailable') } }
   await assert.rejects(reserveFeedbackQuota(42, false), /storage unavailable/)
 })
 
 
-test('flag storage errors fail closed, and a concurrent destination write cannot create duplicate tickets', async () => {
+test('flag storage errors fail closed, and a held fingerprint lock bounds retries without database work', async () => {
   failFlag = true
   assert.equal(await aiFeedbackEnabled(42), false)
   assert.equal(await aiFeedbackEnabled(), false)
   await assert.rejects(fileAiFeedback(input, 42), { status: 404 })
   assert.equal(created.length, 0)
   failFlag = false
-  lock = 'another-report'
+  const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  locks.set(lockKey, 'another-report')
   let attempts = 0
   activeRedis = { ...redis, set: async (...args) => { attempts++; return redis.set(...args) } }
   await assert.rejects(fileAiFeedback(input, 42), { status: 503 })
   assert.equal(created.length, 0)
   assert.equal(bucketCounts.size, 0)
-  assert.equal(lock, 'another-report')
+  assert.equal(locks.get(lockKey), 'another-report')
   assert.equal(attempts, 20)
 })
 
@@ -226,11 +277,11 @@ test('two bumps preserve original report and human triage exactly, updating only
 
 test('human-removed metadata lines are appended without changing remaining description', () => {
   const content = '<p>Original report</p><p>Human investigation</p>'
-  const first = bumpFeedbackDescription(content, 'Kamil', 'claude')
+  const first = bumpFeedbackDescription(content, 2, 'Kamil', 'claude')
   assert.equal(first.count, 2)
   assert.ok(first.description.startsWith(content))
   for (const label of ['Seen 2 times', 'Reporting display names: Kamil', 'Clients: claude', 'Last seen:']) assert.ok(first.description.includes(label))
-  const second = bumpFeedbackDescription(first.description, 'Kamil', 'cursor')
+  const second = bumpFeedbackDescription(first.description, 3, 'Kamil', 'cursor')
   assert.equal(second.count, 3)
   assert.ok(second.description.startsWith(content))
   assert.equal((second.description.match(/Last seen:/g) ?? []).length, 1)
@@ -253,18 +304,20 @@ test('free text is accepted but never persisted, including unquoted private pros
   assert.equal(created[0].description.includes('Free text was supplied'), false)
 })
 
-test('overlapping reports with different fingerprints both file after lock contention, and identical reports dedupe', async () => {
+test('overlapping reports with different fingerprints both file, and identical reports dedupe', async () => {
+  labelRace = true
   const results = await Promise.all([fileAiFeedback(input, 42), fileAiFeedback({ ...input, tool: 'hypertask_hello' }, 43)])
   assert.equal(results.length, 2)
   assert.ok(results.every((result) => result.success && !result.deduped))
   assert.equal(created.length, 2)
   assert.equal(labelCreated, 1)
-  assert.equal(lock, undefined)
+  assert.equal(locks.size, 0)
   rows = []; created = []
   const repeated = await Promise.all([fileAiFeedback(input, 44), fileAiFeedback(input, 45)])
-  assert.deepEqual(repeated.map((result) => result.count), [1, 2])
+  assert.ok(repeated.every((result) => result.count === 2))
+  assert.deepEqual(repeated.map((result) => result.deduped), [false, true])
   assert.equal(created.length, 1)
-  assert.equal(lock, undefined)
+  assert.equal(locks.size, 0)
 })
 
 
@@ -274,4 +327,94 @@ test('partial core failures cannot create more than ten account reports in the h
   assert.equal(created.length, 10)
   await assert.rejects(fileAiFeedback(input, 42), { status: 429 })
   assert.equal(created.length, 10)
+})
+
+test('different fingerprints file without waiting for a blocked fingerprint', { timeout: 3000 }, async () => {
+  const firstKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  let release, entered
+  const blocked = new Promise((resolve) => { release = resolve })
+  const started = new Promise((resolve) => { entered = resolve })
+  activeRedis = { ...redis, set: async (key, ...args) => {
+    const result = await redis.set(key, ...args)
+    if (key === firstKey && result === 'OK') { entered(); await blocked }
+    return result
+  } }
+  const first = fileAiFeedback(input, 42)
+  try {
+    await started
+    const second = await fileAiFeedback({ ...input, tool: 'hypertask_hello' }, 43)
+    assert.equal(second.success, true)
+    assert.equal(created.length, 1)
+    assert.equal(locks.size, 1)
+  } finally { release(); await first }
+  assert.equal(created.length, 2)
+  assert.equal(locks.size, 0)
+})
+
+test('same-fingerprint contention counts every report even when all bounded retries fail', async () => {
+  await fileAiFeedback(input, 42)
+  const fingerprint = feedbackFingerprint(input)
+  const lockKey = `ai-feedback:lock:${fingerprint}`
+  const countKey = `ai-feedback:count:${fingerprint}`
+  locks.set(lockKey, 'other-owner')
+  const databaseBefore = prismaCalls
+  const results = await Promise.allSettled(Array.from({ length: 4 }, (_, index) => fileAiFeedback(input, 50 + index)))
+  assert.ok(results.every((result) => result.status === 'rejected' && result.reason.status === 503))
+  assert.equal(prismaCalls, databaseBefore)
+  assert.equal(counters.get(countKey), 5)
+  locks.delete(lockKey)
+  const bump = await fileAiFeedback(input, 42)
+  assert.equal(bump.count, 6)
+  assert.match(updates.at(-1).content, /Seen 6 times/)
+})
+
+test('attempt limit rejects before any Prisma call, flag lookup, fingerprint count or lock, including malformed and anonymous attempts', async () => {
+  for (const userId of [42, undefined]) {
+    globalEnabled = true
+    for (let index = 0; index < 60; index++) await assert.rejects(fileAiFeedback(null, userId), { status: 400 })
+    flagCalls = 0
+    await assert.rejects(fileAiFeedback(input, userId), { status: 429 })
+    assert.equal(prismaCalls, 0)
+    assert.equal(flagCalls, 0)
+    assert.equal(locks.size, 0)
+    assert.equal(counters.size, 0)
+    assert.equal(bucketCounts.size, 0)
+  }
+  assert.equal(attempts.get('ai-feedback:attempt:42'), 61)
+  assert.equal(attempts.get('ai-feedback:attempt:anonymous'), 61)
+  assert.equal((await fileAiFeedback(input, 43)).success, true)
+})
+
+test('bump re-reads human edits made after dedupe lookup and replaces only owned lines byte for byte', async () => {
+  await fileAiFeedback(input, 42)
+  const human = '\n<h2 data-owner="human">Triage &amp; context</h2>\n<p>Keep  spacing, quotes "exactly", and &#39;entities&#39;.</p>\n'
+  onQuota = () => { rows[0].description_.content += human; onQuota = undefined }
+  const result = await fileAiFeedback(input, 43)
+  assert.equal(result.count, 2)
+  assert.ok(updates[0].content.endsWith(human))
+  assert.equal((updates[0].content.match(/Triage/g) ?? []).length, 1)
+  rows[0].description_.content = rows[0].description_.content.replace('Seen 2 times', 'Seen 999 times')
+  assert.equal((await fileAiFeedback(input, 43)).count, 3)
+  assert.match(updates.at(-1).content, /Seen 3 times/)
+})
+
+test('label creation errors re-read the concurrently created label, and rethrow if none exists', async () => {
+  for (const error of [Object.assign(new Error('unique conflict'), { code: 'P2002' }), new Error('ambiguous create failure')]) {
+    labelCreated = 0; labelError = error
+    assert.equal((await fileAiFeedback({ ...input, errorCode: error.code ? 'unique' : 'ambiguous' }, 42)).success, true)
+    assert.deepEqual(created.at(-1).labelIds, ['label-ai'])
+  }
+  labelCreated = 0
+  const original = db.label.findFirst
+  db.label.findFirst = async () => { prismaCalls++; return null }
+  try { await assert.rejects(fileAiFeedback({ ...input, errorCode: 'missing-label' }, 42), /ambiguous create failure/) }
+  finally { db.label.findFirst = original }
+  assert.equal(locks.size, 0)
+})
+
+test('expired lock owner cannot delete a replacement lock in finally', async () => {
+  const lockKey = `ai-feedback:lock:${feedbackFingerprint(input)}`
+  onQuota = () => locks.set(lockKey, 'replacement-owner')
+  await fileAiFeedback(input, 42)
+  assert.equal(locks.get(lockKey), 'replacement-owner')
 })
