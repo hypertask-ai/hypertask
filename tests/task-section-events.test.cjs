@@ -57,7 +57,7 @@ test("section rename records one event per affected task", () => {
   const service = read("src/utils/controllers/section/sectionService.ts");
   const renameBlock = service.slice(
     service.indexOf("if (titleChanged)"),
-    service.indexOf("// View updates based on operation"),
+    service.indexOf("if (toUpdate.deleted"),
   );
   assert.match(renameBlock, /tx\.task\.updateManyAndReturn\(/);
   assert.match(renameBlock, /tx\.taskSectionEvent\.createMany\(/);

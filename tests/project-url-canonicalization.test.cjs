@@ -9,8 +9,8 @@ const source = fs.readFileSync(
 );
 
 test("project startup canonicalizes URL state with one replace site", () => {
-  const start = source.indexOf("// Canonicalize id, view, and one-shot flags");
-  const end = source.indexOf("// Retry fetching projects", start);
+  const start = source.indexOf("useEffect(() => {\n  if (!searchParams");
+  const end = source.indexOf("const retryCountRef = useRef(", start);
   assert.ok(start > 0 && end > start, "canonicalization block not found");
   const block = source.slice(start, end);
 
@@ -24,8 +24,8 @@ test("project startup canonicalizes URL state with one replace site", () => {
 });
 
 test("canonicalization cannot overwrite a cold cached ticket URL while the board is still mounted", () => {
-  const start = source.indexOf("// Canonicalize id, view, and one-shot flags");
-  const end = source.indexOf("// Retry fetching projects", start);
+  const start = source.indexOf("useEffect(() => {\n  if (!searchParams");
+  const end = source.indexOf("const retryCountRef = useRef(", start);
   const block = source.slice(start, end);
   for (const [pathname, cachedTaskDetail, expectedWrites] of [
     ["/detail/project-1/1", { accountId: 985, taskId: 1 }, 0],
@@ -78,8 +78,8 @@ test("shared surface links initialize layout before canonicalization", () => {
 });
 
 test("canonicalization preserves explicit surface intent without materializing inheritance", () => {
-  const start = source.indexOf("// Canonicalize id, view, and one-shot flags");
-  const end = source.indexOf("// Retry fetching projects", start);
+  const start = source.indexOf("useEffect(() => {\n  if (!searchParams");
+  const end = source.indexOf("const retryCountRef = useRef(", start);
   const block = source.slice(start, end);
 
   assert.match(block, /new URLSearchParams\(searchParams\.toString\(\)\)/);
@@ -87,8 +87,8 @@ test("canonicalization preserves explicit surface intent without materializing i
 });
 
 test("bare project URLs wait for view metadata before replacing", () => {
-  const start = source.indexOf("// Canonicalize id, view, and one-shot flags");
-  const end = source.indexOf("// Retry fetching projects", start);
+  const start = source.indexOf("useEffect(() => {\n  if (!searchParams");
+  const end = source.indexOf("const retryCountRef = useRef(", start);
   const block = source.slice(start, end);
   const metadataGuard = block.indexOf("if (!currentProject || (!viewMetadataReady && (dataFetching || waitingForBoardHydration))) return");
   const replace = block.indexOf("router.replace(");
