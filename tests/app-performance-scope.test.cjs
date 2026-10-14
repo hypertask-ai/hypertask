@@ -248,6 +248,13 @@ test("app analytics use the slim PostHog runtime", () => {
   assert.match(analyticsSource, /posthog-js\/dist\/module\.slim/);
   assert.doesNotMatch(analyticsSource, /import\("posthog-js"\)/);
   assert.match(analyticsSource, /autocapture: true/);
+  // YPER4-361: slim has no extensions; without these, browser errors vanish.
+  assert.match(
+    analyticsSource,
+    /import\("posthog-js\/dist\/extension-bundles"\)/,
+  );
+  assert.match(analyticsSource, /__extensionClasses: ErrorTrackingExtensions/);
+  assert.match(analyticsSource, /capture_exceptions: true/);
   assert.doesNotMatch(analyticsSource, /next\/web-vitals|useReportWebVitals/);
   assert.match(
     analyticsSource,
@@ -255,7 +262,7 @@ test("app analytics use the slim PostHog runtime", () => {
   );
   assert.match(
     analyticsSource,
-    /getCookieConsent\(\) === "essential"[\s\S]*await import\([\s\S]*posthog-js\/dist\/module\.slim/,
+    /getCookieConsent\(\) === "essential"[\s\S]*await Promise\.all\(\[[\s\S]*import\("posthog-js\/dist\/module\.slim"\)/,
   );
   assert.match(
     analyticsSource,
