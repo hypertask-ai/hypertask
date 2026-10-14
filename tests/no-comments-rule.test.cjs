@@ -46,6 +46,7 @@ test("allows every tool directive and pragma, including directive reasons", asyn
     "/* @jsxImportSource react */", "/* @jsx h */", "// prettier-ignore",
     "/* istanbul ignore next */", "/* c8 ignore next */", "/* v8 ignore next */",
     "// @vitest-environment jsdom", "// @jest-environment jsdom", "// @refresh reset",
+    "/** @jest-environment jsdom */", "/**\n * @vitest-environment happy-dom\n */", "/** @jsxImportSource react */",
     "//# sourceMappingURL=file.js.map", "// biome-ignore lint: reason", "// trufflehog:ignore",
     "// @generated", "/* DO NOT EDIT */",
   ]) assert.deepEqual(await lint(`${comment}\nconst value = 1;`), [], comment);
