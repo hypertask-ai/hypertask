@@ -81,6 +81,11 @@
     "reason": "Successful structured info message goes through console.error; Vercel assigns the outer record level error."
   },
   {
+    "id": "forced-test",
+    "match": "\\[ht-forced-test\\]",
+    "reason": "A test threw this error on purpose and marked it [ht-forced-test] (YPER4-384); every source skips it."
+  },
+  {
     "id": "posthog-canary",
     "service": "vercel",
     "match": "^(?:Error: )?PostHog pipeline canary\\b",

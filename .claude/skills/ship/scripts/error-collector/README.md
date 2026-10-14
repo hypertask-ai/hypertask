@@ -50,6 +50,10 @@ Known-group counts and routes accumulate until at most one activity per ticket p
 Sample text, stacks, routes and titles are redacted before reporting or persistence; HTML is escaped and stacks are capped at forty lines. Command output and source exceptions are never logged. `noise.json` rules operate on the raw message and route and can be scoped by service; scanner paths, client aborts and explicit expected 401/403/404 responses are preseeded.
 
 
+## Forced test errors (YPER4-384)
+
+A test that throws an error on purpose in production puts `[ht-forced-test]` in the error message, for example `throw new Error("[ht-forced-test] YPER4-384 forced browser test 1")`. The collector counts it as noise for every source and prints `skipped forced test error`; the native PostHog issue writer (`.github/scripts/posthog-error-issues.mjs`) returns `skip` and files nothing. An error without the marker still becomes a ticket. The nightly `PostHog pipeline canary` keeps its own rule: it must file and then close its ticket to prove the pipeline works.
+
 ## Live read paths and bounds
 
 - Vercel: read-only POST `/v1/observability/events`, production runtime errors and proxy 5xx, board 15 except runtime timeouts, the /sse runtime route and dead outgoing webhooks (`[board-webhook]`/`[agent-webhook] delivery failed ...`, one log line per delivery that used up its retries, YPER4-358) on board 4060. Limit 500, cursor paging, exact record dedupe; 30 pages/window and 120 requests/source. HTTP 413 bisects the window; retention HTTP 400 advances the start ten minutes with an explicit coverage warning (counts are lower bounds). HTTP 429 stops the source. Truncated/excluded-interval responses fail closed. Structured message/error details survive; timestamp/correlation envelopes and Prisma input dumps do not become the cause.
