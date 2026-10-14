@@ -377,8 +377,8 @@ def collect(now):
 # ---------------------------------------------------------------- rendering
 
 CSS = """
-:root{--bg-pageBackground:#ffffff;--bg-cardBackground:#ffffff;--color-white-black:#18181b;--color-text-light-gray:#727279;--border-light-gray-thin:#e2e2e6;--color-rich-text-link:#1365a3;--color-pull-request-green:#1a7f37;--color-pull-request-checks-red:#cf222e;--warn:#8e6a00;--tile:#f4f4f5}
-@media (prefers-color-scheme:dark){:root{--bg-pageBackground:#0e0e0e;--bg-cardBackground:#262a30;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e;--color-rich-text-link:#5896f1;--color-pull-request-green:#4ade80;--color-pull-request-checks-red:#f87171;--warn:#f1c21b;--tile:#0e0e0e}}
+:root{--stats-range-selected-bg:#1365a3;--stats-range-selected-fg:#ffffff;--bg-pageBackground:#ffffff;--bg-cardBackground:#ffffff;--color-white-black:#18181b;--color-text-light-gray:#727279;--border-light-gray-thin:#e2e2e6;--color-rich-text-link:#1365a3;--color-pull-request-green:#1a7f37;--color-pull-request-checks-red:#cf222e;--warn:#8e6a00;--tile:#f4f4f5}
+@media (prefers-color-scheme:dark){:root{--stats-range-selected-bg:#5896f1;--stats-range-selected-fg:#0e0e0e;--bg-pageBackground:#0e0e0e;--bg-cardBackground:#262a30;--color-white-black:#ffffff;--color-text-light-gray:#8e9093;--border-light-gray-thin:#33373e;--color-rich-text-link:#5896f1;--color-pull-request-green:#4ade80;--color-pull-request-checks-red:#f87171;--warn:#f1c21b;--tile:#0e0e0e}}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg-pageBackground);color:var(--color-white-black);font:16px/1.5 'IBM Plex Sans',system-ui,-apple-system,Segoe UI,sans-serif;overflow-x:hidden}
 main{max-width:1056px;margin:0 auto;padding:16px}
@@ -407,7 +407,7 @@ li{margin:4px 0}
 .ranges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
 .ranges button{font:inherit;font-size:14px;color:inherit;background:var(--tile);border:1px solid var(--border-light-gray-thin);border-radius:4px;padding:6px 10px;cursor:pointer}
 @media (max-width:640px){.ranges button{min-width:44px;min-height:44px}}
-.ranges button[aria-pressed="true"]{background:#1365a3!important;border-color:#1365a3!important;color:#ffffff!important;font-weight:600}
+.ranges button[aria-pressed="true"]{background:var(--stats-range-selected-bg)!important;border-color:var(--stats-range-selected-bg)!important;color:var(--stats-range-selected-fg)!important;font-weight:600}
 .ranges button:focus-visible{outline:2px solid var(--color-rich-text-link);outline-offset:2px}
 .delta{font-size:13px;color:var(--color-text-light-gray);margin-top:6px}
 h3{font-size:16px;margin:16px 0 4px}
