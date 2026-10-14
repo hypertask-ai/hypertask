@@ -116,7 +116,7 @@ test('journal recorded entries group normalized MESSAGE per unit, exclude collec
   const parsed = journal.parseJournal(text);
   assert.equal(parsed.length, 1);
   assert.equal(parsed[0].count, 2);
-  assert.equal(parsed[0].message, 'test.service: Failed job <n>');
+  assert.equal(parsed[0].message, 'test.service: Failed job 123');
   assert.deepEqual(journal.parseJournal(text, { since: parsed[0].ts, until }), []);
   writeFileSync(join(home, 'journal.txt'), text);
   fakeCommand('journalctl', `import { readFileSync } from 'node:fs'; console.log(readFileSync(process.env.HOME + '/journal.txt', 'utf8'));`);

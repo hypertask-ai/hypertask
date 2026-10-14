@@ -8,6 +8,8 @@ import { spawnSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { collect, fingerprint, normalize, redact, loadSources } from './collector.mjs';
 import * as fixture from './sources/fixture.mjs';
+import * as journal from './sources/vps-journal.mjs';
+import { command as readCommand, query } from './io.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SCRIPT = join(HERE, 'collector.mjs');
@@ -34,6 +36,7 @@ const row = { name, args };
 if (name === 'vcc' && args.includes('--description-file')) row.description = readFileSync(args[args.indexOf('--description-file') + 1], 'utf8');
 if (name === 'runner-deliver') { row.input = readFileSync(0, 'utf8'); row.id = process.env.RUNNER_DELIVER_ID; }
 appendFileSync(calls, JSON.stringify(row) + '\\n');
+if (cfg.stall === name) { process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); await new Promise(() => {}); }
 const exit = () => { console.error('fake credential-bearing failure suppressed'); process.exit(1); };
 const remote = read('remote.json', []);
 if (name === 'systemctl') { if (cfg.installFail) exit(); process.exit(0); }
@@ -298,6 +301,7 @@ check('tickets', 'negative control rejects a known-group data-loss mutation', ()
   const old = 'const known = state.fingerprints[fp];';
   assert.equal(source.split(old).length - 1, 1);
   writeFileSync(join(directory, 'collector.mjs'), source.replace(old, 'const known = undefined;'));
+  writeFileSync(join(directory, 'io.mjs'), readFileSync(join(HERE, 'io.mjs')));
   writeFileSync(join(directory, 'noise.json'), readFileSync(join(HERE, 'noise.json')));
   const mutant = await import(pathToFileURL(join(directory, 'collector.mjs')));
   h.events([event()]); await mutant.collect({ env: h.env, now: NOW, sources: [fixture] });
@@ -359,7 +363,7 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   assert.equal(activities(h, 'YPER4-354').length, 0);
   // The summary covers the last full UTC day, so 2026-10-14 is reported on the 15th.
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
-  assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: 0), 1 new kinds, 7 noise'));
+  assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: no complete data), 1 new kinds, 7 noise'));
   const posted = activities(h, 'YPER4-354').length;
   await h.run({ now: NOW + DAY + 2 * HOUR }); await h.run({ now: NOW + DAY + 2 * HOUR, summary: true });
   assert.equal(activities(h, 'YPER4-354').length, posted);
@@ -378,8 +382,10 @@ check('reporting', 'upstream resets are errors, client resets remain noise', () 
 check('reporting', 'spike threshold, delivery target/id and fallback log; counts retained fourteen days', async () => {
   for (const count of [49, 50, 60, 61]) await withHarness(async h => {
     const state = { version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: {} };
-    for (let i = 1; i <= 16; i++) state.days[new Date(NOW - i * DAY).toISOString().slice(0, 10)] = { web: { errors: 20, noise: 0, newGroups: 0 } };
+    for (let i = 1; i <= 16; i++) state.days[new Date(NOW - i * DAY).toISOString().slice(0, 10)] = { web: { errors: 20, noise: 0, newGroups: 0, complete: true } };
     for (const date of Object.keys(state.days)) state.summaries[date] = { web: true, fixture: true };
+    state.sources.fixture = new Date(NOW).toISOString();
+    state.coverage = { fixture: { since: '2026-10-01T00:00:00.000Z', until: state.sources.fixture, services: ['fixture', 'web'] } };
     h.seed(state); h.events([event({ count, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
     const deliveries = h.calls().filter(c => c.name === 'runner-deliver');
     assert.equal(deliveries.length, count > 60 ? 1 : 0);
@@ -388,8 +394,10 @@ check('reporting', 'spike threshold, delivery target/id and fallback log; counts
     assert.ok(h.state().days['2026-10-02']); assert.equal(h.state().days['2026-10-01'], undefined);
   });
   await withHarness(async h => {
-    rmSync(join(h.home, 'bin/runner-deliver')); h.events([event({ count: 50, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
-    const path = join(dirname(h.statePath), 'spikes.log'); assert.match(readFileSync(path, 'utf8'), /SPIKE.*web on 2026-10-14: 50 errors/); assert.equal(statSync(path).mode & 0o777, 0o600);
+    await h.run({ now: NOW - DAY });
+    await h.run();
+    rmSync(join(h.home, 'bin/runner-deliver')); h.events([event({ service: 'fixture', count: 50, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
+    const path = join(dirname(h.statePath), 'spikes.log'); assert.match(readFileSync(path, 'utf8'), /SPIKE.*fixture on 2026-10-14: 50 errors/); assert.equal(statSync(path).mode & 0o777, 0o600);
   });
 });
 
@@ -397,6 +405,8 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   const clock = join(h.home, 'dry-clock.mjs');
   writeFileSync(clock, `Date.now = () => ${NOW};`);
   h.env.NODE_OPTIONS = `--import=${clock}`;
+  h.seed({ version: 1, sources: { fixture: '2026-10-13T05:00:00.000Z' }, coverage: { fixture: { since: '2026-10-12T00:00:00.000Z', until: '2026-10-13T05:00:00.000Z', services: ['fixture', 'web'] } }, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: { '2026-10-12': { web: { errors: 0, noise: 0, newGroups: 0, complete: true } } } });
+  const initial = readFileSync(h.statePath);
   h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() })]);
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
@@ -404,7 +414,8 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   assert.match(result.stdout, /DRY-RUN.*"activity".*"YPER4-354"/);
   assert.match(result.stdout, /DRY-RUN.*"runner-deliver"/);
   assert.ok(h.calls().every(c => c.name === 'ht' && c.args[0] === 'GET'));
-  assert.equal(existsSync(dirname(h.statePath)), false);
+  assert.deepEqual(readFileSync(h.statePath), initial);
+  assert.deepEqual(readdirSync(dirname(h.statePath)), ['state.json']);
   h.events([event({ count: 50 })]);
   await h.run(); const before = readFileSync(h.statePath);
   h.events([event({ ts: new Date(NOW + 7 * HOUR).toISOString() })]);
@@ -454,10 +465,10 @@ check('reporting', 'R5: quiet successful sources have zero-error daily coverage'
   const quiet = { name: 'quiet', fetch: async () => [] };
   const bad = { name: 'broken', fetch: async () => { throw new Error('fixture failure'); } };
   await h.run({ sources: [quiet, bad] });
-  assert.deepEqual(h.state().days['2026-10-13'].quiet, { errors: 0, noise: 0, newGroups: 0 });
-  assert.deepEqual(h.state().days['2026-10-14'].quiet, { errors: 0, noise: 0, newGroups: 0 });
+  assert.deepEqual(h.state().days['2026-10-13'].quiet, { errors: 0, noise: 0, newGroups: 0, complete: false });
+  assert.deepEqual(h.state().days['2026-10-14'].quiet, { errors: 0, noise: 0, newGroups: 0, complete: false });
   await h.run({ sources: [quiet], now: NOW + 2 * HOUR });
-  assert.ok(activities(h).some(call => call.args[3] === 'quiet on 2026-10-13: 0 errors (2026-10-12: 0), 0 new kinds, 0 noise'));
+  assert.ok(activities(h).some(call => call.args[3] === 'quiet on 2026-10-13: no complete data, collection did not cover the full day (partial count 0)'));
   assert.ok(!Object.values(h.state().days).some(counts => counts.broken));
 }));
 
@@ -517,14 +528,14 @@ check('tickets', 'R8: known fingerprints persist routes and report bounded new r
 
 check('reporting', 'R9: retained unsent summaries retry oldest first in three-day batches', () => withHarness(async h => {
   const dates = ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13'];
-  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: Object.fromEntries(dates.map((date, i) => [date, { web: { errors: i === 0 ? 50 : 0, noise: 0, newGroups: i + 1 } }])) });
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: Object.fromEntries(dates.map((date, i) => [date, { web: { errors: i === 0 ? 50 : 0, noise: 0, newGroups: i + 1, complete: true } }])) });
   h.config({ activityFail: true }); await h.run({ summary: true });
   assert.deepEqual(h.state().summaries, {});
   h.config({}); await h.run({ now: NOW + DAY, summary: true });
   assert.deepEqual(Object.keys(h.state().summaries), dates.slice(0, 3));
   const lines = activities(h).filter(call => call.args[3].startsWith('web on ')).slice(-3).map(call => call.args[3]);
   assert.deepEqual(lines.map(line => Number(line.match(/(\d+) new kinds/)[1])), [1, 2, 3]);
-  assert.equal(h.calls().find(call => call.name === 'runner-deliver').id, 'error-collector:2026-10-10:web');
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
   await h.run({ now: NOW + DAY + 1000, summary: true });
   assert.equal(h.state().summaries['2026-10-13'].web, true);
 }));
@@ -543,6 +554,7 @@ check('install', 'units mirror precedent, installer copies modules/noise and fak
   assert.match(readFileSync(join(HERE, 'README.md'), 'utf8'), /Backlog, section 10414/);
   const service = readFileSync(join(HERE, '../error-collector.service'), 'utf8');
   const timer = readFileSync(join(HERE, '../error-collector.timer'), 'utf8');
+  assert.ok(service.match(/Environment="PATH=([^"]+)"/)[1].split(':').includes('%h/.local/lib/hypertask/runner-pickup'));
   assert.match(service, /Type=oneshot/); assert.match(service, /UMask=0077/);
   assert.match(service, /\/usr\/bin\/flock --nonblock %h\/\.local\/state\/error-collector\/timer.lock/);
   assert.match(service, /%h\/\.local\/lib\/hypertask\/error-collector\/collector.mjs --once/);
@@ -568,7 +580,212 @@ check('reporting', 'summary-only events are counted but never searched, ticketed
   assert.equal(h.state().days['2026-10-14'].posthog.errors, 9);
   assert.equal(h.state().days['2026-10-14'].posthog.newGroups, 0);
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
-  assert.ok(activities(h).some(call => call.args[3] === 'posthog on 2026-10-14: 9 errors (2026-10-13: 0), 0 new kinds, 0 noise'));
+  assert.ok(activities(h).some(call => call.args[3] === 'posthog on 2026-10-14: 9 errors (2026-10-13: no complete data), 0 new kinds, 0 noise'));
+}));
+
+check('followups', 'delivery uses the installed runner-pickup PATH and HT Product Lead alias', () => withHarness(async h => {
+  const unit = readFileSync(join(HERE, '../error-collector.service'), 'utf8');
+  const path = unit.match(/Environment="PATH=([^"]+)"/)[1];
+  assert.ok(path.split(':').includes('%h/.local/lib/hypertask/runner-pickup'));
+  const installed = join(h.home, '.local/lib/hypertask/runner-pickup');
+  mkdirSync(installed, { recursive: true });
+  writeFileSync(join(installed, 'runner-deliver'), fake, { mode: 0o755 });
+  rmSync(join(h.home, 'bin/runner-deliver'));
+  h.env.PATH += ':' + path.replaceAll('%h', h.home);
+  await h.run({ now: NOW - DAY });
+  await h.run();
+  h.events([event({ service: 'fixture', ticket: false, count: 50, ts: new Date(NOW + HOUR).toISOString() })]);
+  await h.run({ now: NOW + DAY, summary: true });
+  const deliveries = h.calls().filter(call => call.name === 'runner-deliver');
+  assert.equal(deliveries.length, 1);
+  assert.deepEqual(deliveries[0].args, ['ht-product-lead']);
+  assert.equal(deliveries[0].id, 'error-collector:2026-10-14:fixture');
+  assert.match(deliveries[0].input, /^SPIKE 2026-10-14 fixture/);
+  assert.equal(existsSync(join(dirname(h.statePath), 'spikes.log')), false);
+  const deliver = readFileSync(join(HERE, '../runner-deliver'), 'utf8');
+  assert.match(deliver, /\[ "\$n" != ht-product-lead \] \|\| n=infra-manager/);
+  assert.match(deliver, /infra-manager\|HT Product Lead\|0/);
+}));
+
+check('followups', 'baseline rejects first-run, partial and legacy days, then detects a real spike', () => withHarness(async h => {
+  h.events([event({ service: 'fixture', ticket: false, count: 1134, ts: '2026-10-13T12:00:00Z' })]);
+  await h.run({ summary: true });
+  assert.equal(h.state().days['2026-10-13'].fixture.complete, false);
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
+  assert.equal(existsSync(join(dirname(h.statePath), 'spikes.log')), false);
+  h.events([event({ service: 'fixture', ticket: false, count: 200, ts: '2026-10-14T12:00:00Z' })]);
+  await h.run({ now: NOW + DAY, summary: true });
+  assert.equal(h.state().days['2026-10-14'].fixture.complete, true);
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
+  h.events([event({ service: 'fixture', ticket: false, count: 1000, ts: '2026-10-15T12:00:00Z' })]);
+  await h.run({ now: NOW + 2 * DAY, summary: true });
+  assert.equal(h.calls().filter(call => call.name === 'runner-deliver').length, 1);
+  assert.match(h.calls().find(call => call.name === 'runner-deliver').input, /2026-10-14: 200/);
+  await withHarness(async fresh => {
+    // A midnight first run collects a full day but has no previous baseline.
+    fresh.events([event({ service: 'fixture', ticket: false, count: 1134, ts: '2026-10-13T12:00:00Z' })]);
+    await fresh.run({ now: Date.parse('2026-10-14T00:00:00Z'), summary: true });
+    assert.equal(fresh.state().days['2026-10-13'].fixture.complete, true);
+    assert.ok(!fresh.calls().some(call => call.name === 'runner-deliver'));
+    const state = fresh.state();
+    // Legacy counters and cursors do not prove full-day collection.
+    delete state.coverage;
+    delete state.days['2026-10-13'].fixture.complete;
+    state.days['2026-10-13'].fixture.errors = 0;
+    fresh.seed(state);
+    fresh.events([event({ service: 'fixture', ticket: false, count: 50, ts: '2026-10-14T12:00:00Z' })]);
+    await fresh.run({ now: Date.parse('2026-10-15T00:00:00Z'), summary: true });
+    assert.equal(fresh.state().days['2026-10-14'].fixture.complete, true);
+    assert.ok(!fresh.calls().some(call => call.name === 'runner-deliver'));
+  });
+}));
+
+check('followups', 'outage marks every skipped day incomplete and recovers a real baseline', () => withHarness(async h => {
+  await h.run({ now: NOW - DAY });
+  await h.run();
+  assert.equal(h.state().days['2026-10-13'].fixture.complete, true);
+  h.events([event({ service: 'fixture', ticket: false, count: 100, ts: '2026-10-17T12:00:00Z' })]);
+  await h.run({ now: NOW + 4 * DAY, summary: true });
+  const days = h.state().days;
+  assert.equal(days['2026-10-13'].fixture.complete, true);
+  for (const date of ['2026-10-14', '2026-10-15', '2026-10-16', '2026-10-17']) assert.equal(days[date].fixture.complete, false, date);
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
+  h.events([event({ service: 'fixture', ticket: false, count: 200, ts: '2026-10-18T12:00:00Z' })]);
+  await h.run({ now: NOW + 5 * DAY, summary: true });
+  assert.equal(h.state().days['2026-10-18'].fixture.complete, true);
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
+  h.events([event({ service: 'fixture', ticket: false, count: 1000, ts: '2026-10-19T12:00:00Z' })]);
+  await h.run({ now: NOW + 6 * DAY, summary: true });
+  const deliveries = h.calls().filter(call => call.name === 'runner-deliver');
+  assert.equal(deliveries.length, 1);
+  assert.equal(deliveries[0].id, 'error-collector:2026-10-19:fixture');
+}));
+
+check('followups', 'journal classifies raw status codes before normalized grouping', () => withHarness(async h => {
+  const rows = ['HTTP 500', 'HTTP 401', 'HTTP 403', 'HTTP 404', 'HTTP 502', 'HTTP 401', 'Failed job 123', 'Failed job 456'].map((message, index) => ({
+    _SYSTEMD_UNIT: 'api.service', MESSAGE: index === 2 ? [...Buffer.from(message)] : message,
+    __REALTIME_TIMESTAMP: String((NOW - 1000 + index) * 1000),
+  }));
+  const events = journal.parseJournal(rows.map(row => JSON.stringify(row)).join('\n'));
+  assert.equal(events.length, 3);
+  assert.match(events.find(item => item.message.includes('HTTP 401')).message, /401/);
+  assert.equal(events.find(item => item.message.includes('HTTP 401')).count, 4);
+  const source = { name: journal.name, fetch: async () => events };
+  await h.run({ sources: [source] });
+  const counts = h.state().days['2026-10-14']['vps-journal'];
+  assert.equal(counts.noise, 4);
+  assert.equal(counts.errors, 4);
+  assert.equal(creates(h).length, 2);
+  assert.equal(Object.values(h.state().fingerprints).find(item => item.total === 2)?.board, 4060);
+}));
+
+check('followups', 'deadline default is twelve minutes and below the service limit', () => withHarness(async h => {
+  const unit = readFileSync(join(HERE, '../error-collector.service'), 'utf8');
+  const serviceLimit = Number(unit.match(/TimeoutStartSec=(\d+)min/)[1]) * 60 * 1000;
+  const original = globalThis.setTimeout;
+  const scheduled = [];
+  globalThis.setTimeout = (fn, delay, ...args) => { scheduled.push(delay); return original(fn, delay, ...args); };
+  try { await h.run(); }
+  finally { globalThis.setTimeout = original; }
+  assert.equal(scheduled[0], 12 * 60 * 1000);
+  assert.ok(scheduled[0] < serviceLimit);
+}));
+
+check('followups', 'deadline checkpoints fast sources, skips unreached sources and retries without recounting', () => withHarness(async h => {
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  let blocked = true;
+  let reached = 0;
+  let finishedSignal;
+  let firstSignal;
+  const first = { name: 'fast', fetch: async ({ signal }) => { firstSignal = signal; return [event({ count: 7 })]; } };
+  const second = { name: 'blocked', fetch: async ({ signal }) => {
+    finishedSignal = signal;
+    assert.equal(signal, firstSignal);
+    assert.equal(h.state().sources.fast, new Date(blocked ? NOW : NOW + 1000).toISOString());
+    assert.equal(Object.values(h.state().pending)[0].count, 7);
+    return blocked ? new Promise(() => {}) : [];
+  } };
+  const third = { name: 'later', fetch: async () => { reached++; return []; } };
+  const start = performance.now();
+  assert.equal(await h.run({ sources: [first, second, third], timeoutMs: 100 }), 0);
+  assert.ok(performance.now() - start < 2000);
+  assert.equal(finishedSignal.aborted, true);
+  assert.equal(reached, 0);
+  assert.equal(h.state().sources.blocked, undefined);
+  assert.equal(h.state().sources.later, undefined);
+  assert.equal(Object.values(h.state().pending)[0].count, 7);
+  assert.deepEqual(h.calls(), []);
+  blocked = false;
+  await h.run({ sources: [first, second, third], now: NOW + 1000 });
+  assert.equal(reached, 1);
+  assert.equal(h.state().sources.blocked, new Date(NOW + 1000).toISOString());
+  assert.equal(Object.values(h.state().pending)[0].count, 7);
+  assert.equal(h.state().days['2026-10-14'].web.errors, 7);
+}));
+
+check('followups', 'deadline bounds synchronous reads, HTTP reads and reporting commands', async () => {
+  await withHarness(async h => {
+    writeFileSync(join(h.home, 'bin/gh'), `#!${process.execPath}\nprocess.on('SIGTERM', () => {}); setInterval(() => {}, 1000);`, { mode: 0o755 });
+    const source = { name: 'slow', fetch: async () => { readCommand('gh', [], h.env); return []; } };
+    const start = performance.now();
+    assert.equal(await h.run({ sources: [source], timeoutMs: 100 }), 1);
+    assert.ok(performance.now() - start < 2000);
+    assert.equal(existsSync(h.statePath), false);
+  });
+  await withHarness(async h => {
+    const original = globalThis.fetch;
+    let signal;
+    globalThis.fetch = async (_, options) => {
+      signal = options.signal;
+      await new Promise((_, reject) => signal.addEventListener('abort', () => reject(new Error('expired')), { once: true }));
+    };
+    try {
+      const source = { name: 'slow', fetch: async () => { await query('https://fake.invalid', 'fixture'); return []; } };
+      assert.equal(await h.run({ sources: [source], timeoutMs: 100 }), 1);
+      assert.equal(signal.aborted, true);
+      assert.equal(existsSync(h.statePath), false);
+    } finally { globalThis.fetch = original; }
+  });
+  await withHarness(async h => {
+    h.events([event()]); h.config({ stall: 'vcc' });
+    const start = performance.now();
+    assert.equal(await h.run({ timeoutMs: 1000 }), 0);
+    assert.ok(performance.now() - start < 3000);
+    assert.equal(creates(h).length, 1);
+    assert.equal(Object.values(h.state().pending)[0].count, 1);
+    assert.equal(h.state().sources.fixture, new Date(NOW).toISOString());
+    h.config({}); h.events([]);
+    await h.run({ now: NOW + 1000 });
+    assert.equal(Object.keys(h.state().pending).length, 0);
+    assert.equal(Object.values(h.state().fingerprints)[0].total, 1);
+  });
+});
+
+check('followups', 'deadline progress survives a process killed during the next source', () => withHarness(async h => {
+  const child = spawn(process.execPath, ['--input-type=module', '-e', `
+import { collect } from ${JSON.stringify(pathToFileURL(SCRIPT).href)};
+const keepAlive = setInterval(() => {}, 1000);
+await collect({ now: ${NOW}, sources: [
+  { name: 'fast', fetch: async () => [${JSON.stringify(event({ count: 9 }))}] },
+  { name: 'blocked', fetch: async () => { process.stdout.write('BLOCKED\\n'); await new Promise(() => {}); } },
+] });
+clearInterval(keepAlive);
+`], { env: h.env, stdio: ['ignore', 'pipe', 'pipe'] });
+  const exited = new Promise(resolve => child.on('exit', resolve));
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('child did not reach blocked source')), 5000);
+      child.on('error', error => { clearTimeout(timer); reject(error); });
+      child.stdout.once('data', data => { clearTimeout(timer); assert.match(String(data), /BLOCKED/); resolve(); });
+      child.once('exit', () => { clearTimeout(timer); reject(new Error('child exited before blocked source')); });
+    });
+    assert.equal(h.state().sources.fast, new Date(NOW).toISOString());
+    assert.equal(h.state().sources.blocked, undefined);
+    assert.equal(Object.values(h.state().pending)[0].count, 9);
+  } finally { child.kill('SIGKILL'); await exited; }
+  await h.run({ sources: [{ name: 'fast', fetch: async () => [] }, { name: 'blocked', fetch: async () => [] }], now: NOW + 1000 });
+  assert.equal(Object.values(h.state().fingerprints)[0].total, 9);
+  assert.equal(h.state().days['2026-10-14'].web.errors, 9);
 }));
 
 after(() => {

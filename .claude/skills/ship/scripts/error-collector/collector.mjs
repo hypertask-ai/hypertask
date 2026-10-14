@@ -2,13 +2,15 @@
 /** Production error collector. Node 24 ESM, no dependencies. */
 import { createHash, randomUUID } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
+import { withDeadline, timeLeft, bounded } from './io.mjs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const NOISE = JSON.parse(readFileSync(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
 const CONTROL = 'YPER4-354';
@@ -16,6 +18,10 @@ const iso = time => new Date(time).toISOString();
 const day = time => iso(time).slice(0, 10);
 const html = text => String(text).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const diagnostic = text => console.error(`error-collector: ${text}`);
+
+export function isNoise(event) {
+  return NOISE.some(rule => (!rule.service || rule.service === event.service) && rule.regex.test(`${event.message}\n${event.route}`));
+}
 
 export function redact(text) {
   return String(text ?? '')
@@ -50,7 +56,7 @@ export function fingerprint(service, message) {
 
 function command(name, args, env, input) {
   // Never echo child output: CLI errors and receipts may contain credentials.
-  const result = spawnSync(name, args, { env, input, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 });
+  const result = spawnSync(name, args, { env, input, encoding: 'utf8', timeout: timeLeft(30000), killSignal: 'SIGKILL', maxBuffer: 4 * 1024 * 1024 });
   if (result.error || result.status !== 0) throw new Error('command failed');
   return result.stdout;
 }
@@ -153,33 +159,42 @@ function intake(env) {
   return String(section.id);
 }
 
-export async function collect({ env = process.env, now = Date.now(), sources, dryRun = false, summary = false } = {}) {
+export async function collect(options = {}) {
+  return withDeadline(options.timeoutMs ?? 12 * 60 * 1000, signal => run(options, signal));
+}
+
+async function run({ env = process.env, now = Date.now(), sources, dryRun = false, summary = false }, signal) {
   const root = env.ERROR_COLLECTOR_STATE_DIR ?? join(env.HOME ?? homedir(), '.local/state/error-collector');
   const state = await load(root);
   const checkpoint = () => dryRun ? Promise.resolve() : save(state, root);
   const write = (name, args, input, extraEnv = {}) => {
+    timeLeft(Infinity);
     if (dryRun) { console.log(`DRY-RUN ${JSON.stringify({ command: name, args, ...(input == null ? {} : { input }) })}`); return ''; }
     return command(name, args, { ...env, ...extraEnv }, input);
   };
-  const noise = JSON.parse(await fs.readFile(join(HERE, 'noise.json'), 'utf8')).map(rule => ({ ...rule, regex: new RegExp(rule.match, 'i') }));
+  state.coverage ??= {};
   const cap = Number(env.ERROR_COLLECTOR_HOURLY_CAP ?? 5);
   if (!Number.isSafeInteger(cap) || cap < 0) throw new Error('invalid hourly cap');
   const stats = (date, service) => {
     state.days[date] ??= {};
-    return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0 };
+    return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
   };
-  const groups = new Map();
   let succeeded = 0;
   for (const source of sources ?? await loadSources()) {
     try {
+      timeLeft(Infinity);
+    } catch { diagnostic('run deadline reached; remaining sources deferred'); break; }
+    try {
+      const groups = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
       const until = iso(now);
-      const fetched = await source.fetch({ since, until, env });
+      const fetched = await bounded(source.fetch({ since, until, env, signal }));
+      timeLeft(Infinity);
       if (!Array.isArray(fetched)) throw new Error('invalid source response');
       const events = fetched.map(validate).filter(event => event.ts > since && event.ts <= until);
       // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
-      const boards = new Map([...groups].map(([fp, group]) => [fp, group.board]));
+      const boards = new Map();
       for (const event of events) {
         if (event.ticket === false) continue;
         const fp = fingerprint(event.service, event.message, event.route);
@@ -189,43 +204,57 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
-        if (noise.some(rule => (!rule.service || rule.service === event.service) && rule.regex.test(`${event.message}\n${event.route}`))) { counts.noise += event.count; continue; }
+        if (isNoise(event)) { counts.noise += event.count; continue; }
         counts.errors += event.count;
         if (event.ticket === false) continue;
         const fp = fingerprint(event.service, event.message, event.route);
         if (!groups.has(fp)) groups.set(fp, { board: event.board, service: event.service, normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
       }
-      for (let date = Date.parse(`${day(since)}T00:00:00Z`); date <= now; date += DAY) stats(day(date), source.name);
+      const prior = state.coverage[source.name];
+      const continuous = prior && prior.until === state.sources[source.name] && previous >= Date.parse(since);
+      const coverage = {
+        since: continuous ? prior.since : since, until,
+        services: [...new Set([...(prior?.services ?? []), source.name, ...events.map(event => event.service)])],
+      };
+      const start = Math.max(now - 13 * DAY, Number.isFinite(previous) ? Math.min(previous, Date.parse(since)) : Date.parse(since));
+      for (let date = Date.parse(`${day(start)}T00:00:00Z`); date <= now; date += DAY) {
+        for (const service of coverage.services) {
+          const counts = stats(day(date), service);
+          counts.complete = Date.parse(coverage.since) <= date && now >= date + DAY;
+        }
+      }
+      state.coverage[source.name] = coverage;
       if (dryRun) console.log(`DRY-RUN source ${JSON.stringify({ name: source.name, since, until, events: events.length, count: events.reduce((sum, event) => sum + event.count, 0) })}`);
+      for (const [fp, group] of groups) {
+        const known = state.fingerprints[fp];
+        if (known) {
+          const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
+          known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
+          known.total += group.count;
+          known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
+          known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
+          if (!known.deleted) {
+            const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
+            activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
+            activity.count += group.count;
+            activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
+          }
+        } else if (state.pending[fp]) {
+          const pending = state.pending[fp];
+          pending.count += group.count;
+          pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
+          pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
+          pending.routes = [...new Set([...pending.routes, ...group.routes])];
+        } else { state.pending[fp] = group; stats(day(group.firstSeen), group.service).newGroups++; }
+      }
       state.sources[source.name] = until;
+      await checkpoint();
       succeeded++;
     } catch { diagnostic(`source ${/^[a-z][a-z0-9-]*$/.test(source.name) ? source.name : '[invalid]'} failed; cursor unchanged`); }
   }
   if (dryRun) console.log(`DRY-RUN counts ${JSON.stringify(state.days)}`);
   if (!succeeded) return 1;
-  for (const [fp, group] of groups) {
-    const known = state.fingerprints[fp];
-    if (known) {
-      const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
-      known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
-      known.total += group.count;
-      known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
-      known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
-      if (!known.deleted) {
-        const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
-        activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
-        activity.count += group.count;
-        activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
-      }
-    } else if (state.pending[fp]) {
-      const pending = state.pending[fp];
-      pending.count += group.count;
-      pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
-      pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
-      pending.routes = [...new Set([...pending.routes, ...group.routes])];
-    } else { state.pending[fp] = group; stats(day(group.firstSeen), group.service).newGroups++; }
-  }
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
@@ -234,6 +263,7 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
   let held = 0;
   let section;
   for (const [fp, group] of Object.entries(state.pending)) {
+    if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
       if (!found) {
@@ -266,6 +296,7 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
     } catch { diagnostic(`group ${fp} reporting failed; kept pending`); }
   }
   for (const [ticket, activity] of Object.entries(state.activities)) {
+    if (signal.aborted) break;
     const records = Object.values(state.fingerprints).filter(record => record.ticket === ticket);
     const lastActivity = Math.max(0, Date.parse(activity.at) || 0, ...records.map(record => Date.parse(record.lastActivityAt) || 0));
     if (!activity.count || records.some(record => record.deleted) || now - lastActivity < 6 * HOUR) continue;
@@ -282,31 +313,33 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
       await checkpoint();
     } catch { diagnostic('activity failed; retry next run'); }
   }
-  if (held) {
+  if (held && !signal.aborted) {
     try { write('vcc', ['activity', 'add', CONTROL, `${held} error groups held back by the hourly cap`]); }
     catch { diagnostic('held-back notice failed'); }
   }
   // Retry retained completed days, oldest first; partial days cannot reveal a full-day spike.
-  if (summary || new Date(now).getUTCHours() >= 6) {
+  if (!signal.aborted && (summary || new Date(now).getUTCHours() >= 6)) {
     const services = new Set(Object.values(state.days).flatMap(counts => Object.keys(counts)));
     // A day is final for a service once its source has read past that day's end. A source still
     // failing two days later is reported as missing data rather than holding the summary forever.
     const dayEnd = date => Date.parse(`${date}T00:00:00Z`) + DAY;
-    const covered = (date, service) => !(Date.parse(state.sources[service]) < dayEnd(date));
-    const due = (date, service) => !state.summaries[date]?.[service] && (covered(date, service) || now - dayEnd(date) >= 2 * DAY);
+    const covered = (date, service) => state.days[date]?.[service]?.complete === true;
+    const finalized = (date, service) => Object.values(state.coverage).some(coverage => coverage.services.includes(service) && Date.parse(coverage.until) >= dayEnd(date));
+    const due = (date, service) => !state.summaries[date]?.[service] && (covered(date, service) || finalized(date, service) || now - dayEnd(date) >= 2 * DAY);
     const dates = Object.keys(state.days).filter(date => date < day(now) && [...services].some(service => due(date, service))).sort().slice(0, 3);
     for (const date of dates) {
       const previousDate = day(Date.parse(`${date}T00:00:00Z`) - DAY);
       for (const service of services) {
+        if (signal.aborted) break;
         if (!due(date, service)) continue;
         const counts = stats(date, service);
-        const previous = state.days[previousDate]?.[service]?.errors ?? 0;
+        const previous = covered(previousDate, service) ? state.days[previousDate][service].errors : null;
         const text = covered(date, service)
-          ? `${service} on ${date}: ${counts.errors} errors (${previousDate}: ${previous}), ${counts.newGroups} new kinds, ${counts.noise} noise`
-          : `${service} on ${date}: no complete data, the source kept failing (partial count ${counts.errors})`;
+          ? `${service} on ${date}: ${counts.errors} errors (${previousDate}: ${previous ?? 'no complete data'}), ${counts.newGroups} new kinds, ${counts.noise} noise`
+          : `${service} on ${date}: no complete data, ${finalized(date, service) ? 'collection did not cover the full day' : 'the source kept failing'} (partial count ${counts.errors})`;
         try {
           write('vcc', ['activity', 'add', CONTROL, text]);
-          if (covered(date, service) && counts.errors > 3 * previous && counts.errors >= 50) {
+          if (covered(date, service) && previous !== null && counts.errors > 3 * previous && counts.errors >= 50) {
             const spike = `SPIKE ${date} ${text}`;
             try { write('runner-deliver', ['ht-product-lead'], `${spike}\n`, { RUNNER_DELIVER_ID: `error-collector:${date}:${service}` }); }
             catch {
