@@ -407,7 +407,7 @@ li{margin:4px 0}
 .ranges{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
 .ranges button{font:inherit;font-size:14px;color:inherit;background:var(--tile);border:1px solid var(--border-light-gray-thin);border-radius:4px;padding:6px 10px;cursor:pointer}
 @media (max-width:640px){.ranges button{min-width:44px;min-height:44px}}
-.ranges button[aria-pressed="true"]{border-color:var(--color-rich-text-link);color:var(--color-rich-text-link)}
+.ranges button[aria-pressed="true"]{background:#1365a3!important;border-color:#1365a3!important;color:#ffffff!important;font-weight:600}
 .ranges button:focus-visible{outline:2px solid var(--color-rich-text-link);outline-offset:2px}
 .delta{font-size:13px;color:var(--color-text-light-gray);margin-top:6px}
 h3{font-size:16px;margin:16px 0 4px}
