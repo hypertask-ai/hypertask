@@ -153,27 +153,6 @@ test('PostHog recorded aggregate exceptions are summary-only and query identical
   assert.throws(() => posthog.parseExceptions({ ...fixtures.posthog, hasMore: true }));
 });
 
-test('PostHog browser exceptions are ticketable on board 15 with type, message and newest frame first', () => {
-  const exceptions = JSON.stringify([{ type: 'TypeError', value: "Cannot read properties of undefined (reading 'title')", stacktrace: { frames: [{ resolved_name: 'outer', source: 'app/a.js', line: 3 }, { resolved_name: 'inner', source: 'app/b.js', line: 9 }] } }]);
-  const [server, browser] = posthog.parseExceptions({ results: [
-    ['issue-1', 2, '2026-10-14 10:00:00', '2026-10-14 10:05:00', 'production', 'server', exceptions, null],
-    ['issue-2', 3, '2026-10-14 10:00:00', '2026-10-14 10:06:00', 'production-inferred-url', 'browser', exceptions, 'https://app.hypertask.ai/board/1'],
-  ] });
-  assert.equal(server.ticket, false);
-  assert.equal(server.service, 'posthog');
-  assert.equal(browser.ticket, undefined);
-  assert.equal(browser.service, 'browser');
-  assert.equal(browser.board, 15);
-  assert.equal(browser.count, 3);
-  assert.equal(browser.message, "TypeError: Cannot read properties of undefined (reading 'title')");
-  assert.equal(browser.route, 'https://app.hypertask.ai/board/1');
-  assert.equal(browser.stack, 'at inner (app/b.js:9)\nat outer (app/a.js:3)');
-  assert.equal(browser.ts, '2026-10-14T10:06:00.000Z');
-  const bare = posthog.parseExceptions({ results: [['i', 1, '', '2026-10-14T10:00:00Z', 'production', 'browser', '[{"value":"Error: boom"}]', '']] })[0];
-  assert.equal(bare.message, 'Error: boom');
-  assert.equal(bare.stack, '');
-});
-
 test('summary-only event never enters fingerprints/pending, search or tickets, even mixed with ticketable same fingerprint', async () => {
   const root = join(home, 'summary-state');
   const summary = { service: 'posthog', board: 15, message: 'exception', route: '/api', ts: until, count: 4, ticket: false };

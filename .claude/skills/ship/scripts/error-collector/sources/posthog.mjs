@@ -2,28 +2,15 @@ import { key, query } from '../io.mjs';
 
 export const name = 'posthog';
 
-function browserMessage(exception) {
-  const { type, value } = exception ?? {};
-  if (!value) return type || '$exception';
-  return type && !String(value).startsWith(type) ? `${type}: ${value}` : String(value);
-}
-
-function browserStack(exception) {
-  const frames = exception?.stacktrace?.frames;
-  if (!Array.isArray(frames)) return '';
-  // PostHog lists frames oldest first; the throwing frame is last.
-  return frames.slice(-20).reverse().map(frame => `at ${frame.resolved_name || frame.mangled_name || frame.function || '?'} (${frame.source || frame.filename || '?'}:${frame.line ?? frame.lineno ?? '?'})`).join('\n');
-}
-
+// Summary-only for browser and server alike: PostHog's issue_created alert
+// (.github/workflows/posthog-error-alert.yml) already files one Bugs ticket per new issue
+// from both. Ticketing here duplicates it (YPER4-377: HTPR-7223 next to HTPR-7224).
 export function parseExceptions(data) {
   if (data.error || data.hasMore || !Array.isArray(data.results) || data.results.length >= 10000) throw new Error('PostHog query incomplete');
   return data.results.map(row => {
-    const [, count, , last, , source, exceptions, route] = row;
+    const [, count, , last, , , exceptions, route] = row;
     const list = typeof exceptions === 'string' ? JSON.parse(exceptions) : exceptions;
-    const ts = new Date(last.endsWith('Z') || /[+-]\d\d:\d\d$/.test(last) ? last : `${last.replace(' ', 'T')}Z`).toISOString();
-    // The native PostHog alert tickets server errors only (src/lib/telemetry/posthogErrorAlert.ts), so browser errors are ticketed here.
-    if (source === 'browser') return { service: 'browser', board: 15, message: browserMessage(list?.[0]), route: route ?? '', stack: browserStack(list?.[0]), ts, count };
-    return { service: name, board: 15, ticket: false, message: list?.[0]?.value ?? '$exception', route: route ?? '', stack: '', ts, count };
+    return { service: name, board: 15, ticket: false, message: list?.[0]?.value ?? '$exception', route: route ?? '', stack: '', ts: new Date(last.endsWith('Z') || /[+-]\d\d:\d\d$/.test(last) ? last : `${last.replace(' ', 'T')}Z`).toISOString(), count };
   });
 }
 

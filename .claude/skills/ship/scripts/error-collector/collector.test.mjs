@@ -380,18 +380,7 @@ check('reporting', 'outside PR guard dry runs are noise, other workflow failures
   assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
 }));
 
-check('reporting', 'browser errors become one Bugs ticket per kind; ResizeObserver and hidden script errors are noise (YPER4-377)', () => withHarness(async h => {
-  const browser = { service: 'browser', board: 15, stack: 'at inner (app/b.js:9)' };
-  h.events([event({ ...browser, message: 'ResizeObserver loop completed with undelivered notifications.' }), event({ ...browser, message: 'Script error.' }), event({ ...browser, message: 'TypeError: x is undefined', route: 'https://app.hypertask.ai/board/1' }), event({ ...browser, message: 'TypeError: x is undefined', route: 'https://app.hypertask.ai/board/2', count: 4 })]);
-  await h.run();
-  const created = creates(h);
-  assert.equal(created.length, 1);
-  assert.deepEqual(created[0].args.slice(created[0].args.indexOf('--project'), created[0].args.indexOf('--project') + 4), ['--project', '15', '--section', 'Bugs']);
-  assert.equal(h.state().days['2026-10-14'].browser.noise, 2);
-  assert.equal(h.state().days['2026-10-14'].browser.errors, 5);
-}));
-
-check('reporting', 'upstream resets are errors, client resets remain noise',() => withHarness(async h => {
+check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
   h.events([event({ message: 'database ECONNRESET' }), event({ message: 'client request ECONNRESET' })]);
   await h.run();
   assert.equal(creates(h).length, 1);
