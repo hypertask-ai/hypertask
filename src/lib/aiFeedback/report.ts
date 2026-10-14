@@ -16,8 +16,6 @@ export { aiFeedbackEnabled } from './enabled'
 
 const PROJECT_ID = 15
 const MAX_REPORTERS = 10
-
-const RETRY_KEY = 'ai-feedback:retry'
 const COUNT_TTL = 30 * 86400
 
 export const FEEDBACK_RENEW_LEASE_SCRIPT = `
@@ -68,39 +66,10 @@ function description(input: AiFeedbackInput, fingerprint: string, count: number,
     reporterLine('Clients', input.client ? [input.client] : [])
 }
 
-async function enqueueRetry(input: AiFeedbackInput, userId?: number) {
-  const { note: _note, error: _error, ...structured } = aiFeedbackSchema.parse(input)
-  const redis = await getRedis()
-  const results = await redis.multi()
-    .rpush(RETRY_KEY, JSON.stringify({ input: structured, userId }))
-    .ltrim(RETRY_KEY, -500, -1)
-    .expire(RETRY_KEY, 86400)
-    .exec()
-  const failure = results?.find(([error]) => error)?.[0]
-  if (failure) throw failure
-}
-
-async function drainRetries() {
-  const redis = await getRedis()
-  // Pop the batch first so a failed entry is retried only once per call.
-  const entries = await redis.lpop(RETRY_KEY, 5)
-  for (const entry of entries ?? []) {
-    const { input, userId } = JSON.parse(entry) as { input: AiFeedbackInput; userId?: number }
-    try {
-      await fileReport(input, userId, true)
-    } catch {
-      await enqueueRetry(input, userId)
-    }
-  }
-}
-
 export async function fileAiFeedback(raw: unknown, userId?: number, automatic = false) {
-  await drainRetries()
-  return fileReport(raw, userId, automatic, true)
-}
-
-async function fileReport(raw: unknown, userId?: number, automatic = false, queueOnContention = false) {
   if (!await reserveFeedbackAttempt(userId)) throw new AiFeedbackError(429, 'AI feedback hourly attempt limit reached')
+  const reporterId = userId ?? Number(process.env.AI_FEEDBACK_AGENT_USER_ID)
+  if (!Number.isSafeInteger(reporterId) || reporterId <= 0) return
   if (!await aiFeedbackEnabled(userId)) throw new AiFeedbackError(404, 'Not found')
   const parsed = aiFeedbackSchema.safeParse(raw)
   if (!parsed.success) {
@@ -111,13 +80,18 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
   const marker = `<p>Fingerprint: ai-fb-${fingerprint.slice(0, 12)}</p>`
   const redis = await getRedis()
   const countKey = `ai-feedback:count:${fingerprint}`
+  const seedKey = `${countKey}:unseeded`
+  // Every report INCRs before locking, so contenders count; the holder reads just before writing to include arrivals while it worked.
+  await redis.eval(`
+local count = redis.call('INCR', KEYS[1])
+if count == 1 then redis.call('SET', KEYS[2], '1', 'EX', ARGV[1]) end
+redis.call('EXPIRE', KEYS[1], ARGV[1])
+return count
+`, 2, countKey, seedKey, COUNT_TTL)
   const lockKey = `ai-feedback:lock:${fingerprint}`
   const lockToken = randomUUID()
   if (await redis.set(lockKey, lockToken, 'EX', 30, 'NX') !== 'OK') {
-    if (automatic) {
-      if (queueOnContention) await enqueueRetry(input, userId)
-      throw new AiFeedbackError(503, 'Feedback is busy, try again shortly')
-    }
+    if (automatic) return
     for (let attempt = 0; ; attempt++) {
       await setTimeout(250)
       if (await redis.set(lockKey, lockToken, 'EX', 30, 'NX') === 'OK') break
@@ -143,7 +117,7 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
       // Feedback submitters need not be members of the internal product board.
       prisma.project.findFirst({
         where: { id: PROJECT_ID, status: 'Normal' },
-        select: { ownerId: true, uniqueIdentifier: true, section: {
+        select: { uniqueIdentifier: true, section: {
           where: { deleted: false, visibility: true, section_title: 'Bugs' },
           take: 1, select: { id: true, section_title: true },
         } },
@@ -153,7 +127,6 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
     ])
     const section = project?.section[0]
     if (!project?.uniqueIdentifier || !section) throw new AiFeedbackError(503, 'Feedback destination is not configured')
-    // Use a service-side actor for all tickets. Only the scrubbed display name is public.
     const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
     const existing = await prisma.task.findFirst({
       where: {
@@ -166,7 +139,7 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
       },
       select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true, description_: { select: { content: true } } },
     })
-    const actorId = existing?.userId ?? project.ownerId
+    const actorId = existing?.userId ?? reporterId
     const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
     const comment = existing ? await prisma.comment.findFirst({
       where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
@@ -176,15 +149,17 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
     if (!await reserveFeedbackQuota(userId, Boolean(existing))) throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
     const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
     await checkLease()
-    if (existing) await redis.set(countKey, storedCount, 'EX', COUNT_TTL, 'NX')
-    else await redis.set(countKey, 0, 'EX', COUNT_TTL)
-    await checkLease()
-    const count = await redis.incr(countKey)
-    await checkLease()
-    await redis.expire(countKey, COUNT_TTL)
+    // The first counter initializer may lose contention; seed once under the lease, not in that caller.
+    await redis.eval(`
+if redis.call('DEL', KEYS[2]) == 1 then
+  return redis.call('INCRBY', KEYS[1], ARGV[1])
+end
+return redis.call('GET', KEYS[1])
+`, 2, countKey, seedKey, existing ? storedCount : 0)
     if (existing) {
-      const text = tallyComment(comment?.text ?? existing.description_?.content ?? '', tallyMarker, count, displayName, input.client)
       await checkLease()
+      const count = Number(await redis.get(countKey))
+      const text = tallyComment(comment?.text ?? existing.description_?.content ?? '', tallyMarker, count, displayName, input.client)
       if (comment) {
         await updateCommentService({ commentId: comment.id, text, userId: actorId })
       } else {
@@ -208,6 +183,7 @@ async function fileReport(raw: unknown, userId?: number, automatic = false, queu
       }
     }
     await checkLease()
+    const count = Number(await redis.get(countKey))
     const { task } = await createTaskCore({
       title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
       description: description(input, fingerprint, count, displayName),

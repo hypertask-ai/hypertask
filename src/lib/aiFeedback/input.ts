@@ -40,7 +40,7 @@ export function scrubFeedbackText(value: string): string {
 
 export function feedbackFingerprint(input: AiFeedbackInput): string {
   return createHash('sha256')
-    .update([input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? ''].join('|').toLowerCase())
+    .update([input.surface, input.tool ?? '', input.status ?? '', input.errorCode ?? '', input.category ?? 'other'].join('|').toLowerCase())
     .digest('hex')
 }
 

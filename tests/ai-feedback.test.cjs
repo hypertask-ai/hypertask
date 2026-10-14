@@ -31,11 +31,12 @@ test('validation rejects unknown content fields, malformed structured fields and
 test('fingerprints are sha256 of normalized structured failures, not text, client or account', () => {
   const crypto = require('node:crypto')
   const input = { surface: 'mcp', tool: 'Hypertask_TASKS', status: 503, errorCode: 'UPSTREAM' }
-  const expected = crypto.createHash('sha256').update('mcp|hypertask_tasks|503|upstream').digest('hex')
+  const expected = crypto.createHash('sha256').update('mcp|hypertask_tasks|503|upstream|other').digest('hex')
   assert.equal(feedbackFingerprint(input), expected)
+  assert.equal(feedbackFingerprint({ ...input, category: 'other' }), expected)
   assert.equal(feedbackFingerprint({ ...input, tool: 'hypertask_tasks', errorCode: 'upstream', note: 'private', error: 'different', client: 'cursor', userId: 123 }), expected)
-  for (const patch of [{ surface: 'cli' }, { tool: 'other' }, { status: 500 }, { errorCode: 'other' }]) assert.notEqual(feedbackFingerprint({ ...input, ...patch }), expected)
-  assert.equal(feedbackFingerprint({ surface: 'api' }), crypto.createHash('sha256').update('api|||').digest('hex'))
+  for (const patch of [{ surface: 'cli' }, { tool: 'other' }, { status: 500 }, { errorCode: 'other' }, { category: 'slow' }]) assert.notEqual(feedbackFingerprint({ ...input, ...patch }), expected)
+  assert.equal(feedbackFingerprint({ surface: 'api' }), crypto.createHash('sha256').update('api||||other').digest('hex'))
 })
 
 test('MCP clientInfo produces a validated bounded slug', () => {
