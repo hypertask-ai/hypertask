@@ -218,7 +218,8 @@ test("priority-top position preserves ranking and legacy Urgent unless a view pr
   assert.equal(disabled.posts[0].url, "/api/tasks/create");
   for (const file of ["src/lib/api/task-writes/create-global.ts"]) {
     const source = fs.readFileSync(path.join(root, file), "utf8");
-    assert.match(source, /const body = \{[\s\S]*?\branking,[\s\S]*?const task = await tx\.task\.create\(\{\s*data: \{\s*\.\.\.body,/);
+    assert.match(source, /ranking == null \|\| typeof ranking === "string"\s*\?\s*ranking\s*:/);
+    assert.match(source, /const body = \{[\s\S]*?\branking: taskRanking,[\s\S]*?const task = await tx\.task\.create\(\{\s*data: \{\s*\.\.\.body,/);
     assert.match(source, /priority_index: priority\.priority_index/);
   }
 });

@@ -156,7 +156,7 @@ function createHarness(parents) {
   const prisma = { user: { findUnique: async () => ({ id: 7 }) }, project: { findFirst: async () => ({ id: 10 }) } };
   const stubs = {
     "@/utils/controllers/tasks/parentTaskAccess": parentAccess,
-    "@/lib/ai/taskWriterDueDate": {}, "@/lib/flags/keys": {},
+    "@/lib/ai/taskWriterDueDate": {}, "@/lib/flags/keys": {}, "@/utils/generateRank": {},
     "next/server": { NextResponse: { json: (json, options) => ({ json, status: options.status }) } },
     zod: require("zod"), "better-auth/cookies": { parseCookies: () => new Map() }, "@prisma/client": client,
     "@/lib/ai/composeTaskTarget": {}, "@/lib/flags": {},
