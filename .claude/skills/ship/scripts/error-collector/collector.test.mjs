@@ -565,6 +565,20 @@ check('reporting', 'errors marked [ht-forced-test] are skipped for every source,
   assert.equal(h.state().days['2026-10-14'].web.errors, 1);
 }));
 
+check('reporting', 'CLI reports named HtForcedTest are skipped, a real CLI error still files (YPER4-396)', () => withHarness(async h => {
+  const cli = { service: 'cli', board: 15, route: '/api/mcp/cli-error' };
+  h.events([
+    event({ ...cli, message: '[cli-error] task get: HtForcedTest (HTTP 502)' }),
+    event({ ...cli, message: '[cli-error] task create: HtForcedTest' }),
+    event({ ...cli, message: '[cli-error] task get: HtForcedTestX (HTTP 502)' }),
+    event({ ...cli, message: '[cli-error] task get: ServerError (HTTP 502)' }),
+  ]);
+  await h.run();
+  assert.equal(creates(h).length, 2);
+  assert.equal(h.state().days['2026-10-14'].cli.noise, 2);
+  assert.equal(h.state().days['2026-10-14'].cli.errors, 2);
+}));
+
 check('reporting', 'outside PR guard dry runs are noise, other workflow failures are errors (YPER4-364)', () => withHarness(async h => {
   const ci = { service: 'github-actions', board: 4060, route: '', stack: 'https://github.com/hypertask-ai/hypertask/actions/runs/1' };
   h.events([event({ ...ci, message: 'Outside PR guard failed: outside-pr-guard' }), event({ ...ci, message: 'CI Tests failed: browser-smoke' })]);
