@@ -76,7 +76,7 @@ function harness() {
   const home = mkdtempSync(join(tmpdir(), 'error-collector-test-'));
   mkdirSync(join(home, 'bin'));
   for (const name of ['vcc', 'ht', 'runner-deliver', 'systemctl']) writeFileSync(join(home, 'bin', name), fake, { mode: 0o755 });
-  const env = { HOME: home, PATH: join(home, 'bin'), ERROR_COLLECTOR_FIXTURE: join(home, 'fixture.json') };
+  const env = { ...(process.env.NODE_OPTIONS ? { NODE_OPTIONS: process.env.NODE_OPTIONS } : {}), HOME: home, PATH: join(home, 'bin'), ERROR_COLLECTOR_FIXTURE: join(home, 'fixture.json') };
   const statePath = join(home, '.local/state/error-collector/state.json');
   const calls = () => existsSync(join(home, 'calls.jsonl')) ? readFileSync(join(home, 'calls.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(line => JSON.parse(line)) : [];
   const events = data => writeFileSync(env.ERROR_COLLECTOR_FIXTURE, JSON.stringify(data));
@@ -381,11 +381,12 @@ check('reporting', 'spike threshold, delivery target/id and fallback log; counts
   for (const count of [49, 50, 60, 61]) await withHarness(async h => {
     const state = { version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: {} };
     for (let i = 1; i <= 16; i++) state.days[new Date(NOW - i * DAY).toISOString().slice(0, 10)] = { web: { errors: 20, noise: 0, newGroups: 0 } };
+    for (const date of Object.keys(state.days)) state.summaries[date] = { web: true, fixture: true };
     h.seed(state); h.events([event({ count, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
     const deliveries = h.calls().filter(c => c.name === 'runner-deliver');
     assert.equal(deliveries.length, count > 60 ? 1 : 0);
     if (deliveries.length) { assert.deepEqual(deliveries[0].args, ['ht-product-lead']); assert.equal(deliveries[0].id, 'error-collector:2026-10-14:web'); assert.match(deliveries[0].input, /SPIKE/); }
-    assert.equal(Object.keys(h.state().days).length, 13);
+    assert.equal(Object.keys(h.state().days).length, 14);
     assert.ok(h.state().days['2026-10-02']); assert.equal(h.state().days['2026-10-01'], undefined);
   });
   await withHarness(async h => {
@@ -395,8 +396,10 @@ check('reporting', 'spike threshold, delivery target/id and fallback log; counts
 });
 
 check('reporting', 'dry-run plans create/activity/summary/spike and never changes state or performs writes', () => withHarness(async h => {
-  // Yesterday (UTC) inside the 24-hour window, so the forced summary of the last full day sees it.
-  h.events([event({ count: 50, ts: new Date(Date.now() - DAY + 60000).toISOString() })]);
+  const clock = join(h.home, 'dry-clock.mjs');
+  writeFileSync(clock, `Date.now = () => ${NOW};`);
+  h.env.NODE_OPTIONS = `--import=${clock}`;
+  h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() })]);
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
@@ -436,6 +439,72 @@ check('reporting', 'summary failure retries; secret detector rejects positive co
   assert.notEqual(normalize('/users/1', true), '/users/1');
   const mutation = fingerprint('web', 'failed 42', '/users/1');
   assert.notEqual(createHash('sha256').update('web|failed 42|/users/1').digest('hex').slice(0, 16), mutation);
+}));
+
+check('tickets', 'R1: entire Authorization value is redacted for every scheme', () => withHarness(async h => {
+  const credential = Buffer.from('fixture:password').toString('base64');
+  for (const scheme of ['Basic', 'Bearer', 'Digest', 'Custom']) {
+    const sample = `Authorization: ${scheme} ${credential} extra=value\nUseful failure`;
+    assert.equal(redact(sample), 'Authorization: [redacted]\nUseful failure');
+  }
+  h.events([event({ message: `Failure Authorization: Basic ${credential}`, stack: `Authorization: Basic ${credential}` })]);
+  await h.run();
+  assert.ok(!(JSON.stringify(h.calls()) + readFileSync(h.statePath, 'utf8')).includes(credential));
+}));
+
+check('reporting', 'R5: quiet successful sources have zero-error daily coverage', () => withHarness(async h => {
+  const quiet = { name: 'quiet', fetch: async () => [] };
+  const bad = { name: 'broken', fetch: async () => { throw new Error('fixture failure'); } };
+  await h.run({ sources: [quiet, bad] });
+  assert.deepEqual(h.state().days['2026-10-13'].quiet, { errors: 0, noise: 0, newGroups: 0 });
+  assert.deepEqual(h.state().days['2026-10-14'].quiet, { errors: 0, noise: 0, newGroups: 0 });
+  await h.run({ sources: [quiet], now: NOW + 2 * HOUR });
+  assert.ok(activities(h).some(call => call.args[3] === 'quiet: 0 errors (yesterday 0), 0 new kinds, 0 noise'));
+  assert.ok(!Object.values(h.state().days).some(counts => counts.broken));
+}));
+
+check('tickets', 'R8: known fingerprints persist routes and report bounded new routes after throttle', () => withHarness(async h => {
+  h.events([event()]); await h.run();
+  const fp = Object.keys(h.state().fingerprints)[0];
+  const ticket = h.state().fingerprints[fp].ticket;
+  assert.deepEqual(h.state().fingerprints[fp].routes, ['/checkout/123']);
+  const routes = ['/new-a?secret=fixture', '/new-b', '/new-c', '/new-d', '/long/'.repeat(40)];
+  h.events(routes.map(route => event({ route, ts: new Date(NOW + HOUR).toISOString() })));
+  await h.run({ now: NOW + HOUR });
+  assert.equal(activities(h, ticket).length, 0);
+  assert.deepEqual(h.state().fingerprints[fp].routes, ['/checkout/123', ...routes.map(redact)]);
+  h.events([]); h.config({ activityFail: true }); await h.run({ now: NOW + 6 * HOUR });
+  h.config({}); await h.run({ now: NOW + 6 * HOUR + 1000 });
+  const line = activities(h, ticket).at(-1).args[3];
+  assert.match(line, /new routes: \/new-a\?secret=\[redacted\], \/new-b, \/new-c/);
+  assert.ok(!line.includes('/new-d') && !line.includes('fixture'));
+  h.events([event({ route: routes.at(-1) + 'y', ts: new Date(NOW + 7 * HOUR).toISOString() })]);
+  await h.run({ now: NOW + 7 * HOUR });
+  h.events([]); await h.run({ now: NOW + 12 * HOUR + 1000 });
+  assert.ok(activities(h, ticket).at(-1).args[3].split('new routes: ')[1].length <= 120);
+}));
+
+check('reporting', 'R9: retained unsent summaries retry oldest first in three-day batches', () => withHarness(async h => {
+  const dates = ['2026-10-10', '2026-10-11', '2026-10-12', '2026-10-13'];
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: Object.fromEntries(dates.map((date, i) => [date, { web: { errors: i === 0 ? 50 : 0, noise: 0, newGroups: i + 1 } }])) });
+  h.config({ activityFail: true }); await h.run({ summary: true });
+  assert.deepEqual(h.state().summaries, {});
+  h.config({}); await h.run({ now: NOW + DAY, summary: true });
+  assert.deepEqual(Object.keys(h.state().summaries), dates.slice(0, 3));
+  const lines = activities(h).filter(call => call.args[3].startsWith('web:')).slice(-3).map(call => call.args[3]);
+  assert.deepEqual(lines.map(line => Number(line.match(/(\d+) new kinds/)[1])), [1, 2, 3]);
+  assert.equal(h.calls().find(call => call.name === 'runner-deliver').id, 'error-collector:2026-10-10:web');
+  await h.run({ now: NOW + DAY + 1000, summary: true });
+  assert.equal(h.state().summaries['2026-10-13'].web, true);
+}));
+
+check('reporting', 'R11: dry-run fixture remains deterministic in the last UTC minute', () => withHarness(async h => {
+  const clock = join(h.home, 'clock.mjs');
+  writeFileSync(clock, "Date.now = () => Date.parse('2026-10-14T23:59:45Z');");
+  const childEnv = { ...process.env, NODE_OPTIONS: `--import=${clock}` };
+  delete childEnv.NODE_TEST_CONTEXT;
+  const result = spawnSync(process.execPath, ['--import', clock, '--test', '--test-name-pattern', 'reporting: dry-run plans create/activity/summary/spike', new URL('./collector.test.mjs', import.meta.url).pathname], { encoding: 'utf8', env: childEnv, timeout: 30000 });
+  assert.equal(result.status, 0, result.stdout + result.stderr);
 }));
 
 check('install', 'units mirror precedent, installer copies modules/noise and fake systemctl enables user timer', () => withHarness(async h => {

@@ -108,7 +108,7 @@ console.log(JSON.stringify(args[1] === 'list' ? data.runs : { jobs: data.jobs })
   assert.ok(calls.some(args => args.includes('timed_out')));
   data.runs = Array.from({ length: 21 }, (_, i) => ({ ...data.runs[0], databaseId: i }));
   writeFileSync(join(home, 'github.json'), JSON.stringify(data));
-  await assert.rejects(github.fetch(context), /budget/);
+  assert.equal((await github.fetch(context)).length, 21);
 });
 
 test('journal recorded entries group normalized MESSAGE per unit, exclude collector and dedupe user/system', async () => {
@@ -131,7 +131,7 @@ test('Cloudflare recorded Worker exceptions only, no HTTP/DNS traffic tickets; w
   assert.equal(parsed[0].count, 3);
   assert.equal(parsed[0].route, 'ht-slack');
   assert.equal(parsed[0].board, 4060);
-  const calls = mockHTTP([[200, { success: true, result: [{ id: 'account', name: 'Hypertask' }, { id: 'other', name: 'Other' }] }], [200, fixtures.cloudflare]]);
+  const calls = mockHTTP([[200, { success: true, result: [{ id: 'account', name: 'Hypertask' }, { id: 'other', name: 'Other' }] }], [200, fixtures.cloudflare], [200, fixtures.cloudflare]]);
   await workers.fetch(context);
   assert.match(calls[1].body.query, /workersInvocationsAdaptive\(limit: 10000/);
   assert.match(calls[1].body.query, /accountTag: "account"/);
@@ -211,4 +211,74 @@ test('sanitized recorded provider responses parse offline for every source', () 
   const exceptions = posthog.parseExceptions(recorded.posthog);
   assert.equal(exceptions.reduce((sum, event) => sum + event.count, 0), 2);
   assert.ok(exceptions.every(event => event.ticket === false));
+});
+
+
+test('R2: GitHub backlog returns all runs with only twenty newest job lookups', async () => {
+  const runs = Array.from({ length: 25 }, (_, i) => ({ ...fixtures.github.runs[0], databaseId: 100 + i, updatedAt: new Date(Date.parse(since) + (i + 1) * 1000).toISOString() }));
+  writeFileSync(join(home, 'backlog.json'), JSON.stringify(runs));
+  writeFileSync(join(home, 'backlog-calls.jsonl'), '');
+  fakeCommand('gh', `import { readFileSync, appendFileSync } from 'node:fs';
+const args = process.argv.slice(2);
+appendFileSync(process.env.HOME + '/backlog-calls.jsonl', JSON.stringify(args) + '\\n');
+console.log(JSON.stringify(args[1] === 'list' ? JSON.parse(readFileSync(process.env.HOME + '/backlog.json')) : { jobs: [{ name: 'Build', conclusion: 'failure' }] }));`);
+  const events = await github.fetch(context);
+  assert.equal(events.length, 25);
+  const lookups = readFileSync(join(home, 'backlog-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(args => args[1] === 'view');
+  assert.deepEqual(lookups.map(args => Number(args[2])), runs.slice(-20).reverse().map(run => run.databaseId));
+  assert.ok(events.slice(20).every(event => event.message.includes('Deploy') && !event.message.includes('unknown')));
+  assert.deepEqual(await github.fetch({ ...context, since: until }), []);
+});
+
+test('R3: PostHog production filter excludes preview and development before aggregation', async () => {
+  const calls = mockHTTP([[200, fixtures.posthog]]);
+  await posthog.fetch(context);
+  const sql = calls[0].body.query.query;
+  const production = "(properties.ht_environment = 'production' OR (properties.ht_environment IS NULL AND properties.$current_url LIKE 'https://app.hypertask.ai/%'))";
+  assert.ok(sql.includes('AND ' + production));
+  // Independent evaluation of the exact pipeline predicate, including explicit preview on a production URL.
+  const samples = [['production', '', true], ['preview', 'https://app.hypertask.ai/x', false], ['development', '', false], [null, 'https://app.hypertask.ai/x', true], [null, 'https://preview.invalid/x', false]];
+  for (const [environment, url, expected] of samples) assert.equal(environment === 'production' || (environment === null && url.startsWith('https://app.hypertask.ai/')), expected);
+});
+
+test('R4: Vercel live timeout and SSE route go to infra only', () => {
+  const groups = JSON.parse(readFileSync(new URL('./fixtures/h1-groups.json', import.meta.url)));
+  const timeout = groups.find(group => group.message.includes('Vercel Runtime Timeout Error'));
+  const row = { message: timeout.message, requestPath: timeout.route, timestamp: timeout.ts };
+  const rows = [row, { ...row, message: 'other failure', requestPath: '/sse' }, { ...row, message: 'other failure', requestPath: '/mcp' }, { ...row, message: 'other failure', requestPath: '/sse-other' }];
+  assert.match(vercel.messageParts(rows[0].message).message, /Vercel Runtime Timeout Error/);
+  assert.deepEqual(vercel.parseEvents(rows).map(event => event.board), [4060, 4060, 15, 15]);
+});
+
+test('R6: journal identical errors are bucketed separately across UTC midnight', () => {
+  const rows = ['2026-10-13T23:59:59Z', '2026-10-14T00:00:00Z', '2026-10-14T00:00:01Z'].map(ts => ({ _SYSTEMD_UNIT: 'test.service', MESSAGE: 'Failed job 123', __REALTIME_TIMESTAMP: String(Date.parse(ts) * 1000) }));
+  const events = journal.parseJournal(rows.map(row => JSON.stringify(row)).join('\n'), context);
+  assert.deepEqual(events.map(event => [event.ts.slice(0, 10), event.count]), [['2026-10-13', 1], ['2026-10-14', 2]]);
+});
+
+test('R7: PostHog includes shared until boundary and excludes next since boundary', async () => {
+  const boundary = { ...fixtures.posthog, results: fixtures.posthog.results.map(row => row.map((value, index) => index === 3 ? until : value)) };
+  const calls = mockHTTP([[200, boundary], [200, { results: [] }]]);
+  const collectorEnv = { ...env, ERROR_COLLECTOR_STATE_DIR: join(home, 'posthog-boundary') };
+  await collect({ env: collectorEnv, now: Date.parse(until), sources: [posthog] });
+  await collect({ env: collectorEnv, now: Date.parse('2026-10-14T09:00:00.000Z'), sources: [posthog] });
+  for (const [i, start, end] of [[0, since, until], [1, until, '2026-10-14T09:00:00.000Z']]) {
+    assert.ok(calls[i].body.query.query.includes(`timestamp > toDateTime('${start}') AND timestamp <= toDateTime('${end}')`));
+  }
+  const state = JSON.parse(readFileSync(join(collectorEnv.ERROR_COLLECTOR_STATE_DIR, 'state.json')));
+  assert.equal(state.days['2026-10-14'].posthog.errors, 2);
+});
+
+test('R10: Cloudflare analytics split at midnight and preserve each UTC day', async () => {
+  const calls = mockHTTP([[200, { success: true, result: [{ id: 'account', name: 'Hypertask' }] }], [200, fixtures.cloudflare], [200, fixtures.cloudflare]]);
+  const events = await workers.fetch(context);
+  assert.deepEqual(events.map(event => [event.ts.slice(0, 10), event.count]), [['2026-10-13', 3], ['2026-10-14', 3]]);
+  assert.match(calls[1].body.query, /datetime_gt: "2026-10-13T08:29:03.000Z"/);
+  assert.match(calls[1].body.query, /datetime_lt: "2026-10-14T00:00:00.000Z"/);
+  assert.match(calls[2].body.query, /datetime_geq: "2026-10-14T00:00:00.000Z"/);
+  assert.match(calls[2].body.query, /datetime_leq: "2026-10-14T08:29:03.000Z"/);
+  mockHTTP([[200, { success: true, result: [{ id: 'account', name: 'Hypertask' }] }], [200, fixtures.cloudflare], [200, { data: { viewer: { accounts: [{ current: [] }] } } }]]);
+  const midnight = await workers.fetch({ ...context, until: '2026-10-14T00:00:00.000Z' });
+  assert.equal(midnight[0].ts.slice(0, 10), '2026-10-13');
+  assert.ok(midnight[0].ts > since && midnight[0].ts <= until);
 });

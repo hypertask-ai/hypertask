@@ -7,7 +7,7 @@ const failed = run => ['failure', 'timed_out'].includes(run.conclusion);
 export function parseRun(run, jobs) {
   if (!Array.isArray(jobs)) throw new Error('invalid GitHub jobs');
   const job = jobs.find(failed);
-  return { service: name, board: 4060, message: `${run.workflowName} failed: ${job?.name ?? 'unknown failing job'}`, route: '', stack: `https://github.com/${REPO}/actions/runs/${run.databaseId}`, ts: run.updatedAt, count: 1 };
+  return { service: name, board: 4060, message: `${run.workflowName} failed${job ? `: ${job.name}` : ''}`, route: '', stack: `https://github.com/${REPO}/actions/runs/${run.databaseId}`, ts: run.updatedAt, count: 1 };
 }
 
 export async function fetch({ since, until, env }) {
@@ -20,6 +20,6 @@ export async function fetch({ since, until, env }) {
       for (const run of rows) if (failed(run) && (run.headBranch === 'production' || run.event === 'schedule') && Date.parse(run.updatedAt) > Date.parse(since) && Date.parse(run.updatedAt) <= Date.parse(until)) runs.set(run.databaseId, run);
     }
   }
-  if (runs.size > 20) throw new Error('GitHub job lookup budget exceeded');
-  return [...runs.values()].map(run => parseRun(run, JSON.parse(command('gh', ['run', 'view', String(run.databaseId), '--repo', REPO, '--json', 'jobs'], env)).jobs));
+  return [...runs.values()].sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt)).map((run, index) =>
+    parseRun(run, index < 20 ? JSON.parse(command('gh', ['run', 'view', String(run.databaseId), '--repo', REPO, '--json', 'jobs'], env)).jobs : []));
 }

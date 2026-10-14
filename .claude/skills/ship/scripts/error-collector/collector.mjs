@@ -20,6 +20,7 @@ const diagnostic = text => console.error(`error-collector: ${text}`);
 export function redact(text) {
   return String(text ?? '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted-email]')
+    .replace(/(["']?\bauthorization["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\r\n]*)/gi, '$1[redacted]')
     .replace(/\bBearer\s+\S+/gi, 'Bearer [redacted]')
     .replace(/(["']?\b(?:[\w-]*(?:token|key|password|passwd|secret|authorization)[\w-]*)["']?\s*[:=]\s*)(?:"[^"\n]*"|'[^'\n]*'|[^\s,;]+)/gi, '$1[redacted]')
     .replace(/\b(?:sk|pk|ghp|gho|github_pat|AKIA)[-_]?[A-Za-z0-9_-]{12,}\b/g, '[redacted]')
@@ -195,6 +196,7 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
         if (!groups.has(fp)) groups.set(fp, { board: event.board, service: event.service, normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
       }
+      for (let date = Date.parse(`${day(since)}T00:00:00Z`); date <= now; date += DAY) stats(day(date), source.name);
       if (dryRun) console.log(`DRY-RUN source ${JSON.stringify({ name: source.name, since, until, events: events.length, count: events.reduce((sum, event) => sum + event.count, 0) })}`);
       state.sources[source.name] = until;
       succeeded++;
@@ -205,11 +207,14 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
   for (const [fp, group] of groups) {
     const known = state.fingerprints[fp];
     if (known) {
+      const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
+      known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
       known.total += group.count;
       known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
       known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
       if (!known.deleted) {
         const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
+        activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
         activity.count += group.count;
         activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
       }
@@ -245,12 +250,13 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
           const output = write('vcc', ['--json', 'task', 'create', '--project', String(group.board), '--section', column, '--labels', 'prod-error', '--priority', 'high', '--title', `${group.service}: ${group.normalized.slice(0, 150)}`, '--description-file', path]);
           if (dryRun) { console.log(`DRY-RUN description ${JSON.stringify(text)}`); found = { ticket: `DRYRUN-${state.created.length}`, deleted: false }; }
           else found = { ticket: ticketRef(payload(output).task), deleted: false };
-          state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, lastActivityAt: iso(now) };
+          state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, lastActivityAt: iso(now) };
         } finally { if (temp) await fs.rm(temp, { force: true }); }
       } else {
-        state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, lastActivityAt: null };
+        state.fingerprints[fp] = { ...found, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, lastActivityAt: null };
         if (!found.deleted) {
           const activity = state.activities[found.ticket] ??= { count: 0, since: group.firstSeen, at: null };
+          activity.routes = [...new Set([...(activity.routes ?? []), ...group.routes.filter(Boolean)])];
           activity.count += group.count;
           activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
         }
@@ -266,8 +272,10 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
     const total = records.reduce((sum, record) => sum + record.total, 0);
     const lastSeen = records.map(record => record.lastSeen).sort().at(-1);
     try {
-      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}`]);
+      const routes = (activity.routes ?? []).slice(0, 3).map(route => route.trim().slice(0, 120)).join(', ');
+      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}${routes ? `; new routes: ${routes}` : ''}`]);
       activity.count = 0;
+      activity.routes = [];
       activity.since = iso(now);
       activity.at = iso(now);
       for (const record of records) record.lastActivityAt = iso(now);
@@ -278,30 +286,32 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
     try { write('vcc', ['activity', 'add', CONTROL, `${held} error groups held back by the hourly cap`]); }
     catch { diagnostic('held-back notice failed'); }
   }
-  // Summarise the last full UTC day against the day before: a partial morning would hide every spike.
-  const today = day(now - DAY);
-  const yesterday = day(now - 2 * DAY);
+  // Retry retained completed days, oldest first; partial days cannot reveal a full-day spike.
   if (summary || new Date(now).getUTCHours() >= 6) {
     const services = new Set(Object.values(state.days).flatMap(counts => Object.keys(counts)));
-    for (const service of services) {
-      if (state.summaries[today]?.[service]) continue;
-      const counts = stats(today, service);
-      const previous = state.days[yesterday]?.[service]?.errors ?? 0;
-      const text = `${service}: ${counts.errors} errors (yesterday ${previous}), ${counts.newGroups} new kinds, ${counts.noise} noise`;
-      try {
-        write('vcc', ['activity', 'add', CONTROL, text]);
-        if (counts.errors > 3 * previous && counts.errors >= 50) {
-          const spike = `SPIKE ${today} ${text}`;
-          try { write('runner-deliver', ['ht-product-lead'], `${spike}\n`, { RUNNER_DELIVER_ID: `error-collector:${today}:${service}` }); }
-          catch {
-            if (dryRun) console.log(`DRY-RUN spikes.log ${JSON.stringify(spike)}`);
-            else await fs.appendFile(join(root, 'spikes.log'), `${spike}\n`, { mode: 0o600 });
-            diagnostic('spike delivery unavailable; recorded in spikes.log');
+    const dates = Object.keys(state.days).filter(date => date < day(now) && [...services].some(service => !state.summaries[date]?.[service])).sort().slice(0, 3);
+    for (const date of dates) {
+      const previousDate = day(Date.parse(`${date}T00:00:00Z`) - DAY);
+      for (const service of services) {
+        if (state.summaries[date]?.[service]) continue;
+        const counts = stats(date, service);
+        const previous = state.days[previousDate]?.[service]?.errors ?? 0;
+        const text = `${service}: ${counts.errors} errors (yesterday ${previous}), ${counts.newGroups} new kinds, ${counts.noise} noise`;
+        try {
+          write('vcc', ['activity', 'add', CONTROL, text]);
+          if (counts.errors > 3 * previous && counts.errors >= 50) {
+            const spike = `SPIKE ${date} ${text}`;
+            try { write('runner-deliver', ['ht-product-lead'], `${spike}\n`, { RUNNER_DELIVER_ID: `error-collector:${date}:${service}` }); }
+            catch {
+              if (dryRun) console.log(`DRY-RUN spikes.log ${JSON.stringify(spike)}`);
+              else await fs.appendFile(join(root, 'spikes.log'), `${spike}\n`, { mode: 0o600 });
+              diagnostic('spike delivery unavailable; recorded in spikes.log');
+            }
           }
-        }
-        (state.summaries[today] ??= {})[service] = true;
-        await checkpoint();
-      } catch { diagnostic('summary failed; retry next run'); }
+          (state.summaries[date] ??= {})[service] = true;
+          await checkpoint();
+        } catch { diagnostic('summary failed; retry next run'); }
+      }
     }
   }
   await checkpoint();

@@ -1,6 +1,10 @@
 import { key, query } from '../io.mjs';
 
 export const name = 'vercel';
+const infra = [
+  event => event.message.includes('Vercel Runtime Timeout Error'),
+  event => event.route === '/sse',
+];
 
 export function messageParts(message) {
   if (typeof message === 'string') {
@@ -21,11 +25,15 @@ export function messageParts(message) {
 
 export function parseEvents(rows, service = name) {
   if (!Array.isArray(rows)) throw new Error('invalid Vercel events');
-  return rows.filter(row => service !== 'vercel-5xx' || Number(row.httpStatus) >= 500).map(row => ({
-    service, board: 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
-    // 5xx responses repeat failures the error log already holds: count them, never ticket them.
-    ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
-  }));
+  return rows.filter(row => service !== 'vercel-5xx' || Number(row.httpStatus) >= 500).map(row => {
+    const event = {
+      service, board: 15, route: row.requestPath ?? '', ts: row.timestamp, count: 1,
+      // 5xx responses repeat failures the error log already holds: count them, never ticket them.
+      ...(service === 'vercel-5xx' ? { message: `HTTP ${row.httpStatus} ${row.requestMethod ?? ''} response`, stack: '', ticket: false } : messageParts(row.message)),
+    };
+    if (service === name && infra.some(rule => rule(event))) event.board = 4060;
+    return event;
+  });
 }
 
 export async function fetchVercel({ since, until, env }, service = name) {

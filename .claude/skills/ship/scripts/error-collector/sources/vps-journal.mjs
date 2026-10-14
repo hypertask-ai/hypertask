@@ -12,7 +12,7 @@ export function parseJournal(text, { since, until } = {}) {
     const message = `${unit}: ${normalize(Array.isArray(row.MESSAGE) ? Buffer.from(row.MESSAGE).toString('utf8') : row.MESSAGE)}`;
     const ts = new Date(Number(row.__REALTIME_TIMESTAMP) / 1000).toISOString();
     if ((since && ts <= since) || (until && ts > until)) continue;
-    const id = `${unit}|${message}`;
+    const id = `${ts.slice(0, 10)}|${unit}|${message}`;
     const group = groups.get(id);
     if (group) { group.count++; if (ts > group.ts) group.ts = ts; }
     else groups.set(id, { service: name, board: 4060, message, route: unit, stack: '', ts, count: 1 });
