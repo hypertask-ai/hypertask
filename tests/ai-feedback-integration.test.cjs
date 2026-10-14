@@ -249,6 +249,20 @@ test('automatic observers preserve thrown HTTP status and hostile error identity
   assert.match(files[1].description, /HTTP status: 500/)
 })
 
+test('thrown MCP caller errors keep their HTTP meaning instead of filing as 500 (HTPR-7202)', async () => {
+  const { NotFoundError, ValidationError } = jiti('../src/lib/mcp-server/utils/errors.ts')
+  const tools = observeFeedbackTools([
+    { name: 'hypertask_update_task', description: 'missing task', parameters: z.object({}), execute: async () => { throw new NotFoundError('Task not found') } },
+    { name: 'hypertask_create_task', description: 'bad input', parameters: z.object({}), execute: async () => { throw new ValidationError('Invalid request') } },
+  ], 985)
+  await assert.rejects(tools[0].execute({}, 'fixture'), NotFoundError)
+  await assert.rejects(tools[1].execute({}, 'fixture'), ValidationError)
+  await drain()
+  assert.equal(files.length, 2)
+  assert.match(files[0].description, /HTTP status: 404/)
+  assert.match(files[1].description, /HTTP status: 400/)
+})
+
 
 test('an empty real MCP catalog reports even when deferred discovery helpers prevent a literally empty wire list', async () => {
   registeredTools.length = 0

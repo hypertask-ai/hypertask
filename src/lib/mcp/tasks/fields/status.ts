@@ -23,12 +23,17 @@ export async function updateTaskStatus(context: TaskUpdateFieldContext, task: Ta
         })
         if (!archiveResponse.ok) {
             const errorData = await archiveResponse.json().catch(() => null)
-            throw new Error(
+            const error = new Error(
                 toErrorMessage(
                     errorData,
                     `Archive/status update failed: ${archiveResponse.status}`
                 )
             )
+            // Keep caller refusals (e.g. agents archiving Done tasks) a 4xx instead of a 500 (HTPR-7202).
+            if (archiveResponse.status >= 400 && archiveResponse.status < 500 && typeof errorData?.code === 'string') {
+                throw Object.assign(error, { status: archiveResponse.status, code: errorData.code })
+            }
+            throw error
         }
         await archiveResponse.json().catch(() => null)
     }
