@@ -16,6 +16,7 @@
 #   ship-check ticket <T>        ticket exists on the board
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
+#   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
 #   ship-check proof <T>         ~/.local/state/vcc-evidence/<T>/proof.md follows the verify-qa contract for that merge
 #   ship-check done <T>          ticket is in Done
 #   ship-check cleaned <T>       no worktree, local branch or GitHub branch is left for the ticket's PR
@@ -276,6 +277,20 @@ check_pr() {
 
 check_merged() { dropped_ok merged "$1" && return 0; nochange_ok merged "$1" && return 0; local s; s=$(merge_sha "$1") || { echo "$s"; exit 1; }; echo "merged ok"; }
 
+docs_deploy_ok() {
+  local sha=$1 runs id jobs
+  runs=$(gh api "repos/hypertask-ai/docs/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
+    || fail "could not read workflow runs for $sha"
+  id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
+    and .name == "Build and Deploy" and .event == "push" and .head_branch == "main"
+    and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
+    || fail "could not read publishing workflow identity for $sha"
+  [ -n "$id" ] || fail "no successful production publishing push for $sha"
+  jobs=$(gh api "repos/hypertask-ai/docs/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
+  jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
+    || fail "no successful production deploy job for $sha"
+}
+
 check_deployed() {
   dropped_ok deployed "$1" && return 0
   nochange_ok deployed "$1" && return 0
@@ -338,16 +353,7 @@ check_deployed() {
       if [[ $REPO == hypertask-ai/docs && $BASE == main ]]; then
         releases=$(gh release list -R "$REPO" --limit 1 --json tagName 2>/dev/null) || fail "could not read releases in $REPO"
         jq -e 'length == 0' <<<"$releases" >/dev/null || fail "no release found in $REPO"
-        runs=$(gh api "repos/$REPO/actions/workflows/deploy.yml/runs?head_sha=$sha&event=push&per_page=100" 2>/dev/null) \
-          || fail "could not read workflow runs for $sha"
-        id=$(jq -r --arg sha "$sha" '[.workflow_runs[] | select(.path == ".github/workflows/deploy.yml"
-          and .name == "Build and Deploy" and .event == "push" and .head_branch == "main"
-          and .head_sha == $sha and .conclusion == "success")] | first | .id // empty' <<<"$runs") \
-          || fail "could not read publishing workflow identity for $sha"
-        [ -n "$id" ] || fail "no successful production publishing push for $sha"
-        jobs=$(gh api "repos/$REPO/actions/runs/$id/jobs?per_page=100" 2>/dev/null) || fail "could not read publishing jobs for $sha"
-        jq -e 'any(.jobs[]; .name == "Build and deploy to Cloudflare Pages" and .conclusion == "success")' <<<"$jobs" >/dev/null \
-          || fail "no successful production deploy job for $sha"
+        docs_deploy_ok "$sha"
         echo "deployed ok (workflow)"; return
       fi
       [[ $REPO == hypertask-ai/analytics && $BASE == master ]] || fail "no release found in $REPO"
@@ -391,6 +397,34 @@ check_deployed() {
     echo "deployed ok (live in ${live:0:9})"; return
   fi
   echo "deployed ok"
+}
+
+check_docs() {
+  dropped_ok docs "$1" && return 0
+  nochange_ok docs "$1" && return 0
+  local n title type prs sha cmts
+  n=$(bound_pr "$1")
+  [ -n "$n" ] || fail "no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"
+  title=$(gh pr view "$n" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "cannot read PR $n title"
+  [[ $title =~ $TITLE_RE || $title =~ $OLD_TITLE_RE ]] || fail "PR $n title must be PREFIX-NNNN [TYPE] description"
+  [[ $title =~ \[([^]]+)\] ]]; type=${BASH_REMATCH[1]}
+  if [[ $type != FEATURE && $type != IMPROVE ]]; then
+    echo "docs ok (not needed for [$type])"; return
+  fi
+  prs=$(gh pr list -R hypertask-ai/docs --base main --state merged --search "$1 in:title" --limit 100 --json number,title,mergeCommit,baseRefName,state 2>/dev/null) \
+    || fail "could not read docs PRs"
+  while read -r n sha; do
+    [ -n "$n" ] || continue
+    if ( docs_deploy_ok "$sha" ) >/dev/null 2>&1; then echo "docs ok (docs PR $n)"; return; fi
+  done < <(jq -r --arg t "$1" '.[] | select(.state == "MERGED" and .baseRefName == "main"
+    and (.title | test("(^|[^A-Z0-9])" + $t + "([^A-Z0-9]|$)")))
+    | select(.mergeCommit.oid != null) | "\(.number) \(.mergeCommit.oid)"' <<<"$prs")
+  cmts=$(hypertask comment list "$1" --limit 100 --json 2>/dev/null) || fail "cannot read comments of $1"
+  if jq -e '.comments | any(.[]; (.text // "") | gsub("<[^>]*>|&nbsp;|&#160;|&#xa0;"; "")
+      | test("^\\s*No user-visible change:\\s*\\S"))' >/dev/null <<<"$cmts"; then
+    echo "docs ok (no user-visible change)"; return
+  fi
+  fail "[$type] ticket $1 has no merged and deployed docs PR in hypertask-ai/docs titled with $1, and no \"No user-visible change:\" comment"
 }
 
 newest_successful_production_sha() {
@@ -903,11 +937,15 @@ PY
       out=$(check_ci_tests "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }.$unresolved" >&2; exit 2; }
       out=$(check_premerge_status "$pr") || { echo "ship-check blocked the merge: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md before merging.$unresolved" >&2; exit 2; }
     fi
-    # Move to Done: needs the merge and the deploy; app tickets also need proof.md.
+    # Move to Done: needs merge, deploy and docs (FEATURE/IMPROVE); app tickets also need proof.md.
     if [[ $rest =~ ^$done ]]; then
       [[ $rest =~ (HTPR|HYFA|YPER4)-[0-9]+ ]]; t=${BASH_REMATCH[0]}
-      checks="merged deployed"; [[ $t == HTPR-* ]] && checks="merged deployed proof"
+      checks="merged deployed docs"; [[ $t == HTPR-* ]] && checks="merged deployed proof docs"
       for c in $checks; do
+        if [ "$c" = docs ]; then
+          out=$(check_docs "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Merge a docs PR titled with $t or post a No user-visible change: <reason> ticket comment." >&2; exit 2; }
+          continue
+        fi
         out=$("check_$c" "$t") || { echo "ship-check blocked moving $t to Done: ${out#FAIL: }. Follow .claude/skills/verify-qa/SKILL.md first." >&2; exit 2; }
       done
     fi
@@ -929,6 +967,7 @@ case "${1:-}" in
   pr) check_pr "$2" ;;
   merged) check_merged "$2" ;;
   deployed) check_deployed "$2" ;;
+  docs) check_docs "$2" ;;
   proof) check_proof "$2" ;;
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;

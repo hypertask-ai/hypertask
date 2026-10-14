@@ -98,18 +98,27 @@ test('GitHub recorded failure and timeout jobs, production plus scheduled runs, 
   fakeCommand('gh', `import { readFileSync, appendFileSync } from 'node:fs';
 const data = JSON.parse(readFileSync(process.env.HOME + '/github.json'));
 const args = process.argv.slice(2); appendFileSync(process.env.HOME + '/gh-calls.jsonl', JSON.stringify(args) + '\\n');
-console.log(JSON.stringify(args[1] === 'list' ? data.runs : { jobs: data.jobs }));`);
+console.log(JSON.stringify(args[1] === 'list' ? (args[args.indexOf('--repo') + 1] === 'hypertask-ai/docs' ? data.docsRuns : data.runs) : { jobs: data.jobs }));`);
   const events = await github.fetch(context);
-  assert.equal(events.length, 2);
+  assert.equal(events.length, 4);
+  const docs = events.filter(event => event.message.startsWith('docs: '));
+  assert.equal(docs.length, 2);
+  assert.equal(docs[0].message, 'docs: Build and Deploy failed: Build');
+  assert.equal(docs[0].stack, 'https://github.com/hypertask-ai/docs/actions/runs/100');
+  assert.equal(events.find(event => event.message === 'Deploy failed: Build').stack, 'https://github.com/hypertask-ai/hypertask/actions/runs/100');
+  assert.notEqual(fingerprint(github.name, docs[0].message), fingerprint(github.name, 'Build and Deploy failed: Build'));
   assert.ok(events.every(event => event.board === 4060));
   const calls = readFileSync(join(home, 'gh-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse);
-  assert.equal(calls.filter(args => args[1] === 'view').length, 2);
-  assert.ok(calls.some(args => args.includes('production')));
+  assert.equal(calls.filter(args => args[1] === 'view').length, 4);
+  for (const [repo, branch] of [['hypertask-ai/hypertask', 'production'], ['hypertask-ai/docs', 'main']]) {
+    assert.ok(calls.some(args => args.includes(repo) && args.includes(branch)));
+    assert.ok(calls.some(args => args.includes(repo) && args.includes('schedule')));
+  }
   assert.ok(calls.some(args => args.includes('schedule')));
   assert.ok(calls.some(args => args.includes('timed_out')));
   data.runs = Array.from({ length: 21 }, (_, i) => ({ ...data.runs[0], databaseId: i }));
   writeFileSync(join(home, 'github.json'), JSON.stringify(data));
-  assert.equal((await github.fetch(context)).length, 21);
+  assert.equal((await github.fetch(context)).length, 23);
 });
 
 test('journal recorded entries group normalized MESSAGE per unit, exclude collector and dedupe user/system', async () => {
@@ -222,7 +231,7 @@ test('R2: GitHub backlog returns all runs with only twenty newest job lookups', 
   fakeCommand('gh', `import { readFileSync, appendFileSync } from 'node:fs';
 const args = process.argv.slice(2);
 appendFileSync(process.env.HOME + '/backlog-calls.jsonl', JSON.stringify(args) + '\\n');
-console.log(JSON.stringify(args[1] === 'list' ? JSON.parse(readFileSync(process.env.HOME + '/backlog.json')) : { jobs: [{ name: 'Build', conclusion: 'failure' }] }));`);
+console.log(JSON.stringify(args[1] === 'list' ? (args.includes('hypertask-ai/docs') ? [] : JSON.parse(readFileSync(process.env.HOME + '/backlog.json'))) : { jobs: [{ name: 'Build', conclusion: 'failure' }] }));`);
   const events = await github.fetch(context);
   assert.equal(events.length, 25);
   const lookups = readFileSync(join(home, 'backlog-calls.jsonl'), 'utf8').trim().split('\n').map(JSON.parse).filter(args => args[1] === 'view');
