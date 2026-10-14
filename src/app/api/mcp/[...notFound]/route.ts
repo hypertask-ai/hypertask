@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import {
   checkMcpRateLimit,
@@ -20,10 +21,10 @@ async function notFound(request: NextRequest) {
   return NextResponse.json({ error: 'not found' }, { status: 404 })
 }
 
-export const GET = notFound
-export const POST = notFound
-export const PUT = notFound
-export const PATCH = notFound
-export const DELETE = notFound
-export const HEAD = notFound
-export const OPTIONS = notFound
+export const GET = wrapMcpRoute(notFound)
+export const POST = wrapMcpRoute(notFound)
+export const PUT = wrapMcpRoute(notFound)
+export const PATCH = wrapMcpRoute(notFound)
+export const DELETE = wrapMcpRoute(notFound)
+export const HEAD = wrapMcpRoute(notFound)
+export const OPTIONS = wrapMcpRoute(notFound)

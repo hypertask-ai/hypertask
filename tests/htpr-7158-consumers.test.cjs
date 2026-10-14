@@ -13,6 +13,7 @@ function load(relativePath, imports = {}) {
   const mod = { exports: {} }
   new Function('module', 'exports', 'require', javascript)(mod, mod.exports, (name) => {
     if (name in imports) return imports[name]
+    if (name === '@/lib/mcp/routeWrapper') return require('./helpers/mcp-route-wrapper.cjs').loadRouteWrapper({ ...imports, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} } })
     if (name === 'crypto') return require('node:crypto')
     throw new Error(`Unexpected import: ${name}`)
   })

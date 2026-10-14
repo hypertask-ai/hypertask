@@ -27,8 +27,12 @@ function flagsSource(definitions = ["OTHER_FLAG"], mode = "OWNER_AND_QA", suffix
 function makeRepo(t) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "flag-gate-"));
   t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const git = (args) => execFileSync("git", args, { cwd: dir, encoding: "utf8" });
-  git(["init", "-q"]);
+  // Synthetic commits test gate semantics, not workstation Git configuration.
+  const git = (args) => execFileSync("git", args, {
+    cwd: dir, encoding: "utf8",
+    env: { ...process.env, GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: os.devNull },
+  });
+  git(["init", "-q", "--initial-branch=main"]);
   git(["config", "user.email", "test@example.com"]);
   git(["config", "user.name", "Test"]);
   writeFile(dir, "src/lib/flags/keys.ts", 'export const OTHER_FLAG = "htpr-1-other";\n');

@@ -1,9 +1,11 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { logMinutes, TimeTrackingDisabledError } from "@/lib/timeTracking";
 import { parseTimeMinutes } from "@/lib/timeManualEntry";
 import { NextRequest, NextResponse } from "next/server";
 import { resolveMcpTimeTask } from "@/lib/mcp/operations/time/helpers";
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const resolved = await resolveMcpTimeTask(request);
   if (resolved.response) return resolved.response;
 
@@ -48,4 +50,6 @@ export async function POST(request: NextRequest) {
     }
     throw error;
   }
+
+  })(request)
 }

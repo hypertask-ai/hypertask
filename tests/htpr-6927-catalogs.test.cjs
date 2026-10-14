@@ -14,9 +14,11 @@ const { MCP_TOOLS } = jiti(path.join(root, 'src/lib/mcp-server/tools/index.ts'))
 const { resolvePortableTools } = jiti(path.join(root, 'src/lib/mcp-server/listQueryContract.ts'))
 const definitions = jiti(path.join(root, 'src/lib/mcp-server/config/consolidated-descriptions.ts')).CONSOLIDATED_TOOL_DESCRIPTIONS
 const legacy = resolvePortableTools(MCP_TOOLS).map((tool) => ({ ...tool, execute: async (args, token, invocation) => JSON.stringify({ name: tool.name, args, token, invocation }) }))
+const baselineLegacy = legacy.filter((tool) => tool.name !== 'hypertask_report_feedback')
+const baselineDefinitions = definitions.filter((definition) => definition.name !== 'hypertask_report_feedback')
 const overrides = { '@/lib/mcp/auth': { extractBearerToken: (header) => header?.replace(/^Bearer /, '') } }
 const load = loader(overrides)
-const old = loader(overrides, true)
+const old = loader({ ...overrides, './config/consolidated-descriptions': { CONSOLIDATED_TOOL_DESCRIPTIONS: baselineDefinitions } }, true)
 const { selectMcpTools } = load('src/lib/mcp-server/consolidated-tools.ts')
 const previousSelect = old('src/lib/mcp-server/consolidated-tools.ts').selectMcpTools
 const request = (method, params, query = '') => new Request(`https://mcp.example.com/mcp${query}`, {
@@ -29,8 +31,8 @@ async function rpc(modules, tools, method, params, deferred = false, query = '')
 
 for (const consolidated of [false, true]) {
   test(`flag OFF preserves serialized ${consolidated ? 'consolidated' : 'legacy'} lists, discovery and every callable tool`, async () => {
-    const before = previousSelect(legacy, consolidated)
-    const after = selectMcpTools(legacy, consolidated, {}, false)
+    const before = previousSelect(baselineLegacy, consolidated)
+    const after = selectMcpTools(baselineLegacy, consolidated, {}, false)
     for (const deferred of [false, true]) {
       assert.equal(await rpc(load, after, 'tools/list', undefined, deferred), await rpc(old, before, 'tools/list', undefined, deferred))
       if (deferred) assert.equal(await rpc(load, after, 'tools/list', undefined, true, '?tools=meta'), await rpc(old, before, 'tools/list', undefined, true, '?tools=meta'))
@@ -42,7 +44,7 @@ for (const consolidated of [false, true]) {
       const definition = consolidated && definitions.find((definition) => definition.name === tool.name)
       if (definition) args = { action: Object.keys(definition.actions)[0], input: sample(tool.inputSchema.oneOf[0].properties.input) }
       if (tool.name === 'hypertask_time' && !consolidated) args.action = 'running'
-      if (tool.name === 'hypertask_describe_tool') args.name = legacy[0].name
+      if (tool.name === 'hypertask_describe_tool') args.name = baselineLegacy[0].name
       if (tool.name === 'hypertask_search_tools') args.query = 'task'
       const beforeText = await rpc(old, connectedBefore, 'tools/call', { name: tool.name, arguments: args }, true)
       const afterText = await rpc(load, connectedAfter, 'tools/call', { name: tool.name, arguments: args }, true)
@@ -52,7 +54,7 @@ for (const consolidated of [false, true]) {
       assert.notEqual(result.result.isError, true, `${tool.name}: ${afterText}`)
     }
     if (consolidated) {
-      for (const definition of definitions) {
+      for (const definition of baselineDefinitions) {
         const tool = before.find((tool) => tool.name === definition.name)
         for (const [index, action] of Object.keys(definition.actions).entries()) {
           const args = { action, input: sample(tool.inputSchema.oneOf[index].properties.input), response_format: 'detailed' }
@@ -121,13 +123,15 @@ test('legacy scopes reuse consolidated policy for management, team and agent rea
     const consolidated = selectMcpTools(legacy, true, caller, true)
     const permitted = new Set(consolidated.filter((tool) => !tool.hidden).flatMap((tool) => {
       const definition = definitions.find((definition) => definition.name === tool.name)
-      return tool.parameters.shape.action.options.map((action) => definition.actions[action].tool)
+      const actionSchema = tool.parameters.shape.action
+      return (actionSchema.options ?? actionSchema.unwrap().options).map((action) => definition.actions[action].tool)
     }))
     const tools = selectMcpTools(legacy, false, caller, true)
     assert.deepEqual(new Set(tools.map((tool) => tool.name)), permitted)
     if (caller.agentRole === 'read' || caller.managementPermissions?.management.length === 1 && caller.managementPermissions.management[0] === 'read') {
-      assert.ok(tools.every((tool) => tool.annotations.readOnlyHint && !tool.annotations.destructiveHint && tool.annotations.idempotentHint && !tool.annotations.openWorldHint))
-      assert.ok(consolidated.every((tool) => tool.annotations.readOnlyHint))
+      assert.ok(tools.filter((tool) => tool.name !== 'hypertask_report_feedback').every((tool) => tool.annotations.readOnlyHint && !tool.annotations.destructiveHint && tool.annotations.idempotentHint && !tool.annotations.openWorldHint))
+      assert.equal(tools.find((tool) => tool.name === 'hypertask_report_feedback').annotations.readOnlyHint, false)
+      assert.ok(consolidated.filter((tool) => tool.name !== 'hypertask_report_feedback').every((tool) => tool.annotations.readOnlyHint))
     }
   }
   const read = selectMcpTools(legacy, false, { agent: true, agentRole: 'read' }, true)
@@ -163,14 +167,14 @@ test('handler evaluates verified principal and scope, not body IDs or agent IDs,
     '@/lib/telemetry/mcpSseAnalytics': { recordLegacyMcpRequest: () => {} },
     '@/lib/mcp/auth': { ...overrides['@/lib/mcp/auth'], validateMcpAuth: async () => auth },
     '@/lib/mcp/agents/scopes': { getAgentRole: async () => 'read' },
-    '@/lib/flags': { HTPR_6804_MCP_TOOLS_FLAG: 'catalog', isFeatureEnabled: async (key, id) => { calls.push([key, id]); if (key === 'catalog') return false; if (enabled === 'throw') throw new Error('lookup failed'); return enabled } },
+    '@/lib/flags': { HTPR_6804_MCP_TOOLS_FLAG: 'catalog', isFeatureEnabled: async (key, id) => { calls.push([key, id]); if (key === 'catalog' || key === 'htpr-7195-ai-feedback') return false; if (enabled === 'throw') throw new Error('lookup failed'); return enabled } },
   })('src/lib/mcp-server/handler.ts').mcpHandler
   const on = JSON.parse(await (await handler(request('tools/list', { user_id: 6 }))).text()).result.tools
   assert.ok(on.every((tool) => tool.annotations.readOnlyHint))
   assert.ok(calls.every(([, id]) => id === auth.user.id))
   enabled = 'throw'
   const off = await (await handler(request('tools/list'))).text()
-  assert.equal(off, await rpc(old, legacy, 'tools/list', undefined, true))
+  assert.equal(off, await rpc(old, baselineLegacy, 'tools/list', undefined, true))
 })
 
 test('SDK streamable registration passes hints beside inputSchema and OFF omits them', () => {
@@ -180,7 +184,7 @@ test('SDK streamable registration passes hints beside inputSchema and OFF omits 
   bind(tools)
   assert.ok(registrations.every((entry) => entry.config.annotations && !entry.config.inputSchema.annotations))
   registrations.length = 0
-  bind(legacy)
+  bind(baselineLegacy)
   assert.ok(registrations.every((entry) => !('annotations' in entry.config)))
 })
 
@@ -239,8 +243,8 @@ test('legacy SSE registration preserves SDK annotations and resolves per-message
     v2Enabled = false
     callback('mcp:legacy:session:fixture-session', JSON.stringify({ replyChannel: 'reply', body: { jsonrpc: '2.0', id: 1, method: 'tools/list' }, authInfo: auth }))
     await new Promise((resolve) => setImmediate(resolve))
-    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name), legacy.map((tool) => tool.name))
-    assert.ok(registrations.every((entry) => !('annotations' in entry.config)))
+    assert.deepEqual(sent.at(-1).result.tools.map((tool) => tool.name), baselineLegacy.map((tool) => tool.name))
+    assert.ok(sent.at(-1).result.tools.every((tool) => !('annotations' in tool)))
   } finally {
     abort.abort()
     if (originalRedis === undefined) delete process.env.REDIS_URL

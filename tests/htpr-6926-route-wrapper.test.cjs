@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..')
 const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
-  stubs = { './dbTiming': dbTiming, ...stubs }
+  stubs = { './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -341,7 +341,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
   const json = require('./task-route-loader.cjs').load('src/lib/mcp/readJsonBody.ts', {})
   const lease = require('./task-route-loader.cjs').load('src/lib/mcp/tasks/agentMutationLeaseAdoption.ts', {})
   const authForwarder = Object.fromEntries(['checkMcpRateLimit', 'validateMcpAuth', 'mcpUnauthorizedResponse', 'createUnauthorizedResponse'].map(name => [name, (...args) => activeAuth[name](...args)]))
-  const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
+  const wrappers = Object.fromEntries(['off', 'on'].map(mode => [mode, loadRouteWrapper({ '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, '@/lib/mcp/auth': authForwarder, '@/lib/mcp/readJsonBody': json, '@/lib/mcp/tasks/agentMutationLeaseAdoption': lease })]))
   const originalMode = process.env.HTPR_6926_TEST_FLAG
   let legacyBase = null
   try { legacyBase = cp.execFileSync('git', ['merge-base', 'HEAD', 'origin/production'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || null } catch {}
@@ -410,8 +410,8 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
     if (originalMode === undefined) delete process.env.HTPR_6926_TEST_FLAG
     else process.env.HTPR_6926_TEST_FLAG = originalMode
   })
-  assert.equal(files.length, 69)
-  assert.equal(compared, 97)
+  assert.equal(files.length, 109)
+  assert.equal(compared, 147)
 })
 
 

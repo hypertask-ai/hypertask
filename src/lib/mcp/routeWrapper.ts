@@ -1,3 +1,4 @@
+import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
 import jwt from 'jsonwebtoken'
@@ -104,7 +105,20 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
   return async (request, ...args) => {
     const started = performance.now()
-    if (getMcpOperationContext(request) || !(await shouldUseMcpRouteWrapper(request))) return legacy(request, ...args)
+    if (getMcpOperationContext(request)) return legacy(request, ...args)
+    const execute = async (input: NextRequest) => {
+      try {
+        const result = await legacy(input, ...args)
+        if (result instanceof Response) {
+          try { queueRestFailure(request, result.status) } catch { /* Reporting cannot change a response. */ }
+        }
+        return result
+      } catch (error) {
+        try { queueRestFailure(request, 500) } catch { /* Preserve the original error. */ }
+        throw error
+      }
+    }
+    if (!(await shouldUseMcpRouteWrapper(request))) return execute(request)
     const wrappedStarted = performance.now()
     const scope: RouteScope = { originalRequest: request, request, failure: {}, timings: {} }
     const wrappedRequest = new Proxy(request, {
@@ -116,7 +130,7 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
     })
     scope.request = wrappedRequest
     const dbTiming = createMcpDbTiming()
-    const result = await mcpDbTimings.run(dbTiming, () => routeScopes.run(scope, () => legacy(wrappedRequest, ...args)))
+    const result = await mcpDbTimings.run(dbTiming, () => routeScopes.run(scope, () => execute(wrappedRequest)))
     try {
       if (result instanceof Response) {
         result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()) + `, ${mcpDbTimingHeader(dbTiming)}`)

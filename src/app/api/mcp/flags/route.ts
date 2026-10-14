@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest } from "next/server";
 import { parse } from "node-html-parser";
 import { noStore } from "@/lib/flags/http";
@@ -44,6 +45,7 @@ async function authorize(request: NextRequest) {
 }
 
 export async function GET(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
@@ -58,9 +60,12 @@ export async function GET(request: NextRequest) {
     console.error("[feature-flags] MCP read failed", error);
     return noStore({ error: "Unable to load feature flags" }, 500);
   }
+
+  })(request)
 }
 
 export async function PATCH(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
@@ -143,4 +148,6 @@ export async function PATCH(request: NextRequest) {
     console.error("[feature-flags] MCP update failed", error);
     return noStore({ error: "Unable to update feature flag" }, 500);
   }
+
+  })(request)
 }

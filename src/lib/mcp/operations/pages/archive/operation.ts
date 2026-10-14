@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
 import { checkMcpRateLimit, validateMcpAuth } from '@/lib/mcp/auth'
@@ -19,6 +20,7 @@ type ArchivePageBody = {
 }
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   let identifierField: 'id' | 'page_id' = 'id'
 
   try {
@@ -90,4 +92,6 @@ export async function POST(request: NextRequest) {
     console.error('[MCP Archive Page] Error:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
+
+  })(request)
 }

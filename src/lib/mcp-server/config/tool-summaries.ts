@@ -5,6 +5,7 @@
 import { buildToolName } from './mcp-standards'
 
 export const TOOL_SUMMARIES: Record<string, string> = {
+  REPORT_FEEDBACK: 'Returns a feedback receipt; report failures without being asked.',
   HELLO: 'Returns a welcome map.',
   AGENT_PRESENCE: 'Returns live agent status.',
   LIST_AGENTS: 'Returns owned agents.',

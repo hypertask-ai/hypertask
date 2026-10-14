@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -32,6 +33,7 @@ const revokeTokenSchema = z
   });
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -66,9 +68,12 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  })(request)
 }
 
 export async function DELETE(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
 
@@ -108,4 +113,6 @@ export async function DELETE(request: NextRequest) {
       { status: 500 },
     );
   }
+
+  })(request)
 }

@@ -462,23 +462,6 @@
         "mcp": ["^hypertask_report_feedback$"],
         "hyperai": ["^hypertask_report_feedback$"]
       },
-      "planned": {
-        "api": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7195",
-          "expires": "2026-11-10",
-          "entries": ["POST /api/mcp/feedback"]
-        },
-        "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7195",
-          "expires": "2026-11-10",
-          "entries": ["hypertask_report_feedback"]
-        },
-        "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/7195",
-          "expires": "2026-11-10",
-          "entries": ["hypertask_report_feedback"]
-        }
-      },
       "exclusions": {
         "cli": "The hypertask feedback command ships in hypertask-ai/cli and calls the REST endpoint; the pinned CLI inventory predates it.",
         "ai_chat": "Native AI Chat keeps the existing in-app feedback surface rather than exposing the MCP feedback tool."

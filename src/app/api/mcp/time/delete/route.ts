@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { deleteEntry } from "@/lib/timeTracking";
 import { NextRequest, NextResponse } from "next/server";
 import { authenticateMcpTime, readEntryId } from "../_lib";
@@ -8,6 +9,7 @@ import { authenticateMcpTime, readEntryId } from "../_lib";
  * a timer started by mistake is the common case.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const { ctx, body, response } = await authenticateMcpTime(request);
   if (response) return response;
 
@@ -26,4 +28,6 @@ export async function POST(request: NextRequest) {
   }
 
   return NextResponse.json({ success: true, deleted: entry.entryId });
+
+  })(request)
 }

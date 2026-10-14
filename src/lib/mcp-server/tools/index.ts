@@ -8,6 +8,7 @@
  * 3. Import and add it to the tools array below
  */
 
+import { reportFeedbackTool } from './report-feedback.tool';
 import { helloTool } from './hello.tool';
 import { agentPresenceTool } from './agent-presence.tool';
 import { listAgentsTool } from './list-agents.tool';
@@ -88,6 +89,7 @@ import { switchViewTool } from './switch-view.tool';
  * FastMCP will register these automatically
  */
 export const MCP_TOOLS = [
+  reportFeedbackTool,
   helloTool,
   agentPresenceTool,
   listAgentsTool,

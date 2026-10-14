@@ -43,6 +43,10 @@ function harness({ agentId, role }) {
   });
   const rateLimited = { status: 429, body: { reached: "rate-limit" } };
   const mockRequire = (request) => {
+    if (request === "@/lib/mcp/routeWrapper") return require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper({
+      "@/lib/mcp/auth": mockRequire("@/lib/mcp/auth"),
+      "@/lib/aiFeedback/automatic": { queueRestFailure: () => {} },
+    });
     if (request === "next/server") return nextServer;
     if (request === "@/lib/mcp/agents/scopes") return scopes;
     if (request === "@/lib/mcp/auth") {
@@ -60,7 +64,7 @@ function harness({ agentId, role }) {
   return { calls, mockRequire };
 }
 
-const request = { json: async () => ({ id: 1, task_id: 1, content: "x" }) };
+const request = { headers: new Headers({ Authorization: `Bearer ${require("jsonwebtoken").sign({ userId: 7 }, "fixture")}` }), json: async () => ({ id: 1, task_id: 1, content: "x" }) };
 const operations = ["create", "update", "archive", "restore"];
 
 for (const op of operations) {

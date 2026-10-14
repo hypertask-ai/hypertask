@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth } from '@/lib/mcp/auth'
 import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
@@ -20,6 +21,7 @@ interface MoveToInboxBody {
  * TaskMovedToInbox notification the UI creates. See HTPR-4553.
  */
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   try {
     const ctx = await validateMcpAuth(request)
     if (!ctx) {
@@ -128,4 +130,6 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+
+  })(request)
 }

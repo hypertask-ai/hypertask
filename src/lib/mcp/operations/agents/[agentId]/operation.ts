@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { handleDeleteAgentRequest } from '@/lib/mcp/agents/delete'
 import { handleGetAgentRequest } from '@/lib/mcp/agents/get'
@@ -31,12 +32,13 @@ async function getAgent(
 // collector only records `export function GET` / `export const GET`. The locked
 // production contract matches this path to both agents.observe and
 // agents.manage, and a PR cannot change those patterns.
-export const { GET } = { GET: getAgent }
+export const { GET } = { GET: wrapMcpRoute(getAgent) }
 
 export async function POST(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest, context: { params: Promise<{ agentId: string }> }) => {
   // With no collection route file, Next dispatches /agents/runs here while the
   // sibling /agents/runs/[id] routes keep their more-specific static matches.
   const { agentId } = await context.params
@@ -78,14 +80,19 @@ export async function POST(
     console.error('[agent-run] runtime open failed', error)
     return noStore({ success: false, error: 'Failed to open agent run' }, 500)
   }
+
+  })(request, context)
 }
 
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest, context: { params: Promise<{ agentId: string }> }) => {
   const { agentId } = await context.params
   return handleDeleteAgentRequest(request, agentId)
+
+  })(request, context)
 }
 
 /**
@@ -99,6 +106,9 @@ export async function PATCH(
   request: NextRequest,
   context: { params: Promise<{ agentId: string }> }
 ) {
+  return wrapMcpRoute(async (request: NextRequest, context: { params: Promise<{ agentId: string }> }) => {
   const { agentId } = await context.params
   return handlePatchAgentRequest(request, agentId)
+
+  })(request, context)
 }

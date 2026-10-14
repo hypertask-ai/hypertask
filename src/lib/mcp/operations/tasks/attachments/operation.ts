@@ -1,3 +1,4 @@
+import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
@@ -27,7 +28,7 @@ export const maxDuration = 700;
 
 // Native clients receive bytes only after both task access and attachment
 // ownership are checked; the durable storage URL never crosses this API boundary.
-export const GET = createAttachmentDownloadHandler({
+export const GET = wrapMcpRoute(createAttachmentDownloadHandler({
   checkRateLimit: checkMcpRateLimit,
   validateAuth: validateMcpAuth,
   authorizeRead: async (ctx) => ctx.agentId ? requireRole(ctx, 'read') : null,
@@ -51,9 +52,10 @@ export const GET = createAttachmentDownloadHandler({
       data: { fileSize: String(size) },
     });
   },
-});
+}));
 
 export async function POST(request: NextRequest) {
+  return wrapMcpRoute(async (request: NextRequest) => {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) return rateLimited;
   const ctx = await validateMcpAuth(request);
@@ -217,4 +219,6 @@ export async function POST(request: NextRequest) {
       { status: partialAttachments.length > 0 ? 200 : status }
     );
   }
+
+  })(request)
 }
