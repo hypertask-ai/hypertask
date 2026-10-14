@@ -29,7 +29,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
   const getActiveSection = () => store.get(activeSectionAtom);
   const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
 
-  // shift + h => left movement
   const moveItemLeft = async (
     sectionId: number,
     itemId: number
@@ -63,12 +62,10 @@ const useMoveTasks = (props: IUseMoveTasks) => {
 
     let ranking: string | undefined = '';
 
-    // Create a copy of the sections array to avoid modifying the original array
     var newSections = deepCopiedSections;
 
     let newSecId = newSections[targetSectionIdx]?.sectionId;
     if (!newSecId) return
-    // Modify the section that matches the condition
     newSections.forEach((targetSection, index) => {
       const targetSectionItems = targetSection.items;
       const filteredTargetSectionItems = filteredSections[index]?.items
@@ -78,10 +75,8 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         newSections[index].items.splice(itemToMoveIndex, 1);
       }
 
-      // we're in the target sectionid 
       if (targetSection.sectionId === sections[targetSectionIdx].sectionId) {
         let newItem;
-        // ======== current index was 10, but target section only had 0-9 index
         if (itemToMoveIndex >= targetSectionItems.length) {
           const prevRank = targetSectionItems.length > 0 ? lastItemInTargetSection.ranking : undefined
           const nextRank = undefined
@@ -91,7 +86,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
           newSections[index].items.push(newItem);
         }
 
-        // ======== current index is 0
         else if (itemToMoveIndex === 0) {
           const prevRank = undefined
           const nextRank = targetSectionItems.length > 0 ? targetSectionItems[itemToMoveIndex].ranking : undefined
@@ -99,15 +93,11 @@ const useMoveTasks = (props: IUseMoveTasks) => {
 
           newItem = { ...itemToMove, sectionId: newSecId, ranking: ranking, updatedAt: updatedAt.toString() }
 
-          //check if section is empty. if yes, use push, else use unshift
           targetSectionItems.length === 0 ?
             newSections[index].items.push(newItem) :
             newSections[index].items.unshift(newItem)
-
-          // newSections[index].items.push(newItem);
         }
 
-        // ========= current index is somewhere between 1, and within target section's length
         else {
           const prevRank = targetSectionItems[itemToMoveIndex - 1].ranking
           const nextRank = (itemToMoveIndex) < targetSectionItems.length ? targetSectionItems[itemToMoveIndex].ranking : undefined
@@ -118,7 +108,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         }
         let itemsToSort = returnSortedItems(newSections[index].items,_currentProject! )
         
-        // console.log("🚀 ~ newSections.forEach ~ itemsToSort:", itemsToSort)
         newSections[index].items = itemsToSort
       }
 
@@ -143,7 +132,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     )
   }
 
-  // [shift + l] => right movement
   const moveItemRight = async (
     sectionId: number,
     itemId: number
@@ -159,26 +147,20 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     sectionId: number,
     itemId: number
   ) => {
-
-    // if (_currentProject?.sorting_mode==="Priority")         
     if(sorting_mode_current === "UpdatedAt") return toast("Cannot move tasks while kanban is in Last Updated mode")
-// Convert sections and filteredSections arrays to Maps for faster lookups
     const sectionsMap:any = new Map(sections.map(section => [section.sectionId, section]));
     const filteredSectionsMap = new Map(filteredSections.map(section => [section.sectionId, section]));
     
-    // Use Maps for faster lookup
     const section = sectionsMap.get(sectionId);
     const filteredSection = filteredSectionsMap.get(sectionId);
     
     if (!section ||!filteredSection) return;
     
-    // Since we're using Maps, we can directly access the items array without needing to find the index
     const originalItem = section.items.find((i:ITask) => i.id === itemId);
     const filteredItem = filteredSection.items.find(i => i.id === itemId);
     
     if (!originalItem ||!filteredItem) return;
     
-    // Directly access the items array without needing to find the index
     const filteredItemIndex = filteredSection.items.indexOf(filteredItem);
     
     if (filteredItemIndex === 0) return;
@@ -198,7 +180,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
     
     const newSections = deepCopiedSections.map((sec) => {
       if (sec.sectionId === sectionId) {
-        // Create a copy of the items array before modifying it
         const updatedItems = [...sec.items];
         const aboveItemIndex = sec.items.findIndex(i => aboveItem.id === i.id)
 
@@ -207,7 +188,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         const updatedItem = { ...item, ranking: aboveItem.ranking }
         updatedItems.splice(BelowItemIndex, 1, updatedAboveItem);
         updatedItems.splice(aboveItemIndex, 1, updatedItem);
-        // Update the items array with the modified copy
         sec.items = updatedItems;
       }
       return sec;
@@ -232,8 +212,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
 
   };
 
-  // Assuming the existence of a deepCopy function for deep cloning objects
-  // and other necessary variables and functions like _currentProject, toast, updateActiveItemAndItemInView, updateCache
 
   const moveItemDown = async (
     sectionId: number,
@@ -283,9 +261,7 @@ const useMoveTasks = (props: IUseMoveTasks) => {
         const BelowItemIndex = sec.items.findIndex(i => belowItem.id === i.id)
         const updatedBelowItem = { ...belowItem, ranking: item.ranking }
         const updatedItem = { ...item, ranking: belowItem.ranking }
-        // Move the item to the new position, replacing the item at the destination index
         updatedItems.splice(BelowItemIndex, 1, updatedItem);
-        // Shift the item originally at the destination index to the next position
         updatedItems.splice(aboveItemIndex, 1, updatedBelowItem);
         sec.items = updatedItems;
     
@@ -320,7 +296,6 @@ const useMoveTasks = (props: IUseMoveTasks) => {
 
     const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(_currentProject?.id)
 
-    // if (!allData || !projectToUpdateIndex) return;
     if (!allData || !allData.updatedProjects || projectToUpdateIndex == -1 || projectToUpdateIndex === undefined) return;
     mutationHandler(projectToUpdateIndex, newSections, allData, tasks)
   }

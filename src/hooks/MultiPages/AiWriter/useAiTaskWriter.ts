@@ -24,11 +24,8 @@ import {
 import { getTaskWriterTaskIds } from "@/lib/ai/taskWriterTaskIds";
 import type { CurrentBoardBilling } from "@/store";
 import { buildTaskWriterRequestScope } from "@/lib/ai/taskWriterBoardContext";
-// Roughly 100KB of data URI. Below this a pasted image is cheap enough to send as a vision
-// input as well; above it, the copy already inside the description is the only one sent.
 const INLINE_IMAGE_RESEND_LIMIT = 100_000;
 
-// Custom Hooks
 const useAITaskWriter = (
   currentProject: any,
   currentAiOption: TAiModal,
@@ -73,20 +70,13 @@ const useAITaskWriter = (
     const imgURLS = [];
     let countBase64 = 0;
 
-    // Process inline images
     for (const img of imgTags) {
       const url = img.src;
       if (url.includes("tasks/attachments")) {
-        // Only the URL is sent on, so the MIME type comes from the file name. Fetching the
-        // file to read blob.type threw "Failed to fetch" on every task holding a pasted
-        // image: the attachment host serves no CORS header (HTPR-4735).
         const mimeType = getFileTypeFromUrl(url, IMAGE_FALLBACK_MIME);
         const fileName = url.substring(url.lastIndexOf("/") + 1);
         imgURLS.push({ fileName, url, mimeType });
       } else if (url.startsWith("data:") && url.length > INLINE_IMAGE_RESEND_LIMIT) {
-        // Re-sending a large pasted screenshot pushed some requests past the 4.5MB
-        // platform limit (HTPR-4735). The media placeholder preserves its original HTML
-        // without asking the model to reproduce the data URI.
         countBase64++;
       } else {
         const mimeType = getFileTypeFromBase64(url);
@@ -99,10 +89,8 @@ const useAITaskWriter = (
       }
     }
 
-    // Process attachments (including PDFs, DOCX, etc.)
     if (attachments) {
       for (const attachment of attachments) {
-        // Process all file types, not just images
         if (attachment.type || attachment.mimeType) {
           const url = attachment.source || attachment.url;
           if (url?.includes("tasks/attachments")) {
@@ -112,7 +100,6 @@ const useAITaskWriter = (
               mimeType: attachment.type || attachment.mimeType,
             });
           } else {
-            // For blob URLs or base64, use the URL directly
             const fileUrl = attachment.url || attachment.source;
             if (fileUrl) {
               imgURLS.push({
@@ -121,7 +108,6 @@ const useAITaskWriter = (
                 mimeType: attachment.type || attachment.mimeType,
               });
             } else {
-              // Fallback to converting file to base64
               const base64Url = await convertFileToBase64(attachment);
               imgURLS.push({
                 fileName: attachment.name || attachment.fileName,
@@ -197,7 +183,6 @@ const useAITaskWriter = (
             ? maskTaskWriterMedia(promptUrlMediaExtraction.html, media)
             : prompt;
 
-        // Separate processed files by type
         const images = processedURLS.filter((item) =>
           item.mimeType?.startsWith("image/")
         );
@@ -210,9 +195,6 @@ const useAITaskWriter = (
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         );
 
-        // Task Writer needs the current ticket id too: the server uses it to
-        // load the full description and comment history. Write With AI keeps
-        // its broader current/parent/subtask/related-ticket context.
         const taskIds = getTaskWriterTaskIds(currentTask, aiMode);
         const payload = {
           ...buildTaskWriterRequestScope(currentProject, billing),
@@ -248,9 +230,6 @@ const useAITaskWriter = (
           signal: abortController.signal,
         });
 
-        // response.ok was never checked, so a rejected request was indistinguishable from
-        // a real outage: every failure surfaced as the same generic sentence below, with
-        // no hint of what to do about it (HTPR-4735).
         if (!response.ok) {
           throw new Error(await describeTaskWriterFailure(response));
         }

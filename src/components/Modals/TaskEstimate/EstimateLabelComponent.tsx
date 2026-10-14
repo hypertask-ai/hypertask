@@ -29,7 +29,7 @@ const EstimateLabelComponent = ({
 
   const handleOnClick = (e: any) => {
     e.preventDefault();
-    e.stopPropagation(); // Prevent the click event from propagating to the parent div
+    e.stopPropagation();
     onClick();
   };
   const typographyStyle = {

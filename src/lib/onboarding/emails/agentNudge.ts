@@ -107,7 +107,6 @@ export async function sendAgentNudgeEmail(userId: number) {
     }
     return "sent";
   } catch (error) {
-    // An accepted email must keep its claim even if the audit write fails.
     if (!sent) await redis.del(claimKey);
     throw error;
   }

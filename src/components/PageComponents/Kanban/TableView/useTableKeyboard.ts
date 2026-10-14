@@ -29,7 +29,6 @@ export function useTableKeyboard(context: Context) {
   } = context;
 
 
-  // HTPR-6175: quick entry creates straight from a title, no modal.
   const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
@@ -71,9 +70,6 @@ export function useTableKeyboard(context: Context) {
         setShowCommands((prev) => ({ ...prev, show: !prev.show }));
         return;
       }
-      // LandingPage renders HomePage and TableView as mutually exclusive siblings.
-      // Check this before the modal/input guard, matching the board layout's
-      // truly global favorite shortcut while the table layout is active.
       if (
         isFavoriteBoardShortcut(e, isApple) &&
         handleBoardChange
@@ -101,11 +97,6 @@ export function useTableKeyboard(context: Context) {
         return;
       const selectedRow = rows[selectedIndex];
       if (runTaskShortcut(e, selectedRow, selectedIndex)) return;
-      // [ctrl/cmd]+[e] archives the selected task. This component also powers
-      // My Tasks, so archiveTaskFromTable handles both board cache updates and
-      // the cross-board server-data refresh used there.
-      // keyCode matches every other Ctrl+E surface; e.key can be unreliable
-      // under modifiers on some browsers.
       if ((e.ctrlKey || e.metaKey) && e.keyCode === KeyCodes.E) {
         const row = rows[selectedIndex];
         if (
@@ -139,8 +130,6 @@ export function useTableKeyboard(context: Context) {
         myTasksBulk.toggleTaskSelection(row.task.id, e.shiftKey);
         return;
       }
-      // [c] creates a task; /project is excluded from the global handler because
-      // the Kanban surface owns it there, so the table surface must own it too
       if (_currentProject && e.key === "c" && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
         createTaskInCurrentTableContext();

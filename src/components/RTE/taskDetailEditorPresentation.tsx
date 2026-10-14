@@ -1,4 +1,3 @@
-// Tiptap.tsx
 import { type MouseEvent as ReactMouseEvent } from "react";
 import { ITaskLabel } from "@/models/model";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
@@ -65,8 +64,6 @@ export function taskDetailEditorPresentation(context: TaskDetailEditorContext) {
     const target = event.target;
     if (!(target instanceof Element)) return;
 
-    // The Figma thumbnail is a button, not an inline attachment. Let its
-    // NodeView swap in the live iframe instead of opening the image carousel.
     if (target.closest("[data-figma-embed-preview]")) return;
 
     const image = target.closest("img");

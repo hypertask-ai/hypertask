@@ -36,7 +36,6 @@ export async function shouldUseMcpRouteWrapper(request: NextRequest): Promise<bo
   }
   if (typeof candidate !== 'number' || !Number.isSafeInteger(candidate) || candidate <= 0) return false
 
-  // Decoding selects scaffolding only. The candidate never authorizes a request.
   const key = `${HTPR_6926_MCP_ROUTE_WRAPPER_FLAG}:${candidate}`
   const cached = flagDecisions.get(key)
   if (cached && cached.expiresAt > Date.now()) return cached.enabled
@@ -65,8 +64,6 @@ type RouteScope = {
 }
 const routeScopes = new AsyncLocalStorage<RouteScope>()
 
-// Server-Timing for the wrapped path only, with no caller data. ratelimit includes
-// auth when the check resolves the caller's tier; handler still excludes flag lookup.
 function serverTimingHeader(timings: RouteScope['timings'], started: number, wrappedStarted: number, finished: number): string {
   const handlerMs = Math.max(0, finished - wrappedStarted - (timings.authMs ?? 0) - (timings.rateMs ?? 0))
   return [
@@ -98,8 +95,6 @@ function scopeFor(request: NextRequest): RouteScope | undefined {
   return scope?.request === request ? scope : undefined
 }
 
-// The continuation retains each route's guards and error envelopes. Lazy steps
-// preserve rate/auth/JSON order, including routes with permission checks before JSON.
 export function wrapMcpRoute<Args extends unknown[], Result>(
   legacy: (request: NextRequest, ...args: Args) => Promise<Result>,
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
@@ -110,11 +105,11 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
       try {
         const result = await legacy(input, ...args)
         if (result instanceof Response) {
-          try { queueRestFailure(request, result.status) } catch { /* Reporting cannot change a response. */ }
+          try { queueRestFailure(request, result.status) } catch {}
         }
         return result
       } catch (error) {
-        try { queueRestFailure(request, 500) } catch { /* Preserve the original error. */ }
+        try { queueRestFailure(request, 500) } catch {}
         throw error
       }
     }
@@ -136,7 +131,6 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
         result.headers.set('Server-Timing', serverTimingHeader(scope.timings, started, wrappedStarted, performance.now()) + `, ${mcpDbTimingHeader(dbTiming)}`)
       }
     } catch {
-      // Immutable response headers: skip the measurement, never fail the call.
     }
     return result
   }
@@ -172,7 +166,5 @@ export function mcpRouteUnauthorizedResponse(
 
 export const readMcpRouteJsonBody: typeof readJsonBody = (request, errors) => readJsonBody(request, errors)
 
-// Keep adoption at each fenced write, not around an entire multi-write handler.
-// The existing helper owns token-fenced finally cleanup and success preservation.
 export const withMcpRouteMutationLease: typeof withAdoptedAgentMutationLease = (db, actor, run) =>
   withAdoptedAgentMutationLease(db, actor, run)

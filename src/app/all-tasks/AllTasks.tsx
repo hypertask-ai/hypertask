@@ -64,15 +64,8 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
   const latestPickedRange = useRef<AllTasksDateRange>(dateRange);
 
   const handleDateRangeChange = (value: AllTasksDateRange) => {
-    // Optimistic: reflect the pick immediately; the prop catches up when the
-    // server render with the filtered data lands.
     setDisplayedRange(value);
     latestPickedRange.current = value;
-    // The range is an account preference: persist it so every device opens
-    // the same view. Saves are serialized so rapid picks can never commit out
-    // of order (a superseded pick is skipped), and only the winning write
-    // triggers the server refresh — refreshing earlier could read back the
-    // previous preference and snap the selector to the old value.
     rangeSaveLock.current = rangeSaveLock.current.then(async () => {
       if (latestPickedRange.current !== value) return;
       try {
@@ -83,12 +76,10 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
         });
         if (res.ok && latestPickedRange.current === value) router.refresh();
       } catch {
-        // Keep the optimistic selection; it will re-save on the next change.
       }
     });
   };
 
-  // --------------- Refs
   const ulRef = useRef<HTMLUListElement | null>(null);
   const liSelectedRef = useRef<HTMLLIElement | null>(null);
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
@@ -98,7 +89,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     ...globalConstants.multipleKeys,
   };
 
-  // =========================== LINK CLICK HANDLER
   const handleLinkClick = async (task: ITask, idx: number) => {
     setSelectedIndex(idx);
     const tasksPlayList = tasks.map((task) => ({
@@ -123,8 +113,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
       controller[event.keyCode].pressed = true;
     }
 
-    // Don't hijack Escape while the user is in a form control (e.g. the
-    // date-range select): the browser should dismiss it, not router.back().
     const activeTag = document.activeElement?.tagName;
     const inFormControl =
       activeTag === "INPUT" || activeTag === "TEXTAREA" || activeTag === "SELECT";
@@ -136,10 +124,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
       return router.back();
     }
     if (activeTag === "SELECT") {
-      // Arrows/Enter/space belong to the native dropdown; anything else is a
-      // task shortcut, so hand focus back to the page first — a select that
-      // closes without a change event (re-confirming the current value) must
-      // not leave every shortcut dead.
       const nativeSelectKeys: number[] = [
         KeyCodes.ARROW_UP,
         KeyCodes.ARROW_DOWN,
@@ -156,7 +140,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     )
       return;
 
-    // press k
     if (event.keyCode === KeyCodes.K && (cmdControl || event.ctrlKey)) {
       event.preventDefault();
       toggleShowCommands();
@@ -164,12 +147,10 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
 
     if (tasks.length > 0) {
       const index = selectedIndex;
-      // =========== [Down Movement]
       if (
         event.keyCode === KeyCodes.J ||
         event.keyCode === KeyCodes.ARROW_DOWN
       ) {
-        // down
         if (tasks[selectedIndex]) {
           if (index === -1 || index === tasks.length - 1) {
           } else {
@@ -184,13 +165,10 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
             setSelectedIndex(0);
           }
         }
-
-        // ------------------------------ UP MOVEMENT ------------------------------
       } else if (
         event.keyCode === KeyCodes.K ||
         event.keyCode === KeyCodes.ARROW_UP
       ) {
-        // up
         if (tasks[selectedIndex]) {
           if (index <= 0) {
           } else {
@@ -207,20 +185,17 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
         }
       }
 
-      // [Visit Task] Enter
       else if (event.keyCode === KeyCodes.ENTER) {
         event.preventDefault();
         handleLinkClick(tasks[index], index);
       }
 
-      // [Archive/Unarchive] cmd/ctrl + e
       else if (event.keyCode === KeyCodes.E && cmdControl) {
         event.preventDefault();
         if (!shouldRunArchiveShortcut(event)) return;
         markAsDone();
       }
 
-      // [JUMP TO REPLY] cmd/ctrl + m
       else if (event.keyCode === KeyCodes.M && cmdControl) {
         event.preventDefault();
         router.push(
@@ -228,7 +203,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
         );
       }
 
-      // [alt][v]
       else if (
         event.keyCode === KeyCodes.V &&
         event.altKey &&
@@ -240,7 +214,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
         );
       }
     }
-    // ========== [g] then [g] Jump to top/bottom row
     if (controller[KeyCodes.G]?.pressed) {
       const now = new Date().getTime();
       if (
@@ -260,16 +233,14 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
       }
     }
 
-    // ========== [g]
     if (event.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastgClick.current = now;
       setTimeout(() => {
         lastgClick.current = null;
-      }, globalConstants.gThenKeyDelay); // 1000 milliseconds = 1 second
+      }, globalConstants.gThenKeyDelay);
     }
 
-    // ========== [g] then  [t]
     if (controller[KeyCodes.T]?.pressed) {
       const now = new Date().getTime();
       if (
@@ -309,10 +280,8 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
       event.preventDefault();
       let newValue;
       if (event.shiftKey) {
-        // Navigate to the previous tab
         newValue = activeSplit !== 0 ? activeSplit - 1 : tabs.length - 1;
       } else {
-        // Navigate to the next tab
         newValue = activeSplit !== tabs.length - 1 ? activeSplit + 1 : 0;
       }
 
@@ -320,15 +289,12 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     }
   };
 
-  //  -------------------------- MOUSE LEAVE EVENT ----------------------------
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && liSelectedRef.current) {
         (liSelectedRef.current as HTMLLIElement)?.blur();
@@ -340,9 +306,7 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     currentHoveredDiv.current = index;
   };
 
-  //  -------------------------- MOUSE MOVE EVENT ----------------------------
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (
       debounceTimeout.current &&
       document.activeElement?.id !== "linksModal"
@@ -355,7 +319,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     }
   };
 
-  // ----------------------- [PRESS E] || [CLICK ON MARK AS DONE] (mark as done)
   const markAsDone = async () => {
     if (!tasks[selectedIndex]) return;
 
@@ -372,13 +335,10 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
     });
 
     if (response.status === 200) {
-      //lets update this task everywhere shall we
       let currentTasks: any[] = [];
       setAllData((prev) => {
-        // Create a new object to avoid direct mutation
         const newData = { ...prev };
 
-        // Update tasks in "All" tab
         newData["All"] = prev["All"].map((task) => {
           if (task.id === tasks[selectedIndex].id) {
             return {
@@ -389,7 +349,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
           return task;
         });
 
-        // Update tasks in current active tab
         if (tabs[activeSplit] !== "All") {
           newData[tabs[activeSplit]] = prev[tabs[activeSplit]].map((task) => {
             if (task.id === tasks[selectedIndex].id) {
@@ -479,17 +438,10 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
               value={displayedRange}
               onKeyDown={(event) => {
                 if (event.key !== "Escape") return;
-                // Escape dismisses the native popup; also hand focus back so
-                // the task-list shortcuts come alive again (no change event
-                // fires on dismiss). stopPropagation keeps the page-level
-                // Escape handler from turning this into router.back().
                 event.stopPropagation();
                 event.currentTarget.blur();
               }}
               onChange={(event) => {
-                // Hand focus back to the page after picking: the shortcut
-                // guard ignores keys while a form control has focus, so
-                // leaving it here would silence the task list until a click.
                 event.currentTarget.blur();
                 handleDateRangeChange(event.target.value as AllTasksDateRange);
               }}
@@ -503,8 +455,6 @@ const AllTasks = ({ _allData, tabs, currentUser, dateRange }: IProps) => {
             </select>
           </label>
         </div>
-        {/* SplitTitle adds 10px at md and 15px at lg. Keep its text at the
-            same 40px gutter as the heading and task-row project text. */}
         <div className="mt-4 hidden w-full overflow-x-auto @md:block @md:px-[30px] @lg:px-[25px] scrollbar-none no-scrollbar">
           <div className="flex flex-wrap grow">
             {tabs.map((item, index) => (

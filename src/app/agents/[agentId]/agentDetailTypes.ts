@@ -45,14 +45,9 @@ export type TDetailAgent = TAgent & {
 
 export const PROMPT_MAX = 8000;
 export const PROMPT_WARN = 7000;
-// Same cadence as the register, so the two surfaces agree about what an agent
-// is doing rather than one lagging the other by minutes.
 export const POLL_MS = 30_000;
 export interface IProp {
   agentId: string;
   currentUser: IUser;
-  // Embedded inside another surface (Agent Chat details pane): the fixed
-  // global rail would overlay the host layout there, and the screen-height
-  // root would fight the host's scrolling container.
   embedded?: boolean;
 }

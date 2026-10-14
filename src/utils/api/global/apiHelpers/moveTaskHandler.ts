@@ -1,7 +1,5 @@
 import axios from "axios";
 
-// Board drags write here outside react-query, so isMutating() cannot see them.
-// The board reload after a cancelled load (HTPR-7129) waits while any is pending.
 let pendingMoves = 0;
 export const pendingBoardMoves = () => pendingMoves;
 

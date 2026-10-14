@@ -137,8 +137,6 @@ export async function POST(request: NextRequest) {
         where: { id: task.id },
         select: { status: true },
       });
-      // Archived tasks may still be leased so an agent can restore them to
-      // Normal; only deletion closes the lifecycle for good.
       if (!liveTask || liveTask.status === 'Deleted') return [];
 
       if (require_assignment) {

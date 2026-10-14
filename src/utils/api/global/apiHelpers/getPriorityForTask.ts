@@ -2,9 +2,6 @@ import { IPriority } from "@/models/model";
 import axios from "axios"
 import { getTaskDetailMeta, hasSessionCookie } from "./getTaskDetailMeta";
 
-// Shares one request with estimate/labels/followers instead of hitting
-// /api/priority/getByTask on its own (HTPR-3708). Logged out (the public /share
-// page) it stays on the old route. Same return shape either way.
 export const getPriorityForTask = async (taskId:number|null):Promise<IPriority | undefined> => {
     if (!taskId) return
         try {

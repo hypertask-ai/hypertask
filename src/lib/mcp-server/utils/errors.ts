@@ -1,7 +1,3 @@
-/**
- * Custom error classes that map to JSON-RPC 2.0 error codes
- * Following MCP best practices for error handling
- */
 
 export class McpError extends Error {
   constructor(
@@ -23,32 +19,19 @@ export class McpError extends Error {
   }
 }
 
-/**
- * Authentication error - Invalid or missing API key
- * JSON-RPC code: -32001 (custom auth error)
- * HTTP equivalent: 401
- *
- * Includes OAuth re-authentication metadata to signal MCP clients
- * that they need to show the Connect button again.
- */
 export class AuthenticationError extends McpError {
-  /** Indicates the client should re-authenticate */
   public readonly requiresReauth: boolean = true;
 
   constructor(
     message: string = 'Authentication failed',
     correlationId?: string,
     options?: {
-      /** Include OAuth metadata for re-auth flow */
       includeOAuthMetadata?: boolean;
-      /** Custom resource metadata URL */
       resourceMetadataUrl?: string;
     }
   ) {
     const data: Record<string, unknown> = {
-      // Signal to clients that re-authentication is required
       requiresReauth: true,
-      // Error category for client-side handling
       errorCategory: 'authentication',
     };
 
@@ -56,7 +39,6 @@ export class AuthenticationError extends McpError {
       data.correlationId = correlationId;
     }
 
-    // Include OAuth metadata if requested (default: true for backend 401s)
     if (options?.includeOAuthMetadata !== false) {
       const resourceUrl = process.env.MCP_RESOURCE_URL || 'https://mcp.hypertask.ai';
       data.oauth = {
@@ -69,11 +51,6 @@ export class AuthenticationError extends McpError {
   }
 }
 
-/**
- * Authorization error - User lacks permission
- * JSON-RPC code: -32003 (custom permission error)
- * HTTP equivalent: 403
- */
 export class AuthorizationError extends McpError {
   constructor(message: string = 'Authorization failed', correlationId?: string) {
     super(
@@ -84,11 +61,6 @@ export class AuthorizationError extends McpError {
   }
 }
 
-/**
- * Validation error - Invalid input
- * JSON-RPC code: -32602 (Invalid params - standard JSON-RPC)
- * HTTP equivalent: 400
- */
 export class ValidationError extends McpError {
   constructor(
     message: string = 'Invalid parameters',
@@ -110,11 +82,6 @@ export class ValidationError extends McpError {
   }
 }
 
-/**
- * Not found error - Resource not found
- * JSON-RPC code: -32004 (custom not found error)
- * HTTP equivalent: 404
- */
 export class NotFoundError extends McpError {
   constructor(message: string = 'Resource not found', correlationId?: string) {
     super(
@@ -125,11 +92,6 @@ export class NotFoundError extends McpError {
   }
 }
 
-/**
- * API error - Generic API error
- * JSON-RPC code: -32603 (Internal error - standard JSON-RPC)
- * HTTP equivalent: 500
- */
 export class ApiError extends McpError {
   constructor(
     message: string = 'Internal server error',
@@ -145,7 +107,6 @@ export class ApiError extends McpError {
       data.httpStatus = httpStatus;
     }
     if (httpResponse) {
-      // Only include response details for server-side logging, not exposed to client
       data._internal = { httpResponse };
     }
     super(
@@ -156,9 +117,6 @@ export class ApiError extends McpError {
   }
 }
 
-/**
- * Maps HTTP status codes to appropriate error types
- */
 export function mapHttpErrorToMcpError(
   status: number,
   message: string,
@@ -167,7 +125,6 @@ export function mapHttpErrorToMcpError(
 ): McpError {
   switch (status) {
     case 401:
-      // Include OAuth metadata to help clients know they need to re-authenticate
       return new AuthenticationError(
         message || 'Token expired or invalid. Please reconnect to re-authenticate.',
         correlationId,

@@ -3,8 +3,6 @@ import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-// Default idle window when a board turns auto-archive on (Linear parity: 6 months).
-// Not exported: Next.js route files only allow method/config exports.
 const AUTO_ARCHIVE_DEFAULT_DAYS = 180;
 
 export async function POST(request: NextRequest) {

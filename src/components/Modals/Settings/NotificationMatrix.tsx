@@ -147,8 +147,6 @@ const NotificationMatrix = () => {
     >
       <legend className="sr-only">Notification categories and channels</legend>
       <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_48px_48px] items-end gap-x-2 border-b border-border-light-gray-thin px-2 pb-2">
-        {/* Holds the first grid column. sr-only is position:absolute, which
-            drops out of the grid flow and shifts Email/Push a column left. */}
         <span aria-hidden="true" />
         <span className="text-center text-meta font-semibold text-text-light-gray">
           Email

@@ -33,8 +33,6 @@ export function bridgeSessionPlugin() {
             () => null,
           )
 
-          // Better Auth's public adapter types assume string IDs, while this
-          // installation maps IDs directly to the existing integer User.id.
           const userId = legacySession.id as unknown as string
           const user = await ctx.context.internalAdapter.findUserById(userId)
           if (!user) {

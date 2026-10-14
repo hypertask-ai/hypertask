@@ -6,11 +6,9 @@ import { getEmbedUrlFromYoutubeUrl } from "@/utils/helperFunctions/getYoutubeEmb
 export const YoutubeNodeView = ({ node }: NodeViewProps) => {
   const [embedUrl, setEmbedUrl] = useState<string>("");
 
-  // Process the URL once when the component mounts or when src changes
   useEffect(() => {
     if (node.attrs.src) {
       console.log("🚀 ~ useEffect ~ src:", node.attrs.src);
-      // Use the same function that renderHTML uses
       const processedUrl = getEmbedUrlFromYoutubeUrl({
         url: node.attrs.src,
         allowFullscreen: true,

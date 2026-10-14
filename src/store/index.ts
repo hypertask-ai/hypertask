@@ -25,16 +25,12 @@ import {
 
 const { persistAtom } = recoilPersist()
 
-/** BYOK provider toggles from DB; no secrets. `provider` matches `TeamByokApiKey.provider` (string). */
-
-
 export type CurrentBoardBilling = {
   projectId: number;
   teamId: string | null;
   stripePriceId: string | null;
   storePlanId: StorePlanKind;
   billingInterval: StripeBillingInterval | null;
-  /** From `TeamByokApiKey` (provider + enabled only). Empty if team payload omitted keys. */
   byokProviderFlags: ITeamByokApiKey[];
 };
 
@@ -89,8 +85,6 @@ export const composeTaskChatIntroAtom = atom<{ taskId: number; content: string }
     default: null,
 });
 
-// A query handed from Search's "Ask AI" to the single general AI chat, which
-// consumes and auto-sends it when the chat mounts/opens, then clears it.
 export const aiChatPendingPromptAtom = atom<string | { query: string; fullScreen: true } | null>({
     key: "aiChatPendingPromptAtom",
     default: null,
@@ -147,7 +141,6 @@ export const showQuickTipsAtom = atom<boolean>({
 });
 export const archiveShortcutNudgeAtom = atom<ArchiveShortcutNudgeState>({
     key: "archiveShortcutNudge",
-    // Session-only on purpose. A partial streak should not survive a reload.
     default: EMPTY_ARCHIVE_SHORTCUT_NUDGE,
 });
 export const notifPromoteBannerVisibleAtom = atom<boolean>({
@@ -158,67 +151,43 @@ export const showShortcutsAtom = atom({
     key: "showShortcuts",
     default: false,
 });
-// HTPR-4883: guest "Log in / sign up" modal. Global so the surfaces that open
-// it (app-shell rail, guest lock overlay) can close themselves without taking
-// the modal down with them.
 export const showGuestLoginAtom = atom({
     key: "showGuestLogin",
     default: false,
 });
-// Show saved views whose current filtered task count is zero in the app-shell
-// view-tabs row. Hidden by default and persisted per-user across sessions.
 export const showEmptyViewTabsAtom = atom<boolean>({
     key: "showEmptyViewTabs",
     default: false,
     effects_UNSTABLE: [persistAtom],
 });
-// The rail shell is the default layout. Users who prefer the old header
-// layout can switch back from Ctrl+K ("Old Hypertask Design"), which
-// persists false here.
 export const appShellRailAtom = atom<boolean>({
     key: "appShellRail",
     default: true,
     effects_UNSTABLE: [persistAtom],
 });
-// Rail expanded (130px, labelled) vs collapsed (48px, icons only). Persisted
-// per user so the choice survives a reload.
 export const appShellRailExpandedAtom = atom<boolean>({
     key: "appShellRailExpanded",
     default: false,
     effects_UNSTABLE: [persistAtom],
 });
-// Per-view opt-out from the view-tabs bar: view id -> true means hidden.
-// Absent/false means shown. Set from the "Manage views" modal, persisted
-// per-user across sessions.
 export const hiddenViewTabIdsAtom = atom<Record<string, boolean>>({
     key: "hiddenViewTabIds",
     default: {},
     effects_UNSTABLE: [persistAtom],
 });
-// Custom view order per board: project id -> ordered array of view ids, set
-// by dragging pills on the bar or rows in "Manage views". Views not in the
-// array fall back to the default sort, appended after the ordered ones.
-// Key is live in prod localStorage since HTPR-4200 — do not rename.
 export const viewTabsOrderAtom = atom<Record<number, string[]>>({
     key: "viewTabsOrder",
     default: {},
     effects_UNSTABLE: [persistAtom],
 });
-// Session-only write-through layer. Server data wins on a fresh load, while a
-// drag/sort remains immediate until the next server payload catches up.
 export const optimisticViewTabsOrderAtom = atom<Record<number, string[]>>({
     key: "optimisticViewTabsOrder",
     default: {},
 });
-// Built-in board views are virtual and must never reach User_Project_View.
-// Keep their active selection in client memory, keyed by project id.
 export const activeBuiltinViewsAtom = atom<Record<number, string>>({
     key: "activeBuiltinViews",
     default: {},
 });
-// Show history/activity events in the task detail feed. Hidden by default;
-// the toggle (pill / Ctrl+Shift+H / Ctrl+K) reveals them. Persisted per-user so
-// a user's choice sticks across sessions.
 export const showTaskHistoryAtom = atom<boolean>({
     key: "showTaskHistory",
     default: false,
@@ -230,9 +199,6 @@ export const showArchivedOnBoardAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 export type ArchiveBoardScope = "active" | "all" | "archived";
-// Optimistic value for a "show archived" toggle whose view write is still in
-// flight, keyed by project. Without it a second toggle re-reads the stale saved
-// override and repeats the first toggle's value (HTPR-5540).
 export const pendingShowArchivedAtom = atom<{ projectId: number; value: boolean } | null>({
     key: "pendingShowArchived",
     default: null,
@@ -244,16 +210,12 @@ export const archiveBoardScopeAtom = atom<ArchiveBoardScope>({
 });
 export type BoardLayout = "board" | "table";
 
-// Browser preference: used when a saved view has no explicit layout. Keep the
-// existing key so current users retain their preference after saved layouts ship.
 export const boardLayoutPreferenceAtom = atom<BoardLayout>({
     key: "boardLayout",
     default: "board",
     effects_UNSTABLE: [persistAtom],
 });
 
-// Effective surface for the current tab. Saved view overrides and shared-link
-// surface hints must not rewrite the browser preference above.
 export const boardLayoutAtom = atom<BoardLayout>({
     key: "activeBoardLayout",
     default: "board",
@@ -281,32 +243,20 @@ export type {
 } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 import { DEFAULT_TABLE_COLUMNS } from "@/utils/helperFunctions/Views/TableColumnsHelperFunctions";
 
-// Key is live in localStorage once table column configuration ships; do not rename.
 export const tableVisibleColumnsAtom = atom<string[]>({
     key: "tableVisibleColumnsAtom",
     default: [...DEFAULT_TABLE_COLUMNS],
     effects_UNSTABLE: [persistAtom],
 });
-// Bumped by the command palette so My Tasks can open its controlled columns
-// picker without mounting the board's uncontrolled picker on the shared atom.
 export const myTasksTableColumnsPickerRequestAtom = atom<number>({
     key: "myTasksTableColumnsPickerRequestAtom",
     default: 0,
 });
-// A board-level time-total setting introduces the optional Time column once per
-// browser. Keeping the one-time marker separate lets a later manual hide stay
-// hidden instead of being re-added on every render.
 export const tableTimeColumnSeededBoardsAtom = atom<number[]>({
     key: "tableTimeColumnSeededBoardsAtom",
     default: [],
     effects_UNSTABLE: [persistAtom],
 });
-// Per-column width overrides from drag-to-resize (HTPR-4987). Keyed the same
-// way as tableVisibleColumnsAtom (built-in key or 'customField:<uuid>'); a
-// column absent here just uses its default width. Same localStorage
-// persistence layer as the order/visibility atom above, kept as a sibling
-// atom rather than folded into that string[] so the existing order/visibility
-// shape (and its tests) don't have to change.
 export const tableColumnWidthsAtom = atom<Record<string, number>>({
     key: "tableColumnWidthsAtom",
     default: {},
@@ -317,9 +267,6 @@ export const tableTitleWrapAtom = atom<boolean>({
     default: true,
     effects_UNSTABLE: [persistAtom],
 });
-// One-shot signal: the command palette increments this to trigger the
-// task-detail "expand/collapse all comments" toggle, whose state lives in
-// local React state and isn't reachable from the global palette directly.
 export const toggleAllCommentsSignalAtom = atom<number>({
     key: "toggleAllCommentsSignal",
     default: 0,
@@ -342,9 +289,6 @@ export const showBoardManagerAtom = atom({
     default: false,
 });
 
-// Board Ctrl+F search. Lives in Recoil so it survives navigating into a task
-// detail route and back. Scoped by project so the filter does not leak across
-// boards. Not persisted: a hard reload starts clean.
 export const boardSearchAtom = atom<{
     open: boolean;
     keyword: string;
@@ -354,9 +298,6 @@ export const boardSearchAtom = atom<{
     default: { open: false, keyword: "", projectId: null },
 });
 
-// NOT persisted: whether the chat is open is per-session UI state. Persisting it
-// meant every app launch reopened the chat, so a user who couldn't dismiss it
-// could not escape by restarting either — the app booted straight back into it.
 export const showAIChatInterfaceAtom = atom<boolean>({
     key: "showAIChatInterface",
     default: false,
@@ -367,29 +308,16 @@ export const showAnnouncementsAtom = atom<boolean>({
     default: false,
 });
 
-// True once the open task detail's description editor and primary action
-// buttons exist in the DOM (the same condition app_task_detail_readiness
-// waits on). Non-essential task-detail requests - AI chat suggestions/
-// sessions, the share link prefetch, the move-task sections prefetch - gate
-// on this so they fire after the page is usable instead of racing it
-// (HTPR-6047). Not persisted: reset per task-detail open by TaskDetailComp.
 export const taskDetailNonEssentialReadyAtom = atom<boolean>({
     key: "taskDetailNonEssentialReady",
     default: false,
 });
 
-// True while the mobile comment composer is in active comment mode (editor
-// focused, keyboard up). Transient — not persisted. Read by GloablProviders to
-// hide the bottom MobileTabBar so the composer sits directly on the keyboard.
 export const mobileCommentComposerOpenAtom = atom<boolean>({
     key: "mobileCommentComposerOpen",
     default: false,
 });
 
-// Remember the last desktop window mode. The side panel remains the default for
-// new users, while someone who deliberately switches to the floating window
-// gets that choice back after a reload. Full-screen chat is represented by its
-// /chat route and returns to this last docked mode.
 export const isAiChatSidebarModeAtom = atom<boolean>({
     key: "isAiChatSidebarMode",
     default: true,
@@ -402,38 +330,23 @@ export const aiChatSidebarWidthPxAtom = atom<number>({
     effects_UNSTABLE: [persistAtom],
 });
 
-// User preference (Settings > General > Task Page): when on, opening any task
-// detail page or board auto-opens AI chat in the remembered side-panel or
-// floating-window mode. Client-only, persisted per-user in localStorage like
-// the other Task Page toggles.
-// HTPR-4866: defaults ON so the chat is the first thing a new user sees. Mobile
-// is excluded at the call sites, and a manual close persists via
-// aiChatAutoOpenSuppressedAtom, so closing it stays closed.
 export const openAiChatByDefaultAtom = atom<boolean>({
     key: "openAiChatByDefault",
     default: true,
     effects_UNSTABLE: [persistAtom],
 });
 
-// A manual close suppresses default auto-open until the user opens chat again.
 export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     key: "aiChatAutoOpenSuppressed",
     default: false,
     effects_UNSTABLE: [persistAtom],
 });
 
-// Timestamp of the last user action that explicitly opened (or restored) the
-// chat panel. The composer's mount-time focus loop runs only when this is
-// fresh, so auto-open at page load (openAiChatByDefaultAtom) and reload
-// restore mount without stealing the cursor from board keyboard shortcuts
-// (HTPR-6317). Not persisted: an explicit open is meaningful only in the
-// seconds before the lazily-imported panel mounts.
 export const aiChatExplicitOpenAtAtom = atom<number | null>({
     key: "aiChatExplicitOpenAt",
     default: null,
 });
 
-// Keep AI chat open across task and board navigation until manually unpinned.
 export const aiChatPinnedAtom = atom<boolean>({
     key: "aiChatPinned",
     default: false,
@@ -446,36 +359,30 @@ export const aiChatPinnedSessionIdsAtom = atom<string[]>({
     effects_UNSTABLE: [persistAtom],
 });
 
-// Maps projectId -> last chat session used on that board.
 export const aiChatBoardSessionMapAtom = atom<Record<number, string>>({
     key: "aiChatBoardSessionMap",
     default: {},
     effects_UNSTABLE: [persistAtom],
 });
 
-// Full-screen chat scope: null = all boards (list shows ALL chats), number =
-// one board (list shows only that board's chats; also scopes the AI + mentions).
 export const fullScreenChatScopeAtom = atom<number | null>({
     key: "fullScreenChatScope",
     default: null,
     effects_UNSTABLE: [persistAtom],
 });
 
-// null = current board (follows navigation), number = pinned board, "all" = all boards.
 export const dockedChatScopeAtom = atom<number | "all" | null>({
     key: "dockedChatScope",
     default: null,
     effects_UNSTABLE: [persistAtom],
 });
 
-// Most-recently-selected chat scope board ids, newest first.
 export const recentChatBoardIdsAtom = atom<number[]>({
     key: "recentChatBoardIds",
     default: [],
     effects_UNSTABLE: [persistAtom],
 });
 
-// Persisted width of the full-screen chat session rail.
 export const fullScreenChatRailWidthAtom = atom<number>({
     key: "fullScreenChatRailWidth",
     default: 280,
@@ -517,9 +424,6 @@ export const activeItemAtom = atom<number | null>({
     default: null,
 });
 
-// HTPR-3814: per-card active check. Subscribing a Kanban card to this selector
-// (instead of activeItemAtom directly) means moving the selection between cards
-// only re-renders the two cards whose value flips, not every card on the board.
 export const isActiveTaskSelector = selectorFamily<boolean, number | null | undefined>({
     key: "isActiveTask",
     get: (taskId) => ({ get }) => get(activeItemAtom) === taskId,
@@ -530,7 +434,6 @@ export const currentProjectAtom = atom<IProject | null>({
     default: null,
 });
 
-/** Authoritative team scope for the full-screen Settings tree. */
 export const selectedSettingsTeamIdAtom = atom<string | null>({
     key: "selectedSettingsTeamId",
     default: null,
@@ -542,7 +445,6 @@ export const kanbanRunningOnlyAtom = atom<boolean>({
     default: false,
 });
 
-/** Team / Stripe plan for the board in `currentProjectAtom` (updated in `useGlobalProvider`). */
 export const currentBoardBillingAtom = atom<CurrentBoardBilling | null>({
     key: "currentBoardBilling",
     default: null,
@@ -554,16 +456,12 @@ export const projectSectionsAtom = atom<ISection[] | null>({
     effects_UNSTABLE: [persistAtom],
 });
 
-// Session storage keeps each browser tab's playlist to itself, so archiving in one
-// tab cannot navigate into a playlist another tab wrote (HTPR-5584).
 type PlaylistStringStorage = {
     getItem: (key: string) => string | null;
     setItem: (key: string, newValue: string) => void;
     removeItem: (key: string) => void;
 };
 
-// Used when the browser blocks storage access. Keeping the values in memory means
-// navigation still works for the life of the tab instead of resetting on mount.
 const memoryPlaylistValues = new Map<string, string | null>();
 const memoryPlaylistStorage: PlaylistStringStorage = {
     getItem: (key) => memoryPlaylistValues.get(key) ?? null,
@@ -612,7 +510,6 @@ const browserPlaylistStorage: PlaylistStringStorage = {
             window.sessionStorage.removeItem(key);
             memoryPlaylistStorage.removeItem(key);
         } catch {
-            // Keep a tombstone so a later read cannot restore stale browser data.
             memoryPlaylistValues.set(key, null);
         }
     },
@@ -622,8 +519,6 @@ const tasksPlaylistStorage = createJSONStorage<ITasksPlaylist[] | null>(
     () => browserPlaylistStorage,
 );
 
-// getOnInit restores the stored playlist on the first read, so a same-tab reload keeps
-// task-detail navigation working instead of starting from an empty playlist.
 export const tasksPlayListAtom = atomWithStorage<ITasksPlaylist[] | null>(
     "tasksPlayListAtom",
     null,
@@ -685,7 +580,6 @@ export const currentUserAtom = atom<any>({
     effects_UNSTABLE: [persistAtom],
 })
 
-// Define the atoms
 export const uploadInProgressAtom = atom<boolean>({
     key: 'uploadInProgressAtom',
     default: false,
@@ -695,7 +589,6 @@ export const commentsUploadInProgress = atom<any[]>({
     default: [],
 });
 
-// Define the atoms
 interface ICreateTaskModalAtom {
     show: boolean;
     column_payload?: TSectionPayload
@@ -735,7 +628,6 @@ export const tutorialActiveSceneAtom=atom<ITutorialAtom>({
     phase:0,
     currPage:"landing"
   },
-//   effects_UNSTABLE: [persistAtom],
 })
 
 export const newTaskCreatedAtom = atom<ITask | undefined>({
@@ -805,20 +697,11 @@ export const lastUsedBoardsAtom = atom<{ [projectId: number]: number }>({
     effects_UNSTABLE: [persistAtom],
 });
 
-/**
- * Bridges the Alt+Shift+Arrow team-cycle shortcut (registered once, in the
- * app-wide keydown handler alongside Ctrl+B) into Agent Chat, whose team
- * filter is page-local state the global handler has no other way to reach.
- * Agent Chat watches this and applies the direction to its own team list;
- * bumping `seq` on every press is what lets the same direction fire twice
- * in a row register as two separate events.
- */
 export const agentChatTeamCycleAtom = atom<{ direction: 1 | -1; seq: number } | null>({
     key: "agentChatTeamCycle",
     default: null,
 });
 
-/** Mobile Agent Chat owns the viewport: hide app top bar + bottom nav (HTPR-6476). */
 export const agentChatMobileFullscreenAtom = atom<boolean>({
     key: "agentChatMobileFullscreen",
     default: false,
@@ -830,9 +713,6 @@ export const calendarCheckedProjectsAtom = atom<Record<number, boolean>>({
     effects_UNSTABLE: [persistAtom],
 });
 
-// Calendar boards/filters sidebar: closed by default (left overlay opened by the
-// header hamburger, like the Kanban board manager). Not persisted, so the board
-// list stays hidden on every load (safe during client demos).
 export const calendarBoardsSidebarOpenAtom = atom<boolean>({
     key: "calendarBoardsSidebarOpenAtom",
     default: false,
@@ -855,16 +735,11 @@ export const agentToEditAtom = atom<IAgent | null>({
     default: null,
 });
 
-// Title for the mobile top bar when the surface owns it: the calendar shows
-// the month it is scrolled to, which the top bar cannot derive.
 export const mobileTopBarTitleAtom = atom<string | null>({
     key: "mobileTopBarTitle",
     default: null,
 });
 
-// Opens the account switcher modal from globally-mounted surfaces (board
-// sidebar account row). Hosted in GloablProviders because the commands host
-// (HypertasksCommands) is not mounted on every route the sidebar opens on.
 export const showAccountSwitcherAtom = atom<boolean>({
     key: "showAccountSwitcher",
     default: false,

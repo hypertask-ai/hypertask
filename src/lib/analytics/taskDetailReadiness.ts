@@ -39,7 +39,6 @@ export const markTaskDetailNavigationStart = (
     };
     sessionStorage.setItem(TASK_DETAIL_NAVIGATION_STORAGE_KEY, JSON.stringify(marker));
   } catch {
-    // The destination records unavailable storage as an excluded sample.
   }
 };
 const parseMarker = (value: string | null): Marker | null => {

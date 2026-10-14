@@ -130,7 +130,6 @@ type AgentManagementTransaction = {
       data: { agentId: null }
     }): Promise<WriteCount>
   }
-  // Prisma keeps the OAuth acronym casing: oAuthAuthorizationCode, not oauth…
   oAuthAuthorizationCode: {
     updateMany(args: {
       where: { agent_id: string }
@@ -286,11 +285,6 @@ function isSerializationConflict(error: unknown): boolean {
   )
 }
 
-/**
- * Hard-deletes one owned agent in one serializable transaction. Every optional
- * agent reference is detached first; comments retain a display-name tombstone
- * because their author is historical data, not disposable agent state.
- */
 export async function deleteOwnedAgent(
   database: AgentManagementDatabase,
   userId: number,
@@ -322,8 +316,6 @@ export async function deleteOwnedAgent(
           const deletedAssignments = await transaction.assignees.deleteMany({
             where: { agentId: agent.id },
           })
-          // Keep assignments made by this agent when another principal owns the
-          // assignment; only the historical assigner link needs clearing.
           await transaction.assignees.updateMany({
             where: { agentAssignerId: agent.id },
             data: { agentAssignerId: null },
@@ -334,8 +326,6 @@ export async function deleteOwnedAgent(
           await transaction.follower.deleteMany({
             where: { agentId: agent.id },
           })
-          // A lease has no FK-backed agent relation, so release it explicitly
-          // instead of leaving an operational row pointing at a deleted actor.
           await transaction.taskLease.deleteMany({
             where: { agentId: agent.id },
           })
@@ -423,8 +413,6 @@ export async function deleteOwnedAgent(
     try {
       await invalidateRuntime(deleted.id, deleted.runtime_generation + 1)
     } catch (error) {
-      // The database is authoritative after deletion. A stale Redis snapshot is
-      // inaccessible and expires; do not report a failed delete after commit.
       console.warn('[Agent runtime] Snapshot invalidation failed:', error)
     }
   }

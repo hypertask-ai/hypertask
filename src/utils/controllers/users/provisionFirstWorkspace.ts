@@ -23,7 +23,6 @@ export async function provisionFirstWorkspace(
     user.id,
   ).catch(() => false);
 
-  // Creating a default board first would make the existing-account guard refuse adoption.
   if (keepDemoBoard && await adoptGuestBoards(previousSessionToken, user.id) > 0) {
     const Project = await prisma.project.findFirst({
       where: { ownerId: user.id, status: Status.Normal },
@@ -34,7 +33,6 @@ export async function provisionFirstWorkspace(
   }
 
   if (onlyIfEmpty) {
-    // A team-only domain join still leaves "No boards yet", so only boards count.
     const [ownedBoards, memberships] = await Promise.all([
       prisma.project.count({ where: { ownerId: user.id } }),
       prisma.member.count({ where: { userId: user.id } }),

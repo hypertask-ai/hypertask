@@ -21,7 +21,6 @@ export async function getMcpRequestOrigin(request: Request): Promise<string | un
       host !== new URL(MCP_RESOURCE_URL).host && !isAllowedAuthHost(host)
     ) return undefined
 
-    // Discovery precedes login; Everyone/OFF can be evaluated without a user.
     if (!await isFeatureEnabled(HTPR_7190_MCP_RESOURCE_HOST_FLAG, 0)) return undefined
     return origin.origin
   } catch {

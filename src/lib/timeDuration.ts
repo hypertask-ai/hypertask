@@ -20,10 +20,7 @@ export function formatElapsed(totalSeconds: number) {
   return `${hours}:${String(minutes).padStart(2, "0")}:${String(remainder).padStart(2, "0")}`;
 }
 
-// Pause arithmetic lives here, next to the other pure time helpers, so it can
-// be unit-tested without booting the Prisma client (HTPR-4380).
 
-/** Seconds counted so far. A paused timer freezes at pausedAt, a stopped one at endedAt. */
 export function elapsedSeconds(
   startedAt: Date,
   endedAt: Date | null,
@@ -36,12 +33,10 @@ export function elapsedSeconds(
   );
 }
 
-/** Resume shifts startedAt forward by the paused gap, so the accumulated total carries over. */
 export function resumedStartedAt(startedAt: Date, pausedAt: Date, now = new Date()) {
   return new Date(startedAt.getTime() + (now.getTime() - pausedAt.getTime()));
 }
 
-/** Stopping while paused bills up to the pause, never through it. */
 export function stoppedAt(pausedAt: Date | null, now = new Date()) {
   return pausedAt ?? now;
 }

@@ -21,12 +21,8 @@ const getInvite= async (inviteId:string ) => {
                     status:200,
                     json:invitedProject
                 })
-            // res.status(200).json(comments);
-            // console.log(comments);
         } catch (error) {
             console.log(error);
-
-            // res.status(500).json({ message: "Internal server error" });
         }
 
 };

@@ -36,7 +36,6 @@ export const taskCycleResponseSchema = z.looseObject({
   nextCursor: id.nullable(),
 });
 
-// These are wire projections, not the richer, hydrated ITask/IProject models.
 export const taskRelationSchema = z.looseObject({
   id,
   uniqueIndex: z.number().int(),

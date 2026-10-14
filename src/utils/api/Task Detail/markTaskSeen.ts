@@ -43,8 +43,6 @@ export function markTaskSeen(
   if (!request) {
     request = sendTaskSeenRequest(taskId, commentIds);
     inFlightRequests.set(key, request);
-    // Successful requests live only in caller state, so a later screen open
-    // starts fresh while overlapping mounts still share this network write.
     const clearInFlight = () => {
       if (inFlightRequests.get(key) === request) inFlightRequests.delete(key);
     };

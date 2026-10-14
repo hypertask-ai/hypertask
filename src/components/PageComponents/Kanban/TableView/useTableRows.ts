@@ -24,9 +24,6 @@ export function useTableRows(context: Context) {
   } = context;
 
 
-  // HTPR-6215: sorting My Tasks by priority interleaves every board's tasks by
-  // priority level, since priority (unlike most sort columns) is already
-  // comparable across boards. Limited to Owner + QA by default; see tableSortFlatten.ts.
   const crossBoardPrioritySortEnabled = useFlag(MY_TASKS_CROSS_BOARD_PRIORITY_SORT_FLAG);
   const isPrioritySort = sortState[0]?.column === "priority";
   const savedViewPrioritySort = myTasksSort?.field === "priority";
@@ -39,9 +36,6 @@ export function useTableRows(context: Context) {
         isPrioritySort,
         crossBoardPrioritySortEnabled
       ) || savedViewPrioritySort;
-      // sectionId and sid share a numeric namespace only when there's a current
-      // project (real sections); on /my-tasks, sid is the boardId (see
-      // myTasksGrouping.ts), so sectionOrder would compare unrelated ids (HTPR-4887).
       const comparators = sortState.map(({ column, direction }, index) =>
         getSortComparator(
           column,
@@ -63,10 +57,6 @@ export function useTableRows(context: Context) {
           return 0;
         });
 
-      // Flat sort on a real board (there's only one project, so "flat" and
-      // "grouped by board" are the same thing), or on /my-tasks when priority
-      // sort is flattening it across boards (HTPR-6215). Otherwise /my-tasks
-      // keeps the board grouping while sorting within it (HTPR-4887).
       if (flattenSort) {
         const allTasks = sections.flatMap((section) => section.items || []);
         return sortTasks(allTasks).map((task) => ({
@@ -122,11 +112,6 @@ export function useTableRows(context: Context) {
     myTasksBulk.setVisibleItems(visibleTasksFromRows(rows));
   }, [enableMyTasksBulkSelection, myTasksBulk, rows]);
 
-  // HTPR-4876: table view rendered <HypertasksCommands /> with no context, so
-  // the palette fell back to "Others" and every Task- or Kanban-gated command
-  // vanished: sort board, board time tracking, filter match mode. Table view is
-  // the same board with the same filters and views, so it gets the same
-  // context the board builds in Homepage's createContextOptionsForHTC.
   const buildCommandContext = useCallback((): IAllCommands => {
     const currentTask = persistedActiveItem
       ? rows
@@ -140,9 +125,6 @@ export function useTableRows(context: Context) {
       (currentTask?.projectId === _currentProject?.id ? _currentProject : undefined);
 
     return {
-      // No current project means /my-tasks, which is not a board: claiming
-      // Kanban there would advertise sort-board and friends with nothing to
-      // act on. Keep the old fallback for that surface.
       context: currentTask ? "Task" : _currentProject ? "Kanban" : "Others",
       task: currentTask
         ? {
@@ -178,9 +160,6 @@ export function useTableRows(context: Context) {
     document.getElementById(id)?.scrollIntoView({ block: "nearest" });
   }, []);
 
-  // Kanban cards take DOM focus on hover via spaceship; table rows only tracked
-  // selectedIndex. Leftover focus in AI chat or an input then made
-  // returnIfModalOrInputActive() swallow Ctrl+E on My Tasks (HTPR-6445).
   const focusRowElement = useCallback((taskId: number) => {
     const element = document.getElementById(`inbox-${taskId}`);
     if (element instanceof HTMLElement) {

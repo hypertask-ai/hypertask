@@ -139,15 +139,10 @@ const readInboxReadModelOnce = async (
     await transactionComplete;
     if (startedGeneration !== operationGeneration) return null;
     if (!isInboxReadModelSnapshotV1(snapshot, accountId)) {
-      // Do not delete in a second transaction: another tab may have replaced
-      // this invalid value after the read completed. A valid same-key write
-      // safely replaces it later.
       return null;
     }
     return materializeInboxReadModelSnapshot(snapshot);
   } catch {
-    // The authoritative query remains usable when IndexedDB is unavailable,
-    // corrupt, or denied by the browser.
     return null;
   } finally {
     closeDatabase(database);
@@ -170,14 +165,6 @@ export const readInboxReadModel = (
   return trackedRead;
 };
 
-/**
- * HTPR-5847: opens (or reuses) the connection with no read, so it can be
- * started in parallel with the persisted-payload read -- by the time
- * readInboxReadModelRevisionFence needs it below, the expensive part
- * (indexedDB.open()) is already done. The fence itself still reads last,
- * right before the response-staleness check; only its connection cost moves
- * off the critical path, not its timing.
- */
 export const openInboxReadModelConnection = async (): Promise<IDBDatabase | null> => {
   if (operationsDisabled) return null;
   try {
@@ -187,12 +174,6 @@ export const openInboxReadModelConnection = async (): Promise<IDBDatabase | null
   }
 };
 
-/**
- * HTPR-5847: closes a connection opened by openInboxReadModelConnection when
- * nothing ends up consuming it (e.g. the network request it was opened
- * alongside threw before the fence read ran) -- otherwise it leaks: stays in
- * activeDatabases, and a retry opens yet another one on top of it.
- */
 export const closeInboxReadModelConnection = (
   database: IDBDatabase | null,
 ): void => {
@@ -204,8 +185,6 @@ export const readInboxReadModelRevisionFence = async (
   preOpenedConnection?: IDBDatabase | null,
 ): Promise<InboxReadModelRevision | null> => {
   const startedGeneration = operationGeneration;
-  // Assigned before the operationsDisabled check so a handed-in connection is
-  // always closed in finally, even on the earliest return.
   let database: IDBDatabase | null = preOpenedConnection ?? null;
   try {
     if (operationsDisabled) return null;
@@ -354,8 +333,6 @@ export const writeInboxReadModelRevisionFence = async ({
           effectiveRevision,
         ) < 0
       ) {
-        // The fence transaction is serialized with snapshot writes. It deletes
-        // only the exact older account snapshot, never newer confirmed data.
         store.delete(inboxReadModelKey(accountId));
         changed = true;
       }

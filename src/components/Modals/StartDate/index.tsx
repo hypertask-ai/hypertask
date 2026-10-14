@@ -1,7 +1,7 @@
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6975_TYPED_WRITES_FLAG } from "@/lib/flags/keys";
 import { setTaskStartDate } from "@/lib/api/typedClient";
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import {
   ModalContainerCustom,
   ModalHeaderComp,
@@ -21,9 +21,6 @@ import { setStartDateApiHandler } from "@/utils/api/Task Detail";
 import useGetTimeOptions from "@/hooks/General/useGetTimeOptions";
 import toast from "react-hot-toast";
 
-// HTPR-4884: start-date picker. Same natural-language flow as the due-date
-// modal (Sugar parsing + presets), minus the custom-calendar second screen —
-// a start date is nearly always "today"/"monday", not a far-off exact day.
 
 type StartDateMode = "Create" | "Update";
 
@@ -53,9 +50,6 @@ const StartDateModal: React.FC<Props> = ({
   const { handleMouseEnter, handleMouseLeave, handleMouseMove, elRef } =
     useHandleMouseGlobal({ setSelectedIndex });
 
-  // Recomputed when the task query resolves: with a [] dep list, opening this
-  // from a surface where the task isn't cached yet would miss the start date
-  // and never offer "Reset".
   const defaultOptions: any[] = useMemo(
     () =>
       [
@@ -66,7 +60,6 @@ const StartDateModal: React.FC<Props> = ({
   );
   const [filteredOptions, setFilteredOptions] = useState<any[]>(defaultOptions);
 
-  // Keep the untyped list in step with those options once they arrive.
   useEffect(() => {
     if (keyword.length === 0) setFilteredOptions(defaultOptions);
   }, [defaultOptions]);
@@ -111,9 +104,6 @@ const StartDateModal: React.FC<Props> = ({
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
-    // Arrows only: this modal's whole point is a text field, so j/k have to
-    // stay typeable (the due-date modal's bare keyCode check scrolls the list
-    // when you type "june").
     if (event.key === "ArrowUp") {
       event.preventDefault();
       move(-1);

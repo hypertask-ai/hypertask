@@ -11,7 +11,6 @@ const LoginMinimal = () => {
     const [showEmailForm, setShowEmailForm] = useState(false)
     const searchParams = useSearchParams()
 
-    // Custom styling for the AB test login page
     const emailAuthStyleConfig: EmailAuthStyleConfig = {
         container: "w-full",
         input: "w-full px-3 text-dense h-12 py-3 bg-transparent border-2 border-gray-600 rounded text-white placeholder-gray-400 outline-none focus:border-gray-500 transition-colors",
@@ -33,7 +32,6 @@ const LoginMinimal = () => {
                 "p-8"
             )}>
                 <div className="w-full max-w-md flex flex-col items-center">
-                    {/* Logo with Text */}
                     <Image
                         src="/loginLogoMain.png"
                         alt="Hypertask logo"
@@ -43,7 +41,6 @@ const LoginMinimal = () => {
                     />
 
 
-                    {/* Title */}
                     <span className="text-emphasis  font-medium text-white mb-6">
                         Log in to Hypertask
                     </span>
@@ -54,7 +51,6 @@ const LoginMinimal = () => {
                         </p>
                     )}
 
-                    {/* Login Options */}
                     {showEmailForm ? (
                         <div className="min-w-[288px] space-y-4">
                             <EmailAuth styleConfig={emailAuthStyleConfig} />
@@ -68,14 +64,12 @@ const LoginMinimal = () => {
                     ) : (
                         <div className="flex flex-col gap-3 w-[288px]">
 
-                            {/* Google Sign In Button */}
                             <LoginButton
                                 className="w-full h-12 sm:w-full font-medium shadow-sm text-content"
                                 size="small"
                                 iconClassName="hidden"
                             />
 
-                            {/* Email Sign In Button */}
                             <button
                                 onClick={() => setShowEmailForm(true)}
                                 className={cn(

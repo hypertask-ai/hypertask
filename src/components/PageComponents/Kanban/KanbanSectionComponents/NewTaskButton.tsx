@@ -26,7 +26,6 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
     let quickEntryRequested: true | undefined;
     if (quickEntryCardsEnabled) quickEntryRequested = true;
     
-    // ============= for top of section on section title. 
     if (buttonPosition == "top"){
         const  left= -160;
         const bottom = -15
@@ -41,7 +40,6 @@ const NewTaskButton:React.FC<INewTaskButton> = ({buttonPosition, createTaskAt, s
         )
     }
 
-    // =============== for bottom of section
     else if (buttonPosition ==="bottom" && !snapshot?.isDraggingOver){
         return (
             <div 
@@ -66,7 +64,6 @@ const TooltipAndIcon = (
         text:string,keyCombination:string[], left:number, bottom:number, size?:number, className?:string
     })=>{
     const sharpPlusEnabled = useFlag(HTPR_7047_SHARP_PLUS_SIGNS_FLAG);
-    // Keep 2px strokes despite theme thinning; snap painted edges without moving the button.
     return (
         <>
         <Plus

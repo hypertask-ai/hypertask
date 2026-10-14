@@ -53,7 +53,6 @@ const handler: NextApiHandler = async (
         return res.status(404).json({ message: "Task not found or access denied" });
 
       const userId = session.userId;
-      //first things first we are going to find if any links exist for this task by the current user
       const foundLink = await prisma.taskSharing.findMany({
         where: {
           userId: userId,

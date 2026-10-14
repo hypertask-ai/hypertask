@@ -68,7 +68,6 @@ export function useSearch(
   const [includeArchived, setIncludeArchived] =
     useState<boolean>(_includeArchived);
 
-  // --------------- Refs
   const tasksInputRef = useRef<HTMLInputElement>(null);
   const ulRef = useRef<HTMLUListElement | null>(null);
   const liSelectedRef = useRef<HTMLLIElement | null>(null);
@@ -158,7 +157,7 @@ export function useSearch(
       const term = searchTerm.trim();
       if (term.length >= 2 && history.at(-1) !== term) {
         history.push(term);
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* Keep history in memory when storage is unavailable. */ }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
       }
     }
     setSubmittedQuery(searchTerm.trim());
@@ -167,7 +166,6 @@ export function useSearch(
   }
 
   async function handleSearchOnMount(showArchived = includeArchived) {
-    // If there's a search term from URL params, fetch results from server
     if (_searchTerm && _searchTerm.length >= 2) {
       const requestId = beginSearch(_searchTerm, showArchived);
       if (searchLayoutEnabled) tasksInputRef.current?.blur();
@@ -293,12 +291,6 @@ export function useSearch(
     return buildSearchUrl(searchTerm, tabIndex, showArchived, _fromProject);
   }
 
-  /**
-   * Searches for boards in the given array based on an input string
-   * @param input - The search input that may contain board identifiers
-   * @param boardsArray - Array of board names to search through
-   * @returns Object containing matching board names and their indexes
-   */
   function searchBoards(input: string, showArchived = includeArchived, searchProjects = projects): {
     searchProjectIds: number[];
     archive: null | "Normal" | "Archive";
@@ -308,7 +300,6 @@ export function useSearch(
     let lowerInput = input.toLowerCase();
     let archive: null | "Normal" | "Archive" =
       defaultSearchArchiveStatus(showArchived);
-    // Check if input contains the "board:" identifier
     if (!lowerInput.includes("board:") && !lowerInput.includes("is:")) {
       return {
         searchProjectIds: [],
@@ -384,7 +375,6 @@ export function useSearch(
         return handleStatesOnResponse(searchConfig.responseMessages.fail);
       lastSearchKey.current = currentSearchKey(searchTerm, showArchived, searchProjects);
 
-      // Draft results must not navigate: a delayed URL render can overwrite newer typing.
       if (!options?.live) router.replace(
         searchUrl(
           searchTerm,
@@ -414,7 +404,6 @@ export function useSearch(
       if (response.status === 200) {
         const { processedData, tabs: splits } = response.data;
         if (processedData["All"].length > 0) {
-          // Only update search history in cache, not results
           const newData = {
             history: updatedHistory,
             results: [],
@@ -478,7 +467,6 @@ export function useSearch(
   }
 
   function handleKeyDown(event: KeyboardEvent) {
-    // The app shell prevents body arrows from scrolling, not from selecting results.
     const resultArrow = searchAutocompleteEnabled &&
       document.activeElement === document.body &&
       !event.ctrlKey && !event.metaKey && !event.altKey &&
@@ -506,7 +494,7 @@ export function useSearch(
         const history = getTabSearchHistory();
         if (!isSearchDraft) history.pop();
         const previous = history.at(-1) ?? "";
-        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch { /* The in-memory history still works. */ }
+        try { sessionStorage.setItem("htpr-6879-search-history", JSON.stringify(history)); } catch {}
         setInputValue(previous);
         setExplicitTabIndex(undefined);
         handleStatesOnResponse(searchConfig.responseMessages.default);
@@ -522,7 +510,6 @@ export function useSearch(
       showCommands.show ||
       document?.activeElement?.role === "dialog" ||
       document?.activeElement?.id === "modalButtons" ||
-      // document.activeElement?.tagName === "INPUT" ||
       document.activeElement?.id === "htc" ||
       searchConfig.handleKeyDown.classNamesToReturnFrom.includes(
         document?.activeElement?.className
@@ -531,10 +518,8 @@ export function useSearch(
     )
       return;
 
-    // Draft suggestions own navigation; old result rows must never be actionable.
     if (isSearchDraft && [KeyCodes.ARROW_DOWN, KeyCodes.ARROW_UP, KeyCodes.J, KeyCodes.K, KeyCodes.TAB].some((key) => key === event.keyCode) && !cmdControl) return;
 
-    // press k
     if (event.keyCode === KeyCodes.K && cmdControl) {
       event.preventDefault();
       toggleShowCommands();
@@ -564,7 +549,6 @@ export function useSearch(
         searchConfig.elementIds.history.id
       );
 
-      //Phase 1 (if nothing in search type, we are going to display past searches if any)
       if (!!historyList) {
         if (selectedHistory === null) {
           setSelectedHistory(0);
@@ -583,7 +567,6 @@ export function useSearch(
         }
       }
 
-      //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
@@ -628,7 +611,6 @@ export function useSearch(
         }
       }
 
-      //Phase 3 (Since we are skipping suggestions right now)
       if (typedTasks.length > 0 && (selectedIndex !== null || searchAutocompleteEnabled)) {
         if (searchAutocompleteEnabled) {
           event.preventDefault();
@@ -652,26 +634,20 @@ export function useSearch(
     if (
       (event.keyCode === KeyCodes.TAB || cycleSearchTabs) && tabs.length > 0 &&
       (searchLayoutEnabled
-        // Enter leaves the search box, so Tab cycles only outside it and never traps the cursor.
         ? cycleSearchTabs && !isInputFocused && tabs.length > 1
         : !isInputFocused)
     ) {
       event.preventDefault();
       let newValue;
       if (event.shiftKey) {
-        // Navigate to the previous tab
         newValue = activeSplit !== 0 ? activeSplit - 1 : tabs.length - 1;
       } else {
-        // Navigate to the next tab
         newValue = activeSplit !== tabs.length - 1 ? activeSplit + 1 : 0;
       }
 
       updateSplitAndTasks(newValue);
     }
 
-    // Only the search field swallows Tab, and only to accept a live
-    // autocompletion. Anything else focusable on the page (the archived
-    // toggle) keeps native Tab so it stays keyboard reachable.
     if (
       event.keyCode === KeyCodes.TAB &&
       document.activeElement === tasksInputRef.current &&
@@ -682,7 +658,6 @@ export function useSearch(
       setSuggestedValue("");
     }
 
-    // ========== [g] main handler: initiate sequence only if no other g-then sequence is active
     if (
       event.keyCode === KeyCodes.G &&
       !isInputFocused &&
@@ -692,7 +667,6 @@ export function useSearch(
       !event.shiftKey &&
       !event.repeat
     ) {
-      // If another g-sequence was not just triggered, start the timer for g-then combos.
       if (!lastgClick.current) {
         const now = new Date().getTime();
         lastgClick.current = now;
@@ -701,10 +675,8 @@ export function useSearch(
         }, globalConstants.gThenKeyDelay);
         return;
       }
-      // Don't let a plain [g] immediately fall through to any other logic
     }
 
-    // ========== [g] then [x] - Toggle archived search results
     if (
       lastgClick.current &&
       event.keyCode === KeyCodes.X &&
@@ -723,8 +695,6 @@ export function useSearch(
       }
     }
 
-    // ========== [g] then [g] - Jump to top/bottom row
-    // Only handle this if (a) g was just pressed, timer active, (b) NOT mixed up with other G-combos
     if (
       lastgClick.current &&
       controller[KeyCodes.G]?.pressed &&
@@ -733,9 +703,8 @@ export function useSearch(
     ) {
       const now = new Date().getTime();
       if (now - lastgClick.current < globalConstants.gThenKeyDelay) {
-        lastgClick.current = null; // consume the combo
+        lastgClick.current = null;
         if (event.shiftKey) {
-          // Go to bottom
           setSelectedAndInView(
             typedTasks[typedTasks.length - 1],
             typedTasks.length - 1
@@ -744,13 +713,12 @@ export function useSearch(
             .getElementById(`task_${typedTasks[typedTasks.length - 1].taskId}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" });
         } else {
-          // Go to top
           setSelectedAndInView(typedTasks[0], 0);
           document
             .getElementById(`task_${typedTasks[0].taskId}`)
             ?.scrollIntoView({ behavior: "smooth", block: "center" });
         }
-        return; // prevent interfering with any other g-then-[key]
+        return;
       }
     }
 
@@ -855,16 +823,12 @@ export function useSearch(
     results,
   ]);
 
-  // -------------------- recieving data from React-Query
   useEffect(() => handleProjectsFromCache(), [allProjects]);
 
   useEffect(() => {
     setExplicitTabIndex(_initialTabIndex);
   }, [_initialTabIndex]);
 
-  // Keep URL navigation authoritative while avoiding the duplicate request
-  // caused by our own router.replace after an already-started search.
-  // Board loading must not reset a local draft or invalidate its waiting search.
   useEffect(() => {
     setIncludeArchived(_includeArchived);
     setInputValue(_searchTerm);

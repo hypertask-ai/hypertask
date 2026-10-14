@@ -6,8 +6,6 @@ import prisma from "@/lib/prisma";
 import { getPage } from "@/utils/controllers/pages/pageService";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
-// The root layout turns off native pinch zoom on phones. Pages hold documents
-// and screenshots people need to read up close, so allow it here.
 export const viewport = {
   maximumScale: 5,
   userScalable: true,

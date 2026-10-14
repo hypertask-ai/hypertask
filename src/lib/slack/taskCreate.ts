@@ -250,7 +250,6 @@ async function writeSlackTaskDraft(input: {
   return {
     description,
     title:
-      // Drop tags, then any stray angle bracket, so the title is plain text.
       result.output.title.split(/<[^>]*>/).join("").replace(/[<>]/g, "").trim() ||
       result.output.ask.slice(0, 140).trim(),
   };

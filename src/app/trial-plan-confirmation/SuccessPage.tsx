@@ -1,5 +1,5 @@
 "use client";
-/* eslint-disable @next/next/no-img-element */
+
 import { useRecoilState } from "@/lib/state";
 import { currentProjectAtom } from "@/store";
 import { useRouter } from "next/navigation";
@@ -13,7 +13,6 @@ const Success = () => {
     if (_currentProject?.id) {
       router.push(`/project?id=${_currentProject?.id}`);
     } else {
-      // Check for previousBoard cookie
       const cookies = parseCookies();
       const previousBoard = cookies.previousBoard;
       
@@ -28,7 +27,6 @@ const Success = () => {
         
         router.push(redirectUrl);
       } else {
-        // Fallback to onboarding if no project found
         router.push("/onboarding");
       }
     }
@@ -41,7 +39,6 @@ const Success = () => {
       >
         <main className="flex items-center min-w-[90vw] sm:min-w-[350px] max-w-[350px] sm:max-w-[520px] mx-auto my-auto">
           <div className="flex flex-col w-full items-center rounded-lg py-4 px-[28px] gap-5  sm:py-7 sm:px-20 justify-center  bg-inherit ">
-            {/* <img src="/loginLogoMain.png" alt="logo" /> */}
             <div className="flex flex-col gap-5">
               <h1 className="text-subheading sm:text-display max-w-[500px] whitespace-nowrap  font-semibold">
                 Your Pro Plan trial is now active!

@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 
 import prisma from '@/lib/prisma'
 import type { NextApiRequest, NextApiResponse } from 'next'
@@ -21,9 +20,6 @@ export default  async function handler(
     const {content, taskId, type, projectId} = req.body
     if (!content || !taskId || !type ) return res.status(400).json({message:"Missing Required Information"})
 
-    // A canceled browser autosave can still finish on the server while the next
-    // request starts. The old find-then-create sequence let both requests see
-    // no row and race on the unique (taskId, type, userId) key.
     const draft = await prisma.drafts.upsert({
       where: {
         taskId_type_userId: {

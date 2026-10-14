@@ -130,11 +130,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
                 attachments={newCommentAttachments}
                 returnTitleAndDescription={handleTitleAndDescriptionReturn}
                 defaultMode={getDefaultMode()}
-                // additionalContext={getAdditionalContext()}
                 toggleRecording={toggleRecording}
                 isRecording={isRecording}
-                // A fresh opening intentionally requests a fresh draft. The
-                // container guard prevents duplicates within that opening.
                 autoTrigger={taskWriterOpening.autoTrigger}
                 initialPrompt={taskWriterOpening.initialPrompt}
                 currentTask={currentTask}

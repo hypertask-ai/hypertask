@@ -29,7 +29,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
   return {
     scene0: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Enter] pressed
       if (e.key === "Enter") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -42,7 +41,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     },
     scene1: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Enter] pressed
       if (e.key === "Enter") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -55,7 +53,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     },
     scene2: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[j] pressed
       if (
         e.keyCode === 74 &&
         sceneState.scene2.jCount < 3 &&
@@ -71,7 +68,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
         setActiveTask((prev) => prev + 1);
         updateHint();
       }
-      //[k] pressed
       else if (
         e.keyCode === 75 &&
         sceneState.scene2.jCount === 3 &&
@@ -94,7 +90,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     },
     scene3: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[tab] pressed
       if (
         controller[9]?.pressed &&
         !e.shiftKey &&
@@ -110,7 +105,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[shift] pressed
       else if (
         sceneState.scene3.tabCount === 2 &&
         e.key === "Shift" &&
@@ -127,7 +121,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
           },
         }));
         updateHint();
-        //[shift]+[tab]
       } else if (
         e.shiftKey &&
         controller[9]?.pressed &&
@@ -148,7 +141,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     },
     scene4: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Enter] pressed
       if (e.key === "Enter") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -162,7 +154,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     scene5: (e: KeyboardEvent) => {
       e.preventDefault();
       if (!pathname?.startsWith("/interactive-onboarding/taskDetail")) return;
-      //[ctrl] pressed
       if (
         e.key === "Control" &&
         e.ctrlKey &&
@@ -179,7 +170,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[m] pressed
       else if (controller[77]?.pressed && e.ctrlKey) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -200,7 +190,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
       var notCmdControl = isApple ? e.ctrlKey : e.metaKey;
       var cmdControlAndEnterPressed = cmdControlKey && controller[13]?.pressed;
       var isCommentValid = isInputValid(commentInput) && commentInput;
-      //[cmd/ctrl] pressed
       if (
         e.key === cmdControl &&
         cmdControlKey &&
@@ -221,7 +210,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
       else if (cmdControlAndEnterPressed && !isCommentValid) {
         toast.error("Please type your comment first");
       }
-      //[enter] pressed
       else if (isCommentValid && cmdControlAndEnterPressed) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -277,7 +265,6 @@ export const createTutorialBoardSteps = (context: TutorialContext) => {
     },
     scene7: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[a] pressed
       if (e.keyCode === 65) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -327,7 +314,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
         if (activeModalIndex - 1 >= 0)
           setActiveModalIndex((prev) => prev - 1);
       }
-      //[Enter] pressed
       if (
         e.key === "Enter" &&
         filteredAssignees[activeModalIndex].name === tutorialUsers[1].name
@@ -336,7 +322,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
           ...prevState,
           scene8: !prevState.scene8,
         }));
-        //update assignees if any.
         setBoard((prev) => {
           const updatedBoard = { ...prev };
           const updatedTaskPages = [...updatedBoard.taskPages];
@@ -376,7 +361,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
     },
     scene9: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[p] pressed
       if (e.keyCode === 80) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -388,7 +372,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
       }
     },
     scene10: (e: KeyboardEvent) => {
-      //[downArrow] pressed
       if (e.keyCode === 40) {
         if (activeModalIndex + 1 <= 4)
           setActiveModalIndex((prev) => prev + 1);
@@ -397,7 +380,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
         if (activeModalIndex - 1 >= 0)
           setActiveModalIndex((prev) => prev - 1);
       }
-      //[Enter] pressed
       if (
         e.key === "Enter" &&
         filterPriorityOptions[activeModalIndex].index === 1
@@ -442,7 +424,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
     },
     scene11: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Esc] pressed
       if (e.key === "Escape") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -456,7 +437,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
     scene12: (e: KeyboardEvent) => {
       if (!pathname?.startsWith("/interactive-onboarding/landing")) return;
       e.preventDefault();
-      //[g] pressed
       if (e.keyCode === 71 && !lastGPress.current) {
         const now = new Date().getTime();
         lastGPress.current = now;
@@ -481,7 +461,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
           setShake(false);
         }, 500);
       }
-      //[i] pressed
       else if (controller[73]?.pressed && lastGPress.current) {
         const now = new Date().getTime();
         if (now - lastGPress.current < 500) {
@@ -503,7 +482,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
     scene13: (e: KeyboardEvent) => {
       if (!pathname?.startsWith("/interactive-onboarding/inbox")) return;
       e.preventDefault();
-      //[j] pressed
       if (
         e.keyCode === 74 &&
         sceneState.scene13.jCount < 2 &&
@@ -520,7 +498,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[k] pressed
       else if (
         e.keyCode === 75 &&
         sceneState.scene13.kCount < 2 &&
@@ -537,7 +514,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[e] pressed
       else if (
         e.keyCode === 69 &&
         sceneState.scene13.jCount === 2 &&
@@ -547,9 +523,7 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
         updateHint();
         if (sceneState.scene13.eCount === 1)
           updateScene(undefined, false, undefined);
-        //setActiveNotification((prev) => prev - 1);
         setNotifications((prev) => {
-          //we need to remove the current active notification
           const filtered = prev.filter(
             (item, index) => index !== activeNotification
           );
@@ -568,7 +542,6 @@ export const createTutorialTaskSteps = (context: TutorialContext) => {
     },
     scene14: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Enter] pressed
       if (e.key === "Enter") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -611,7 +584,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
     scene15: (e: KeyboardEvent) => {
       if (!pathname?.startsWith("/interactive-onboarding/taskDetail")) return;
       e.preventDefault();
-      //[e] pressed
       if (e.keyCode === 69) {
         updateScene(undefined, false, undefined);
         setSceneState((prevState) => ({
@@ -619,7 +591,7 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
           scene15: !prevState.scene15,
         }));
         setNotifications(
-          (prev) => prev.slice(0, -1) // Removes the last element
+          (prev) => prev.slice(0, -1)
         );
         setActiveTaskPage((prev) => prev + 1);
         setTimeout(() => {
@@ -636,7 +608,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
     },
     scene16: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[h] pressed
       if (e.keyCode === 72) {
         updateScene(undefined, false, undefined);
         setSceneState((prevState) => ({
@@ -649,7 +620,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
       }
     },
     scene17: (e: KeyboardEvent) => {
-      //[downArrow] pressed
       if (e.keyCode === 40) {
         if (activeModalIndex + 1 <= filteredOptions.length - 1)
           setActiveModalIndex((prev) => prev + 1);
@@ -658,7 +628,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
         if (activeModalIndex - 1 >= 0)
           setActiveModalIndex((prev) => prev - 1);
       }
-      //[Enter] pressed
       if (e.key === "Enter") {
         e.preventDefault();
         if (
@@ -670,7 +639,7 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
             scene17: !prevState.scene17,
           }));
           setNotifications(
-            (prev) => prev.slice(0, -1) // Removes the last element
+            (prev) => prev.slice(0, -1)
           );
           updateScene("inbox", true, undefined);
         } else {
@@ -680,7 +649,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
     },
     scene18: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Esc] pressed
       if (e.key === "Escape") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -707,7 +675,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[b] pressed
       else if (cmdControl && controller[66]?.pressed) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -722,7 +689,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
       }
     },
     scene20: (e: KeyboardEvent) => {
-      //[downArrow] pressed
       if (e.keyCode === 40) {
         if (activeModalIndex + 1 <= filteredSideBarOptions.length - 1)
           setActiveModalIndex((prev) => prev + 1);
@@ -731,7 +697,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
         if (activeModalIndex - 1 >= 0)
           setActiveModalIndex((prev) => prev - 1);
       }
-      //[Enter] pressed
       if (e.key === "Enter") {
         e.preventDefault();
         if (
@@ -767,7 +732,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[k] pressed
       else if (cmdControl && controller[75]?.pressed) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -782,26 +746,8 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
       }
     },
     scene22: (e: KeyboardEvent) => {
-      //reason why this is all commented out is because umm the scene for the Command Center
-      //is being handled by CC itself. So you dont have to do anything.
-      // //[Enter] pressed
-      // if (e.key === "Enter") {
-      //   e.preventDefault();
-      //   const val=(document.getElementById('htc') as HTMLInputElement)?.value
-      //   console.log("🚀 ~ useTutorial ~ val:", val)
-      //   if (val?.toLowerCase() === "add column") {
-      //     setSceneState((prevState) => ({
-      //       ...prevState,
-      //       scene22: !prevState.scene22,
-      //     }));
-      //     updateScene(undefined, false, undefined);
-      //   } else {
-      //     errorShake();
-      //   }
-      // }
     },
     scene23: (e: KeyboardEvent) => {
-      //[Enter] pressed
       if (e.key === "Enter") {
         e.preventDefault();
         if (["done"].includes(addColumnInput.toLowerCase())) {
@@ -810,7 +756,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
             scene23: !prevState.scene23,
           }));
           setBoard((prev) => {
-            //lets add a new board section here
             const newBoard = {
               ...prev,
               sections: [
@@ -832,7 +777,6 @@ export const createTutorialNavigationSteps = (context: TutorialContext) => {
       }
     },
     scene24: (e: KeyboardEvent) => {
-      //[m] pressed
       if (e.keyCode === 77) {
         e.preventDefault();
         setSceneState((prevState) => ({
@@ -870,7 +814,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
   } = context;
   return {
     scene25: (e: KeyboardEvent) => {
-      //[downArrow] pressed
       if (e.keyCode === 40) {
         if (activeModalIndex + 1 <= filterMoveColumnsOptions.length - 1)
           setActiveModalIndex((prev) => prev + 1);
@@ -879,7 +822,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
         if (activeModalIndex - 1 >= 0)
           setActiveModalIndex((prev) => prev - 1);
       }
-      //[Enter] pressed
       if (e.key === "Enter") {
         e.preventDefault();
         if (
@@ -922,7 +864,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
     },
     scene26: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[shift] pressed
       if (
         e.key === "Shift" &&
         e.shiftKey &&
@@ -939,7 +880,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[l] pressed
       else if (e.shiftKey && controller[76]?.pressed) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -977,7 +917,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
     },
     scene27: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[shift] pressed
       if (
         e.key === "Shift" &&
         e.shiftKey &&
@@ -994,7 +933,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[j] pressed
       else if (e.shiftKey && controller[74]?.pressed) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -1034,7 +972,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
     },
     scene28: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[Enter] pressed
       if (e.key === "Enter") {
         setSceneState((prevState) => ({
           ...prevState,
@@ -1047,7 +984,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
     },
     scene29: (e: KeyboardEvent) => {
       e.preventDefault();
-      //[ctrl] pressed
       if (
         e.key === "Control" &&
         e.ctrlKey &&
@@ -1064,7 +1000,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[d] pressed
       else if (controller[68]?.pressed && e.ctrlKey) {
         setSceneState((prevState) => ({
           ...prevState,
@@ -1074,7 +1009,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
           },
         }));
 
-        //focus on description somehow
         if (descriptionEditor) descriptionEditor.commands.focus("end");
         updateScene(undefined, false, undefined);
       } else {
@@ -1086,7 +1020,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
       var cmdControlKey = isApple ? e.metaKey : e.ctrlKey;
       var notCmdControl = isApple ? e.ctrlKey : e.metaKey;
       e.preventDefault();
-      //[cmd/ctrl] pressed
       if (
         e.key === cmdControl &&
         cmdControlKey &&
@@ -1104,7 +1037,6 @@ export const createTutorialWorkflowSteps = (context: TutorialContext) => {
         }));
         updateHint();
       }
-      //[j] pressed
       else if (cmdControlKey && controller[74]?.pressed) {
         setSceneState((prevState) => ({
           ...prevState,

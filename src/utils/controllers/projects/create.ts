@@ -20,7 +20,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
         status: 400,
         json: { message: "Required information missing" }
       })
-      // return res.status(400).json({ message: "Required information missing" });
     }
     const user = await prisma.user.findUnique({
       where: {
@@ -32,11 +31,8 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
         status: 400,
         json: { message: "User not found" }
       })
-      // return res.status(400).json({ message: "User not found" });
     }
 
-    // HTPR-7164: only the team owner or an accepted member may add a board,
-    // and the board takes the team's own account, never one from the request.
     const team = await prisma.team.findFirst({
       where: {
         id: teamId,
@@ -55,7 +51,6 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })
     }
 
-    // HTPR-4894: free accounts cap out at FREE_BOARD_LIMIT owned boards.
     if (await isBoardLimitReached(userId)) {
       return ({
         status: 403,
@@ -63,7 +58,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })
     }
 
-    let projectCount = Date.now() //temp count
+    let projectCount = Date.now()
     let project : any = undefined
 
     const hasPrefix = ticketPrefix !== undefined;
@@ -90,7 +85,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
           title: title,
           teamId: teamId,
           googleAccountId: team.googleAccountId,
-          section: { // Add the section field with the related section records
+          section: {
             create: [
               { section_title: "Todo", ranking: "A0100" },
               { section_title: "Doing", ranking: "A0200" },
@@ -170,15 +165,12 @@ export async function createProjectViewAndCreateDefault(
 ) {
   const project_view = await prisma.project_View.upsert({
     create: {
-      // ... data to create a Project_View
       projectId
     },
     update: {
-      // ... in case it already exists, update
     },
     where: {
       projectId
-      // ... the filter for the Project_View we want to update
     },
     include:{
       project:{
@@ -246,7 +238,6 @@ export async function updateUniqueIdentifier(teamId: string, title: string, proj
   return prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
 
-    // Ensure uniqueness within the team; on collision append a counter (kept <= 5 chars).
     let candidate = base;
     let clash = await tx.project.findFirst({
       where: { teamId, id: { not: projectId }, OR: [

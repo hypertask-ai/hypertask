@@ -32,10 +32,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 export const maxDuration = 120;
 
-// HTPR-4888: an AI-written board status update, stored as a normal Report so
-// it reuses the existing /report surface, sandboxing and permissions. Asana
-// ships "Smart Status"; ours reads the same board data the velocity report
-// does, so the numbers in the prose are computed, not hallucinated.
 
 const STATUS_SLUG = "status-update";
 
@@ -214,7 +210,6 @@ export async function POST(request: NextRequest) {
   );
 
   const doneTitles = doneColumnTitles(project.section, isDoneByName);
-  // Titles are user-written; strip anything that would close the data fence.
   const fenceSafe = (value: string) => value.replace(/[<>]/g, " ").slice(0, 200);
   const movementLines = recentlyMoved
     .map(
@@ -278,11 +273,6 @@ Write the status update:
     });
     const title = `Status update — ${now.toISOString().slice(0, 10)}`;
 
-    // One living status report per board: update in place so the URL is
-    // stable. Only "it isn't there yet" falls through to create — swallowing
-    // every error here would turn a real validation failure into a confusing
-    // slug-taken 500. Two concurrent runs can still both miss, so the create
-    // retries as an update if the other one won the race.
     const existing = await getReport({
       userId: session.userId,
       projectId,

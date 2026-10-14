@@ -1,5 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-// /* eslint-disable react-hooks/exhaustive-deps */
+
 import { ISection, ITask } from '@/models/model'
 import  { useContext, useEffect, useRef, useState } from 'react'
 import { activeBuiltinViewsAtom, currentProjectAtom, currentUserAtom, showCommandsAtom, showSidebarAtom, activeItemAtom,activeSectionAtom, showBoardManagerAtom, appShellRailAtom } from '@/store'
@@ -48,16 +47,12 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const {showManageColumnsModal, showSaveModal, toggleViewsModal, toggleSaveViewsModal, toggleSearchTasks, showSearchTasks} = useKanbanModalStatesContext()
     const { resetShowCommands }= useHypertasksRecoilStates()
 
-    // =========== CALL hooks here
     const {updateActiveItemAndItemInView, mutationHandler, getProjectIdxAndAllData }=UpdateKanban();
 
-    //This hook is for handling focus right now.
     const spaceship = useUniversalMovement({type: "Kanban", initialSections, filteredSections})
 
     const {undoData, undoAction, undoLatest} = useUndoContext();
 
-  //Updarte to useRead only recoil values or setOnly
-    // =========== RECOIL STATES
     const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
     const setShowSidebar = useSetRecoilState(showSidebarAtom);
     const _currentProject = useRecoilValue(currentProjectAtom)
@@ -141,9 +136,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       return
     }
 
-    // Favorite-board jump. Checked before the modal/input and #sectionsContainer guards
-    // below so it stays global on a board: it has to work while typing in a filter, with
-    // a modal open, or before the columns have rendered.
     if (isFavoriteBoardShortcut(e, isApple)) {
       e.preventDefault();
       const index = parseInt(e.code.replace("Digit", ""));
@@ -153,7 +145,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
     if (returnIfModalOrInputActive()) return
 
-    // When board has no columns, [C] opens Add Column modal
     if (
       filteredSections.length === 0 &&
       (e.key === "c" || e.key === "C") &&
@@ -165,7 +156,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       return;
     }
 
-    // console.log("🚀 ~ file: Homepage.tsx:178 ~ handleKeyDown ~ document.activeElement?.id:", document.activeElement?.id)
     const sectionsContainer = document.getElementById("sectionsContainer");
     if (!sectionsContainer) return;
     const sectionEls = sectionsContainer.children;
@@ -190,76 +180,50 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       e.preventDefault()
     }
     if (e.key === "Escape") {
-      // setShowShortcuts(false);
-      // setShowBoardManager(false)
       if (activeItem) spaceship.refocus(activeItem)
     }
     
-    // [shift] +[v]
     if (e.keyCode === 86 && e.shiftKey){
       if ( _currentProject?.project_view?.user_project_views[0]?.unsavedView )return toggleSaveViewsModal()
     }
 
-    // [Z] FOR UNDO
     if (e.keyCode === 90&&undoData.length>0){
-      // console.log("🚀 ~ handleKeyDown ~ e.keyCode:", e.keyCode)
       const firstUndoData = undoData[undoData.length - 1];
-      // console.log("🚀 ~ handleKeyDown ~ firstUndoData:", firstUndoData)
       if (undoToastSettings.single) void undoLatest();
       else undoHandler(firstUndoData, firstUndoData.id);
 
   }
-    // [shift] + [f] for filters
     if (e.shiftKey && e.keyCode===70) setShowCommands({show: true, mode: CommandMode.ShowFilterHTC})
 
-    // [shift] + [s] for board sorting
     if (e.shiftKey && e.keyCode===83) setShowCommands({show: true, mode: CommandMode.SortKanbanBoard})
     
 
-    // j for downmovement and k for up movement
-    // HTPR-4903: the [k] twin below always excluded cmd/ctrl; [j] did not, so
-    // Ctrl+J moved the focus down as a side effect of opening the AI Task Writer.
     if ((e.keyCode === 74 ||e.key==="ArrowDown") && !e.shiftKey && !cmdControl) {
       e.preventDefault();
       if (isAIChatElementFocused()) return
       spaceship.focus.down()
     }
     
-    // k for up movement
     if ((e.keyCode === 75 ||e.key==="ArrowUp") && (!e.shiftKey && !cmdControl )) {
       e.preventDefault();
       if (isAIChatElementFocused()) return
       spaceship.focus.up()
     }
-    
-    // if (osName === "MacOS" && e.metaKey && e.key === "0" && projectIndex !==0) {
-    //   e.preventDefault();
-      // handleBoardChange(0,sections)
-    // } 
-  
 
-
-    // shift and shift+tab for navigating between sections in sectionsContainer
-    // l
-    // "[" was a redundant focus-left twin of ArrowLeft/H on the rail shell;
-    // it now toggles the sidebar instead (HTPR-4890, RAIL_TOGGLE_KEY).
     if ((!appShellRailOn && e.key === "Tab" && e.shiftKey) || ((e.key==="ArrowLeft" ||e.keyCode===72 )&& !e.shiftKey)) {
-      //  from right to left
       e.preventDefault();
       if (isAIChatElementFocused()) return
       spaceship.focus.left()
     }
 
-    // [g] press
     if (e.keyCode === 71) {
       const now = new Date().getTime();
       lastgClick.current = now;
       setTimeout(() => {
         lastgClick.current = null;
-      }, globalConstants.gThenKeyDelay); // 1000 milliseconds = 1 second
+      }, globalConstants.gThenKeyDelay);
     }
     
-    // [v] for views 
     if (e.keyCode === 86) {
       const now = new Date().getTime();
       if (lastgClick.current && now - lastgClick.current < globalConstants.gThenKeyDelay) {
@@ -277,19 +241,13 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       }
     }
 
-    // Shift+[t]: table/board layout toggle. Plain [t] stays "set tags" on the
-    // focused task; the table view handles the reverse in TableView.
     if (e.keyCode === 84 && e.shiftKey) {
       e.preventDefault();
       toggleBoardLayout();
     }
 
     let activeKeysSet = new Set(['j', 'k', 'J', 'K',"h","H","l","L",  'ArrowRight', 'ArrowDown', 'ArrowUp', 'ArrowLeft']);
-    // if (e.key==="Tab" && _activeItem===null){
-    //   e.preventDefault()
-    // }
      if (((appShellRailOn ? e.key === "]" : e.key === "Tab" && !e.shiftKey)) || ((e.key==="ArrowRight" ||e.keyCode===76)&& !e.shiftKey)) {
-      // from left to right
       e.preventDefault();
       if (isAIChatElementFocused()) return
       spaceship.focus.right()
@@ -318,7 +276,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       if (filteredSections[i].items.length > 0) {
         const item = filteredSections[i].items[0]
         const sectionEls = document.getElementById("sectionsContainer")!.children;
-        // @ts-ignore
+        // @ts-expect-error Element does not declare focus on this DOM collection.
         sectionEls[i].focus()
         updateActiveItemAndItemInView(item.id, _currentProject.id, getActiveSection());
         break;
@@ -327,13 +285,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
   }
 
 
-  // ============== task archive/ delete undo handler
   const undoHandler = async (data: any, toastId: string) => {
-    //  first you need to bring the item back in its place.
-    // then you need to run the api call so there is no render blocking. 
     await undoAction("UNDO_REMOVE", data)
-    // router.refresh()
-    toast.dismiss(toastId);  // Dismiss the toast here
+    toast.dismiss(toastId);
     queryClient.refetchQueries({queryKey:["projectsAll"]})
     if (!undoToastSettings.single) toast("Undo remove")
     
@@ -341,51 +295,36 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
   const CTRL_F_handler = (e:any)=>{
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
-    if (e.keyCode === 70 && cmdControl) { // [Cmd+F] or [Ctrl+F]
-      // Never steal focus from the command palette or an open modal.
+    if (e.keyCode === 70 && cmdControl) {
       if (showCommands.show || document.querySelector(".modal")) return;
       e.preventDefault();
       if (!showSearchTasks) {
-        // Open the search filter
         toggleSearchTasks(true);
         setTimeout(() => {
           document.getElementById('search-tasks-filter-input')?.focus();
         }, 200);
       } else {
-        // Refocus the input if it's already open
         document.getElementById('search-tasks-filter-input')?.focus();
       }
     }
   }
 
-    // =========== useEffect for either on fresh reload or when there is new data from TanStack
     useEffect(() => { 
-        // console.log("🚀 ~ useEffect ~ initialSections:", initialSections)
-        // addLastActivityAt(_currentProject?.teamId!, undefined)
-
         if (filteredSections) {
-          // getSections()
-          // Assuming _currentProject.sections is an array of sections
           setSections(initialSections);
           setSectionsToDisplay(filteredSections)
         }
-        // console.log("🚀 ~ useEffect ~ _currentProject:", _currentProject)
         setFirstTask(_currentProject?.firstTask)
       }, [filteredSections, initialSections, _currentProject]);
   
 
-        // -------------------------- keyboard handler 
         useEffect(() => {
-            const debouncedKeyDown = throttle(handleKeyDown, 20); // Adjust the debounce delay as needed (e.g., 300 milliseconds)
-            // const debounceKeyUp  = throttle(handleKeyUp,20)
+            const debouncedKeyDown = throttle(handleKeyDown, 20);
             
             document.addEventListener("keydown", debouncedKeyDown);
-            // document.addEventListener('keyup', debounceKeyUp);
 
                 return () => {
             document.removeEventListener("keydown", debouncedKeyDown);
-            // document.removeEventListener('keyup', debounceKeyUp);
-
             };
 
         }, [sections, undoData, showCommands, firstTask, _currentProject, handleKeyDown]);
@@ -400,20 +339,16 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
         
         useEffect(() => {
             if (showBoardManager || showCommands.show || showSaveModal || returnIfModalOrInputActive() || showSearchTasks )return
-            // if (_activeItem===firstTask?.id)return
-            // console.log("🚀 ~ useEffect ~ elementToFocus:")
         
             
             const activeItem = getActiveItem();
             const elementToActivate = document.getElementById(`task-${activeItem}`)
-            // if (!parent)return
             if (activeItem && elementToActivate && !showSearchTasks) {
               spaceship.refocus(activeItem)
               const parent = elementToActivate?.parentElement?.id.split("-")[2]
               parent&&setActiveSection(parseInt(parent))
               
             } 
-            // console.log('focus goes to ==>', firstTask.uniqueIndex)
             else if (firstTask && _currentProject && !showSearchTasks) {
         
               const elementToFocus = document.getElementById(`task-${firstTask.id}`);
@@ -423,43 +358,27 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
               updateActiveItemAndItemInView(firstTask.id, _currentProject.id, getActiveSection())
             }
           }, [showBoardManager,showCommands.show,showSaveModal,firstTask, showSearchTasks]);
-        
-  
 
-
-          //  this one is responsible to bring focus back to the active element when you open a modal
-          //  HTPR-5201: the save-view modal was missing here, so saving a view dropped DOM
-          //  focus to <body> and the next h/l landed on whatever card the fallback picked
-          //  (usually the last one in the column) instead of the card you were on.
           useEffect(() => {
 
             const activeItem = getActiveItem();
             if (activeItem && !showBoardManager && !showCommands.show && !showSaveModal && document.activeElement?.tagName!=="INPUT" && !showSearchTasks ) {
             spaceship.refocus(activeItem)
-            // document.getElementById('task-' + _activeItem)?.scrollIntoView({  block: 'center' ,inline: "center", behavior:"smooth" as ScrollBehavior});
           }
       
           }, [ showBoardManager, showCommands.show, showManageColumnsModal, showSaveModal, showSearchTasks])
 
-  // ===================== dragend handler
   const onDragEndHandler = (result: DropResult) => {
-    console.time("onDragEndHandler"); // Start the timer
+    console.time("onDragEndHandler");
     const {source, destination, draggableId } = result;
     console.log("🚀 ~ onDragEndHandler ~ result:", result)
     if (!destination?.droppableId || !_currentProject) return;
   
     const itemId = parseInt(draggableId.split("-")[1]);
-    const sectionIndex = parseInt(source.droppableId); // section index where the item was dragged from
+    const sectionIndex = parseInt(source.droppableId);
     console.log("🚀 ~ original Sections ~ sections:", sections)
-    // return;
-    // DropResult indices refer to the RENDERED lists: sectionsToDisplay is what
-    // maps to the Droppables/Draggables (Homepage.tsx). The filteredSections
-    // prop can lag behind that state (cache-update lag after a previous drag),
-    // and positional lookups against it then resolve a DIFFERENT card/column
-    // and move the WRONG task server-side (HTPR-4543). Resolve everything
-    // against sectionsToDisplay, and the dragged card by id, never by index.
     const displaySource = sectionsToDisplay[sectionIndex];
-    const destinationSectionIdx = parseInt(destination.droppableId); // section index where the item was dropped at
+    const destinationSectionIdx = parseInt(destination.droppableId);
     const displayDestination = sectionsToDisplay[destinationSectionIdx];
     if (!displaySource || !displayDestination) return;
     const sectionId = displaySource.sectionId;
@@ -559,7 +478,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       return sec;
     });
     console.log("🚀 ~ onDragEndHandler ~ newSections:", newSections)
-    console.timeEnd("onDragEndHandler"); // Stop the timer and log the elapsed time
+    console.timeEnd("onDragEndHandler");
     const activeBuiltinViewId = activeBuiltinViews[_currentProject.id]
     const runningTimers = queryClient.getQueryData<Array<{ taskId: number }>>([
       "time",
@@ -598,7 +517,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
   
       const { allData, projectToUpdateIndex } = getProjectIdxAndAllData(_currentProject?.id)
   
-      // if (!allData || !projectToUpdateIndex) return;
       if (!allData || !allData.updatedProjects || projectToUpdateIndex == -1 || projectToUpdateIndex === undefined) return;
       mutationHandler(projectToUpdateIndex, newSections, allData, tasks)
     }

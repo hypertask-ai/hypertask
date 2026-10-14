@@ -5,11 +5,6 @@ import { columnRoleFor } from '@/lib/mcp/boards/columnRole'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
-/**
- * GET /api/mcp/projects/:projectId/manifest
- *
- * Returns the authenticated user's read-only view of a board's column structure.
- */
 export async function GET(
   request: NextRequest,
   props: { params: Promise<{ projectId: string }> }

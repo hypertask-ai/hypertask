@@ -15,21 +15,6 @@ import {
   resolveMcpAddMemberTarget,
 } from "@/lib/mcp/projects/addMemberTarget";
 
-/**
- * GET /api/mcp/projects/:projectId/members
- *
- * Returns ONLY members of the requested project (owner + project members).
- * Used for @mention resolution and assignee selection.
- *
- * SECURITY (CRITICAL):
- * - Strict project scoping: returns ONLY users who are members of :project_id
- * - Access control: verifies requesting user has permission to view this project
- * - Response integrity: projectId in response matches requested :project_id
- * - Do NOT return users from other projects, workspaces, or boards
- *
- * Auth: MCP JWT (Bearer token)
- * Errors: 401 (invalid/missing JWT), 403 (no permission), 404 (project not found)
- */
 export async function GET(request: NextRequest, props: { params: Promise<{ projectId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   const params = await props.params;
@@ -74,10 +59,6 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       );
     }
 
-    // HTPR-3805: this is a "list members" endpoint, not an assignee picker -
-    // excludeUserId must not be the caller. Passing it excluded the owner
-    // whenever the owner is also the requester (boards with zero Member
-    // rows then returned an empty list even though the owner has full access).
     const requestingUserId = user.id;
     const result = await getProjectMembers(
       projectId,
@@ -161,8 +142,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    // Match board remove-member: owner or project Admin may change membership.
-    // validateProjectAccess alone only proves read/use access.
     if (!(await isProjectAdmin(user.id, projectId))) {
       return NextResponse.json(
         {
@@ -217,7 +196,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     if (target.kind === "user_id") {
-      // HTPR-6408: numeric IDs are direct adds. Email invites stay consent-based.
       const result = await addExistingUserToProject(projectId, target.userId);
       if (!result.ok) {
         return NextResponse.json(
@@ -279,7 +257,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
       );
     }
 
-    // Email belonged to an existing team member; addMemberController added them.
     if (existingEmailUser) {
       const member =
         existingEmailMember ??

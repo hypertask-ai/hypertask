@@ -12,10 +12,6 @@ import { logger } from '../../utils/logger';
 
 type PageApiResponse = Record<string, unknown>;
 
-/**
- * Service for creating, reading, updating, listing, and searching pages.
- * Validates input and makes API requests.
- */
 export class PageService {
   constructor(private readonly apiClient: IApiClient) {}
 

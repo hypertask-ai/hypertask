@@ -21,10 +21,6 @@ function positiveInt(value: unknown): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
 }
 
-// POST /api/mcp/tasks/description-restore { task_id, version_id }
-// Restores a task's description to a historical snapshot. Restoring first
-// snapshots the current description (via upsertTaskDescription), so it is
-// itself undoable and never destroys history.
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -44,8 +40,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Accept the same identifiers as every other task route, so a caller
-    // holding a ticket number does not have to look the numeric id up first.
     const taskId = await resolveTaskIdOnly({
       task_id: positiveInt(body.task_id),
       ticket_number: typeof body.ticket_number === 'string' ? body.ticket_number : null,

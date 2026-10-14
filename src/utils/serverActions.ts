@@ -11,19 +11,14 @@ export const isMobileDevice = async () => {
   }
 
   const headersList = await headers();
-  const userAgent = headersList.get("user-agent") || ""; // Fallback to empty string if header is not available
-  // console.log("🚀 ~ isMobileDevice ~ userAgent:", userAgent);
+  const userAgent = headersList.get("user-agent") || "";
 
   const uaParser = new UAParser(userAgent);
-  // console.log("🚀 ~ isMobileDevice ~ uaParser:", uaParser);
   const OS = uaParser.getOS();
-  const device = uaParser.getDevice() || {}; // Fallback to empty object if no device information is available
-  // console.log("🚀 ~ isMobileDevice ~ OS:", OS);
-  // console.log("🚀 ~ isMobileDevice ~ device:", device);
+  const device = uaParser.getDevice() || {};
 
-  const { type = null, vendor = null } = device; // Use destructuring with default values
+  const { type = null, vendor = null } = device;
 
-  // Check if the device is mobile based on type or OS
   const isMobile =
     Boolean(
       type === "mobile" ||
@@ -39,9 +34,9 @@ export const isMobileDevice = async () => {
 
 
   return {
-    type, // Device type (e.g., "mobile", "tablet", or null if unavailable)
-    isMobile: isMobile ?? false, // True if the device is a mobile or has mobile OS
-    isApple, // True if the device is running macOS or iOS
+    type,
+    isMobile: isMobile ?? false,
+    isApple,
   };
 };
 

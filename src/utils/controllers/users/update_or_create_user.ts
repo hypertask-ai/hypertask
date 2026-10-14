@@ -27,22 +27,14 @@ const update_or_create_user = async (
       };
     }
 
-    // HTPR-4156: Gmail treats dots and +suffixes as noise, so the same inbox can
-    // arrive as several different strings. Exact match first, then the Gmail
-    // fallback, otherwise a user who typed their own address a different way got
-    // a second empty account instead of signing in.
     let exist_user = await findUserByEmail(email, { UserSetting: true });
 
-    let isNewUser = false; // Flag to track if this is a new user signup
+    let isNewUser = false;
 
-    // =======================================================================================================================
-    // ================================== NEW USER ======================
-    // =======================================================================================================================
 
     if (!exist_user) {
-      isNewUser = true; // Set flag to true for new user
+      isNewUser = true;
 
-      // =================== CREATE USER
       const userWithPhoto = {
         ...user,
         photoURL: user.photoURL
@@ -78,19 +70,12 @@ const update_or_create_user = async (
       });
     }
 
-    // =======================================================================================================================
-    // ================================== EXISTING USER ======================
-    // =======================================================================================================================
     else {
-      // For existing users, find the googleAccount using the existing user's ID, not user.id
       const googleAc = await prisma.googleAccount.findFirst({
         where: {
           userId: exist_user.id,
         },
       });
-      // HTPR-4156: key off the resolved id, not the typed string. When the Gmail
-      // fallback matched a dot-variant, `email` is not what is stored on the row,
-      // so this updated nothing.
       await prisma.user.update({
         where: {
           id: exist_user.id,
@@ -103,7 +88,6 @@ const update_or_create_user = async (
 
       await updateUserProfilePicture(exist_user.id, user.photoURL, user.displayName);
 
-      // Update onboardingTutorialStatus for existing users if shouldSkipInteractive is true
       if (shouldSkipInteractive && exist_user.UserSetting) {
         await prisma.userSetting.update({
           where: {
@@ -115,7 +99,6 @@ const update_or_create_user = async (
         });
       }
 
-      // HTPR-4156: by id, for the same reason as the update above.
       const updatedUser = await prisma.user.findFirst({
         where: {
           id: exist_user.id,

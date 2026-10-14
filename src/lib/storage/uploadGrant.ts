@@ -1,14 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-/**
- * A short-lived signed grant naming exactly the object keys one presign request
- * minted, and for whom (HTPR-5524 review).
- *
- * Without it, `/api/tasks/uploadFinalize` would authorize on the key prefix
- * alone, so any signed-in user who learned another user's attachment key could
- * ask for it to be deleted. The grant makes finalization a capability handed
- * back to the same caller, not a bucket-wide permission.
- */
 
 export type UploadGrantFile = {
   key: string;

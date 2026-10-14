@@ -57,15 +57,12 @@ export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
-  /** HTPR-7051: pasted image URLs keep their link and show the image, like a manual paste. */
   unfurlImageUrls?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
   fields?: Partial<Pick<Parameters<typeof createNewTaskGloballyAPIHandler>[0], "tags" | "assignees" | "priority" | "estimate">>;
 }): Promise<{ task: ITask; writerFailed: boolean; writerFailureReason?: string; tasks: ITask[]; failedTitles: string[] }> {
-  // Resolve the destination before spending AI credits; omitting sectionId uses
-  // the same first active column as the regular create-task form.
   let defaults = existingTaskId ? null : await axios.get("/api/tasks/createGlobally", {
     params: { projectId: project.id, position: "top" },
   });
@@ -115,14 +112,11 @@ export async function createComposedTask({
       }),
     });
     if (!response.ok) {
-      // Same extraction as the AI Task Writer panel (HTPR-7077).
       if (explainWriterFailure) writerFailureReason = await describeTaskWriterFailure(response);
       throw new Error("Task writer unavailable");
     }
     let html = "";
     if (onProgress && response.body) {
-      // Headers arrive after server retrieval and prompt preparation. The model
-      // can use that context while we wait for its first visible output.
       onProgress("Understanding the context");
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -145,10 +139,7 @@ export async function createComposedTask({
     } else {
       html = await response.text();
     }
-    // HTPR-7123: only a server that announced the ticket type is read for it.
     const typedWriter = response.headers?.get(TICKET_TYPE_HEADER) === "enabled";
-    // This endpoint streams raw HTML on success, but SSE error frames can arrive
-    // after a 200. A partial answer must not be mistaken for a completed ticket.
     if (/^event:\s*(?:error|done)\b/m.test(html)) {
       if (explainWriterFailure) writerFailureReason = describeTaskWriterStreamFailure(html) ?? undefined;
       throw new Error("Task writer interrupted");
@@ -162,7 +153,6 @@ export async function createComposedTask({
           throw new Error("Task writer returned an incomplete ticket");
         }
         const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
-        // Same DOM removal of writer markers that the single-task path does in extractTitleAndDescription.
         return { title: draft.title, description: typed ? stripWriterMarkers(typed.html) : draft.description,
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
@@ -213,10 +203,7 @@ export async function createComposedTask({
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
   for (const [index, draft] of drafts.entries()) {
-    // HTPR-7123: the ticket type picks the column and the task goes to its top, like the default column.
-    // No view setting chooses a column for a new task, so only an existing task or a missing match keeps the default.
     let placement = defaults?.data;
-    // Only a board whose default column is the Bugs column is rerouted; any other first column keeps today's behaviour.
     const typedSection = !existingTaskId && isBugsColumn(defaults?.data, project.section ?? project.sections)
       ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
     if (typedSection) {
@@ -225,7 +212,7 @@ export async function createComposedTask({
           params: { projectId: project.id, sectionId: typedSection.id, position: "top" },
         });
         if (top?.data?.sectionId === typedSection.id && top.data.ranking) placement = { ...top.data, section: typedSection.title };
-      } catch { /* keep the default column */ }
+      } catch {}
     }
     try {
       const created = await createNewTaskGloballyAPIHandler({

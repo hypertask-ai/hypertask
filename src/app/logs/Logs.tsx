@@ -16,7 +16,6 @@ const Logs: React.FC<LogsProps> = ({ logs })  => {
     const [selectedDay, setSelectedDay] = useState<string>()
 
     useEffect(() => {
-        // Helper function to group logs by day
         const groupLogsByDay = (logsArray: typeof logs) => {
           return logsArray.reduce((acc, log) => {
             const date = new Date(log.createdAt).toISOString().split('T')[0];
@@ -28,7 +27,6 @@ const Logs: React.FC<LogsProps> = ({ logs })  => {
           }, {} as { [key: string]: ILog[] });
         };
     
-        // Update groupedLogs when the logs prop changes
         setGroupedLogs(groupLogsByDay(logs));
         setSelectedDay(logs[0].createdAt.toISOString().split('T')[0])
       }, [logs]);
@@ -39,7 +37,6 @@ const Logs: React.FC<LogsProps> = ({ logs })  => {
             className='flex items-center justify-center flex-col w-full min-h-fit bg-dark-background'>
             <div className={`w-full max-w-[1440px] min-h-screen  py-9 px-16 flex flex-col items-start  bg-[#212429]`}>
         
-                    {/* <p style={{ fontSize: '24px' }}>Comments</p> */}
                     <div className='hidden sm:flex  sm:gap-8 w-100  h-20 sm:h-8  overflow-x-auto scrollbar-none no-scrollbar font-bold mb-3' >
                         
                         {
@@ -72,13 +69,10 @@ const Logs: React.FC<LogsProps> = ({ logs })  => {
                                         <div className="flex gap-3">
                                             <span className="">
                                                 {log.log} 
-                                                {/* at{' '} */}
-                                                {/* <span className="underline text-[#6b7cd9]">{getHoursAndMinutes(log.createdAt.toISOString())}</span> */}
                                             </span>
                                   
                                         </div>
                                         <p className="whitespace-nowrap">{formatDateDifference(log.createdAt.toString())}</p>
-                                    {/* Render other properties of your log object as needed */}
                                 </div>
                             ))}
 

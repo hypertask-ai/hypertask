@@ -20,9 +20,6 @@ const ACCOUNT_INDEX = "accountId";
 const CLEAR_MESSAGE = "clear-board-read-models";
 const DELETE_TIMEOUT_MS = 2_000;
 
-// Snapshots and revocation stubs share one key per board and record their own
-// recency field (savedAt / revokedAt respectively) — this reads whichever is
-// present so both compete on equal footing for the retained slots.
 const recordRecency = (record: unknown): string | null => {
   const savedAt = (record as { savedAt?: unknown })?.savedAt;
   if (typeof savedAt === "string") return savedAt;
@@ -127,8 +124,6 @@ export const readBoardReadModel = async (
     if (!isBoardReadModelSnapshotV1(snapshot, accountId, projectId)) return null;
     return materializeBoardReadModelSnapshot(snapshot);
   } catch {
-    // IndexedDB can be denied in private contexts. The server path remains the
-    // source of truth and must keep working without local persistence.
     return null;
   } finally {
     closeDatabase(database);
@@ -156,8 +151,6 @@ export const writeBoardReadModel = async ({
     const transaction = database.transaction(STORE_NAME, "readwrite");
     const transactionComplete = waitForTransaction(transaction);
     const store = transaction.objectStore(STORE_NAME);
-    // Another tab may have revoked this board mid-write. Revocation wins until
-    // fresh network authorization lifts it.
     let wroteSnapshot = false;
     const existing = store.get(snapshot.key);
     existing.onsuccess = () => {
@@ -168,12 +161,6 @@ export const writeBoardReadModel = async ({
       wroteSnapshot = true;
     };
 
-    // HTPR-5753: the pilot keeps the RETENTION_LIMIT most-recently-written
-    // boards per account (was 1, uncovering that cross-session board
-    // rotation, not live in-session switching, was driving most network-path
-    // loads). Whole-record eviction only: a stub occupies the same key as the
-    // snapshot it masks, so deleting a key always drops both together, never
-    // leaving one behind.
     const otherRecords: { key: string; recency: string }[] = [];
     const cursorRequest = store.index(ACCOUNT_INDEX).openCursor(IDBKeyRange.only(accountId));
     cursorRequest.onsuccess = () => {
@@ -195,9 +182,6 @@ export const writeBoardReadModel = async ({
 
     await transactionComplete;
     const committed = startedGeneration === operationGeneration;
-    // HTPR-5927: first successful snapshot write proves this origin has a
-    // board-read-model database, so later loads can skip indexedDB.databases()
-    // and go straight to the keyed open (see readModelMarker.ts).
     if (committed && wroteSnapshot) setBoardReadModelMarker();
     return committed;
   } catch {
@@ -207,11 +191,6 @@ export const writeBoardReadModel = async ({
   }
 };
 
-/**
- * Revoking overwrites the snapshot with a stub in a single put. Deleting the
- * record instead would leave nothing behind to say the board was denied, so a
- * reload could republish a snapshot whose deletion had failed.
- */
 export const revokeBoardReadModel = async (
   accountId: number,
   projectId: number,
@@ -237,10 +216,6 @@ export const revokeBoardReadModel = async (
   }
 };
 
-/**
- * Fresh network authorization is the only thing that lifts a revocation. A
- * valid snapshot is left alone: only the stub (or an unreadable record) goes.
- */
 export const clearBoardReadModelRevocation = async (
   accountId: number,
   projectId: number,
@@ -262,8 +237,6 @@ export const clearBoardReadModelRevocation = async (
     };
     await transactionComplete;
   } catch {
-    // Nothing to recover: the board simply stays revoked locally until the
-    // next authorization tries again.
   } finally {
     closeDatabase(database);
   }
@@ -274,10 +247,6 @@ export const clearBoardReadModels = async (): Promise<boolean> => {
   operationsDisabled = true;
   closeActiveDatabases();
   clearChannel?.postMessage(CLEAR_MESSAGE);
-  // HTPR-5927: this deletes the whole database, so the marker (which only
-  // claims "some snapshot may exist") must go with it. revokeBoardReadModel
-  // and clearBoardReadModelRevocation, below, touch a single board's record
-  // and leave the rest of the store intact, so they don't clear this.
   clearBoardReadModelMarker();
   if (typeof indexedDB === "undefined") return true;
 
@@ -294,9 +263,6 @@ export const clearBoardReadModels = async (): Promise<boolean> => {
     request.onsuccess = () => finish(true);
     request.onerror = () => finish(false);
     request.onblocked = () => {
-      // Do not report success while another tab still owns a connection. The
-      // BroadcastChannel/versionchange handlers close cooperating tabs; the
-      // timeout lets logout continue while accurately reporting failure.
       closeActiveDatabases();
       clearChannel?.postMessage(CLEAR_MESSAGE);
     };

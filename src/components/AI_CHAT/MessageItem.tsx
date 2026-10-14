@@ -1,4 +1,3 @@
-// components/MessageItem.tsx
 import AttachmentView from "@/components/Common/AttachmentsView";
 import { IMessageItemProps } from "@/models/AICHATMODELS";
 import { IChatMessage, TCarousalItems } from "@/models/model";
@@ -64,7 +63,6 @@ export const MessageItem: FC<IMessageItemProps> = ({
             />
         )}
         {message.role === "assistant" && message.authorAgent?.displayName && (
-          // HTPR-6284: a routed @mention reply names the agent that wrote it.
           <div className="text-micro text-icon-dark-gray px-2">
             {message.authorAgent.displayName}
           </div>
@@ -273,9 +271,6 @@ const SubMessage = ({ message }: { message: IChatMessage }) => {
     useAiChatContext();
   const isMbl = useContext(MobileViewContext);
 
-  // On mobile the chat is a sheet covering the page, so following a link left the
-  // ticket loading invisibly behind it. Opening something means you want to look
-  // at it: dismiss the chat. Desktop keeps the chat open beside the content.
   const revealNavigationTarget = () => {
     if (isMbl && showAiChatInterface) togglePopover();
   };

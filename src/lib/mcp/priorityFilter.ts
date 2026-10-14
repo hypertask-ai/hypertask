@@ -1,7 +1,5 @@
 import { PriorityConstants } from '@/lib/constants/constants'
 
-// HTPR-6799: the CLI sends priority numbers (priority=1) while MCP callers send
-// names (priority=Urgent). Both resolve to the stored priority_index.
 const PRIORITY_ALIASES: Record<string, number> = { none: 0 }
 
 export function parsePriorityFilter(values: string[]): number[] | null {

@@ -1,14 +1,3 @@
-/**
- * Turns plain-text Hypertask ticket references (e.g. HTPR-1234) inside an HTML
- * fragment into clickable links to the in-app ticket page, scoped to whatever
- * projects the given user/agent can access. Used to linkify AI-generated
- * responses (chat + @AI comment replies) where the model mentions a ticket
- * without wrapping it in an anchor itself.
- *
- * Refs already inside an existing <a> tag, or that don't resolve to a task
- * the caller can see, are left as plain text. The pure text-transform lives in
- * ticketRefLinker.ts (see ticketRefLinker.check.ts for its unit checks).
- */
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {

@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/exhaustive-deps */
+
 import React, { RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import toast from "react-hot-toast";
@@ -37,7 +37,6 @@ const NewTask = ({
         textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`
       }
       resize()
-      // Wrapping also changes when the column or viewport width changes.
       if (typeof ResizeObserver === 'undefined') return
       let width = textarea.clientWidth
       const observer = new ResizeObserver(() => {
@@ -74,7 +73,6 @@ const NewTask = ({
     const schemaCheck = ()=>{
       const trimmedTitle = title.trim();
   
-      // Check if the trimmed title is not empty
       
       if (trimmedTitle.length > 0) {
         return trimmedTitle;

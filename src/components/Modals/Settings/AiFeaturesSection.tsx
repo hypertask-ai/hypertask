@@ -50,7 +50,6 @@ type FeatureModelRow = {
   enabled: boolean;
   model: string | null;
   effectiveModel: string | null;
-  // Only present on the "dictation" row (transcription backend, no LLM model).
   provider?: DictationProvider;
 };
 

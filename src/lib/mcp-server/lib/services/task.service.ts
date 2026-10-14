@@ -162,7 +162,7 @@ export interface GetTaskResponse {
 
 export interface UpdateTaskResponse {
   success: boolean;
-  task: TaskDetail; // or TaskListItem if API returns simplified version
+  task: TaskDetail;
   attachments?: AttachmentUploadItem[];
   attachment_status?: 'complete' | 'partial' | 'failed';
   failed_files?: Array<{ index: number; filename: string; error: string }>;
@@ -281,9 +281,6 @@ export interface LinkTasksResponse {
 
 type TaskDescriptionHistoryResponse = Record<string, unknown>;
 
-/**
- * Service for task operations - listing and retrieving tasks.
- */
 export class TaskService {
   constructor(private readonly apiClient: IApiClient) { }
 
@@ -291,7 +288,6 @@ export class TaskService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = ListTasksInputSchema.parse(params);
 
       logger.debug('Listing tasks', {
@@ -304,7 +300,6 @@ export class TaskService {
         offset: validatedInput.offset,
       });
 
-      // Build query parameters
       const queryParams = new URLSearchParams();
 
       if (validatedInput.project_id) {
@@ -406,21 +401,14 @@ export class TaskService {
         correlationId
       );
 
-      // Guard against undefined/malformed response (HTPR-3030)
       const rawTasks = response?.tasks ?? [];
       const validTasks = rawTasks.filter((t): t is TaskListItem => t != null);
 
-      // Normalize priority values in list response
-      // Note: ListTasksResponse uses simplified priority string, so we need to handle it differently
-      // If the API returns priority as a string, we keep it as-is
-      // If it returns priority_index, we normalize it
       // @ts-expect-error list-query merge types fields as unknown
       const requestedFields = parseFields(validatedInput.fields)
       const normalizedTasks = validTasks.map((task) => {
-        // Projection is final: never add row fields after the route projected.
         if (requestedFields.length > 0 || task.link) return task
 
-        // Add task link information for MCP clients (guard task.projectId)
         const linkInfo =
           task.projectId != null
             ? getTaskLinkInfo({
@@ -470,42 +458,28 @@ export class TaskService {
     const correlationId = generateCorrelationId();
 
     try {
-      // Validate input
       const validatedInput = GetTaskInputSchema.parse(params);
 
-      // logger.debug('Getting tasks', {
-      //   correlationId,
-      //   taskIdCount: validatedInput.task_id?.length,
-      //   ticketNumberCount: validatedInput.ticket_number?.length,
-      //   projectId: validatedInput.project_id,
-      //   uniqueIndex: validatedInput.unique_index,
-      // });
 
-      // Build query parameters for single API call
       const queryParams = new URLSearchParams();
 
       if (validatedInput.task_id) {
-        // Add all task IDs to query params
         validatedInput.task_id.forEach((taskId) => {
           queryParams.append('task_id', String(taskId));
         });
       } else if (validatedInput.ticket_number) {
-        // Add all ticket numbers to query params
         validatedInput.ticket_number.forEach((ticketNumber) => {
           queryParams.append('ticket_number', ticketNumber);
         });
       } else if (validatedInput.unique_index !== undefined && validatedInput.project_id !== undefined) {
-        // Efficient lookup by project_id + unique_index
         queryParams.append('project_id', String(validatedInput.project_id));
         queryParams.append('unique_index', String(validatedInput.unique_index));
       }
 
       if (validatedInput.project_id && validatedInput.unique_index === undefined) {
-        // Only add project_id if not using unique_index lookup (it's already added above)
         queryParams.append('project_id', String(validatedInput.project_id));
       }
 
-      // Make single API call with all IDs/ticket numbers
       const response = await this.apiClient.makeRequest<GetTaskResponse>(
         `/mcp/tasks?${queryParams.toString()}`,
         {
@@ -516,11 +490,9 @@ export class TaskService {
 
       const tasks = response.tasks || [];
 
-      // Normalize priority and estimate values based on indices
       const normalizedTasks = tasks.map((task) => {
         const normalizedTask = { ...task };
 
-        // Normalize priority: use index to get correct value, ignoring API's Priority_Value
         if (normalizedTask.priority?.priority_index !== undefined) {
           normalizedTask.priority = {
             ...normalizedTask.priority,
@@ -528,7 +500,6 @@ export class TaskService {
           };
         }
 
-        // Normalize estimate: use index to get correct value, ignoring API's estimate_value
         if (normalizedTask.estimate?.estimate_index !== undefined) {
           normalizedTask.estimate = {
             ...normalizedTask.estimate,
@@ -537,7 +508,6 @@ export class TaskService {
           };
         }
 
-        // Add task link information for MCP clients
         const linkInfo = getTaskLinkInfo({
           ticketNumber: normalizedTask.ticketNumber,
           projectId: normalizedTask.projectId,
@@ -549,11 +519,6 @@ export class TaskService {
         return normalizedTask;
       });
 
-      // logger.info('Tasks retrieved successfully', {
-      //   correlationId,
-      //   taskCount: normalizedTasks.length,
-      //   lookupMethod: validatedInput.unique_index !== undefined ? 'project_id+unique_index' : validatedInput.task_id ? 'task_id' : 'ticket_number',
-      // });
 
       return {
         success: true,
@@ -799,7 +764,6 @@ export class TaskService {
         correlationId
       );
 
-      // logger.info('Task tree retrieved successfully', { correlationId });
 
       return response;
     } catch (error) {
@@ -817,7 +781,6 @@ export class TaskService {
   ): Promise<UpdateTaskResponse> {
     const correlationId = generateCorrelationId();
     try {
-      // Validate input
       const validatedInput = UpdateTaskInputSchema.parse(params);
       const { attachments, ...taskUpdate } = validatedInput;
       const hasTaskFieldUpdate =
@@ -872,14 +835,10 @@ export class TaskService {
         };
       }
 
-      // HTPR-3772: the server returns no `task` when the identifier matched nothing
-      // (e.g. a bare numeric ticket like "3772" instead of "HTPR-3772"). Fail clean
-      // instead of dereferencing undefined.
       if (!response.task) {
         throw new Error(response.message || 'Task not found or access denied');
       }
 
-      // Add task link information for MCP clients
       const linkInfo = getTaskLinkInfo({
         ticketNumber: response.task.ticketNumber,
         projectId: response.task.projectId,
@@ -915,12 +874,6 @@ export class TaskService {
         return { ...response, ...attachmentOutcome };
       }
 
-      // logger.info('Task updated successfully', {
-      //   correlationId,
-      //   taskId: response.task.id,
-      //   ticketNumber: response.task.ticketNumber,
-      //   projectId: response.task.projectId,
-      // });
 
       return response;
     } catch (error) {
@@ -938,7 +891,6 @@ export class TaskService {
   ): Promise<CreateTaskResponse> {
     const correlationId = generateCorrelationId();
     try {
-      // Validate input
       const validatedInput = CreateTaskInputSchema.parse(params);
       const { attachments, ...taskInput } = validatedInput;
 
@@ -949,7 +901,6 @@ export class TaskService {
         sectionId: validatedInput.section_id,
       });
 
-      // Build explicit body to ensure project_id is always sent (fixes "Project identifier is required" from backends)
       const body: Record<string, unknown> = {
         project_id: taskInput.project_id,
         title: taskInput.title,
@@ -981,7 +932,6 @@ export class TaskService {
         correlationId
       );
 
-      // Add task link information for MCP clients
       const linkInfo = getTaskLinkInfo({
         ticketNumber: response.task.ticketNumber,
         projectId: response.task.projectId,
@@ -999,12 +949,6 @@ export class TaskService {
         return { ...response, ...attachmentOutcome };
       }
 
-      // logger.info('Task created successfully', {
-      //   correlationId,
-      //   taskId: response.task.id,
-      //   ticketNumber: response.task.ticketNumber,
-      //   projectId: response.task.projectId,
-      // });
 
       return response;
     } catch (error) {
@@ -1016,10 +960,6 @@ export class TaskService {
     }
   }
 
-  /**
-   * Moves a task from one board/project to another.
-   * Use a dedicated endpoint for cross-board moves (distinct from update_task sectionId for intra-board column changes).
-   */
   async moveTaskBetweenBoards(params: unknown): Promise<UpdateTaskResponse> {
     const correlationId = generateCorrelationId();
     try {
@@ -1031,7 +971,6 @@ export class TaskService {
       if (validatedInput.target_section_id !== undefined) {
         body.target_section_id = validatedInput.target_section_id;
       }
-      // Forward task identification
       if (validatedInput.task_id !== undefined) body.task_id = validatedInput.task_id;
       if (validatedInput.ticket_number !== undefined) body.ticket_number = validatedInput.ticket_number;
       if (validatedInput.unique_index !== undefined) body.unique_index = validatedInput.unique_index;

@@ -27,11 +27,6 @@ export function countFeatureFlagsByAudience(
   return counts;
 }
 
-/**
- * `shippedOn` is a bare calendar day ("2026-09-04") with no timezone. Date.parse would read
- * it as UTC midnight and show the previous day to anyone west of UTC, so build local midnight
- * from the parts instead.
- */
 function localDay(shippedOn: string): Date | null {
   const [year, month, day] = shippedOn.split("-").map(Number);
   if (!year || !month || !day) return null;
@@ -54,15 +49,6 @@ function dayLabel(date: Date | null): string {
   });
 }
 
-/**
- * Sorts flags by date and clusters them by calendar day.
- *
- * The date is the day the flag key first reached production. Every declared
- * flag carries one, and a stored key with no definition left behind by a removed flag falls
- * back to its `updatedAt`, which the database sets on write, so in practice the trailing
- * "Not yet released" cluster stays empty. The null handling below is still the honest
- * fallback for a row that somehow has neither date; do not remove it.
- */
 export function clusterFeatureFlagsByReleaseDate(
   flags: FeatureFlagRow[],
   sortDirection: "asc" | "desc" | "risk",

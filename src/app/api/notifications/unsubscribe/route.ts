@@ -3,13 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { verifyUnsubscribeToken } from "@/lib/email/unsubscribe";
 
-// HTPR-4164: turns off notification email for whoever holds a validly-signed
-// token. Deliberately NO auth: the whole point is a stop path for someone who
-// cannot log in, and Gmail/Yahoo one-click POSTs this URL unattended with no
-// cookies. The signature is the authorisation.
-//
-// GET so a human clicking the footer link lands somewhere, POST so providers can
-// do the one-click handshake. Both do the same thing.
 export const dynamic = "force-dynamic";
 
 async function unsubscribe(request: NextRequest) {
@@ -20,9 +13,6 @@ async function unsubscribe(request: NextRequest) {
     return { ok: false as const, message: "This unsubscribe link is not valid." };
   }
 
-  // The email is signed into the token, but it is the user row that decides
-  // where mail goes. Re-check they still match, so a token for an address the
-  // account has since moved away from cannot silence the new one.
   const user = await prisma.user.findUnique({
     where: { id: claim.userId },
     select: { id: true, email: true },
@@ -31,9 +21,6 @@ async function unsubscribe(request: NextRequest) {
     return { ok: false as const, message: "This unsubscribe link is no longer valid." };
   }
 
-  // notification=false is the master switch every send already checks;
-  // notificationPreference=nothing keeps the in-app settings UI consistent with
-  // what actually happens.
   await prisma.userSetting.updateMany({
     where: { userId: user.id },
     data: { notification: false, notificationPreference: "nothing" },
@@ -77,7 +64,6 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  // One-click: providers want a 2xx and ignore the body.
   const result = await unsubscribe(request);
   return NextResponse.json(
     { success: result.ok, message: result.message },

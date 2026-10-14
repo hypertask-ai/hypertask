@@ -33,7 +33,6 @@ export async function GET(request: NextRequest) {
     try {
       restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
     } catch {
-      // Flag lookup failure preserves the legacy entry path.
     }
   }
   const cookieUser = restCompat && currentUser
@@ -92,7 +91,6 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     const { priorStart, windowStart } = velocityWindow(now, range);
 
-    // Scans every non-deleted open board task; fine on demand, but use groupBy on a hot path.
     const [tasks, comments] = await Promise.all([
       prisma.task.findMany({
         where: {
@@ -121,8 +119,6 @@ export async function GET(request: NextRequest) {
       prisma.comment.groupBy({
         by: ["creatorId"],
         where: {
-          // Bounded at both ends: a comment written between capturing `now` and
-          // this query would push _max past `now` and void the whole group.
           createdAt: { gte: windowStart, lte: now },
           task: { projectId },
         },

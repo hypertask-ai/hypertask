@@ -20,10 +20,9 @@ export interface ICommandList {
     key: string;
     name: string;
     payload?: string;
-    commandMode: CommandMode; // Assuming CommandMode is a predefined type or enum
-    checkOwnerShip?: boolean; // This property is optional
+    commandMode: CommandMode;
+    checkOwnerShip?: boolean;
     keyboard?:(string | null)[]
-    /** Optional synonyms/keywords for Cmd+K search discoverability */
     keywords?: string;
     isNew?: boolean;
    }

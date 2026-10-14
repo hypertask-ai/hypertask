@@ -108,10 +108,6 @@ export async function POST(request: NextRequest) {
     ),
   ]);
   const cookieClaimId = cookieUser?.id ? Number(cookieUser.id) : null;
-  // Legacy browser sessions prove nookies_user with the signed ht_session.
-  // Better Auth sessions are also valid when their server-resolved identity
-  // agrees with the legacy display cookie. The JSON cookie alone never proves
-  // identity, but neither path requires an Authorization header.
   const authenticatedSessionUserId =
     cookieIdentity.status === "verified"
       ? cookieIdentity.id
@@ -138,9 +134,6 @@ export async function POST(request: NextRequest) {
   const bearerContext = hasAuthorization
     ? await validateMcpAuth(request)
     : null;
-  // A supplied bearer remains the selected principal even when an ambient
-  // browser session is present. Native agents and management keys cannot use
-  // this human HyperAI entry point or inherit its user-scoped MCP token.
   const requestUser = hasAuthorization
     ? bearerContext && !bearerContext.agentId && !bearerContext.management
       ? bearerContext.user
@@ -246,9 +239,6 @@ export async function POST(request: NextRequest) {
       userId: requestUser.id,
       projectId: body.projectId,
     });
-    // A bare "@hyperai /standup" strips to an empty string. Fall back to the raw
-    // text so retrieval and the model prompt are never empty; the skill body in
-    // the system prompt still carries the intent.
     const promptText = skillResolution.cleanedText || sourceMessageText;
     const requestedMentionLabel = body.modelMentionLabel?.trim() || null;
     const requestedMention = resolveAiModelMention(requestedMentionLabel, await haiku55ModelEnabled(requestUser.id));
@@ -307,19 +297,11 @@ export async function POST(request: NextRequest) {
     const accessibleProjectIds = accessibleProjects.map(
       (project) => project.id
     );
-    // The mention is always about the ticket it was posted on. Load that
-    // ticket's own content directly so it is ALWAYS in context and clearly
-    // labelled, then add accessible-board semantic results only as background. Without
-    // the "THIS TICKET" anchor, a vague prompt like "summarize this ticket" fell
-    // back to the project-wide search and could summarise an unrelated ticket.
     const [currentTaskContext, currentTaskImages, relatedContext] =
       await Promise.all([
         loadCurrentTaskContext([usageTaskId], requestUser.id, undefined, {
           projectId: body.projectId,
         }),
-        // Images anywhere on this ticket (description + all comments), not just the
-        // triggering comment's own attachments (body.images64). Fixes HyperAI being
-        // blind to screenshots posted in the description or an earlier comment.
         loadCurrentTaskImages([body.taskId], requestUser.id),
         retrieveTaskWriterContext({
           projectId: body.projectId,
@@ -379,8 +361,6 @@ export async function POST(request: NextRequest) {
               ...body.images64,
               ...body.pdfs64,
               ...body.docx64,
-              // ponytail: the triggering comment's image may also appear here as a
-              // URL, so the model may see it twice — harmless, and cheap under the cap.
               ...currentTaskImages,
             ]
           ),
@@ -416,9 +396,6 @@ export async function POST(request: NextRequest) {
     const requesterName = requestUser.displayName || "User";
     const requesterId = requestUser.id;
     const sanitizedAiHtml = sanitizeRichHtml(ensureHtmlFragment(text));
-    // Linkify is enrichment only — never let it fail the comment post.
-    // markAiDetailAnchors also stamps model-authored detail links so NO
-    // AI-generated anchor can create a TaskRelation via extractTaskReferences.
     const aiResponse = markAiDetailAnchors(
       await linkifyTicketRefs(sanitizedAiHtml, requestUser.id).catch(
         (err) => {

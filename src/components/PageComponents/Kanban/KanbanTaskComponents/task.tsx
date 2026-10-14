@@ -108,9 +108,6 @@ const TaskContent = ({
     handleBulkKeyDown,
   } = useKanbanBulkSelection();
   const taskRef = useRef<HTMLDivElement | null>(null);
-  // HTPR-3814: subscribe to a per-card selector instead of activeItemAtom so
-  // moving the selection only re-renders the cards whose active-state flips,
-  // not all of them.
   const isActive = useRecoilValue(isActiveTaskSelector(task.id));
   const setActiveItem = useSetRecoilState(activeItemAtom);
   const setInViewObject = useSetRecoilState(inViewObjectAtom);
@@ -120,9 +117,6 @@ const TaskContent = ({
   const lastM_APress = useRef<number | null>(null);
   const { navigate, navigateToTask } = useHypertasksNavigate();
   const { resetShowCommands } = useHypertasksRecoilStates();
-  // HTPR-3814: card modal flags used to live in a per-card ModalProvider wrapped
-  // around every Task (173 providers on the heaviest board). Folded into the card
-  // itself; only the active card ever opens these.
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showPriorityModal, setShowPriorityModal] = useState(false);
   const [showEstimateModal, setShowEstimateModal] = useState(false);
@@ -195,10 +189,6 @@ const TaskContent = ({
 
   const toggleAssigneesModal = (_assignees?: IAssignees[], keepOpen?: boolean) => {
     if (_assignees) updateAssignees(sectionId, task.id, _assignees);
-    // keepOpen mirrors the detail view: the assign menu refreshes the card
-    // without closing, so several people can be toggled in one session.
-    // Force-closing here made users reopen instantly and race the modal
-    // into a state where clicks stop registering (HTPR-3731).
     if (!keepOpen) setShowAssignModal((prev) => !prev);
   };
 
@@ -339,9 +329,6 @@ const TaskContent = ({
     } = latestRef.current;
     const taskElement = taskRef.current;
     if (!taskElement) return;
-    // The selected card keeps its shortcuts when focus has fallen back to the
-    // body — returning from the detail view, closing a modal, clicking empty
-    // board space. It still renders as selected, so it must still respond.
     const focusLost =
       !document.activeElement || document.activeElement === document.body;
     const focusWithinTask = taskElement.contains(document.activeElement);
@@ -386,7 +373,6 @@ const TaskContent = ({
         Boolean(lastgPress.current),
       )
     ) {
-      // Bulk actions can advance focus before this event reaches document.
       e.preventDefault();
       e.stopPropagation();
       return;
@@ -395,7 +381,6 @@ const TaskContent = ({
     if (e.keyCode === KeyCodes.TAB) {
       e.preventDefault();
     }
-    // [#] for delete task
     if (
       taskShortcutAction === "delete" ||
       (!rowShortcutsEnabled && e.shiftKey && e.keyCode === KeyCodes.THREE)
@@ -407,20 +392,15 @@ const TaskContent = ({
       });
     }
 
-    // [ctrl]+[e]
     if (
       taskShortcutAction === "archive" ||
       (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && cmdControl)
     ) {
       e.preventDefault();
-      // A held key emits repeated keydown events. Archiving advances focus to
-      // the next card and then into the next column, so those repeats would
-      // otherwise archive far more than the user pressed for.
       if (!shouldRunArchiveShortcut(e)) return;
       markAsDone(task.section, task.id, task.parentTask);
     }
 
-    // [s] for size / estimate
     if (
       (taskShortcutAction === "size" ||
         (!rowShortcutsEnabled &&
@@ -437,7 +417,6 @@ const TaskContent = ({
       });
     }
 
-    // [p] for set priority
     if (
       (taskShortcutAction === "priority" ||
         (!rowShortcutsEnabled &&
@@ -453,14 +432,12 @@ const TaskContent = ({
       });
     }
 
-    // press [e]
     if (
       taskShortcutAction === "edit" ||
       (!rowShortcutsEnabled && e.keyCode === KeyCodes.E && !cmdControl)
     )
       eHandler();
 
-    //[a]
     if (
       (taskShortcutAction === "assignee" ||
         (!rowShortcutsEnabled && e.keyCode === KeyCodes.A)) &&
@@ -508,7 +485,6 @@ const TaskContent = ({
       }
     }
 
-    // [d]
     if (
       !lastgPress.current &&
       (taskShortcutAction === "dueDate" ||
@@ -542,7 +518,6 @@ const TaskContent = ({
       }
     }
 
-    // shift + [k]
     if (
       (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP) &&
       e.shiftKey
@@ -553,7 +528,6 @@ const TaskContent = ({
       setMovingItem(false);
     }
 
-    // shift + [j]
     if (
       (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN) &&
       e.shiftKey
@@ -564,7 +538,6 @@ const TaskContent = ({
       setMovingItem(false);
     }
 
-    // [t] for tag
     if (
       taskShortcutAction === "label" ||
       (!rowShortcutsEnabled && e.keyCode === KeyCodes.T && !e.shiftKey)
@@ -575,7 +548,6 @@ const TaskContent = ({
         mode: CommandMode.LabelModal,
       });
     }
-    // shift + [h]
     if (
       (e.keyCode === KeyCodes.H || e.keyCode === KeyCodes.ARROW_LEFT) &&
       e.shiftKey
@@ -585,7 +557,6 @@ const TaskContent = ({
       await moveItemLeft(sectionId, task.id);
       setMovingItem(false);
     }
-    // shift + [l]
     if (
       (e.keyCode === KeyCodes.L || e.keyCode === KeyCodes.ARROW_RIGHT) &&
       e.shiftKey
@@ -598,7 +569,7 @@ const TaskContent = ({
     if (e.ctrlKey) {
       if (e.keyCode === KeyCodes.TAB) {
         e.preventDefault();
-        console.log("ctrl+tab"); // chromium fullscreen (think PWA)
+        console.log("ctrl+tab");
       }
     }
 
@@ -613,7 +584,6 @@ const TaskContent = ({
       });
     }
 
-    // [m]
     if (
       (taskShortcutAction === "moveColumn" ||
         (!rowShortcutsEnabled &&
@@ -637,7 +607,6 @@ const TaskContent = ({
         mode: CommandMode.MoveToColumn,
       });
     }
-    // [shift][m]
     if (
       taskShortcutAction === "moveBoard" ||
       (!rowShortcutsEnabled &&
@@ -652,7 +621,6 @@ const TaskContent = ({
       });
     }
 
-    // enter
     if (
       (taskShortcutAction === "open" ||
         (!rowShortcutsEnabled && e.keyCode === KeyCodes.ENTER)) &&
@@ -665,14 +633,12 @@ const TaskContent = ({
       console.timeEnd("EnterPressOnTask");
     }
 
-    // cmd/ctrl + [m]
     if (e.keyCode === KeyCodes.M && cmdControl) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
       navigateToTask(task.projectId, task.uniqueIndex, "push", `?reply=true`, instantTicketOpen ? task : undefined);
     }
 
-    // GG
     if (e.keyCode === KeyCodes.G && e.shiftKey) {
       const now = new Date().getTime();
       if (lastgClick.current && now - lastgClick.current < 500) {
@@ -682,7 +648,7 @@ const TaskContent = ({
         )?.children;
 
         if (tasksList!.length > 0) {
-          // @ts-ignore
+          // @ts-expect-error querySelectorAll returns Element, which does not declare focus.
           tasksList![tasksList!.length - 1].focus();
         }
         e.preventDefault();
@@ -690,11 +656,10 @@ const TaskContent = ({
         lastgClick.current = now;
         setTimeout(() => {
           lastgClick.current = null;
-        }, globalConstants.gThenKeyDelay); // 1000 milliseconds = 1 second
+        }, globalConstants.gThenKeyDelay);
       }
     }
 
-    //[cmdControl][shift][,]
     if (
       e.keyCode === KeyCodes.SEMICOLON &&
       cmdControl &&
@@ -704,7 +669,6 @@ const TaskContent = ({
       e.preventDefault();
       return copyTaskURL(task.uniqueIndex, task.projectId);
     }
-    //[cmdControl][,]
     if (
       (e.keyCode === KeyCodes.SEMICOLON || e.keyCode === KeyCodes.COMMA) &&
       cmdControl &&
@@ -720,30 +684,25 @@ const TaskContent = ({
       );
     }
 
-    //[cmdControl][shift][.]
     if (e.keyCode === KeyCodes.PERIOD && cmdControl && e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler();
     }
 
-    //[cmdControl][.]
     if (e.keyCode === KeyCodes.PERIOD && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler(true);
     }
 
-    //[cmdControl][I]
     if (e.keyCode === KeyCodes.I && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return copyTitleAndTicketNumber(task.title, task.ticketNumber!);
     }
-    //[cmdControl][i]
     if (e.keyCode === KeyCodes.I && cmdControl && e.shiftKey) {
       e.preventDefault();
       return copyTicketNumber(task.ticketNumber!);
     }
 
-    // gg
     if (e.keyCode === KeyCodes.G && !e.shiftKey) {
       const now = new Date().getTime();
       if (lastgPress.current && now - lastgPress.current < 500) {
@@ -752,7 +711,7 @@ const TaskContent = ({
           `tasks-list-${sectionIndex}`
         )!.children;
         if (tasksList.length > 0) {
-          // @ts-ignore
+          // @ts-expect-error querySelectorAll returns Element, which does not declare focus.
           tasksList[0].focus();
         }
         e.preventDefault();
@@ -763,7 +722,6 @@ const TaskContent = ({
         }, globalConstants.gThenKeyDelay);
       }
     }
-    // [cmd/ctrl][shift][o]
     if (e.keyCode === KeyCodes.O && e.shiftKey && cmdControl) {
       e.preventDefault();
       return setShowCommands({
@@ -772,7 +730,6 @@ const TaskContent = ({
       });
     }
 
-    // [alt][s]
     if (
       taskShortcutAction === "star" ||
       (!rowShortcutsEnabled &&
@@ -784,19 +741,16 @@ const TaskContent = ({
       return handleStarTask();
     }
 
-    // [f]
     if (e.keyCode === KeyCodes.F && !e.altKey && !e.shiftKey) {
       e.preventDefault();
       return addFollowerHandler();
     }
 
-    // [alt][f]
     if (e.keyCode === KeyCodes.F && e.altKey && !e.shiftKey) {
       e.preventDefault();
       return removeFollowerKanban(task.id);
     }
 
-    // [alt][v]
     if (e.keyCode === KeyCodes.V && e.altKey && !e.shiftKey) {
       if (!task.uniqueIndex) return;
       setTasksPlayList(tasksPlayList);
@@ -854,7 +808,6 @@ const TaskContent = ({
     navigateToTask(task.projectId, task.uniqueIndex, "push", undefined, instantTicketOpen ? task : undefined);
   };
 
-  // ============ toggle remove subtask modal
   const toggleRemoveSubtaskModal = async (
     refresh?: boolean,
     subTask?: ITask
@@ -932,8 +885,6 @@ const TaskContent = ({
     if (isActive && !showSearchTasks && !showCommands.show) {
       setActive(true);
       setActiveSection(sectionIndex);
-      // PERT-5: follow the active item with real DOM focus, but never yank it
-      // away from an open input/editor (inline edits, modals, search).
       if (!returnIfModalOrInputActive())
         document.getElementById(`task-${task.id}`)?.focus();
     } else if (
@@ -962,11 +913,6 @@ const TaskContent = ({
     };
   }, [handleKeyDown]);
 
-  // The selected card also listens at document level. It frequently has no real
-  // DOM focus (returning from the detail view, closing a modal, clicking empty
-  // board space), and a card-scoped listener never sees those keystrokes, so
-  // [a] / [p] / [s] / [m] / [d] / [t] silently did nothing on a card that looked
-  // selected. Skip events that already went through the element listener.
   useEffect(() => {
     if (!isActive) return;
     const onDocumentKeyDown = (e: KeyboardEvent) => {

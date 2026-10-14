@@ -26,8 +26,6 @@ const BoardSchema = z.object({
           .array(
             z.object({
               title: z.string().min(1).max(80),
-              // OpenAI strict structured output requires nullable fields to
-              // remain required, so absent values come back as null.
               label: z.string().max(20).nullable(),
               priority: z.number().int().min(1).max(4).nullable(),
               dueInDays: z.number().int().min(-3).max(14).nullable(),
@@ -88,19 +86,14 @@ function ensureMinimumDueDates(board: DemoBoard): DemoBoard {
 export async function generateDemoBoard(purpose: string): Promise<DemoBoard> {
   const apiKey = process.env.DEMO_AI_GATEWAY_API_KEY?.trim();
   if (!apiKey) {
-    // ponytail: fail closed. No shared-key fallback, so anonymous cost can only
-    // ever land on the dedicated demo key.
     throw new DemoBoardGenerationUnavailableError();
   }
 
-  // HTPR-7075: no user exists here, so the flag is read as user 0 (Everyone only).
   const claude = await backgroundClaudeModelEnabled(null);
-  // The demo key routes Claude through the Gateway on purpose, to keep anonymous spend isolated; this predates HTPR-7075.
   const model = createGateway({ apiKey })(claude ? DEMO_CLAUDE_MODEL : DEMO_MODEL);
   const { output } = await generateText({
     model,
     output: Output.object({ schema: BoardSchema }),
-    // Luna's completion budget includes reasoning as well as the board JSON.
     maxOutputTokens: 4096,
     maxRetries: 2,
     providerOptions: {

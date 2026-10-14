@@ -21,7 +21,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
 
 
-  // Event handlers
   const toggleHighlightHandler = (state: boolean) => {
     return setToggleHighlight(state);
   };
@@ -78,9 +77,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     );
     let attachmentFilesForSave: IEditorAttachmentFile[] | undefined =
       currentAttachmentFiles;
-    // An undefined attachment list means this editor has no replacement
-    // snapshot (desktop comments); preserve stored files in that case. Mobile
-    // editing passes [] when the user intentionally removes every file.
     const hasAttachmentSnapshot = attachments !== undefined;
     if (mode === "read-edit-comments" && !hasAttachmentSnapshot) {
       attachmentFilesForSave =
@@ -145,8 +141,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     }
   };
 
-  // A task can still carry an inbox notification when opened from another
-  // surface. Advancement is limited to Inbox lineage.
   const sendComment = (alwaysAdvance = false) => {
     const tutorialState = currentUser?.id
       ? parseLearnTutorialState(
@@ -187,7 +181,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
       block: "center",
     });
     setShouldShowAITaskWriter((prev) => !prev);
-    //Make sure when toggling the edit Mode is updated as well.
     if (editMode === "description" && !shouldShowAiTaskWriter)
       setEditMode("description-ai");
   };
@@ -230,10 +223,6 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
 
   function handleCommentEscape () {
     editor?.commands.blur();
-    // Editing an existing comment: actually leave edit mode (revert to the
-    // read view) instead of only blurring. editState/editMode are what keep
-    // CommentText rendering the editor, so clearing them is the real exit —
-    // for both ESC and the footer's cancel trash. Unchanged for create-comment.
     if (mode === "read-edit-comments") {
       setEditState(null);
       setEditMode(null);

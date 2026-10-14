@@ -50,7 +50,6 @@ const handler: NextApiHandler = async (req, res) => {
     if (chipsEnabled) scope.projectId.in = ids
     if (labelScopeEnabled) {
       scope.projectId.in = pickedBoardIds.length ? ids.filter((id) => pickedBoardIds.includes(id)) : ids
-      // Read the whole label scope so duplicate names and used labels cannot fall behind a candidate cap.
       const labels = await prisma.label.findMany({
         where: scope, select: { id: true, value: true, projectId: true },
         orderBy: [{ value: 'asc' }, { id: 'asc' }],

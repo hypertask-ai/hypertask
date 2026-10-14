@@ -28,18 +28,6 @@ import {
 } from "@/lib/storage/hypertasksS3";
 import { TASK_ATTACHMENT_PREFIX } from "@/lib/storage/uploadTaskAttachmentToS3";
 
-/**
- * Closes the direct-upload handshake (HTPR-5524 review).
- *
- * A signed PUT cannot carry a size limit: the AWS SDK refuses ContentLength in
- * a pre-signed URL, so the browser could upload a body far larger than the size
- * it declared. This route reads the stored object's real length and deletes
- * anything over the per-file ceiling, so the limit is enforced by the server
- * rather than trusted from the client.
- *
- * It also deletes objects the browser no longer wants, which is what keeps a
- * half-failed batch from leaving unreferenced files in public storage.
- */
 
 const KEY_PATTERN = new RegExp(`^${TASK_ATTACHMENT_PREFIX}/[A-Za-z0-9._/-]+$`);
 
@@ -49,19 +37,13 @@ export function parseKeys(
   granted?: string[]
 ): string[] {
   if (value === undefined || value === null) return [];
-  // A HEIC is two objects, the original and its generated preview
-  // (HTPR-6264), so a full batch of them is twice the file count the user is
-  // allowed to pick.
   if (!Array.isArray(value) || value.length > DIRECT_UPLOAD_MAX_FILES * 2) {
     throw new Error(`Invalid "${field}"`);
   }
   return value.map((key) => {
-    // The client may only name objects inside the attachments prefix, so this
-    // route can never be used to read or delete anything else in the bucket.
     if (typeof key !== "string" || !KEY_PATTERN.test(key) || key.includes("..")) {
       throw new Error(`Invalid "${field}"`);
     }
-    // Only keys this caller was just issued may be verified or deleted.
     if (granted && !granted.includes(key)) {
       throw new Error(`Invalid "${field}"`);
     }
@@ -166,15 +148,11 @@ const route = taskWriteRoute({
       try {
         await s3.deleteObject({ Bucket: HYPERTASKS_S3_BUCKET, Key: key }).promise();
       } catch {
-        // Best effort: a stray object is not worth failing the upload over.
       }
     };
 
     await Promise.all(discard.map(remove));
 
-    // The signed PUT carries no size condition, so the stored length is the only
-    // trustworthy number. Both the per-file and the whole-batch ceiling are
-    // checked against it, never against what the client declared.
     const sizes = await Promise.all(
       keep.map(async (key) => {
         try {
@@ -183,7 +161,6 @@ const route = taskWriteRoute({
             .promise();
           return head.ContentLength ?? 0;
         } catch {
-          // A key that cannot be read cannot be vouched for either.
           return null;
         }
       })
@@ -212,9 +189,6 @@ const route = taskWriteRoute({
       }, { status: 413 });
     }
 
-    // A generated preview (HTPR-6264) is verified and kept like any other object
-    // but is never linkable: it has no attachment row of its own, so the grant
-    // deliberately does not list it and it gets no receipt.
     const taskLinkReceipts = issueTaskLinkReceipts
       ? keep
           .map((key, index) => ({ key, index }))
@@ -248,7 +222,6 @@ const route = taskWriteRoute({
 });
 
 export const POST: TaskWriteRoute = async (request) => {
-  // Preserve uploads' signed-cookie-first auth and their SESSION_REQUIRED body.
   const signed = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   const session = signed
     ? { userId: signed.id, source: "legacy" as const, needsBridge: true as const }

@@ -12,8 +12,6 @@ const MentionNotificationSidebar = () => {
     const [loading, setLoading] = useState(false);
   
     useEffect(() => {
-      // Load initial notification preference from user data
-      // Check flattened property first, then fallback to nested UserSetting
       const preference = currentUser?.notificationPreference || currentUser?.UserSetting?.notificationPreference;
       if (preference) {
         setNotificationLevel(preference);
@@ -25,19 +23,16 @@ const MentionNotificationSidebar = () => {
       setLoading(true);
   
       try {
-        // Update on backend
         await axios.post("/api/notifications/preference", {
           notificationLevel: value,
         });
   
-        // Update local state
         setCurrentUser((prev:any) => ({
           ...prev,
           notificationPreference: value,
         }));
       } catch (error) {
         console.error("Failed to update notification preference:", error);
-        // Revert on error
         setNotificationLevel(currentUser?.notificationPreference || "direct");
       } finally {
         setLoading(false);

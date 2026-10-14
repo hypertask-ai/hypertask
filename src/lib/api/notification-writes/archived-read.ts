@@ -32,7 +32,6 @@ const parseBoardScope = (value: string | string[] | undefined): ArchiveBoardScop
     : "active";
 };
 
-// Boards the user can see archived notifications from.
 const archivedInboxProjectWhere = (
   userId: number,
   boardScope: ArchiveBoardScope
@@ -86,9 +85,6 @@ const getArchivedInboxMeta = async (
   projectId?: number | null,
   boardScope: ArchiveBoardScope = "active"
 ) => {
-  // One row per (type, taskId) so counts match the list's distinct de-dup.
-  // HTPR-6509: GROUP BY returns only the distinct pairs, then one lookup maps
-  // their tasks to boards, instead of loading every archived notification.
   const pairs = await prisma.notification.groupBy({
     by: ["type", "taskId"],
     where: getArchivedInboxWhere(userId, projectId, boardScope),
@@ -101,8 +97,6 @@ const getArchivedInboxMeta = async (
   }
   const tasks = pairsPerTask.size
     ? await prisma.task.findMany({
-        // Same board access as the grouped query, so a task moved to a board
-        // the user can't see in between is neither counted nor named.
         where: {
           id: { in: Array.from(pairsPerTask.keys()) },
           project: archivedInboxProjectWhere(userId, boardScope),
@@ -119,8 +113,6 @@ const getArchivedInboxMeta = async (
     number,
     { projectId: number; name: string; count: number }
   >();
-  // Counted from the tasks the lookup still returns, so total matches the
-  // per-board counts even if a task moved away between the two queries.
   let total = 0;
   for (const task of tasks) {
     const pid = task.projectId;

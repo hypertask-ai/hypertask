@@ -68,12 +68,10 @@ export const getEmbedUrlFromYoutubeUrl = (options: GetEmbedUrlOptions) => {
     return null;
   }
 
-  // if is already an embed url, return it
   if (url.includes("/embed/")) {
     return url;
   }
 
-  // if is a youtu.be url, get the id after the /
   if (url.includes("youtu.be")) {
     const id = url.split("/").pop();
 

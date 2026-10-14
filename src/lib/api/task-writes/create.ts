@@ -8,7 +8,6 @@ import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { createFullScreenTaskAndReturn } from "./create-fullscreen";
 import { taskWriteRoute } from "./route";
 
-// Fullscreen creation precedes ordinary required-field validation in legacy.
 const schema = z.custom<Record<string, any>>(
   (body) => !!((body as any)?.fullScreenTask || ((body as any)?.title && (body as any)?.projectId)),
 );
@@ -50,7 +49,6 @@ export const POST = taskWriteRoute({
           return NextResponse.json(response.json, { status: response.status });
         }
       }
-      // Deliberate parity: unresolved section or rank returns without sending JSON.
     } catch {
       return NextResponse.json({ message: "Internal server error" }, { status: 500 });
     }

@@ -47,10 +47,6 @@ async function findTaskByIdentifier(
   }
 
   if (ticket_number) {
-    // Callers pass this as a string ("HTPR-4578") but also, often, as the bare
-    // number. Handing a number straight to a String column threw a Prisma
-    // validation error and surfaced as a 500 (HTPR-4580). Normalise, then fall
-    // back to matching the digits as a unique index within the board.
     const reference = String(ticket_number).trim();
     const task = await prisma.task.findFirst({
       where: {
@@ -250,9 +246,6 @@ export async function POST(request: NextRequest) {
       UserSetting: {} as any,
     };
 
-    // Same request-boundary adoption as assignees/assign (HTPR-6388): take a
-    // lease for this request's first fenced write, then release it so the next
-    // worker can claim immediately instead of waiting for TTL expiry (HTPR-6391).
     const result = await withAdoptedAgentMutationLease(
       prisma,
       { agentId: ctx.agentId, userId: currentUser.id },
@@ -277,7 +270,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Real-time: refresh both the source and target boards for everyone watching.
     void broadcastBoardChange(taskRef.projectId, { originUserId: user.id });
     void broadcastBoardChange(target_project_id, { originUserId: user.id });
 

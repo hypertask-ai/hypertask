@@ -35,7 +35,6 @@ export function parseBoardDisplay(value: string | undefined, accountId: number):
           typeof key === "string" && ((TABLE_COLUMN_KEYS as readonly string[]).includes(key) || /^customField:[a-zA-Z0-9-]{1,100}$/.test(key))) ||
         !record(b.tableWidths) || !Object.entries(b.tableWidths).every(([k, v]) => typeof v === "number" && Number.isFinite(v) && v >= 40 && v <= 2000 &&
           ((TABLE_COLUMN_KEYS as readonly string[]).includes(k) || /^customField:[a-zA-Z0-9-]{1,100}$/.test(k)))) return null;
-    // The open chat is a separate first-screen owner not included in step 3.
     if (!display.isMobile && (b.chatPinned || (b.openChat && !b.chatSuppressed))) return null;
     return display;
   } catch {

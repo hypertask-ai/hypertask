@@ -11,7 +11,6 @@ export const canManageBoardLifecycle = (project: IProject, userId: number) =>
   );
 
 export const canLeaveBoard = (project: IProject, userId: number) =>
-  // Missing ownerId must not look like "everyone can leave" (HTPR-6471).
   project.ownerId !== null &&
   project.ownerId !== undefined &&
   String(project.ownerId) !== "" &&

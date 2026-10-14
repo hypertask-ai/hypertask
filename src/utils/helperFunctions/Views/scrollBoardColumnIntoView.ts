@@ -35,13 +35,6 @@ const findBoardScroller = (
   );
 };
 
-/**
- * Keep a newly created board column visible after the board grows horizontally.
- *
- * The board's horizontal scroll may live on its wrapper or the page.
- * `scrollIntoView` can also move a column's vertical scroller, so adjust only
- * the actual horizontal scroller by the amount the column is clipped.
- */
 export const scrollBoardColumnIntoView = (
   sectionId: number,
   documentLike?: BoardDocumentLike,
@@ -90,11 +83,6 @@ export type ViewSwitchScrollState = {
   viewId?: string;
 };
 
-/**
- * HTPR-6333: keep the focused card, but do not keep the previous view's
- * horizontal offset. First paint and board changes still leave the remembered
- * card-navigation scroll alone.
- */
 export const shouldRevealFocusOnViewSwitch = (
   previous: ViewSwitchScrollState | null,
   next: ViewSwitchScrollState,
@@ -105,9 +93,6 @@ export const shouldRevealFocusOnViewSwitch = (
   return previous.viewId !== next.viewId;
 };
 
-/**
- * Smallest scrollLeft that keeps the focused card fully visible, preferring 0.
- */
 export const preferredScrollLeftToShowFocus = ({
   scrollLeft,
   viewportWidth,
@@ -130,10 +115,6 @@ export const preferredScrollLeftToShowFocus = ({
   return Math.max(0, cardRightInContent - viewportWidth);
 };
 
-/**
- * After a view switch, snap the board as far left as it can go without hiding
- * the focused card. A missing card still resets to the left edge.
- */
 export const scrollBoardToShowFocusFromLeft = (
   taskId: number | null | undefined,
   documentLike?: BoardDocumentLike,
@@ -172,14 +153,6 @@ type RevealBoardColumnOptions = {
   maxAttempts?: number;
 };
 
-/**
- * Wait for React to mount a just-created column, then reveal it.
- *
- * A busy board can commit the cache update after several animation frames. The
- * old 10-frame loop stopped after roughly 170 ms, leaving the new column off
- * screen even though the create request succeeded. Retry for up to five seconds
- * with one pending timer at a time, and stop as soon as the column is present.
- */
 export const revealBoardColumnAfterRender = (
   sectionId: number,
   options: RevealBoardColumnOptions = {},

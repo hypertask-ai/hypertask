@@ -16,17 +16,6 @@ export const isTaskRelationType = (
   typeof relationType === "string" &&
   taskRelationTypes.includes(relationType as TaskRelationType);
 
-/**
- * Go through each task in array
- * Check whether task exists
- * If exists, check if there is an existing relation
- * If no relation, then check if it's not trying to relate to itself.
- * Also need to make sure if the relation we are adding is not sub/parent of the currentTask
- * If all requirements are met, relation is made both ways.
- *
- * @param {*} relatedTasks
- * @return {*}
- */
 export const addRelatedTasks = async (relations: any, userId: number) => {
   try {
     console.log("🚀 ~ addRelatedTasks ~ relations:", relations);
@@ -102,7 +91,6 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
           ) {
             const relationType: TaskRelationType =
               related.relationType ?? "RelatedTo";
-            //See if there is an existing relation between the task to relate and relatee tasks.
             const existingRelation = await prisma.taskRelations.findFirst({
               where: {
                 OR: [
@@ -156,10 +144,6 @@ export const addRelatedTasks = async (relations: any, userId: number) => {
               existingRelation.targetTaskId === taskToFind.id &&
               existingRelation.relationType !== relationType
             ) {
-              // Only update in place when the existing relation runs the SAME
-              // direction we are setting. A reverse-direction relation (source
-              // and target swapped) is a distinct relationship; overwriting its
-              // type would invert its meaning for the other task, so leave it.
               const relation = await prisma.taskRelations.update({
                 where: {
                   id: existingRelation.id,

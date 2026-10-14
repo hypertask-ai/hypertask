@@ -65,9 +65,6 @@ const TAG_ATTRIBUTES: Record<string, Set<string>> = {
     "title",
     "uniqueindex",
   ]),
-  // HTML-block (Pages canvas): the raw HTML lives base64-encoded in data-html,
-  // never as live child nodes, so it is only ever executed in the sandboxed
-  // iframe NodeView. Base64 has no <>"'& chars, so it round-trips escapeHtml.
   div: new Set(["data-html-block", "data-html"]),
   img: new Set(["src", "alt", "title", "width", "height"]),
   iframe: new Set(["src", "width", "height", "allowfullscreen", "title"]),
@@ -295,10 +292,6 @@ function replacePreTagNames(value: string, preSentinel: string) {
 }
 
 export function sanitizeRichHtml(value: string) {
-  // node-html-parser treats <pre> content as raw text and never parses
-  // inner HTML tags (e.g. <code>, <span>). Choose an internal tag that does
-  // not occur in this input, then map only that parsed tag back to <pre>.
-  // This avoids globally rewriting user-supplied lookalike tags.
   const lowerValue = value.toLowerCase();
   let preSentinel = "x-ht-pre";
   while (

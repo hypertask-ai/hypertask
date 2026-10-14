@@ -25,9 +25,6 @@ export function taskAccessWhere(
   };
 }
 
-// updateTaskSingle does no membership check of its own. It looks the task up
-// by id and writes. Routes that take a caller-supplied taskId therefore have to
-// gate access themselves; this is that gate.
 export async function userCanAccessTask(
   userId: number,
   taskId: number,
@@ -41,8 +38,6 @@ export async function userCanAccessTask(
   return Boolean(task);
 }
 
-// Same owner/member check as task writes, so a legacy teamless board still
-// counts. userCanAccessTask stays on getProjectWhere for team-scoped callers.
 export async function userCanAccessTaskContent(
   userId: number,
   taskId: number,

@@ -76,11 +76,6 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Same request-boundary adoption as assignees/assign and tasks/move
-    // (HTPR-6388 / HTPR-6391): take a lease for this request's first fenced
-    // write, then release it so the next worker can claim immediately instead
-    // of waiting for TTL expiry. Native CLI column moves POST here, not
-    // /mcp/tasks/move (HTPR-6394).
     const result = await withAdoptedAgentMutationLease(
       prisma,
       { agentId: ctx.agentId, userId: ctx.user.id },

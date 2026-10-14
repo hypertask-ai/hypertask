@@ -61,17 +61,9 @@ export interface SearchTasksResponse {
   nextCursor?: string | null
 }
 
-/**
- * GET /api/mcp/tasks/search
- *
- * Searches for tasks by name, description, or ticket number. Uses Turbopuffer
- * when available for full-text ranking, with Prisma fallback.
- * Results are limited to boards/projects the user has access to.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
-    // Validate authentication
     const rateLimited = await checkMcpRateLimit(request)
     if (rateLimited) return rateLimited
     const ctx = await validateMcpAuth(request)
@@ -85,7 +77,6 @@ export async function GET(request: NextRequest) {
       )
     }
     const user = ctx.user;
-    // Parse query parameters
     const searchParams = request.nextUrl.searchParams
 
     const parsedListQuery = readListQuery(searchParams)
@@ -162,7 +153,6 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Search query exceeds the operator limit' }, { status: 400 })
     }
 
-    // Get user's accessible projects
     const accessibleProjects = await prisma.project.findMany({
       where: {
         status: 'Normal',
@@ -180,13 +170,11 @@ export async function GET(request: NextRequest) {
       })
     }
 
-    // Build where clause
     const where: any = {
       projectId: { in: accessibleProjectIds },
       status
     }
 
-    // Filter by project/board
     const targetProjectId = projectId ?? boardId
     if (targetProjectId != null) {
       if (accessibleProjectIds.includes(targetProjectId)) {
@@ -199,7 +187,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by section
     if (section) {
       where.section = section
     }
@@ -239,7 +226,6 @@ export async function GET(request: NextRequest) {
       Object.assign(where, prWhere)
     }
 
-    // Filter by assignee
     if (assignedTo) {
       if (listQuery) {
         const assignee = parseAssigneeFilter(assignedTo)
@@ -269,7 +255,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by priority
     if (priorityParam) {
       const priorities = Array.isArray(priorityParam) ? priorityParam : [priorityParam]
       where.priority = {
@@ -277,7 +262,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Filter by due date
     if (hasDueDate !== undefined) {
       if (hasDueDate) {
         where.dueDate = { not: null }
@@ -286,9 +270,6 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Prefer Turbopuffer for full-text ranking. Extra filters and explicit
-    // sort must run in Prisma so matching rows outside the candidate window
-    // are not dropped, and requested order is honored.
     const extraFilters = Boolean(
       section ||
         labelsParam.length > 0 ||
@@ -385,7 +366,6 @@ export async function GET(request: NextRequest) {
       ]
     }
 
-    // Count the complete filtered candidate set before applying a cursor window.
     const total = await prisma.task.count({ where })
     if (useTurbopufferWindow && cursorId) {
       const start = turbopufferIds.indexOf(cursorId)
@@ -460,7 +440,6 @@ export async function GET(request: NextRequest) {
         ? String(orderedTasks[orderedTasks.length - 1]?.id ?? '')
         : null
 
-    // Transform to response format
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const comment = commentById?.get(task.id)

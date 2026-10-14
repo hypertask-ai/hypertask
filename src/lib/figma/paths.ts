@@ -12,12 +12,6 @@ export const FIGMA_SETTINGS_PATH = "/settings/accounts";
 export const FIGMA_CONNECT_GENERIC_ERROR =
   "Figma could not be connected. Try again.";
 
-// The OAuth routes can only hand the browser a short code on the redirect back
-// to settings. Each code gets its own sentence because "try again" is wrong
-// advice for half of them: a server with no Figma keys will never succeed.
-// A Map, not an object literal: the code comes from the query string, and an
-// object lookup would answer `?figma_error=__proto__` with Object.prototype,
-// which React refuses to render.
 const FIGMA_CONNECT_ERROR_MESSAGES = new Map<string, string>([
   [
     "not_configured",

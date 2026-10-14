@@ -1,7 +1,3 @@
-/**
- * Section update - delegates to centralized sectionService.
- * Used by: /api/section/update (Pages), MCP update/delete
- */
 import { ISection } from '@/models/model'
 import prisma from '@/lib/prisma'
 import { isFeatureEnabled } from '@/lib/flags'
@@ -29,7 +25,6 @@ const sectionUpdate = async (
   }
 
   if (newSection.deleted === true && await isFeatureEnabled(HTPR_7036_CTRLK_COLUMN_DELETE_KEEPS_CARDS_FLAG, _userId)) {
-    // Ctrl+K and the column header share this endpoint; move cards before hiding their column.
     const result = await sectionService.deleteSection({ sectionId, projectId: section.projectId, userId: _userId })
     return { status: result.status, json: { projectId: section.projectId, ...result.json } }
   }

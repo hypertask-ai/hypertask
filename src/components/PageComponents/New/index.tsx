@@ -20,8 +20,6 @@ const NewTaskPage = ({
   useEffect(() => {
     setCurrentProject(currentProject);
     setCreateTaskModal({
-      // GlobalProviders also renders the shared modal from this atom on /new.
-      // This route owns the visible instance, so keep shared visibility off.
       show: false,
       column_payload:
         initialSection?.id == null

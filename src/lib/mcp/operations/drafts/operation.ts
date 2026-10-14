@@ -136,8 +136,6 @@ export async function POST(request: NextRequest) {
         data:{
           content: text,
           saved: false,
-          // Drafts.updatedAt is @default(now()) with no @updatedAt, so an update
-          // keeps the original timestamp unless we set it here.
           updatedAt: new Date(),
         },
         include: {
@@ -239,8 +237,6 @@ export async function GET(request: NextRequest) {
     }
 
     const drafts = await prisma.drafts.findMany({
-      // Drafts are private, unpublished text. Every other draft route already
-      // refuses to touch someone else's; listing leaked theirs in full.
       where: { taskId: task.id, userId: user.id, content: { not: "<p></p>" }},
       include: {
         task: { select: { ticketNumber: true } },

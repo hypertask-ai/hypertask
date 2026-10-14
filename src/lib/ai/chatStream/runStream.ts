@@ -25,8 +25,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
   state.errorSent = false;
   state.cancelled = false;
   state.providerAbort = new AbortController();
-  // Single winner: if user Stop already aborted the signal, the deadline
-  // must not claim the termination.
   state.turnDeadlineHit = false;
   state.turnDeadline = createTurnDeadline(
     (reason) => {
@@ -34,20 +32,11 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       state.turnDeadlineHit = true;
       state.providerAbort.abort(reason);
     },
-    // Remaining budget is computed here, at timer creation, so the
-    // setup work between route entry and stream start is counted.
     maxDuration -
     AI_CHAT_TURN_DEADLINE_RESERVE_SECONDS -
     (Date.now() - turnStartedAtMs) / 1000,
   );
-  // Ends the turn when the graceful deadline fired: a real in-band error,
-  // a heartbeat failure record, diagnostics, and a durable failure message
-  // so reopening the chat shows why the turn ended instead of nothing.
-  // Cleanup steps run concurrently — the 15-second reserve before the
-  // platform kill cannot fit them sequentially.
   state.endDeadlineTurn = async () => {
-    // A Stop recorded in Redis just before the deadline fired outranks it:
-    // the turn was user-cancelled, not timed out (AI review finding).
     if (body.session_id && streamId) {
       try {
         if (
@@ -69,7 +58,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
           return;
         }
       } catch {
-        // Unreadable cancellation state: fall through to the deadline path.
       }
     }
     state.send("error", { content: AI_CHAT_TURN_DEADLINE_USER_MESSAGE });
@@ -158,11 +146,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     }
   };
 
-  // Turn outcomes are separate from modelProvider's per-generation events.
-  // Declared
-  // outside the try below so every exit path, including the catch and
-  // finally, can name its outcome.
-  // All of it is best effort and never changes what the user receives.
   state.generationStartedAt = Date.now();
   state.observedAgentId = actingAgent?.id ?? null;
   state.observedModel = state.selected.resolvedModelId;
@@ -222,9 +205,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
     );
     const resolvedBody = {
       ...body,
-      // A message of only "/standup" strips to empty; fall back to the raw
-      // message so retrieval and the model query are never blank. The skill
-      // body in the system prompt still carries the intent.
       message: skillResolution.cleanedText || requestMessage,
     };
     if (await routeAgentMention(state, resolvedBody)) return;
@@ -237,9 +217,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       }
       return;
     }
-    // The deadline abort lands here as an iterator error. Its own message,
-    // persistence, heartbeat, and diagnostics already ran (or run here
-    // once); the generic handler must not report the abort again.
     if (state.turnDeadlineHit) {
       if (!state.errorSent) {
         state.errorSent = true;
@@ -268,9 +245,6 @@ export async function runChatStream(controller: ReadableStreamDefaultController<
       state.heartbeatExecutionTerminal = true;
     }
   } finally {
-    // Every model exit above names its outcome before reaching here. This
-    // only covers a turn that ended before the model ever ran, and records
-    // it only when cancellation gives it a real terminal outcome.
     if (state.cancelled) state.recordTurnOutcome("cancelled");
     state.turnDeadline?.clear();
     stopCancellationWatch();

@@ -10,11 +10,6 @@ function timestamp(value: Date | string | null | undefined): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-/**
- * Returns a write revision that is newer than every reminder observed while
- * holding the task advisory lock. This makes the persisted updatedAt value a
- * monotonic queue revision even when concurrent requests start in one millisecond.
- */
 export function nextReminderRevision(
   reminders: ReminderRevisionSource[],
   clock: () => number = Date.now

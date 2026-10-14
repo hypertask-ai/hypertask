@@ -34,8 +34,6 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Missing required information" });
     }
 
-    // HTPR-7161: the task, its board and the comment come from the database,
-    // never from the request, so a bookmark cannot reach another team's content.
     const task = await prisma.task.findFirst({
       where: {
         id: requestedTaskId,

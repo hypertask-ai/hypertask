@@ -301,12 +301,6 @@ export const getBulkTaskCommands = (
 };
 
 
-// Agent Chat's shortcuts are handler-only local keydown listeners with no
-// dispatchable action of their own (roster/composer/mention state lives in
-// AgentChatClient.tsx, not here). These entries make them palette-visible
-// and invokable by dispatching a window CustomEvent AgentChatClient listens
-// for (src/lib/agents/chatPaletteCommands.ts) rather than duplicating that
-// component-local state and logic here.
 export const getAgentChatCommands = (): CommandGroup => ({
   group: "Agent Chat",
   commandLists: [

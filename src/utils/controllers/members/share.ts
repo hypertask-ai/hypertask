@@ -36,13 +36,9 @@ const membersShare = async (userId: number, shareId: string) => {
       },
     });
 
-    // const defaultDomains = ["gmail.com", "outlook.com", "yahoo.com"];
 
     if (taskShared) {
       if (taskShared.shareType === "Domain") {
-        //Okay for this case we only need to check if the user is already part of the team. If not then the user will
-        //just go their own board or sth.
-
         const project = await prisma.project.findFirst({
           where: {
             id: taskShared.projectId,
@@ -64,14 +60,12 @@ const membersShare = async (userId: number, shareId: string) => {
           },
         });
 
-        //meaning user is part of project then let them through. man i really need to clean up this file.
         if (project) {
           return { status: 200, json: { taskShared, allowShare: true } };
         } else {
           return { status: 200, json: { taskShared, allowShare: false } };
         }
       } else if (taskShared?.shareType === "Anyone") {
-        //get user email domain
         const res = await addToTeam(taskShared.projectId, user.id);
         if (res)
           return { status: 200, json: { taskShared, allowShare: true } };
@@ -98,8 +92,6 @@ const membersShare = async (userId: number, shareId: string) => {
 const addToTeam = async (projectId: number, userId: number) => {
   try {
     const result = await addExistingUserToProject(projectId, userId);
-    // Anyone share links still grant view access when membership/billing cannot
-    // complete (legacy no-op success). Missing project/user must still deny.
     if (!result.ok && result.status === 404) return false;
     return true;
   } catch (error: any) {

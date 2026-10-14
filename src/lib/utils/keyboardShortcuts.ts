@@ -1,80 +1,34 @@
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 
-/**
- * Keyboard Shortcut Utility
- * 
- * Centralized utility for managing keyboard shortcut combinations across the application.
- * Provides type-safe shortcuts and helper functions to check if keyboard events match shortcuts.
- */
 
-/**
- * Modifier keys that can be part of a shortcut
- */
 export type ModifierKey = "shift" | "ctrl" | "alt" | "meta";
 
-/**
- * Configuration for a keyboard shortcut
- */
 export interface IKeyboardShortcut {
-  /** The main key code (e.g., KeyCodes.D) */
   key: number;
-  /** Modifier keys that must be pressed */
   modifiers?: readonly ModifierKey[];
-  /** Modifier keys that must NOT be pressed */
   excludeModifiers?: readonly ModifierKey[];
-  /** Description of what this shortcut does */
   description: string;
 }
 
-/**
- * Platform-specific shortcut configuration
- * Some shortcuts may differ between Mac and Windows/Linux
- */
 export interface PlatformShortcut {
   mac?: IKeyboardShortcut;
   windows?: IKeyboardShortcut;
-  /** Default shortcut used if platform-specific not provided */
   default: IKeyboardShortcut;
 }
 
-/**
- * Shortcut configuration that supports multiple key options
- * Useful for shortcuts like arrow keys + vim keys (HJKL)
- */
 export interface MultiKeyShortcut {
-  /** Array of key codes that trigger the same action */
   keys: readonly number[];
-  /** Modifier keys that must be pressed */
   modifiers?: readonly ModifierKey[];
-  /** Modifier keys that must NOT be pressed */
   excludeModifiers?: readonly ModifierKey[];
-  /** Description of what this shortcut does */
   description: string;
 }
 
-/**
- * Union type for all shortcut configurations
- */
 export type ShortcutConfig =
   | IKeyboardShortcut
   | PlatformShortcut
   | MultiKeyShortcut;
 
-/**
- * Collection of all keyboard shortcuts in the application
- */
 export const keyboard_shortcuts = {
-  /**
-   * Due Date Modal Trigger
-   * Opens/closes the due date modal
-   * 
-   * Note: Currently has inconsistencies:
-   * - TaskDetail: Just 'D' (no modifiers)
-   * - CreateTaskModal: 'SHIFT + D'
-   * - Shortcuts help: 'SHIFT + D'
-   * 
-   * TODO: Standardize to one shortcut across all contexts
-   */
   dueDateModal: {
     default: {
       key: KeyCodes.D,
@@ -82,7 +36,6 @@ export const keyboard_shortcuts = {
       excludeModifiers: ["ctrl", "meta", "alt", "shift"],
       description: "Set due date",
     },
-    // Task detail page uses just 'D' without shift
     taskDetail: {
       key: KeyCodes.D,
       excludeModifiers: ["shift", "ctrl", "meta", "alt"],
@@ -223,21 +176,8 @@ export const keyboard_shortcuts = {
       description: "Cycle project",
     },
   }
-
-  // Add more shortcuts here as needed
-  // Example:
-  // createTask: {
-  //   default: {
-  //     key: KeyCodes.C,
-  //     excludeModifiers: ["shift", "ctrl", "meta"],
-  //     description: "Create task",
-  //   },
-  // },
 } as const;
 
-/**
- * Get the appropriate shortcut for the current platform
- */
 export function getShortcut(
   shortcut: PlatformShortcut | IKeyboardShortcut,
   isApple: boolean = false
@@ -255,9 +195,6 @@ export function getShortcut(
   return shortcut as IKeyboardShortcut;
 }
 
-/**
- * Check if all required modifiers are pressed in a keyboard event
- */
 function checkRequiredModifiers(
   event: KeyboardEvent,
   modifiers?: readonly ModifierKey[]
@@ -283,9 +220,6 @@ function checkRequiredModifiers(
   return true;
 }
 
-/**
- * Check if no excluded modifiers are pressed in a keyboard event
- */
 function checkExcludedModifiers(
   event: KeyboardEvent,
   excludeModifiers?: readonly ModifierKey[]
@@ -311,9 +245,6 @@ function checkExcludedModifiers(
   return true;
 }
 
-/**
- * Get the display name for a modifier key
- */
 function getModifierDisplayName(
   modifier: ModifierKey,
   isApple: boolean
@@ -330,67 +261,42 @@ function getModifierDisplayName(
   }
 }
 
-/**
- * Get the key name from a key code
- */
 function getKeyNameFromCode(keyCode: number): string | undefined {
   return Object.keys(KeyCodes).find(
     (key) => KeyCodes[key as keyof typeof KeyCodes] === keyCode
   );
 }
 
-/**
- * Check if a keyboard event matches a given shortcut
- * 
- * @param event - The keyboard event to check
- * @param shortcut - The shortcut configuration to match against
- * @param isApple - Whether the user is on a Mac (for platform-specific shortcuts)
- * @returns true if the event matches the shortcut
- */
 export function matchesShortcut(
   event: KeyboardEvent,
   shortcut: ShortcutConfig,
   isApple: boolean = false
 ): boolean {
-  // Handle MultiKeyShortcut first
   if ("keys" in shortcut && Array.isArray(shortcut.keys)) {
     const multiKeyShortcut = shortcut as MultiKeyShortcut;
 
-    // Check if the pressed key is one of the allowed keys
     if (!multiKeyShortcut.keys.includes(event.keyCode)) {
       return false;
     }
 
-    // Check required and excluded modifiers
     return (
       checkRequiredModifiers(event, multiKeyShortcut.modifiers) &&
       checkExcludedModifiers(event, multiKeyShortcut.excludeModifiers)
     );
   }
 
-  // Existing logic for IKeyboardShortcut and PlatformShortcut
-  // TypeScript narrowing: at this point, shortcut is not MultiKeyShortcut
   const shortcutConfig = getShortcut(shortcut as PlatformShortcut | IKeyboardShortcut, isApple);
 
-  // Check main key matches
   if (event.keyCode !== shortcutConfig.key) {
     return false;
   }
 
-  // Check required and excluded modifiers
   return (
     checkRequiredModifiers(event, shortcutConfig.modifiers) &&
     checkExcludedModifiers(event, shortcutConfig.excludeModifiers)
   );
 }
 
-/**
- * Helper to get display string for a shortcut (for tooltips/help)
- * 
- * @param shortcut - The shortcut configuration
- * @param isApple - Whether the user is on a Mac
- * @returns Array of key names for display (e.g., ["CMD", "SHIFT", "D"])
- */
 export function getShortcutDisplay(
   shortcut: ShortcutConfig,
   isApple: boolean = false
@@ -399,27 +305,22 @@ export function getShortcutDisplay(
   let modifiers: readonly ModifierKey[] | undefined;
   let keyCodes: number[];
 
-  // Handle MultiKeyShortcut
   if ("keys" in shortcut && Array.isArray(shortcut.keys)) {
     const multiKeyShortcut = shortcut as MultiKeyShortcut;
     modifiers = multiKeyShortcut.modifiers;
     keyCodes = [...multiKeyShortcut.keys];
   } else {
-    // Existing logic for other shortcut types
-    // TypeScript narrowing: at this point, shortcut is not MultiKeyShortcut
     const shortcutConfig = getShortcut(shortcut as PlatformShortcut | IKeyboardShortcut, isApple);
     modifiers = shortcutConfig.modifiers;
     keyCodes = [shortcutConfig.key];
   }
 
-  // Add modifiers in order
   if (modifiers) {
     for (const modifier of modifiers) {
       keys.push(getModifierDisplayName(modifier, isApple));
     }
   }
 
-  // Add key names
   const keyNames = keyCodes
     .map(keyCode => getKeyNameFromCode(keyCode))
     .filter(Boolean) as string[];
@@ -428,14 +329,6 @@ export function getShortcutDisplay(
   return keys;
 }
 
-/**
- * Create a keyboard event handler that checks for a shortcut and calls a callback
- * 
- * @param shortcut - The shortcut to listen for
- * @param callback - Function to call when shortcut is pressed
- * @param isApple - Whether the user is on a Mac
- * @returns Event handler function
- */
 export function createShortcutHandler(
   shortcut: ShortcutConfig,
   callback: (event: KeyboardEvent) => void,

@@ -9,7 +9,6 @@ const asUserId = (value: number | string | null | undefined): number | null => {
   return Number.isFinite(id) ? id : null;
 };
 
-/** True when this comment belongs to the signed-in user. */
 export function isCommentCreatedByUser(
   comment: CommentAuthor | null | undefined,
   userId: number | string | null | undefined,

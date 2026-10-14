@@ -12,7 +12,6 @@ import { IAttachment, IComment, RedirectAPIParams, StackedType } from "@/models/
 import { useRecoilState } from "@/lib/state";
 import { currentUserAtom, mobileCommentComposerOpenAtom } from "@/store";
 
-// import Tiptap from "@/components/RTE/TipTap";
 import dynamic from "next/dynamic"
 const Tiptap = dynamic(()=>import("@/components/RTE/TipTapTaskDetail"))
 import useSaveContent from "@/hooks/Task Detail/CommentAndDescriptionHooks/useSaveContent";
@@ -44,14 +43,12 @@ import { HTPR_6555_IDLE_COMMENT_MIC_FLAG } from "@/lib/flags/keys";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
 
-// import BackButton from "@/components/Buttons/BackButton";
 
 const NewCommentComponent = (
 
     ) => {
   
       const {parsedTask:parsed_task, currentTask, setCurrentId, currentId, allowPerks,  forceOpenEdit,setLoading , editMode, draftsFromTQ} = useTaskContext();
-      // console.log("🚀 ~ editMode:", editMode)
       const _parsedTask = useMemo(()=>JSON.parse(parsed_task),[parsed_task])
       const { replyQuote} = useDescriptionAndCommentsContext()
       const tiptapContainerRef = useRef<HTMLDivElement | null>(null)
@@ -82,14 +79,7 @@ const NewCommentComponent = (
       const [currentUser, _setCurrentUser] = useRecoilState(currentUserAtom);
       const _mbl = useContext(MobileViewContext);
       const pathname = usePathname();
-      // The dock is hidden on the detail page, so it reserves no space and the
-      // composer rests flush on the bottom edge (bottomInset falls to 0).
       const dockVisible = shouldShowMobileDock(pathname);
-      // True while the mobile composer is actually focused (keyboard up). We
-      // key the tab-bar hide on real focus rather than editMode/currentId,
-      // which are write-once on mobile and would leave the nav stuck hidden
-      // after a send or tap-away. When it holds we hide the bottom tab bar and
-      // stop reserving dock space so the sheet sits on the keyboard.
       const [composerOpen, setMobileCommentComposerOpen] = useRecoilState(
         mobileCommentComposerOpenAtom
       );
@@ -98,12 +88,10 @@ const NewCommentComponent = (
         _parsedTask?.id,
         "Comment",
       );
-      // auto-saved drafts are often "<p></p>": strip tags so visually-empty drafts don't mount the editor (media tags count as content)
       const hasDraftContent =
         /<(img|video|iframe)/i.test(defaultCommentContent) ||
         defaultCommentContent.replace(/<[^>]*>/g, "").trim().length > 0;
       const shouldMountCommentEditor =
-        // not currentId === "comment": defaultCommentFocus sets that on task open (keyboard-nav selection, not typing intent)
         currentId === "comment-input" ||
         editMode === "comment" ||
         editMode === "new-comment-ai" ||
@@ -116,10 +104,6 @@ const NewCommentComponent = (
         text: string;
         setContent?: boolean;
       } | null>(null);
-      // Desktop: always render the editor (unfocused) so the composer shows its
-      // active toolbar at rest instead of a blank placeholder. The focus effect
-      // only fires on currentId === "comment-input", so mounting stays cursor-free
-      // and keyboard nav is unaffected. Mobile keeps the lazy collapsed state.
       const shouldRenderCommentEditor = shouldMountCommentEditor || hasMountedCommentEditor || !_mbl;
 
       const handleTaskOptions = (val:boolean) => setShowTaskOptions(val)
@@ -195,12 +179,6 @@ const NewCommentComponent = (
         setHasMountedCommentEditor(true);
         forceOpenEdit("comment");
         setCurrentId("comment-input");
-        // If the editor is already mounted (re-opening, or a draft pre-mounted
-        // it), focus synchronously inside the tap gesture so iOS opens the
-        // keyboard reliably. First mount is handled by the focus effect below.
-        // Skip when the editor is already focused: the click landed inside the
-        // text and the browser already placed the caret there — forcing "end"
-        // would yank the caret to the bottom on every mid-text click.
         const editor = getTiptapEditorForMode("create-comment");
         if (editor && !editor.isDestroyed && !editor.isFocused)
           editor.commands.focus("end");
@@ -224,12 +202,6 @@ const NewCommentComponent = (
         });
       }, [shouldRenderCommentEditor, hasMountedCommentEditor]);
 
-      // Track composer focus and publish it to the global tab bar. focusin/
-      // focusout bubble, so we catch the editor and every toolbar control
-      // inside the composer. On blur we re-check next frame, because focus may
-      // just be moving to another control inside the composer (e.g. the send
-      // button) — only truly leaving it (send, tap-away, keyboard dismiss)
-      // shows the nav again. Reset on unmount so the bar can never stick hidden.
       useEffect(() => {
         if (!_mbl) return;
         const container = tiptapContainerRef.current;
@@ -296,8 +268,6 @@ const NewCommentComponent = (
               visualViewportHeight:
                 visualViewport?.height ?? window.innerHeight,
               visualViewportOffsetTop: visualViewport?.offsetTop ?? 0,
-              // While the composer is focused the tab bar is hidden, so it
-              // reserves no space.
               dockInset:
                 dockVisible && !composerOpen
                   ? Number.isFinite(publishedDockHeight)
@@ -378,11 +348,6 @@ const NewCommentComponent = (
         };
       }, [forceOpenEdit, setCurrentId]);
 
-      // Dictation shortcuts from the task page (desktop): the editor's onKeyDown
-      // only fires while focused, so at rest Chrome swallows CTRL+SHIFT+D
-      // (bookmark-all-tabs). A document listener reclaims them: D = speech to text,
-      // F = dictate and improve. Skips when another input/editor has focus (those
-      // own the shortcut), and lets the editor's own handler run when focused there.
       useEffect(() => {
         if (_mbl) return;
         const onKeyDown = (e: KeyboardEvent) => {
@@ -395,13 +360,13 @@ const NewCommentComponent = (
           if (!anchor) return;
           const active = document.activeElement as HTMLElement | null;
           const inComment = Boolean(active?.closest?.("#comment"));
-          if (inComment) return; // the editor's own onKeyDown handles it
+          if (inComment) return;
           const inOtherField =
             Boolean(active) &&
             (active!.tagName === "INPUT" ||
               active!.tagName === "TEXTAREA" ||
               active!.isContentEditable);
-          if (inOtherField) return; // another composer owns the shortcut
+          if (inOtherField) return;
           e.preventDefault();
           anchor.click();
         };
@@ -474,8 +439,6 @@ const NewCommentComponent = (
                 />
               )}
   
-              {/* ------------------------- New Comment ------------------------- */}
-              {/* ====================== DESKTOP ===================== */}
               {!_mbl ? (
                   <div
                       tabIndex={0}
@@ -501,8 +464,6 @@ const NewCommentComponent = (
                               isMbl={_mbl}
                               shouldTriggerAiTaskWriter={editMode==="new-comment-ai"}
                               creatorname={currentUser?.displayName}
-                              // createdAt={comment.createdAt}
-                              // user={users.find(user => user.id === comment.creatorId)}
                               isSelected={[`comment-input`].includes(currentId!)}
                               id={`comment-input`}
                               customPlaceholder={"Comment"}
@@ -518,8 +479,6 @@ const NewCommentComponent = (
                       </div>
                   </div>
               )
-              // {/* ------------------------- New Comment ------------------------- */}
-              // {/* ====================== MOBILE ===================== */}
               : (
                   <div
                     tabIndex={-1}
@@ -665,10 +624,6 @@ const NewCommentComponent = (
   )
   
   const TaskOptions = ({show}:{show:boolean}) => {
-
-    // Read the reactive currentTask (not the frozen server parse) so the inbox
-    // actions appear/disappear live as the notification is removed or undone —
-    // same rationale as the desktop TaskOptions.
     const {currentId, currentTask} = useTaskContext()
     const inInbox = !!(
       currentTask?._count?.notifications && currentTask._count.notifications > 0
@@ -680,7 +635,6 @@ const NewCommentComponent = (
       
       <div 
       className={`mb-[8px] flex items-center justify-evenly gap-[8px] text-text-light-gray ${currentId}`}>
-        {/* <DoneButton/> */}
         { 
         inInbox ?
           <>
@@ -701,7 +655,6 @@ const NewCommentComponent = (
 
     return (
       <div onClick={()=>{navigateToNextTask(true,true)}} className="flex items-center gap-2 whitespace-nowrap">
-        {/* Blue when the task is in the inbox, matching desktop's ArchiveTaskNotification (hypertasks-header-blue). This button only renders in-inbox, so it's always blue. */}
         <ArchiveNotificationIcon height={18} width={18} show={true} color="rgb(35, 131, 226)"/>
 
         <span>Remove notification</span>

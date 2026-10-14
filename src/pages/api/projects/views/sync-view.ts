@@ -35,9 +35,7 @@ const handler: NextApiHandler = async (req, res) => {
       if (applied.visibility === "Private") return targets;
     }
     if (pv.default_view_id) {
-      // A null applied pointer means the default is active, including an owned Private default.
       const defaultView = await db.view.findFirst({ where: { id: pv.default_view_id, project_view_id: pv.id, ...(state.appliedViewId ? { visibility: "Public" as const } : {}), ...viewWhere } });
-      // A Public applied view still syncs; a Private default is never a secondary target.
       if (!defaultView) return state.appliedViewId ? targets : null;
       if (!targets.some(target => target.id === defaultView.id)) targets.push(defaultView);
     }

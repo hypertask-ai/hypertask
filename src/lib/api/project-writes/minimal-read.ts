@@ -19,7 +19,6 @@ const route = taskWriteRoute({
 });
 
 export const GET: TaskWriteRoute = async (request) => {
-  // Preserve signed-cookie-only authorization, even after Better Auth preflight.
   const session = verifySession(request.cookies ? request.cookies[SESSION_COOKIE] : parseCookies(request.headers.get("cookie") ?? "").get(SESSION_COOKIE));
   if (!session) return NextResponse.json({ error: "Unauthorized", code: "SESSION_REQUIRED" }, { status: 401 });
   return route({ headers: request.headers, json: async () => taskReadQuery(request) }, { userId: session.id, source: "legacy", needsBridge: true });

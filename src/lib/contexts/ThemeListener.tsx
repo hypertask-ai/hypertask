@@ -56,8 +56,8 @@ const ThemeListener = () => {
         );
     };
 
-    applyTheme(); // On mount
-    match.addEventListener("change", applyTheme); // On system change
+    applyTheme();
+    match.addEventListener("change", applyTheme);
 
     return () => match.removeEventListener("change", applyTheme);
   }, []);

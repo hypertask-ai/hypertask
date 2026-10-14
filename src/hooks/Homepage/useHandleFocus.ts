@@ -18,23 +18,15 @@ const useHandleFocus = (filteredSections: ISection[]) => {
 
   const moveFocusToSection = (index: number, itemIndex?: number) => {
     console.log("🚀 ~ moveFocusToSection ~ index:", index)
-    // console.log("🚀 ~ moveFocusToSection ~ index:", index)
     if (!_currentProject) return
     const sectionEls = document.getElementById("sectionsContainer")!.children;
-    // console.log("🚀 ~ moveFocusToSection ~ sectionEls:", sectionEls)
     if (index >= 0 && index < sectionEls.length) {
-      // @ts-ignore
+      // @ts-expect-error querySelectorAll returns Element, which does not declare focus.
       sectionEls[index].focus();
-      // setActiveSection(parseInt(sectionEls[index]?.id.split("-")[2]))
       setActiveSection(index)
       var ItemId = null;
-      // sectionEls[index].scrollIntoView({ behavior: 'smooth', block: 'start' });
       const sectionLength = filteredSections[index].items.length
-      // console.log("🚀 ~ moveFocusToSection ~ sectionLength:", sectionLength)
-      // console.log("🚀 ~ moveFocusToSection ~ sectionLength<itemIndex!+1:", sectionLength<itemIndex!+1)
       if (sectionLength > 0) {
-        // console.log("🚀 ~ file: index.tsx:239 ~ moveFocusToSection ~ itemIndex:", itemIndex)
-
         if (sectionLength < itemIndex! + 1) {
           const item = filteredSections[index].items[sectionLength - 1]
           updateActiveItemAndItemInView(item.id, _currentProject.id, getActiveSection())
@@ -53,7 +45,6 @@ const useHandleFocus = (filteredSections: ISection[]) => {
           ItemId = item.id
         }
       } else {
-        // console.log("scroll into view")
         document.getElementById("header")?.scrollIntoView({ block: 'start', behavior: "smooth" })
         updateActiveItemAndItemInView(null, _currentProject.id, getActiveSection())
 
@@ -68,10 +59,7 @@ const useHandleFocus = (filteredSections: ISection[]) => {
       refocus(ItemId)
 
       const element = document.getElementById(`task-${ItemId}`)
-      // console.log("🚀 ~ moveFocusToSection ~ element:", element)
       element && scrollToCenterIfNear(element, 10)
-      // document.getElementById('task-' + ItemId)?.scrollIntoView({  block: 'center' ,inline: "center", behavior:"smooth" as ScrollBehavior});
-
     }
     else {
       const element = sectionEls[index] as HTMLElement
@@ -79,36 +67,26 @@ const useHandleFocus = (filteredSections: ISection[]) => {
     }
   }
 
-  // [l] for focus to right
   const moveFocusToRight = () => {
 
     const sectionEls = document.getElementById("sectionsContainer")!.children;
-    // console.log("ALL SECTION",sectionEls);
 
     const activeElement = document.activeElement;
-    // console.log("Active Element - Prev.State",activeElement);
 
     const parentNode = activeElement?.parentNode;
     const activeElementIndex = Array.from(sectionEls).indexOf(activeElement!);
-    // console.log("Section Index -1 for 0th", activeElementIndex);
 
     const activeElementInSection = Array.from(parentNode?.children!).indexOf(activeElement!);
-    // console.log("Active Section Index-1", activeElementInSection);
-    // console.log(_activeItem)
     const activeItem = getActiveItem();
     if (activeElementIndex === -1 || activeElementIndex === sectionEls.length - 1) {
       if (activeItem && activeElementIndex === -1) {
-        // console.log("Task_ID of ActiveElem", _activeItem);
         const filter = filteredSections.filter(s => {
-          // console.log("Total Columns", _sections);
           const _filter = s.items.filter(i => i.id === activeItem);
           return _filter && _filter.length > 0
         })
         if (filter && filter.length > 0) {
           const _index = filteredSections.indexOf(filter[0])
-          // console.log("🚀 ~ file: Homepage.tsx:637 ~ moveFocusToRight ~ _index:", _index)
           if (_index === sectionEls.length - 1) {
-            // moveFocusToSection(0)
           }
           else
             moveFocusToSection(_index + 1, activeElementInSection)
@@ -129,12 +107,9 @@ const useHandleFocus = (filteredSections: ISection[]) => {
   };
 
 
-  // [h] to move focus to left
   const moveFocusToLeft = () => {
 
     const now = new Date().getTime();
-    //  from right to left
-    // if (lastgClick.current && now - lastgClick.current < 5000) return
     const sectionEls = document.getElementById("sectionsContainer")!.children;
     const activeElement = document.activeElement;
     const activeElementIndex = Array.from(sectionEls).indexOf(activeElement!);
@@ -152,7 +127,6 @@ const useHandleFocus = (filteredSections: ISection[]) => {
         if (filter && filter.length > 0) {
           const _index = filteredSections.indexOf(filter[0])
           if (_index <= 0) {
-            // moveFocusToSection(sectionEls.length - 1)
           }
           else {
             moveFocusToSection(_index - 1, activeElementInSection)
@@ -161,7 +135,6 @@ const useHandleFocus = (filteredSections: ISection[]) => {
           moveFocusToSection(sectionEls.length - 1)
         }
       } else {
-        // moveFocusToSection(sectionEls.length - 1)
       }
     } else {
       moveFocusToSection(activeElementIndex - 1)
@@ -176,16 +149,13 @@ const useHandleFocus = (filteredSections: ISection[]) => {
       if (filteredSections[i].items.length > 0) {
         const item = filteredSections[i].items[0]
         const sectionEls = document.getElementById("sectionsContainer")!.children;
-        // @ts-ignore
+        // @ts-expect-error querySelectorAll returns Element, which does not declare focus.
         sectionEls[i].focus()
         updateActiveItemAndItemInView(item.id, _currentProject.id, getActiveSection());
         break;
       }
     }
   }
-
-
-  // [j] for arrow down
 
   const ArrowDownHandler = (e: any) => {
     e.key === "ArrowDown" && e.preventDefault();
@@ -197,20 +167,16 @@ const useHandleFocus = (filteredSections: ISection[]) => {
       if (index === -1) {
         document.getElementById(tasksList[0].id)?.focus()
       } else if (index === tasksList.length - 1) {
-        // tasksList[0].focus();
       } else {
         const activeElement_ = document.getElementById(tasksList[index + 1].id)
         console.log("🚀 ~ ArrowDownHandler ~ activeElement_:", activeElement_)
         activeElement_ && scrollToCenterIfNearBottom(activeElement_, 15)
         activeElement_?.focus()
-        // document.getElementById(tasksList[index + 1].id)?.scrollIntoView({  block: 'center',inline:"end",behavior:"instant"})
-
       }
     }
   }
 
 
-  // [k] for arrow up
   const ArrowUpHandler = (e: any) => {
     const now = new Date().getTime();
 
@@ -223,19 +189,11 @@ const useHandleFocus = (filteredSections: ISection[]) => {
         document.getElementById(tasksList[0].id)?.focus()
 
       } else if (index === 0) {
-        // tasksList[tasksList.length - 1].focus();
       } else {
-        // document.getElementById(tasksList[index].id)?.scrollIntoView({behavior:"smooth", block:"end"})
         const activeElement_ = document.getElementById(tasksList[index - 1].id)
         activeElement_ && scrollToCenterIfNearTop(activeElement_, 30)
         activeElement_?.focus()
         if (index - 1 === 0) document.getElementById(tasksList[0].id)?.scrollIntoView({ block: "center" })
-
-        // document.getElementById(tasksList[index - 1].id)?.scrollIntoView({  block: 'end',behavior:"instant"})
-
-        // if (document.activeElement?.id===activeElement.id){
-        //   document.getElementById(tasksList[index].id)?.focus()
-        // }
       }
     }
 

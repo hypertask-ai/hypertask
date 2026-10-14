@@ -17,11 +17,6 @@ export type SignedWebhookResult = {
   durationMs: number
 }
 
-/**
- * Low-level signed POST shared by board test pings and the durable agent outbox.
- * The caller owns the body and delivery id, which lets retries send the exact
- * same payload with a stable deduplication key.
- */
 export async function postSignedWebhook(input: {
   url: string
   secret: string
@@ -97,20 +92,9 @@ async function recordOutcome(id: string, ok: boolean): Promise<void> {
       data: { lastDeliveryAt: new Date(), lastDeliveryOk: ok },
     })
   } catch {
-    /* observability only — never throw */
   }
 }
 
-/**
- * POST a signed event to one subscription's URL. Never throws — returns whether
- * the receiver answered 2xx — and records the outcome. Single attempt, no retry
- * (best-effort). Security:
- *  - target is re-validated and the socket is PINNED to the validated public IP,
- *    so DNS rebinding between check and connect can't reach an internal host;
- *  - undici does not follow redirects, so a 3xx can't bounce to an internal host;
- *  - body is signed as `timestamp.body` with a per-delivery id, so receivers can
- *    verify authenticity and reject replays.
- */
 export async function deliverWebhook(
   sub: { id: string; url: string; secret: string },
   delivery: WebhookDelivery

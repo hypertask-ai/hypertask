@@ -10,7 +10,6 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
   if (!adminPassword || req.headers["x-admin-password"] !== adminPassword) {
     return res.status(401).json({ message: "Unauthorized" });
   }
-  // if (req.method === "POST") {
     try {
       const { lastXdays, lastXmonths, lastXweeks } = req.body;
       const response = await getProjectCounts(lastXdays, lastXweeks, lastXmonths)
@@ -22,14 +21,11 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
       console.log("🚀 ~ consthandler:NextApiHandler= ~ error:", error)
       return res.status(500)
     }
-
-  // }
 }
 export default handler
 
 
 async function getProjectCounts(lastXdays: number = 14, lastXweeks: number = 4, lastXmonths: number = 12) {
-  // Monthly aggregation
   const monthlyCounts: IProjectMonthly[] = await prisma.$queryRaw`
       SELECT 
         TO_CHAR("createdAt", 'Month,YYYY') AS month,
@@ -46,7 +42,6 @@ async function getProjectCounts(lastXdays: number = 14, lastXweeks: number = 4, 
     `;
 
 
-  // Weekly aggregation
   const weeklyCounts: IProjectWeekly[] = await prisma.$queryRaw`
       SELECT 
         EXTRACT(YEAR FROM "createdAt") AS year,
@@ -64,7 +59,6 @@ async function getProjectCounts(lastXdays: number = 14, lastXweeks: number = 4, 
         year, week;
     `;
 
-  // Daily aggregation
   const dailyCounts: IProjectDaily[] = await prisma.$queryRaw`
           SELECT 
             DATE("createdAt") AS day,

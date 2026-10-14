@@ -1,4 +1,3 @@
-// Tiptap.tsx
 import { Dispatch, SetStateAction, useEffect, useRef } from "react";
 import { IAttachment, IDraft, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { updateDraftHelper } from "@/utils/api/Task Detail";
@@ -56,7 +55,6 @@ export function useTaskDetailEditorDrafts(context: TaskDetailEditorState) {
   const { handleSave, mode, queryClient, currentUser, currentTask, hasDraftInit, setHasDraftInit, draftsFromTQ, draftQueryKey, editor, setTrigger, setEditMode, defaultCommentFocus, focusOn, scrollVirtualize, inViewObject, uploadingDescription } = context;
 
 
-  // Draft management
   const invalidateUserDrafts = () => {
     queryClient.invalidateQueries({
       queryKey: USER_DRAFTS_QUERY_KEY(currentUser?.id),
@@ -106,9 +104,6 @@ export function useTaskDetailEditorDrafts(context: TaskDetailEditorState) {
     input: string,
     target?: Omit<PendingDraftUpdate, "content">
   ) => {
-    // A debounced update may flush while navigation is changing the global
-    // in-view task. Prefer the IDs captured with the editor update so content
-    // can never be written into the next task's draft slot.
     const projectId = target ? target.projectId : inViewObject.taskProjectId;
     const taskId = target ? target.taskId : inViewObject.taskId;
 
@@ -122,21 +117,14 @@ export function useTaskDetailEditorDrafts(context: TaskDetailEditorState) {
       currentUser?.id,
     ];
 
-    // Editing an existing comment must NOT autosave a draft. The edit editor
-    // always initialises from comment.text (never the draft), so this write is
-    // never read back for the edit — it only lands in the shared "Comment"
-    // draft slot that the new-comment composer restores, leaving the composer
-    // polluted with the edited comment's text after you exit. Skip it.
     if (mode === "read-edit-comments") return;
 
     const draftType = mode === "read-edit-description" ? "Description" : "Comment";
 
-    // Don't update drafts if we're currently uploading/saving
     if (uploadingDescription) {
       return;
     }
 
-    // Update draft via API (debounced calls will be canceled by the helper)
     void updateDraftHelper(
       projectId,
       taskId,

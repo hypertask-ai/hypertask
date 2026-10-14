@@ -21,4 +21,3 @@ export const translate = [
         name:"French"
     }
  ]
-// Tone: 'default' , 'academic' , 'business' , 'casual' , 'childfriendly' , 'confident' , 'conversational' , 'creative' , 'emotional' , 'excited' , 'formal' , 'friendly' , 'funny' , 'humorous' , 'informative' , 'inspirational' , 'memeify' , 'narrative' , 'objective' , 'persuasive' , 'poetic' , string

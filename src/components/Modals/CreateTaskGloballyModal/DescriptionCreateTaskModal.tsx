@@ -5,7 +5,6 @@ import { MobileViewContext } from '@/lib/contexts/mobileContext';
 import CreatedBy from '@/components/PageComponents/TaskDetail/CommentAndDescription/Common/CreatedBy';
 import useCurrentUser from '@/hooks/General/useCurrentUserCheckFromCookies';
 import { useContextCreateTaskModal } from '@/lib/contexts/Multipages/CreateTaskGloballyContexts/useContextCreateTaskModal';
-// import TiptapCreateTaskModal from '@/components/RTE/TiptapCreateTaskModal';
 const TiptapCreateTaskModal = dynamic(()=>import("@/components/RTE/TiptapCreateTaskModal"),{ssr:false})
 
 import useClickOutside from '@/hooks/MultiPages/useClickOutside';
@@ -26,22 +25,15 @@ const DescriptionCreateTaskModal = () => {
         setEditMode(null)
         setCurrentFocusedElement("Description")
     }
-    // const AISaveHandler = (aiContent: string) => {
-    //     console.log("🚀 ~ AISaveHandler ~ aiContent:", aiContent)
-    //     handleChange("description", aiContent)
-    //     EscapeHandler()
 
-    // }
     const outsideClickHandler = () => {
         if (editMode == "Description") setEditMode(null)
-        // focusOn(null)
     }
     useClickOutside(null, outsideClickHandler, DIV_ID_CONSTANTS.descriptionContainerCreateTaskModal);
 
     if (!currentUser) return <></>
     return (
         <BaseCommentAndDescriptionContainer className={descriptionFirstMobile ? "flex flex-col pb-4" : undefined}>
-            {/* ======= description =========== */}
             <div
                 id={DIV_ID_CONSTANTS.descriptionContainerCreateTaskModal}
                 onClick={() => {

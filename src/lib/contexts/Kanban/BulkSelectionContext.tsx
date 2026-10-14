@@ -101,8 +101,6 @@ export const KanbanBulkSelectionProvider = ({
     [items, selectedIds],
   );
 
-  // A task can disappear after an action or a realtime update. Do not leave a
-  // hidden id in the selection, because the action bar count must match cards.
   useEffect(() => {
     const visibleIds = new Set(items.map((task) => task.id));
     setSelectedIds((current) => {
@@ -175,8 +173,6 @@ export const KanbanBulkSelectionProvider = ({
       setIsProcessing(true);
 
       try {
-        // Keep the calls sequential. Each operation updates the shared board
-        // cache, and the next task must see the previous update.
         for (const task of snapshot) {
           try {
             hasUndo = (await operation(task)) === true || hasUndo;

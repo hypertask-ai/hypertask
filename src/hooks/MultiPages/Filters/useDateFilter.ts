@@ -128,13 +128,11 @@ export const useDateFilter = (
         return;
       }
 
-      // Get Sugar date suggestions
       const sugarSuggestions: any = inputChange(input, {
         past: true,
         future: mode === "DueDate",
       });
 
-      // Add date display to Sugar suggestions (these are static)
       const enhancedSugarSuggestions = sugarSuggestions.map(
         (suggestion: any) => {
           if (suggestion.date) {
@@ -144,23 +142,20 @@ export const useDateFilter = (
                 new Date(suggestion.date),
                 "do MMM, yyyy"
               ),
-              isDynamic: false, // Sugar suggestions are static dates
+              isDynamic: false,
             };
           }
           return suggestion;
         }
       );
 
-      // Filter default options based on input
       const filteredDefaults = defaultOptions.filter((option) => {
         if (!option.display) return false;
         return option.display.toLowerCase().includes(input.toLowerCase());
       });
 
-      // Combine filtered defaults with Sugar suggestions, avoiding duplicates
       const combinedOptions = [...filteredDefaults];
 
-      // Add Sugar suggestions that aren't already in defaults
       enhancedSugarSuggestions.forEach((suggestion: any) => {
         const isDuplicate = combinedOptions.some(
           (opt) =>

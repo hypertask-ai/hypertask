@@ -73,10 +73,6 @@ export type SlackThreadSource = {
   transcript: string;
 };
 
-/**
- * Which model and key a thread summary runs on. HTPR-7098 reads this too, to decide whether the
- * thread can wait in a half-price batch (`haikuByok` set means the team's own key: instant path only).
- */
 export async function resolveSlackSummaryModelInputs(
   context: Pick<SlackThreadSummaryContext, "aiProviderSettings" | "teamId" | "installedByUserId">,
 ) {
@@ -225,7 +221,6 @@ function selectRecentTranscriptMessages(
 
   for (let index = messages.length - 1; index >= 0; index -= 1) {
     const message = messages[index];
-    // Reserve room for the timestamp, author name, separators, and newline.
     estimatedCharacters += (message.text?.length ?? 0) + 128;
     firstIncludedIndex = index;
     if (estimatedCharacters >= MAX_SLACK_TRANSCRIPT_CHARACTERS) break;

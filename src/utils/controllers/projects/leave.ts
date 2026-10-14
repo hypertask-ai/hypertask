@@ -29,11 +29,8 @@ const leaveProject = async (projectId:number, userId:number) => {
 
             if (!project && project?.ownerId===userId) {
                 return({status:400, json:{ message:"Project not valid"}})
-
-                // return res.status(400).json({ message: "Project not valid" });
             }
      
-            // first delete yourself from the members. 
             const member = await prisma.member.findFirst({
                 where:{
                     userId,
@@ -50,7 +47,6 @@ const leaveProject = async (projectId:number, userId:number) => {
                 }
             })
 
-            //Removing agents from board when user leaves
             for (const agent of memberAgents) {
                 await prisma.member.delete({
                     where:{
@@ -59,54 +55,12 @@ const leaveProject = async (projectId:number, userId:number) => {
                 })
             }
 
-            //Removing the user from the board
             await prisma.member.delete({
                 where:{
                     id:member?.id,
                     
                 }
             })
-
-            // first check if the user memberis in any of the projects that belongs to the current project's team, and IF NONE, THEN DELETE
-            // if it comes as null, it means that means that the member we are removing is in none of the projects of that team
-            // only then should we delete member_team instance and decrement the total seats.
-            // const projectsWhereStillMember = await prisma.member.findMany({
-            //     where:{
-            //         userId:member?.userId,
-            //         project:{
-            //             teamId:project.teamId
-            //         }
-            //     }
-            //   })  
-            //   console.log("🚀 ~ file: removeMember.ts:61 ~ membersRemove ~ projectsWhereStillMember:", projectsWhereStillMember)
-            //   if (projectsWhereStillMember.length===0 && project.teamId){
-
-            //       const deletedTeamMember=  await prisma.member_Team.deleteMany({
-            //             where:{
-            //                 userId:userId,
-            //                 teamId:project.teamId
-            //             }
-            //         })
-            //         const updatedTeam=await prisma.team.update({
-            //             where:{
-            //                 id:project.teamId
-            //             },
-            //             data:{
-            //                 totalSeats:{
-            //                     decrement:1
-            //                 }
-            //             }
-            //         })
-            //          // update totalseats in stripe if that team has a subcriptionItemId
-            //          if(updatedTeam.activeSubscriptionPlanItemId)
-            //          await stripe.subscriptionItems.update(
-            //              updatedTeam.activeSubscriptionPlanItemId,
-            //              {
-            //                  quantity:updatedTeam.totalSeats
-            //              }
-            //            );
-
-            //   }
 
             const firstProject = await getFirst(userId)
 

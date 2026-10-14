@@ -9,17 +9,14 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
             };
         }
 
-        // Ultra-optimized single query - minimal data only
         const teams = await prisma.team.findMany({
             where: {
                 OR: [
-                    // Teams the user owns
                     {
                         googleAccount: { 
                             userId: userId 
                         }
                     },
-                    // Teams where user has projects (member or owner)
                     {
                         projects: {
                             some: {
@@ -56,9 +53,6 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                         title: true,
                         name: true,
                         ownerId: true,
-                        // Human members only - needed for sidebar avatars.
-                        // Agents share the owner's photo, so they don't get an
-                        // avatar; they're summarized by the _count below.
                         members: {
                             where: { agentId: null },
                             select: {
@@ -68,10 +62,8 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                                     }
                                 }
                             },
-                            take: 8 // Limit to first 8 avatars for performance
+                            take: 8
                         },
-                        // Accurate agent count for the sidebar's "+robot N"
-                        // indicator (independent of the avatar take limit).
                         _count: {
                             select: {
                                 members: {
@@ -96,7 +88,7 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
                     orderBy: {
                         id: 'asc'
                     },
-                    take: 50 // Limit projects per team for performance
+                    take: 50
                 },
                 stripe_customer_id: true,
                 activeSubscriptionPlanId:true,
@@ -111,7 +103,6 @@ const getAllTeamsSidebarOptimized = async (userId: number) => {
             }
         });
 
-        // Filter out teams with no projects (done in memory for better performance)
         const filteredTeams = teams.filter(team => team.projects.length > 0);
 
         return {

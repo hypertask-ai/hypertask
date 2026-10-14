@@ -28,14 +28,10 @@ export function useAgentDetailLifecycle({
     setAgent({
       ...agent,
       revokedAt: wasRevoked ? null : new Date().toISOString(),
-      // Turning an agent off destroys its key server-side, so the Access block
-      // must not keep showing one that no longer works.
       mcpToken: wasRevoked ? agent.mcpToken : null,
       hasMcpToken: wasRevoked ? agent.hasMcpToken : false,
     });
     try {
-      // The request states the wanted result rather than asking for a flip, so
-      // this page and an open register tab cannot cancel each other out.
       const res = await fetch(`/api/agents/${agentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -49,19 +45,12 @@ export function useAgentDetailLifecycle({
       if (!res.ok || !data.success) {
         throw new Error(data.error ?? "Failed to update agent");
       }
-      // Re-enabling an external agent mints a fresh key and reveals it in this
-      // one response. Dropping it is not fatal (the key is stored, and can be
-      // regenerated) but it is the only time the value can be read, so keep it.
       if (data.token) {
         setAgent((prev) =>
           prev ? { ...prev, mcpToken: data.token, hasMcpToken: true } : prev,
         );
       }
     } catch {
-      // Roll back everything the optimistic update touched, not just the
-      // switch: leaving the key fields cleared reports "no key" for an agent
-      // whose key is still live, and the obvious next move is to regenerate,
-      // which breaks the runtime that was authenticating fine.
       setAgent((prev) =>
         prev
           ? {
@@ -77,9 +66,6 @@ export function useAgentDetailLifecycle({
     }
   };
 
-  // Talking to a native agent means a chat session pointed at it. The manage
-  // modal opened one the same way; this page replaced that modal, so it has to
-  // keep the door open or native agents become unreachable.
   const handleOpenChat = async () => {
     if (openingChat) return;
     setOpeningChat(true);

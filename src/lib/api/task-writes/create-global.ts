@@ -47,7 +47,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       urlsToAdd,
       assignees,
       createTaskFromComment,
-      agentId: requestedAgentId, //Determines if task is created by an agent. If task created by an agent then everything in here is created by an agent
+      agentId: requestedAgentId,
     } = body;
     console.log("🤔 ~ creating task ~ body:", body);
     if (
@@ -310,7 +310,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         const currentProject = await tx.project.findUnique({ where: { id: projectId }, select: { uniqueIdentifier: true } });
         const nextUniqueIndex = await getNextUniqueTaskIndex(projectId, tx);
         const currentDate = new Date();
-        // Callers sometimes send a number; Task.ranking is a string, so place the task last instead of crashing (HTPR-7217).
         const taskRanking = ranking == null || typeof ranking === "string"
           ? ranking
           : generateRank((await tx.task.findFirst({
@@ -541,7 +540,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
 export const POST: TaskWriteRoute = async (request, session) => {
   const requestStartedAt = performance.now();
   const body = await request.json();
-  // Preserve the legacy pre-auth exception, including its req.body error text.
   const req = { body };
   const { title } = req.body;
   void title;

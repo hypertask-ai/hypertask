@@ -58,7 +58,6 @@ export function actionableToolError(error: unknown): string {
   }
   const message = (detail?.message ?? '').replace(/^Error:\s*/i, '').trim()
   if (!message) return 'The tool could not complete this action. Check the action and its required input fields, then retry.'
-  // Never echo credentials or an upstream response body in model-facing errors.
   const safe = redactModelFacingMessage(message)
   if (/unique_index.*project_id|project_id.*unique_index/.test(safe)) {
     return 'project_id is required when unique_index is given; pass the project id or use ticket_number.'
@@ -87,7 +86,7 @@ export async function executeToolResult(
     if (/^Error:/i.test(text)) return toolErrorResult(new Error(text))
     let structured: Record<string, unknown> | undefined
     let value: unknown
-    try { value = JSON.parse(text) } catch { /* Some legacy tools return plain text. */ }
+    try { value = JSON.parse(text) } catch {}
     if (value && typeof value === 'object') {
       structured = Array.isArray(value) ? { items: value } : value as Record<string, unknown>
       const failure = structured.data && typeof structured.data === 'object' ? structured.data as Record<string, unknown> : structured
@@ -167,7 +166,6 @@ export function formatToolResponse(
   let truncated = false
   let capReached = false
   let returnedRows = 0
-  // Only resource collections are pageable; document nodes and configuration arrays are indivisible.
   function bound(value: unknown, depth = 0, collection = true): unknown {
     if (Array.isArray(value)) {
       if (!collection) return value

@@ -23,7 +23,7 @@ const FORCED_TEST = /\[ht-forced-test\]/i;
 
 function noiseRule(event) {
   const text = `${event.message}\n${event.route}`;
-  const matches = NOISE.filter(rule => (!rule.service || rule.service === event.service) && rule.regex.test(text));
+  const matches = NOISE.filter(rule => (!rule.service || rule.service === event.service) && !rule.excludeServices?.includes(event.service) && rule.regex.test(text));
   return matches.find(rule => rule.id === 'forced-test') ?? matches.find(rule => rule.alert) ?? matches[0];
 }
 
@@ -110,7 +110,7 @@ async function load(root) {
 }
 
 export async function loadSources(names) {
-  const files = names ?? ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon'];
+  const files = names ?? ['vercel', 'vercel-5xx', 'realtime', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon'];
   return files.map(name => ({
     name,
     async fetch(context) {

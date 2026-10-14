@@ -18,6 +18,7 @@ HERE = Path(__file__).resolve().parent
 REPO = 'hypertask-ai/hypertask'
 CHECKER_PATH = '.claude/skills/ship/scripts/ship-check'
 REFRESH_SECONDS = 600  # ten-minute refresh for live flag changes; a new head or changed evidence re-checks at once
+MISSES_BEFORE_FAILURE = 3  # consecutive sweeps (about six minutes) before one PR fails the unit
 
 
 def install():
@@ -210,6 +211,14 @@ def revoke_passing(state):
             raise ValueError('could not revoke premerge-evidence on PR ' + ', '.join(failed))
 
 
+def missed(updated, previous, key):
+    # A PR closed mid-sweep or one failed status post is retried next sweep; only a PR that keeps
+    # failing fails the unit, so one-off blips stop filing error tickets (YPER4-378).
+    misses = previous.get('misses', 0) + 1
+    updated[key] = {'misses': misses}
+    return misses >= MISSES_BEFORE_FAILURE
+
+
 def sweep():
     if paused():
         return
@@ -262,10 +271,10 @@ def sweep():
                 if match and result.returncode == (0 if match[1] == 'success' else 1):
                     updated[key] = {'fingerprint': signature, 'state': match[1].upper(), 'checked': time.time()}
                 else:
-                    failed = True
+                    failed |= missed(updated, previous, key)
             except Exception:
                 print(f'PR #{key}: cannot reconcile evidence; retry next sweep', file=sys.stderr)
-                failed = True
+                failed |= missed(updated, previous, key)
         temporary = state / 'cache.tmp'
         temporary.write_text(json.dumps(updated))
         temporary.replace(cache_file)

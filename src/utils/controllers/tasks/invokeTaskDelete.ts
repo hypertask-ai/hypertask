@@ -51,9 +51,6 @@ async function claimTaskTreeForHardDelete(
       );
       if (taskIds.length === 0) return null;
 
-      // Hard deletion takes the same per-task fence as agent writes and recovery.
-      // A human choosing "delete permanently" explicitly cancels a live agent
-      // lease; the background expiry path never does.
       for (const id of taskIds) {
         await assertAgentAssignmentChangeAllowed(
           tx,
@@ -77,12 +74,6 @@ async function claimTaskTreeForHardDelete(
       const staleBefore = new Date(
         now.getTime() - HARD_DELETE_PROCESSING_TIMEOUT_MINUTES * 60_000,
       );
-      // The root owns deletion intent for its tree. Modern soft deletion
-      // cascades one deadline to every descendant, but legacy/partial trees can
-      // contain Normal children or later child deadlines. Requiring every child
-      // to be independently eligible strands the deleted root forever. Lock the
-      // whole tree, require only the root's intent/deadline, and ensure no row
-      // has a live competing claim before normalizing and claiming the cascade.
       const root = rows.find((row) => row.id === taskId);
       const rootEligible =
         root?.status === "Deleted" &&
@@ -105,8 +96,6 @@ async function claimTaskTreeForHardDelete(
           );
         }
       }
-      // HTPR-7187: the tree stops at the board boundary. A legacy sub-task on
-      // another board is unlinked and kept, never deleted with this parent.
       await tx.task.updateMany({
         where: { parentTaskId: { in: taskIds }, id: { notIn: taskIds } },
         data: { parentTaskId: null },
@@ -176,11 +165,6 @@ async function releaseHardDeleteClaim(claim: HardDeleteClaim) {
 }
 
 const invokeTaskDelete = async (taskId: number, claim: HardDeleteClaim) => {
-  // HTPR-3855: these 14 child rows all reference the task and nothing else,
-  // so they can be deleted concurrently instead of in 14 sequential round
-  // trips. Subtasks (recursive) and the task row itself keep their ordering:
-  // the parent task row must be deleted last, after its subtasks stop
-  // referencing it.
   const independentDeletes = [
     deleteReactions,
     deleteAttachments,
@@ -196,14 +180,6 @@ const invokeTaskDelete = async (taskId: number, claim: HardDeleteClaim) => {
     deleteDescription,
     deleteShareTask,
     deleteRelations,
-    // HTPR-6040: every model below has a taskId FK to Task with no onDelete
-    // cascade in the schema and was never cleared here. A leftover row in
-    // any of them fails deleteTASK's final deleteMany with a foreign key
-    // violation, forever -- the claim releases and the sweep retries the
-    // same task every minute with no way to ever succeed. This list must
-    // match every non-cascading taskId relation in schema.prisma -- see
-    // tests/task-delete-fk-coverage.test.cjs, which derives the required
-    // set from the schema and fails if a future one is added here-less.
     deleteTaskSummary,
     deleteTaskReadState,
     deleteSavedContent,
@@ -235,7 +211,6 @@ const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
     if (task.count !== 1) return "error";
 
     deleteTaskInTurbopuffer(taskId);
-    // console.log("🚀 ~ task: deleted: ", task)
 
     return "success";
   } catch (error) {
@@ -547,9 +522,6 @@ const deleteFollowers = async (taskId: number) => {
 const deleteNotifications = async (taskId: number) => {
   console.log("------------ deleting Notifications ==");
   try {
-    // Collect the owners first: deleteMany does not return rows, and the open
-    // inboxes need telling or the deleted task's row sits there until a reload
-    // (HTPR-4724).
     const owners = await prisma.notification.findMany({
       where: { taskId },
       select: { userId: true },

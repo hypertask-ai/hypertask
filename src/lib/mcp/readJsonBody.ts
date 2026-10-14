@@ -5,12 +5,6 @@ export type JsonBodyResult<T> =
   | { ok: true; body: T }
   | { ok: false; response: NextResponse }
 
-/**
- * Reads a JSON object body, turning a malformed payload into a 400 instead of
- * an unhandled SyntaxError. A client that interpolates an undefined variable
- * into a JSON template sends something like `{"task_id":,"title":""}`, and an
- * unguarded `request.json()` crashed the route with a 500 (HTPR-5568).
- */
 export async function readJsonBody<T>(
   request: Request,
   errors: {

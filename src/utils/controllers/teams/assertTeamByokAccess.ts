@@ -1,10 +1,5 @@
 import prisma from "@/lib/prisma";
 
-/**
- * Only the team owner may manage BYOK API keys.
- * There is no admin role in the Member_Team schema, so membership alone
- * does not grant access.
- */
 export async function assertUserCanManageTeamByok(
   userId: number,
   accountId: string | null | undefined,

@@ -163,10 +163,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
             id: taskId,
             description: draft.content
           },
-          // Without this the TaskUpdateDescription notification is stored with
-          // fromAgentId = null, so an agent-written description looks
-          // human-authored and lands in Important instead of Updates. Every
-          // other agent path already tags itself (HTPR-4719).
           ...(ctx.agentId ? { agentId: ctx.agentId } : {})
         })
       })

@@ -5,24 +5,10 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 
 const MAX_DEVICES_PER_USER = 8;
 
-/**
- * Registers (POST) and releases (DELETE) this browser's push token.
- *
- * A push token identifies a browser, so it belongs to exactly one account at a
- * time. Registration used to look for a row matching this token AND the current
- * user, and on not finding one simply create another, leaving the token
- * registered to whoever signed in before. A browser signed in as one account
- * then received the other account's notifications, ticket titles included, for
- * boards it could not open (HTPR-4865). Signing out cleared it; signing in as
- * someone else did not.
- */
 const handler: NextApiHandler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  // Identity comes from the signed session. The old unsigned cookie let a
-  // caller register their own browser against any user id and start receiving
-  // that person's push.
   const session = await getSessionUser(
     new Headers(req.headers as Record<string, string>)
   );
@@ -51,8 +37,6 @@ const handler: NextApiHandler = async (
           await tx.subscribedDevices.delete({ where: { id: devices[0].id } });
         }
 
-        // The unique firebaseId constraint makes ownership transfer atomic.
-        // Concurrent registrations can no longer both create a row.
         return tx.subscribedDevices.upsert({
           where: { firebaseId: fcmToken },
           update: { userId: session.userId, sendNotifications: true },
@@ -73,8 +57,6 @@ const handler: NextApiHandler = async (
       return res.status(400).json({ message: "Missing FCM Token" });
     }
     try {
-      // Scoped to the caller: this ran on the token alone, so anyone holding a
-      // token could silence that browser's notifications.
       const deviceDeleted = await prisma.subscribedDevices.deleteMany({
         where: { firebaseId: fcmToken, userId: session.userId },
       });

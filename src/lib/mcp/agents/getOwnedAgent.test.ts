@@ -1,5 +1,3 @@
-// Assert-based demo because this repository has no Vitest setup.
-// Run after installing dependencies: npx tsx src/lib/mcp/agents/getOwnedAgent.test.ts
 import type { PrismaClient } from '@prisma/client'
 import assert from 'node:assert/strict'
 import { getOwnedAgent } from './ownedAgents'

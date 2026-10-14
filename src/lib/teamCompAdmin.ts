@@ -37,7 +37,6 @@ export async function searchTeamsForComp(query: string) {
 
 export type TeamCompTarget = { teamId?: string; email?: string };
 
-/** Finds exactly one team by id, or by an owner/member email. Never guesses between several. */
 export async function findTeamForComp(target: TeamCompTarget) {
   if (target.teamId) {
     const team = await prisma.team.findUnique({
@@ -100,10 +99,6 @@ function compLabel(plan: string | null, until: Date | null) {
   return `${plan ?? "Pro"} until ${until.toISOString()}`;
 }
 
-/**
- * Sets (plan + until) or clears (null) a team's comp. The team update and its
- * audit log row commit together, so no comp change goes unlogged.
- */
 export async function setTeamComp(
   team: { id: string },
   comp: { plan: TeamCompPlan; until: Date } | null,
@@ -113,7 +108,6 @@ export async function setTeamComp(
   const compedUntil = comp?.until ?? null;
 
   return prisma.$transaction(async (tx) => {
-    // Serialize comp changes before reading the old value used by the audit log.
     await tx.$queryRaw`SELECT "id" FROM "Team" WHERE "id" = ${team.id} FOR UPDATE`;
     const current = await tx.team.findUniqueOrThrow({
       where: { id: team.id },

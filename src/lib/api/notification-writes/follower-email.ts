@@ -16,7 +16,6 @@ const route = taskWriteRoute({
         receiver: number;
         taskTitle: string;
         taskLink: string;
-        // when present and equal to "mention", this is a direct @mention email
         mentionType?: "mention";
         taskId?: number;
       };

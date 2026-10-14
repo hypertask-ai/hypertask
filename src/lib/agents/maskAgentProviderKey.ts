@@ -1,12 +1,6 @@
 import { decryptByokSecret } from "@/lib/crypto/byokCipher";
 import { maskByokSecret } from "@/lib/crypto/maskByokSecret";
 
-/**
- * The card shows whether an agent runs on its own provider account. Only the
- * masked tail is exposed; a decrypt failure reads as "no key" rather than
- * breaking the whole register. Disabled rows are not a key: resolution falls
- * back to the team credential, so the card has to say so too (HTPR-5389).
- */
 export function maskAgentProviderKey(
   rows: { provider: string; ciphertext: string | null; enabled?: boolean }[],
 ): { provider: string; maskedKey: string } | null {

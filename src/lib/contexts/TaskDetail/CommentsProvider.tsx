@@ -23,7 +23,7 @@ interface CommentsProviderProps {
     return (
         <>
         {comments&&comments.map((comment:IComment, i:number) => (
-                      // eslint-disable-next-line react/jsx-key
+
                       <CommentsProvider
                         key={`comment-provider-${comment.id}`} 
                         comment={comment} 

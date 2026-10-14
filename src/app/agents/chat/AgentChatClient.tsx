@@ -20,10 +20,6 @@ const AgentChatClient = (props: IProp) => {
   const agentChatSession = useAgentChatSession({ ...agentChatState });
   const agentChatFeed = useAgentChatFeed({ ...agentChatState, ...agentChatSession });
   const { awaiting } = agentChatState;
-  // Drain a queued follow-up once the ball is actually back in our court.
-  // Runs after render, so it always sees the awaiting value this render
-  // computed -- unlike draining synchronously inside loadMessages, which ran
-  // before awaitingRef had been updated and left the queue stuck.
   useEffect(() => {
     if (!awaiting) drainQueuedMessageRef.current();
   }, [awaiting]);

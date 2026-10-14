@@ -10,7 +10,7 @@ import { debounce } from "@/utils/helperFunctions/helperFunctions";
 export function useGetSelectionDetails(target: TargetSelector) {
   const [state, setState] = useState<SelectionDetails | null>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+
   const onSelectionChange = () => {
     const selection = getSelectionDetails();
     if (!selection?.range) {
@@ -40,7 +40,6 @@ export function useGetSelectionDetails(target: TargetSelector) {
       updateAnchorPos();
     };
 
-    // Debounce the scroll and resize events
     const debouncedScroll = debounce(onWindowScroll, 100);
     const debouncedResize = debounce(updateAnchorPos, 100);
 

@@ -50,15 +50,6 @@ const teamForCustomer = (customerId: string, teamId?: string) =>
     },
   });
 
-/**
- * Store a newly created Stripe subscription exactly once.
- *
- * Stripe can deliver both `customer.subscription.created` and
- * `checkout.session.completed` for the same subscription, then replay either
- * delivery. The team billing lease serializes those deliveries. The database
- * transaction prevents a failed first attempt from leaving a plan without its
- * matching active-team pointer.
- */
 const sessionOnSuccess = async (
   subscription: PinnedApiVersionSubscription,
   plan: ISubscriptionPlan,

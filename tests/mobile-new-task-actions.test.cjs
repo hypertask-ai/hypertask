@@ -25,7 +25,7 @@ const { mobileMicPresentation } = jiti(
 
 const mobileBarStart = attachmentSource.indexOf("const MobileBottomBar");
 const mobileBarEnd = attachmentSource.indexOf(
-  "// ====================================",
+  "const SaveButtonMobile",
   mobileBarStart,
 );
 const mobileBar =
@@ -184,7 +184,7 @@ test("mobile new-task flow keeps the Back pill removed", () => {
   )?.[0];
   assert.ok(backButton);
   assert.match(backButton, /fixed xs:hidden sm:flex/);
-  assert.match(backButton, /The mobile Back pill is gone/);
+  assert.equal((backButton.match(/closeHandler\(false\)/g) || []).length, 1);
   assert.doesNotMatch(backButton, /xs:flex[\s\S]*?closeHandler\(false\)/);
 });
 

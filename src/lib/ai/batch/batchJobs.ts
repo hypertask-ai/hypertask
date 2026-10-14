@@ -1,7 +1,3 @@
-/**
- * HTPR-7098: pure helpers for background AI jobs that wait in a gateway batch (half price).
- * No database, network or SDK calls here, so every rule can be tested on its own.
- */
 import { createHash } from "node:crypto";
 
 import {
@@ -22,15 +18,9 @@ import {
 
 export const BATCH_PRICE_MULTIPLIER = 0.5;
 export const BATCH_MAX_REQUESTS = 1000;
-/** Gateway batches finish within 24h; one more hour of slack before the collector gives up. */
 export const BATCH_STALE_MS = 25 * 60 * 60 * 1000;
-/** Marks AiUsage rows as batch-priced. */
 export const BATCH_USAGE_PROVIDER = "gateway-batch";
 
-/**
- * Only platform-managed team keys batch. Batches skip the instant path's spend reservation, so the
- * capped shared key (free plan) stays instant, and a customer's own key stays on the existing path.
- */
 export function batchEligibleFunding(source: "customer" | "managed" | "shared"): boolean {
   return source === "managed";
 }
@@ -44,7 +34,6 @@ export type SlackSummaryBatchItem = {
   lastMessageTsAtSubmit: string;
   participants: string[];
   permalink: string;
-  /** Tasks already commented on, written right after each comment so a re-applied batch skips them. */
   deliveredTaskIds?: number[];
 };
 
@@ -52,23 +41,15 @@ export type SmartLabelBatchItem = {
   taskId: number;
   projectId: number;
   labelId: string;
-  /** The label prompt the request was built from; the apply step drops the verdict if it changed. */
   promptAtSubmit: string;
-  /** Hash of the title and plain-text description the model saw; the apply step drops the verdict if it changed. */
   contentHash: string;
-  /** ISO time of the task snapshot (unused once contentHash is set; kept for the shared apply signature). */
   snapshotAt: string;
 };
 
-/** What a smart label verdict is about: title plus plain-text description, as the prompt sends them. */
 export function labelTaskContentHash(task: { title: string; description: string }): string {
   return createHash("sha256").update(JSON.stringify([task.title, task.description])).digest("hex");
 }
 
-/**
- * Stable per chunk, so a retried submit replays the same gateway batch instead of paying twice.
- * Covers the request ids and prompts: a thread that grew since the first try is a new batch.
- */
 export function batchIdempotencyKey(
   kind: BatchKind,
   teamId: string,
@@ -90,8 +71,6 @@ export type BatchTextRequest = {
   maxOutputTokens: number;
 };
 
-// Requests carry no per-request gateway options: async batches reject anything but
-// safetyIdentifier per request. Usage is attributed by our own AiUsage rows instead.
 export function buildSlackSummaryBatchRequest(args: {
   id: string;
   model: string;
@@ -123,7 +102,6 @@ export function buildSmartLabelBatchRequest(args: {
   };
 }
 
-/** The gateway rejects a batch whose requests use different models; one batch per model. */
 export function groupByKey<T>(entries: T[], keyOf: (entry: T) => string): Map<string, T[]> {
   const groups = new Map<string, T[]>();
   for (const entry of entries) {
@@ -143,7 +121,6 @@ export function chunkForBatch<T>(entries: T[], size = BATCH_MAX_REQUESTS): T[][]
   return chunks;
 }
 
-/** Half price: the normal token cost times 0.5. Unknown cost stays unknown. */
 export function batchCostUsd(normalCostUsd: number | null | undefined): number | null {
   return typeof normalCostUsd === "number" && Number.isFinite(normalCostUsd)
     ? normalCostUsd * BATCH_PRICE_MULTIPLIER
@@ -175,7 +152,6 @@ type SdkItemResult = {
   };
 };
 
-/** Maps the SDK's per-item results onto the stored items; an item with no result counts as failed. */
 export function outcomesForItems(itemIds: string[], results: SdkItemResult[]): BatchItemOutcome[] {
   const byId = new Map(results.map((result) => [result.id, result]));
   return itemIds.map((id): BatchItemOutcome => {
@@ -204,7 +180,6 @@ export function outcomesForItems(itemIds: string[], results: SdkItemResult[]): B
 
 export type SlackBatchAction =
   | { type: "comment"; html: string }
-  /** Failed, expired, cancelled or unparsable: the collector summarizes the thread once, instantly. */
   | { type: "retry" };
 
 export function slackActionForOutcome(
@@ -217,11 +192,6 @@ export function slackActionForOutcome(
   return { type: "comment", html: renderSlackSummaryComment(summary, item.participants, item.permalink) };
 }
 
-/**
- * The comment HTML for one Slack batch result. A failed, expired, cancelled or unparsable item runs
- * `instant` (the normal single-call path) once instead of being batched again. If that also throws,
- * the thread is left unsummarized, which is what the cron does on a failure today.
- */
 export async function slackHtmlWithInstantFallback(
   outcome: BatchItemOutcome,
   item: Pick<SlackSummaryBatchItem, "participants" | "permalink">,
@@ -241,14 +211,12 @@ export async function slackHtmlWithInstantFallback(
   }
 }
 
-/** Batches are Anthropic only; other models (for example the Gemini label model) stay instant. */
 export function batchEligibleModel(model: string): boolean {
   return model.startsWith("anthropic/");
 }
 
 export type LabelBatchAction =
   | { type: "verdict"; matchingLabelIds: string[]; definitions: AiLabelDefinition[] }
-  /** Failed, expired, cancelled, missing or unparsable: classify that task once through the instant path. */
   | { type: "instant"; definitions: AiLabelDefinition[] };
 
 export function labelActionForOutcome(
@@ -258,14 +226,9 @@ export function labelActionForOutcome(
   const definitions = [{ labelId: item.labelId, prompt: item.promptAtSubmit }];
   if (outcome.status !== "succeeded") return { type: "instant", definitions };
   const matchingLabelIds = parseMatchingLabelIds(outcome.text.trim(), definitions);
-  // Unparsable output is "no verdict", never "remove the label": ask again, instantly.
   return matchingLabelIds === null ? { type: "instant", definitions } : { type: "verdict", matchingLabelIds, definitions };
 }
 
-/**
- * Only move the "summarized up to" mark forward. A newer message that arrived while the batch ran
- * keeps the thread due for another summary.
- */
 export function nextSummarizedTs(current: string | null, submitted: string): string {
   if (!current) return submitted;
   const currentValue = Number.parseFloat(current);
@@ -278,7 +241,6 @@ export function isBatchStale(createdAt: Date, nowMs = Date.now()): boolean {
   return nowMs - createdAt.getTime() > BATCH_STALE_MS;
 }
 
-/** The AiUsage row for one succeeded result. `normalCostUsd` is the instant-call price; the row stores half. */
 export function buildBatchUsageRow(args: {
   kind: BatchKind;
   userId: number;

@@ -15,9 +15,6 @@ export interface UpdateUserProfileResponse {
   user: UserProfile;
 }
 
-/**
- * Service for user profile operations.
- */
 export class UserService {
   constructor(private readonly apiClient: IApiClient) {}
 

@@ -4,11 +4,6 @@ import DragHandle from "@tiptap/extension-drag-handle-react";
 import { GripVertical } from "lucide-react";
 
 const DragHandleTiptap = ({ editor }: { editor: Editor }) => {
-  // Stable config object. The DragHandle's registration effect lists
-  // computePositionConfig in its deps, so passing a fresh object each render
-  // makes it unregister/re-register its plugin on every re-render. That changes
-  // the editor's plugin set, which destroys all plugin views (including an open
-  // slash/mention suggestion popup) - the popup would flash then vanish.
   const computePositionConfig = useMemo(
     () => ({ placement: "left-start" as const }),
     []

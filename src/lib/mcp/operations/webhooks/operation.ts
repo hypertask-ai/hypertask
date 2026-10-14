@@ -32,7 +32,6 @@ function validationError(message: string, field?: string) {
   )
 }
 
-// Never return the raw secret on reads - it is shown once at creation only.
 function maskSecret(secret: string): string {
   return `whsec_…${secret.slice(-4)}`
 }
@@ -61,10 +60,6 @@ function serialize(sub: {
   }
 }
 
-/**
- * GET /api/mcp/webhooks?project_id=
- * List a board's outbound webhook subscriptions. Secrets are masked.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -142,12 +137,6 @@ export async function GET(request: NextRequest) {
   })(request)
 }
 
-/**
- * POST /api/mcp/webhooks
- * Register a signed outbound webhook for a board.
- * Body: { project_id, url, events? }. `events` omitted/empty = all events.
- * Returns the generated `secret` ONCE (used to verify the HMAC signature).
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -236,15 +225,12 @@ export async function POST(request: NextRequest) {
     } catch {
       return validationError('url must be a valid absolute URL', 'url')
     }
-    // https only: the signature protects integrity, not confidentiality - a
-    // plaintext http receiver would leak the payload in transit.
     if (parsedUrl.protocol !== 'https:') {
       return validationError('url must use https', 'url')
     }
     if (url.length > 2000) {
       return validationError('url must be 2000 characters or less', 'url')
     }
-    // SSRF guard: reject targets that resolve to private/reserved addresses.
     const safe = await assertSafeWebhookTarget(url)
     if (!safe.ok) {
       return validationError(safe.reason, 'url')
@@ -297,7 +283,6 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Return the full secret exactly once, alongside the masked view.
     return NextResponse.json(
       { success: true, subscription: serialize(sub), secret },
       { status: 201 }
@@ -310,10 +295,6 @@ export async function POST(request: NextRequest) {
   })(request)
 }
 
-/**
- * DELETE /api/mcp/webhooks?id=
- * Remove a subscription the caller can access (scoped by board access).
- */
 export async function DELETE(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -376,7 +357,6 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: true, deleted: id })
     }
 
-    // Delete only if the subscription's board is one the caller can access.
     const result = await prisma.webhookSubscription.deleteMany({
       where: { id, project: getProjectWhere(ctx.user.id, ctx.agentId) },
     })

@@ -6,13 +6,6 @@ import { startGatewayBatch } from "@/lib/ai/batch/gatewayBatch";
 import { batchIdempotencyKey, type BatchKind, type BatchTextRequest } from "@/lib/ai/batch/batchJobs";
 import prisma from "@/lib/prisma";
 
-/**
- * Starts one gateway batch and records it for the collector. Returns the AiBatch row id, or null
- * when `claim` got no items (nothing is recorded then).
- *
- * The row is created in the same transaction as `claim`, so the collector never sees a pending
- * batch whose work is not yet marked as waiting in it.
- */
 export async function submitBatch(args: {
   kind: BatchKind;
   teamId: string;
@@ -20,9 +13,7 @@ export async function submitBatch(args: {
   model: string;
   gatewayKey: string;
   requests: BatchTextRequest[];
-  /** Request id -> what the collector applies when that result arrives. */
   items: Record<string, unknown>;
-  /** Runs inside the transaction with the new row id. Returns the item keys it actually claimed. */
   claim?: (tx: Prisma.TransactionClient, batchId: string) => Promise<string[]>;
 }): Promise<string | null> {
   const gatewayBatchId = await startGatewayBatch(
@@ -31,7 +22,6 @@ export async function submitBatch(args: {
     batchIdempotencyKey(args.kind, args.teamId, args.requests),
   );
   return prisma.$transaction(async (tx) => {
-    // A replayed idempotent start returns a batch we already recorded.
     const existing = await tx.aiBatch.findUnique({ where: { gatewayBatchId }, select: { id: true } });
     if (existing) return existing.id;
     const id = randomUUID();

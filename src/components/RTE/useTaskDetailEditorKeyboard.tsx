@@ -16,12 +16,8 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
     const { cancelMobileExistingEdit, handleCallback, handleCommentEscape, toggleAiTaskWriter, sendComment } = getContext();
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
     if (isRecording) return;
-    // Persistent description and Figma-comment editors stay mounted while
-    // reading. Their shortcuts must stay inert until edit mode is active.
     if (isReadOnlyContent) return;
 
-    // Shift+R: same flow as Ctrl+K → Suggest reply (empty comment composer).
-    // Inline AI float owns Shift+R while open (prompt state + empty draft).
     if (
       mode === "create-comment" &&
       !shouldShowInlineDraftAiRef.current &&
@@ -52,7 +48,6 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
       'j': () => cmdControl && (e.preventDefault(), toggleAiTaskWriter()),
     };
 
-    // Shortcut handlers
     if (cmdControl) {
       if (e.shiftKey) {
         const shiftHandlers: Record<string, () => void> = {
@@ -115,7 +110,6 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
         };
         shiftHandlers[e.keyCode]?.();
       }
-      // Enter key combinations
       const enterAction = resolveCommentEnterShortcutAction({
         commandKey: cmdControl,
         key: e.key,
@@ -168,17 +162,11 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
       forceFocus && typeof forceFocus === "object" ? forceFocus : null;
     if (editor?.isFocused || (shouldShowAiTaskWriter && !forceFocus)) return false;
 
-    // When focus arrives from clicking inside the editor text, the browser has
-    // already placed the caret at the click point — respect it. Only pull the
-    // caret to the end when focus lands on the wrapper itself (e.g. clicking the
-    // empty padding) or when forced via handleFocus(true)/handleFocus().
     if (focusEvent && focusEvent.target !== focusEvent.currentTarget) return false;
 
     editor?.commands.focus("end");
 
     if (isMbl) {
-      //We shall look at mobile later
-      //Too tired here. I think im supposed to replace this document scroll with scroll virtualize
       setTimeout(() => {
         document.getElementById("bottom")?.scrollIntoView({
           behavior: "smooth",

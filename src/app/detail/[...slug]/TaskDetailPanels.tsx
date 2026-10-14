@@ -14,7 +14,6 @@ import { ArrowLeft } from "lucide-react";
 
 import { useRecoilState } from "@/lib/state";
 
-// const HypertasksCommands = dynamic(() => import("@/components/commands"), { ssr: false });
 const KeyboardShortcuts = dynamic(
   instrumentedDynamicImport("KeyboardShortcuts", () => import("@/components/sidebars/keyboardShortcuts")),
   { ssr: false }
@@ -77,7 +76,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const { secondaryPanelsReady, cachedLayout } = useTaskContext();
-  // HTPR-7074: the phone composer waits for the thread height to stop growing.
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded);
   if (!currentTask) return <></>;
 
@@ -93,11 +91,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
 
   const content = (
     <>
-      {/* HTPR-6277: command modals (ShareTaskModal, etc.) are next/dynamic and
-          suspend on first open. Without a local boundary that suspend bubbles
-          into page.tsx's Suspense, the whole task detail swaps to "Loading...",
-          document height collapses, and window scroll jumps to 0. Homepage and
-          TableView already isolate commands the same way. */}
       {!embedded && showCommands.show && (
         <Suspense fallback={null}>
           <HypertasksCommands
@@ -144,7 +137,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   toggleDueDate={toggleDueDate}
                 />
 
-              {/* --------------------------- COMMENTS + DESCRIPTION CONTAINER ------------------------------ */}
               <div
                 id={taskDetailConfig.elementIds.taskInfoCommentsDescriptionContainer}
                 className={`${_mbl ? "no-scrollbar scrollbar-none" : "mt-0 pl-1 task-detail-horizontal-padding"} `}
@@ -154,8 +146,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
                   width: "100%",
                 }}
               >
-                {/* Not my proudest moment here but I will have to fix this. Reason why im double propping here is because the Task
-                info column in part of virtualizer when on mobile. So I need to pass on the props inside there. */}
                 <CommentAndDescriptionContainer
                   showAssignModal={showAssignModal}
                   toggleModal={toggleModal}
@@ -212,7 +202,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
           {_mbl && embedded && secondaryPanelsReady !== false && (instantTicketOpen ? <Suspense fallback={null}><NewCommentComponent /></Suspense> : <NewCommentComponent />)}
 
           {
-            // Hide Go Back only for Mobile Devices
             !_mbl && !embedded && (
               <DesktopNavigation
                 onGoback={onGoback}
@@ -227,7 +216,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
         </DescriptionAndCommentsProvider>
       </>
 
-      {/* ============================================= IMPORT AND USE MODALS HERE ================================= */}
       {showTaskDeleteModal && (
         <ConfirmTaskDelete
           confirmDelete={deleteTask}
@@ -263,7 +251,6 @@ export function TaskDetailPanels(context: TaskDetailContext) {
           onClose={linksModalToggle}
         />
       )}
-      {/* Conditionally render the modal */}
       {showMoveModal && (
         <MoveToColumn
           key={taskDetailConfig.modalKeys.moveToColumn + currentTask?.id}
@@ -392,7 +379,6 @@ const DesktopNavigation = ({
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   return (
     <div
-      // className="fixed  flex gap-2  items-center  flex-col xl:flex-row xl:left-10 left-5"
       className={`fixed  flex gap-2  items-center  flex-col left-3 ${
         showAiChatInterface && isSidebarMode ? "" : "xl:flex-row"
       } ${showAiChatInterface && isSidebarMode ? "" : "xl:left-10"}`}

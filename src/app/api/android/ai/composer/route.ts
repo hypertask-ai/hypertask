@@ -15,7 +15,6 @@ function error(message: string, status: number) {
   return NextResponse.json({ success: false, error: message }, { status });
 }
 
-/** Board-scoped model and feature capabilities for the native Android AI composer. */
 export async function GET(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);

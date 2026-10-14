@@ -24,7 +24,6 @@ function isPositiveInteger(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
 
-/** POST /api/mcp/custom-fields/value */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

@@ -85,9 +85,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-// The database filter has to be a superset of what the projection accepts, or a
-// milestone is dropped before anything parses it. The projection matches case
-// insensitively, so this must too.
 function prefixedCommentWhere(
   prefixes: string[],
   caseInsensitive = false,
@@ -195,8 +192,6 @@ function authoredCommentText(row: TimelineRow, selectedAgentId: string): string 
     if (/^(?:Model|Switched|Live):(?:\s|$)/.test(text)) return text;
   }
 
-  // QA agents write the verdict freely: "PASS:", "FAIL:", "QA passed on
-  // production:", "QA fail:". Accept every shape, reject "QA is blocked".
   const qa = /^(?:QA[:\s]+)?(pass|fail)(?:ed|s|ing)?\b[:\s]*(.*)$/i.exec(text);
   if (!qa) return null;
   const detail = qa[2].trim();
@@ -263,9 +258,6 @@ function projectTimelineRows(
           }),
         );
       } else {
-        // ponytail: the approve is inferred when no green row sits in this
-        // window, so a very old approval that paged out shows twice. Persist a
-        // per-task last-known PR state if that ever bites.
         if (!approvedPullRequests.has(key)) {
           feed.push(
             timelineEvent(row, {
@@ -337,8 +329,6 @@ export async function listAgentChatActivity(
       { task: visibleTask },
     ],
   } satisfies Prisma.AgentRunWhereInput;
-  // ponytail: the app records no deployment, so a "Live" row only exists when an
-  // agent writes a "Live:" comment. Add a durable deploy signal to guarantee it.
   const selectedCommentWhere = prefixedCommentWhere([
     "Model:",
     "Switched:",

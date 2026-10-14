@@ -10,7 +10,6 @@ export function normalizeDbConnectionString(connectionString: string | undefined
   const normalized = query.split('&').map(param => {
     const mode = new URLSearchParams(param).get('sslmode')
     if (mode !== 'prefer' && mode !== 'require' && mode !== 'verify-ca') return param
-    // These modes already verify certificates and hostnames in pg's default parser.
     return param.slice(0, param.indexOf('=') + 1) + 'verify-full'
   }).join('&')
   return connectionString.slice(0, queryStart + 1) + normalized + connectionString.slice(end)

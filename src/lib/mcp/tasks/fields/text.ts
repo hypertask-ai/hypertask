@@ -14,7 +14,6 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
     if (hasTextOrParentUpdate) {
         const newTask: any = { id: task.id }
         if (requestBody.title !== undefined) newTask.title = requestBody.title
-        // SECURITY: Sanitize MCP rich text before the legacy updater, and preserve explicit parent_task_id null clears from staging.
         const sanitizedDescription = hasDescriptionUpdate
             ? sanitizeRichHtml(requestBody.description ?? '')
             : undefined

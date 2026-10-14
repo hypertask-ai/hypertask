@@ -83,7 +83,6 @@ interface ISectionPayload extends TSectionPayload{
     ranking?:string
 }
 
-//TODO: this needs to be done better.
 export type TSectionPayload= {
     sectionId: number;
     sectionTitle:string;
@@ -106,10 +105,6 @@ export type TSectionPayload= {
 export type TDefaultEditFocus={
     defaultEditMode?:TEditModeCTModal;
     defaultFocus?:TCurrentFocusedElement;
-    /**
-     * Seeds the AI task writer's composer for this opening only (guest demo).
-     * Not sent: the user still presses send.
-     */
     aiPrompt?:string;
 }
 export const MOBILE_AI_TASK_WRITER_FOCUS = {

@@ -29,7 +29,6 @@ const SidebarContainer = ({ children }: Props) => {
           className="fixed h-SVH-full w-screen bg-black bg-opacity-25"
         >
           <div className="fixed shadow-customshadow-2  flex flex-col justify-between bg-sidebar sm:max-w-[461px] w-[80vw]  h-SVH-full top-0 left-0 text-white-black pt-[env(safe-area-inset-top)]">
-            {/* ================== current user ================ */}
             <div style={{ display: "flex", padding: "20px 16px" }}>
               <div
                 className="text-white-black"
@@ -55,7 +54,6 @@ const SidebarContainer = ({ children }: Props) => {
               </div>
             </div>
 
-            {/* ===================== favorites and teams ============ */}
             <div
               style={{
                 flex: 1,
@@ -80,7 +78,6 @@ const SidebarContainer = ({ children }: Props) => {
                 <div className="flex flex-col gap-6 favsAndTeamsContainer">
                   <>
                     <div>
-                      {/* ========================= TEAM TITLE ====================== */}
                       <div className="flex text-content items-center gap-2">
                         <span className="pl-[16px]  font-semibold">
                           { currentUser.id===0?'Your team': `${currentUser.displayName}'s Team`}
@@ -88,7 +85,6 @@ const SidebarContainer = ({ children }: Props) => {
                         <Plus className="text-meta mb-[2px]  text-text-muted"  strokeWidth={1.75}/>
                       </div>
 
-                      {/* ========================= TEAM allProjects ====================== */}
                       <div className="mt-2 ">
                         {filteredSideBarOptions.map(
                           (item: IBoardHeader, index: number) => (
@@ -102,7 +98,6 @@ const SidebarContainer = ({ children }: Props) => {
                               }`}
                             >
                               <>
-                                {/* --------------------- PROJECT TITLE ------------------ */}
 
                                 <span className="text-content mr-4 font-normal text-white-black">
                                   {item.title}

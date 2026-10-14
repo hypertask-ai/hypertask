@@ -37,10 +37,8 @@ export type MyTasksTask = ITask & {
 };
 
 export type ApplyMyTasksViewOptions = {
-  /** When false, ignore filterSettings (flag off). Default true. */
   applyFilterSettings?: boolean;
   runtimeContext?: IFilterRuntimeContext;
-  /** IANA zone for calendar-day filters. Omit to use the process local day. */
   timeZone?: string;
 };
 
@@ -282,7 +280,6 @@ const matchesFlatTaskFilters = (
   return true;
 };
 
-/** Pure, board-agnostic filtering and sorting for saved My Tasks views. */
 export function applyMyTasksView(
   tasks: MyTasksTask[],
   rawConfig: MyTasksViewConfig,
@@ -290,8 +287,6 @@ export function applyMyTasksView(
   options: ApplyMyTasksViewOptions = {},
 ): MyTasksTask[] {
   const parsed = parseMyTasksViewConfig(rawConfig);
-  // Explicit `true` (My Tasks filter-parity flag) migrates flat → filterSettings for
-  // evaluation. Default/undefined keeps legacy flat filtering when settings are empty.
   const config =
     options.applyFilterSettings === true &&
     hasMigratableFlatFilters(parsed.filters)
@@ -330,9 +325,6 @@ export function applyMyTasksView(
         return false;
       }
 
-      // Boards/columns/showDone always apply. Kanban-parity filterSettings replace
-      // the overlapping flat fields when present so both UIs do not double-AND.
-      // starred:false stays flat (Kanban Starred cannot express it).
       if (useFilterSettings) {
         if (filters.starred === false && Boolean(task.savedContent?.length)) {
           return false;
@@ -347,7 +339,6 @@ export function applyMyTasksView(
     .sort(myTasksSortComparator(config, now));
 }
 
-/** Overdue rows that remain after a saved (or dirty) My Tasks view's filters. */
 export function overdueCountForMyTasksTasks(
   tasks: MyTasksTask[],
   rawConfig: MyTasksViewConfig,
@@ -402,15 +393,6 @@ export function sortMyTasksViewSections(
   });
 }
 
-/**
- * Pure, board-agnostic filtering for the My Tasks page (HTPR-6312).
- *
- * My Tasks spans every board, so it cannot reuse the project-scoped filter
- * system (FilterHTC/useFilters bail out without a current project and persist
- * to one board's saved view). This keeps its own selection in component state
- * only and reuses the shared per-type condition functions here. An empty
- * selection means "no filter".
- */
 export function filterMyTasksByPriority(
   sections: ISection[],
   selected: IPrioritiesConstants[],

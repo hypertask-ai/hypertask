@@ -49,8 +49,6 @@ const writeStoredRevision = (
       !isInboxReadModelRevision(current) ||
       compareInboxReadModelRevisions(revision, current) > 0
     ) {
-      // Each tab owns one key. Concurrent tabs cannot overwrite a newer
-      // revision written by another tab with an older value.
       window.localStorage.setItem(key, revision);
     }
     const latest = readStoredRevision(accountId);
@@ -73,7 +71,6 @@ const writeStoredRevision = (
       }
     }
   } catch {
-    // Browsers can deny storage. The caller keeps the late IndexedDB check.
   }
 };
 
@@ -166,7 +163,6 @@ export const clearInboxReadModelRevisionStorage = (): void => {
       }
     }
   } catch {
-    // IndexedDB cleanup still proceeds when localStorage is unavailable.
   }
 };
 
@@ -212,9 +208,6 @@ export const reserveInboxReadModelRevision = (
     tabId,
   });
   observeInboxReadModelRevision(accountId, revision);
-  // localStorage updates synchronously across same-origin tabs. This small
-  // revision-only fence closes the delivery gap left by BroadcastChannel
-  // without copying Inbox content or user-local view state.
   writeStoredRevision(accountId, tabId, revision);
   revisionChannel?.postMessage({
     type: REVISION_MESSAGE_TYPE,

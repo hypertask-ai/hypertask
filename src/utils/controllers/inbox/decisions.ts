@@ -15,8 +15,6 @@ export type DecisionRow = {
   href: string;
 };
 
-// Plain text for display only (React escapes it). Tags are removed until none are left,
-// and &amp; is decoded last so "&amp;lt;" stays the literal text "&lt;".
 const stripHtml = (html: string) => {
   let text = html;
   let previous;
@@ -66,12 +64,6 @@ type CommentRow = {
 const taskHref = (task: TaskRow, commentId?: number) =>
   `/detail/project-${task.projectId}/${task.uniqueIndex}${commentId ? `#comment-${commentId}` : ""}`;
 
-/**
- * Everything waiting on this person's decision, derived from ticket state.
- * Nothing is stored: a reply on the ticket or a move out of the review column
- * makes the row disappear on the next read. The query count is fixed (at most
- * five) whatever the number of rows.
- */
 export async function getDecisionInbox(
   userId: number,
   isFlagOwner: boolean,
@@ -92,7 +84,6 @@ export async function getDecisionInbox(
             status: "Normal",
             archivedAt: null,
             deletedAt: null,
-            // Review columns use the full or the first name ("Valentin Review").
             OR: [...new Set([displayName, displayName.split(/\s+/)[0]])].map((name) => ({
               section: { equals: `${name} Review`, mode: "insensitive" as const },
             })),
@@ -149,9 +140,7 @@ export async function getDecisionInbox(
   };
 
   for (const m of questions) {
-    // A later comment by the viewer on the same ticket is their answer.
     if ((lastReplyByTask.get(m.task.id) ?? 0) > m.comment.createdAt.getTime()) continue;
-    // The oldest unanswered question per ticket is the one still waiting.
     add(
       `task-${m.task.id}`,
       {

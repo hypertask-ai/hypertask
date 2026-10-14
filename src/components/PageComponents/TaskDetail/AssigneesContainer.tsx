@@ -1,4 +1,4 @@
-/* eslint-disable react/jsx-key */
+
 
 import { IAgent, IAssignees, ITask, IUser } from "@/models/model";
 import { taskBaseUri } from "@/utils";

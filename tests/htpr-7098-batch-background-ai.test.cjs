@@ -195,7 +195,7 @@ test("stuck batches rotate and stale errors are final (review 1)", () => {
   assert.match(collector, /orderBy: \{ lastCheckedAt: \{ sort: "asc", nulls: "first" \} \}/);
   assert.ok(collector.indexOf("data: { lastCheckedAt: new Date() }") < collector.indexOf("await planBatch(batch, itemIds, stale)"));
   // Any error from the key, status or results calls is rethrown only while the batch is fresh.
-  assert.match(collector, /catch \(error\) \{\s*\/\/[^\n]*\n\s*if \(!stale\) throw error;[\s\S]*?finalStatus: "cancelled"/);
+  assert.match(collector, /catch \(error\) \{\s*if \(!stale\) throw error;[\s\S]*?finalStatus: "cancelled"/);
   // A cancelled stale batch still runs the apply step, which clears every thread's summaryBatchId.
   assert.match(collector, /await applySlackBatch\(batch, items, plan\.outcomes\)/);
   assert.match(read("src/prisma/schema.prisma"), /lastCheckedAt\s+DateTime\?/);

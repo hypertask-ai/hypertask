@@ -47,7 +47,6 @@ export function useMyTasksFilterController() {
 type ProviderProps = {
   settings: SerializableFilterSettings | null | undefined;
   onChange: (next: SerializableFilterSettings) => void;
-  /** Clear All: empty settings plus any leftover flat not-starred. */
   onClearAll?: () => void;
   members: CalendarUserSummary[];
   labels: CalendarLabelSummary[];

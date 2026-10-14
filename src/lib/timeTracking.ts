@@ -133,9 +133,6 @@ export async function boardTimeSummary(userId: number, projectId: number) {
   };
 }
 
-// Fire-and-forget, like every other broadcast caller: a timer must not fail
-// or hang because the pub/sub hop is slow. broadcast() keeps the serverless
-// instance alive on its own via waitUntil.
 function notifyTimeChange(taskId: number, projectId?: number) {
   void (async () => {
     const project =
@@ -166,7 +163,6 @@ export async function startTimer(
     taskId,
     getProjectWhere(userId, agentId)
   );
-  // Every caller starts through here, so task tabs receive one notification.
   notifyTimeChange(taskId, started.projectId);
   return started.entry;
 }
@@ -361,8 +357,6 @@ export async function listReport(
     from?: Date;
     to?: Date;
     runningOnly?: boolean;
-    // Precomputed by the web route to avoid a second identical query; the
-    // MCP and AI-chat callers omit it and the query runs here.
     adminProjectIds?: number[];
   } = {}
 ) {
@@ -378,8 +372,6 @@ export async function listReport(
       })))
     : [];
   const adminSet = new Set(adminProjectIds);
-  // Other people's entries are protected data. The flag may grant reports to
-  // an owner or admin, but disabling it must fall back to the caller's history.
   const seesOthers = adminProjectIds.length > 0;
 
   const entries = await prisma.timeEntry.findMany({
@@ -392,8 +384,7 @@ export async function listReport(
           : options.filterUserId
             ? { userId: options.filterUserId }
             : {}
-        : // A member without other-user scope never gets anyone else's rows,
-          // whatever filter the caller passed.
+        :
           { userId }),
       ...(options.from || options.to
         ? {
@@ -434,8 +425,6 @@ export async function listReport(
       },
       user: { select: { displayName: true } },
     },
-    // Pin every running timer ahead of completed entries before applying the
-    // report cap, including timers that started more than 1000 entries ago.
     orderBy: [
       { endedAt: { sort: "asc", nulls: "first" } },
       { startedAt: "desc" },
@@ -472,8 +461,6 @@ export async function listReport(
   }));
 }
 
-// HTPR-4228: boards in the report scope that the caller owns or administers.
-// Everyone else's entries are only visible on these.
 export async function administeredProjectIds(
   userId: number,
   scope: { teamId?: string; boardIds?: number[] } = {}
@@ -522,7 +509,6 @@ export async function updateEntry(
       const startedAt = date === undefined
         ? entry.startedAt
         : manualEntryTimes(date, minutes ?? 1, timezoneOffsetMinutes).startedAt;
-      // Date-only edits retain exact timer duration, including partial minutes.
       const duration = minutes === undefined
         ? entry.endedAt!.getTime() - entry.startedAt.getTime()
         : minutes * 60 * 1000;
@@ -598,9 +584,6 @@ export async function taskSummary(userId: number, taskId: number) {
         total + elapsedSeconds(entry.startedAt, entry.endedAt, entry.pausedAt, now),
       0
     ),
-    // Every entry except the caller's own running one, so a client can tell
-    // "this run" from everything else without subtracting a server timestamp
-    // from a browser clock (HTPR-4701). Includes other users' running timers.
     otherEntriesSeconds: entries.reduce(
       (total, entry) =>
         entry.id === runningEntry?.id

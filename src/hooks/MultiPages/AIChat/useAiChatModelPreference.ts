@@ -21,7 +21,6 @@ export function useAiChatModelPreference() {
   const lastTeamId = getLastBoardTeam();
   const teamId = currentProject?.teamId ??
     teams.find((team) => team.id === lastTeamId)?.id ?? teams[0]?.id ?? null;
-  // Sidebar teams omit subscription status, so fetch the full billing source.
   const { data: team } = useQuery<ITeam | null>({
     queryKey: ["settingsTeam", currentUser?.id ?? null, teamId],
     enabled: Boolean(teamId) && !currentProject?.teamId,

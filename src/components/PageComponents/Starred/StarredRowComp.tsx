@@ -1,6 +1,6 @@
 /* eslint-disable react/jsx-key */
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable @next/next/no-img-element */
+
+
 "use client";
 import { useRouter } from "next/navigation";
 import React, { useEffect, useRef, useState } from "react";
@@ -95,50 +95,41 @@ const StarredRow = ({
     )
       return;
 
-    // [e][cmdControl] for archive task(keyCode 69 = 'e')
     if (e.keyCode === KeyCodes.E && cmdControl) {
       e.preventDefault();
       if (!shouldRunArchiveShortcut(e)) return;
       return archiveTaskHandler();
     }
 
-    // [e] for archive notifications (keyCode 69 = 'e')
     if (e.keyCode === KeyCodes.E && !cmdControl && _starType === "Task") {
       e.preventDefault();
       if (savedContent && savedContent.length > 0)
         return archiveNotificationHandler();
     }
 
-    // [j] for down (keyCode 74 = 'j') or ArrowDown (keyCode 40)
     if (e.keyCode === KeyCodes.J || e.keyCode === KeyCodes.ARROW_DOWN)
       ArrowDownHandler();
 
-    // [k] for up (keyCode 75 = 'k') or ArrowUp (keyCode 38)
     if (e.keyCode === KeyCodes.K || e.keyCode === KeyCodes.ARROW_UP)
       ArrowUpHandler();
 
-    // [enter] (keyCode 13)
     if (e.keyCode === KeyCodes.ENTER && savedContent && savedContent.length > 0)
       openTask(
         savedContent[selectedIndex].task,
         savedContent[selectedIndex].comment
       );
 
-    // cmd/ctrl + m (keyCode 77 = 'm')
     if (e.keyCode === KeyCodes.M && cmdControl) {
       e.preventDefault();
       openTask(savedContent[selectedIndex].task, undefined, undefined, true);
     }
 
-    // [alt][v]
     else if (e.keyCode === KeyCodes.V && e.altKey && !e.shiftKey) {
       e.preventDefault();
       openTask(savedContent[selectedIndex].task, undefined, true);
     }
 
-    // --- G key sequence handling start ---
 
-    // Helper: check if a g-sequence is available and matches a target key
     const gSequenceActive = () => {
       const now = new Date().getTime();
       return (
@@ -147,7 +138,6 @@ const StarredRow = ({
       );
     };
 
-    // [g] then [g]: Jump to top/bottom row
     if (
       controller[KeyCodes.G]?.pressed &&
       e.keyCode === KeyCodes.G &&
@@ -156,23 +146,19 @@ const StarredRow = ({
     ) {
       lastgClick.current = null;
       if (e.shiftKey) {
-        // Go to bottom task
         setSelectedIndex(savedContent.length - 1);
         updateActiveItemAndItemInView(
           savedContent[savedContent.length - 1].task
         );
         scrollToRow(savedContent.length - 1);
       } else {
-        // Go to top task
         setSelectedIndex(0);
         updateActiveItemAndItemInView(savedContent[0].task);
         scrollToRow(0);
       }
-      // Prevent further G combos after this triggers
       return;
     }
 
-    // [g] then [t]: Go to project page
     if (
       controller[KeyCodes.T]?.pressed &&
       e.keyCode === KeyCodes.T &&
@@ -180,11 +166,9 @@ const StarredRow = ({
     ) {
       lastgClick.current = null;
       goToProjectShortcut(savedContent[selectedIndex].projectId, true);
-      // Prevent further G combos after this triggers
       return;
     }
 
-    // [g] then [i]: Go to inbox
     if (
       controller[KeyCodes.I]?.pressed &&
       e.keyCode === KeyCodes.I &&
@@ -192,11 +176,9 @@ const StarredRow = ({
     ) {
       lastgClick.current = null;
       router.push(globalConstants.inboxRoute);
-      // Prevent further G combos after this triggers
       return;
     }
 
-    // [g] then [d]: Go to drafts
     if (
       controller[KeyCodes.D]?.pressed &&
       e.keyCode === KeyCodes.D &&
@@ -207,7 +189,6 @@ const StarredRow = ({
       return;
     }
 
-    // [g] then [u]: Go to scheduled tasks
     if (
       controller[KeyCodes.U]?.pressed &&
       e.keyCode === KeyCodes.U &&
@@ -218,19 +199,16 @@ const StarredRow = ({
       return;
     }
 
-    // [g] - capture sequence initiation only if previous was NOT part of a combo
     if (e.keyCode === KeyCodes.G) {
       const now = new Date().getTime();
       lastgClick.current = now;
       setTimeout(() => {
         lastgClick.current = null;
       }, globalConstants.gThenKeyDelay);
-      return; // Do not let a plain [g] fall through to other handlers
+      return;
     }
 
-    // --- G key sequence handling end ---
 
-    //[cmdControl][shift][,]
     if (
       e.keyCode === KeyCodes.SEMICOLON &&
       cmdControl &&
@@ -243,7 +221,6 @@ const StarredRow = ({
         savedContent[selectedIndex].task?.projectId
       );
     }
-    //[cmdControl][,]
     if (
       (e.keyCode === KeyCodes.SEMICOLON || e.keyCode === KeyCodes.COMMA) &&
       cmdControl &&
@@ -259,19 +236,16 @@ const StarredRow = ({
       );
     }
 
-    //[cmdControl][shift][.]
     if (e.keyCode === KeyCodes.PERIOD && cmdControl && e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler();
     }
 
-    //[cmdControl][.]
     if (e.keyCode === KeyCodes.PERIOD && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return shareTaskHandler(true);
     }
 
-    //[cmdControl][I]
     if (e.keyCode === KeyCodes.I && cmdControl && !e.shiftKey) {
       e.preventDefault();
       return copyTitleAndTicketNumber(
@@ -280,13 +254,11 @@ const StarredRow = ({
       );
     }
 
-    //[cmdControl][i]
     if (e.keyCode === KeyCodes.I && cmdControl && e.shiftKey) {
       e.preventDefault();
       return copyTicketNumber(savedContent[selectedIndex].task?.ticketNumber!);
     }
 
-    // [cmd][shift][s]
     if (
       e.keyCode === KeyCodes.S &&
       cmdControl &&
@@ -298,7 +270,6 @@ const StarredRow = ({
       if (savedContent && savedContent.length > 0) return handleStarring();
     }
 
-    // [alt][s]
     if (
       e.keyCode === KeyCodes.S &&
       e.altKey &&
@@ -310,11 +281,6 @@ const StarredRow = ({
     }
   };
 
-  /**
- *This function is generalized for (un)star tasks/comments
- Depending on the starType, the relevant function will run
- Reponse status && _starType determines toast message
- */
   const handleStarring = async () => {
     let response: any;
     if (_starType === "Comment") {
@@ -334,16 +300,13 @@ const StarredRow = ({
 
     if (response.status === 201) {
       removeFromStarredContentQuery(savedContent[selectedIndex], _starType);
-      // Get the current item
       const currentItem = savedContent[selectedIndex];
 
-      // Generate toast message based on type
       const itemLabel =
         _starType === "Comment"
           ? `Comment-${currentItem.comment?.id!}`
           : `Task ${currentItem.task.ticketNumber?.toUpperCase()}`;
 
-      // Show toast with appropriate message
       toast(`Unstarred ${itemLabel}`);
     }
   };
@@ -390,7 +353,6 @@ const StarredRow = ({
       }
   };
 
-  // [j] for down
   const ArrowDownHandler = () => {
     if (savedContent && savedContent.length > 0)
       if (savedContent[selectedIndex]) {
@@ -417,7 +379,6 @@ const StarredRow = ({
       .getElementById(`task-row-${index}`)
       ?.scrollIntoView({ behavior: "smooth", block: "center" });
 
-  // [k] for up
   const ArrowUpHandler = () => {
     if (savedContent && savedContent.length > 0)
       if (savedContent[selectedIndex]) {
@@ -460,12 +421,6 @@ const StarredRow = ({
     updateActiveItemAndItemInView(task);
     router.push(route);
   };
-  /**
-   *This function is for archiving/unarchiving a task
-   * @todo Update this function to deal with cache insstead of state.
-   * @param {ITask} task
-   * @param {number} index
-   */
   const archiveTask = async (task: ITask, index: number) => {
     try {
       await fetch(`/api/tasks/single`, {
@@ -478,9 +433,6 @@ const StarredRow = ({
           },
         }),
       });
-      // queryClient.refetchQueries({
-      //   queryKey: ["Saved starred for [userId]:", _currentUser.id],
-      // });
       setSavedContent((prev) =>
         prev.map((item) => {
           if (item.taskId === task.id) {
@@ -524,13 +476,11 @@ const StarredRow = ({
     (currentHoveredDiv.current = index);
 
   const handleMouseLeave = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       clearTimeout(debounceTimeout.current);
       debounceTimeout.current = null;
     }
 
-    // Start a new debounceTimeout to remove focus after a short delay (e.g., 100ms)
     debounceTimeout.current = setTimeout(() => {
       if (currentHoveredDiv.current !== null && taskRef.current) {
         (taskRef.current as HTMLDivElement)?.blur();
@@ -540,7 +490,6 @@ const StarredRow = ({
   };
 
   const handleMouseMove = () => {
-    // Clear any existing debounceTimeout
     if (debounceTimeout.current) {
       setSelectedIndex(
         currentHoveredDiv.current ? currentHoveredDiv.current : 0

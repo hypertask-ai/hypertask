@@ -7,11 +7,9 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse) => {
     if (req.method === "POST") {
         try {
-            // HTPR-4303: demo guests can't invite or join real projects.
             if (await isGuestRequest(req)) {
                 return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
             }
-            // HTPR-7162: the joining user is the signed-in user, never a userId from the body.
             const session = await getSessionUser(new Headers(req.headers as Record<string, string>));
             if (!session) {
                 return res.status(401).json({ message: "Unauthorized" });

@@ -17,7 +17,6 @@ const handler: NextApiHandler = async (
   res: NextApiResponse,
 ) => {
   if (req.method === "POST") {
-    // HTPR-4303: demo guests can't invite people to throwaway boards.
     if (await isGuestRequest(req)) {
       return res.status(403).json({ message: GUEST_FORBIDDEN_MESSAGE });
     }
@@ -99,13 +98,10 @@ export const addMemberController = async (
         json: "User already part of board",
       };
 
-    // SEND INVITE TO EACH EMAIL
-    // there are some recalculations, optimize later, works for now, short on time.
     for (const email of emailsToInvite) {
       console.log("Running invite procedure for the following email: ", email);
       if (currentProject?.owner.email === email) return {status: 201, json: "Cannot add owner email"};
 
-      // check if that member is in the TEAM, if he is, just add him straight away, do not send invite.
       const isInTeamAlready = teamMemberEmails.includes(email);
       console.log(
         "Is user already in the team? " + `${isInTeamAlready ? "Yes" : "No"}`,
@@ -228,14 +224,12 @@ export const createNotification = async (
   inviteId: string,
   projectId: number,
 ) => {
-  // check if the user exists so we can create notification, if not just return
   const invitedUser = await prisma.user.findFirst({
     where: { email: email },
   });
   console.log("🚀 ~ createNotification ~ invitedUser:", invitedUser);
   if (!invitedUser) return false;
 
-  // ============= create first notification
   const notification = await prisma.notification.create({
     data: {
       type: "Invited",
@@ -247,7 +241,6 @@ export const createNotification = async (
   });
   console.log("🚀 ~ createNotification ~ notification:", notification);
 
-  // ============ create notification_invite
   const userIdBy = await createUserNotificationInvite(fromUserId);
   const userIdTo = await createUserNotificationInvite(invitedUser.id);
 
@@ -311,7 +304,6 @@ const sendInviteToAlreadyExistingMember = async (
 };
 
 const checkTeamMemberEmails = async (teamId: string) => {
-  // first get owner email
   const team = await prisma.team.findFirst({
     where: {
       id: teamId,

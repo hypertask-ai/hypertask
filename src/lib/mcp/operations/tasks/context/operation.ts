@@ -22,7 +22,6 @@ import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 const FULL_COMMENT_LIMIT = 20;
 const SUMMARY_COMMENT_LIMIT = 3;
-// Upper bound on comments scanned for PR links, so a huge thread stays cheap.
 const PR_LINK_SCAN_LIMIT = 200;
 
 const relatedTaskSelect = {
@@ -66,11 +65,6 @@ function parseRequiredPositiveInteger(
   return { ok: true, value };
 }
 
-/**
- * GET /api/mcp/tasks/context
- *
- * Returns a read-only context pack for one accessible task.
- */
 export async function GET(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -194,8 +188,6 @@ export async function GET(request: NextRequest) {
             commentText: true,
           },
           orderBy: { createdAt: 'asc' },
-          // Cap the PR-link scan so a long comment thread can't turn this
-          // pre-session endpoint into an unbounded full-history fetch.
           take: PR_LINK_SCAN_LIMIT,
         }),
         prisma.taskRelations.findMany({

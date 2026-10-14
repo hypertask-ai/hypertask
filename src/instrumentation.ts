@@ -3,7 +3,6 @@ import { isExpectedClientAbortedRscPayload } from "./lib/errors/requestErrorFilt
 
 export async function register() {
   if (process.env.NEXT_RUNTIME === "nodejs") {
-    // AWS SDK v3 migration is tracked separately from this maintenance notice.
     process.env.AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE ??= "1";
   }
   if (process.env.NEXT_RUNTIME === "edge") return;
@@ -26,8 +25,6 @@ export const onRequestError: Instrumentation.onRequestError = async (
     return;
   }
 
-  // Next 16.3 reports an RSC response cancelled by navigation as a render
-  // failure. The exact context keeps real stream and route errors visible.
   if (isExpectedClientAbortedRscPayload(error, context)) return;
 
   try {

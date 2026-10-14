@@ -22,18 +22,6 @@ const boardRouteDependencies: BoardRouteDependencies = {
   createBoardFromManifest,
 }
 
-/**
- * POST /api/mcp/teams/:teamId/boards
- *
- * Creates one board (project) under the team from a structured manifest.
- * teamId is the Team UUID (see GET /api/mcp/user/context → teams[].id).
- *
- * Label `color` in the manifest is accepted but not persisted (Label model has no color column).
- *
- * Optional `Idempotency-Key` header: replays with the same key + same body return the cached
- * successful response for 24h (Redis); no duplicate board. A same-key retry while the original
- * request is still in flight returns 409 and tells the caller to retry shortly.
- */
 export async function POST(
   request: NextRequest,
   props: { params: Promise<{ teamId: string }> },

@@ -8,7 +8,6 @@ import {
   MoveTaskToInboxInputSchema,
 } from '../../validations/inbox.validation';
 
-/** Tab metadata from structured inbox view */
 export interface InboxTab {
   idx: number;
   project: string;
@@ -17,7 +16,6 @@ export interface InboxTab {
   projectId: number | null;
 }
 
-/** Full notification object from backend */
 export interface InboxNotification {
   id: number;
   type: string;
@@ -50,15 +48,12 @@ export interface InboxNotification {
 
 export interface InboxListResponse {
   success: boolean;
-  /** New format: full notification objects */
   user_notifications?: InboxNotification[];
   agent_notifications?: InboxNotification[];
-  /** Legacy: flat items (prefer notifications) */
   items?: unknown[];
   [key: string]: unknown;
 }
 
-/** GET /mcp/inbox/composition: who a board's unread load actually belongs to. */
 export interface InboxCompositionResponse {
   success: boolean;
   project?: { id: number; title: string };
@@ -81,17 +76,9 @@ export interface MoveTaskToInboxResponse {
   error?: string;
 }
 
-/**
- * Service for inbox operations
- */
 export class InboxService {
   constructor(private readonly apiClient: IApiClient) {}
 
-  /**
-   * Lists inbox notifications for a user.
-   * @param params - The parameters for the inbox list operation.
-   * @returns The response from the API.
-   */
   async listInbox(
     params: unknown
   ): Promise<InboxListResponse | InboxCompositionResponse> {
@@ -129,10 +116,6 @@ export class InboxService {
         correlationId
       );
 
-      // logger.info('Inbox listed successfully', {
-      //   correlationId,
-      //   userId: validatedInput.user_id ?? 'from_jwt',
-      // });
 
       return response;
     } catch (error) {
@@ -144,11 +127,6 @@ export class InboxService {
     }
   }
 
-  /**
-   * Archives one or multiple notifications from the user's inbox.
-   * @param params - The parameters for the inbox archive operation.
-   * @returns The response from the API.
-   */
   async archiveInbox(params: unknown): Promise<InboxArchiveResponse> {
     const correlationId = generateCorrelationId();
 
@@ -170,10 +148,6 @@ export class InboxService {
         correlationId
       );
 
-      // logger.info('Inbox notifications archived successfully', {
-      //   correlationId,
-      //   count: validatedInput.notification_ids.length,
-      // });
 
       return response;
     } catch (error) {
@@ -185,10 +159,6 @@ export class InboxService {
     }
   }
 
-  /**
-   * Restores one or multiple archived inbox notifications (unarchive).
-   * @param params - Same shape as archive: notification_ids.
-   */
   async unarchiveInbox(params: unknown): Promise<InboxUnarchiveResponse> {
     const correlationId = generateCorrelationId();
 
@@ -225,10 +195,6 @@ export class InboxService {
     }
   }
 
-  /**
-   * Routes a task into a specific project member's inbox (mirrors the
-   * "Move task to inbox" command-palette action). HTPR-4553.
-   */
   async moveTaskToInbox(params: unknown): Promise<MoveTaskToInboxResponse> {
     const correlationId = generateCorrelationId();
 

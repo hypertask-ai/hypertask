@@ -26,7 +26,6 @@ interface MobileBottomSheetProps {
 
 const MOBILE_SHEET_MAX_HEIGHT_RATIO = 0.82;
 
-/** Shared mobile sheet shape for command and navigation surfaces. */
 export const MobileBottomSheet = ({
   isOpen = true,
   onClose,
@@ -54,7 +53,6 @@ export const MobileBottomSheet = ({
         viewport.layoutHeight * MOBILE_SHEET_MAX_HEIGHT_RATIO
       )
     : 0;
-  // Leave room for controls above the sheet when the keyboard fills the viewport.
   const sheetHeight = keyboardOpen
     ? Math.max(0, availableHeight - (aboveSlot ? 48 : 0))
     : restingHeight;

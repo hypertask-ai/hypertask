@@ -1,8 +1,3 @@
-/**
- * Centralized Section CRUD service.
- * Both Pages API and MCP endpoints should use this service.
- * All view updates (default, applied, unsaved) are handled here.
- */
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
@@ -20,7 +15,6 @@ export interface CreateSectionInput {
   title: string
   ranking?: string
   afterSectionId?: number
-  /** The acting user; must own or belong to the board. Visibility is ON only in their views. */
   userId: number
   agentId?: string | null
 }
@@ -29,9 +23,6 @@ export type CreateSectionResult =
   | { status: 200; json: { id: number; section_title: string; projectId: number; visibility: boolean; deleted: boolean; ranking: string; isDone: boolean | null } }
   | { status: 400 | 403 | 404 | 500; json: { message: string } | unknown }
 
-/**
- * Create a new section. Updates all project views.
- */
 export async function createSection(input: CreateSectionInput): Promise<CreateSectionResult> {
   const { projectId, title, ranking: explicitRanking, afterSectionId, userId, agentId } = input
 
@@ -108,7 +99,6 @@ export interface UpdateSectionInput {
   isDone?: boolean | null
   autoAssignUserId?: number | null
   autoAssignAgentId?: string | null
-  /** Place section after this section ID; ranking is computed. Use with projectId. */
   moveAfterSectionId?: number
   projectId?: number
   userId: number
@@ -136,10 +126,6 @@ async function canAccessProject(
   return Boolean(project)
 }
 
-/**
- * Update a section (rename, move, delete, visibility).
- * Updates Section record, tasks when title changes, and all views.
- */
 export async function updateSection(input: UpdateSectionInput): Promise<UpdateSectionResult> {
   const { sectionId, section_title, ranking, deleted, visibility, isDone, autoAssignUserId, autoAssignAgentId, moveAfterSectionId, projectId, userId, agentId } = input
 
@@ -194,7 +180,6 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
         }
       })
 
-      // Keep the task name update and its history row in one transaction.
       if (titleChanged) {
         const tasks = await tx.task.updateManyAndReturn({
           where: { sectionId },
@@ -218,7 +203,6 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
       return updated
     })
 
-    // View updates based on operation
     if (toUpdate.deleted) {
       await removeSectionFromAllViews(sectionId, toUpdate.projectId)
     } else if (titleChanged || finalRanking != null || isDone !== undefined) {
@@ -263,9 +247,6 @@ export interface DeleteSectionResult {
   destinationSection?: { id: number; title: string } | null
 }
 
-/**
- * Delete a section (soft delete). Moves tasks to first section, updates all views.
- */
 export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSectionResult> {
   const { sectionId, projectId, userId, agentId } = input
 
@@ -308,8 +289,6 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
   let movedTaskCount = 0
   if (firstSection) {
     const moved = await prisma.$transaction(async (tx) => {
-      // Lock the actual pre-move rows, including legacy title matches, so a
-      // concurrent move cannot turn an already-done task into a first completion.
       const beforeTasks = agentId ? await tx.$queryRaw<Pick<Task, 'id' | 'projectId' | 'uniqueIndex' | 'title' | 'sectionId' | 'section' | 'status'>[]>`
         SELECT id, "projectId", "uniqueIndex", title, "sectionId", section, status FROM "Task"
         WHERE "projectId" = ${projectId}

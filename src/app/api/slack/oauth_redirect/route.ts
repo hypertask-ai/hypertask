@@ -41,14 +41,7 @@ export async function GET(request: NextRequest) {
 
   const rawState = request.nextUrl.searchParams.get("state");
   if (!rawState) {
-    // HTPR-4857: Slack Marketplace "Add to Slack" lands here with a code and no
-    // state. Slack has already added the bot; we store nothing and send the
-    // visitor through login, then Settings completes the link (the second
-    // authorize is instant — Slack skips consent for an already-authorized app).
-    // Never claim success: the code was not exchanged by us. Denied or
-    // malformed callbacks already returned above.
     const user = await getServerCookieUser();
-    // Anonymous visitors pass -1: only an EVERYONE flag passes the mode check.
     if (await isFeatureEnabled(HTPR_4857_ADD_TO_SLACK_FLAG, user?.id ?? -1)) {
       const settingsUrl = new URL(SLACK_SETTINGS_PATH, request.url);
       if (user) {
@@ -63,7 +56,6 @@ export async function GET(request: NextRequest) {
 
   const state = verifySlackOAuthState(rawState, clientSecret);
   if (!state) return redirectWithError(request, "invalid_state");
-  // HTPR-7157: only the browser and signed-in user that started the install may finish it.
   if (
     !slackOAuthNonceMatches(
       state,
@@ -143,7 +135,6 @@ export async function GET(request: NextRequest) {
       existingTeamInstall &&
       existingTeamInstall.slackTeamId !== slackTeamId
     ) {
-      // Replacing a workspace must also remove its old channel/thread checkpoints.
       await prisma.$transaction([
         prisma.slackInstall.delete({ where: { teamId: state.teamId } }),
         prisma.slackInstall.create({
@@ -173,7 +164,6 @@ function redirectWithError(request: NextRequest, error: string) {
   return clearAttemptCookie(NextResponse.redirect(destination));
 }
 
-// The attempt cookie is single use: every callback outcome consumes it.
 function clearAttemptCookie(response: NextResponse) {
   response.cookies.set(SLACK_OAUTH_ATTEMPT_COOKIE, "", {
     httpOnly: true,

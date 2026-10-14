@@ -30,10 +30,8 @@ export const getDraftsHelper= async(taskId:number, userId:number )=>{
   }
 }
 
-// Module-level variable to persist cancel token across function calls
 let cancelTokenSource: CancelTokenSource | null = null;
 
-/** Cancel any in-flight draft autosave (e.g. before publishing description). */
 export const cancelPendingDraftUpdates = () => {
   if (cancelTokenSource) {
     cancelTokenSource.cancel("Canceled before description save");
@@ -51,42 +49,30 @@ export const updateDraftHelper = async (projectId:number, taskId: number, userId
       content:content,
       projectId
     };
-    // console.log("🚀 ~ updateDraftHelper ~ requestBody:", requestBody)
 
-    // Cancel the previous request if it exists
     if (cancelTokenSource) {
       cancelTokenSource.cancel('Operation canceled due to new request.');
     }
 
-    // Create a new CancelToken
     cancelTokenSource = axios.CancelToken.source();
 
     const response = await axios.post("/api/drafts/updateDraft", requestBody, {
       cancelToken: cancelTokenSource.token,
     });
 
-    // console.log("🚀 ~ updateDraft ~ response:", response);
     if (response.status === 200) return response;
  } catch (error) {
     if (axios.isCancel(error)) {
       console.log('Request canceled', error.message);
-      // Don't throw - cancellation is expected behavior
       return;
     } else {
       console.log("🚀 ~ updateDraft ~ error:", error);
-      throw error; // Re-throw non-cancellation errors
+      throw error;
     }
  }
 };
 
 
-  // Preferences barely change and are already the single React Query cache
-  // entry every other consumer reads (useGetUserPreferences, 5 min staleTime,
-  // HTPR-3998). fetchCommentsHelper used to keep its own separate memo, which
-  // meant every task-detail open fired /api/users/preferences twice: once for
-  // that cache, once for this one (HTPR-6047). Routing through the same
-  // QueryClient/query key makes it the same fetch.
-  // ---------------------- FETCH COMMENTS ---------------
   export const fetchCommentsHelper = async (taskId:number, userId:number, queryClient?: QueryClient) => {
     markTaskDetailPhase(TASK_DETAIL_COMMENTS_REQUEST_MARK);
     const response = await fetch(`/api/comments/getByTask?taskId=${taskId}`);
@@ -172,14 +158,9 @@ export const fetchAssignedUsers = async (taskId: number) => {
 };
 
 
-// ========================== get all followers
 export const getAllFollowers = async(taskId:number) => {
 
   try {
-    // Shares one request with priority/estimate/labels instead of hitting
-    // /api/follower/getFollower on its own (HTPR-3708). The creator-filtering
-    // rule moved with it, so the returned list is unchanged. Logged out (the
-    // public /share page) it stays on the old route.
     if (!hasSessionCookie()) {
       const legacy = await axios.post("/api/follower/getFollower", { taskId });
       return legacy.data;
@@ -190,9 +171,6 @@ export const getAllFollowers = async(taskId:number) => {
   }
 }
 
-
-
-// ========================== UPDATE COMMENTS
 export const updateComment = async(updatedComment:commentBody,resultUrls:any[], commentId?:string) => {
 
   console.log("🚀 ~ file: index.ts:48 ~ updateComment ~ resultUrls:", resultUrls)
@@ -203,18 +181,15 @@ export const updateComment = async(updatedComment:commentBody,resultUrls:any[], 
 
 }
 
-// ========================== UPDATE TASK
 export const updateTask = async(updatedTaskBody:any, otherPayload?:any, mode?:string)=>{
   const response = await axios.put('/api/tasks/single', {newTask:updatedTaskBody})
   
   if (otherPayload && mode==="SaveDescription"){
-    // save urls from the description
     axios.put(`/api/urls/addIntoTaskDesc`,otherPayload )
   }
   return response
 }
 
-// --------------------- CONVERTING BASE64s TO FILES -----------------
 export async function base64ToFile(
   base64String: string,
   filename: string
@@ -257,7 +232,6 @@ export async function setDueDateApiHandler(
   }
 }
 
-// HTPR-4884: planned start date. Undefined clears it.
 export async function setStartDateApiHandler(
   startDate: Date | undefined,
   taskId: number,
@@ -274,7 +248,6 @@ export async function setStartDateApiHandler(
   }
 }
 
-// HTPR-4885: repeat rule. Null stops the task repeating.
 export async function setRecurrenceApiHandler(
   recurrence: string | null,
   taskId: number

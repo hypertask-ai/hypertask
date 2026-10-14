@@ -4,11 +4,6 @@ import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { NextRequest, NextResponse } from "next/server";
 
-/**
- * Rate limit, authenticate, read the JSON body. Entry-scoped routes (update,
- * delete) address a TimeEntry by id rather than a task, so they stop here;
- * resolveMcpTimeTask continues on to resolve the task.
- */
 export async function authenticateMcpTime(request: NextRequest) {
   const rateLimited = await checkMcpRateLimit(request);
   if (rateLimited) {
@@ -30,7 +25,6 @@ export async function authenticateMcpTime(request: NextRequest) {
   return { ctx, body, response: null };
 }
 
-/** Reads a positive integer TimeEntry id from the request body. */
 export function readEntryId(body: any) {
   const raw = body?.entry_id;
   const entryId = typeof raw === "string" ? Number(raw) : raw;

@@ -56,7 +56,6 @@ export async function validateProjectAccess(
     userId: number,
     agentId?: string | null
 ): Promise<{ project: any; error: null } | { project: null; error: { status: number; message: string } }> {
-    // Check if project exists
     const projectExists = await prisma.project.findFirst({
         where: { id: projectId, status: 'Normal' },
         select: { id: true }
@@ -189,14 +188,6 @@ export async function validateProjectMemberIds(
     return { invalidIds, error: null };
 }
 
-/**
- * Match label names OR ids against a project's labels.
- *
- * Callers (the AI chat especially) naturally pass human label names like "AI",
- * because that is what the user typed. Matching on id alone made every
- * name-based call fail with "Label(s) not found", so names are matched here
- * case-insensitively and whitespace-tolerantly.
- */
 export function matchLabelIds(
     projectLabels: { id: string; value: string | null }[],
     labels: (string | number)[]
@@ -265,9 +256,6 @@ async function assertTaskBelongsToProject(
     }
 }
 
-/**
- * Replace all labels on a task and log only the labels whose assignment changed.
- */
 export async function setTaskLabels(
     taskId: number,
     projectId: number,
@@ -340,17 +328,10 @@ export async function setTaskLabels(
     try {
       await publishAgentWebhookDeliveries(deliveryIds);
     } catch (error) {
-        // The outbox row committed with the label mutation. The queue helper
-        // and the agent-webhook outbox sweeper retry publication failures.
         console.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
     }
 }
 
-/**
- * Add and/or remove labels on a task without touching the ones it already has.
- * Unlike setTaskLabels, this never wipes labels the caller did not mention, so a
- * "swap tag A for tag B" never silently drops the task's other tags.
- */
 export async function mutateTaskLabels(
     taskId: number,
     projectId: number,
@@ -366,7 +347,6 @@ export async function mutateTaskLabels(
     const removeIds = await resolveLabelIds(projectId, changes.remove ?? []);
     const skipIfPresentIds = await resolveLabelIds(projectId, changes.skipIfPresent ?? []);
     const deliveryIds = await prisma.$transaction(async (tx) => {
-        // This task-row lock is the shared mutex used by both MCP and UI label writers.
         await assertTaskBelongsToProject(tx, taskId, projectId);
         const existing = await tx.taskLabel.findMany({
             where: { taskId },
@@ -427,8 +407,6 @@ export async function mutateTaskLabels(
     try {
       await publishAgentWebhookDeliveries(deliveryIds);
     } catch (error) {
-        // The outbox row committed with the label mutation. The queue helper
-        // and the agent-webhook outbox sweeper retry publication failures.
         console.warn('[task-labels] queue publish failed; outbox sweep will retry', error);
     }
 }
@@ -442,13 +420,13 @@ export async function createTask(data: {
     userId: number;
     priorityIndex: number;
     estimateIndex: number;
-    dueDate?: Date; // ISO 8601 parsed date
+    dueDate?: Date;
     projectUniqueIdentifier: string | null;
     teamId: string | null;
-    images?: string[]; // Array of S3 image URLs
-    labels?: (string | number)[]; // Label IDs to assign
-    parentTaskId?: number; // Parent task ID to assign to the task
-    assigneeIds?: number[]; // User IDs to assign as assignees
+    images?: string[];
+    labels?: (string | number)[];
+    parentTaskId?: number;
+    assigneeIds?: number[];
     agentId?: string | null;
 }) {
     const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds } = data;
@@ -457,7 +435,6 @@ export async function createTask(data: {
         throw new Error('Project identifier is required');
     }
 
-    // Validate and resolve labels (must belong to project)
     let tags: { id: string }[] = [];
     if (labelIds && labelIds.length > 0) {
         const validLabels = await prisma.label.findMany({
@@ -475,8 +452,6 @@ export async function createTask(data: {
         tags = validLabels.map(l => ({ id: l.id }));
     }
 
-    // Get user object for createGlobally (it expects currentUser from cookies)
-    // Include photoURL so activity log avatars display correctly
     const user = await prisma.user.findUnique({
         where: { id: userId },
         select: {
@@ -491,7 +466,6 @@ export async function createTask(data: {
         throw new Error('User not found');
     }
 
-    // Prepare priority/estimate objects in the format createGlobally expects
     const priority = priorityIndex > 0 
         ? PriorityConstants.find(p => p.priority_index === priorityIndex)
         : undefined;
@@ -500,7 +474,6 @@ export async function createTask(data: {
         ? EstimateConstants.find(e => e.estimate_index === estimateIndex)
         : undefined;
 
-    // Get ranking (createGlobally expects it)
     const lastTask = await prisma.task.findFirst({
         where: {
             sectionId,
@@ -514,14 +487,11 @@ export async function createTask(data: {
     const generateRank = (await import('@/utils/generateRank')).default;
     const ranking = generateRank(lastTask?.ranking, undefined);
 
-    // Convert images array to IUrl format for createGlobally
     const urlsToAdd = data.images && data.images.length > 0
         ? data.images.map((imageUrl: string) => {
-            // Extract file extension from URL to determine file type
             const urlPath = new URL(imageUrl).pathname;
             const extension = urlPath.split('.').pop()?.toLowerCase() || 'jpg';
             
-            // Map common image extensions to MIME types
             const mimeTypeMap: Record<string, string> = {
                 'jpg': 'image/jpeg',
                 'jpeg': 'image/jpeg',
@@ -537,7 +507,7 @@ export async function createTask(data: {
             
             return {
                 urlString: imageUrl,
-                TaskId: 0, // Will be set after task creation
+                TaskId: 0,
                 Attachment: true,
                 attachmentType: fileType,
                 title: fileName
@@ -545,23 +515,17 @@ export async function createTask(data: {
         })
         : undefined;
 
-    // Call the existing createGlobally API endpoint internally
-    // Use absolute URL for internal calls
     const baseUrl = process.env.NEXT_PUBLIC_BASEURL 
         || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     
     const apiUrl = `${baseUrl}/api/tasks/createGlobally`;
     
-    // Create a cookie string for the user (createGlobally expects nookies_user cookie)
-    // Include photoURL so activity log avatars display correctly when tasks are created via MCP
     const userCookie = JSON.stringify(slimUserForCookie({
         id: user.id,
         email: user.email,
         displayName: user.displayName,
         photoURL: user.photoURL ?? undefined
     }));
-    // Bind the managed-agent claim into the signed hop so createGlobally can
-    // resolve authorship from authentication, not a forgeable body field.
     const sessionToken = signSession({
         id: user.id,
         email: user.email,
@@ -571,10 +535,6 @@ export async function createTask(data: {
 
     let assigneesMinimal: any[] | undefined = undefined
     if (assigneeIds && assigneeIds.length > 0) {
-        // Only project owner/members may be assigned. Without this, any caller could
-        // assign an arbitrary internal user id, who then gets a notification/email
-        // with the task title and link. Mirrors the mentions check on the comment
-        // route and the AI chat write tools. See HTPR-3964.
         const memberCheck = await validateProjectMemberIds(projectId, assigneeIds);
         if (memberCheck.error) {
             throw new Error(memberCheck.error.message);
@@ -640,7 +600,6 @@ export async function createTask(data: {
         throw new Error(result.message || 'Failed to create task');
     }
 
-    // Fetch complete task with all relations for MCP response format
     const taskWithDescription = await prisma.task.findUnique({
         where: { id: result.newTask.id },
         include: taskDetailInclude(userId)

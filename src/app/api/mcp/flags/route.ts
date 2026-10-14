@@ -17,8 +17,6 @@ import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
-// The whole approval comment is "Question: Switch <flag-key> to <mode label>?", optionally after
-// the @Valentin Yeo mention, so a negated, quoted or second request never matches.
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
   OWNER_AND_QA: "Owner + QA",
@@ -79,7 +77,6 @@ export async function PATCH(request: NextRequest) {
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
     }
-    // The reason names one comment: the ticket link plus #comment-<id>.
     const link = typeof body.reason === "string" && body.reason.length <= 500
       ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
       : null;
@@ -98,12 +95,8 @@ export async function PATCH(request: NextRequest) {
       source: "api",
     }, async (tx) => {
       const commentId = Number(link[3]);
-      // Hold the comment, its task and its reactions until the flag write commits, so an edit,
-      // a task delete or a removed thumbs up cannot land between this check and the write.
       await tx.$queryRaw`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
-      // An edited comment never counts: the thumbs up may have been given to different words,
-      // and edit and reaction times come from different clocks.
       const comment = await tx.comment.findFirst({
         where: {
           id: commentId,
@@ -117,7 +110,6 @@ export async function PATCH(request: NextRequest) {
         },
         select: { commentText: true, text: true },
       });
-      // Compare the visible HTML first; legacy comments may only have commentText.
       const words = parse(comment?.text || comment?.commentText || "").text;
       const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
       if (!comment || !ask || ask[1] !== body.key
@@ -127,7 +119,6 @@ export async function PATCH(request: NextRequest) {
         );
       }
     });
-    // The locked write supplies the previous mode, not a read that can race another session.
     const previousMode = flag.lastChange
       ? flag.lastChange.oldMode ?? defaultFeatureFlagMode(body.key)
       : flag.mode;

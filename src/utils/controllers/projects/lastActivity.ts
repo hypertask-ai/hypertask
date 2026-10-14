@@ -1,18 +1,6 @@
 import prisma from "@/lib/prisma";
 import { extraMinimalProjectWhere } from "./getAllMinimal";
 
-/**
- * Most recent task update per board the user can see.
- *
- * The board switcher listed boards in creation order, which reads as random
- * once an account has more than a handful (HTPR-5476). Activity is derived
- * rather than stored: Project has no updatedAt, and adding one would need
- * every task write to touch its board row.
- *
- * This is deliberately its own endpoint instead of a field on the board
- * bootstrap payload — it runs when the switcher opens, not on every board
- * load.
- */
 const getProjectsLastActivity = async (userId: number) => {
   if (!userId) return { status: 400, json: {} };
 

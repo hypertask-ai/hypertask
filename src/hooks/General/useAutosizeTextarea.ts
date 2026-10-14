@@ -2,7 +2,6 @@ import { aiTaskWriterConfig } from "@/lib/configs/aiTaskWriter.config";
 import { ITaskDetailEditMode } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useLayoutEffect, useRef, type RefObject } from "react";
 
-// Updates the height of a <textarea> when the value changes.
 const useAutosizeTextArea = (
   textArea: HTMLTextAreaElement | RefObject<HTMLTextAreaElement | null> | null,
   value: string,
@@ -12,9 +11,6 @@ const useAutosizeTextArea = (
     isMobile: boolean;
     maxHeightPx?: number;
   },
-  // Any value that changes when the surrounding layout width changes (e.g. the
-  // AI chat sidebar open state / width). Wrapped-text height depends on width,
-  // so we must recompute on those shifts, not only on value change.
   resizeTrigger?: unknown
 ) => {
   const recalc = () => {
@@ -25,7 +21,6 @@ const useAutosizeTextArea = (
       : "37px";
     const scrollHeight = textAreaRef.scrollHeight;
 
-    // Calculate the height of the textarea based on the task writer details
     let continueCalculating = true;
     if (taskWriterDetails)
       continueCalculating = calculateAITaskWriterHeight(
@@ -43,19 +38,15 @@ const useAutosizeTextArea = (
   const recalcRef = useRef(recalc);
   recalcRef.current = recalc;
 
-  // Measure the committed width before paint, including the initial ref attachment.
   useLayoutEffect(() => {
     recalcRef.current();
   }, [textArea, value, resizeTrigger]);
 
-  // Ancestor flex reflow can settle after the layout pass (HTPR-4321).
   useEffect(() => {
     const raf = requestAnimationFrame(() => recalcRef.current());
     return () => cancelAnimationFrame(raf);
   }, [resizeTrigger]);
 
-  // Viewport resize (e.g. dragging the window to/from half-screen) also changes
-  // the wrap width.
   useEffect(() => {
     const onResize = () => recalcRef.current();
     window.addEventListener("resize", onResize);
@@ -84,7 +75,6 @@ function calculateAITaskWriterHeight(
     taskWriterDetails?.editMode == null;
 
   if (isFallbackHeight) {
-    // Try parent popover wrapper or parent element for max height
     const parentEl =
       (textAreaRef.closest("popover-wrapper-description") as HTMLElement) ||
       textAreaRef.parentElement;
@@ -95,7 +85,6 @@ function calculateAITaskWriterHeight(
         parseFloat(parentStyles.paddingTop) -
         parseFloat(parentStyles.paddingBottom);
 
-      // Get 60svh in pixels
       const tempDiv = document.createElement("div");
       tempDiv.style.height = "60svh";
       tempDiv.style.position = "absolute";
@@ -112,8 +101,6 @@ function calculateAITaskWriterHeight(
     }
   }
 
-  // Mobile Task Writer reserves room for its keyboard-safe action dock. Other
-  // callers keep the existing 60svh cap.
   let maxHeight = taskWriterDetails.maxHeightPx;
   if (maxHeight == null) {
     const tempDiv = document.createElement("div");

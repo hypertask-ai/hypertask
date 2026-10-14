@@ -31,12 +31,6 @@ function hasField(body: ProfilePatchBody, field: keyof ProfilePatchBody) {
   return Object.prototype.hasOwnProperty.call(body, field)
 }
 
-/**
- * PATCH /api/mcp/user/profile
- *
- * Updates the current human user's MCP-visible profile fields.
- * Authentication: Bearer token via MCP auth.
- */
 export async function PATCH(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   let userObj: { id: number; email: string } | null = null
@@ -53,8 +47,6 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Agent tokens act on behalf of an agent, not the human owner; they must
-    // not be able to rename or re-avatar the underlying human account.
     if (ctx.agentId) {
       return NextResponse.json(
         {

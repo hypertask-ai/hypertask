@@ -45,11 +45,6 @@ export async function resolveCommentRecipientUserIds(
     recipientUserIds.add(task.userId);
   }
 
-  // HTPR-7096: an agent comment carries its owner as creatorId. With the flag on,
-  // the owner hears from their own agent only through an @mention (the mention
-  // path notifies then) or an explicit direct reply (added by the caller after
-  // this). Applied after every recipient source, so assignee and follower rows
-  // cannot bring the chatter back.
   if (
     fromAgentId &&
     recipientUserIds.has(creatorId) &&
@@ -73,8 +68,6 @@ export async function createNotificationForComment(
   dedupeByComment = false,
 ) {
   const { prisma, checkRemindersAndCreateNotifications, broadcastInboxChange } = dependencies;
-  // A direct reply gets one addressed Mentioned event below instead of a
-  // routine agent Comment event. Its marker bypasses project-level muting.
   let humanUserIds = recipientUserIds.filter(
     (recipientUserId) => recipientUserId !== directReplyUserId,
   );
@@ -105,8 +98,6 @@ export async function createNotificationForComment(
     },
   );
 
-  // User → Agent: notify agent assignees and followers (agents have no
-  // reminders, create directly; follower rows keep the owner's user inbox clean)
   const agentWhere = {
     taskId: task.id,
     agentId: { not: null },
@@ -118,8 +109,6 @@ export async function createNotificationForComment(
     prisma.follower.findMany({ where: agentWhere, include: agentInclude }),
   ]);
 
-  // HTPR-7088: an agent never gets an inbox row for its own comment, and
-  // follower agents get the same live inbox update as assigned agents.
   if (agentAssignees.length + agentFollowers.length === 0) return;
   const fanoutFixOn = await isAgentCommentFanoutFixOn(creatorId);
   const isOwnComment = (agentId: string | null) =>
@@ -149,8 +138,6 @@ export async function createNotificationForComment(
     });
     deliveredAgentIds = new Set(delivered.map(({ agentId }) => agentId));
   }
-  // On replay, a row queued earlier in this batch counts as delivered, as it
-  // did when each row was checked right after the previous insert.
   const isNew = ({ agentId }: { agentId: string }) => {
     if (deliveredAgentIds.has(agentId)) return false;
     if (dedupeByComment) deliveredAgentIds.add(agentId);
@@ -255,8 +242,6 @@ export async function sendCommentEmails(
   const sendToRecipient = async (recipient: (typeof recipients)[number]) => {
     if (deliveredUserIds?.has(recipient.id)) return;
     if (recipient.email && recipient.UserSetting?.notification) {
-      // shouldNotify, not the legacy preference helper: only the former reads the
-      // per-category matrix, so the old call ignored "comments off" entirely.
       if (await shouldNotify(recipient.id, "Comment", "email")) {
         await beforeDelivery?.();
         const sent = await sendEmailNotification("Comment", {
@@ -281,11 +266,6 @@ export async function sendCommentEmails(
   }
 }
 
-/**
- * Extracts task references from comment text and creates related task relations.
- * Supports URLs (/detail/project-X/Y) and HTML spans (span[data-label="task"]).
- * Used for MCP/CLI comments and any comment where client-side relation extraction was skipped.
- */
 export async function processTaskReferencesFromCommentText(
   dependencies: CommentDependencies,
   text: string,

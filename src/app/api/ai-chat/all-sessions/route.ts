@@ -1,13 +1,3 @@
-/* Opt-in API: server flag htpr-6924-rest-compat AND ?compat=htpr-6924.
- * List: { success, sessions: summaries, nextCursor }; limit 1..100 (default 30),
- * optional taskId, projectId (board-only unless taskId is supplied), emptyOnly=true.
- * Detail: sessionId alone returns { success, session } with its full transcript.
- * Ordering is snapshotted as updatedAt DESC, id DESC; opaque cursors expire after
- * 15 minutes (410: restart). New/updated sessions appear in order on a fresh list.
- * The snapshot stores IDs only; each page rechecks owner, visibility and scope.
- * Initial ordering costs one ID-only scan; transcript/summary reads stay bounded.
- * Without both opt-ins the legacy response and query remain unchanged.
- */
 import { randomUUID } from "node:crypto";
 import { getRedis } from "@/lib/redis";
 import { HTPR_6924_REST_COMPAT_FLAG, isFeatureEnabled } from "@/lib/flags";
@@ -92,8 +82,6 @@ async function pagedSessions(request: NextRequest, userId: number) {
     ids = JSON.parse(cached);
     if (cursor.offset >= ids.length) return invalid();
   } else {
-    // A mutable updatedAt keyset skips unseen sessions moved ahead of the cursor.
-    // Freeze membership/order, not transcripts, so concurrent writes cannot move IDs.
     ids = (await prisma.chatSession.findMany({
       where, select: { id: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }],
     })).map(({ id }) => id);
@@ -137,7 +125,6 @@ export async function GET(request: NextRequest) {
     try {
       restCompat = await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, currentUser.userId);
     } catch {
-      // Flag lookup failure preserves the legacy route.
     }
     if (restCompat) {
       const limited = await checkRestRateLimit(currentUser.userId, "read");
@@ -152,10 +139,6 @@ export async function GET(request: NextRequest) {
       relationLoadStrategy: "join",
       where: {
         userId: user.id,
-        // External agents (self-hosted runtimes) are only chatted with from
-        // Agent Chat, which sends through /api/agent-chat, not this general
-        // AI chat surface. Listing their sessions here lets a user open one
-        // and hit the /api/ai/chat/stream guard that rejects the send.
         OR: [{ agentId: null }, { agent: { runtimeType: { not: "EXTERNAL" } } }],
       },
       include: {
@@ -165,7 +148,6 @@ export async function GET(request: NextRequest) {
           },
           include: {
             attachments: true,
-            // HTPR-6284: agent-attributed replies keep their author on reload.
             authorAgent: { select: { displayName: true } },
           },
         },

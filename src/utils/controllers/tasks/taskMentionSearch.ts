@@ -17,36 +17,14 @@ const taskMentionSearch = async(props:ItaskMentionSearch) => {
           },
           deletedAt:null,
           
-          // description:{
-            //   search:searchQuery.toLowerCase()
-          // },
           OR:[
             {
               title: {
-              // search:searchQuery.toLowerCase(),
-              contains: searchQuery.toLowerCase(), // Convert searchQuery to lowercase
-              mode: 'insensitive', // Perform case-ins
+              contains: searchQuery.toLowerCase(),
+              mode: 'insensitive',
               },
             },
-            // {
-            //   description: {
-            //   // search:searchQuery.toLowerCase(),
-            //   contains: param.toLowerCase(), // Convert searchQuery to lowercase
-            //   mode: 'insensitive', // Perform case-ins
-            //   },
-            // },
-            // {
               
-            //   comments:{
-            //     some:{
-            //       text:{
-            //         // search:searchQuery.toLowerCase(),
-            //         contains: param.toLowerCase(), // Convert searchQuery to lowercase
-            //         mode: 'insensitive', // Perform case-ins
-            //       }
-            //     }
-            //   },
-            // }
           ],
         },
         select: {

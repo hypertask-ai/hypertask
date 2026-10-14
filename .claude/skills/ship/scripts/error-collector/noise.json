@@ -6,11 +6,13 @@
   },
   {
     "id": "aborted-client",
+    "excludeServices": ["realtime"],
     "match": "(?:AbortError|client (?:request )?abort(?:ed)?|request aborted|\\bclient (?:request|closed|disconnected)\\b[^\\n]*(?:ECONNRESET|socket hang up))",
     "reason": "Clients disconnecting before their response completes"
   },
   {
     "id": "expected-http",
+    "excludeServices": ["realtime"],
     "match": "(?:\\b(?:HTTP(?: status)?|status(?: code)?|response(?: status)?)\\s*[:=]?\\s*(?:401|403|404)\\b|\\b(?:401 Unauthorized|403 Forbidden|404 Not Found)\\b)",
     "reason": "Expected unauthorized, forbidden or missing-resource responses"
   },

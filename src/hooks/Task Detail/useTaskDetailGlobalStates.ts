@@ -66,7 +66,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG } from "@/lib/flags/keys";
 
-// import useSetStickyHeight from "./useSetStickyHeight";
 export type TReturnFocusedEl =
   | "Description"
   | "Edit-Comment"
@@ -90,9 +89,7 @@ const useTaskDetailGlobalStates = (
   const { navigate } = useHypertasksNavigate();
   const queryClient = useQueryClient();
 
-  // const{setStickyElementHeight} =useSetStickyHeight()
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
-  // console.log("🚀 ~ useTaskDetailGlobalStates ~ editMode:", editMode)
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const initialCommentsPayload = useMemo(() => JSON.parse(_comments), [_comments]);
@@ -101,13 +98,9 @@ const useTaskDetailGlobalStates = (
   const ticketStaysOpen = useFlag(HTPR_7116_TICKET_STAYS_OPEN_FLAG);
   useEffect(() => {
     if (secondaryPanelsReady) return;
-    // HTPR-7116: the panels mount lazy chunks (the description editor). An urgent update
-    // that suspends re-hides the shown ticket inside HTPR-6991's Suspense boundary; a
-    // transition keeps the shown ticket on screen until the chunks arrive.
     const reveal = ticketStaysOpen
       ? () => startTransition(() => setSecondaryPanelsReady(true))
       : () => setSecondaryPanelsReady(true);
-    // Keep rich editors off the cached first paint; property geometry is already mounted.
     let frame = requestAnimationFrame(() => {
       frame = requestAnimationFrame(reveal);
     });
@@ -136,7 +129,6 @@ const useTaskDetailGlobalStates = (
     }));
   }, []);
   const [stacked, setStacked] = useState<StackedType>(_initialStacked ?? {});
-  // console.log("🚀 ~ useTaskDetailGlobalStates ~ stacked:", stacked)
 
   const [tasksPlayList, setTasksPlaylist] = useRecoilState(tasksPlayListAtom);
   const [__, setInboxTaskIndexAtom] = useRecoilState(InboxTaskIndexAtom);
@@ -163,8 +155,6 @@ const useTaskDetailGlobalStates = (
   const [showScrollToTop, setShowScrollToTop] = useState<boolean>(false);
   const _mbl = useContext(MobileViewContext);
 
-  // const {data:commentsFromQueryTQ, isRefetching:commentFromTQRefetching} = useGetAllComments([globalConstants.CommentsTQPrefixKey,_parsedTask.id], _parsedTask.id, currentUser.id)
-  // ================= ON SCREEN DATA STATES
   const [currentTask, setCurrentTask] = useState<ITask | null>(_parsedTask);
   const { hasDraft, hasCommentDraft, draftsFromTQ, draftsHydrated } =
     useHasDrafts(_parsedTask.id, currentUser?.id);
@@ -191,16 +181,12 @@ const useTaskDetailGlobalStates = (
   } = useCommentAndDescriptionUploadingStates();
   const listRef = useRef<HTMLDivElement | null>(null);
 
-  // -------- History (activity) events: hidden by default; toggle to show --------
   const quietRunActivityEnabled = useFlag(HTPR_6551_QUIET_RUN_ACTIVITY_FLAG);
   const [showHistory, setShowHistory] = useRecoilState(showTaskHistoryAtom);
   const toggleHistory = useCallback(
     () => setShowHistory((prev) => !prev),
     [setShowHistory]
   );
-  // Feed references retain original comment indexes so edit/react/stack/delete
-  // handlers and `comment-${i}` DOM ids remain aligned while passive agent rows
-  // are interleaved chronologically.
   const visibleFeedItems = useMemo(
     quietRunActivityEnabled
       ? () =>
@@ -224,26 +210,21 @@ const useTaskDetailGlobalStates = (
   const virtualizeIndexes = useMemo(() => {
     let currentCount = 0;
 
-    // 1. TaskInfo: Only exists at index 0 if on mobile
     const taskInfoVirtualIndex = _mbl ? currentCount++ : -1;
 
-    // 2. Description: Appears at index 0 (non-mobile) or 1 (mobile)
     const descriptionVirtualIndex = currentCount++;
 
-    // 3. Description Bottom Spacer: Appears at index 1 (non-mobile) or 2 (mobile)
     const descriptionBottomVirtualIndex = currentCount++;
 
-    // 4. Stored thread rows: regular comments and passive agent activities.
     const commentsStartVirtualIndex = currentCount;
     const commentsLength = visibleFeedItems.length;
     currentCount += commentsLength;
 
-    // 5. Uploading Comments: Start after regular comments
     const uploadingCommentsStartVirtualIndex = currentCount;
     const uploadingCommentsLength = uploadingComments?.length ?? 0;
     currentCount += uploadingCommentsLength;
 
-    const totalCount = currentCount; // This is the new, reduced total count for the virtualizer
+    const totalCount = currentCount;
 
     return {
       totalCount,
@@ -283,30 +264,9 @@ const useTaskDetailGlobalStates = (
   const virtualizerOptions = {
     getItemKey: virtualItemKey,
     estimateSize: () => (_mbl ? 500 : 100),
-    // Each mounted row is a live Tiptap/ProseMirror editor under a ResizeObserver.
-    // Mobile was hardcoded to overscan 100 — for a commented ticket that keeps
-    // ~all comments mounted, so opening the content-height summary bottom sheet
-    // forced a full-document reflow on every animation frame and the ~300ms
-    // slide stretched into ~10s. Bound mobile overscan low (5–8) so only a small
-    // buffer of editors stays mounted; desktop keeps its existing dynamic value.
     overscan: _mbl ? Math.min(8, dynamicOverscan) : dynamicOverscan,
     scrollMargin: 0,
-    // Opening a reactstrap modal (e.g. Share task, HTPR-6277) mutates body
-    // styles, mounted rows re-measure, and tanstack's scroll correction then
-    // re-scrolls the window on its own — the task detail jumps to the top
-    // while the user reads. Native browser scroll anchoring already keeps the
-    // view stable across those re-measurements, so the JS correction only
-    // double-compensates here. Leave positioning to the platform.
     shouldAdjustScrollPositionOnItemSizeChange: () => false,
-    // HTPR-4950: keep the description row mounted at all times. Scrolling it out
-    // of the virtual window unmounted the whole subtree, and an embedded Figma,
-    // Loom or YouTube iframe cannot survive that: it cold-reloaded every time you
-    // scrolled back. There is exactly one description per task, so the cost is a
-    // single extra mounted row.
-    //
-    // This replaces the old AI-writer-only pin, which hardcoded index 0. That was
-    // right on desktop and wrong on mobile, where index 0 is TaskInfo and the
-    // description sits at 1, so the writer's own row was never pinned there.
     rangeExtractor: (range: Range) => {
       const normalRange = defaultRangeExtractor(range);
       if (cachedLayout) {
@@ -315,35 +275,14 @@ const useTaskDetailGlobalStates = (
       }
       const pinned = virtualizeIndexes.descriptionVirtualIndex;
       if (pinned < 0 || normalRange.includes(pinned)) return normalRange;
-      // The virtualizer wants an ascending range, and the pinned index is not
-      // always below the window's first item, so sort rather than prepend.
       return Array.from(new Set([pinned, ...normalRange])).sort((a, b) => a - b);
     },
-    // measureElement: _mbl
-    //   ? (element, _entry, instance) => {
-    //       const direction = instance.scrollDirection;
-    //       if (direction === "forward" || direction === null) {
-    //         // Allow remeasuring when scrolling down or direction is null
-    //         return element.getBoundingClientRect().height;
-    //       } else {
-    //         // When scrolling up, use cached measurement to prevent stuttering
-    //         const indexKey = Number(element.getAttribute("data-index"));
-    //         const cachedMeasurement =
-    //           instance.measurementsCache[indexKey]?.size;
-    //         return cachedMeasurement || element.getBoundingClientRect().height;
-    //       }
-    //     }
-    //   : undefined,
   };
 
-  // The normal detail page virtualizes against the browser window. Embedded
-  // task detail has its own scrollable card, so keep the same renderer and
-  // measurements while swapping only the scroll element.
   const hydrated = useHydrated();
   const windowVirtualizer = useWindowVirtualizer({
     ...virtualizerOptions,
     count: scrollElementRef ? 0 : _count,
-    // Cached client navigation already knows the viewport; render its body on the first commit.
     initialRect: instantTicketOpen && hydrated ? { width: window.innerWidth, height: window.innerHeight } : undefined,
   });
   const elementVirtualizer = useVirtualizer({
@@ -355,15 +294,9 @@ const useTaskDetailGlobalStates = (
     ? elementVirtualizer
     : windowVirtualizer;
 
-  // Show the scroll-to-top button whenever we are away from the top, in either
-  // direction. Tasks open pre-scrolled to the newest comment, so gating it on
-  // an upward scroll kept it hidden until the user scrolled up first.
-  // The button is mobile-only, so desktop never pays for the context update.
   useEffect(() => {
     if (!_mbl) return;
 
-    // Read the live offset off the (stable) virtualizer instance on each native
-    // scroll event: a React re-render is not guaranteed for every pixel.
     const syncScrollToTop = () =>
       setShowScrollToTop((virtualizer.scrollOffset ?? 0) > 200);
 
@@ -411,7 +344,6 @@ const useTaskDetailGlobalStates = (
     else return "Others";
   }
 
-  // ======================== update active item and inViewObejct
   const updateActiveItemAndItemInView = (taskId: number | null) => {
     _setActiveItem(taskId);
     setInViewObject({
@@ -424,7 +356,6 @@ const useTaskDetailGlobalStates = (
     });
   };
 
-  // ------------------------FORCE ON AN ID HANDLER
   const focusOn = (
     id: string,
     scroll: boolean = true,
@@ -444,9 +375,7 @@ const useTaskDetailGlobalStates = (
   const defaultCommentFocus = () =>
     focusOn("comment", true, "auto", "center", true);
 
-  // ----------------- GO BACK HANDLER
   const onGoback = () => {
-    // queryClient.refetchQueries({queryKey:["projectsAll"]});
     if (tasksPlayList) {
       const indexOf = tasksPlayList.findIndex(
         (obj) =>
@@ -459,14 +388,7 @@ const useTaskDetailGlobalStates = (
       setArchivedTaskIndexAtom(setTo);
     }
     updateActiveItemAndItemInView(currentTask?.id ?? null);
-    // console.log("🚀 ~ onGoback ~ window.history:", window.history)
 
-    // Plain Back returns to the previous tab-history entry, which is often a
-    // DIFFERENT board (reached via a notification, search result, @mention or a
-    // pasted deep link). Never dump the user on an unrelated board: when Back
-    // would land on another board, go to this task's own board instead. Reads
-    // the previous entry via the Navigation API; falls back to Back where it's
-    // unavailable (non-Chromium), so behaviour is unchanged there.
     const backLandsOnDifferentBoard = () => {
       try {
         const nav = (window as any).navigation;
@@ -490,11 +412,10 @@ const useTaskDetailGlobalStates = (
       console.log("Navigating back");
       navigate("Back");
     } else {
-      navigate("Push", `/project?id=${currentTask?.projectId}`); // Redirect to the home page
+      navigate("Push", `/project?id=${currentTask?.projectId}`);
     }
   };
 
-  // --------------- callback handler for HTC shortcut Open Task Writer
   const refocusAndOpenTaskWriter = (prevActive: string) => {
     document.getElementById(prevActive)?.focus();
     CTRL_J_ENTER_Handler(true);
@@ -502,18 +423,14 @@ const useTaskDetailGlobalStates = (
 
   const CTRL_J_ENTER_Handler = (shouldTriggerAi: boolean = false) => {
     const currentFocusedType = returnCurrentFocusedType();
-    // edit description
     if (currentFocusedType === "Description")
       editDescriptionHandler(shouldTriggerAi);
-    // edit comments
     else if (currentFocusedType === "Edit-Comment") {
       const currentIndex: any = parseInt(
         document?.activeElement?.id?.split("-")[1]!
-      ); // can use exclamation here because we are checking that
+      );
       editCommentHandler(currentIndex, shouldTriggerAi);
-      // setEditMode("comment");
     }
-    // edit new comment
     else if (currentFocusedType === "New-Comment") {
       EnterCommentCreateMode(shouldTriggerAi);
     }
@@ -525,7 +442,6 @@ const useTaskDetailGlobalStates = (
       : "comment";
     setTimeout(() => {
       setEditMode(editModeToSelect);
-      // commentRef.current?.focus()
       focusOn(
         "comment-input",
         undefined,
@@ -554,29 +470,23 @@ const useTaskDetailGlobalStates = (
     }, 100);
   };
 
-  // ------------------ [ENTER] for reply handler
   const replyToCommentHandler = (currentIndex: number) => {
     if (currentIndex === -1) return replyComment(currentIndex);
-    // ===================== for comments
     if (currentIndex === comments.length - 1) {
       replyComment(currentIndex);
     } else {
       updateStackedComments(currentIndex, true);
     }
 
-    // console.log("stacked comments after",stacked , stacked[currentIndex],currentIndex)
 
     if (!stacked[currentIndex]) {
       replyComment(currentIndex);
     }
   };
-  // ========================= comment reply
   const replyComment = (currentIndex: number) => {
-    // focusOn("comment-input");
-    if (document.querySelector(".Popover")) return; // meaning user has selected some text
+    if (document.querySelector(".Popover")) return;
     var content;
     var creator;
-    // ===================== for description
     if (currentIndex === -1) {
       content = description;
       creator = currentTask?.user;
@@ -598,12 +508,10 @@ const useTaskDetailGlobalStates = (
       "comment-input-input"
     );
 
-    // const elementWithAttribute = document.querySelector('[data-placeholder="Comment"]');
     if (element) {
       setReplyQuote(wrapblockquote);
       focusOn("comment-input", false);
       setEditMode("comment");
-      // The cached desktop composer scrolls after quote insertion, using its real DOM height.
       if (!cachedLayout || _mbl) {
         scrollVirtualize(cachedLayout ? "new-comment" : "comment", undefined, true);
       }
@@ -620,7 +528,6 @@ const useTaskDetailGlobalStates = (
     ) {
       setShowEmojiPickerAtCount({ commentId: commentIndex, show: true });
       const commentElement = document.getElementById(`comment-${commentIndex}`);
-      // commentElement&&scrollToCenterIfNearBottom(commentElement,20)
     } else setShowEmojiPickerAtCount(undefined);
   };
 
@@ -655,7 +562,7 @@ const useTaskDetailGlobalStates = (
     (commentIdx: number, forceOpen?: boolean) => {
       setStacked((prevCommentMap) => ({
         ...prevCommentMap,
-        [commentIdx]: forceOpen ? false : !stacked[commentIdx], // Toggle the value (true to false or false to true)
+        [commentIdx]: forceOpen ? false : !stacked[commentIdx],
       }));
     },
     [stacked]
@@ -679,12 +586,6 @@ const useTaskDetailGlobalStates = (
     }
   };
 
-  /**
-   *Function responsible for oinning/starring comments
-   *
-   * @param {string} commentId
-   * @param {ViewVisibility} type
-   */
   const handlePinComment = async (commentId: string, type: ViewVisibility) => {
     const response = await pinComment(
       currentTask?.id!,
@@ -816,7 +717,6 @@ const useTaskDetailGlobalStates = (
       const commentIndex = withCommentId
         ? comments.findIndex((x) => parseInt(x.id) === commentId)
         : commentId;
-      //If no index was found, focus on comment as fallback.
       if (commentIndex === -1) return defaultCommentFocus();
       const visiblePosition = visibleFeedItems.findIndex(
         (item) => item.kind === "comment" && item.commentIndex === commentIndex,
@@ -830,11 +730,6 @@ const useTaskDetailGlobalStates = (
         behavior: "auto",
       });
     } else if (type === "comment" && end !== undefined) {
-      // getTotalSize() is only an estimate while rows below the viewport are
-      // unmeasured, so scrolling to that offset lands short on long tasks.
-      // scrollToIndex re-runs itself once measurement settles; scrollToOffset
-      // does not. Leave `behavior` unset: the retry is skipped for "smooth".
-      // HTPR-3752.
       virtualizer.scrollToIndex(_count - 1, { align: "end" });
     }
   };

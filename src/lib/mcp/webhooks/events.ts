@@ -1,12 +1,3 @@
-// Board events an outbound webhook may subscribe to (HTPR-4434, HTPR-5168).
-//
-// Delivery is durable (HTPR-4530): the emitting controllers write a
-// BoardWebhookDelivery outbox row and a QStash handler retries it with bounded
-// exponential backoff under a stable delivery id. See webhooks/outbox.ts.
-//
-// task.updated fires for section, status, and dueDate changes. Priority is
-// written from several unrelated controllers rather than one choke point, so
-// it is not part of the change contract; wiring it is tracked separately.
 export const WEBHOOK_EVENTS = [
   'comment.created',
   'comment.mention',
@@ -116,8 +107,6 @@ export type WebhookEventPayloadMap = {
     action: 'assigned' | 'unassigned'
     assignee: {
       userId: number
-      // Present for agent assignments so a runner can filter without another
-      // API request. Null means the assignee is the human user directly.
       agentId: string | null
     }
     actor: WebhookActor
@@ -327,8 +316,6 @@ export function createWebhookEnvelope(
   delivery: WebhookDelivery,
   metadata: { id: string; deliveredAt: string }
 ): WebhookEnvelope {
-  // Structurally compatible caller objects may carry extra internal data.
-  // Rebuild both the envelope and event payload from public contract fields.
   const sanitized = sanitizeWebhookDelivery(delivery)
   return {
     id: metadata.id,
@@ -355,8 +342,6 @@ const actorFields = {
   'actor.agentId': 'string|null — authenticated agent actor when applicable',
 }
 
-// Returned by GET /api/mcp/webhooks so clients can discover the payload
-// contract without consulting server source.
 export const WEBHOOK_EVENT_DEFINITIONS = {
   'comment.created': {
     description: 'A comment was added to a task.',

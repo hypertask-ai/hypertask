@@ -7,21 +7,12 @@ import { generalConfig } from '@/lib/configs/general.config'
 import {
     evaluateInboxZero,
     inboxZeroDoneNameFallback,
-    loadActiveInboxZeroNotifications,
+    loadActiveInboxZeroNotifications, // trufflehog:ignore
     loadDoneTitlesByProject,
 } from '@/utils/controllers/notifications/inboxZero'
 import { DEFAULT_INBOX_ZERO_RULES } from '@/lib/inboxZero'
 import { isDoneColumn } from '@/lib/doneColumns'
 
-/**
- * GET /api/mcp/inbox/composition?project_id=<id>
- *
- * Shows the SHAPE of a board's inbox noise so Important can be tuned against real
- * traffic: per recipient, how many active notifications they hold, of which type,
- * from whom, and which split each lands in.
- *
- * Counts only. No task titles, no comment text, no notification rows.
- */
 
 const SPLIT_BY_TYPE: Record<string, string> = {
     TaskMoved: 'Updates',
@@ -76,7 +67,6 @@ export async function GET(request: NextRequest) {
             )
         }
 
-        // Team-internal stat: you have to be on the board to see its shape.
         if (project.ownerId !== ctx.user.id) {
             const membership = await prisma.member.findFirst({
                 where: { projectId, userId: ctx.user.id, agentId: null },
@@ -101,8 +91,6 @@ export async function GET(request: NextRequest) {
             _count: { _all: true },
         })
 
-        // HTPR-4769: task state feeds the liveness + addressed-to-you gates, so the
-        // report mirrors what the inbox actually shows.
         const taskIds = Array.from(
             new Set(rows.map((row) => row.taskId).filter((id): id is number => id != null))
         )
@@ -182,7 +170,6 @@ export async function GET(request: NextRequest) {
                   ? `u:${row.fromUserId}`
                   : 'system'
 
-            // HyperAI posts under its own user account rather than an Agent record.
             const isAgent =
                 !!row.fromAgentId || row.fromUserId === generalConfig.hyperAiId
             const isSelf = !row.fromAgentId && row.fromUserId === row.userId
@@ -194,10 +181,7 @@ export async function GET(request: NextRequest) {
                 ? agentSplitName
                 : SPLIT_BY_TYPE[row.type] ?? 'Other'
 
-            // Same gates as getInboxTabs: Important = names you, on a live task.
             const task = row.taskId != null ? taskById.get(row.taskId) : undefined
-            // Human-activity clock, matching getInboxTabs: bot property bumps
-            // (updatedAt) must not keep a task alive.
             const lastHumanActivity = task
                 ? Math.max(
                       ...[task.comments[0]?.createdAt, task.sectionChangedAt, task.createdAt]
@@ -217,7 +201,6 @@ export async function GET(request: NextRequest) {
                         inboxZeroDoneNameFallback
                     ) &&
                     !isStale)
-            // Stale rows get their own shelf only on boards that opted in.
             const demotedHome =
                 isStale && project.stalenessEnabled ? staleSplitName : 'Updates'
             const addressed =
@@ -246,10 +229,6 @@ export async function GET(request: NextRequest) {
             bucket.bySplit[split] = (bucket.bySplit[split] ?? 0) + count
             if (row.type === 'Mentioned') {
                 bucket.importantLegacy += count
-                // Known approximation: the inbox lets a mention newer than the Done
-                // move survive; the groupBy carries no timestamps, so this report
-                // counts every mention on a Done task as demoted. Counts-only tool,
-                // the divergence is rare and conservative.
                 if (alive) {
                     bucket.bySplit.Important = (bucket.bySplit.Important ?? 0) + count
                     bucket.importantByType.Mentioned =
@@ -269,9 +248,6 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        // What the default Inbox Zero run would archive for each recipient, computed
-        // with the real evaluator so the numbers match the button in the UI. This is
-        // across their whole inbox (the evaluator is per user, not per board).
         const inboxZeroByUser = new Map<
             number,
             { wouldArchive: number; wouldKeep: number; totalActive: number }

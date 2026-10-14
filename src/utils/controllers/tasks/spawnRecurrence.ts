@@ -5,14 +5,8 @@ import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { broadcastBoardChange } from "@/lib/realtime/server";
 import { scheduleDueDateJob } from "@/pages/api/queues/duedateQueue";
 
-// HTPR-4885: a recurring task that gets completed (moved to a done column or
-// archived) spawns its next occurrence. The rule moves to the new copy, so the
-// completed one stays a plain historical task. The updateMany claim below is
-// the double-fire guard: only the caller that actually nulls the rule spawns.
 export async function spawnNextRecurrence(
   taskId: number,
-  // Archiving clears dueDate before we read the row, so callers pass the
-  // pre-update value to keep the series anchored to its original schedule.
   anchorDate?: Date | null,
 ): Promise<number | null> {
   const task = await prisma.task.findUnique({
@@ -29,21 +23,14 @@ export async function spawnNextRecurrence(
   if (!task?.recurrence || !isRecurrenceRule(task.recurrence)) return null;
   const rule = task.recurrence;
 
-  // Resolve everything that can fail before claiming: clearing the rule and
-  // then bailing would silently stop the task ever repeating again.
   const sections = await prisma.section.findMany({
     where: { projectId: task.projectId, deleted: false, visibility: true },
     orderBy: { ranking: "asc" },
     select: { id: true, section_title: true, isDone: true },
   });
-  // Only a non-done column will do. Dropping the new occurrence into Done
-  // would hide it as finished work the moment it is created, so a board with
-  // nothing but done columns simply does not repeat.
   const target = sections.find((s) => columnRoleFor(s) !== "done");
   if (!target) return null;
 
-  // Labels can be deleted between setting the rule and completing the task;
-  // a stale id would fail the create and cost us the series.
   const labelIds = task.taskLabels.map((tl) => tl.labelId);
   const liveLabelIds =
     labelIds.length > 0
@@ -55,9 +42,6 @@ export async function spawnNextRecurrence(
         ).map((label) => label.id)
       : [];
 
-  // Claiming the rule is the double-fire guard: whichever caller wins this
-  // update is the one that spawns, so a done-column move and an archive
-  // arriving together cannot both produce a copy.
   const claimed = await prisma.task.updateMany({
     where: { id: taskId, recurrence: rule },
     data: { recurrence: null },
@@ -68,10 +52,6 @@ export async function spawnNextRecurrence(
     rule,
     task.dueDate ?? anchorDate ?? new Date(),
   );
-  // A planned start rolls forward with the series; dropping it would file the
-  // copy under its deadline in My Tasks instead of the day work begins. Keep
-  // the gap to the deadline rather than advancing each date on its own — a
-  // late completion fast-forwards them by different amounts otherwise.
   const anchorDue = task.dueDate ?? anchorDate ?? null;
   const nextStart = !task.startDate
     ? null
@@ -81,10 +61,6 @@ export async function spawnNextRecurrence(
         )
       : nextOccurrence(rule, task.startDate);
 
-  // The claim already destroyed the rule, so from here any failure has to put
-  // it back — otherwise a transient error (uniqueIndex collision, dropped
-  // connection, deleted label) would silently end the series with nothing
-  // created and nothing shown to the user.
   let newTask;
   try {
     ({ task: newTask } = await createTaskCore({
@@ -133,7 +109,6 @@ export async function spawnNextRecurrence(
   return newTask.id;
 }
 
-// True when the task's new section counts as done for its board.
 export async function sectionIsDone(sectionId: number | null): Promise<boolean> {
   if (!sectionId) return false;
   const section = await prisma.section.findUnique({

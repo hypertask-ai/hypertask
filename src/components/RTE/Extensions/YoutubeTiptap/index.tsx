@@ -80,7 +80,6 @@ export const Youtube = Node.create<YoutubeOptions>({
           };
         },
       },
-      // Fallback for direct iframes (in case they exist in content)
       {
         tag: 'iframe[src*="youtube.com"]',
         getAttrs: (node) => {
@@ -144,7 +143,7 @@ export const Youtube = Node.create<YoutubeOptions>({
   },
 
   addProseMirrorPlugins() {
-    let isShiftPressed = false; // Track if Shift is pressed during paste
+    let isShiftPressed = false;
     return [
       new Plugin({
         key: new PluginKey("youtubeEmbedPlugin"),
@@ -157,20 +156,20 @@ export const Youtube = Node.create<YoutubeOptions>({
                 console.log("🚀 ~ addProseMirrorPlugins ~ embedSrc:", embedSrc);
 
                 this.editor.commands.setYoutubeVideo({ src: text });
-                event.preventDefault(); // Prevent default paste behavior
-                return true; // Indicate that we handled the paste event
+                event.preventDefault();
+                return true;
               }
             }
 
-            isShiftPressed = false; // Reset flag after handling paste
-            return false; // Allow default behavior for Ctrl+Shift+V or invalid Figma URLs
+            isShiftPressed = false;
+            return false;
           },
           handleKeyDown: (view, event) => {
             if (event.shiftKey) {
-              isShiftPressed = true; // Set flag for Shift + Ctrl + V
+              isShiftPressed = true;
             }
 
-            return false; // Allow default behavior for other key presses
+            return false;
           },
 
           handleDOMEvents: {

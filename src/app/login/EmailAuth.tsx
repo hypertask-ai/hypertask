@@ -26,7 +26,6 @@ export default function EmailAuth({ styleConfig, initialEmail }: EmailAuthProps 
   return <EmailForm state={state} handlers={handlers} styleConfig={styleConfig} />
 }
 
-// Re-export types and components for convenience
 export { useEmailAuth } from './EmailAuth/useEmailAuth'
 export type { EmailAuthStyleConfig } from './EmailAuth/EmailAuthComponents'
 export { EmailForm, LinkSent, CodeInput, SigningIn } from './EmailAuth/EmailAuthComponents'

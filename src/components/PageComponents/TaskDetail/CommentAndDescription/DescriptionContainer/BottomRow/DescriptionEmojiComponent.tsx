@@ -9,7 +9,6 @@ import { MobileViewContext } from "@/lib/contexts/mobileContext";
 // eslint-disable-next-line react/display-name
 const DescriptionEmojiComponent = memo(
   ({
-    //   commentId,
     initialCount,
     reaction,
     currentUser,
@@ -26,7 +25,7 @@ const DescriptionEmojiComponent = memo(
   }) => {
     const _mbl = useContext(MobileViewContext);
     const [isHovered, setIsHovered] = useState(false);
-    const [showReactors, setShowReactors] = useState(false); // Mobile: who reacted
+    const [showReactors, setShowReactors] = useState(false);
     const emojiData = useMemo(() => emojiFinder(reaction.unified), []);
     const reactors = useMemo(() => {
       if (!reaction?.users?.length) return "";
@@ -48,7 +47,6 @@ const DescriptionEmojiComponent = memo(
       } else if (otherUsers.length === 1) {
         temp = includesCurrentUser ? `${otherUsers[0]} and you` : otherUsers[0];
       } else {
-        // Handle cases with more than 5 total users
         if (reaction.users.length > 5) {
           const displayUsers = otherUsers.slice(0, includesCurrentUser ? 4 : 5);
           const remainingCount =
@@ -60,7 +58,6 @@ const DescriptionEmojiComponent = memo(
             ? `${displayUsers.join(", ")}, you and +${remainingCount}`
             : `${displayUsers.join(", ")} and +${remainingCount}`;
         } else {
-          // Original logic for 5 or fewer users
           const lastUser = otherUsers.pop();
           temp = includesCurrentUser
             ? `${otherUsers.join(", ")}, ${lastUser} and you`
@@ -74,8 +71,6 @@ const DescriptionEmojiComponent = memo(
       <>
         <div
           onClick={(e) => {
-            // Mobile has no hover, so a tap surfaces who reacted (via the
-            // sheet) instead of toggling; the sheet itself offers "Tap to remove".
             if (_mbl) {
               setShowReactors(true);
               return;

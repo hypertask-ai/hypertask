@@ -9,9 +9,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_ACTIVITY_LENGTH = 2000;
-// Deterministic, agent-scoped message id: one cron post per host tick, so a
-// retried POST replays instead of duplicating. Client-supplied ids are never
-// used raw (they would be a cross-session primary-key collision).
 const ACTIVITY_ID_PREFIX = "loop-activity-";
 const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 
@@ -23,15 +20,6 @@ function requireAgentToken(ctxAgentId: string | null): NextResponse | null {
   );
 }
 
-/**
- * POST /api/mcp/chat/activity
- *
- * An agent runtime posts an unsolicited activity entry into its own Agent Chat
- * thread — the scheduled Manager loop records every cycle here, including the
- * quiet and failed ones that never produce a reply. `clientMessageId` is the
- * idempotency key: the caller stamps it per cycle, so a retried POST returns
- * the already stored entry instead of creating a second one.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -46,8 +34,6 @@ export async function POST(request: NextRequest) {
     }
     const agentGate = requireAgentToken(ctx.agentId);
     if (agentGate) return agentGate;
-    // Proven non-null by the gate above; the helper returns a response, not a
-    // type predicate, so the narrowing has to be restated here.
     const tokenAgentId = ctx.agentId as string;
 
     const body = (await request.json().catch(() => null)) as {
@@ -70,9 +56,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // The thread is keyed by the agent's owner, not by whoever could reach the
-    // agent: sessions are unique per (userId, agentId), so only that row is
-    // this agent's own conversation with its owner.
     const agent = await prisma.agent.findFirst({
       where: { id: tokenAgentId, revokedAt: null },
       select: { id: true, userId: true },
@@ -84,8 +67,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Flag gate before anything is stored (or an empty session is created);
-    // the session owner is always the agent's owner, so one check covers both.
     if (!(await isFeatureEnabled(MANAGER_LOOP_ACTIVITY_FLAG, agent.userId))) {
       return NextResponse.json(
         { success: false, error: "Agent Chat activity is not enabled for this thread" },
@@ -140,8 +121,6 @@ export async function POST(request: NextRequest) {
           { status: 409 }
         );
       }
-      // A replay after a failed side effect must repair it: the entry exists,
-      // but the session refresh or broadcast may never have happened.
     }
 
     await prisma.chatSession.update({

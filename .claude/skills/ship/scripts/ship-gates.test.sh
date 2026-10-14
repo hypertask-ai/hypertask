@@ -24,7 +24,7 @@ import json, os, sys
 with open(os.environ['CALLS'], 'a') as f:
     f.write(json.dumps([sys.argv[1:], os.getcwd(), os.environ.get('SHIP_REPO'), os.environ.get('SHIP_CHECKOUT')]) + '\\n')
 markers = dict(ticket='ticket ok', pr='title ok', merged='merged ok',
-               deployed='deployed ok (no app build needed)', proof='proof ok', done='done ok', cleaned='cleaned ok')
+               deployed='deployed ok (no app build needed)', proof='proof ok', docs='docs ok', done='done ok', cleaned='cleaned ok')
 if sys.argv[1] in ('done', 'cleaned') and os.environ.get('DONE') != 'yes':
     print('FAIL: not Done'); sys.exit(1)
 print(markers[sys.argv[1]])
@@ -59,33 +59,33 @@ print(markers[sys.argv[1]])
     assert r.returncode == 0, r.stderr
     assert r.stdout.strip() == str(file), (r.stdout, r.stderr)
     assert (file.parent/'session').read_text() == session+'\n'
-    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','done','cleaned']]
-    assert 'UNMET: 2 (met: 5)' in r.stderr, r.stderr
-    assert len(calls()) == 7
+    assert ids(file) == ['HTPR-6819.'+g for g in ['ticket','pr','merged','deployed','proof','docs','done','cleaned']]
+    assert 'UNMET: 2 (met: 6)' in r.stderr, r.stderr
+    assert len(calls()) == 8
     assert all(c[1] == str(repo) for c in calls())
-    assert file.read_text().count('automatic-evidence=v1') == 5
-    assert file.read_text().count('  CWD: '+str(repo)) == 7
+    assert file.read_text().count('automatic-evidence=v1') == 6
+    assert file.read_text().count('  CWD: '+str(repo)) == 8
     original = file.read_text()
     r = run(CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 7 and len(calls()) == 9
+    assert r.returncode == 0 and len(ids(file)) == 8 and len(calls()) == 10
     assert file.read_text() == original
     print('ok Claude precedence, full binding, absolute quoted commands/CWD, executed approvals, deployed suffix and idempotence')
 
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 13 and len(set(ids(file))) == 13, r.stderr
+    assert r.returncode == 0 and len(ids(file)) == 15 and len(set(ids(file))) == 15, r.stderr
     assert 'YPER4-123.proof' not in ids(file)
     assert file.read_text().startswith(original)
     assert len([d for d in (repo/'.unlazy').iterdir() if d.name != 'locks']) == 1
     r = run('YPER4-123', CLAUDE_CODE_SESSION_ID=session)
-    assert r.returncode == 0 and len(ids(file)) == 13
+    assert r.returncode == 0 and len(ids(file)) == 15
     print('ok another ticket appends in one scope and repeat calls do not duplicate ids or reset evidence')
 
     for key, sid in [('CODEX_SESSION_ID','codexses-full'), ('CODEX_THREAD_ID','codexthr-full')]:
         r = run('HYFA-12', **{key:sid})
-        assert r.returncode == 0 and len(ids(ledger(sid))) == 6, r.stderr
+        assert r.returncode == 0 and len(ids(ledger(sid))) == 7, r.stderr
         assert (ledger(sid).parent/'session').read_text() == sid+'\n'
     r = run('HYFA-13', CODEX_SESSION_ID='codexses-full', CODEX_THREAD_ID='ignoredC-full')
-    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 12
+    assert r.returncode == 0 and len(ids(ledger('codexses-full'))) == 14
     print('ok Codex session/thread fallback and precedence')
 
     before = file.read_text()
@@ -136,12 +136,12 @@ print(markers[sys.argv[1]])
     cfile = ledger('cliSessA-full')
     assert r.returncode == 0, r.stderr
     prefix = "SHIP_REPO=hypertask-ai/cli SHIP_BASE=main SHIP_CHECKOUT='/home/u/hypertask cli' "
-    assert cfile.read_text().count('  CHECK: '+prefix) == 7
+    assert cfile.read_text().count('  CHECK: '+prefix) == 8
     new = calls()[count:]
-    assert len(new) == 7 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
+    assert len(new) == 8 and all(c[2] == 'hypertask-ai/cli' and c[3] == '/home/u/hypertask cli' for c in new), new
     r = run('HTPR-6819', CLAUDE_CODE_SESSION_ID='cliSessA-full')
-    assert r.returncode == 0 and len(ids(cfile)) == 14, r.stderr
-    assert all(c[2] is None for c in calls()[-7:])
+    assert r.returncode == 0 and len(ids(cfile)) == 16, r.stderr
+    assert all(c[2] is None for c in calls()[-8:])
     print('ok CLI tickets carry SHIP_REPO, SHIP_BASE and SHIP_CHECKOUT into every check; app tickets append without them')
 
     before = cfile.read_text()

@@ -70,8 +70,6 @@ const createAssignedActivity = async ({
     });
     return Number.isSafeInteger(Number(comment?.id)) ? Number(comment.id) : null;
   } catch (error) {
-    // Assignee create/delete already committed before activity is written.
-    // Keep the mutation successful and let callers fall back when no id returns.
     console.error("createAssignedActivity failed after assignee mutation", error);
     return null;
   }

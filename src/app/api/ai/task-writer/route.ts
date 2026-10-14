@@ -33,9 +33,7 @@ async function isRealErrorEnabled(userId: number) {
   return isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId);
 }
 
-// HTPR-7086: a team using up its monthly AI allowance is a plan limit the user already sees, not a production error.
 async function isAllowanceLimitMessage(message: string) {
-  // Cheap pre-check first so ordinary errors never load the policy module.
   if (!message.includes("AI allowance")) return false;
   const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
   return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
@@ -47,7 +45,6 @@ export async function POST(request: NextRequest) {
     return createSseErrorResponse("Unauthorized", 401);
   }
   const userId = requestUser.id;
-  // Same call shape as reportError; the allowance limit is skipped, every other error is reported.
   const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
     if (await isAllowanceLimitMessage(payload.message)) {
       const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
@@ -108,11 +105,9 @@ export async function POST(request: NextRequest) {
         let streamError: unknown;
         let producedText = false;
 
-        // HTPR-7123: with the ticket type on, text still streams as before; only the possible trailing marker is held back.
         let held = "";
         const enqueueText = (text: string) => {
           if (validateDraft || dueDateContext || ticketTypeEnabled) draft += text;
-          // Compose consumes completed HTML, so a due-date request is validated before it is sent.
           if (!text || dueDateContext) return;
           if (!ticketTypeEnabled) {
             controller.enqueue(encoder.encode(text));
@@ -149,7 +144,6 @@ export async function POST(request: NextRequest) {
             maxRetries: 2,
             providerOptions: selected.providerOptions,
             ...selected.settings,
-            // Without this, provider and allowance errors vanish from textStream and the draft ends empty.
             onError: ({ error }: { error: unknown }) => {
               streamError ??= error;
             },
@@ -172,7 +166,6 @@ export async function POST(request: NextRequest) {
             const filtered = filterOneImagePass(buffer, allowedImgSrcs);
             enqueueText(filtered.emit);
           }
-          // Loaded only on the empty-stream path, so ordinary streams never touch the flags module.
           if (!producedText && streamError !== undefined && await isRealErrorEnabled(userId)) {
             const error = streamError;
             await reportError({
@@ -212,13 +205,11 @@ export async function POST(request: NextRequest) {
           enqueueError("error", errorMessage(error));
         } finally {
           if (!streamCompleted) {
-            // Flask only sends done on error/interruption; successful streams end raw.
           }
           controller.close();
         }
       },
       cancel() {
-        // Client disconnects are expected for cancelled generations.
       },
     });
 

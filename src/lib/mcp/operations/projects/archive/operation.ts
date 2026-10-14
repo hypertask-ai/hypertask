@@ -8,12 +8,6 @@ import {
 } from '@/lib/flags'
 import deleteProject from '@/utils/controllers/projects/delete'
 
-/**
- * Archive, restore, or explicitly delete a board.
- *
- * Archive and restore remain owner-only and reversible. Delete reuses the web
- * app's owner-or-admin lifecycle path and is separately feature-gated.
- */
 export async function POST(request: NextRequest) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {
@@ -62,8 +56,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(response.json, { status: response.status })
     }
 
-    // Owner only. A member archiving a shared board would take it away from
-    // everyone else on it.
     const project = await prisma.project.findFirst({
       where: { id: projectId, ownerId: ctx.user.id, status: { not: 'Deleted' } },
       select: { id: true, name: true, title: true, status: true },

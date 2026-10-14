@@ -1,15 +1,5 @@
 #!/usr/bin/env tsx
 
-/**
- * HTPR-3836 one-off repair: re-sort every view's board_columns_view to match
- * the current Section.ranking order, so views saved before the viewHelpers
- * sync existed stop showing jumbled column order.
- *
- * Dry run by default (prints what would change). Pass --apply to write.
- *
- *   npx tsx src/scripts/repair-view-column-order.ts
- *   npx tsx src/scripts/repair-view-column-order.ts --apply
- */
 import { Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";

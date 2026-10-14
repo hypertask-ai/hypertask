@@ -38,13 +38,6 @@ export function renderCommandModals2(context: Context) {
         id="htc-container"
         className={
           isMbl
-            // Mobile: this transparent full-screen layer only positions inline
-            // palette content, but reactstrap command sub-modals (Set theme,
-            // Set priority, …) portal to <body> at a LOWER z-index than this
-            // z-[9999] overlay — so the overlay sat on top of them and swallowed
-            // every tap (visible but dead). pointer-events-none lets taps fall
-            // through to those portaled modals; the inner wrapper re-enables
-            // pointer events for content that renders inline here.
             ? "fixed inset-0 z-[9999] bg-transparent pointer-events-none"
             : "fixed left-0 right-0 top-[180px] z-[9999] flex items-center justify-center bg-transparent"
         }
@@ -118,9 +111,6 @@ function renderPaletteModalGroup1(context: Context) {
               onRelationAdded={async (relations) => {
                 await callbackHandler?.(relations, "AddRelation");
                 if (commandMode === CommandMode.DeclineAsDuplicateOf) {
-                  // Archive in its own try so a failure here is not reported as
-                  // a relation error (the relation already succeeded) and does
-                  // not block the picker from closing.
                   try {
                     await archiveHandler();
                   } catch {
@@ -324,8 +314,6 @@ function renderPaletteModalGroup2(context: Context) {
             <AddColumn
               createColumn={createColumn}
               toggleModal={boardCloseHandler}
-              // hideColumn ={hideColumn}
-              // renameColumn =
             />
           )}
 
@@ -433,7 +421,6 @@ function renderPaletteModalGroup3(context: Context) {
           {commandMode === CommandMode.ManageLabels && (
             <ManageLabels
               onClose={boardCloseHandler}
-              // closeHandler={boardCloseHandler}
             />
           )}
           {commandMode === CommandMode.PriorityModal && (
@@ -581,8 +568,6 @@ function renderPaletteModalGroup4(context: Context) {
           {commandMode === CommandMode.CreateAgent && (
             <AgentModal key={agentToEdit?.id ?? "create"} closeHandler={closeCallbackCreateAgent} />
           )}
-          {/* Managing agents and reviewing switched-off ones is the /agents
-              page now, so neither modal is rendered from the palette. */}
           {commandMode === CommandMode.CreateCustomField && (
             <CreateCustomFieldModal closeHandler={boardCloseHandler} />
           )}

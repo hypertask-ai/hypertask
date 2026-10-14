@@ -24,24 +24,20 @@ const SearchContainer = (
 
   const [searchTermFinal, setSearchTermFinal] = useState<string>(_searchTerm??"");
 
-   // -------------------- ON MODAL LOAD
    const onOpenHandler = async()=>{
     document?.getElementById(`task_${selectedIndex}`)?.scrollIntoView({ behavior: 'smooth' as ScrollBehavior, block: 'center' })
     queryClient.invalidateQueries({queryKey:["projectsAll"]});
 
   }
 
-        // ---------------------------- AVOIDING CONTINIOUS MOUSE MOVEMENT TRACKING ---------------------
         useLayoutEffect(() => {
           router.refresh()
           setSearchTaskIndex(0)
-          // window.scrollTo(0,720)
           document?.getElementById(`task_${selectedIndex}`)?.scrollIntoView({ behavior: 'instant' as ScrollBehavior, block: 'center' })
   
           onOpenHandler()
           tasksInputRef.current?.focus()
           return () => {
-            // Clear the debounceTimeout when the component unmounts
             if (debounceTimeout.current) {
               clearTimeout(debounceTimeout.current);
             }
@@ -90,8 +86,6 @@ const SearchContainer = (
 
 
 const useHandleInput = (_searchTerm:string)=>{
-
-    // -------------------- input handlers
     const [inputValue, setInputValue] = useState<string>(_searchTerm??"");
     const [searchTermFinal, setSearchTermFinal] = useState<string>(_searchTerm??"");
     const [timerId, setTimerId] = useState<any>("");
@@ -101,26 +95,19 @@ const useHandleInput = (_searchTerm:string)=>{
 
     const { selectedIndex, _parsedProjects,setSelectedIndex} = useSearchListContext()
 
-       // =========================== INPUT CHANGE HANDLER
        const handleChange = (e:any)=>{
         setSelectedIndex(-1)
         setInputValue(e.target.value)
-        // if (_selectedUrl) setSelectedUrl(null)
         clearTimeout(timerId);
         const newTimerId = setTimeout( async() => {
-            // Call the API callback after 2 seconds
-           
-        
         }, 1000);
         setTimerId(newTimerId);
 
     }
 
-       // =========================== Search HANDLER
        const searchHandle = async(searchTerm:string)=>{
         if (searchTerm.length<2) return
         setSearchTermFinal(searchTerm)
-        // window.history.replaceState({},"",`search?searchTerm=${searchTerm}`)
         router.replace(`search?searchTerm=${searchTerm}&index=${0}`)
   
      
@@ -129,7 +116,6 @@ const useHandleInput = (_searchTerm:string)=>{
                 searchQuery:searchTerm            
             })
             if (response.status===200){
-                // setFilteredTasks(response.data)
                 if (response.data.length===0) setNoResultsMessage("No Tasks Found")
                 else setNoResultsMessage("No Tasks Found")   
             }

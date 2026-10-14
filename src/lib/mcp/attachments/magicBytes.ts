@@ -9,9 +9,6 @@ function isUtf8Buffer(buf: Buffer): boolean {
   }
 }
 
-/**
- * Best-effort verify file magic matches declared MIME (reduces confused deputy issues).
- */
 export function bufferMatchesDeclaredMime(buffer: Buffer, declaredMime: string): boolean {
   const m = normalizeMime(declaredMime);
   if (buffer.length === 0) return false;
@@ -53,8 +50,6 @@ export function bufferMatchesDeclaredMime(buffer: Buffer, declaredMime: string):
       return false;
     }
   }
-  // Zip container: APK, and the zip-compressed aliases. "PK\x03\x04" is the
-  // local file header; PK\x05\x06 is an empty archive (HTPR-4577).
   if (
     m === 'application/zip' ||
     m === 'application/x-zip-compressed' ||
@@ -70,10 +65,6 @@ export function bufferMatchesDeclaredMime(buffer: Buffer, declaredMime: string):
   if (m === 'application/gzip') {
     return buffer.length >= 2 && buffer[0] === 0x1f && buffer[1] === 0x8b;
   }
-  // tar has no leading magic (the "ustar" marker sits at offset 257) and
-  // octet-stream is by definition unknown bytes, so there is nothing to match.
-  // Both are stored and served as non-renderable types, so the browser
-  // downloads them rather than executing anything.
   if (m === 'application/x-tar' || m === 'application/octet-stream') {
     return true;
   }

@@ -143,10 +143,6 @@ export interface ParsedAttachmentsBody {
   files: ValidatedFileSpec[];
 }
 
-/**
- * Parse and validate JSON body for POST /api/mcp/tasks/attachments.
- * Throws Error with status 400 on failure.
- */
 export function parseAndValidateAttachmentsBody(body: unknown): ParsedAttachmentsBody {
   if (body === null || typeof body !== 'object') {
     reject('Request body must be a JSON object');

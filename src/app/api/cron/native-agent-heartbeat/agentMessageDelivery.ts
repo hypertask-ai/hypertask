@@ -55,9 +55,6 @@ export async function deliverAgentMessageNotification({
     return "existing";
   }
 
-  // QStash/cron delivery is at-least-once. Redis serializes concurrent retries;
-  // the durable marker in Notification handles a crash after the insert but
-  // before the lock/result can be acknowledged.
   const redis = redisClient ?? (await getRedis());
   const lockKey = `native-agent-heartbeat:delivery-lock:v1:${assistantMessageId}`;
   const lockToken = randomUUID();
@@ -71,9 +68,6 @@ export async function deliverAgentMessageNotification({
   if (locked !== "OK") return "busy";
 
   try {
-    // The serializable transaction is the final duplicate guard if a process
-    // stalls past the Redis lease. One concurrent predicate-read/insert wins;
-    // PostgreSQL aborts the other, whose next retry observes the durable row.
     return await db.$transaction(
       async (transaction) => {
         if (

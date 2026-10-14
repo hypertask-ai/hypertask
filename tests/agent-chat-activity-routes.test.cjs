@@ -232,8 +232,8 @@ test("ordinary MCP transcript reads preserve all normal messages without activit
 
 test("activity rows keep refreshing without a pending reply, and uncached", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("// Activity rows arrive without a chat reply"),
-    chatClientSource.indexOf("// Poll delivery availability"),
+    chatClientSource.indexOf("useEffect(() => {\n    if (!session || !"),
+    chatClientSource.indexOf("useEffect(() => {\n    if (!session || awaiting"),
   );
 
   // 5s keeps the ticket's "within 10 seconds" promise with one request in hand.
@@ -255,8 +255,8 @@ test("activity rows keep refreshing without a pending reply, and uncached", () =
 
 test("polling delivery status refreshes while an idle chat stays open", () => {
   const polling = chatClientSource.slice(
-    chatClientSource.indexOf("// Poll delivery availability"),
-    chatClientSource.indexOf("// Realtime nudge"),
+    chatClientSource.indexOf("useEffect(() => {\n    if (!session || awaiting"),
+    chatClientSource.indexOf("useEffect(() => {\n    let cancelled = false;\n    let unsubscribe"),
   );
 
   assert.match(chatClientSource, /const CHAT_AVAILABILITY_POLL_MS = 30_000/);

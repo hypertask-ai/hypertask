@@ -10,10 +10,6 @@ export interface CreateAgentMentionNotificationParams {
   fromAgentId?: string | null;
 }
 
-/**
- * Creates a Mentioned notification for an agent inbox (notificationsToAgent).
- * Always runs on @mention, independent of follower/assignee state.
- */
 export async function createAgentMentionNotification(
   params: CreateAgentMentionNotificationParams
 ): Promise<void> {

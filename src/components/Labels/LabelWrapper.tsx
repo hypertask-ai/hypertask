@@ -1,4 +1,3 @@
-// components/LabelWrapper.tsx
 import React, { HTMLAttributes } from 'react';
 import { cn } from '@/utils/undoActions/helperFuncs';
 

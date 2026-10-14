@@ -1,6 +1,6 @@
-/* eslint-disable react-hooks/exhaustive-deps */
-/* eslint-disable jsx-a11y/no-static-element-interactions */
-/* eslint-disable jsx-a11y/media-has-caption */
+
+
+
 
 import { useEffect, useRef, useState } from "react";
 import { NodeViewWrapper } from "@tiptap/react";
@@ -15,37 +15,20 @@ import {
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import "./styles.scss";
 
-// Loading spinner component
 const Spinner = () => (
   <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-40 rounded-lg">
     <div className="loader animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-white"></div>
   </div>
 );
 
-// ! had to manage this state outside of the component because `useState` isn't fast enough and creates problem cause
-// ! the function is getting old data even though new data is set by `useState` before the execution of function
 let lastClientX: number;
 
-// HTPR-6254. A Mac attaches photos as HEIC. The paste/drop handler accepts
-// anything whose type starts with "image/", so a HEIC became an <img> node, and
-// no browser except Safari decodes HEIF: the comment showed a broken-image icon
-// on a file that had uploaded perfectly well. Comments already posted that way
-// are in the database, so the fix has to live here, at render time, rather than
-// at insertion time.
 const fileNameFromSource = (src?: string | null) => {
   if (!src) return "attachment";
   const path = src.split(/[?#]/)[0];
   return decodeURIComponent(path.slice(path.lastIndexOf("/") + 1)) || "attachment";
 };
 
-/**
- * The download chip shown in place of a picture the browser cannot paint.
- *
- * `src` is what failed to render; `downloadSrc` is what the user should
- * actually get. HTPR-6264 makes those different for a HEIC: the node paints the
- * generated JPEG copy, so when even that will not load, the link still has to
- * hand back the photo that was attached, under its own name.
- */
 const UnrenderableMedia = ({
   src,
   downloadSrc,
@@ -75,13 +58,10 @@ const calculateProperDimensions = (
 ) => {
   const aspectRatio = naturalWidth / naturalHeight;
 
-  // For landscape images (width > height)
   if (naturalWidth > naturalHeight) {
-    // Use container width as constraint, calculate height
     let newWidth = Math.min(naturalWidth, containerWidth);
     let newHeight = Math.round(newWidth / aspectRatio);
 
-    // If calculated height exceeds MAX_HEIGHT, constrain by height instead
     if (newHeight > MAX_HEIGHT) {
       newHeight = MAX_HEIGHT;
       newWidth = Math.round(newHeight * aspectRatio);
@@ -90,13 +70,10 @@ const calculateProperDimensions = (
     return { width: newWidth, height: newHeight };
   }
 
-  // For portrait images (height > width)
   else if (naturalHeight > naturalWidth) {
-    // Use MAX_HEIGHT as constraint, calculate width
     let newHeight = Math.min(naturalHeight, MAX_HEIGHT);
     let newWidth = Math.round(newHeight * aspectRatio);
 
-    // If calculated width exceeds container width, constrain by width instead
     if (newWidth > containerWidth) {
       newWidth = containerWidth;
       newHeight = Math.round(newWidth / aspectRatio);
@@ -105,7 +82,6 @@ const calculateProperDimensions = (
     return { width: newWidth, height: newHeight };
   }
 
-  // For square images (width === height)
   else {
     const maxDimension = Math.min(MAX_HEIGHT, containerWidth);
     const newSize = Math.min(naturalWidth, maxDimension);
@@ -125,10 +101,6 @@ export const ResizableMediaNodeView = ({
   const [dimensionsCalculated, setDimensionsCalculated] =
     useState<boolean>(false);
 
-  // A format the browser cannot decode (HEIC/HEIF/TIFF), or one that decoded
-  // into an error, gets the download chip instead of a dead <img>. The src
-  // carries no MIME, so the extension is what we have; an unknown extension
-  // still renders, and onError catches it if that guess was wrong.
   const canRenderImage =
     !imageFailed &&
     isBrowserRenderableImage(
@@ -170,13 +142,11 @@ export const ResizableMediaNodeView = ({
   }, [node.attrs]);
 
   const mediaSetupOnLoad = () => {
-    // ! TODO: move this to extension storage
     const proseMirrorContainerDiv = document.querySelector(".ProseMirror");
 
     if (proseMirrorContainerDiv)
       setProseMirrorContainerWidth(proseMirrorContainerDiv?.clientWidth);
 
-    // When the media has loaded
     if (!resizableImgRef.current) return;
 
     if (mediaType === "video") {
@@ -189,7 +159,6 @@ export const ResizableMediaNodeView = ({
         setAspectRatio(naturalWidth / naturalHeight);
 
         if (!dimensionsCalculated) {
-          // Pass the container width to the calculation
           const { width, height } = calculateProperDimensions(
             naturalWidth,
             naturalHeight,
@@ -212,7 +181,6 @@ export const ResizableMediaNodeView = ({
       });
     } else {
       resizableImgRef.current.onload = () => {
-        // Ref can be null if the node view unmounts before the image loads (HTPR-4734)
         if (!resizableImgRef.current) return;
         const naturalWidth = (resizableImgRef.current as HTMLImageElement)
           .naturalWidth;
@@ -224,8 +192,6 @@ export const ResizableMediaNodeView = ({
         if (!dimensionsCalculated) {
           const currentWidth = Number(node.attrs.width);
           const currentHeight = Number(node.attrs.height);
-          // Saved widths belong to the user, not the initial natural-size fit.
-          // Page sanitization can drop fractional heights, so recover just the height.
           const { width, height } = Number.isFinite(currentWidth) && currentWidth > 0
             ? {
                 width: currentWidth,
@@ -271,7 +237,6 @@ export const ResizableMediaNodeView = ({
     mediaSetupOnLoad();
   });
 
-  // Reset dimensions calculated flag when loading state changes
   useEffect(() => {
     if (!isLoading) {
       setDimensionsCalculated(false);
@@ -294,7 +259,6 @@ export const ResizableMediaNodeView = ({
   };
 
   const startHorizontalResize = (e: { clientX: number }) => {
-    // Don't allow resizing while uploading
     if (isLoading) return;
 
     setIsHorizontalResizeActive(true);
@@ -341,7 +305,6 @@ export const ResizableMediaNodeView = ({
       newMediaDimensions.width = currentMediaDimensions.width + Math.abs(diff);
     }
 
-    // Only enforce container width limit when shrinking, not when expanding
     if (
       directionOfMouseMove === "left" &&
       newMediaDimensions.width > proseMirrorContainerWidth
@@ -388,11 +351,9 @@ export const ResizableMediaNodeView = ({
     setIsAlign(node.attrs.dataAlign);
   }, [node.attrs]);
 
-  // Get current dimensions with fallbacks
   const currentWidth = node.attrs.width || "300";
   const currentHeight = node.attrs.height || "200";
 
-  // Calculate dynamic maxHeight for CSS - allow expansion beyond MAX_HEIGHT during manual resize
   const dynamicMaxHeight =
     parseInt(currentHeight) > MAX_HEIGHT ? currentHeight : MAX_HEIGHT;
 
@@ -454,7 +415,6 @@ export const ResizableMediaNodeView = ({
           </video>
         )}
 
-        {/* Loading spinner overlay */}
         {isLoading && <Spinner />}
 
         {!isLoading && editor.isEditable && (

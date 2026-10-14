@@ -4,6 +4,7 @@ import tsParser from "@typescript-eslint/parser";
 import nextCoreWebVitals from "eslint-config-next/core-web-vitals";
 import { styleGuideLintConfig } from "./eslint-local-rules/style-guide.mjs";
 import { uiPatternsLintConfig } from "./eslint-local-rules/ui-patterns.mjs";
+import { noCommentsLintConfig } from "./eslint-local-rules/no-comments.mjs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -36,6 +37,7 @@ export default defineConfig([
   // Existing style debt is recorded in eslint-local-rules/style-guide-suppressions.json.
   styleGuideLintConfig,
   uiPatternsLintConfig,
+  noCommentsLintConfig,
   {
     // HTPR-6160: "@/lib/flags" reaches ioredis through getSessionUser, so a browser
     // component importing it breaks the production build with `Can't resolve 'tls'`.

@@ -83,9 +83,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       const result = await prisma.$transaction(async (tx) => {
         const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${key}) AS locked`
         if (!lock.locked) return
-        // Core services use global prisma, but this connection holds the lock throughout their work.
         const [project, user] = await Promise.all([
-          // Feedback submitters need not be members of the internal product board.
           prisma.project.findFirst({
             where: { id: PROJECT_ID, status: 'Normal' },
             select: { uniqueIdentifier: true, section: {
@@ -156,7 +154,6 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
       const remaining = deadline - Date.now()
       if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, 100 + Math.floor(Math.random() * 151))))
     }
-    // Automatic callers catch this only after 30 seconds of continuous contention, losing the report quietly.
     throw new AiFeedbackError(503, 'Feedback timed out, try again shortly')
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2028') {

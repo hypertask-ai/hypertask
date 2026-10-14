@@ -22,7 +22,6 @@ const DescriptionBody = ({ creatorName, creatorImg, content }: IProp) => {
       }}
       className="relative"
     >
-      {/**-----------------------------------DESCRIPTION TOP ROW */}
       <DescriptionTopRow
         name={creatorName ?? "John Doe"}
         pfp={
@@ -32,7 +31,6 @@ const DescriptionBody = ({ creatorName, creatorImg, content }: IProp) => {
         isUploadingDescription={undefined}
       />
 
-      {/**----------------------------------INNERHTML DESCRIPTION */}
 
       {[30, 31].includes(activeScene.index) ? (
         <>

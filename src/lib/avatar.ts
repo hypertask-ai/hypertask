@@ -36,10 +36,6 @@ export function getAvatarInitials(name?: string | null): string {
   return uppercaseInitials([firstWord[0] ?? "", lastWord[0] ?? ""]);
 }
 
-/**
- * Deterministic robot-face avatar (DiceBear bottts-neutral) for an agent, so
- * every agent looks distinct instead of falling back to initials. HTPR-6034.
- */
 export function getAgentAvatarDataUri(seed: string): string {
   return createAvatar(botttsNeutral, { seed, size: 128 }).toDataUri();
 }

@@ -244,10 +244,6 @@ const AccountsSection = () => {
     }
   };
 
-  // A failed connect returns here as ?figma_error=<code>. The message sits
-  // inside the Connected apps card, under the row that was clicked, because the
-  // page is otherwise identical after the bounce and a note below the card
-  // reads as unrelated.
   const figmaMessage =
     figmaError ?? (!figmaLoading && !figmaConfigured
       ? "Figma is not set up on this server yet."

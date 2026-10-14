@@ -25,7 +25,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(400).json({ message: "Missing Required Task ID" });
     }
 
-    // Only fetch agent if provided
     const agent = agentId
       ? await prisma.agent.findUnique({
           where: { id: agentId },
@@ -38,8 +37,6 @@ const handler: NextApiHandler = async (req, res) => {
         })
       : null;
 
-    // HTPR-7163: only someone who may write to the task's board may change
-    // its estimate, and every branch below works on this checked task.
     const task = await prisma.task.findFirst({
       where: {
         id: taskId,
@@ -55,7 +52,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(404).json({ message: "Task not found" });
     }
 
-    // Delete estimate if required
     if (estimate_index === 0) {
       await prisma.estimate.deleteMany({
         where: { taskId: task.id },
@@ -63,7 +59,6 @@ const handler: NextApiHandler = async (req, res) => {
       return res.status(200).json({ message: "Successfully deleted" });
     }
 
-    // CREATE or UPDATE estimate
     if (!task.estimate) {
       const estimate = await prisma.estimate.create({
         data: {

@@ -18,7 +18,7 @@ const EmailNotificationSidebar = ({
 
   const updateUserStateAndCookie = (user: any) => {
     nookies.set(null, "nookies_user", JSON.stringify(slimUserForCookie(user)), {
-      maxAge: 600 * 60 * 24 * 7, // 1 week
+      maxAge: 600 * 60 * 24 * 7,
       path: "/",
     });
     setCurrentUser(user);

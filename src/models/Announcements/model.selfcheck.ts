@@ -5,8 +5,6 @@ import {
   youtubeThumbnailUrl,
 } from "./model";
 
-// A YouTube embed yields a poster (so the banner shows a thumbnail that opens
-// YouTube); anything else yields null and is rendered as a plain image.
 assert.equal(
   youtubeThumbnailUrl("https://www.youtube.com/embed/L62LY5lIKCo?controls=0"),
   "https://img.youtube.com/vi/L62LY5lIKCo/mqdefault.jpg"
@@ -19,10 +17,8 @@ for (const level of ["note", "link", "video", "banner", "takeover"] as const) {
   assert.equal(getExplicitLevel({ level }), level);
 }
 
-// Legacy records: inferred for display, but never explicit — so they never auto-interrupt.
 assert.equal(resolveLevel({ slides: [{} as never] }), "takeover");
 assert.equal(resolveLevel({ blogURL: "https://hypertask.ai" }), "link");
-// A blogURL still wins over slides, exactly as the sidebar behaved before the ladder.
 assert.equal(
   resolveLevel({ blogURL: "https://hypertask.ai", slides: [{} as never] }),
   "link"

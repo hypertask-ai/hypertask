@@ -1,4 +1,3 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from '@/lib/prisma';
 
@@ -10,19 +9,15 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Data>
 ) {
-
-  // Fetch all board ids
   const boards = await prisma.project.findMany({ select: { id: true } });
 
   for (const board of boards) {
-    // Fetch all tickets for the current board
     const tickets = await prisma.task.findMany({
       where: { projectId: board.id },
       select: { id: true }
     });
 
     for (const ticket of tickets) {
-      // Get all comments with activity for this ticket
       const comments = await prisma.comment.findMany({
         where: {
           taskId: ticket.id,
@@ -33,7 +28,6 @@ export default async function handler(
         },
       });
 
-      // Extract unique userIds from activityBody.fromUserId
       const uniqueUserIds = new Set<number>();
 
       for (const comment of comments) {
@@ -48,7 +42,6 @@ export default async function handler(
         }
       }
 
-      // Update the task with unique userIds if any were found
       if (uniqueUserIds.size > 0) {
         await prisma.task.update({
           where: { id: ticket.id },

@@ -3,7 +3,6 @@ import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
-// hooks/General/useAIResponseHandler.ts
 import { currentProjectAtom } from '@/store';
 import { useState, useCallback } from 'react';
 import { useRecoilState } from '@/lib/state';

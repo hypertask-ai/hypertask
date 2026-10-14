@@ -4,8 +4,6 @@ import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { IReminder } from "@/models/model";
 import invokeReminder from '@/utils/controllers/reminders/invokeReminder';
 
-// HTPR-7175: the caller may only fire their own active reminder, and the
-// stored row (never the submitted body) decides which user and task it hits.
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse

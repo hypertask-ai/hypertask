@@ -50,6 +50,7 @@ Repo skills live in the app repo at `.claude/skills/`; their index is `.claude/s
 | Open the PR (ticket stays In Progress) | the PR rule below, then bind it: `~/.agents/skills/ship/scripts/ship-check bind HTPR-NNNN <pr number>` | `ship-check pr HTPR-NNNN` prints `title ok` |
 | Merge and deploy | `vcc` QA routine steps 1 to 3 | `ship-check deployed HTPR-NNNN` prints `deployed ok` |
 | Live QA | repo `verify-qa` and its feature map | `ship-check proof HTPR-NNNN` prints `proof ok` |
+| Docs (FEATURE and IMPROVE only) | repo `update-docs` | `ship-check docs <T>` prints `docs ok` |
 | Report and close | `vcc` QA routine step 5, plus the QA record below | `ship-check done HTPR-NNNN` prints `done ok` |
 | Clean up | `clean-up` (this session's worktree and branch) | `ship-check cleaned HTPR-NNNN` prints `cleaned ok` |
 

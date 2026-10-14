@@ -33,8 +33,6 @@ const taskQuestionsRequestSchema = z.object({
 });
 
 const TASK_QUESTIONS_INSTRUCTIONS = renderPrompt("task-questions-context-1");
-// HTPR-6953: structured output, so a stray quote in a question can no longer
-// break a hand-rolled JSON.parse of the model text.
 const taskQuestionsOutputSchema = z.object({
   questions: z.array(z.string()),
 });

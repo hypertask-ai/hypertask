@@ -31,7 +31,6 @@ const ArchiveTaskNotification:React.FC<ArchiveTaskNotificationProps> = (
                       fill="none"
                       className="keep-stroke task-option-icon text-[#696b6e] hover:text-[#95999e] transition-colors duration-75"
                     />
-                    {/* <FiCheck size={15} color={notification.type==="Assigned"? (notification.assignee?.task?.status === 'Archive' ? 'green' : '#8E9093'): (notification.comment?.task?.status === 'Archive' ? 'green' : '#8E9093')} /> */}
                 </button>
             </div>
         </>

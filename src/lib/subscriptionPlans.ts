@@ -18,15 +18,12 @@ export interface ISubscriptionPlan {
   }[];
 
 }
-//old price ids
 const prevMonthly1 = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_01)
 const prevYearly1 = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_01)
 
 const prevMonthly2 = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_02)
 const prevYearly2 = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_02)
 
-// export const monthlyPriceId = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID)
-// export const yearlyPriceId = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID)
 
 const monthly_byok_price_id = String(process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID_BYOK)
 const yearly_byok_price_id = String(process.env.NEXT_PUBLIC_STRIPE_YEARLY_PRICE_ID_BYOK)
@@ -184,8 +181,6 @@ export const storeSubscriptionPlans: ISubscriptionPlan[] = [
         title: "Monthly",
         price: "$0",
         description: "/ 14 days",
-        // stripePriceId: process.env.NEXT_PUBLIC_STRIPE_MONTHLY_PRICE_ID ?? "",
-
       }
     ],
     perks: [

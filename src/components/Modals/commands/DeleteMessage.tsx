@@ -6,9 +6,6 @@ import { useRecoilState } from "@/lib/state";
 import ConfirmDialog from "@/components/Modals/Common Modals/ConfirmDialog";
 import { Trash2 } from "lucide-react";
 
-// Ctrl+K "delete comment" command. Routes through the shared palette ConfirmDialog
-// (same as DeleteCommentById) instead of raw reactstrap Bootstrap buttons, so it
-// matches the Ctrl+K style and inherits ConfirmDialog's safe Enter/Esc handling.
 const DeleteMessage = ({ callback }: { callback: (id: number) => void }) => {
   const [deleteModal, setDeleteModal] = useState<boolean>(true);
   const [idToDelete] = useRecoilState(idToDeleteCommentAtom);

@@ -38,7 +38,6 @@ export const HELLO_CAPABILITIES = {
     'Use signed per-agent webhooks to wake an agent on mentions and assignments, or SSE streams for board events. Setup and verification: https://docs.hypertask.ai/mcp/agent-webhooks/',
 } as const
 
-// HTPR-7122: the shared agent directive, served while htpr-7122-agent-reactions is on.
 export const HTPR_7122_HELLO_CAPABILITIES = {
   ...HELLO_CAPABILITIES,
   comments:

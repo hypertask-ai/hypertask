@@ -12,9 +12,6 @@ const renderItems = () => {
   return {
     onStart: (props:any) => {
       getClientRect = props.clientRect;
-      // Destroy any stale popup/component first (mirrors the mention renderer).
-      // Without this, a re-triggered suggestion can orphan a tippy instance,
-      // which shows up as the menu "disappearing" intermittently.
       if (popup && popup[0]) popup[0].destroy();
       if (component) component.destroy();
 
@@ -30,12 +27,7 @@ const renderItems = () => {
         showOnCreate: true,
         interactive: true,
         trigger: "manual",
-        // Slash commands are shared by editors at both edges of the viewport:
-        // task creation starts near the top, while chat/comment composers sit
-        // near the bottom. Let Popper choose the side with more usable space,
-        // then keep the menu inside the visual viewport. HTPR-4568/5392.
         placement: "auto-start",
-        // Above #portal-root (z-index 5000) and the comment composer (HTPR-6404).
         zIndex: 10001,
         popperOptions: {
           strategy: "fixed",
@@ -61,9 +53,6 @@ const renderItems = () => {
       component?.updateProps(props);
 
       if (popup && popup[0]) {
-        // Keep the stable anchor: props.clientRect can momentarily resolve
-        // null mid-typing, and tippy reads that as "no reference" and jumps
-        // the menu to the document origin. HTPR-3383.
         popup[0].setProps({
           getReferenceClientRect: anchor
         });
@@ -77,13 +66,6 @@ const renderItems = () => {
       }
 
       const handled = component?.ref?.onKeyDown(props);
-      // When the menu consumes a key — Enter to pick a skill, arrows to
-      // navigate — stop it from bubbling to the editor container's own key
-      // handlers. The AI chat sends on Enter via a container-level handler
-      // (useAiChat tiptapKeydown); without this, selecting a skill would ALSO
-      // fire the send, because the popup (and its DOM marker) is torn down by
-      // the time that bubbled handler runs. Selecting a skill must only insert
-      // "/slug " so the user can keep typing their prompt, then Enter sends.
       if (handled) {
         props.event.stopPropagation();
       }

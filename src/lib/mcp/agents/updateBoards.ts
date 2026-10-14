@@ -134,9 +134,6 @@ export async function updateOwnedAgentBoards(
   userId: number,
   input: AgentBoardUpdateInput,
   teamId?: string,
-  // HTPR-6348: set when an agent credential makes the change. Every project
-  // touched must be one that agent is on, checked inside the transaction so a
-  // concurrent removal of the acting agent cannot slip through.
   actingAgentId?: string
 ) {
   const scopeWhere = teamId ? agentWithinTeamWhere(teamId) : {}
@@ -215,7 +212,6 @@ export async function updateOwnedAgentBoards(
             })
           )
 
-          // Removal-only updates can clean up legacy teamless or mixed-team rows.
           if (additions.length) {
             const finalTeams = [
               ...agent.members

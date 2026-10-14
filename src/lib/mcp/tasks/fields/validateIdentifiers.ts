@@ -6,7 +6,6 @@ import type { validateTaskUpdateFields } from './validateFields';
 
 export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRun: boolean, fields: Exclude<Awaited<ReturnType<typeof validateTaskUpdateFields>>, NextResponse>) {
     const { hasDueDate, parsedPullRequest } = fields;
-    // Validate due_date if provided (must be valid ISO 8601 or null to clear)
     if (hasDueDate && requestBody.due_date !== null) {
         if (typeof requestBody.due_date !== 'string' || requestBody.due_date.trim().length === 0) {
             return NextResponse.json(
@@ -37,7 +36,6 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
         }
     }
 
-    // Validate status if provided
     if (requestBody.status !== undefined && !VALID_STATUSES.includes(requestBody.status)) {
         return NextResponse.json(
             {
@@ -93,7 +91,6 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
         )
     }
 
-    // Validate task identifiers
     const { task_id, ticket_number, unique_index, project_id } = requestBody
     const methodCount = [!!task_id, !!ticket_number, !!unique_index].filter(Boolean).length
 
@@ -140,7 +137,6 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
         )
     }
 
-    // Validate arrays are not empty
     if (task_id && Array.isArray(task_id) && task_id.length === 0) {
         return NextResponse.json(
             {
@@ -165,7 +161,6 @@ export function validateTaskUpdateIdentifiers(requestBody: UpdateTaskBody, dryRu
         )
     }
 
-    // Validate ticket_number format if provided
     if (ticket_number) {
         const ticketNumbers = Array.isArray(ticket_number) ? ticket_number : [ticket_number]
         for (const tn of ticketNumbers) {

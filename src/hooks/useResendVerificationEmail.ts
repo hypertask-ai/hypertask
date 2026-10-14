@@ -7,9 +7,6 @@ interface UseResendVerificationEmailReturn {
   handleResend: (email: string) => Promise<void>;
 }
 
-/**
- * Hook for resending verification emails
- */
 export const useResendVerificationEmail = (): UseResendVerificationEmailReturn => {
   const [isResending, setIsResending] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
@@ -29,7 +26,6 @@ export const useResendVerificationEmail = (): UseResendVerificationEmailReturn =
       });
 
       if (response.data.success) {
-        // Show success message (you could use a toast here)
         alert('Verification email sent! Please check your inbox.');
         setErrorMessage('');
       } else {

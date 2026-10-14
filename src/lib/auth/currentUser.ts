@@ -18,8 +18,6 @@ export async function loadCurrentUser(
   if (!session) return null
 
   if (legacyProfile) {
-    // Keep the description endpoints' profile precondition and activity actor,
-    // but never use the client-writable profile as proof of identity.
     const cookie = (await cookies()).get('nookies_user')
     const { isValid, user } = isValidUser(cookie?.value)
     if (isValid && user && user.id === session.userId) {
@@ -31,9 +29,6 @@ export async function loadCurrentUser(
   return { userId: session.userId }
 }
 
-// HTPR-7073: the profile cookie lives shorter than the signed session, so a signed-in
-// person can lack it. With the REST compat flag on, load the profile of the signed session
-// user from the database; flag off, unknown user or lookup failure keeps the legacy null (401).
 async function loadProfileFromSession(userId: number): Promise<CurrentUserWithProfile | null> {
   try {
     if (!(await isFeatureEnabled(HTPR_6924_REST_COMPAT_FLAG, userId))) return null

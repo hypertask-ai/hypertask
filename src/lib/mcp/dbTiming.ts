@@ -37,7 +37,6 @@ export function createMcpTimingPool(config: PoolConfig): Pool {
     query: Client['query'] = (...args: any[]): any => {
       const run = () => super.query.apply(this, args as Parameters<Client['query']>)
       if (args.some(arg => typeof arg === 'function') || typeof args[0]?.submit === 'function') return run()
-      // Prisma can issue concurrent transaction queries on this one pg client.
       const result = this.queryTail.then(run)
       this.queryTail = result.then(() => undefined, () => undefined)
       return result
@@ -73,9 +72,6 @@ export function createMcpTimingPool(config: PoolConfig): Pool {
           store.connections++
           store.connectMs += connectMs
         }
-        // pg serves queued acquires in the releasing request's context. Attribute
-        // to the captured caller, and exclude TCP/TLS/startup from acquisition wait.
-        // Failed acquires cannot reliably distinguish queue timeout from startup failure.
         if (!err) store.waitMs += Math.max(0, performance.now() - started - (connectMs ?? 0))
         done(err, client, release)
       })
@@ -88,8 +84,6 @@ export function createMcpTimingPool(config: PoolConfig): Pool {
   }
 
   const pool = new TimingPool({ ...config, Client: TimingClient })
-  // A non-MCP acquire may open a client while a measured acquire is queued.
-  // Discard that handshake before reuse so it cannot be charged to a later caller.
   pool.on('release', (_err, client) => { connections.delete(client) })
   return pool
 }

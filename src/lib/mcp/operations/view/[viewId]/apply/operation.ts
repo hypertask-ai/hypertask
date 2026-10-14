@@ -3,10 +3,6 @@ import { NextRequest, NextResponse } from "next/server";
 
 import { applyView } from "@/lib/mcp/views/services";
 
-/**
- * POST /api/mcp/view/[viewId]/apply -- switch the caller's active view on a board.
- * Passing the board's default view id returns them to the default (all tasks) view.
- */
 export async function POST(request: NextRequest, props: { params: Promise<{ viewId: string }> }) {
   return wrapMcpRoute(async (request: NextRequest) => {
   try {

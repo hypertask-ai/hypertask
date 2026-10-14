@@ -104,8 +104,6 @@ export function AgentInstructions({
                   </div>
                 )}
 
-                {/* Native agents run inside Hypertask, and the mint endpoint
-                    refuses them, so only external agents get this block. */}
                 {agent.runtimeType === "EXTERNAL" && (
                   <div className="bg-cardBackground rounded-[4px] p-4 shadow-md mb-3">
                     <h2 className="font-semibold">Access key</h2>
@@ -153,9 +151,6 @@ export function AgentInstructions({
                         </div>
                       </div>
                     ) : agent.hasMcpToken ? (
-                      /* The routes only ever send the value once, at minting, so
-                       an existing key can be replaced or revoked but not read
-                       back — saying "no key yet" here would be a lie. */
                       <div className="mt-3">
                         <p className="text-[13px] text-text-light-gray">
                           A key is set. It was shown once when it was created.

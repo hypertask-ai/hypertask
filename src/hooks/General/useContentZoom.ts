@@ -1,21 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-/**
- * In-app zoom for a scrollable content region (e.g. the Page editor body).
- *
- * Zooming in on a phone is native pinch zoom (the page route re-enables it in
- * its `viewport`), which also enlarges images. Native zoom cannot go below
- * the device width, so pinching out to a desktop-like overview stays here.
- * It applies to the target element via CSS `zoom`, which reflows text within
- * the container width instead of overflowing (unlike `transform: scale`), and
- * keeps pointer/caret coordinates correct for the underlying editor.
- *
- * Mechanisms (no new visible chrome, no registered keyboard shortcuts):
- *  - touch pinch out, and back in up to 100% (mobile)
- *  - Ctrl/⌘ + wheel — also fires for trackpad pinch (desktop)
- *
- * The chosen level is persisted so a reader's comfort setting survives reloads.
- */
 
 type Options = {
   min?: number;
@@ -81,7 +65,6 @@ export function useContentZoom(
   );
   const reset = useCallback(() => applyZoom(1), [applyZoom]);
 
-  // Restore the persisted level once, on the client.
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(storageKey);
@@ -92,22 +75,16 @@ export function useContentZoom(
         setZoom(parsed);
       }
     } catch {
-      // localStorage may be unavailable (private mode / SSR) — ignore.
     }
   }, [clamp, storageKey]);
 
-  // Persist changes.
   useEffect(() => {
     try {
       window.localStorage.setItem(storageKey, String(zoom));
     } catch {
-      // ignore
     }
   }, [storageKey, zoom]);
 
-  // Ctrl/⌘ + wheel (mouse wheel + trackpad pinch, which browsers report as a
-  // ctrl-modified wheel event). Scale by a clamped delta so both a coarse mouse
-  // notch and a fine trackpad gesture feel natural.
   useEffect(() => {
     const el = targetRef.current;
     if (!el) return;
@@ -123,7 +100,6 @@ export function useContentZoom(
     return () => el.removeEventListener("wheel", onWheel);
   }, [applyZoom, targetRef]);
 
-  // Touch pinch.
   useEffect(() => {
     const el = targetRef.current;
     if (!el) return;
@@ -149,8 +125,6 @@ export function useContentZoom(
       if (event.touches.length !== 2 || !pinch) return;
       const ratio = distance(event.touches) / pinch.startDist;
       if (pinch.mode === "pending") {
-        // Pinching in from 100% is the browser's own zoom, so images grow.
-        // Pinching out, or anything while already zoomed out, is ours.
         const nativeScale = window.visualViewport?.scale ?? 1;
         if (ratio === 1) return;
         pinch.mode =
@@ -179,7 +153,6 @@ export function useContentZoom(
     };
   }, [applyZoom, targetRef]);
 
-  // Clear any pending indicator timer on unmount.
   useEffect(
     () => () => {
       if (hideTimerRef.current) clearTimeout(hideTimerRef.current);

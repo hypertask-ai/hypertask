@@ -6,11 +6,6 @@ import type { INotification } from "@/models/model";
 
 type InboxResponse = Awaited<ReturnType<typeof notificationGetAll>>;
 
-/**
- * HTPR-7092: the inbox read with the Decisions split. Wraps the existing read so its
- * bytes stay untouched. Flag-gated on the server: with the flag off (or no pending
- * Question) the response is returned as is, so no Decisions split exists.
- */
 export default async function notificationGetAllWithDecisions(
   userId: string | string[],
 ): Promise<InboxResponse> {

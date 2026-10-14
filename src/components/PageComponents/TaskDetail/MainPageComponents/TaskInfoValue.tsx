@@ -8,10 +8,6 @@ export interface TaskInfoValueProps
   className?: string;
 }
 
-/**
- * Value area wrapper for task info rows.
- * Provides consistent left margin and layout; font inherits from container.
- */
 export const TaskInfoValue: React.FC<TaskInfoValueProps> = ({
   children,
   className,

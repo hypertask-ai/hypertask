@@ -162,8 +162,6 @@ export async function storeAttachmentBatch(
   let preparedBytes = 0;
 
   try {
-    // Resolve and validate every input before the first storage write. A bad URL
-    // later in the batch therefore cannot strand objects uploaded for earlier files.
     try {
       for (const [specIndex, spec] of files.entries()) {
         assertBatchActive(batchSignal);
@@ -279,9 +277,6 @@ export async function storeAttachmentBatch(
           }
         }
 
-        // A lost upload response may hide a committed object. Persisting its
-        // deterministic identity gives every possible object a durable attachment
-        // row; a retry overwrites the same key if the object was actually absent.
         if (!uploadCompleted && uploadStarted && state !== 'missing') {
           uploads.push({
             filename: spec.filename,
@@ -339,10 +334,6 @@ export async function storeAttachmentBatch(
       ) {
         throw new AttachmentBatchError('Failed to store attachment(s)', 500, false);
       }
-      // Never delete a deterministic object inline after an async failure. The
-      // lease can expire while S3 is processing a delete, allowing a retry to
-      // overwrite the same key before the delayed delete lands. Keeping the
-      // bounded deterministic object is safer; a retry reuses it.
       throw new AttachmentBatchError('Failed to store attachment(s)', 500, false);
     }
   } finally {

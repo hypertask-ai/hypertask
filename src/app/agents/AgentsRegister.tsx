@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+
 "use client";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -43,8 +43,6 @@ type TAgentBoard = TRegisterBoard;
 
 type TAgent = {
   id: string;
-  // Readable URL segment, derived from the name by the server so the register
-  // and the detail route cannot disagree about what a slug points at.
   slug?: string;
   displayName: string;
   visibility: "PRIVATE" | "TEAM";
@@ -52,40 +50,23 @@ type TAgent = {
   createdAt: string;
   revokedAt: string | null;
   archivedAt?: string | null;
-  // The ticket this agent holds a live lease on, or null when it is idle.
   working?: TRegisterWork | null;
   runtimeType: "NATIVE" | "EXTERNAL";
   prompt: string | null;
   modelOptionId: string | null;
-  // Set when this agent runs on its own provider account (HTPR-5389); the
-  // server sends only the masked tail, and only to the owner.
   providerKey?: { provider: string; maskedKey: string } | null;
   heartbeatAt: string | null;
   lastPostedAt?: string | null;
-  // Most recent Agent Chat message in this person's own thread with the
-  // agent -- distinct from lastPostedAt's board comments (HTPR-6283).
   lastChatMessageAt?: string | null;
   boards?: TAgentBoard[];
-  // Messages in this agent's shared chat thread that arrived after this person
-  // last caught up. Private to them: it is read off their own participant row.
   unreadCount?: number;
-  // A key is shown once, when it is minted: the database keeps only its hash,
-  // so no route can send it again. The two fields answer different questions:
-  // `mcpToken` is a value this session just saw, `hasMcpToken` is what the
-  // server says about whether a key exists.
   mcpToken?: string | null;
   hasMcpToken?: boolean;
-  // Off keeps everything this agent authors out of Important, mentions of you
-  // included. Both agent routes send it; only the detail page edits it.
   postsToImportant?: boolean;
 };
 
-// A spinner over data fetched once is an animation telling a lie, so the
-// register re-asks. 30s against a 5-minute lease TTL: work shows up within half
-// a minute, and a finished agent stops spinning promptly.
 const POLL_MS = 30_000;
 
-/** OpenRouter and friends read better than the stored provider slug. */
 function providerLabel(provider: string): string {
   return provider === "openrouter"
     ? "OpenRouter"
@@ -105,8 +86,6 @@ function timeAgo(iso: string): string {
   return `${days} day${days === 1 ? "" : "s"} ago`;
 }
 
-// An action is something the agent did. A heartbeat that found no work is not
-// an action, so it only proves the agent is alive.
 function lastActionAt(agent: TAgent): string | null {
   return agent.lastPostedAt ?? null;
 }
@@ -197,9 +176,6 @@ export function AgentCard({
   const [webhookOpen, setWebhookOpen] = useState(false);
 
   return (
-    // A real anchor covers the card, so these pages can be middle-clicked,
-    // opened in a new tab and bookmarked. The switch sits above that overlay
-    // rather than inside it, since a <button> cannot legally nest in an <a>.
     <div className="relative bg-cardBackground rounded-[4px] p-4 shadow-md hover:bg-hoverCardBackground transition-colors">
       <Link
         href={`/agents/${agent.slug ?? agent.id}`}
@@ -259,8 +235,6 @@ export function AgentCard({
           {agent.visibility === "TEAM" ? "Team" : "Private"}
         </InfoRow>
         {working && (
-          // Text, not a link: the whole card is already an anchor to the agent,
-          // and a second anchor inside it would have to fight that overlay.
           <InfoRow label="Working on">
             <span className="truncate block">
               <span className="text-text-light-gray">{working.ticket}</span>{" "}
@@ -296,9 +270,6 @@ export function AgentCard({
         </InfoRow>
         <InfoRow label="Boards">
           {cardBoards.length > 0 ? (
-            // The board glyph, not the bare name: a board can be named after
-            // the agent that works it ("AB Test Concept Agent"), and without
-            // the glyph the row reads as the agent's own name repeated back.
             <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
               {cardBoards.map((board) => (
                 <span
@@ -341,18 +312,12 @@ function FilterBar({
 }) {
   return (
     <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-[13px]">
-      {/* Shown from one team up: the filter was asked for by name, and hiding
-          it whenever a user happens to have a single team makes it look
-          missing. Zero teams means no board carries one, so there is nothing
-          to pick. */}
       {teams.length > 0 && (
         <label className="flex items-center gap-2">
           <span className="text-text-light-gray">Team</span>
           <AgentSelect
             value={filters.teamId ?? ""}
             ariaLabel="Filter agents by team"
-            // Boards belong to teams, so narrowing the team invalidates any
-            // board already chosen.
             onChange={(teamId) =>
               onChange({ ...filters, teamId: teamId || null, boardId: null })
             }
@@ -443,9 +408,6 @@ const AgentsRegister = (props: IProp) => {
   }, [currentUser.id]);
 
   const inFlightToggles = useRef<Set<string>>(new Set());
-  // Bumped on every toggle edge. A poll that started before a toggle and lands
-  // after it finished would pass the in-flight check and write pre-PATCH state
-  // back, so the switch flicks back a moment after you set it.
   const toggleGeneration = useRef(0);
   const loadedOnce = useRef(false);
 
@@ -453,14 +415,9 @@ const AgentsRegister = (props: IProp) => {
     let cancelled = false;
 
     async function load() {
-      // A refetch mid-toggle would overwrite the optimistic switch with the
-      // state the server had before the PATCH landed, and the switch would
-      // visibly flick back.
       if (inFlightToggles.current.size > 0) return;
       const generation = toggleGeneration.current;
       try {
-        // Owner-scoped, so this lists every agent across every team. The
-        // sibling /api/agents needs a teamId and would show one arbitrary team.
         const res = await fetch("/api/agents/owned");
         const data = (await res.json()) as {
           success?: boolean;
@@ -470,25 +427,16 @@ const AgentsRegister = (props: IProp) => {
         if (!res.ok || !data.success || !Array.isArray(data.agents)) {
           throw new Error(data.error ?? "Failed to load agents");
         }
-        // Rechecked after the await, not only before it: a request already in
-        // flight when a toggle starts would otherwise land afterwards and
-        // overwrite the optimistic switch with pre-PATCH state. The generation
-        // covers the toggle that both starts and finishes inside this await,
-        // which leaves the pending set empty again.
         if (
           !cancelled &&
           inFlightToggles.current.size === 0 &&
           generation === toggleGeneration.current
         ) {
           loadedOnce.current = true;
-          // A poll that recovers has to take the error screen down with it,
-          // or the register stays blank over data it now has.
           setError(null);
           setAgents(data.agents);
         }
       } catch (e) {
-        // A poll that fails must not blank a register that is already on
-        // screen; the next tick usually succeeds.
         if (!cancelled && !loadedOnce.current) {
           setError(e instanceof Error ? e.message : "Failed to load agents");
         }
@@ -503,8 +451,6 @@ const AgentsRegister = (props: IProp) => {
     };
   }, [currentUser.id]);
 
-  // Each request states the wanted result, so a second click cannot undo the
-  // first. The pending set still stops this tab from firing two at once.
   const [pendingToggle, setPendingToggle] = useState<Set<string>>(new Set());
   const markPending = (id: string, pending: boolean) => {
     toggleGeneration.current += 1;
@@ -544,7 +490,6 @@ const AgentsRegister = (props: IProp) => {
         if (!res.ok || !data.success) throw new Error("Failed to update agent");
       })
       .catch(() => {
-        // revert on failure
         setAgents((prev) =>
           prev ? prev.map((a) => (a.id === agent.id ? agent : a)) : prev,
         );
@@ -552,18 +497,12 @@ const AgentsRegister = (props: IProp) => {
       .finally(() => markPending(agent.id, false));
   };
 
-  // Running/Quiet is a question about the clock, not only about the data, so
-  // a page left open has to re-ask it or an agent stays under Running long
-  // after its last check-in aged out.
   const [clockTick, setClockTick] = useState(0);
   useEffect(() => {
     const id = setInterval(() => setClockTick((n) => n + 1), 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // Filters live in the URL, so a filtered register is a link you can keep or
-  // send, and the palette can open one directly (Disabled agents -> ?active=off).
-  // A URL without a grouping restores this account's last Sort choice.
   const filters = useMemo(
     () => resolveAgentFilters(searchParams, rememberedGrouping),
     [searchParams, rememberedGrouping],
@@ -577,8 +516,6 @@ const AgentsRegister = (props: IProp) => {
       );
       setRememberedGrouping(next.group);
     }
-    // Once the user interacts, keep the resulting URL deterministic for
-    // sharing. Bare /agents remains the preference-restoring entry point.
     const preserveDefaultGrouping = next.group === "board";
     router.replace(
       `/agents${agentFiltersToQuery(next, { preserveDefaultGrouping })}`,
@@ -594,26 +531,20 @@ const AgentsRegister = (props: IProp) => {
 
   const clusters = useMemo(() => {
     return viewAgents(agents ?? [], filters);
-    // clockTick: the status dot and the "x min ago" strings both read the
-    // clock, so a page left open has to re-render as time passes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [agents, filters, clockTick]);
 
-  // Archived agents are out of every count for the same reason they are out of
-  // every view: "50 agents" over 47 cards is the register contradicting itself.
   const total = (agents ?? []).filter((a) => !a.archivedAt).length;
   const shown = useMemo(
     () => filterAgents(agents ?? [], filters).length,
     [agents, filters],
   );
-  // An agent holding a lease is running whatever the heartbeat clock says, or
-  // the header would read "0 running" over a card that is visibly spinning.
   const runningCount = useMemo(
     () =>
       (agents ?? []).filter(
         (a) => !a.archivedAt && (isWorking(a) || statusOf(a) === "running"),
       ).length,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
     [agents, clockTick],
   );
   const filtered = hasAgentContentFilters(filters);
@@ -624,8 +555,6 @@ const AgentsRegister = (props: IProp) => {
         <h1 className="text-[22px] font-semibold">Agents</h1>
         {agents && (
           <p className="mt-1 text-[13px] text-text-light-gray">
-            {/* The count has to describe what is on screen, or it contradicts
-                the cards as soon as a filter is on. */}
             {filters.active === "archived"
               ? `${shown} archived agent${shown === 1 ? "" : "s"}`
               : filtered
@@ -688,8 +617,6 @@ const AgentsRegister = (props: IProp) => {
                 <div className="grid gap-3 [grid-template-columns:repeat(auto-fill,minmax(320px,1fr))]">
                   {cluster.agents.map((agent) => (
                     <AgentCard
-                      // An agent works on several boards, so the id alone is
-                      // not unique across clusters.
                       key={`${cluster.board?.id ?? "none"}-${agent.id}`}
                       agent={agent}
                       pending={pendingToggle.has(agent.id)}

@@ -26,11 +26,6 @@ import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 
 const EMPTY_BOARDS: IProject[] = [];
 
-/**
- * Board switcher. Views live in the header strip now, so this is boards only:
- * title tap switches BOARD, strip switches VIEW, horizontal scroll moves
- * between COLUMNS. One concept per surface.
- */
 const MobileTitleSheet = ({ onClose }: { onClose: () => void }) => {
   const { goToProjectShortcut } = useProjectQuery();
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -42,10 +37,6 @@ const MobileTitleSheet = ({ onClose }: { onClose: () => void }) => {
     null,
   );
 
-  // This component mounts only after explicit switcher intent. Keep its fetch
-  // independent from the route-authoritative projectsAll query: a second
-  // observer on that singleton key could otherwise cancel or overwrite the
-  // Board request whose scope/request ID LandingPage is reconciling.
   const {
     data: accessibleBoards = EMPTY_BOARDS,
     isFetching: accessibleBoardsLoading,
@@ -192,8 +183,6 @@ const MobileTitleSheet = ({ onClose }: { onClose: () => void }) => {
             </button>
           </div>
         ) : boards.length === 0 || lastActivity === null ? (
-          // Never render an empty sheet again: an explicit line is a state the
-          // user can read, a zero-height list is a broken control.
           <p className="px-4 py-6 text-content text-text-light-gray">
             {accessibleBoardsLoading || lastActivity === null
               ? "Loading boards…"

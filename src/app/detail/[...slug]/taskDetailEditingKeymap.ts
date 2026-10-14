@@ -8,7 +8,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
   const { EnterHandler, CTRL_ENTERHandler, editMode, editModeCheck, setEditMode, currentTask, requestDescriptionFocus, focusOn, scrollVirtualize, toggleMoveToBoardModal, lastGPress, toggleHistory, sectionsForProjectTQ, moveTaskToNextColumn, audioInputHandler, gPressHandler, navigate, toggleCreateTaskGlobally, toggleSubtaskLinkingModal, updateActiveItemAndItemInView, toggleDueDate, lastM_APress, toggleMoveModal, isSummaryExpanded, setIsSummaryExpand, togglePriorityModal } = context;
   return [
 
-    // ========================= ENTER
 
     {
       action: "enter",
@@ -16,16 +15,12 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       run: () => { return { stop: true, value: EnterHandler(e) }; },
     },
 
-    // ========================= CTRL + ENTER
 
     {
       action: "controlEnter",
       matches: () => e.key === "Enter" && cmdControl,
       run: () => { return { stop: true, value: CTRL_ENTERHandler(e) }; },
     },
-
-
-    // [ctrl] + [d] []
 
     {
       action: "description",
@@ -38,15 +33,9 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       focusOn("description", false);
       scrollVirtualize("edit-description");
       return { stop: true };
-      // document?.getElementById(currentId)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      // setTimeout(() => {
-      // commentRef.current?.focus()
-      // document.getElementById("bottom")?.scrollIntoView({ behavior: "instant" as ScrollBehavior, block: "start" })
-      // }, 600);
     },
     },
 
-    // [shift][m]
 
     {
       action: "moveToBoard",
@@ -56,12 +45,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       return { stop: true, value: toggleMoveToBoardModal() };
     },
     },
-
-
-
-    // [shift][r] → reply with an AI-suggested draft; opens the composer and
-    // inserts the suggestion there (never posts anything automatically).
-    // Bare R stays reserved for emoji reactions; g-sequence keeps priority.
 
     {
       action: "suggestReply",
@@ -83,9 +66,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // [ctrl] + [m] [comment edit mode]
-
     {
       action: "comment",
       matches: () => (e.keyCode === KeyCodes.M && !e.shiftKey && cmdControl) ||
@@ -98,11 +78,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // moving task to next/previous column logic
-
-    // [ctrl/cmd] + [shift] + [h] → toggle history (activity) events in the feed
-
     {
       action: "history",
       matches: () => cmdControl && e.shiftKey && e.keyCode === KeyCodes.H,
@@ -112,9 +87,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       return { stop: true };
     },
     },
-
-
-    // shift + [h]
 
     {
       action: "previousColumn",
@@ -131,9 +103,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       if (prev) moveTaskToNextColumn(prev);
     },
     },
-
-
-    // shift + [l]
 
     {
       action: "nextColumn",
@@ -159,13 +128,10 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       run: () => {
       if (e.keyCode === KeyCodes.TAB) {
         e.preventDefault();
-        console.log("ctrl+tab"); // chromium fullscreen (think PWA)
+        console.log("ctrl+tab");
       }
     },
     },
-
-
-    // [cmd/ctrl][shift][d] [comment edit mode with audio]
 
     {
       action: "dictate",
@@ -180,9 +146,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       audioInputHandler();
     },
     },
-
-
-    // [cmd/ctrl][shift][f] [comment edit mode with audio + improve]
 
     {
       action: "dictateAndImprove",
@@ -211,9 +174,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // [g]
-
     {
       action: "gSequence",
       matches: () => e.keyCode === KeyCodes.G,
@@ -233,9 +193,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // [c] for creating a task
-
     {
       action: "createTask",
       matches: () => e.keyCode === KeyCodes.C &&
@@ -252,9 +209,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // [cmd/ctrl][shift][o]
-
     {
       action: "linkSubtask",
       matches: () => e.keyCode === KeyCodes.EQUALS && e.shiftKey && cmdControl,
@@ -263,9 +217,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
       if (currentTask && currentTask.sectionId) toggleSubtaskLinkingModal();
     },
     },
-
-
-    // [d] for due date
 
     {
       action: "dueDate",
@@ -292,7 +243,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-    // [m] for move task
 
     {
       action: "moveTask",
@@ -315,9 +265,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-
-    // [i] for summary
-
     {
       action: "summary",
       matches: () => e.keyCode === KeyCodes.I && !e.shiftKey && !e.ctrlKey && !cmdControl,
@@ -330,7 +277,6 @@ export function taskDetailEditingKeymap(context: TaskDetailKeyboardContext & { c
     },
     },
 
-    // [p] for set priority
 
     {
       action: "priority",

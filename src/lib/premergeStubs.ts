@@ -23,7 +23,6 @@ export function premergeStubEnabled(stub: PremergeStub): boolean {
         /^\d+$/.test(redis.port) && !redis.search && !redis.hash;
     }
   } catch {
-    // Do not include a connection string in the refusal message.
   }
 
   if (process.env.PREMERGE_LOCAL !== "1" || process.env.VERCEL ||

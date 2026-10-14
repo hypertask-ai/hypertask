@@ -10,7 +10,6 @@ import {
 } from "@/lib/configs/style.config";
 import { cn } from "@/utils/undoActions/helperFuncs";
 
-/** Left-edge resize strip: idle / hover / active (drag) — desktop AI chat sidebar only. */
 export function AiChatSidebarResizeHandle() {
   const [widthPx, setWidthPx] = useRecoilState(aiChatSidebarWidthPxAtom);
   const [isHovered, setIsHovered] = useState(false);

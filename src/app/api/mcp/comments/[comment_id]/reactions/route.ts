@@ -33,9 +33,7 @@ async function setReaction(
   active: boolean,
   agentId: string | null
 ): Promise<CommentReactionResult> {
-  // HTPR-7122: an agent token reacts as the agent. userId stays the owner, for access only.
   const agent = await reactionAgent(agentId);
-  // HTPR-7095: a newly added reaction and its agent webhook outbox row are written together, then published after commit.
   const webhookInput = {
     commentId: target.commentId,
     reactorUserId: userId,
@@ -44,7 +42,6 @@ async function setReaction(
     emoji,
     added: active,
   };
-  // A failed lookup fails the request before anything is stored, so the client retry keeps the event.
   const preparedWebhook = await prepareCommentReactionWebhook(webhookInput);
   let deliveryIds: string[] = [];
   const result = await prisma.$transaction(async (tx) => {
@@ -65,11 +62,8 @@ async function setReaction(
     return { changed: wasActive !== active, reaction, reactions };
   });
   await publishAgentWebhookDeliveries(deliveryIds).catch((error) => {
-    // The outbox row is stored; the outbox retry delivers it later.
     console.error('[comment-reaction] agent webhook publish failed', error);
   });
-  // HTPR-7122: the response names only agents the caller may see, like the comment reads.
-  // A failed lookup hides every agent instead of failing a committed write.
   return mapReactionWriteResult(result, (agentIds) =>
     loadVisibleReactionAgents(agentIds, userId, target.projectId)
   );
@@ -100,7 +94,6 @@ async function notifyReaction(
           type: 'Reacted',
           projectId: target.projectId,
           fromUserId: userId,
-          // HTPR-7122: the inbox names the agent, never its owner, as the reactor.
           ...(agentId ? { fromAgentId: agentId } : {}),
         }
       );

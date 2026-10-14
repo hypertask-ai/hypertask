@@ -258,7 +258,6 @@ const TrialCard = ({
         className={`relative rounded  border-2  ${selected === plan ? "border-[#8B5CF6]" : "border-icon-hover-gray"
           } p-7 sm:p-4`}
       >
-        {/* Savings Banner */}
         {save && (
           <div className="absolute top-2 left-1/2 -translate-x-1/2">
             <div
@@ -272,7 +271,6 @@ const TrialCard = ({
           </div>
         )}
 
-        {/* Card Content */}
         <div className="pt-4 text-center space-y-2">
           <h2
             className={`text-heading sm:text-subheading font-normal ${selected === plan
@@ -307,7 +305,6 @@ const TrialFooter = () => {
   const [animating, setAnimating] = useState<boolean>(false);
   const isMbl = useContext(MobileViewContext);
 
-  // Create paired slides (two different testimonials per slide)
   const checkCarousal = useMemo(() => {
     const check = isMbl
       ? testimonials.length - 1

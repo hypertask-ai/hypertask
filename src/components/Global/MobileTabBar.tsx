@@ -64,16 +64,8 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
     };
   }, [snapshot]);
 
-  // Hide the dock whenever the AI chat is open: it overlays the chat and covered
-  // the composer with the keyboard up. Back (the gesture / Android button) now
-  // closes the chat, so this no longer strands the user on a sheet with no way
-  // out — which is why it previously had to stay visible while not typing.
   const hidden = !shouldShowMobilePrimaryDock(pathname) || showAiChatInterface;
 
-  // The dock is a fixed overlay, so layout reserves its measured height rather
-  // than a hard-coded number that drifts if the bar's height ever changes. While
-  // it's hidden the reservation must read 0, or the AI composer keeps a dead gap
-  // above the keyboard (a `null` render doesn't run this effect's cleanup).
   useEffect(() => {
     const root = document.documentElement;
     if (hidden) {
@@ -99,8 +91,6 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
 
   if (hidden) return null;
 
-  // AI chat is an overlay, not a route, so leaving it means closing it before
-  // the tab navigates.
   const leaveChat = () => {
     if (showAiChatInterface) closeAIChatInterface();
   };
@@ -167,7 +157,6 @@ const MobileTabBar = ({ currentUserId }: MobileTabBarProps) => {
           <span className="relative">
             <FaInbox size={20} aria-hidden />
             {notificationCount.unseen > 0 && (
-              // Desktop's calm unread signal: a blue dot, no count.
               <span className="absolute -right-1 -top-1 h-[7px] w-[7px] rounded-full bg-[#51A4F1]" />
             )}
           </span>

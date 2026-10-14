@@ -5,7 +5,6 @@ import { toFilesFallbackUrl } from "@/lib/files/fallbackUrl";
 
 export default function FilesImageFallback() {
   useEffect(() => {
-    // HTPR-6716: the files host is blocked in some countries; retry only failed images.
     const onError = (event: Event) => {
       const image = event.target;
       if (!(image instanceof HTMLImageElement) || image.hasAttribute("data-files-fallback")) {

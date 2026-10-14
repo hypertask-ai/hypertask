@@ -144,10 +144,6 @@ export function getFigmaConnection(userId: number) {
   });
 }
 
-// `deadlineMs` is an absolute point on the same synthetic clock as `nowMs`, set
-// once by the first caller. Recomputing it per hop let a queue of workers each
-// claiming the operation slot as the previous one lapsed stretch one request's
-// wait without bound, because every recursion started a fresh TTL.
 async function waitForPendingRefresh(
   userId: number,
   nowMs: number,

@@ -7,7 +7,6 @@ export interface ChatHeaderProps {
 }
 
 
-// types.ts - Shared types
 export type TMessage = {
     id: string
     content: string

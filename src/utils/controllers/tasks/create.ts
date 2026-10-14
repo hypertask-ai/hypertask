@@ -17,22 +17,10 @@ import {
   persistAgentTaskCreatedPending,
 } from "@/lib/agentWebhooks/outbox";
 
-// Share createGlobally.ts's board lock so both routes serialize ticket-number allocation.
 const TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS = 9428471;
 
-/** Subset used by uniqueIndex helpers — works with root client and interactive transaction `tx`. */
 type TaskDb = Pick<PrismaClient, "task">
 
-// HTPR-5928: builds the task.created webhook payload from the row tx.task.create
-// already returned (both branches below `include: { priority: true, ... }`),
-// instead of persistTaskCreatedWebhook re-reading the task and its section.
-//
-// `sectionTitle` is passed in separately rather than read off `row.section`:
-// row.section is Task's denormalized string field, written here from the
-// caller-supplied `body.section` (IProps.section) — not DB truth. Callers pass
-// the title from the Section row they already fetched (`sectionExists`) so a
-// stale/renamed client value can't leak into the webhook payload (HTPR-5928
-// review).
 export function buildWebhookTaskSnapshot(
   row: {
     id: number;
@@ -81,18 +69,6 @@ export const getUniqueTaskCount = async (
 
 const create = async ({title, description, section, userId, ranking, projectId,sectionId,index,currentUser,agentId}:IProps) => {
         try {
-            // if (userId===4){
-            //     await prisma.task.updateMany({
-            //         where:{
-            //             updatedAt:null
-            //         },
-            //         data: {
-            //           updatedAt: new Date(), // Set updatedAt to the current date and time
-            //         },
-            //       });
-            //     console.log("Updated")
-            // }
-            
             const allowedProject = await prisma.project.findFirst({
                 where: {
                     id: projectId,
@@ -123,7 +99,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             
             const currentDate = new Date();
 
-            // return res.status(400).json({ message: "Section Doesn't Exist" });
             let task;
             let boardWebhookDeliveryIds: string[] = [];
             const count  = await prisma.task.count({
@@ -132,7 +107,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                     status:"Normal"
                 }
             })
-            // ------------------- BODY 
             const body = {title,
                 description,
                 section,
@@ -173,8 +147,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         taskLabels:{include:{label:true}}
                     }
                   })
-                  // Same transaction as the task row, so a subscriber can never
-                  // miss task.created for a task that exists (HTPR-4530).
                   await persistAgentTaskCreatedPending(tx, row.id)
                   return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
                 })
@@ -224,7 +196,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             }
             await publishBoardWebhookDeliveries(boardWebhookDeliveryIds)
             
-            // =============== also now create task description by default
             await Promise.all([
                 upsertTaskDescription({
                     content: "",
@@ -235,8 +206,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Description", projectId:projectId, saved:false, content:"" }}),
                 prisma.drafts.create({data:{taskId:task.id,userId:userId, type:"Comment", projectId:projectId, saved:false }})
             ])
-            // HTPR-7131: index the new ticket for search. waitUntil keeps the serverless
-            // instance alive without making the create request wait on the embedding call.
             waitUntil((async () => {
                 if (!await isFeatureEnabled(HTPR_7131_INDEX_NEW_TICKETS_FLAG, currentUser.id)) return;
                 const { upsertTaskToTurbopuffer } = await import("@/utils/controllers/turbopuffer/turbopufferHelper");
@@ -244,10 +213,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             })().catch((error) => console.error("[task-create] search indexing failed", { taskId: task.id, error })));
             scheduleClassifyTaskAiLabels(task.id, projectId)
 
-            // The task transaction committed above. Run column auto-assignment
-            // first, then build task.created from the final task state.
-            // A column rule applies to every ticket that lands in the column,
-            // not only to tickets dragged in later (HTPR-5488).
             const autoAssigned = await autoAssignForSection({
                 taskId: task.id,
                 projectId,
@@ -268,17 +233,12 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         agentId: agentId ?? null,
                     });
                     if (recoveryResult === "recovered") {
-                        // The recovery helper emitted task.created after its
-                        // final assignment and task-state checks.
                     } else if (recoveryResult === "pending") {
-                        // The recovery helper already requeued the marker.
                         console.warn("[task-create] task.created handoff remains pending for the recovery sweep", {
                             taskId: task.id,
                         });
                     }
                 } catch (error) {
-                    // Keep the creation marker pending. Emitting here could
-                    // publish task.created without the final assignees.
                     console.error("[task-create] pending task.created recovery failed", {
                         taskId: task.id,
                         error,
@@ -306,8 +266,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                         },
                     });
                 } catch (error) {
-                    // The creation transaction left a pending marker; the minute
-                    // sweep retries this handoff if the request path stops here.
                     console.error("[task-create] agent task.created webhook failed", {
                         taskId: task.id,
                         error,
@@ -330,7 +288,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 status:200,
                 json:task
             })
-            // return res.json(task)
         } catch (error) {
             console.log(error)
             return ({

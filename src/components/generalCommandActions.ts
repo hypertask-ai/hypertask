@@ -98,8 +98,6 @@ export function createGeneralCommandActions(context: Context) {
     shouldNewTab ? window.open(href, "_blank") : router.push(href);
   };
 
-  // Replay the onboarding sequence on demand. Carry the current board so the
-  // connect-AI / tutorial / launch steps land back on it when finished.
   const GoToOnboarding = () => {
     boardCloseHandler();
     router.push(
@@ -167,8 +165,6 @@ export function createGeneralCommandActions(context: Context) {
     ticketPrefix?: string
   ) => {
     if (!_currentProject) return;
-    // The create route rejects with a reason the user needs to see (e.g. the free
-    // board limit); without this the rejection was silent and the modal just hung.
     try {
       if (mode === "CreateTeamBoard" && teamTitle) {
         const body = {
@@ -203,7 +199,6 @@ export function createGeneralCommandActions(context: Context) {
       boardCloseHandler();
     }
   };
-  // =========== create board and update cache
   const receieveResponse = async (data: any, type: "Team" | "Board") => {
     if (data) {
       setCurrentProject(data);
@@ -221,7 +216,6 @@ export function createGeneralCommandActions(context: Context) {
     router.push(`/trash/${_currentProject.id}`);
   };
 
-  // ================ mark as unread function.
   const markUnread = async () => {
     if (_activeItem) {
       await markAsUnseen(inViewObject.taskId, false, "byTaskId");
@@ -264,8 +258,6 @@ export function createGeneralCommandActions(context: Context) {
   const createColumn = async (title: string, ranking: string | undefined) => {
     if (!_currentProject) return;
 
-    // HTPR-5527: axios rejects on 4xx/5xx, so an unguarded call left the dialog
-    // open forever with no message when the create failed.
     let response;
     try {
       response = createSectionWriter ? await createSectionWriter({
@@ -310,10 +302,6 @@ export function createGeneralCommandActions(context: Context) {
         const { projectToUpdateIndex } = getProjectIdxAndAllData(
           _currentProject?.id
         );
-        // HTPR-5542: pass the created section, not just the refreshed view. A
-        // board that has never saved a view has no Project_View row, so the
-        // route answers project_view: null and a view-only update was skipped —
-        // the column existed in the database but never reached the board.
         createdSectionForReveal = Number.isSafeInteger(createdSection?.id)
           ? { ...createdSection, items: [] }
           : undefined;
@@ -364,7 +352,6 @@ export function createGeneralCommandActions(context: Context) {
     boardCloseHandler();
   };
 
-  //  ----------------------------INVITE NEW MEMBER
   const inviteNewMemberHandlerLocal = async (emails: string[]) => {
     if (!_currentProject) return;
     await inviteNewMembersToBoard(emails, _currentProject, currentUser);

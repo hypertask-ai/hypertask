@@ -5,7 +5,6 @@ import axios from "axios";
 import { stableClientRect } from "../../suggestionAnchor";
 import { mentionCommand } from "../../mentionCommand";
 
-// Function that accepts contextCallback and returns the suggestion configuration
 const createMentionData = (contextCallback, getProjectId) => ({
   command: mentionCommand,
   items: async ({ query }) => {
@@ -75,7 +74,7 @@ const createMentionData = (contextCallback, getProjectId) => ({
       onKeyDown(props) {
         if (props.event.key === "Escape") {
           popup[0]?.hide();
-          return true; // Return true to indicate the event was handled
+          return true;
         }
 
         return component?.ref?.onKeyDown(props);
@@ -93,8 +92,6 @@ const createMentionData = (contextCallback, getProjectId) => ({
   },
 });
 
-// Export the function
 export { createMentionData };
 
-// Default export for backwards compatibility (without callback)
 export default createMentionData(null);

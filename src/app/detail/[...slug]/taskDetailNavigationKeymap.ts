@@ -10,9 +10,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
   const { lastGPress, navigate, updateActiveItemAndItemInView, currentTask, toggleEstimateModal, undoData, undoHandler, setArchiveNudge, currentUser, markAsDone, goToProjectShortcut, _parsedTask, toggleLabelModal, aHandler, setShowCommands, toggleDeleteModal, searchParams, navigateToNextTask, returnCurrentFocusedType, focusOn, setEditMode, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL, copyTitleAndTicketNumber, copyTicketNumber, navigateToPreviousTask, handleStarTask, PostFollower, UnFollowCallback, taskTimer } = context;
   return [
 
-
-    // [s] for size/estimate && ([g] then [s] Starred tasks & comments)
-
     {
       action: "estimate",
       matches: () => e.keyCode === KeyCodes.S && !e.shiftKey && !e.altKey && !cmdControl,
@@ -26,21 +23,14 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // [Z] FOR UNDO
-
     {
       action: "undo",
       matches: () => e.keyCode === KeyCodes.Z && undoData.length > 0,
       run: () => {
-      // undoHandler(actualUndo[0])
       const firstUndoData = undoData[undoData.length - 1];
       return { stop: true, value: undoHandler(firstUndoData, firstUndoData.toastId) };
     },
     },
-
-
-    // [ctrl]/[cmd] + [e]
 
     {
       action: "archive",
@@ -56,10 +46,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       }
     },
     },
-
-
-    // ========== [g] then  [t]
-
 
     {
       action: "projectOrLabel",
@@ -78,7 +64,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-    // [a] for assign && ([g] then [a] All Tasks)
 
     {
       action: "assign",
@@ -91,9 +76,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       }
     },
     },
-
-
-    // [shift][b] for blocked by person (plain B is Log time)
 
     {
       action: "blockedBy",
@@ -112,9 +94,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // [shift][#/3] delete task modal
-
     {
       action: "deleteTask",
       matches: () => e.keyCode === KeyCodes.THREE && e.shiftKey && !e.ctrlKey && !e.metaKey,
@@ -122,9 +101,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       toggleDeleteModal();
     },
     },
-
-
-    // press [e]
 
     {
       action: "nextAfterArchive",
@@ -146,9 +122,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // press [j]
-
     {
       action: "nextTask",
       matches: () => e.keyCode === KeyCodes.J && !cmdControl,
@@ -157,9 +130,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       return { stop: true, value: navigateToNextTask(false, true, undefined, undefined, inboxFlow) };
     },
     },
-
-
-    // press [cmd/ctrl][j]
 
     {
       action: "aiWriter",
@@ -177,7 +147,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-    //[cmdControl][shift][,]
 
     {
       action: "copyUrl",
@@ -191,7 +160,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-    //[cmdControl][,]
 
     {
       action: "copyFormattedUrl",
@@ -210,9 +178,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    //[cmdControl][shift][.]
-
     {
       action: "copySharedUrl",
       matches: () => e.keyCode === KeyCodes.PERIOD && cmdControl && e.shiftKey,
@@ -221,9 +186,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       return { stop: true, value: copySharedTaskURL(sharedLink.id) };
     },
     },
-
-
-    //[cmdControl][.]
 
     {
       action: "copySharedFormattedUrl",
@@ -238,9 +200,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    //[cmdControl][I]
-
     {
       action: "copyTitle",
       matches: () => e.keyCode === KeyCodes.I && cmdControl && !e.shiftKey,
@@ -253,9 +212,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    //[cmdControl][shift][i]
-
     {
       action: "copyTicket",
       matches: () => e.keyCode === KeyCodes.I && cmdControl && e.shiftKey,
@@ -264,9 +220,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       return { stop: true, value: copyTicketNumber(currentTask?.ticketNumber!) };
     },
     },
-
-
-    // press [k]
 
     {
       action: "previousTask",
@@ -291,9 +244,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // [alt][s]
-
     {
       action: "star",
       matches: () => e.keyCode === KeyCodes.S && e.altKey && !e.shiftKey,
@@ -302,9 +252,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       return { stop: true, value: handleStarTask() };
     },
     },
-
-
-    // [f]
 
     {
       action: "follow",
@@ -315,9 +262,6 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // [alt][f]
-
     {
       action: "unfollow",
       matches: () => e.keyCode === KeyCodes.F && e.altKey && !e.shiftKey,
@@ -327,15 +271,11 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
     },
     },
 
-
-    // [alt][t] — start/stop the timer for this task
-
     {
       action: "timer",
       matches: () => e.keyCode === KeyCodes.T && e.altKey && !e.shiftKey,
       run: () => {
       e.preventDefault();
-      // Only when time tracking is on for this board (or a timer is already running).
       if (taskTimer.data?.enabled === false && !taskTimer.data?.runningEntry) return { stop: true };
       taskTimer
         .toggle()
