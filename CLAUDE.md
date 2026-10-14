@@ -17,7 +17,7 @@ Live QA fails on flagged code: get the flag switched Off first (HT Product Lead)
 | `AGENTS.md` "Repository Workflow"; `.claude/reference/workflow.md`; `.claude/skills/clean-up/SKILL.md` | Before branching, committing, opening or merging a PR, deploying or removing your worktree |
 | `AGENTS.md` "Feature flags for new user-facing behavior"; `.claude/reference/flags.md`; `.claude/skills/verify-qa/SKILL.md` | Any bugfix, new behavior, flagged-code change, premerge check or failed live QA |
 | `.claude/reference/previews.md`; `AGENTS.md` "Repository Workflow" | Any preview creation, use, polling or preview login |
-| `.claude/reference/ci.md`; `AGENTS.md` "CI contract", "CLI and MCP repositories"; `docs/ci-policy.yml`; https://hypertask.app/wiki/deployment | Any workflow, runner, ruleset, required check, preview or CLI/MCP change |
+| `.claude/reference/ci.md`; `AGENTS.md` "CI contract", "CLI and MCP repositories"; `docs/ci.md`; `docs/ci-policy.yml` | Any workflow, runner, ruleset, required check, preview or CLI/MCP change |
 | `AGENTS.md` "AI models" | Changing an app AI model or saved model choices |
 | `.claude/skills/INDEX.md`; `.claude/skills/verify-on-phone/SKILL.md`; `.claude/skills/verify-qa/SKILL.md`; `.claude/skills/reuse-existing-ui/SKILL.md` | Selecting a ticket workflow, checking UI reuse or proving desktop, phone and live behavior |
-| `openwiki/`; https://hypertask.app/wiki | Technical reference: architecture, auth, routing-and-controllers, queues, realtime and hypertask-cli; not session rules |
+| `src/app/`, `src/pages/api/`, `src/utils/controllers/`, `src/lib/auth/`, `src/pages/api/queues/`, `src/lib/realtime/`; `docs/` | How the app is built: routes, controllers, auth, queues, realtime; not session rules |

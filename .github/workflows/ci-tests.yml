@@ -149,7 +149,7 @@ jobs:
           echo "$CHANGED"
           # A change to this gate itself (or the CI scripts) always runs the
           # full pipeline once, so the edited workflow is exercised end to end.
-          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|openwiki/|docs/|\.claude/|\.github/)' \
+          if echo "$CHANGED" | grep -qvE '^(scripts/self_hosted_agent/|docs/|\.claude/|\.github/)' \
             || echo "$CHANGED" | grep -qE '^\.github/(workflows/ci-tests\.yml|scripts/)'; then
             echo "build_needed=true" >> "$GITHUB_OUTPUT"
           else

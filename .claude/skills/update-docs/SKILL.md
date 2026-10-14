@@ -5,7 +5,7 @@ description: Any ticket that changes what a user sees or how a feature works, be
 
 # update-docs
 
-Public product docs live in a **separate repo from the app**: `~/projects/HypertaskDocs` (remote `hypertask-ai/docs`), built with Astro Starlight and published at `https://docs.hypertask.ai`. They are not the same thing as `openwiki/` inside `~/projects/hypertasks` — that is the internal engineering wiki for agents working the codebase, covered by the separate `openwiki-refresh` skill. This skill is about the pages a Hypertask user reads.
+Public product docs live in a **separate repo from the app**: `~/projects/HypertaskDocs` (remote `hypertask-ai/docs`), built with Astro Starlight and published at `https://docs.hypertask.ai`. Internal engineering references live with the code in `docs/` and `.claude/skills/`. This skill is about the pages a Hypertask user reads.
 
 This skill absorbs the standing job of the retired "Hypertask Docs" board agent. Its rules below come from that repo's own `CLAUDE.md`, carried over verbatim rather than paraphrased.
 

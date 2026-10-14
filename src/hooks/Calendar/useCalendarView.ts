@@ -219,7 +219,7 @@ function useCalendarState({
   // Serializes currentDate (the anchor that decides what is displayed;
   // currentDay can sit in an adjacent month's filler cells). replaceState
   // only: a Next router navigation here would re-render the app and can
-  // cancel in-flight navigation (see openwiki on router.refresh).
+  // cancel in-flight navigation.
   useEffect(() => {
     if (urlStateAppliedRef.current) {
       urlStateAppliedRef.current = false;

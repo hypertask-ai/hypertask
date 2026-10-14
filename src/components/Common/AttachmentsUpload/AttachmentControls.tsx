@@ -156,7 +156,7 @@ export const MobileBottomBar: React.FC<IMobileBottomBar> = ({
           dictationCoordinator={dictationCoordinator}
           ariaLabel="Dictate description"
           mobilePresentation="prominent"
-          // Canonical exception: openwiki/style-guide.md approves the white buttons for
+          // Canonical exception: .claude/skills/reuse-existing-ui/reference/style-guide.md approves the white buttons for
           // https://app.hypertask.ai/detail/project-15/5995.
           mobilePrimaryTone="default"
           className={isDictating ? undefined : MOBILE_TARGET}

@@ -356,7 +356,7 @@ const actorFields = {
 }
 
 // Returned by GET /api/mcp/webhooks so clients can discover the payload
-// contract without consulting server source. OpenWiki carries full examples.
+// contract without consulting server source.
 export const WEBHOOK_EVENT_DEFINITIONS = {
   'comment.created': {
     description: 'A comment was added to a task.',
