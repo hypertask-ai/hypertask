@@ -6,7 +6,7 @@
   },
   {
     "id": "aborted-client",
-    "match": "(?:AbortError|client (?:request )?abort(?:ed)?|request aborted|(?:client|request)[^\\n]*(?:ECONNRESET|socket hang up))",
+    "match": "(?:AbortError|client (?:request )?abort(?:ed)?|request aborted|\\bclient (?:request|closed|disconnected)\\b[^\\n]*(?:ECONNRESET|socket hang up))",
     "reason": "Clients disconnecting before their response completes"
   },
   {

@@ -154,14 +154,12 @@ check('sources', 'fixture filters boundaries, groups counts/times/routes and rep
   assert.equal(h.state().days['2026-10-14'].web.errors, 5);
 }));
 
-check('sources', 'invalid event/source and conflicting boards fail without advancing', () => withHarness(async h => {
+check('sources', 'invalid event/source fail without advancing', () => withHarness(async h => {
   for (const item of [event({ board: 99 }), event({ count: 0 }), event({ count: 1.5 }), event({ ts: 'invalid' }), event({ service: '__proto__' }), event({ route: {} })]) {
     assert.equal(await h.run({ sources: [{ name: 'invalid', fetch: async () => [item] }] }), 1);
     assert.equal(existsSync(h.statePath), false);
   }
   assert.equal(await h.run({ sources: [{ name: 'invalid', fetch: async () => ({}) }] }), 1);
-  h.events([event(), event({ board: 4060 })]);
-  assert.equal(await h.run(), 1);
   assert.equal(h.cli('--sources', '../bad').status, 1);
   assert.equal(h.cli('--sources', 'fixture,fixture').status, 1);
   assert.equal((await loadSources())[0].name, 'vercel');
@@ -361,12 +359,12 @@ check('reporting', 'noise counted per service and day, no tickets; daily summary
   assert.equal(activities(h, 'YPER4-354').length, 0);
   // The summary covers the last full UTC day, so 2026-10-14 is reported on the 15th.
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
-  assert.ok(activities(h).some(c => c.args[3] === 'web: 2 errors (yesterday 0), 1 new kinds, 7 noise'));
+  assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-14: 2 errors (2026-10-13: 0), 1 new kinds, 7 noise'));
   const posted = activities(h, 'YPER4-354').length;
   await h.run({ now: NOW + DAY + 2 * HOUR }); await h.run({ now: NOW + DAY + 2 * HOUR, summary: true });
   assert.equal(activities(h, 'YPER4-354').length, posted);
   await h.run({ now: NOW + 2 * DAY + 2 * HOUR });
-  assert.ok(activities(h).some(c => c.args[3] === 'web: 0 errors (yesterday 2), 0 new kinds, 0 noise'));
+  assert.ok(activities(h).some(c => c.args[3] === 'web on 2026-10-15: 0 errors (2026-10-14: 2), 0 new kinds, 0 noise'));
 }));
 
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
@@ -391,7 +389,7 @@ check('reporting', 'spike threshold, delivery target/id and fallback log; counts
   });
   await withHarness(async h => {
     rmSync(join(h.home, 'bin/runner-deliver')); h.events([event({ count: 50, ts: new Date(NOW + 1000).toISOString() })]); await h.run({ now: NOW + DAY, summary: true });
-    const path = join(dirname(h.statePath), 'spikes.log'); assert.match(readFileSync(path, 'utf8'), /SPIKE.*web: 50 errors/); assert.equal(statSync(path).mode & 0o777, 0o600);
+    const path = join(dirname(h.statePath), 'spikes.log'); assert.match(readFileSync(path, 'utf8'), /SPIKE.*web on 2026-10-14: 50 errors/); assert.equal(statSync(path).mode & 0o777, 0o600);
   });
 });
 
@@ -459,8 +457,41 @@ check('reporting', 'R5: quiet successful sources have zero-error daily coverage'
   assert.deepEqual(h.state().days['2026-10-13'].quiet, { errors: 0, noise: 0, newGroups: 0 });
   assert.deepEqual(h.state().days['2026-10-14'].quiet, { errors: 0, noise: 0, newGroups: 0 });
   await h.run({ sources: [quiet], now: NOW + 2 * HOUR });
-  assert.ok(activities(h).some(call => call.args[3] === 'quiet: 0 errors (yesterday 0), 0 new kinds, 0 noise'));
+  assert.ok(activities(h).some(call => call.args[3] === 'quiet on 2026-10-13: 0 errors (2026-10-12: 0), 0 new kinds, 0 noise'));
   assert.ok(!Object.values(h.state().days).some(counts => counts.broken));
+}));
+
+check('review', 'one error on a product route and an infra route keeps its first board and the source keeps reading', () => withHarness(async h => {
+  h.events([event({ route: '/mcp' }), event({ route: '/sse', board: 4060 })]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(creates(h)[0].args[4], '15');
+  h.events([event({ route: '/sse', board: 4060, ts: new Date(NOW + 1000).toISOString() })]);
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.values(h.state().fingerprints)[0].total, 3);
+}));
+
+check('review', 'upstream and Prisma connection resets are errors, client disconnects stay noise', () => withHarness(async h => {
+  h.events([event({ message: 'PrismaClientKnownRequestError: ECONNRESET' }), event({ message: 'upstream request ECONNRESET' }), event({ message: 'client closed request ECONNRESET' })]);
+  await h.run();
+  assert.equal(h.state().days['2026-10-14'].web.errors, 2);
+  assert.equal(h.state().days['2026-10-14'].web.noise, 1);
+}));
+
+check('review', 'a day is summarised only after its source read past the day end, and a dead source is reported as missing', () => withHarness(async h => {
+  const ok = { name: 'ok', fetch: async () => [] };
+  let fail = false;
+  const flaky = { name: 'flaky', fetch: async () => { if (fail) throw new Error('down'); return [{ ...event({ service: 'flaky', ts: new Date(NOW - HOUR).toISOString() }) }]; } };
+  await h.run({ sources: [ok, flaky] });
+  fail = true;
+  await h.run({ sources: [ok, flaky], now: NOW + DAY, summary: true });
+  const lines = () => activities(h, 'YPER4-354').map(call => call.args[3]);
+  assert.ok(lines().some(line => line.startsWith('ok on 2026-10-14:')));
+  assert.ok(!lines().some(line => line.startsWith('flaky on 2026-10-14')));
+  await h.run({ sources: [ok, flaky], now: NOW + 3 * DAY, summary: true });
+  assert.ok(lines().some(line => line === 'flaky on 2026-10-14: no complete data, the source kept failing (partial count 1)'));
+  assert.ok(!h.calls().some(call => call.name === 'runner-deliver'));
 }));
 
 check('tickets', 'R8: known fingerprints persist routes and report bounded new routes after throttle', () => withHarness(async h => {
@@ -491,7 +522,7 @@ check('reporting', 'R9: retained unsent summaries retry oldest first in three-da
   assert.deepEqual(h.state().summaries, {});
   h.config({}); await h.run({ now: NOW + DAY, summary: true });
   assert.deepEqual(Object.keys(h.state().summaries), dates.slice(0, 3));
-  const lines = activities(h).filter(call => call.args[3].startsWith('web:')).slice(-3).map(call => call.args[3]);
+  const lines = activities(h).filter(call => call.args[3].startsWith('web on ')).slice(-3).map(call => call.args[3]);
   assert.deepEqual(lines.map(line => Number(line.match(/(\d+) new kinds/)[1])), [1, 2, 3]);
   assert.equal(h.calls().find(call => call.name === 'runner-deliver').id, 'error-collector:2026-10-10:web');
   await h.run({ now: NOW + DAY + 1000, summary: true });
@@ -537,7 +568,7 @@ check('reporting', 'summary-only events are counted but never searched, ticketed
   assert.equal(h.state().days['2026-10-14'].posthog.errors, 9);
   assert.equal(h.state().days['2026-10-14'].posthog.newGroups, 0);
   h.events([]); await h.run({ now: NOW + DAY, summary: true });
-  assert.ok(activities(h).some(call => call.args[3] === 'posthog: 9 errors (yesterday 0), 0 new kinds, 0 noise'));
+  assert.ok(activities(h).some(call => call.args[3] === 'posthog on 2026-10-14: 9 errors (2026-10-13: 0), 0 new kinds, 0 noise'));
 }));
 
 after(() => {

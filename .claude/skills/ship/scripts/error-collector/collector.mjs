@@ -178,14 +178,14 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
       const fetched = await source.fetch({ since, until, env });
       if (!Array.isArray(fetched)) throw new Error('invalid source response');
       const events = fetched.map(validate).filter(event => event.ts > since && event.ts <= until);
-      // Routing must stay stable for a fingerprint, whose specified hash excludes board.
+      // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
       const boards = new Map([...groups].map(([fp, group]) => [fp, group.board]));
       for (const event of events) {
         if (event.ticket === false) continue;
         const fp = fingerprint(event.service, event.message, event.route);
         const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? boards.get(fp);
-        if (board != null && board !== event.board) throw new Error('conflicting board routing');
-        boards.set(fp, event.board);
+        if (board == null) boards.set(fp, event.board);
+        else event.board = board;
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
@@ -289,17 +289,24 @@ export async function collect({ env = process.env, now = Date.now(), sources, dr
   // Retry retained completed days, oldest first; partial days cannot reveal a full-day spike.
   if (summary || new Date(now).getUTCHours() >= 6) {
     const services = new Set(Object.values(state.days).flatMap(counts => Object.keys(counts)));
-    const dates = Object.keys(state.days).filter(date => date < day(now) && [...services].some(service => !state.summaries[date]?.[service])).sort().slice(0, 3);
+    // A day is final for a service once its source has read past that day's end. A source still
+    // failing two days later is reported as missing data rather than holding the summary forever.
+    const dayEnd = date => Date.parse(`${date}T00:00:00Z`) + DAY;
+    const covered = (date, service) => !(Date.parse(state.sources[service]) < dayEnd(date));
+    const due = (date, service) => !state.summaries[date]?.[service] && (covered(date, service) || now - dayEnd(date) >= 2 * DAY);
+    const dates = Object.keys(state.days).filter(date => date < day(now) && [...services].some(service => due(date, service))).sort().slice(0, 3);
     for (const date of dates) {
       const previousDate = day(Date.parse(`${date}T00:00:00Z`) - DAY);
       for (const service of services) {
-        if (state.summaries[date]?.[service]) continue;
+        if (!due(date, service)) continue;
         const counts = stats(date, service);
         const previous = state.days[previousDate]?.[service]?.errors ?? 0;
-        const text = `${service}: ${counts.errors} errors (yesterday ${previous}), ${counts.newGroups} new kinds, ${counts.noise} noise`;
+        const text = covered(date, service)
+          ? `${service} on ${date}: ${counts.errors} errors (${previousDate}: ${previous}), ${counts.newGroups} new kinds, ${counts.noise} noise`
+          : `${service} on ${date}: no complete data, the source kept failing (partial count ${counts.errors})`;
         try {
           write('vcc', ['activity', 'add', CONTROL, text]);
-          if (counts.errors > 3 * previous && counts.errors >= 50) {
+          if (covered(date, service) && counts.errors > 3 * previous && counts.errors >= 50) {
             const spike = `SPIKE ${date} ${text}`;
             try { write('runner-deliver', ['ht-product-lead'], `${spike}\n`, { RUNNER_DELIVER_ID: `error-collector:${date}:${service}` }); }
             catch {
