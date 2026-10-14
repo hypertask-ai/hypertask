@@ -10,6 +10,7 @@ import * as github from './sources/github-actions.mjs';
 import * as journal from './sources/vps-journal.mjs';
 import * as workers from './sources/cloudflare-workers.mjs';
 import * as posthog from './sources/posthog.mjs';
+import * as neon from './sources/neon.mjs';
 
 const since = '2026-10-13T08:29:03.000Z';
 const until = '2026-10-14T08:29:03.000Z';
@@ -40,7 +41,7 @@ function fakeCommand(name, source) {
 globalThis.fetch = async () => { throw new Error('NETWORK FORBIDDEN'); };
 
 test('default sources are explicit and fixture stays opt-in', async () => {
-  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog']);
+  assert.deepEqual((await loadSources()).map(source => source.name), ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon']);
 });
 
 test('recorded Vercel structured messages lose metadata, preserve error details and request path', () => {
@@ -281,4 +282,138 @@ test('R10: Cloudflare analytics split at midnight and preserve each UTC day', as
   const midnight = await workers.fetch({ ...context, until: '2026-10-14T00:00:00.000Z' });
   assert.equal(midnight[0].ts.slice(0, 10), '2026-10-13');
   assert.ok(midnight[0].ts > since && midnight[0].ts <= until);
+});
+
+const neonURL = ['postgresql://stats_reader', 'fixture-password@ep-fixture.neon.invalid/stats?sslmode=require'].join(':');
+const neonFile = join(home, '.local/state/error-collector/neon-stats.url');
+mkdirSync(join(home, '.local/state/error-collector'), { recursive: true });
+writeFileSync(neonFile, `${neonURL}\n`, { mode: 0o600 });
+
+function neonHTTP({ slow = fixtures.neon.slow, counters = fixtures.neon.counters } = {}) {
+  return mockHTTP([[200, structuredClone(slow)], [200, structuredClone(counters)]]);
+}
+
+test('Neon bounded HTTPS function reads, thresholds, stable query message and grouping despite changing metrics', async () => {
+  const calls = neonHTTP();
+  const first = await neon.fetch(context);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].url, 'https://ep-fixture.neon.invalid/sql');
+  assert.equal(calls[0].method, 'POST');
+  assert.equal(calls[0].redirect, 'error');
+  assert.equal(calls[0].headers['Neon-Connection-String'], neonURL);
+  assert.equal(calls[0].headers['Content-Type'], 'application/json');
+  assert.ok(calls[0].signal instanceof AbortSignal);
+  assert.deepEqual(calls[0].body, { query: 'SELECT * FROM ops_stats.slow_queries($1::double precision, $2::integer)', params: [1000, 50] });
+  assert.deepEqual(calls[1].body, { query: 'SELECT * FROM ops_stats.db_counters()', params: [] });
+  assert.equal(first.events.length, 1);
+  const event = first.events[0];
+  assert.equal(event.message, 'slow query: SELECT id FROM sample_tasks WHERE id = $1');
+  assert.equal(event.service, 'neon');
+  assert.equal(event.board, 4060);
+  assert.equal(event.ts, until);
+  assert.equal(event.count, 1);
+  assert.match(event.stack, /calls: 9007199254740993\nmean_ms: 1600\nmax_ms: 4200\ntotal_ms: 16000/);
+  const slow = structuredClone(fixtures.neon.slow);
+  Object.assign(slow.rows[0], { calls: '9007199254740994', mean_ms: 1800, max_ms: 5000, total_ms: 20000, query: 'SELECT  id\nFROM sample_tasks WHERE id = $1' });
+  neonHTTP({ slow });
+  const second = await neon.fetch(context);
+  assert.equal(second.events[0].message, event.message);
+  assert.equal(fingerprint('neon', second.events[0].message), fingerprint('neon', event.message));
+  assert.notEqual(second.events[0].stack, event.stack);
+  const higher = neonHTTP();
+  assert.deepEqual((await neon.fetch({ ...context, env: { ...env, NEON_SLOW_QUERY_MS: '1601' } })).events, []);
+  assert.equal(higher[0].body.params[0], 1601);
+  neonHTTP();
+  assert.equal((await neon.fetch({ ...context, env: { ...env, NEON_SLOW_QUERY_MS: '1600' } })).events.length, 1);
+  neonHTTP();
+  assert.equal((await neon.fetch({ ...context, env: { ...env, HOME: '/missing', NEON_STATS_URL_FILE: neonFile } })).events.length, 1);
+});
+
+test('Neon missing/unreadable login, HTTP, network and malformed response failures never expose credentials', async () => {
+  const safeFailure = error => {
+    assert.equal(error.message, 'Neon statistics read failed');
+    assert.ok(!String(error.stack).includes(neonURL));
+    assert.ok(!String(error.stack).includes('fixture-password'));
+    return true;
+  };
+  const calls = mockHTTP([]);
+  for (const path of [join(home, 'absent.url'), home]) {
+    await assert.rejects(neon.fetch({ ...context, env: { ...env, NEON_STATS_URL_FILE: path } }), safeFailure);
+  }
+  assert.equal(calls.length, 0);
+  for (const status of [302, 401, 429, 500]) {
+    const denied = mockHTTP([[status, { error: neonURL }]]);
+    await assert.rejects(neon.fetch(context), safeFailure);
+    assert.equal(denied.length, 1);
+  }
+  globalThis.fetch = async () => { throw new Error(neonURL); };
+  await assert.rejects(neon.fetch(context), safeFailure);
+  globalThis.fetch = async () => ({ status: 200, json: async () => { throw new Error(neonURL); } });
+  await assert.rejects(neon.fetch(context), safeFailure);
+  for (const slow of [{}, { rows: [{}] }, { rows: Array(51).fill(fixtures.neon.slow.rows[0]) }]) {
+    mockHTTP([[200, slow]]);
+    await assert.rejects(neon.fetch(context), safeFailure);
+  }
+  for (const counters of [{ rows: [] }, { rows: [{ ...fixtures.neon.counters.rows[0], deadlocks: '-1' }] }, { rows: [{ ...fixtures.neon.counters.rows[0], read_at: 'invalid' }] }]) {
+    neonHTTP({ counters });
+    await assert.rejects(neon.fetch(context), safeFailure);
+  }
+  for (const config of [{ NEON_SLOW_QUERY_MS: 'invalid' }, { NEON_SLOW_QUERY_MS: '-1' }, { NEON_ROLLBACK_ALERT: '1.5' }, { NEON_ROLLBACK_ALERT: '-1' }]) {
+    const unused = mockHTTP([]);
+    await assert.rejects(neon.fetch({ ...context, env: { ...env, ...config } }), safeFailure);
+    assert.equal(unused.length, 0);
+  }
+});
+
+test('Neon first reading is a baseline; exact bigint deltas and rollback threshold produce stable messages', async () => {
+  neonHTTP({ slow: { rows: [] } });
+  const first = await neon.fetch(context);
+  assert.deepEqual(first.events, []);
+  assert.equal(first.cursor.xact_commit, '9007199254740993');
+  assert.equal(first.cursor.stats_reset, '2026-10-13T00:00:00.000Z');
+  const counters = structuredClone(fixtures.neon.counters);
+  Object.assign(counters.rows[0], { xact_rollback: '600', deadlocks: '4', conflicts: '6', read_at: '2026-10-14T08:44:03Z' });
+  neonHTTP({ slow: { rows: [] }, counters });
+  const second = await neon.fetch({ ...context, cursor: first.cursor });
+  assert.deepEqual(second.events.map(event => [event.message, event.count]), [['database deadlocks increased', 2], ['database conflicts increased', 3]]);
+  assert.ok(second.events.every(event => event.service === 'neon' && event.board === 4060 && event.ts === until));
+  assert.match(second.events[0].stack, /delta: 2/);
+  counters.rows[0].xact_rollback = '601';
+  neonHTTP({ slow: { rows: [] }, counters });
+  const third = await neon.fetch({ ...context, cursor: first.cursor });
+  assert.equal(third.events.at(-1).message, 'database xact_rollback increased');
+  assert.equal(third.events.at(-1).count, 501);
+  neonHTTP({ slow: { rows: [] }, counters });
+  assert.deepEqual((await neon.fetch({ ...context, cursor: third.cursor })).events, []);
+  neonHTTP({ slow: { rows: [] }, counters });
+  assert.equal((await neon.fetch({ ...context, cursor: first.cursor, env: { ...env, NEON_ROLLBACK_ALERT: '501' } })).events.length, 2);
+  counters.rows[0].xact_rollback = '101';
+  neonHTTP({ slow: { rows: [] }, counters });
+  assert.equal((await neon.fetch({ ...context, cursor: first.cursor, env: { ...env, NEON_ROLLBACK_ALERT: '0' } })).events.at(-1).count, 1);
+  // Precision is retained even when the cumulative value is above Number.MAX_SAFE_INTEGER.
+  const huge = { ...first.cursor, deadlocks: '9007199254740993' };
+  counters.rows[0].deadlocks = '9007199254740994';
+  neonHTTP({ slow: { rows: [] }, counters });
+  assert.equal((await neon.fetch({ ...context, cursor: huge })).events[0].count, 1);
+});
+
+test('Neon changed stats_reset or any decreasing counter establishes a fresh baseline without alerts', async () => {
+  neonHTTP({ slow: { rows: [] } });
+  const { cursor } = await neon.fetch(context);
+  for (const change of [{ stats_reset: '2026-10-14T00:00:00Z' }, { deadlocks: '1' }, { xact_commit: '1' }, { temp_bytes: '0' }]) {
+    const counters = structuredClone(fixtures.neon.counters);
+    Object.assign(counters.rows[0], { conflicts: '100', xact_rollback: '10000' }, change);
+    neonHTTP({ slow: { rows: [] }, counters });
+    const reset = await neon.fetch({ ...context, cursor });
+    assert.deepEqual(reset.events, []);
+    assert.equal(reset.cursor.xact_rollback, '10000');
+  }
+  const counters = structuredClone(fixtures.neon.counters);
+  counters.rows[0].stats_reset = null;
+  neonHTTP({ slow: { rows: [] }, counters });
+  const baseline = await neon.fetch(context);
+  assert.equal(baseline.cursor.stats_reset, null);
+  counters.rows[0].deadlocks = '3';
+  neonHTTP({ slow: { rows: [] }, counters });
+  assert.equal((await neon.fetch({ ...context, cursor: baseline.cursor })).events[0].count, 1);
 });

@@ -802,3 +802,76 @@ after(() => {
   assert.equal(failed, 0);
   console.log(suite === 'all' ? 'ERROR COLLECTOR TESTS PASSED' : `${suite.toUpperCase()} PASS`);
 });
+
+check('sources', 'optional source cursor persists with its timestamp, survives restart and cannot be mutated on failure', () => withHarness(async h => {
+  const contexts = [];
+  const source = { name: 'stateful', fetch: async context => { contexts.push(context); return { events: [], cursor: { counter: String(contexts.length) } }; } };
+  await h.run({ sources: [source] });
+  assert.equal(contexts[0].cursor, undefined);
+  assert.deepEqual(h.state().sourceCursors.stateful, { counter: '1' });
+  assert.equal(h.state().sources.stateful, new Date(NOW).toISOString());
+  await h.run({ now: NOW + 1000, sources: [source] });
+  assert.deepEqual(contexts[1].cursor, { counter: '1' });
+  assert.equal(contexts[1].since, new Date(NOW).toISOString());
+  const before = readFileSync(h.statePath);
+  for (const fetch of [
+    async ({ cursor }) => { cursor.counter = 'changed'; throw new Error('unavailable'); },
+    async () => ({ events: [event({ count: 0 })], cursor: { counter: 'changed' } }),
+    async () => ({ events: [], cursor: 'x'.repeat(4097) }),
+    async () => ({ events: [] }),
+    async () => ({ events: [], cursor: 1n }),
+  ]) {
+    assert.equal(await h.run({ now: NOW + 2000, sources: [{ name: 'stateful', fetch }] }), 1);
+    assert.deepEqual(readFileSync(h.statePath), before);
+  }
+  await h.run({ now: NOW + 3000, sources: [{ name: 'stateful', fetch: async ({ cursor }) => { cursor.counter = 'changed'; throw new Error('unavailable'); } }, { name: 'other', fetch: async () => [] }] });
+  assert.deepEqual(h.state().sourceCursors.stateful, { counter: '2' });
+  assert.equal(h.state().sources.stateful, new Date(NOW + 1000).toISOString());
+  assert.equal(h.state().sources.other, new Date(NOW + 3000).toISOString());
+}));
+
+check('sources', 'Neon collector advances snapshots atomically, failures leave both cursors unchanged and dry-run writes nothing', () => withHarness(async h => {
+  const neon = await import('./sources/neon.mjs');
+  const data = JSON.parse(readFileSync(join(HERE, 'fixtures/sources.json'))).neon;
+  const connection = ['postgresql://stats_reader', 'fixture-password@ep-fixture.neon.invalid/stats'].join(':');
+  h.env.NEON_STATS_URL_FILE = join(h.home, 'neon.url');
+  writeFileSync(h.env.NEON_STATS_URL_FILE, connection, { mode: 0o600 });
+  const original = globalThis.fetch;
+  let readings = structuredClone(data.counters);
+  let counterStatus = 200;
+  globalThis.fetch = async (url, options) => ({ status: JSON.parse(options.body).query.includes('db_counters') ? counterStatus : 200, json: async () => JSON.parse(options.body).query.includes('db_counters') ? readings : data.slow });
+  try {
+    assert.equal(await h.run({ sources: [neon] }), 0);
+    const baseline = h.state();
+    assert.equal(baseline.sources.neon, new Date(NOW).toISOString());
+    assert.equal(baseline.sourceCursors.neon.deadlocks, '2');
+    assert.equal(creates(h).length, 1);
+    const before = readFileSync(h.statePath);
+    counterStatus = 500;
+    assert.equal(await h.run({ now: NOW + HOUR, sources: [neon] }), 1);
+    assert.deepEqual(readFileSync(h.statePath), before);
+    for (const path of [join(h.home, 'missing.url'), h.home]) {
+      assert.equal(await h.run({ now: NOW + HOUR, sources: [neon], env: { ...h.env, NEON_STATS_URL_FILE: path } }), 1);
+      assert.deepEqual(readFileSync(h.statePath), before);
+    }
+    counterStatus = 200;
+    Object.assign(readings.rows[0], { deadlocks: '4', xact_rollback: '601', read_at: '2026-10-14T09:29:03Z' });
+    const filesBefore = readdirSync(dirname(h.statePath));
+    const writesBefore = h.calls().filter(call => call.name !== 'ht').length;
+    assert.equal(await h.run({ now: NOW + HOUR, sources: [neon], dryRun: true }), 0);
+    assert.deepEqual(readFileSync(h.statePath), before);
+    assert.deepEqual(readdirSync(dirname(h.statePath)), filesBefore);
+    assert.equal(h.calls().filter(call => call.name !== 'ht').length, writesBefore);
+    const freshRoot = join(h.home, 'fresh-neon-dry-run');
+    assert.equal(await h.run({ sources: [neon], dryRun: true, env: { ...h.env, ERROR_COLLECTOR_STATE_DIR: freshRoot } }), 0);
+    assert.equal(existsSync(freshRoot), false);
+    assert.equal(await h.run({ now: NOW + HOUR, sources: [neon] }), 0);
+    assert.equal(h.state().sources.neon, new Date(NOW + HOUR).toISOString());
+    assert.equal(h.state().sourceCursors.neon.deadlocks, '4');
+    assert.equal(h.state().sourceCursors.neon.xact_rollback, '601');
+    assert.equal(creates(h).length, 3);
+    assert.ok(!readFileSync(h.statePath, 'utf8').includes(connection));
+    assert.ok(!readFileSync(h.statePath, 'utf8').includes('fixture-password'));
+    assert.equal(Object.values(h.state().fingerprints).find(record => record.total === 2).board, 4060);
+  } finally { globalThis.fetch = original; }
+}));

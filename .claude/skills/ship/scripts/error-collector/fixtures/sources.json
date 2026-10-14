@@ -134,5 +134,35 @@
       ]
     ],
     "hasMore": false
+  },
+  "neon": {
+    "slow": {
+      "rows": [
+        {
+          "queryid": "-9223372036854775807",
+          "calls": "9007199254740993",
+          "total_ms": 16000,
+          "mean_ms": 1600,
+          "max_ms": 4200,
+          "rows_returned": "20",
+          "query": "SELECT id FROM sample_tasks WHERE id = $1",
+          "stats_since": "2026-10-13T00:00:00Z"
+        }
+      ]
+    },
+    "counters": {
+      "rows": [
+        {
+          "xact_commit": "9007199254740993",
+          "xact_rollback": "100",
+          "deadlocks": "2",
+          "conflicts": "3",
+          "temp_files": "4",
+          "temp_bytes": "1024",
+          "stats_reset": "2026-10-13T00:00:00Z",
+          "read_at": "2026-10-14T08:29:03Z"
+        }
+      ]
+    }
   }
 }

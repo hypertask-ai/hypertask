@@ -98,7 +98,7 @@ async function load(root) {
 }
 
 export async function loadSources(names) {
-  const files = names ?? ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog'];
+  const files = names ?? ['vercel', 'vercel-5xx', 'github-actions', 'vps-journal', 'cloudflare-workers', 'posthog', 'neon'];
   return files.map(name => ({
     name,
     async fetch(context) {
@@ -189,10 +189,17 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
       const until = iso(now);
-      const fetched = await bounded(source.fetch({ since, until, env, signal }));
+      const fetched = await bounded(source.fetch({ since, until, env, signal, cursor: structuredClone(state.sourceCursors?.[source.name]) }));
       timeLeft(Infinity);
-      if (!Array.isArray(fetched)) throw new Error('invalid source response');
-      const events = fetched.map(validate).filter(event => event.ts > since && event.ts <= until);
+      const rows = Array.isArray(fetched) ? fetched : fetched?.events;
+      let cursor;
+      if (!Array.isArray(fetched)) {
+        const encoded = JSON.stringify(fetched?.cursor);
+        if (encoded == null || Buffer.byteLength(encoded) > 4096) throw new Error('invalid source cursor');
+        cursor = JSON.parse(encoded);
+      }
+      if (!Array.isArray(rows)) throw new Error('invalid source response');
+      const events = rows.map(validate).filter(event => event.ts > since && event.ts <= until);
       // A fingerprint keeps the board it was first routed to, so one kind of error never splits across boards.
       const boards = new Map();
       for (const event of events) {
@@ -249,6 +256,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         } else { state.pending[fp] = group; stats(day(group.firstSeen), group.service).newGroups++; }
       }
       state.sources[source.name] = until;
+      if (!Array.isArray(fetched)) (state.sourceCursors ??= {})[source.name] = cursor;
       await checkpoint();
       succeeded++;
     } catch { diagnostic(`source ${/^[a-z][a-z0-9-]*$/.test(source.name) ? source.name : '[invalid]'} failed; cursor unchanged`); }
