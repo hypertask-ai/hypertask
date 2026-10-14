@@ -114,7 +114,7 @@ const RAW_TOOL_METADATA = {
   GET_TASKS: {
     name: buildToolName('get_tasks'),
     description:
-      'Gets detailed information about one or more tasks including assignees, followers, priority, estimate, due date, labels, attachments, and comment count. Provide task_id as an array of numbers or ticket_number as an array of strings. Tasks are retrieved in parallel for efficiency. Each task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex} where uniqueIndex is extracted from the ticket number (e.g., "HTPR-3550" → 3550).',
+      'Gets detailed information about one or more tasks including assignees, followers, priority, estimate, due date, labels, attachments, and comment count. Provide task_id as one number or a list of numbers, or ticket_number as one string or a list of strings. Tasks are retrieved in parallel for efficiency. Each task includes a "link" field with the task URL: https://app.hypertask.ai/detail/project-{projectId}/{uniqueIndex} where uniqueIndex is extracted from the ticket number (e.g., "HTPR-3550" → 3550).',
   },
 
   TASK_CONTEXT: {

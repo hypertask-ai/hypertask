@@ -22,6 +22,15 @@ export const ticketNumberSchema = z
   .max(config.limits.ticketNumberMaxLength)
   .regex(/^[a-zA-Z0-9_-]+$/, 'Ticket number must contain only alphanumeric characters, hyphens, and underscores');
 
+const taskIdSchema = z.coerce.number().int().positive();
+
+/** Wire shape for get_tasks ids: one value or a list (HTPR-7206). */
+export const taskIdOneOrManySchema = z.union([taskIdSchema, z.array(taskIdSchema)]);
+export const ticketNumberOneOrManySchema = z.union([ticketNumberSchema, z.array(ticketNumberSchema)]);
+
+const asArray = (value: unknown) =>
+  value === undefined || Array.isArray(value) ? value : [value];
+
 /**
  * Base task identification schema (without validation)
  * Used for FastMCP parameter validation - refine logic checked in execute
@@ -91,8 +100,9 @@ export function createTaskIdentificationArraySchema() {
   return z
     .object({
       // z.coerce: Claude sometimes stringifies IDs (HTPR-3618)
-      task_id: z.array(z.coerce.number().int().positive()).optional(),
-      ticket_number: z.array(ticketNumberSchema).optional(),
+      // A single id or ticket number is wrapped into a list (HTPR-7206)
+      task_id: z.preprocess(asArray, z.array(taskIdSchema).optional()),
+      ticket_number: z.preprocess(asArray, z.array(ticketNumberSchema).optional()),
       unique_index: z.coerce.number().int().positive().optional(),
       project_id: z.coerce.number().int().positive().optional(),
     })
