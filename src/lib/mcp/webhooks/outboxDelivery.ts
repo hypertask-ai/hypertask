@@ -151,7 +151,13 @@ export async function deliverBoardWebhook(
     })
   })
 
-  if (!failedPermanently) {
+  if (failedPermanently) {
+    // The only lasting record of a dead delivery: the error collector reads it
+    // from the Vercel log (YPER4-358). No URL or response text, they are the customer's.
+    console.error(
+      `[board-webhook] delivery failed after ${attemptCount} attempts (${result.statusCode ? `HTTP ${result.statusCode}` : 'no response'})`
+    )
+  } else {
     await queueBoardWebhookDelivery(
       delivery.id,
       Math.floor(nextAttemptAt.getTime() / 1000)
@@ -192,13 +198,16 @@ export async function sweepBoardWebhookDeliveries(limit = 100): Promise<number> 
       attemptCount: { increment: 1 },
     },
   })
-  await prisma.boardWebhookDelivery.updateMany({
+  const exhausted = await prisma.boardWebhookDelivery.updateMany({
     where: {
       status: { in: ['pending', 'retrying'] },
       attemptCount: { gte: BOARD_WEBHOOK_MAX_ATTEMPTS },
     },
     data: { status: 'failed', processingAt: null },
   })
+  for (let i = 0; i < exhausted.count; i++) {
+    console.error('[board-webhook] delivery failed after its worker stopped (no response)')
+  }
 
   const due = await prisma.boardWebhookDelivery.findMany({
     where: {
