@@ -21,7 +21,7 @@ export function withPhoneProfile(browser) {
 export const PATHS = ['board', 'ticket-cold', 'ticket-warm', 'search', 'my-tasks', 'ctrl-j', 'page-navigation'];
 export const METRICS = ['contentMs', 'requestCount', 'bytes', 'longTaskMs'];
 const BASE = 'https://app.hypertask.ai';
-const BOARD = '/project?id=6859';
+const BOARD = '/project?id=6859&view=default';
 const TASK = '/detail/project-6859/43';
 const TITLE = 'QA 6667 Enter verification';
 const PROTOCOL = 1;
@@ -108,6 +108,8 @@ export function browserObserver() {
 }
 
 export async function ready(page, surface) {
+  // view=default bypasses saved filters; scrolling keeps newer QA cards from hiding task 43 below the viewport.
+  if (surface === 'board' || surface === 'page-navigation') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
   return page.evaluate(async ({ surface, task, title }) => {
     const visible = element => {
       if (!element) return false;
@@ -234,11 +236,16 @@ async function measure(shared, browser, profile, index, run) {
       await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
       await sample('my-tasks', () => navigate('/my-tasks'));
       await page.evaluate(() => document.activeElement?.blur());
-      await sample('page-navigation', () => shared.action(page, async () => { await page.keyboard.press('g'); await page.keyboard.press('b'); }, run.actions, 'client', BOARD), false);
+      await sample('page-navigation', () => shared.action(page, async () => {
+        await page.keyboard.press('g'); await page.keyboard.press('b');
+        await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
+        await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
+      }, run.actions, 'client', BOARD), false);
       // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
       await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
       await page.locator('.section-container').first().focus();
-      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press('Control+j'), run.actions, 'client', BOARD), false);
+      // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
+      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
       await page.keyboard.press('Escape');
     } catch {
       const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
