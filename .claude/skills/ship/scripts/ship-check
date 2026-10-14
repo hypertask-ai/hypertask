@@ -402,7 +402,9 @@ check_deployed() {
 check_docs() {
   dropped_ok docs "$1" && return 0
   nochange_ok docs "$1" && return 0
-  local n title type prs sha cmts
+  local n title type prs sha cmts owner
+  # On the duplicate path the docs PR belongs to the ticket that shipped the fix.
+  owner=$(pr_owner "$1")
   n=$(bound_pr "$1")
   [ -n "$n" ] || fail "no PR bound for $1; run ship-check bind $1 <pr number> right after opening it"
   title=$(gh pr view "$n" -R "$REPO" --json title --jq .title 2>/dev/null) || fail "cannot read PR $n title"
@@ -411,12 +413,12 @@ check_docs() {
   if [[ $type != FEATURE && $type != IMPROVE ]]; then
     echo "docs ok (not needed for [$type])"; return
   fi
-  prs=$(gh pr list -R hypertask-ai/docs --base main --state merged --search "$1 in:title" --limit 100 --json number,title,mergeCommit,baseRefName,state 2>/dev/null) \
+  prs=$(gh pr list -R hypertask-ai/docs --base main --state merged --search "$owner in:title" --limit 100 --json number,title,mergeCommit,baseRefName,state 2>/dev/null) \
     || fail "could not read docs PRs"
   while read -r n sha; do
     [ -n "$n" ] || continue
     if ( docs_deploy_ok "$sha" ) >/dev/null 2>&1; then echo "docs ok (docs PR $n)"; return; fi
-  done < <(jq -r --arg t "$1" '.[] | select(.state == "MERGED" and .baseRefName == "main"
+  done < <(jq -r --arg t "$owner" '.[] | select(.state == "MERGED" and .baseRefName == "main"
     and (.title | test("(^|[^A-Z0-9])" + $t + "([^A-Z0-9]|$)")))
     | select(.mergeCommit.oid != null) | "\(.number) \(.mergeCommit.oid)"' <<<"$prs")
   cmts=$(hypertask comment list "$1" --limit 100 --json 2>/dev/null) || fail "cannot read comments of $1"
@@ -424,7 +426,7 @@ check_docs() {
       | test("^\\s*No user-visible change:\\s*\\S"))' >/dev/null <<<"$cmts"; then
     echo "docs ok (no user-visible change)"; return
   fi
-  fail "[$type] ticket $1 has no merged and deployed docs PR in hypertask-ai/docs titled with $1, and no \"No user-visible change:\" comment"
+  fail "[$type] ticket $1 has no merged and deployed docs PR in hypertask-ai/docs titled with $owner, and no \"No user-visible change:\" comment"
 }
 
 newest_successful_production_sha() {

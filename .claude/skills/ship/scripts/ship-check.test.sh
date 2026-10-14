@@ -320,7 +320,7 @@ esac
 MOCK
 cat > "$E/docs-bin/hypertask" <<'MOCK'
 #!/usr/bin/env bash
-[[ $1 == comment && $2 == list && $3 == YPER4-388 ]] || exit 1
+[[ $1 == comment && $2 == list && $3 == "${DOCS_TICKET:-YPER4-388}" ]] || exit 1
 if [ -n "${DOCS_COMMENTS:-}" ]; then printf '%s\n' "$DOCS_COMMENTS"
 else echo '{"comments":[]}'; fi
 MOCK
@@ -332,7 +332,7 @@ DC() {
   if [ "$mode" = guard ]; then
     out=$(echo '{"tool_input":{"command":"vcc task move YPER4-388 --section \"Done\""}}' | env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check guard 2>&1); got=$?
   else
-    out=$(env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check docs YPER4-388 2>&1); got=$?
+    out=$(env PATH="$E/docs-bin:$PATH" RUNS_FIXTURE="$docs_publish" JOBS_FIXTURE='{"jobs":[{"name":"Build and deploy to Cloudflare Pages","conclusion":"success"}]}' "$@" ./ship-check docs "${DOCS_TICKET:-YPER4-388}" 2>&1); got=$?
   fi
   if [ "$got" = "$want" ] && [[ $out == *"$expected"* ]]; then ok "docs gate $mode: $expected"
   else bad "docs gate $mode: want $want $expected got $got $out"; fi
@@ -356,6 +356,11 @@ DC 0 '' guard DOCS_PRS="$docs_pr"
 DC 0 '' guard DOCS_TYPE=BUGFIX
 DC 0 '' guard DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: internal tooling only."}]}'
 DC 2 'Merge a docs PR titled with YPER4-388' guard DOCS_TYPE=IMPROVE
+# Duplicate path: the docs PR is titled with the fixing ticket; the comment exemption stays on the duplicate.
+mkdir -p "$E/YPER4-390"; echo 888 > "$E/YPER4-390/pr"; echo YPER4-388 > "$E/YPER4-390/duplicate-of"
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (docs PR 42)' docs DOCS_PRS="$docs_pr"
+DOCS_TICKET=YPER4-390 DC 1 'titled with YPER4-388' docs
+DOCS_TICKET=YPER4-390 DC 0 'docs ok (no user-visible change)' docs DOCS_COMMENTS='{"comments":[{"text":"No user-visible change: duplicate of a docs-free fix."}]}'
 
 # Manual worker deployments must bind the only active version to the full merge SHA.
 mkdir -p "$E/worker-bin" "$E/worker-checkout/workers/docs-agent"
