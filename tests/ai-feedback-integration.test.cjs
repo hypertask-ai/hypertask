@@ -10,18 +10,20 @@ const stub = (file, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 let mode = 'OWNER_AND_QA', userId = 985, authorized = true, files = [], pending = [], clientNames = new Map(), quotaCount = 0, attemptCount = 0
-let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockBlock, transactionError
+let registeredTools = [], coreBlock, coreThrow = false, catalogEnabled = false, lockBlock, transactionError, onLockAttempt
 const enabledFor = (id) => mode === 'EVERYONE' || mode === 'OWNER_AND_QA' && [6, 985].includes(id)
 const auth = () => authorized ? { user: { id: userId, displayName: 'QA', email: 'private@example.test' }, agentId: 'board-agent' } : null
 stub('src/lib/prisma.ts', { default: {
   $transaction: async (callback, options) => {
-    assert.deepEqual(options, { timeout: 30000, maxWait: 30000 })
+    assert.equal(options.timeout, 30000)
+    assert.ok(options.maxWait > 0 && options.maxWait <= 30000)
     if (transactionError) throw transactionError
     return callback({
-      $executeRaw: async (strings, key) => {
-        assert.equal(strings.join('?'), 'SELECT pg_advisory_xact_lock(?)')
+      $queryRaw: async (strings, key) => {
+        assert.equal(strings.join('?'), 'SELECT pg_try_advisory_xact_lock(?) AS locked')
         assert.equal(typeof key, 'bigint')
-        if (lockBlock) await lockBlock
+        if (onLockAttempt) onLockAttempt()
+        return [{ locked: !lockBlock }]
       },
       task: { findFirst: async () => null },
     })
@@ -69,7 +71,7 @@ const restRequest = (body) => new NextRequest('https://app.hypertask.ai/api/mcp/
 const rpcRequest = (method, params) => new Request('https://mcp.hypertask.ai/mcp', { method: 'POST', headers: { Authorization: 'Bearer fixture', 'Content-Type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) })
 async function drain() { while (pending.length) { const batch = pending.splice(0); await Promise.all(batch) } }
 
-test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
+test.beforeEach(() => { mode = 'OWNER_AND_QA'; userId = 985; authorized = true; files = []; pending = []; clientNames = new Map(); quotaCount = 0; attemptCount = 0; registeredTools.splice(0, registeredTools.length, reportFeedbackTool); coreBlock = undefined; coreThrow = false; catalogEnabled = false; lockBlock = undefined; transactionError = undefined; onLockAttempt = undefined; delete process.env.AI_FEEDBACK_AGENT_USER_ID })
 test.afterEach(drain)
 
 test('REST accepts legitimate agent caller and returns the exact contract without private account fields', async () => {
@@ -330,12 +332,16 @@ test('REST and MCP feedback check flags before the shared attempt limit and fili
 
 
 test('automatic contention awaits the same filing path in waitUntil', async () => {
-  let release
-  lockBlock = new Promise((resolve) => { release = resolve })
+  let attempted
+  const waiting = new Promise((resolve) => { attempted = resolve })
+  lockBlock = true
+  onLockAttempt = attempted
   queueAiFeedback({ surface: 'mcp', tool: 'hypertask_tasks', status: 503, note: 'private prose', error: 'private error' }, 985)
   assert.equal(files.length, 0)
   assert.equal(pending.length, 1)
-  release()
+  await waiting
+  assert.equal(quotaCount, 0)
+  lockBlock = false
   await drain()
   assert.equal(files.length, 1)
   assert.equal(files[0].userId, 985)

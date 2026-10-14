@@ -75,81 +75,89 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
     ],
     description_: { is: { content: { contains: marker } } },
   }
-  const deduped = Boolean(await prisma.task.findFirst({ where, select: { id: true } }))
-  if (!await reserveFeedbackQuota(userId, deduped)) throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
   const key = BigInt.asIntN(64, BigInt(`0x${fingerprint.slice(0, 16)}`))
   let changedTaskId: number | undefined
+  const deadline = Date.now() + 30000
   try {
-    const result = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${key})`
-      // Core services use global prisma, but this connection holds the lock throughout their work.
-      const [project, user] = await Promise.all([
-        // Feedback submitters need not be members of the internal product board.
-        prisma.project.findFirst({
-          where: { id: PROJECT_ID, status: 'Normal' },
-          select: { uniqueIdentifier: true, section: {
-            where: { deleted: false, visibility: true, section_title: 'Bugs' },
-            take: 1, select: { id: true, section_title: true },
-          } },
-        }),
-        userId === undefined ? null : prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } }),
-      ])
-      const section = project?.section[0]
-      if (!project?.uniqueIdentifier || !section) throw new AiFeedbackError(503, 'Feedback destination is not configured')
-      const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
-      const existing = await tx.task.findFirst({
-        where, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true },
-      })
-      if (userId !== undefined && Boolean(existing) !== deduped && !await reserveFeedbackQuota(userId, Boolean(existing))) {
-        throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
-      }
-      const actorId = existing?.userId ?? reporterId
-      const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
-      const comment = existing ? await tx.comment.findFirst({
-        where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
-        orderBy: { id: 'asc' }, select: { id: true, text: true },
-      }) : null
-      const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
-      if (existing) {
-        const count = storedCount + 1
-        const text = tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client)
-        if (comment) {
-          await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null } })
-        } else {
-          await createCommentService({
-            taskId: existing.id, text, creatorId: actorId, ownerId: existing.userId,
-            currentUser: { id: actorId }, processTaskReferences: false, trustedCaller: true,
-          })
+    while (Date.now() < deadline) {
+      const result = await prisma.$transaction(async (tx) => {
+        const [lock] = await tx.$queryRaw<{ locked: boolean }[]>`SELECT pg_try_advisory_xact_lock(${key}) AS locked`
+        if (!lock.locked) return
+        // Core services use global prisma, but this connection holds the lock throughout their work.
+        const [project, user] = await Promise.all([
+          // Feedback submitters need not be members of the internal product board.
+          prisma.project.findFirst({
+            where: { id: PROJECT_ID, status: 'Normal' },
+            select: { uniqueIdentifier: true, section: {
+              where: { deleted: false, visibility: true, section_title: 'Bugs' },
+              take: 1, select: { id: true, section_title: true },
+            } },
+          }),
+          userId === undefined ? null : prisma.user.findUnique({ where: { id: userId }, select: { displayName: true } }),
+        ])
+        const section = project?.section[0]
+        if (!project?.uniqueIdentifier || !section) throw new AiFeedbackError(503, 'Feedback destination is not configured')
+        const displayName = scrubFeedbackText(user?.displayName ?? '').replace(/,/g, ' ').slice(0, 60) || undefined
+        const existing = await tx.task.findFirst({
+          where, select: { id: true, userId: true, ticketNumber: true, uniqueIndex: true },
+        })
+        if (!await reserveFeedbackQuota(userId, Boolean(existing))) {
+          throw new AiFeedbackError(429, 'AI feedback hourly limit reached')
         }
-        changedTaskId = existing.id
-        return receipt(existing, true, count, project.uniqueIdentifier)
-      }
-      let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
-      if (!label) {
-        try {
-          label = await prisma.label.create({ data: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
-        } catch (error) {
-          label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
-          if (!label) throw error
+        const actorId = existing?.userId ?? reporterId
+        const tallyMarker = `<p>AI feedback tally: ai-fb-${fingerprint.slice(0, 12)}</p>`
+        const comment = existing ? await tx.comment.findFirst({
+          where: { taskId: existing.id, creatorId: actorId, agentId: null, text: { contains: tallyMarker } },
+          orderBy: { id: 'asc' }, select: { id: true, text: true },
+        }) : null
+        const storedCount = Number(comment?.text.match(/<p>Seen (\d+) times<\/p>/)?.[1] ?? 1)
+        if (existing) {
+          const count = storedCount + 1
+          const text = tallyComment(comment?.text ?? '', tallyMarker, count, displayName, input.client)
+          if (comment) {
+            await tx.comment.update({ where: { id: comment.id }, data: { text, summary: null } })
+          } else {
+            await createCommentService({
+              taskId: existing.id, text, creatorId: actorId, ownerId: existing.userId,
+              currentUser: { id: actorId }, processTaskReferences: false, trustedCaller: true,
+            })
+          }
+          changedTaskId = existing.id
+          return receipt(existing, true, count, project.uniqueIdentifier)
         }
+        let label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
+        if (!label) {
+          try {
+            label = await prisma.label.create({ data: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
+          } catch (error) {
+            label = await prisma.label.findFirst({ where: { projectId: PROJECT_ID, value: 'ai-feedback' }, select: { id: true } })
+            if (!label) throw error
+          }
+        }
+        const count = 1
+        const { task } = await createTaskCore({
+          title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
+          description: description(input, fingerprint, displayName),
+          userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
+          projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
+          priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,
+        })
+        await createCommentService({
+          taskId: task.id, text: tallyComment('', tallyMarker, count, displayName, input.client),
+          creatorId: actorId, ownerId: actorId, currentUser: { id: actorId },
+          processTaskReferences: false, trustedCaller: true,
+        })
+        return receipt(task, false, count, project.uniqueIdentifier)
+      }, { timeout: 30000, maxWait: Math.max(1, deadline - Date.now()) })
+      if (result) {
+        if (changedTaskId !== undefined) void broadcastTaskChange(changedTaskId).catch(() => {})
+        return result
       }
-      const count = 1
-      const { task } = await createTaskCore({
-        title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
-        description: description(input, fingerprint, displayName),
-        userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,
-        projectIdentifier: project.uniqueIdentifier, createDrafts: false, labelIds: [label.id],
-        priorityIndex: PriorityConstants.find((priority) => priority.Priority_Value === 'Medium')!.priority_index,
-      })
-      await createCommentService({
-        taskId: task.id, text: tallyComment('', tallyMarker, count, displayName, input.client),
-        creatorId: actorId, ownerId: actorId, currentUser: { id: actorId },
-        processTaskReferences: false, trustedCaller: true,
-      })
-      return receipt(task, false, count, project.uniqueIdentifier)
-    }, { timeout: 30000, maxWait: 30000 })
-    if (changedTaskId !== undefined) void broadcastTaskChange(changedTaskId).catch(() => {})
-    return result
+      const remaining = deadline - Date.now()
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, 100 + Math.floor(Math.random() * 151))))
+    }
+    // Automatic callers catch this only after 30 seconds of continuous contention, losing the report quietly.
+    throw new AiFeedbackError(503, 'Feedback timed out, try again shortly')
   } catch (error) {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2028') {
       throw new AiFeedbackError(503, 'Feedback timed out, try again shortly')

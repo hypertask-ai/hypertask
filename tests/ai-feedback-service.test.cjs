@@ -7,7 +7,7 @@ const stub = (file, exports) => {
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
 }
 let enabled, globalEnabled, rows, created, updates, comments, commentCreates, descriptionWrites, labelCreated, taskQuery, userQuery, failWrite, configured, failFlag, partialWriteFailure
-let bucketCounts, lockQueue, lockKeys, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace, onLock, onTaskCreate, transactionError, onQueued
+let bucketCounts, lockQueue, lockKeys, attempts, activeRedis, prismaCalls, flagCalls, onQuota, labelError, labelRace, onLock, onTaskCreate, transactionError, onQueued, openTransactions, transactionRecords
 const redis = {
   eval: async (script, _keys, key, now, limit, token) => {
     assert.equal(_keys, 1)
@@ -60,29 +60,32 @@ const db = {
 }
 for (const model of Object.values(db)) for (const [name, execute] of Object.entries(model)) model[name] = async (...args) => { prismaCalls++; return execute(...args) }
 db.$transaction = async (callback, options) => {
-  assert.deepEqual(options, { timeout: 30000, maxWait: 30000 })
+  assert.equal(options.timeout, 30000)
+  assert.ok(options.maxWait > 0 && options.maxWait <= 30000)
   if (transactionError) throw transactionError
-  let release, key, held
-  const tx = { ...db, $executeRaw: async (strings, value) => {
-    assert.equal(strings.join('?'), 'SELECT pg_advisory_xact_lock(?)')
+  let key, held
+  const record = { open: true, locked: false, maxWait: options.maxWait }
+  transactionRecords.push(record)
+  openTransactions++
+  const tx = { ...db, $queryRaw: async (strings, value) => {
+    assert.equal(strings.join('?'), 'SELECT pg_try_advisory_xact_lock(?) AS locked')
     assert.equal(typeof value, 'bigint')
     assert.equal(value, BigInt.asIntN(64, value))
     key = value
     lockKeys.push(key)
     if (onQueued) onQueued(key)
-    const previous = lockQueue.get(key) ?? Promise.resolve()
-    held = new Promise((resolve) => { release = resolve })
+    if (lockQueue.has(key)) return [{ locked: false }]
+    held = record
     lockQueue.set(key, held)
-    await previous
+    record.locked = true
     if (onLock) await onLock(key)
-    return 1
+    return [{ locked: true }]
   } }
   try { return await callback(tx) }
   finally {
-    if (release) {
-      release()
-      if (lockQueue.get(key) === held) lockQueue.delete(key)
-    }
+    record.open = false
+    openTransactions--
+    if (held && lockQueue.get(key) === held) lockQueue.delete(key)
   }
 }
 stub('src/lib/prisma.ts', { default: db })
@@ -118,7 +121,7 @@ const { queueAiFeedback } = jiti('../src/lib/aiFeedback/automatic.ts')
 const input = { surface: 'mcp', client: 'claude', tool: 'hypertask_tasks', status: 503, errorCode: 'unavailable', error: 'Cannot save "Confidential task description" for customer@example.test' }
 
 test.beforeEach(() => {
-  pending = []; enabled = true; globalEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; userQuery = undefined; taskQuery = undefined
+  pending = []; enabled = true; globalEnabled = false; rows = []; created = []; updates = []; comments = []; commentCreates = []; descriptionWrites = 0; labelCreated = 0; bucketCounts = new Map(); lockQueue = new Map(); lockKeys = []; attempts = new Map(); prismaCalls = 0; flagCalls = 0; onQuota = undefined; labelError = undefined; labelRace = false; activeRedis = redis; failWrite = false; configured = true; failFlag = false; partialWriteFailure = false; onLock = undefined; onTaskCreate = undefined; transactionError = undefined; onQueued = undefined; openTransactions = 0; transactionRecords = []; userQuery = undefined; taskQuery = undefined
   delete process.env.AI_FEEDBACK_AGENT_USER_ID
 })
 
@@ -492,16 +495,16 @@ for (const holderFails of [false, true]) {
   })
 }
 
-test('quota 429 rejects before touching the lock or tally and never inflates later counts', async () => {
+test('quota 429 rejects inside the lock without writes or tally inflation', async () => {
   for (let index = 0; index < 10; index++) await fileAiFeedback({ ...input, tool: `tool-${index}` }, 42)
   const beforeNew = { locks: lockKeys.length, comments: comments.map((comment) => comment.text) }
   await assert.rejects(fileAiFeedback(input, 42), { status: 429 })
-  assert.equal(lockKeys.length, beforeNew.locks)
+  assert.equal(lockKeys.length, beforeNew.locks + 1)
   assert.deepEqual(comments.map((comment) => comment.text), beforeNew.comments)
   for (let index = 0; index < 30; index++) await fileAiFeedback({ ...input, tool: 'tool-0' }, 42)
   const beforeBump = { locks: lockKeys.length, comments: comments.map((comment) => comment.text) }
   await assert.rejects(fileAiFeedback({ ...input, tool: 'tool-0' }, 42), { status: 429 })
-  assert.equal(lockKeys.length, beforeBump.locks)
+  assert.equal(lockKeys.length, beforeBump.locks + 1)
   assert.deepEqual(comments.map((comment) => comment.text), beforeBump.comments)
   assert.equal((await fileAiFeedback({ ...input, tool: 'tool-0' }, 43)).count, 32)
   assert.equal((await fileAiFeedback(input, 43)).count, 1)
@@ -511,19 +514,19 @@ test('a changed new-vs-bump decision charges the correct quota bucket inside the
   const results = await Promise.all([fileAiFeedback(input, 42), fileAiFeedback(input, 43)])
   assert.deepEqual(results.map((result) => result.count), [1, 2])
   assert.equal(bucketCounts.get('ai-feedback:quota:42:new').length, 1)
-  assert.equal(bucketCounts.get('ai-feedback:quota:43:new').length, 1)
+  assert.equal(bucketCounts.has('ai-feedback:quota:43:new'), false)
   assert.equal(bucketCounts.get('ai-feedback:quota:43:bump').length, 1)
   assert.equal(comments.length, 1)
 })
 
-test('a ticket closed between quota read and lock charges the new-ticket bucket and resets tally', async () => {
+test('a ticket closed before the locked lookup charges only the new-ticket bucket and resets tally', async () => {
   await fileAiFeedback(input, 42)
   await fileAiFeedback(input, 42)
-  onQuota = () => { rows[0].sectionId = 222; rows[0].section = 'Done'; onQuota = undefined }
+  onLock = () => { rows[0].sectionId = 222; rows[0].section = 'Done'; onLock = undefined }
   const result = await fileAiFeedback(input, 43)
   assert.equal(result.deduped, false)
   assert.equal(result.count, 1)
-  assert.equal(bucketCounts.get('ai-feedback:quota:43:bump').length, 1)
+  assert.equal(bucketCounts.has('ai-feedback:quota:43:bump'), false)
   assert.equal(bucketCounts.get('ai-feedback:quota:43:new').length, 1)
   assert.match(comments[0].text, /Seen 2 times/)
   assert.match(comments[1].text, /Seen 1 times/)
@@ -558,4 +561,122 @@ test('advisory keys retain the high hash bit as a signed 64-bit integer', async 
   assert.ok(key < 0n)
   await fileAiFeedback(report, 42)
   assert.deepEqual(lockKeys, [key])
+})
+
+test('ten identical concurrent account reports reserve one new slot and nine bump slots, leaving room for a distinct report', async () => {
+  const results = await Promise.all(Array.from({ length: 10 }, () => fileAiFeedback(input, 42)))
+  assert.deepEqual(results.map((result) => result.count).sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  assert.equal(results.filter((result) => !result.deduped).length, 1)
+  assert.equal(created.length, 1)
+  assert.equal(bucketCounts.get('ai-feedback:quota:42:new').length, 1)
+  assert.equal(bucketCounts.get('ai-feedback:quota:42:bump').length, 9)
+  assert.match(comments[0].text, /Seen 10 times/)
+  const distinct = await fileAiFeedback({ ...input, tool: 'hypertask_hello' }, 42)
+  assert.equal(distinct.deduped, false)
+  assert.equal(distinct.count, 1)
+  assert.equal(created.length, 2)
+  assert.equal(bucketCounts.get('ai-feedback:quota:42:new').length, 2)
+  assert.equal(bucketCounts.get('ai-feedback:quota:42:bump').length, 9)
+  assert.equal(attempts.get('ai-feedback:attempt:42'), 11)
+  assert.equal(openTransactions, 0)
+})
+
+test('same-fingerprint waiter ends its transaction before sleeping, leaving only the holder connection open, then both reports land in order', { timeout: 3000 }, async (t) => {
+  let release, entered, sleeps = 0
+  const blocked = new Promise((resolve) => { release = resolve })
+  const started = new Promise((resolve) => { entered = resolve })
+  onTaskCreate = async () => { onTaskCreate = undefined; entered(); await blocked }
+  const holder = fileAiFeedback(input, 42)
+  await started
+  const schedule = global.setTimeout
+  t.mock.method(global, 'setTimeout', (callback, delay) => {
+    sleeps++
+    assert.ok(delay >= 100 && delay <= 250)
+    assert.equal(openTransactions, 1)
+    assert.deepEqual(transactionRecords.map(({ open, locked }) => ({ open, locked })), [
+      { open: true, locked: true }, { open: false, locked: false },
+    ])
+    assert.equal(bucketCounts.has('ai-feedback:quota:43:new'), false)
+    assert.equal(bucketCounts.has('ai-feedback:quota:43:bump'), false)
+    release()
+    return schedule(callback, 0)
+  })
+  let results
+  try { results = await Promise.all([holder, fileAiFeedback(input, 43)]) }
+  finally { release(); await holder }
+  assert.equal(sleeps, 1)
+  assert.deepEqual(results.map((result) => result.count), [1, 2])
+  assert.deepEqual(results.map((result) => result.deduped), [false, true])
+  assert.equal(created.length, 1)
+  assert.equal(comments.length, 1)
+  assert.match(comments[0].text, /Seen 2 times/)
+  assert.equal(updates.length, 1)
+  assert.equal(openTransactions, 0)
+  assert.ok(transactionRecords.every((record) => !record.open))
+})
+
+for (const automatic of [false, true]) {
+  test(`${automatic ? 'automatic' : 'explicit'} contention retries with released connections for the full 30 seconds before ${automatic ? 'returning quietly' : '503'}`, async (t) => {
+    const start = Date.now()
+    let now = start, sleeps = 0
+    const key = BigInt.asIntN(64, BigInt(`0x${feedbackFingerprint(automatic ? { ...input, category: 'call_failed' } : input).slice(0, 16)}`))
+    lockQueue.set(key, 'external holder')
+    t.mock.method(Date, 'now', () => now)
+    t.mock.method(Math, 'random', () => automatic ? 1 - Number.EPSILON : 0)
+    t.mock.method(global, 'setTimeout', (callback, delay) => {
+      assert.equal(openTransactions, 0)
+      assert.ok(transactionRecords.every((record) => !record.open && !record.locked))
+      assert.equal(delay, automatic ? 250 : 100)
+      assert.ok(now < start + 30000)
+      assert.equal(bucketCounts.size, 0)
+      sleeps++
+      now += delay
+      queueMicrotask(callback)
+    })
+    if (automatic) {
+      queueAiFeedback(input, 42)
+      assert.equal(pending.length, 1)
+      assert.deepEqual(await Promise.all(pending), [undefined])
+    } else {
+      await assert.rejects(fileAiFeedback(input, 42), { status: 503, message: 'Feedback timed out, try again shortly' })
+    }
+    assert.equal(now - start, 30000)
+    assert.equal(sleeps, automatic ? 120 : 300)
+    assert.equal(lockKeys.length, sleeps)
+    assert.deepEqual(transactionRecords.map((record) => record.maxWait), Array.from({ length: sleeps }, (_, index) => 30000 - index * (automatic ? 250 : 100)))
+    assert.equal(attempts.get('ai-feedback:attempt:42'), 1)
+    assert.equal(created.length, 0)
+    assert.equal(comments.length, 0)
+    assert.equal(bucketCounts.size, 0)
+    assert.equal(openTransactions, 0)
+    lockQueue.delete(key)
+  })
+}
+
+test('automatic contention still files when the lock becomes free just before the 30-second deadline', async (t) => {
+  const start = Date.now()
+  let now = start, sleeps = 0
+  const key = BigInt.asIntN(64, BigInt(`0x${feedbackFingerprint({ ...input, category: 'call_failed' }).slice(0, 16)}`))
+  lockQueue.set(key, 'external holder')
+  t.mock.method(Date, 'now', () => now)
+  t.mock.method(Math, 'random', () => 1 - Number.EPSILON)
+  t.mock.method(global, 'setTimeout', (callback, delay) => {
+    assert.equal(openTransactions, 0)
+    assert.equal(delay, 250)
+    sleeps++
+    now += delay
+    if (now - start === 29750) lockQueue.delete(key)
+    queueMicrotask(callback)
+  })
+  queueAiFeedback(input, 42)
+  await Promise.all(pending)
+  assert.equal(now - start, 29750)
+  assert.equal(sleeps, 119)
+  assert.equal(created.length, 1)
+  assert.equal(comments.length, 1)
+  assert.match(comments[0].text, /Seen 1 times/)
+  assert.equal(bucketCounts.get('ai-feedback:quota:42:new').length, 1)
+  assert.equal(bucketCounts.has('ai-feedback:quota:42:bump'), false)
+  assert.equal(openTransactions, 0)
+  assert.equal(lockQueue.size, 0)
 })
