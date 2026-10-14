@@ -24,6 +24,7 @@ import {
   normalizeTaskStatus,
   parseAssigneeFilter,
   parseNumericCursor,
+  parseUpdatedSince,
   projectRows,
   resolveListLimit,
   withTaskPresentation,
@@ -97,6 +98,14 @@ export interface ListTasksResponse {
 /** Matches `Label.id` (Prisma `@default(uuid())`). Plain digits kept for backwards compatibility. */
 const LABEL_ID_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Name of the first date filter whose value is not a parseable date, so it answers 400 instead of crashing Prisma. */
+function findInvalidDateParam(params: Record<string, string | undefined>): string | null {
+  for (const [name, value] of Object.entries(params)) {
+    if (value && !parseUpdatedSince(value)) return name
+  }
+  return null
+}
 
 function isLabelIdParam(raw: string): boolean {
   const l = raw.trim()
@@ -425,6 +434,16 @@ export async function GET(request: NextRequest) {
       if (listQuery.sortBy) sortBy = listQuery.sortBy
       if (listQuery.sortOrder) sortOrder = listQuery.sortOrder
       limit = resolveListLimit(listQuery, limit)
+    }
+
+    const invalidDateParam = findInvalidDateParam({
+      updated_since: updatedSince,
+      created_since: createdSince,
+      due_date_before: dueDateBefore,
+      due_date_after: dueDateAfter,
+    })
+    if (invalidDateParam) {
+      return validationError(`${invalidDateParam} must be a valid date or datetime, e.g. 2026-10-14 or 2026-10-14T03:00:00Z`)
     }
 
     const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const
