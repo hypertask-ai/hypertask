@@ -178,7 +178,7 @@ class RenderTests(unittest.TestCase):
         self.assertIn('<meta name="viewport" content="width=device-width,initial-scale=1">', self.page)
         self.assertIn('prefers-color-scheme:dark', self.page)
         self.assertIn('<meta http-equiv="refresh" content="900">', self.page)
-        self.assertNotIn('fonts.googleapis.com', self.page)
+        self.assertIn('family=IBM+Plex+Sans', self.page)
         self.assertIn('type="application/json"', self.page)
         self.assertIn('history.replaceState', self.page)
 
