@@ -43,9 +43,8 @@ export class UserService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update user profile', {
+      logger.failure('Failed to update user profile', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

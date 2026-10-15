@@ -66,9 +66,8 @@ export class RelatedTasksService {
         correlationId
       )
     } catch (error) {
-      logger.error('Failed to find related tasks', {
+      logger.failure('Failed to find related tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       })
       throw error
     }

@@ -147,9 +147,8 @@ export class CommentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to add comment', {
+      logger.failure('Failed to add comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -225,9 +224,8 @@ export class CommentService {
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to get comments', {
+      logger.failure('Failed to get comments', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -265,9 +263,8 @@ export class CommentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update comment', {
+      logger.failure('Failed to update comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -299,9 +296,8 @@ export class CommentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to delete comment', {
+      logger.failure('Failed to delete comment', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

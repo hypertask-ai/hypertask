@@ -149,9 +149,8 @@ export class SearchService {
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to search tasks', {
+      logger.failure('Failed to search tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

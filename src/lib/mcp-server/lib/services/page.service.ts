@@ -41,9 +41,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to create page', {
+      logger.failure('Failed to create page', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -71,9 +70,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to get page', {
+      logger.failure('Failed to get page', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -104,9 +102,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to update page', {
+      logger.failure('Failed to update page', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -146,9 +143,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to list pages', {
+      logger.failure('Failed to list pages', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -172,9 +168,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to search pages', {
+      logger.failure('Failed to search pages', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -214,9 +209,8 @@ export class PageService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage page history', {
+      logger.failure('Failed to manage page history', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

@@ -206,9 +206,8 @@ export class ProjectService {
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to list projects', {
+      logger.failure('Failed to list projects', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -230,9 +229,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get board manifest', {
+      logger.failure('Failed to get board manifest', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -254,9 +252,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get board playbook', {
+      logger.failure('Failed to get board playbook', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -297,9 +294,8 @@ export class ProjectService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage board config', {
+      logger.failure('Failed to manage board config', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -336,9 +332,8 @@ export class ProjectService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage project administration', {
+      logger.failure('Failed to manage project administration', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -378,9 +373,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list sections', {
+      logger.failure('Failed to list sections', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -424,9 +418,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to create section', {
+      logger.failure('Failed to create section', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -464,9 +457,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to create label', {
+      logger.failure('Failed to create label', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -491,9 +483,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list labels', {
+      logger.failure('Failed to list labels', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -534,9 +525,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list project members', {
+      logger.failure('Failed to list project members', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -587,9 +577,8 @@ export class ProjectService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list project members', {
+      logger.failure('Failed to list project members', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

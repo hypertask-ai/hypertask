@@ -446,9 +446,8 @@ export class TaskService {
         ...paginationMetadata,
       };
     } catch (error) {
-      logger.error('Failed to list tasks', {
+      logger.failure('Failed to list tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -525,9 +524,8 @@ export class TaskService {
         tasks: normalizedTasks,
       };
     } catch (error) {
-      logger.error('Failed to get tasks', {
+      logger.failure('Failed to get tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -556,9 +554,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get task context', {
+      logger.failure('Failed to get task context', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -601,9 +598,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get next tasks', {
+      logger.failure('Failed to get next tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -663,9 +659,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to link tasks', {
+      logger.failure('Failed to link tasks', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -723,9 +718,8 @@ export class TaskService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage task description history', {
+      logger.failure('Failed to manage task description history', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -767,9 +761,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to get task tree', {
+      logger.failure('Failed to get task tree', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -877,9 +870,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to update task', {
+      logger.failure('Failed to update task', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -952,9 +944,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to create task', {
+      logger.failure('Failed to create task', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -1002,9 +993,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to move task between boards', {
+      logger.failure('Failed to move task between boards', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -1060,9 +1050,8 @@ export class TaskService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to assign user to task', {
+      logger.failure('Failed to assign user to task', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

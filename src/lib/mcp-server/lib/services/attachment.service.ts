@@ -75,9 +75,8 @@ export class AttachmentService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to attach files', {
+      logger.failure('Failed to attach files', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
