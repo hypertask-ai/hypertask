@@ -1,7 +1,8 @@
 "use client"
 import { showBoardManagerAtom } from '@/store';
 import { getFirstProject } from '@/utils/api/Homepage';
-import { getViewFromProject } from '@/utils/helperFunctions/Views/ViewsHelperFunctions';
+import { returnToFirstBoard } from '@/lib/firstScreen/returnToFirstBoard';
+import { useSignout } from '@/hooks/MultiPages/HTC/useSignout';
 import Head from 'next/head'
 import { useRouter } from 'next/navigation';
 import { CircleAlert } from 'lucide-react';
@@ -15,13 +16,12 @@ const Unauthorized = () => {
         setShowBoardManager(false)
     }, [setShowBoardManager])
     const router = useRouter()
-    const goBacktoPrevious = async()=>{
-        const response = await getFirstProject()
-        const activeView = getViewFromProject(response?.data)
-        let view;
-        if(activeView && activeView.type === "Applied")  view = activeView.view.slug
-        router.replace(`/project?id=${response?.data?.id}${view?`&view=${view}`:''}`)
-    }
+    const { handleHardReset } = useSignout()
+    const goBacktoPrevious = () => returnToFirstBoard({
+        getFirstProject,
+        navigate: (url) => router.replace(url),
+        signOut: handleHardReset,
+    })
     
     return (
     <>
