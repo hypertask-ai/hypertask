@@ -208,6 +208,9 @@ export enum CommandMode {
   AgentChatPreviousTeam,
   ArchiveInboxCluster,
   MyTasksSnooze,
+  SelectAllOnBoard,
+  SelectAllInColumn,
+  ClearTaskSelection,
 }
 
 export enum ELogType {

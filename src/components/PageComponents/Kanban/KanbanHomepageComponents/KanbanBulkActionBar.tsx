@@ -1,13 +1,19 @@
 import React from "react";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
+import { BulkActionButtons } from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
 
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 
 const KanbanBulkActionBar = () => {
+  const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const {
     selectedCount,
     failedIds,
     isProcessing,
     openBulkCommand,
+    archiveSelected,
+    clearSelection,
   } = useKanbanBulkSelection();
 
   if (selectedCount === 0) return null;
@@ -22,6 +28,13 @@ const KanbanBulkActionBar = () => {
         {selectedCount} selected
         {failedIds.size > 0 ? ` · ${failedIds.size} failed` : ""}
       </span>
+      {selectAllEnabled && (
+        <BulkActionButtons
+          isProcessing={isProcessing}
+          archiveSelected={archiveSelected}
+          openBulkCommand={openBulkCommand}
+        />
+      )}
       <button
         type="button"
         className="rounded-[4px] bg-hypertasks-purple px-3 py-1.5 text-content text-white transition-opacity hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
@@ -30,7 +43,17 @@ const KanbanBulkActionBar = () => {
       >
         Open actions
       </button>
-      <span className="text-meta text-text-light-gray">Esc to clear</span>
+      {selectAllEnabled ? (
+        <button
+          type="button"
+          className="ml-1 text-meta text-text-light-gray hover:text-white-black"
+          onClick={clearSelection}
+        >
+          Esc
+        </button>
+      ) : (
+        <span className="text-meta text-text-light-gray">Esc to clear</span>
+      )}
     </div>
   );
 };
