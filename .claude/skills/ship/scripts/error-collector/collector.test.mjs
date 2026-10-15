@@ -96,6 +96,7 @@ function harness() {
   };
 }
 async function withHarness(fn) { const h = harness(); try { await fn(h); } finally { h.close(); } }
+const longValue = 'Xy'.repeat(20);
 const event = (overrides = {}) => ({ service: 'web', board: 15, message: 'Checkout failed for user 123', route: '/checkout/123', stack: 'Error: checkout failed\n  at checkout', ts: new Date(NOW - 1000).toISOString(), ...overrides });
 const creates = h => h.calls().filter(c => c.name === 'vcc' && c.args.includes('create'));
 const activities = (h, ticket) => h.calls().filter(c => c.name === 'vcc' && c.args[0] === 'activity' && (!ticket || c.args[2] === ticket));
@@ -136,6 +137,79 @@ check('sources', 'leading ISO timestamps and rejected Better Auth origins do not
   assert.equal(normalize('failed at 2026-10-15T01:33:06.945Z'), 'failed at <time>');
   assert.equal(normalize('Invalid callbackURL: https://other.example/x'), 'Invalid callbackURL: <url>');
   assert.notEqual(fingerprint('vercel', lines[0][0]), fingerprint('vercel', 'ERROR [Better Auth]: Invalid callbackURL: https://x.example'));
+}));
+
+check('tickets', 'groups parked before a fingerprint rule change join the current fingerprint instead of filing duplicates', () => withHarness(async h => {
+  const parked = [
+    ['8e2912a350500b38', '2026-10-15T01:46:59.060Z', '', '/api/demo/guest'],
+    ['3c221db2496d9ced', '2026-10-15T01:46:59.025Z', '', '/api/demo/guest'],
+    ['768f089384b26376', '2026-10-15T01:46:58.277Z', '/demo', '/api/auth/bridge-legacy-session'],
+    ['502ccac81c34360a', '2026-10-15T01:46:57.514Z', '/demo', '/api/auth/bridge-legacy-session'],
+  ];
+  const pending = Object.fromEntries(parked.map(([fp, ts, path, route]) => {
+    const message = `${ts} ERROR [Better Auth]: Invalid origin: https://[redacted].vercel.app${path}`;
+    return [fp, { board: 15, service: 'vercel', normalized: normalize(message), message, stack: '', routes: [route], count: 1, firstSeen: ts, lastSeen: ts }];
+  }));
+  const seedState = () => h.seed({ version: 1, sources: {}, fingerprints: {}, pending, days: {}, summaries: {}, activities: {}, created: [] });
+  const current = fingerprint('vercel', 'ERROR [Better Auth]: Invalid origin: https://x.vercel.app');
+  seedState();
+  h.remote([{ ticketNumber: 'HTPR-7239', projectId: 15, status: 'Normal', description: `<p>error-fingerprint:${current}</p>` }]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  assert.equal(h.state().fingerprints[current].ticket, 'HTPR-7239');
+  assert.equal(h.state().fingerprints[current].total, 4);
+  h.remote([]);
+  seedState();
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.match(creates(h)[0].description, new RegExp(`error-fingerprint:${current}<`));
+}));
+
+check('tickets', 'a group parked under the current rules keeps its key even when its saved sample is redacted', () => withHarness(async h => {
+  const message = `Upstream refused ${longValue}`;
+  h.events([event({ message })]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  assert.equal(await h.run(), 0);
+  const raw = fingerprint('web', message);
+  assert.notEqual(raw, fingerprint('web', redact(message)));
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+  h.events([]);
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+  const legacy = h.state();
+  delete legacy.pending[raw].rules;
+  h.seed(legacy);
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.deepEqual(Object.keys(h.state().pending), [raw]);
+}));
+
+for (const [kind, hidden] of [['long-value', longValue], ['email', 'person@example.invalid']]) check('tickets', `a parked group whose ${kind}-redacted sample cannot rebuild its fingerprint keeps its key and gets one ticket`, () => withHarness(async h => {
+  const message = `2026-10-15T01:46:59.060Z Upstream refused ${hidden}`;
+  h.events([event({ message })]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  assert.equal(await h.run(), 0);
+  const raw = fingerprint('web', message);
+  const legacy = h.state();
+  delete legacy.pending[raw].rules;
+  h.seed(legacy);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  assert.equal(await h.run({ now: NOW + 1000 }), 0);
+  assert.equal(creates(h).length, 1);
+  h.events([event({ message, ts: new Date(NOW + 1500).toISOString() })]);
+  assert.equal(await h.run({ now: NOW + 2000 }), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().fingerprints[raw].total, 2);
+}));
+
+check('tickets', 'a ticket already filed under a parked group\'s old fingerprint is adopted, not filed again', () => withHarness(async h => {
+  const message = '2026-10-15T01:46:59.060Z ERROR [Better Auth]: Invalid origin: https://[redacted].vercel.app';
+  const old = '8e2912a350500b38';
+  h.seed({ version: 1, sources: {}, fingerprints: {}, pending: { [old]: { board: 15, service: 'vercel', normalized: normalize(message), message, stack: '', routes: ['/api/demo/guest'], count: 1, firstSeen: '2026-10-15T01:46:59.060Z', lastSeen: '2026-10-15T01:46:59.060Z' } }, days: {}, summaries: {}, activities: {}, created: [] });
+  h.remote([{ ticketNumber: 'HTPR-7244', projectId: 15, status: 'Normal', description: `<p>error-fingerprint:${old}</p>` }]);
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fingerprint('vercel', message)].ticket, 'HTPR-7244');
 }));
 
 check('sources', 'independent source windows, cap, partial failure and all-failed exit', () => withHarness(async h => {

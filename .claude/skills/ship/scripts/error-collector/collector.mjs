@@ -41,14 +41,17 @@ export function redact(text) {
     .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
 }
 
+const FINGERPRINT_RULES = 2;
 const isoTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
+const rejectedUrl = /(\bInvalid [A-Za-z ]{1,40}: )https?:\/\/\S+/g;
+const changedByCurrentRules = message => (isoTime.test(message) || new RegExp(rejectedUrl.source).test(message)) && !/\[redacted(?:-[a-z]+)?\]/.test(normalize(message));
 
 export function normalize(text, route = false) {
   const id = route ? ':id' : '<id>';
   return String(text ?? '')
     .replace(new RegExp(`^\\s*${isoTime.source}\\s+`), '')
     .replace(new RegExp(`\\b${isoTime.source}`, 'g'), '<time>')
-    .replace(/(\bInvalid [A-Za-z ]{1,40}: )https?:\/\/\S+/g, '$1<url>')
+    .replace(rejectedUrl, '$1<url>')
     .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\?[^#]*/, '').replace(/#.*$/, ''))
     .replace(/\?[^\s]*/g, '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, id)
@@ -201,6 +204,30 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     state.days[date] ??= {};
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
   };
+  const absorb = (fp, group, observed = true) => {
+    const known = state.fingerprints[fp];
+    if (known) {
+      const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
+      known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
+      known.total += group.count;
+      known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
+      known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
+      if (!known.deleted) {
+        const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
+        activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
+        activity.count += group.count;
+        activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
+      }
+    } else if (state.pending[fp]) {
+      const pending = state.pending[fp];
+      pending.count += group.count;
+      pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
+      pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
+      pending.routes = [...new Set([...pending.routes, ...group.routes])];
+      if (group.aliases) pending.aliases = [...new Set([...(pending.aliases ?? []), ...group.aliases])];
+      if (group.noiseRule && group.hourlyCount > pending.hourlyCount) { pending.hourlyCount = group.hourlyCount; pending.hourLastSeen = group.hourLastSeen; }
+    } else { state.pending[fp] = group; if (observed && !group.noiseRule) stats(day(group.firstSeen), group.service).newGroups++; }
+  };
   let succeeded = 0;
   for (const source of sources ?? await loadSources()) {
     try {
@@ -249,7 +276,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         counts.errors += event.count;
         if (event.ticket === false) continue;
         const fp = fingerprint(event.service, event.message, event.route);
-        if (!groups.has(fp)) groups.set(fp, { board: event.board, service: event.service, normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
+        if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
       }
       for (const [fp, warning] of warnings) {
@@ -287,29 +314,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       state.coverage[source.name] = coverage;
       if (dryRun) console.log(`DRY-RUN source ${JSON.stringify({ name: source.name, since, until, events: events.length, count: events.reduce((sum, event) => sum + event.count, 0) })}`);
-      for (const [fp, group] of groups) {
-        const known = state.fingerprints[fp];
-        if (known) {
-          const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
-          known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
-          known.total += group.count;
-          known.firstSeen = known.firstSeen < group.firstSeen ? known.firstSeen : group.firstSeen;
-          known.lastSeen = known.lastSeen > group.lastSeen ? known.lastSeen : group.lastSeen;
-          if (!known.deleted) {
-            const activity = state.activities[known.ticket] ??= { count: 0, since: group.firstSeen, at: known.lastActivityAt };
-            activity.routes = [...new Set([...(activity.routes ?? []), ...newRoutes])];
-            activity.count += group.count;
-            activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
-          }
-        } else if (state.pending[fp]) {
-          const pending = state.pending[fp];
-          pending.count += group.count;
-          pending.firstSeen = pending.firstSeen < group.firstSeen ? pending.firstSeen : group.firstSeen;
-          pending.lastSeen = pending.lastSeen > group.lastSeen ? pending.lastSeen : group.lastSeen;
-          pending.routes = [...new Set([...pending.routes, ...group.routes])];
-          if (group.noiseRule && group.hourlyCount > pending.hourlyCount) { pending.hourlyCount = group.hourlyCount; pending.hourLastSeen = group.hourLastSeen; }
-        } else { state.pending[fp] = group; if (!group.noiseRule) stats(day(group.firstSeen), group.service).newGroups++; }
-      }
+      for (const [fp, group] of groups) absorb(fp, group);
       state.sources[source.name] = until;
       if (!Array.isArray(fetched)) (state.sourceCursors ??= {})[source.name] = cursor;
       await checkpoint();
@@ -325,6 +330,15 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
+  for (const [fp, group] of Object.entries(state.pending)) {
+    if (group.noiseRule || group.rules === FINGERPRINT_RULES) continue;
+    group.rules = FINGERPRINT_RULES;
+    if (!changedByCurrentRules(group.message)) continue;
+    const current = fingerprint(group.service, group.message);
+    if (current === fp) continue;
+    delete state.pending[fp];
+    absorb(current, { ...group, aliases: [...new Set([...(group.aliases ?? []), fp])], normalized: redact(normalize(group.message)) }, false);
+  }
   // Persist fetched data before external writes so interrupted runs retry pending groups.
   await checkpoint();
   let held = 0;
@@ -333,6 +347,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (signal.aborted) break;
     try {
       let found = search(fp, group.board, env);
+      for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
       if (!found) {
         if (state.created.length >= cap) { held++; continue; }
         const column = group.board === 15 ? 'Bugs' : (section ??= intake(env));
