@@ -84,14 +84,28 @@ in place. Reinstall to update the installed copy. No crontab is used.
      found by the first word of each command line and by `/proc/<pid>/comm`,
      because npm rewrites its title to one string such as `npm ci`.
      Per-file deletion is not used.
-- At 80%, old user-owned `/tmp` leftovers and dangling Docker images can be
-  cleaned. Every descendant's newest mtime must be older than two days. Links,
-  mounts, special files, foreign owners, incomplete scans, active process paths,
-  and registered worktrees are kept. Git checkouts are not disposable caches.
-- `/tmp/claude-*` top-level directories and scratch/build content stay. Only
-  named `node-compile-cache*` and `.next/cache` descendants are eligible, with
-  the same age, ownership and process checks. A live process using a cache
-  keeps it. No generalized Claude scratchpad deletion is performed.
+- At 80%, old user-owned `/tmp` leftovers and unused Docker images can be
+  cleaned. Every descendant's newest mtime must be older than two days. Mounts,
+  special files, foreign owners, incomplete scans, active process paths and
+  command lines, paths a running container mounts, and registered worktrees are
+  kept. Links inside a leftover (`node_modules/.bin`, Wine `dosdevices`) are
+  removed as links and never followed; a top-level link is kept. Git checkouts
+  are not disposable caches.
+- Owning session (YPER4-411, https://app.hypertask.ai/detail/project-4060/411):
+  a top-level `/tmp` entry is kept while a running session names it as
+  `/tmp/<name>`: the transcript of every live Claude Code session (pid alive in
+  `~/.claude/sessions/<pid>.json`) and every Codex log in `~/.codex/sessions`
+  written in the last two days. If the registry or a log cannot be read, every
+  top-level entry stays with reason `running session logs unreadable`.
+- `/tmp/claude-*` top-level and project folders stay. A session folder
+  `/tmp/claude-<uid>/<project>/<session id>` is eligible only when that session
+  no longer runs: its id is not the current or a former id of a live registry
+  entry and appears on no process command line (`claude --resume <id>`). The
+  age, ownership, process (a live session holds its `tasks` folder open) and
+  container checks above still apply. An unreadable registry keeps every
+  session folder. In a running session's folder, only named
+  `node-compile-cache*` and `.next/cache` descendants are eligible, with the
+  same checks.
 - Process inspection first tries a read-only sudo scan across all UIDs, including
   root: `sudo -n /usr/bin/python3 -I -c <fixed embedded script>`, without a shell
   and with a 60-second timeout. The constant script only lists `/proc` entries
@@ -147,8 +161,10 @@ in place. Reinstall to update the installed copy. No crontab is used.
   `~/.config/hypertask-env.sh` or the environment. Attempts are limited to one
   per hour. Credentials and notification errors are never printed or logged.
 - Docker volumes other than leaked smoke volumes (cache category 1) are never
-  removed, even when dangling. Images are pruned without `-a`, so only
-  dangling images are eligible.
+  removed, even when dangling. Dangling images are pruned, then images no
+  container (running or stopped) uses and created over 7 days ago
+  (`docker image prune -a --filter until=168h`). An image any container uses
+  is never removed.
 
 ## State and report
 

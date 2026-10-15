@@ -35,6 +35,11 @@ BROWSER_DIR = re.compile(r'^([a-z][a-z0-9_]*)-([0-9]+)$')
 NPM_PROGRAMS = {'npm', 'npx', 'npm-cli.js', 'npx-cli.js'}
 # Home-relative folders no cache rule may touch, at any depth or as an ancestor.
 NEVER_CACHE = ('.config', '.ssh', '.claude', '.codex', '.local/state/vcc-evidence')
+# Claude Code keeps per-session scratch in /tmp/claude-<uid>/<project>/<session id> (YPER4-411).
+SESSION_ID = re.compile(r'[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}')
+TMP_MENTION = re.compile(r'/tmp/([^/\s"\'\\`<>|;:,()\[\]{}]+)')
+# Images no container (running or stopped) uses, created over 7 days ago.
+IMAGE_UNUSED_FOR = '168h'
 
 
 def command(args, cwd=None):
@@ -223,6 +228,44 @@ def cmdline_paths(proc=Path('/proc')):
     return paths, programs, complete
 
 
+def live_sessions(home, proc=Path('/proc')):
+    """Ids of running Claude Code sessions, old ids included, plus session ids on any command line.
+
+    Raises OSError or ValueError when the registry cannot be read completely."""
+    ids, transcripts = set(), []
+    registry = home / '.claude/sessions'
+    if registry.exists():
+        for entry in registry.glob('*.json'):
+            row = json.loads(entry.read_text())
+            if not isinstance(row, dict) or not isinstance(row.get('pid'), int):
+                raise ValueError(f'malformed session registry entry {entry.name}')
+            if not (proc / str(row['pid'])).exists() or not row.get('sessionId'):
+                continue
+            ids.add(row['sessionId'])
+            ids.update(old['sessionId'] for old in row.get('formerNames') or [] if old.get('sessionId'))
+            transcripts.extend((home / '.claude/projects').glob(f'*/{row["sessionId"]}.jsonl'))
+    for process in proc.iterdir():
+        if process.name.isdigit():
+            try:
+                ids.update(SESSION_ID.findall((process / 'cmdline').read_bytes().decode(errors='replace')))
+            except (FileNotFoundError, ProcessLookupError):
+                continue
+    return ids, transcripts
+
+
+def tmp_mentions(files):
+    """Top-level /tmp names a running session wrote about; such a folder still belongs to that session."""
+    names = set()
+    for path in files:
+        try:
+            with path.open(errors='replace') as stream:
+                for line in stream:
+                    names.update(TMP_MENTION.findall(line))
+        except FileNotFoundError:
+            continue
+    return names
+
+
 def docker_available():
     return shutil.which('docker') is not None
 
@@ -375,16 +418,71 @@ class Guard:
             raise ValueError(reason)
         return size
 
+    def ended_sessions(self, scratch, live):
+        """Session folders under one /tmp/claude-* root whose Claude Code session no longer runs."""
+        ended = []
+        try:
+            projects = [p for p in scratch.iterdir() if p.is_dir() and not p.is_symlink()]
+        except OSError:
+            self.log('kept', scratch, 'Claude scratch folder unreadable')
+            return ended
+        for project in projects:
+            try:
+                folders = list(project.iterdir())
+            except OSError:
+                self.log('kept', project, 'Claude scratch folder unreadable')
+                continue
+            for folder in folders:
+                if not SESSION_ID.fullmatch(folder.name) or not folder.is_dir() or folder.is_symlink():
+                    continue
+                if live is None:
+                    self.log('kept', folder, 'Claude session registry unreadable')
+                elif folder.name in live:
+                    self.log('kept', folder, 'Claude session still running')
+                else:
+                    ended.append(folder)
+        return ended
+
+    def temporary_check(self, path, mentioned, refresh=False, session=False):
+        if session and refresh:
+            try:
+                live, _ = live_sessions(self.home)
+            except (OSError, ValueError, AttributeError):
+                raise ValueError('Claude session registry unreadable')
+            if path.name in live:
+                raise ValueError('Claude session still running')
+        if path.parent == self.tmp:
+            if mentioned is None:
+                raise ValueError('running session logs unreadable')
+            if path.name in mentioned:
+                raise ValueError('a running session names this path')
+        size = self.safety(path, 2 * DAY, refresh=refresh, links=True)
+        reason = self.cache_busy(path, refresh=refresh)
+        if reason:
+            raise ValueError(reason)
+        return size
+
     def temporary(self):
-        candidates = []
+        try:
+            live, transcripts = live_sessions(self.home)
+            codex = [log for log in (self.home / '.codex/sessions').rglob('*.jsonl')
+                     if self.now - log.stat().st_mtime <= 2 * DAY]
+            mentioned = tmp_mentions(transcripts + codex)
+        except (OSError, ValueError, AttributeError):
+            live = mentioned = None
+        candidates, sessions = [], set()
         for entry in self.tmp.iterdir():
             if entry.name.startswith('claude-'):
                 self.log('kept', entry, 'Claude scratchpad top-level directory')
                 if entry.is_dir() and not entry.is_symlink():
-                    # Only named, rebuildable caches, never session build/scratch content.
+                    ended = self.ended_sessions(entry, live)
+                    candidates.extend(ended)
+                    sessions.update(ended)
+                    # Elsewhere only named, rebuildable caches, never a running session's build or scratch content.
                     for root, dirs, _ in os.walk(entry, followlinks=False):
                         parent = Path(root)
-                        dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules'} and not (parent / d).is_symlink()]
+                        dirs[:] = [d for d in dirs if d not in {'.git', 'node_modules'}
+                                   and not (parent / d).is_symlink() and parent / d not in ended]
                         for name in list(dirs):
                             child = parent / name
                             if name.startswith('node-compile-cache') or (name == 'cache' and parent.name == '.next'):
@@ -402,13 +500,13 @@ class Guard:
                     raise ValueError('foreign owner')
                 if contains_git(path):
                     raise ValueError('git checkout, not disposable cache')
-                size = self.safety(path, 2 * DAY)
+                size = self.temporary_check(path, mentioned)
                 if self.dry:
                     self.planned += size
                     self.log('would remove', path, 'old, owned, inactive temporary output', size)
                 else:
                     # Recheck immediately before removal, including all descendant mtimes.
-                    self.safety(path, 2 * DAY, refresh=True)
+                    self.temporary_check(path, mentioned, refresh=True, session=path in sessions)
                     if path.is_dir():
                         shutil.rmtree(path)
                     else:
@@ -913,6 +1011,7 @@ class Guard:
         try:
             before = shutil.disk_usage('/').used
             command(['docker', 'image', 'prune', '-f'])
+            command(['docker', 'image', 'prune', '-a', '-f', '--filter', f'until={IMAGE_UNUSED_FOR}'])
             freed = max(0, before - shutil.disk_usage('/').used)
             self.freed += freed
             self.log('pruned', 'docker dangling images', 'disk >=80%; volumes never pruned', freed)

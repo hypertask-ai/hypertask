@@ -20,6 +20,7 @@ HERE = Path(__file__).resolve().parent
 spec = importlib.util.spec_from_file_location('disk_guard', HERE / 'disk-guard.py')
 disk = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(disk)
+LIVE_SESSIONS = disk.live_sessions
 
 
 class Fixture(unittest.TestCase):
@@ -43,6 +44,7 @@ class Fixture(unittest.TestCase):
         # Never read real command lines or reach the real Docker daemon from a test.
         self.cmdlines = patch.object(disk, 'cmdline_paths', return_value=(set(), set(), True)).start()
         self.docker = patch.object(disk, 'docker_available', return_value=False).start()
+        self.live = patch.object(disk, 'live_sessions', return_value=(set(), [])).start()
         # 79%: above the cache line, below the 80% cleanup and 90% alert. Tests override it explicitly.
         if not os.environ.get('DISK_GUARD_TEST_REAL_USAGE'):
             self.usage = patch.object(disk.Guard, 'usage', return_value=79).start()
@@ -201,6 +203,139 @@ class TemporaryTests(Fixture):
         self.guard.temporary()
         self.assertTrue(cache.exists())
 
+    RUNNING = '11111111-2222-4333-8444-555555555555'
+    EARLIER = '22222222-2222-4333-8444-555555555555'
+    ENDED = '33333333-2222-4333-8444-555555555555'
+    RESUMED = '44444444-2222-4333-8444-555555555555'
+
+    def sessions(self, registry=None, cmdline=''):
+        proc = self.root / 'proc'
+        (proc / str(os.getpid())).mkdir(parents=True)
+        (proc / str(os.getpid()) / 'cmdline').write_bytes(cmdline.encode())
+        (proc / '999999999').mkdir()
+        (proc / '999999999' / 'cmdline').write_bytes(b'claude')
+        folder = self.home / '.claude/sessions'
+        folder.mkdir(parents=True)
+        for name, row in (registry or {}).items():
+            (folder / name).write_text(row if isinstance(row, str) else json.dumps(row))
+        self.live.side_effect = lambda home: LIVE_SESSIONS(home, proc)
+
+    def session_dir(self, session):
+        return self.output_dir(self.tmp / 'claude-1000/-home-project' / session)
+
+    def test_ended_session_scratch_removed_running_sessions_kept(self):
+        self.sessions({'1.json': {'pid': os.getpid(), 'sessionId': self.RUNNING,
+                                  'formerNames': [{'name': 'old', 'sessionId': self.EARLIER}]},
+                       '2.json': {'pid': 999999998, 'sessionId': self.ENDED}},
+                      cmdline=f'claude\0--resume\0{self.RESUMED}')
+        running, earlier, ended, resumed = (self.session_dir(s) for s in
+                                            (self.RUNNING, self.EARLIER, self.ENDED, self.RESUMED))
+        self.guard.temporary()
+        self.assertFalse(ended.exists())
+        for kept in (running, earlier, resumed):
+            self.assertTrue(kept.exists(), kept)
+        self.assertTrue((self.tmp / 'claude-1000/-home-project').exists())
+        self.assertIn('Claude session still running', self.output.getvalue())
+
+    def test_session_resumed_during_sweep_kept(self):
+        self.sessions()
+        ended = self.session_dir(self.ENDED)
+        first = self.live.side_effect
+        calls = []
+        def resumed(home):
+            calls.append(home)
+            return first(home) if len(calls) == 1 else ({self.ENDED}, [])
+        self.live.side_effect = resumed
+        self.guard.temporary()
+        self.assertTrue(ended.exists())
+        self.assertEqual(len(calls), 2)
+        self.assertIn('Claude session still running', self.output.getvalue())
+
+    def test_session_registry_unreadable_at_deletion_keeps_folder(self):
+        self.sessions()
+        ended = self.session_dir(self.ENDED)
+        first = self.live.side_effect
+        calls = []
+        def broken(home):
+            calls.append(home)
+            if len(calls) > 1:
+                raise ValueError('malformed')
+            return first(home)
+        self.live.side_effect = broken
+        self.guard.temporary()
+        self.assertTrue(ended.exists())
+
+    def test_ended_session_held_open_or_fresh_kept(self):
+        self.sessions()
+        held = self.session_dir(self.ENDED)
+        fresh = self.output_dir(self.tmp / 'claude-1000/-home-project' / self.RESUMED, 1)
+        self.paths.return_value = ({held / 'output'}, False)
+        self.guard.temporary()
+        self.assertTrue(held.exists())
+        self.assertTrue(fresh.exists())
+
+    def test_unreadable_session_registry_keeps_every_session_and_tmp_entry(self):
+        self.sessions({'1.json': 'not json'})
+        ended = self.session_dir(self.ENDED)
+        old = self.output_dir(self.tmp / 'old')
+        self.guard.temporary()
+        self.assertTrue(ended.exists())
+        self.assertTrue(old.exists())
+        self.assertIn('Claude session registry unreadable', self.output.getvalue())
+        self.assertIn('running session logs unreadable', self.output.getvalue())
+
+    def test_unreadable_scratch_root_of_another_user_kept_and_run_continues(self):
+        self.sessions()
+        foreign = self.tmp / 'claude-1002'
+        (foreign / 'project').mkdir(parents=True)
+        foreign.chmod(0)
+        self.addCleanup(foreign.chmod, 0o700)
+        old = self.output_dir(self.tmp / 'old')
+        self.guard.temporary()
+        self.assertFalse(old.exists())
+        self.assertIn('Claude scratch folder unreadable', self.output.getvalue())
+
+    def test_tmp_entry_named_by_running_session_kept(self):
+        transcript = self.home / '.claude/projects/-home-project' / f'{self.RUNNING}.jsonl'
+        transcript.parent.mkdir(parents=True)
+        transcript.write_text(json.dumps({'command': 'npm ci --prefix /tmp/wt-7019-dependencies'}) + '\n')
+        self.sessions({'1.json': {'pid': os.getpid(), 'sessionId': self.RUNNING}})
+        named = self.output_dir(self.tmp / 'wt-7019-dependencies')
+        other = self.output_dir(self.tmp / 'wt-7019-dependencies-old')
+        self.guard.temporary()
+        self.assertTrue(named.exists())
+        self.assertFalse(other.exists())
+        self.assertIn('a running session names this path', self.output.getvalue())
+
+    def test_tmp_entry_named_in_recent_codex_log_kept(self):
+        log = self.home / '.codex/sessions/2026/10/15/rollout.jsonl'
+        log.parent.mkdir(parents=True)
+        log.write_text('cd /tmp/codex-build && make\n')
+        named = self.output_dir(self.tmp / 'codex-build')
+        self.guard.temporary()
+        self.assertTrue(named.exists())
+
+    def test_links_inside_old_leftover_removed_as_links_only(self):
+        target = self.output_dir(self.root / 'valuable')
+        leftover = self.output_dir(self.tmp / 'wt-dependencies')
+        (leftover / 'node_modules/.bin').mkdir(parents=True)
+        (leftover / 'node_modules/.bin/tool').symlink_to(target / 'output')
+        (leftover / 'dosdevices').symlink_to(target)
+        self.old(leftover)
+        for link in (leftover / 'node_modules/.bin/tool', leftover / 'dosdevices'):
+            os.utime(link, (self.guard.now - 4 * disk.DAY,) * 2, follow_symlinks=False)
+        self.guard.temporary()
+        self.assertFalse(leftover.exists())
+        self.assertTrue((target / 'output').exists())
+
+    def test_container_mount_keeps_tmp_entry(self):
+        mounted = self.output_dir(self.tmp / 'mounted')
+        self.docker.return_value = True
+        with patch.object(disk, 'docker_mounts', return_value={mounted / 'output'}):
+            self.guard.temporary()
+        self.assertTrue(mounted.exists())
+        self.assertIn('running container mounts this path', self.output.getvalue())
+
     def test_symlink_never_followed(self):
         target = self.output_dir(self.root / 'valuable')
         (self.tmp / 'link').symlink_to(target)
@@ -266,7 +401,7 @@ class TemporaryTests(Fixture):
         (entry / 'loop').symlink_to(entry)
         self.assertFalse(disk.contains_git(entry))
         self.guard.temporary()
-        self.assertTrue(entry.exists())  # The existing symlink safety rule still applies.
+        self.assertTrue(entry.exists())  # The fresh link keeps it under the age rule.
 
     def test_failed_discovery_still_protects_successfully_registered_tree(self):
         repo, _ = self.repo()
@@ -1420,7 +1555,9 @@ class OperationTests(Fixture):
     def test_images_only_no_volume_prune(self):
         with patch.object(disk, 'command') as commands:
             self.guard.images()
-        self.assertEqual(commands.call_args.args[0], ['docker', 'image', 'prune', '-f'])
+        self.assertEqual([call.args[0] for call in commands.call_args_list],
+                         [['docker', 'image', 'prune', '-f'],
+                          ['docker', 'image', 'prune', '-a', '-f', '--filter', 'until=168h']])
 
     def test_report_old_and_new_items_no_deletion(self):
         old = self.output_dir(self.home / '.local/state/br7-runs/old', 31)
