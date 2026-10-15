@@ -237,6 +237,34 @@ class TemporaryTests(Fixture):
         self.assertTrue((self.tmp / 'claude-1000/-home-project').exists())
         self.assertIn('Claude session still running', self.output.getvalue())
 
+    def test_session_resumed_during_sweep_kept(self):
+        self.sessions()
+        ended = self.session_dir(self.ENDED)
+        first = self.live.side_effect
+        calls = []
+        def resumed(home):
+            calls.append(home)
+            return first(home) if len(calls) == 1 else ({self.ENDED}, [])
+        self.live.side_effect = resumed
+        self.guard.temporary()
+        self.assertTrue(ended.exists())
+        self.assertEqual(len(calls), 2)
+        self.assertIn('Claude session still running', self.output.getvalue())
+
+    def test_session_registry_unreadable_at_deletion_keeps_folder(self):
+        self.sessions()
+        ended = self.session_dir(self.ENDED)
+        first = self.live.side_effect
+        calls = []
+        def broken(home):
+            calls.append(home)
+            if len(calls) > 1:
+                raise ValueError('malformed')
+            return first(home)
+        self.live.side_effect = broken
+        self.guard.temporary()
+        self.assertTrue(ended.exists())
+
     def test_ended_session_held_open_or_fresh_kept(self):
         self.sessions()
         held = self.session_dir(self.ENDED)

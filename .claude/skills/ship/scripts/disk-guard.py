@@ -443,7 +443,14 @@ class Guard:
                     ended.append(folder)
         return ended
 
-    def temporary_check(self, path, mentioned, refresh=False):
+    def temporary_check(self, path, mentioned, refresh=False, session=False):
+        if session and refresh:
+            try:
+                live, _ = live_sessions(self.home)
+            except (OSError, ValueError, AttributeError):
+                raise ValueError('Claude session registry unreadable')
+            if path.name in live:
+                raise ValueError('Claude session still running')
         if path.parent == self.tmp:
             if mentioned is None:
                 raise ValueError('running session logs unreadable')
@@ -463,13 +470,14 @@ class Guard:
             mentioned = tmp_mentions(transcripts + codex)
         except (OSError, ValueError, AttributeError):
             live = mentioned = None
-        candidates = []
+        candidates, sessions = [], set()
         for entry in self.tmp.iterdir():
             if entry.name.startswith('claude-'):
                 self.log('kept', entry, 'Claude scratchpad top-level directory')
                 if entry.is_dir() and not entry.is_symlink():
                     ended = self.ended_sessions(entry, live)
                     candidates.extend(ended)
+                    sessions.update(ended)
                     # Elsewhere only named, rebuildable caches, never a running session's build or scratch content.
                     for root, dirs, _ in os.walk(entry, followlinks=False):
                         parent = Path(root)
@@ -498,7 +506,7 @@ class Guard:
                     self.log('would remove', path, 'old, owned, inactive temporary output', size)
                 else:
                     # Recheck immediately before removal, including all descendant mtimes.
-                    self.temporary_check(path, mentioned, refresh=True)
+                    self.temporary_check(path, mentioned, refresh=True, session=path in sessions)
                     if path.is_dir():
                         shutil.rmtree(path)
                     else:
