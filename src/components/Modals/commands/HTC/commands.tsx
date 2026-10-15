@@ -103,8 +103,10 @@ const Commands = (props: Props) => {
     focusProxy,
   } = props;
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
-  const selectedTasksFirst = kanbanSelectAllEnabled &&
-    !!contextOptions?.kanbanSelectAllEnabled && !!contextOptions.bulkSelectionCount;
+  let selectedTasksFirst = false;
+  if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
+    selectedTasksFirst = true;
+  }
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
@@ -142,8 +144,8 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const getAgentLogCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, true),
-    []
+    (options?: IAllCommands) => getAllCommands(options, true, kanbanSelectAllEnabled && !!options?.kanbanSelectAllEnabled),
+    [kanbanSelectAllEnabled]
   );
   let getCommands = getAllCommands;
   if (agentLogNameEnabled) {
@@ -239,7 +241,6 @@ const Commands = (props: Props) => {
     const registryGroups = getCommands({
       context: "Others",
       ...contextOptions,
-      kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled,
       appShellRailOn,
       agentChatOn: onAgentChat,
       projectOptions: {
@@ -247,7 +248,7 @@ const Commands = (props: Props) => {
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
         autoArchiveEnabled: currentProject?.autoArchiveAfterDays != null,
       },
-    }).map((group) => ({
+    }, false, kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled).map((group) => ({
       ...group,
       commandLists: group.commandLists
         .filter(

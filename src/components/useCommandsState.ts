@@ -32,15 +32,17 @@ import { useMyTasksBulkSelectionOptional } from "@/lib/contexts/MyTasks/BulkSele
 import { MIXED_BOARD_MESSAGE, sharedProjectId } from "@/lib/myTasksBulkSelection";
 import { taskTemplatePickerForProject, type TaskTemplatePickerState } from "@/lib/taskTemplatePrefill";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SNOOZE_FLAG, MY_TASKS_TABLE_COLUMNS_FLAG, MY_TASKS_VIEWS_FLAG } from "@/lib/flags/keys";
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
-type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler">;
+type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler"> & {
+  kanbanSelectAllEnabled?: boolean;
+};
 
 export function useCommandsState(context: Context) {
   const {
-  contextOptions, callbackHandler,
+  contextOptions, callbackHandler, kanbanSelectAllEnabled = false,
   } = context;
 
   const queryClient = useQueryClient();
@@ -49,7 +51,6 @@ export function useCommandsState(context: Context) {
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
   const myTasksSnoozeEnabled = useFlag(MY_TASKS_SNOOZE_FLAG);
-  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const myTasksBulkSelectionEnabled = useFlag(MY_TASKS_BULK_SELECTION_FLAG);
   const activeSectionId = useRecoilValue(activeSectionIdAtom);
   const {

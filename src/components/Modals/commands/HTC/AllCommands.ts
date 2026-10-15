@@ -1299,11 +1299,12 @@ const help: CommandGroup = {
 
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
-  agentLogNameEnabled = false
+  agentLogNameEnabled = false,
+  kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
-  const bulk = getBulkTaskCommands(commandOptions);
+  const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
   const comment = getCommentCommands(commandOptions);
   const task = getTaskCommands(commandOptions, agentLogNameEnabled);
   const board = getBoardCommands(commandOptions);
