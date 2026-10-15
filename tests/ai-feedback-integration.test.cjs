@@ -264,6 +264,40 @@ test('thrown MCP caller errors keep their HTTP meaning instead of filing as 500 
   assert.match(files[1].description, /HTTP status: 400/)
 })
 
+test('deliberate thrown 403 refusals are rethrown unchanged without AI feedback (HTPR-7251)', async () => {
+  const { McpError, AuthorizationError } = jiti('../src/lib/mcp-server/utils/errors.ts')
+  const { AgentDoneLifecycleDeniedError } = jiti('../src/lib/mcp/tasks/agentDoneLifecycle.ts')
+  for (const original of [
+    Object.assign(new Error('Access denied'), { httpStatus: 403 }),
+    new McpError(-32003, 'Access denied'),
+    new AuthorizationError(),
+    new AgentDoneLifecycleDeniedError(),
+  ]) {
+    const [tool] = observeFeedbackTools([
+      { name: 'hypertask_update_task', description: 'permission refusal', parameters: z.object({}), execute: async () => { throw original } },
+    ], 985)
+    await assert.rejects(tool.execute({}, 'fixture'), (error) => error === original)
+    assert.equal(pending.length, 0)
+    await drain()
+    assert.equal(files.length, 0)
+  }
+})
+
+test('thrown 400, 404 and 500 errors still file AI feedback and are rethrown unchanged (HTPR-7251)', async () => {
+  for (const status of [400, 404, 500]) {
+    const original = Object.assign(new Error('Tool failed'), { httpStatus: status })
+    const [tool] = observeFeedbackTools([
+      { name: 'hypertask_update_task', description: 'tool failure', parameters: z.object({}), execute: async () => { throw original } },
+    ], 985)
+    const count = files.length
+    await assert.rejects(tool.execute({}, 'fixture'), (error) => error === original)
+    await drain()
+    assert.equal(files.length, count + 1)
+    assert.match(files.at(-1).description, new RegExp(`HTTP status: ${status}`))
+    assert.match(files.at(-1).description, /Error code: tool-exception/)
+  }
+})
+
 test('schema rejections thrown inside a tool file as 400, not a 500 crash (HTPR-7207)', async () => {
   const schema = z.object({ task_id: z.array(z.number()) })
   const tools = observeFeedbackTools([
