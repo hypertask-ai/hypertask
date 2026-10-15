@@ -66,6 +66,14 @@ async function authMiddleware(request: NextRequest) {
     }
   }
 
+  if (
+    process.env.VERCEL_ENV === 'production' &&
+    request.headers.get('host')?.endsWith('.vercel.app') &&
+    currentPath.startsWith('/demo')
+  ) {
+    return NextResponse.redirect(new URL(`${currentPath}${request.nextUrl.search}`, 'https://app.hypertask.ai'), 307);
+  }
+
   if (request.headers.get('host') === 'demo.hypertask.ai' && currentPath === '/') {
     return NextResponse.redirect(new URL('/demo', request.url), 307);
   }
