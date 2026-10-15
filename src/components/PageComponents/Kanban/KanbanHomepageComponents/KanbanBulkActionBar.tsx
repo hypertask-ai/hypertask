@@ -35,7 +35,7 @@ const KanbanBulkActionBar = () => {
   return (
     <div
       className={phoneBar ? phoneBarClass : desktopBarClass}
-      style={phoneBar ? phoneBarStyle : undefined}
+      style={phoneBar ? phoneBarStyle : selectAllEnabled ? { bottom: "var(--quick-tips-clearance, 20px)" } : undefined}
       role="status"
       aria-live="polite"
     >

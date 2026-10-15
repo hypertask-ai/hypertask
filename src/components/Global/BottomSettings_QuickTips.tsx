@@ -334,14 +334,17 @@ const TipsComp = ({
   const [hasHorizontalScrollbar, setHasHorizontalScrollbar] = useRecoilState(
     isXScrollOnKanbanAtom
   );
+  const bottom = `calc(${appShellRailOn ? 0 : hasHorizontalScrollbar && pathanme?.startsWith("/project") ? 12 : 0}px + var(--notif-banner-h, 0px))`;
   useEffect(() => {
     if (!barRef.current) return;
 
     const bar = barRef.current;
     const updateHeight = () => {
+      const height = bar.getBoundingClientRect().height;
+      document.documentElement.style.setProperty("--quick-tips-h", `${height}px`);
       document.documentElement.style.setProperty(
-        "--quick-tips-h",
-        `${bar.getBoundingClientRect().height}px`
+        "--quick-tips-clearance",
+        height > 0 ? `calc(${height}px + ${bottom} + 8px)` : "20px"
       );
     };
     updateHeight();
@@ -351,8 +354,9 @@ const TipsComp = ({
     return () => {
       observer.disconnect();
       document.documentElement.style.removeProperty("--quick-tips-h");
+      document.documentElement.style.removeProperty("--quick-tips-clearance");
     };
-  }, []);
+  }, [bottom]);
 
   const renderShortcut = (x: string) => {
     if (x.toLowerCase() === "ctrl") {
@@ -365,13 +369,7 @@ const TipsComp = ({
     <div
       ref={barRef}
       style={{
-        bottom: `calc(${
-          appShellRailOn
-            ? 0
-            : hasHorizontalScrollbar && pathanme?.startsWith("/project")
-            ? 12
-            : 0
-        }px + var(--notif-banner-h, 0px))`,
+        bottom,
         position: "fixed",
         zIndex: 299,
         left: appShellRailOn ? "var(--app-shell-rail-w, 48px)" : 0,
