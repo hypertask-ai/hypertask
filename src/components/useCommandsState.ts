@@ -36,11 +36,13 @@ import { HTPR_6427_ROW_SHORTCUTS_FLAG, MY_TASKS_BULK_SELECTION_FLAG, MY_TASKS_SN
 import { useTaskProjectFallback } from "@/lib/keyboard/taskProjectFallback";
 import type { IHTCProps } from "./commandTypes";
 
-type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler">;
+type Context = Pick<IHTCProps, "contextOptions" | "callbackHandler"> & {
+  kanbanSelectAllEnabled?: boolean;
+};
 
 export function useCommandsState(context: Context) {
   const {
-  contextOptions, callbackHandler,
+  contextOptions, callbackHandler, kanbanSelectAllEnabled = false,
   } = context;
 
   const queryClient = useQueryClient();
@@ -96,6 +98,7 @@ export function useCommandsState(context: Context) {
         task: undefined,
         taskOptions: undefined,
         bulkSelectionCount: bulkSelection?.selectedCount,
+        kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!kanbanBulkSelection,
       }
     : contextOptions;
 

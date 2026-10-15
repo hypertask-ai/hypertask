@@ -54,6 +54,16 @@ export function createCommandDispatcher(context: Context) {
       return;
     }
 
+    if ([CommandMode.SelectAllOnBoard, CommandMode.SelectAllInColumn, CommandMode.ClearTaskSelection].includes(mode!)) {
+      if (paletteContextOptions?.kanbanSelectAllEnabled && bulkSelection && "selectAll" in bulkSelection) {
+        if (mode === CommandMode.SelectAllOnBoard) bulkSelection.selectAll();
+        if (mode === CommandMode.SelectAllInColumn) bulkSelection.selectColumn();
+        if (mode === CommandMode.ClearTaskSelection) bulkSelection.clearSelection();
+      }
+      boardCloseHandler();
+      return;
+    }
+
     if (mode) {
       setShowCommands((prev) => ({ ...prev, mode }));
       setCommandMode(mode);

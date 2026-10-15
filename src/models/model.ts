@@ -1094,6 +1094,7 @@ export type HTCContext = "Task" | "Kanban" | "Inbox" | "Others";
 export interface IAllCommands {
   context: HTCContext;
   bulkSelectionCount?: number;
+  kanbanSelectAllEnabled?: boolean;
   task?: {
     taskId: number;
     projectId: number;

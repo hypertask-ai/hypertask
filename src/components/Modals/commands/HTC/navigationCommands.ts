@@ -266,36 +266,60 @@ export const getBulkTaskCommands = (
   if (!commandOptions.bulkSelectionCount) return null;
 
   return {
-    group: "Selected tasks",
+    group: commandOptions.kanbanSelectAllEnabled
+      ? `${commandOptions.bulkSelectionCount} selected tasks`
+      : "Selected tasks",
     commandLists: [
       {
         key: "bulkMoveToColumn",
-        name: "Move selected tasks to column",
+        name: commandOptions.kanbanSelectAllEnabled ? "Move to column" : "Move selected tasks to column",
         keyboard: ["M"],
         commandMode: CommandMode.MoveToColumn,
         keywords: "move selected tasks status column section stage kanban workflow",
       },
       {
         key: "bulkAssignUser",
-        name: "Assign selected tasks",
+        name: commandOptions.kanbanSelectAllEnabled ? "Assign" : "Assign selected tasks",
         keyboard: ["A"],
         commandMode: CommandMode.OpenAssignModal,
         keywords: "assign selected tasks assignee owner user member person delegate",
       },
       {
         key: "bulkSetLabels",
-        name: "Set tags on selected tasks",
+        name: commandOptions.kanbanSelectAllEnabled ? "Set tags" : "Set tags on selected tasks",
         keyboard: ["T"],
         commandMode: CommandMode.LabelModal,
         keywords: "set add edit tags labels selected tasks categories organize",
       },
       {
         key: "bulkArchive",
-        name: "Archive selected tasks",
+        name: commandOptions.kanbanSelectAllEnabled ? "Archive" : "Archive selected tasks",
         keyboard: ["CTRL", "E"],
         commandMode: CommandMode.ArchiveTask,
         keywords: "archive selected tasks done complete finish close",
       },
+      ...(commandOptions.kanbanSelectAllEnabled ? [
+        {
+          key: "bulkSelectAllOnBoard",
+          name: "Select all on board",
+          keyboard: ["CTRL", "A"],
+          commandMode: CommandMode.SelectAllOnBoard,
+          keywords: "select all on board visible cards selected tasks",
+        },
+        {
+          key: "bulkSelectAllInColumn",
+          name: "Select all in this column",
+          commandMode: CommandMode.SelectAllInColumn,
+          keywords: "select all column section focused selected tasks",
+        },
+        {
+          key: "bulkClearSelection",
+          name: "Clear selection",
+          keyboard: ["ESC"],
+          commandMode: CommandMode.ClearTaskSelection,
+          keywords: "clear deselect selection selected tasks escape",
+        },
+      ] : []),
     ],
   };
 };

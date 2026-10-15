@@ -14,7 +14,7 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -61,6 +61,7 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -95,6 +96,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   boardCloseHandler, refreshRowTaskList, taskTemplatePickerForCurrentProject,
   } = useCommandsState({
     contextOptions, callbackHandler,
+    ...(kanbanSelectAllEnabled ? { kanbanSelectAllEnabled: true } : {}),
   });
   const {
   setRecurrenceHandler, saveTaskTemplateHandler, openTaskTemplateHandler, generateStatusUpdateHandler, toggleStalenessHandler,

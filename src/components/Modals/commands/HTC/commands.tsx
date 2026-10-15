@@ -51,6 +51,7 @@ import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
 import {
   GOOGLE_CALENDAR_FLAG,
+  HTPR_7260_KANBAN_SELECT_ALL_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -86,6 +87,8 @@ type Props = {
   focusProxy?: { current: HTMLInputElement | null };
 };
 
+const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
+
 const Commands = (props: Props) => {
   const {
     handleAction,
@@ -99,6 +102,11 @@ const Commands = (props: Props) => {
     scope,
     focusProxy,
   } = props;
+  const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
+  let selectedTasksFirst = false;
+  if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
+    selectedTasksFirst = true;
+  }
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
@@ -240,7 +248,7 @@ const Commands = (props: Props) => {
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
         autoArchiveEnabled: currentProject?.autoArchiveAfterDays != null,
       },
-    }).map((group) => ({
+    }, false, kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled).map((group) => ({
       ...group,
       commandLists: group.commandLists
         .filter(
@@ -306,13 +314,14 @@ const Commands = (props: Props) => {
     ].map((group) => ({
       ...group,
       commandLists:
-        pinCommentActions && group.group === "Comment"
+        (pinCommentActions && group.group === "Comment") ||
+        (selectedTasksFirst && group.commandLists.some((command) => command.key === "bulkMoveToColumn"))
           ? group.commandLists
           : [...group.commandLists].sort(
               (left, right) => scoreCommand(right) - scoreCommand(left)
             ),
     }));
-    if (contextOptions?.context === "Task") {
+    if (contextOptions?.context === "Task" && !selectedTasksFirst) {
       const taskGroups = getMobileCommandGroups(commandGroups, isMobile);
       return pinCommentActions
         ? pinCommentGroupFirst(taskGroups)
@@ -324,8 +333,13 @@ const Commands = (props: Props) => {
         .flatMap((group) => group.commandLists)
         .map((command) => [command.key, command])
     );
-    const topCommands = Object.entries(frequentlyUsed)
-      .filter(([key]) => canonicalCommands.has(key))
+    let suggestableFrequentlyUsed = Object.entries(frequentlyUsed)
+      .filter(([key]) => canonicalCommands.has(key));
+    if (kanbanSelectAllEnabled) {
+      suggestableFrequentlyUsed = suggestableFrequentlyUsed.filter(([key]) =>
+        !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode));
+    }
+    const topCommands = suggestableFrequentlyUsed
       .sort(
         (left, right) =>
           getHTCFrecencyScore(right[1].frequency, right[1].lastUsedAt, now)
@@ -348,7 +362,9 @@ const Commands = (props: Props) => {
       return command ? [command] : [];
     });
 
-    const rankedCommandGroups = topCommands.length > 0
+    const rankedCommandGroups = selectedTasksFirst
+      ? commandGroups
+      : topCommands.length > 0
       ? [{ group: "Frequently used", commandLists: topCommands }, ...commandGroups]
       : getStartedCommands.length > 0
         ? [{ group: "Get started", commandLists: getStartedCommands }, ...commandGroups]
@@ -366,11 +382,19 @@ const Commands = (props: Props) => {
           }],
         }, ...mobileGroups]
       : mobileGroups;
+    if (selectedTasksFirst) {
+      const bulkGroup = rankedGroups.find((group) =>
+        group.commandLists.some((command) => command.key === "bulkMoveToColumn"),
+      );
+      if (bulkGroup) return [bulkGroup, ...rankedGroups.filter((group) => group !== bulkGroup)];
+    }
     return pinCommentActions
       ? pinCommentGroupFirst(rankedGroups)
       : rankedGroups;
   }, [
     appShellRailOn,
+    kanbanSelectAllEnabled,
+    selectedTasksFirst,
     boardLayout,
     calendarSettings.showWeekends,
     contextOptions,

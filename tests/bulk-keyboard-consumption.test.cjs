@@ -45,7 +45,7 @@ function fixture({ selected = true, rowShortcutsEnabled = true, isApple = false 
     useCallback: fn => fn, KeyCodes, document, navigator: { platform: isApple ? "MacIntel" : "Linux" },
     returnIfModalOrInputActive: () => false, selectedTasks, items: tasks,
     CommandMode: { OpenAssignModal: "assign", LabelModal: "label", MoveToColumn: "move" },
-    clearSelection() {}, toggleTaskSelection() {},
+    clearSelection() {}, toggleTaskSelection() {}, selectAll() {}, selectAllEnabled: false,
     openBulkCommand: mode => { bulkCommands.push(mode); cards[2].focus(); },
     bulkArchiveUndoAll: false, isProcessing: false,
     setIsProcessing() {}, setSelectedIds() {}, setFailedIds() {},
