@@ -72,6 +72,7 @@ jobs:
       head-repository: ${{ steps.request.outputs.head-repository }}
       head-sha: ${{ steps.request.outputs.head-sha }}
       pr: ${{ steps.request.outputs.pr }}
+      superseded: ${{ steps.request.outputs.superseded }}
     steps:
       - name: Validate the exact pull-request revision
         id: request
@@ -97,6 +98,13 @@ jobs:
               )] |
               if length == 1 then .[0].number else empty end
             ' <<<"$prs_json")
+            if [ -z "$REQUEST_PR" ] && jq -e --arg sha "$REQUEST_HEAD_SHA" '
+              all(.[]; .state != "open" or .base.ref != "production" or .head.sha != $sha)
+            ' <<<"$prs_json" >/dev/null; then
+              echo "::notice::No open production pull request has $REQUEST_HEAD_SHA as its head any more (closed, merged or pushed again); nothing to smoke."
+              echo "superseded=true" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
           fi
           [ -n "$REQUEST_PR" ] || { echo "::error::Request is not attached to one open production pull request."; exit 1; }
 
@@ -109,6 +117,11 @@ jobs:
             .base.ref == "production" and
             .head.sha == $sha
           ' <<<"$pr_json" >/dev/null || {
+            if jq -e --arg sha "$REQUEST_HEAD_SHA" '.state != "open" or .head.sha != $sha' <<<"$pr_json" >/dev/null; then
+              echo "::notice::Pull request #$REQUEST_PR was closed or pushed again after this request started; its newest head gets its own request."
+              echo "superseded=true" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "::error::Pull request changed after this request started."
             exit 1
           }
@@ -127,6 +140,7 @@ jobs:
     name: run app-smoke
     needs: validate
     runs-on: ubuntu-latest
+    if: needs.validate.outputs.superseded != 'true'
     timeout-minutes: 15
     permissions:
       contents: read
@@ -186,7 +200,7 @@ jobs:
 
   report:
     name: report app-smoke result
-    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled'
+    if: always() && github.event_name == 'workflow_run' && github.event.workflow_run.conclusion != 'cancelled' && needs.validate.outputs.superseded != 'true'
     needs: [validate, app-smoke]
     runs-on: ubuntu-latest
     timeout-minutes: 1
