@@ -12,6 +12,7 @@ import {
 } from "@/lib/flags";
 import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
+import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -131,6 +132,8 @@ async function sweep() {
 
     try {
       const title = removalTitle(flag.key);
+      const description = removalDescription(flag.key, flag.releasedAt);
+      const projectIdentifier = project.uniqueIdentifier;
       const existing = await prisma.task.findFirst({
         where: { projectId: REMOVAL_PROJECT_ID, title, status: "Normal" },
         select: { id: true },
@@ -138,17 +141,21 @@ async function sweep() {
       const taskId =
         existing?.id ??
         (
-          await createTaskCore({
-            title,
-            description: removalDescription(flag.key, flag.releasedAt),
-            userId: FEATURE_FLAG_OWNER_USER_ID,
-            agentId: FEATURE_FLAG_SWEEP_AGENT_ID,
-            projectId: REMOVAL_PROJECT_ID,
-            sectionId: section.id,
-            sectionTitle: section.section_title,
-            projectIdentifier: project.uniqueIdentifier,
-            labelIds: label ? [label.id] : undefined,
-          })
+          await withAdoptedAgentMutationLease(
+            prisma,
+            { agentId: FEATURE_FLAG_SWEEP_AGENT_ID, userId: FEATURE_FLAG_OWNER_USER_ID },
+            () => createTaskCore({
+              title,
+              description,
+              userId: FEATURE_FLAG_OWNER_USER_ID,
+              agentId: FEATURE_FLAG_SWEEP_AGENT_ID,
+              projectId: REMOVAL_PROJECT_ID,
+              sectionId: section.id,
+              sectionTitle: section.section_title,
+              projectIdentifier,
+              labelIds: label ? [label.id] : undefined,
+            }),
+          )
         ).task.id;
       const recorded = await prisma.featureFlag.updateMany({
         where: {
