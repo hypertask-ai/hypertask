@@ -7,6 +7,7 @@ import { passkey } from '@better-auth/passkey'
 import { randomUUID } from 'crypto'
 
 import { bridgeSessionPlugin } from '@/lib/auth/bridgePlugin'
+import { betterAuthTrustedOrigins } from '@/lib/auth/trustedOrigins'
 import authConfig from '@/lib/configs/auth.config'
 import { legacyCookiePlugin, newGoogleSignupRequests } from '@/lib/auth/legacyCookiePlugin'
 import { sendEmail } from '@/lib/email/sendEmail'
@@ -134,20 +135,7 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
-  trustedOrigins:
-    process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
-      ? [
-          'https://demo.hypertask.ai',
-          `https://${process.env.VERCEL_URL}`,
-          ...(process.env.VERCEL_BRANCH_URL
-            ? [`https://${process.env.VERCEL_BRANCH_URL}`]
-            : []),
-        ]
-      : [
-          'https://app.hypertask.ai',
-          'https://staging.hypertask.ai',
-          'https://demo.hypertask.ai',
-        ],
+  trustedOrigins: betterAuthTrustedOrigins(),
   emailAndPassword: {
     enabled: false,
   },
