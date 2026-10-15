@@ -100,7 +100,7 @@ test("every default with no user choice is Haiku 5.5 when the flag is on", () =>
         `${plan} ${hasByok}`,
       );
       assert.equal(
-        catalog.getDefaultAiModelOptionForPlan(plan, hasByok, false, true, true).modelKey,
+        catalog.getDefaultAiModelOptionForPlan(plan, hasByok, true, true).modelKey,
         "claude-haiku-5-5",
       );
     }

@@ -20,7 +20,7 @@ import { defaultAiModelOption, getDefaultAiModelOptionForPlan, getAiModelOptionB
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { resolveUserFacingModelOption, type UserFacingModelFeature } from "@/lib/systemModelLadder";
 import { getAiModelPreferenceIds, type TAiModelPreferenceSurface, type TAiModelPreferences } from "@/lib/aiModelPreferences";
-import { assertModelAllowedForPlan, haiku55ModelEnabled, lunaFreePlanEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
+import { assertModelAllowedForPlan, haiku55ModelEnabled, storePlanIdForProject } from "@/app/api/ai/_lib/planGate";
 import { excludeLoadedTaskRows } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { mergeTaskWriterContextBudget } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 
@@ -653,7 +653,6 @@ export async function selectTaskWriterModel(args: {
         credential.trim() !== sharedKey) ||
       (credential !== null && typeof credential === "object");
   }
-  const lunaFree = await lunaFreePlanEnabled(args.userId);
   const haiku55Enabled = await haiku55ModelEnabled?.(args.userId) ?? false;
   const defaultContext = haiku55Enabled
     ? await getAiDefaultModelContext(keyLookup, true, storePlanId)
@@ -661,7 +660,6 @@ export async function selectTaskWriterModel(args: {
   const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
     storePlanId,
     haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
-    lunaFree,
     haiku55Enabled,
     defaultContext.haikuDefaultEnabled,
   );
@@ -699,7 +697,6 @@ export async function selectTaskWriterModel(args: {
     isLunaBlockedForPlan(
       selection.modelOption,
       storePlanId,
-      lunaFree,
       hasEligibleByokCredential,
     )
   ) {
@@ -786,7 +783,6 @@ export async function selectTaskWriterModel(args: {
       selection.modelOption,
       teamContext.teamId,
       byokApiKey,
-      lunaFree,
     );
   }
 

@@ -4,7 +4,7 @@ Add one client-safe file in `src/lib/flags/definitions/<flag-key>.ts`, exporting
 
 Do not edit shared keys, definitions or risk maps to add a flag. `scripts/generate-flag-index.mjs` validates and sorts the flag files and writes gitignored `index.generated.ts`. Never commit that index. Postinstall covers direct CI `tsc` after `npm ci`; npm prebuild, predev, pretypecheck, prelint and pretest hooks regenerate after local file additions. Next config also generates for direct Next builds/typegen, including installs using `--ignore-scripts`. The two isolated eval workflows explicitly generate after their `--ignore-scripts` installs, before direct Node tests. No manual step is needed. Direct `tsc` after an `--ignore-scripts` install must use `npm run typecheck`, not bypass its generator.
 
-Existing keys.ts, definitions.ts, releaseRisk.ts and flags.ts imports remain supported. Agent run constants are re-exported from their flag files by agentRuns/model.ts; LUNA_FREE_PLAN_FLAG keeps its existing name. Non-flag reply guidance stays in keys.ts.
+Existing keys.ts, definitions.ts, releaseRisk.ts and flags.ts imports remain supported. Agent run constants are re-exported from their flag files by agentRuns/model.ts. Non-flag reply guidance stays in keys.ts.
 
 New features and improvements default to Owner + QA. Bugfix flags use `kind: "bugfix"` and default to Everyone unless an explicit defaultMode overrides it. Infra tickets do not add a flag.
 

@@ -18,27 +18,12 @@ test("composer uses the enabled board default and filters disabled providers", (
   assert.equal(result.models.some((model) => model.provider === "claude"), false);
 });
 
-test("composer filters premium models before send for free boards without BYOK", () => {
+test("composer offers Luna as the free default", () => {
   const result = buildComposerConfig({
     settings: null,
     customEndpointConfigured: false,
     storePlanId: "Free",
     providersWithByok: new Set(),
-  });
-
-  assert.equal(result.models.some((model) => model.id === "gpt-6.1-sol"), false);
-  assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), false);
-  assert.equal(result.models.some((model) => model.id === "gemini-3.5-flash-lite"), true);
-  assert.equal(result.selectedModelId, "gemini-3.5-flash-lite");
-});
-
-test("composer offers Luna as the free default when the htpr-6722 flag is on", () => {
-  const result = buildComposerConfig({
-    settings: null,
-    customEndpointConfigured: false,
-    storePlanId: "Free",
-    providersWithByok: new Set(),
-    lunaFree: true,
   });
 
   assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), true);
@@ -46,13 +31,12 @@ test("composer offers Luna as the free default when the htpr-6722 flag is on", (
   assert.equal(result.selectedModelId, "gpt-6-luna");
 });
 
-test("composer keeps Luna gated on BYOK boards without a key even with the htpr-6722 flag on", () => {
+test("composer keeps Luna gated on BYOK boards without a key", () => {
   const result = buildComposerConfig({
     settings: null,
     customEndpointConfigured: false,
     storePlanId: "BYOK",
     providersWithByok: new Set(),
-    lunaFree: true,
   });
 
   assert.equal(result.models.some((model) => model.id === "gpt-6-luna"), false);

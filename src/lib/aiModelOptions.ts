@@ -558,14 +558,13 @@ export function hasHaikuByokProvider(providers: ReadonlySet<string>): boolean {
 export function getDefaultAiModelOptionForPlan(
   storePlanId: StorePlanKind | null | undefined,
   hasEligibleByokCredential = false,
-  lunaFree = false,
   haiku55Enabled = false,
   haikuDefaultEnabled = false,
 ): TAiModelOption {
   const productionDefault = storePlanId === "Pro" ||
     storePlanId === "AI" ||
     (storePlanId === "BYOK" && hasEligibleByokCredential) ||
-    (storePlanId === "Free" && lunaFree)
+    storePlanId === "Free"
     ? preferredAiModelOption
     : defaultAiModelOption;
   return getAiModelOptionById(defaultModelKeyFor({ haiku55Enabled, haikuDefaultEnabled, plan: storePlanId, hasByok: hasEligibleByokCredential }, productionDefault.modelKey))!;
@@ -586,11 +585,9 @@ export function resolveAiModelOption(
 export function isLunaBlockedForPlan(
   modelOption: TAiModelOption | undefined,
   storePlanId: StorePlanKind | null | undefined,
-  lunaFree: boolean,
   hasEligibleByokCredential: boolean,
 ): boolean {
   if (modelOption?.modelKey !== LUNA_FREE_MODEL_KEY) return false;
-  if (storePlanId === "Free") return !lunaFree;
   return storePlanId === "BYOK" && !hasEligibleByokCredential;
 }
 
@@ -674,9 +671,9 @@ export function getMobileAiChatModelLabel(
 
 export function isPremiumAiModelDefinition(
   model: TAiModelDefinition | undefined,
-  lunaFree = false,
+  freePlan = false,
 ): boolean {
-  if (lunaFree && model?.key === LUNA_FREE_MODEL_KEY) return false;
+  if (freePlan && model?.key === LUNA_FREE_MODEL_KEY) return false;
   return Boolean(model && ((model.priceTier ?? 1) > 1 || model.premium));
 }
 

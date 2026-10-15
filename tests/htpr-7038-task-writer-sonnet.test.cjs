@@ -250,7 +250,7 @@ async function main() {
     for (const plan of ["Free", "Pro", "BYOK"]) {
       const h = harness({ plan });
       assert.equal((await h.post(kind)).status, 200);
-      assert.equal(h.calls.at(-1).modelId, plan === "Pro" ? "openai/gpt-6-luna" : "google/gemini-3.5-flash-lite");
+      assert.equal(h.calls.at(-1).modelId, plan !== "BYOK" ? "openai/gpt-6-luna" : "google/gemini-3.5-flash-lite");
       assert.equal(h.calls.at(-1).params.providerOptions?.anthropic, undefined);
     }
     const offPremium = harness({ plan: "Free", saved: "claude-sonnet-5-5-thinking" });

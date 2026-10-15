@@ -1,6 +1,6 @@
 import { getAiDefaultModelContext } from "@/app/api/ai/_lib/byokKeys";
 import { getDefaultAiModelOptionForPlan } from "@/lib/aiModelOptions";
-import { haiku55ModelEnabled, lunaFreePlanEnabled } from "@/app/api/ai/_lib/planGate";
+import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { reportError } from "@/lib/errors/reportError";
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -123,7 +123,7 @@ export default async function handler(
             const selectedModelOption = hasModelSelection
                 ? getAiModelOptionById(modelOptionId, haiku55Enabled) ??
                   getAiModelOptionById(modelSelected, haiku55Enabled) ??
-                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, await lunaFreePlanEnabled(session.userId), true, defaultContext?.haikuDefaultEnabled) : defaultAiModelOption)
+                  (haiku55Enabled ? getDefaultAiModelOptionForPlan(defaultContext?.plan, defaultContext?.hasByok, true, defaultContext?.haikuDefaultEnabled) : defaultAiModelOption)
                 : undefined;
 
             var customInstructions;

@@ -10,7 +10,7 @@ import { resolveChatTeamContext, buildChatProviderContext } from "@/app/api/ai/_
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";
 import { getAiModelPreferenceIds, type TAiModelPreferences, type TAiModelPreferenceSurface } from "@/lib/aiModelPreferences";
-import { storePlanIdForProject, haiku55ModelEnabled, lunaFreePlanEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
+import { storePlanIdForProject, haiku55ModelEnabled, assertModelAllowedForPlan } from "@/app/api/ai/_lib/planGate";
 import { getAiDefaultModelContext, getByokOrTeamGatewayApiKeyForModelOption, getTeamGatewayApiKey, getByokOrTeamGatewayApiKeyForProvider } from "@/app/api/ai/_lib/byokKeys";
 import { resolveAgentModelPin } from "@/lib/nativeAgent/modelPin";
 import { filterModelOptionForTeam } from "@/app/api/ai/_lib/providerGate";
@@ -123,7 +123,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           credential.trim() !== sharedKey) ||
         (credential !== null && typeof credential === "object");
     }
-    const lunaFree = await lunaFreePlanEnabled(dbUser.id);
     const haiku55Enabled = await haiku55ModelEnabled?.(dbUser.id) ?? false;
     const defaultContext = haiku55Enabled
       ? await getAiDefaultModelContext(keyLookupContext, true, storePlanId)
@@ -131,7 +130,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
     const requestDefaultModelOption = getDefaultAiModelOptionForPlan(
       storePlanId,
       haiku55Enabled ? defaultContext.hasByok : hasEligibleByokCredential,
-      lunaFree,
       haiku55Enabled,
       defaultContext.haikuDefaultEnabled,
     );
@@ -159,7 +157,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       isLunaBlockedForPlan(
         selection.modelOption,
         storePlanId,
-        lunaFree,
         hasEligibleByokCredential,
       )
     ) {
@@ -238,7 +235,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       selection.modelOption,
       gatewayTags.teamId,
       byokApiKey,
-      lunaFree,
     );
 
     titleByokApiKey =
