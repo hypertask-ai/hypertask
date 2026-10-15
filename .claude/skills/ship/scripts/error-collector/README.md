@@ -26,7 +26,7 @@ node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 10m -n 
 node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 2h --level error --path /api/ai/chat/stream --search Allowance
 ```
 
-It prints one JSON line per log entry (newest first: timestamp, level, method, path, deployment, message), production only. `--since` takes `30s`, `10m`, `2h`, `1d` or an ISO time; `-n` 1 to 500 (default 50); `--search` matches message text locally. Messages can contain user data: quote only what a ticket needs.
+It prints one JSON line per log entry (newest first: timestamp, level, method, path, deployment, message), production only. `--since` takes `30s`, `10m`, `2h`, `1d` or an ISO time; `-n` 1 to 500 (default 50); `--level` is `error`, `warn` (Vercel's name; `warning` is accepted) or `info`; `--search` matches message text locally. Messages can contain user data: quote only what a ticket needs.
 
 ## Install (operator action, not done by tests)
 

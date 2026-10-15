@@ -25,6 +25,11 @@ test('bad arguments are refused before any network call', () => {
   }
 });
 
+test('--level warning means the warn level Vercel actually stores', () => {
+  assert.equal(parseArgs(['--level', 'warning'], now).level, 'warn');
+  assert.equal(logFilter(parseArgs(['--level', 'warn'], now)), 'environment:production AND level:warn');
+});
+
 test('the filter always pins production and adds only what was asked', () => {
   assert.equal(logFilter({}), 'environment:production');
   assert.equal(logFilter({ level: 'error', path: '/api/ai/chat/stream' }), 'environment:production AND level:error AND requestPath:"/api/ai/chat/stream"');
