@@ -17,6 +17,17 @@ Tests have a private HOME and fake `vcc`, `ht`, `systemctl`, and `runner-deliver
 
 `--once` runs one collection pass (also the default). `--sources` selects comma-separated module names; without it the eight production sources above run. `--dry-run` permits only `ht GET` reads, prints planned writes/descriptions, and does not create or change state, locks or temporary files. `--summary` forces the daily summary before 06:00 UTC, without duplicating an already sent daily service line.
 
+## Read production logs by hand (YPER4-400)
+
+`vercel logs` (and `vercel-ht logs`) fails from the VPS with 403: the CLI reads from `vercel.com/api/logs/request-logs`, and Vercel's bot protection answers every vercel.com request from this IP with `x-vercel-mitigated: challenge`. `api.vercel.com` is not challenged, so read logs through the same observability API and `stack-key` credentials as the collector:
+
+```sh
+node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 10m -n 5
+node .claude/skills/ship/scripts/error-collector/vercel-logs.mjs --since 2h --level error --path /api/ai/chat/stream --search Allowance
+```
+
+It prints one JSON line per log entry (newest first: timestamp, level, method, path, deployment, message), production only. `--since` takes `30s`, `10m`, `2h`, `1d` or an ISO time; `-n` 1 to 500 (default 50); `--search` matches message text locally. Messages can contain user data: quote only what a ticket needs.
+
 ## Install (operator action, not done by tests)
 
 ```sh
