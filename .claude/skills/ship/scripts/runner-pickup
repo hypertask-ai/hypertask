@@ -18,12 +18,17 @@ NOW=${RUNNER_PICKUP_NOW:-$(date +%s)}
 EVENT_MAX_AGE_HOURS=${RUNNER_PICKUP_EVENT_MAX_AGE_HOURS:-24}
 SEEN_CAP=${RUNNER_PICKUP_SEEN_CAP:-2000}
 EVENT_CAP=10
+# Each board call is bounded so one stalled request cannot outlive the unit's 2 minute start timeout (YPER4-409).
+CALL_TIMEOUT=${RUNNER_PICKUP_CALL_TIMEOUT:-25}
+# Failed ticks in a row before a tick exits non-zero; earlier ones only back off, so one blip is not a failed unit.
+FAIL_AFTER=${RUNNER_PICKUP_FAIL_AFTER:-3}
 HERE=$(cd "$(dirname "$(readlink -f "$0")")" && pwd)
 DELIVER=${RUNNER_DELIVER:-$HERE/runner-deliver}
 # Columns where a ticket is already claimed or settled; everything else counts as not yet claimed.
 SKIP='^(In Progress|AI Review|QA|Valentin Review|Review|Done|Archive|Archived|Blocked)$'
 log() { printf '%s runner-pickup: %s\n' "$(date -Is)" "$*" >&2; }
 die() { log "$*"; exit 1; }
+board() { SHIP_SESSION_NAME="RUNNER $1" timeout "$CALL_TIMEOUT" "$VCC" "${@:2}"; }
 
 install_units() {
   local n=$1 here repo lib unit_dir settings hook_cmd tmp
@@ -203,14 +208,15 @@ run_tick() {
     fails=$((fails + 1)); delay=$((INTERVAL * (1 << (fails > 10 ? 10 : fails))))
     [ "$delay" -le "$CAP" ] || delay=$CAP
     printf '{"fails":%s,"until":%s}\n' "$fails" "$((NOW + delay))" > "$bfile"
+    [ "$fails" -ge "$FAIL_AFTER" ] || { log "$1 (failure $fails, next try in ${delay}s)"; exit 0; }
     die "$1 (failure $fails, next try in ${delay}s)"
   }
   # The one read: tickets assigned to the owner (a runner's agent assigns as the owner), newest changes first.
-  resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --json 2>/dev/null) \
+  resp=$(board "$n" task list --assigned-to me --status Normal --sort updatedAt:desc --limit 100 --json 2>/dev/null) \
     || fail_tick 'board read failed'
   jq -e '.success == true and (.tasks | type == "array")' <<<"$resp" >/dev/null 2>&1 || fail_tick 'board read returned no task list'
   # The inbox is only a backstop: when its read fails, still update tickets and retry pending messages (no backoff).
-  inbox_resp=$(SHIP_SESSION_NAME="RUNNER $n" "$VCC" inbox list --json 2>/dev/null) || inbox_resp=''
+  inbox_resp=$(board "$n" inbox list --json 2>/dev/null) || inbox_resp=''
   jq -e '.success == true and (.agent_notifications | type == "array")' <<<"$inbox_resp" >/dev/null 2>&1 \
     || { log "agent inbox read failed, skipping the inbox backstop this tick"; inbox_resp=''; }
   rm -f "$bfile"
@@ -231,7 +237,7 @@ run_tick() {
   # One activity line per ticket, only when it is still undelivered one tick after it was queued (the runner is busy).
   tickets=$(jq -r '.[] | select(.seen and (.delivered | not) and (.notified | not)) | .ticket' <<<"$merged")
   for t in $tickets; do
-    if SHIP_SESSION_NAME="RUNNER $n" "$VCC" activity add "$t" "Queued for Runner $n: it is busy with other work and will start this ticket when it is free." >/dev/null 2>&1; then
+    if board "$n" activity add "$t" "Queued for Runner $n: it is busy with other work and will start this ticket when it is free." >/dev/null 2>&1; then
       merged=$(jq -c --arg t "$t" 'map(if .ticket == $t then .notified = true else . end)' <<<"$merged")
     else log "activity line for $t failed, will retry next tick"; fi
   done

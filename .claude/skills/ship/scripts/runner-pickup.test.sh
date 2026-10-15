@@ -15,7 +15,7 @@ cat > "$T/vcc" <<'EOF'
 #!/usr/bin/env bash
 echo "$SHIP_SESSION_NAME|$*" >> "$FAKE_LOG"
 case "$1 $2" in
-  "task list") [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
+  "task list") [ -z "${FAKE_HANG:-}" ] || sleep 30; [ -z "${FAKE_FAIL:-}" ] || exit 1; cat "$FAKE_TASKS" ;;
   "inbox list") [ -z "${FAKE_INBOX_FAIL:-}" ] || exit 1; [ -n "${FAKE_INBOX:-}" ] && cat "$FAKE_INBOX" || echo '{"success":true,"agent_notifications":[]}' ;;
   "activity add") exit 0 ;;
   *) exit 9 ;;
@@ -55,13 +55,16 @@ eq "claimed ticket dropped" "$(jq -r '[.items[].ticket]|join(",")' "$inbox")" "Y
 # Errors: backoff file, no tight retry, capped growth.
 export FAKE_FAIL=1; : > "$FAKE_LOG"
 "$SCRIPT" run 3 2>/dev/null; rc=$?
-eq "failed read exits non-zero" "$rc" "1"
+eq "first failed read only backs off" "$rc" "0"
 eq "backoff file written" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "1"
 "$SCRIPT" run 3 2>/dev/null; rc=$?
 eq "second run inside backoff does not call the board" "$(grep -c '|task list' "$FAKE_LOG")" "1"
-RUNNER_PICKUP_NOW=$(( $(date +%s) + 400 )) "$SCRIPT" run 3 2>/dev/null
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 400 )) "$SCRIPT" run 3 2>/dev/null; rc=$?
 eq "after the delay it retries and the delay doubles" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "2"
-for i in 1 2 3 4 5 6 7 8; do RUNNER_PICKUP_NOW=$(( $(date +%s) + 100000 * i )) "$SCRIPT" run 3 2>/dev/null; done
+eq "second failed read in a row only backs off" "$rc" "0"
+RUNNER_PICKUP_NOW=$(( $(date +%s) + 2000 )) "$SCRIPT" run 3 2>/dev/null; rc=$?
+eq "third failed read in a row exits non-zero" "$rc" "1"
+for i in 1 2 3 4 5 6 7; do RUNNER_PICKUP_NOW=$(( $(date +%s) + 100000 * i )) "$SCRIPT" run 3 2>/dev/null; done
 until=$(jq -r .until "$RUNNER_INBOX_DIR/runner-3.backoff.json")
 [ $((until - $(date +%s) - 800000)) -le 3600 ] && ok "backoff delay capped at 3600s" || bad "cap"
 unset FAKE_FAIL
@@ -83,8 +86,14 @@ eq "inbox read failure: tickets file still updated" "$(jq -r '[.items[].ticket]|
 eq "inbox read failure: pending message retried" "$(cat "$FAKE_DELIVERED" 2>/dev/null)" "pending hello"
 [ ! -e "$RUNNER_INBOX_DIR/runner-3.backoff.json" ] && ok "inbox read failure: no backoff" || bad "inbox failure wrote backoff"
 FAKE_FAIL=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
-eq "board read failure still fails the tick" "$rc" "1"
 eq "board read failure still backs off" "$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "1"
+rm -f "$RUNNER_INBOX_DIR"/runner-3.backoff.json
+
+# YPER4-409: a stalled board read is cut off and backs off instead of hanging until systemd kills the unit.
+start=$(date +%s)
+FAKE_HANG=1 RUNNER_PICKUP_CALL_TIMEOUT=1 "$SCRIPT" run 3 2>/dev/null; rc=$?
+[ $(( $(date +%s) - start )) -lt 10 ] && ok "stalled board read is cut off by the call timeout" || bad "stalled board read not cut off"
+eq "stalled board read only backs off" "$rc|$(jq -r .fails "$RUNNER_INBOX_DIR/runner-3.backoff.json")" "0|1"
 rm -f "$RUNNER_INBOX_DIR"/runner-3.backoff.json
 
 # Hook.
