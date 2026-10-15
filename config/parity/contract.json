@@ -272,23 +272,23 @@
       },
       "planned": {
         "mcp": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "cli": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["labels update", "project label update"]
         },
         "ai_chat": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         },
         "hyperai": {
-          "issue": "https://app.hypertask.ai/detail/project-15/5127",
-          "expires": "2026-10-14",
+          "issue": "https://app.hypertask.ai/detail/project-4060/397",
+          "expires": "2026-11-13",
           "entries": ["hypertask_update_label"]
         }
       }
