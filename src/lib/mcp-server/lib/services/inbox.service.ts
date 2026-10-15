@@ -119,9 +119,8 @@ export class InboxService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to list inbox', {
+      logger.failure('Failed to list inbox', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -151,9 +150,8 @@ export class InboxService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to archive inbox notifications', {
+      logger.failure('Failed to archive inbox notifications', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -187,9 +185,8 @@ export class InboxService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to unarchive inbox notifications', {
+      logger.failure('Failed to unarchive inbox notifications', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -218,9 +215,8 @@ export class InboxService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to move task to inbox', {
+      logger.failure('Failed to move task to inbox', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

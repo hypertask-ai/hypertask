@@ -77,9 +77,8 @@ export class ContextService {
         projects: projectsResponse.projects,
       };
     } catch (error) {
-      logger.error('Failed to fetch user context', {
+      logger.failure('Failed to fetch user context', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

@@ -96,9 +96,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to start time entry', {
+      logger.failure('Failed to start time entry', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -119,9 +118,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to stop time entry', {
+      logger.failure('Failed to stop time entry', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -142,9 +140,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to pause time entry', {
+      logger.failure('Failed to pause time entry', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -165,9 +162,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to resume time entry', {
+      logger.failure('Failed to resume time entry', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -188,9 +184,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to get time status', {
+      logger.failure('Failed to get time status', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -221,9 +216,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to log time entry', {
+      logger.failure('Failed to log time entry', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -241,9 +235,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to list running timers', {
+      logger.failure('Failed to list running timers', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -272,9 +265,8 @@ export class TimeService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to get time report', {
+      logger.failure('Failed to get time report', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

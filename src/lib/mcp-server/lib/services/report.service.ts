@@ -47,9 +47,8 @@ export class ReportService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to manage report', {
+      logger.failure('Failed to manage report', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

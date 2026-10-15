@@ -73,9 +73,8 @@ export class CustomFieldService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to list custom fields', {
+      logger.failure('Failed to list custom fields', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
@@ -94,9 +93,8 @@ export class CustomFieldService {
         correlationId
       );
     } catch (error) {
-      logger.error('Failed to set custom field value', {
+      logger.failure('Failed to set custom field value', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }

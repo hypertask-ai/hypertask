@@ -64,9 +64,8 @@ export class HelloService {
 
       return response;
     } catch (error) {
-      logger.error('Failed to fetch hello context', {
+      logger.failure('Failed to fetch hello context', error, {
         correlationId,
-        error: error instanceof Error ? error.message : String(error),
       });
       throw error;
     }
