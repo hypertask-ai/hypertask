@@ -119,6 +119,25 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   assert.notEqual(fingerprint('web', 'failed 42', '/users/1'), fingerprint('api', 'failed 42', '/users/1'));
 });
 
+check('sources', 'leading ISO timestamps and rejected Better Auth origins do not split one error into many tickets', () => withHarness(async h => {
+  const host = 'https://hypertask-git-yper4-399-guest-demo-hypertask.vercel.app';
+  const lines = [
+    [`2026-10-15T01:33:10.523Z ERROR [Better Auth]: Invalid origin: ${host}`, '/api/demo/guest'],
+    [`2026-10-15T01:33:09.342Z ERROR [Better Auth]: Invalid origin: ${host}`, '/api/demo/guest'],
+    [`2026-10-15T01:33:06.967Z ERROR [Better Auth]: Invalid origin: ${host}/demo`, '/api/auth/bridge-legacy-session'],
+    [`2026-10-15T01:33:06.945Z ERROR [Better Auth]: Invalid origin: ${host}/demo`, '/api/auth/bridge-legacy-session'],
+  ];
+  h.events(lines.map(([message, route]) => event({ service: 'vercel', message, route })));
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(Object.values(h.state().fingerprints)[0].total, 4);
+  assert.equal(normalize(lines[0][0]), 'ERROR [Better Auth]: Invalid origin: <url>');
+  assert.equal(normalize('2026-10-15 01:33:06,945+02:00 boom 7'), 'boom <n>');
+  assert.equal(normalize('failed at 2026-10-15T01:33:06.945Z'), 'failed at <time>');
+  assert.equal(normalize('Invalid callbackURL: https://other.example/x'), 'Invalid callbackURL: <url>');
+  assert.notEqual(fingerprint('vercel', lines[0][0]), fingerprint('vercel', 'ERROR [Better Auth]: Invalid callbackURL: https://x.example'));
+}));
+
 check('sources', 'independent source windows, cap, partial failure and all-failed exit', () => withHarness(async h => {
   const windows = [];
   const ok = { name: 'good', fetch: async context => { windows.push(context); return []; } };
