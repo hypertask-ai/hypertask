@@ -52,6 +52,10 @@ Sample text, stacks, routes and titles are redacted before reporting or persiste
 
 Warning rules explicitly opted in with `alert: true` stay out of error totals and ordinary error grouping, but more than 50 matches of one rule for one service within a rolling hour file one source-fix ticket. `ERROR_COLLECTOR_NOISE_HOURLY_LIMIT` overrides that threshold. The trailing hour persists across collection passes; repeats reuse the service/rule fingerprint and existing activity, cap and retry paths. Scanner traffic, expected HTTP responses, client aborts, agent refusals and forced tests never alert.
 
+## One error, one fingerprint (YPER4-399)
+
+Fingerprints drop a leading ISO timestamp, turn any other ISO timestamp into `<time>`, and turn a URL after `Invalid <thing>: ` (Better Auth's rejected origin or callback) into `<url>`. Before this, each Vercel line kept its own timestamp fraction and preview URL path, so one Better Auth "Invalid origin" error filed four tickets (HTPR-7240 to HTPR-7243).
+
 ## Forced test errors (YPER4-384)
 
 A test that throws an error on purpose in production puts `[ht-forced-test]` in the error message, for example `throw new Error("[ht-forced-test] YPER4-384 forced browser test 1")`. The collector counts it as noise for every source and prints `skipped forced test error`; the native PostHog issue writer (`.github/scripts/posthog-error-issues.mjs`) returns `skip` and files nothing. An error without the marker still becomes a ticket. CLI error reports only allow a plain error name, so a live check of `/api/mcp/cli-error` sends the error name `HtForcedTest` instead (YPER4-396): the collector skips `[cli-error] <command>: HtForcedTest` the same way, and any other CLI error name still files. The nightly `PostHog pipeline canary` keeps its own rule: it must file and then close its ticket to prove the pipeline works.

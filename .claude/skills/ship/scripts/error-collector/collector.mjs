@@ -41,9 +41,14 @@ export function redact(text) {
     .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
 }
 
+const isoTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
+
 export function normalize(text, route = false) {
   const id = route ? ':id' : '<id>';
   return String(text ?? '')
+    .replace(new RegExp(`^\\s*${isoTime.source}\\s+`), '')
+    .replace(new RegExp(`\\b${isoTime.source}`, 'g'), '<time>')
+    .replace(/(\bInvalid [A-Za-z ]{1,40}: )https?:\/\/\S+/g, '$1<url>')
     .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\?[^#]*/, '').replace(/#.*$/, ''))
     .replace(/\?[^\s]*/g, '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, id)
