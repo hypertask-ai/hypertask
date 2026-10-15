@@ -332,12 +332,12 @@ const Commands = (props: Props) => {
         .flatMap((group) => group.commandLists)
         .map((command) => [command.key, command])
     );
-    const knownFrequentlyUsed = Object.entries(frequentlyUsed)
+    let suggestableFrequentlyUsed = Object.entries(frequentlyUsed)
       .filter(([key]) => canonicalCommands.has(key));
-    const suggestableFrequentlyUsed = kanbanSelectAllEnabled
-      ? knownFrequentlyUsed.filter(([key]) =>
-        !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode))
-      : knownFrequentlyUsed;
+    if (kanbanSelectAllEnabled) {
+      suggestableFrequentlyUsed = suggestableFrequentlyUsed.filter(([key]) =>
+        !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode));
+    }
     const topCommands = suggestableFrequentlyUsed
       .sort(
         (left, right) =>
