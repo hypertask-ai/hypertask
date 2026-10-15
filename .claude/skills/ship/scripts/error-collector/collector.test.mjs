@@ -681,6 +681,15 @@ check('reporting', 'outside PR guard dry runs are noise, other workflow failures
   assert.equal(h.state().days['2026-10-14']['github-actions'].errors, 1);
 }));
 
+check('reporting', 'an SSH client hanging up is noise, other sshd failures are errors (YPER4-406)', () => withHarness(async h => {
+  const vps = { service: 'vps-journal', board: 4060, route: 'ssh.service', stack: '' };
+  h.events([event({ ...vps, message: 'ssh.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe' }), event({ ...vps, message: 'ssh.service: error: bind [127.0.0.1]:7979: Address already in use' })]);
+  await h.run();
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].noise, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, 1);
+}));
+
 check('reporting', 'upstream resets are errors, client resets remain noise', () => withHarness(async h => {
   h.events([event({ message: 'database ECONNRESET' }), event({ message: 'client request ECONNRESET' })]);
   await h.run();
