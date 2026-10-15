@@ -4,7 +4,7 @@ import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
 import { teamAiFeatureModelsQueryKey } from "@/lib/aiModelPreferences";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 import axios from "axios";
 import { useEffect, useMemo, useState } from "react";
@@ -321,7 +321,6 @@ const AiFeaturesSection = () => {
   const queryClient = useQueryClient();
   const currentUser = useRecoilValue(currentUserAtom);
   const { ownerAndMembers, team, teamId, billing } = useSettingsTeam();
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultContext = { haikuDefaultEnabled, plan: billing?.storePlanId, hasByok: hasHaikuByokProviderFlags(billing?.byokProviderFlags) };
   const { isLoading: providersLoading, providers } =
     useTeamAiProviders(teamId);
@@ -439,7 +438,7 @@ const AiFeaturesSection = () => {
         feature as UserFacingModelFeature,
         providerSettings,
         undefined,
-        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, lunaFree, true, haikuDefaultEnabled) } : {}) },
+        { customEndpointConfigured: customEndpoint.configured, haiku55Enabled, ...defaultContext, ...(haiku55Enabled ? { defaultModelOption: getDefaultAiModelOptionForPlan(defaultContext.plan, defaultContext.hasByok, true, haikuDefaultEnabled) } : {}) },
       )?.id ?? aiModelOptions[0].id
     );
   };

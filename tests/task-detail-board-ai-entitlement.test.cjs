@@ -70,8 +70,8 @@ test("a paid board opened from a board-agnostic view keeps its premium models", 
   assert.equal(context.teamId, "paid-team");
   assert.equal(context.billing.storePlanId, "Pro");
   assert.notEqual(
-    getDefaultAiModelOptionForPlan(context.billing.storePlanId, false).id,
-    getDefaultAiModelOptionForPlan("Free", false).id,
+    getDefaultAiModelOptionForPlan(context.billing.storePlanId, false, true).id,
+    getDefaultAiModelOptionForPlan("Free", false, true).id,
   );
 });
 
@@ -84,7 +84,7 @@ test("dropping the subscription rows is what downgraded the picker to the free d
   const billing = deriveCurrentBoardBilling(strippedProject);
   assert.equal(billing.storePlanId, "Free");
   assert.equal(
-    getDefaultAiModelOptionForPlan(billing.storePlanId, false).id,
-    "gemini-3.5-flash-lite",
+    getDefaultAiModelOptionForPlan(billing.storePlanId, false, true).id,
+    "gpt-6-luna",
   );
 });

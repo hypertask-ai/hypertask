@@ -6,7 +6,7 @@ import {
   pickEntitlingSubscriptionRow,
   subscriptionStatusGrantsAccess,
 } from "@/lib/subscriptionAccess";
-import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG, HTPR_7038_HAIKU_DEFAULT_FLAG, HTPR_7075_BACKGROUND_CLAUDE_FLAG, HTPR_7076_PROMPT_CACHE_FLAG, HTPR_7098_BATCH_BACKGROUND_AI_FLAG } from "@/lib/flags/keys";
 import {
   getAiModelDefinition,
   isPremiumAiModelDefinition,
@@ -96,19 +96,6 @@ export async function storePlanIdForProject(
   return storePlanIdForTeam(team);
 }
 
-export async function lunaFreePlanEnabled(
-  userId: number | null | undefined,
-): Promise<boolean> {
-  if (!userId) return false;
-  if (await haikuDefaultModelEnabled(userId)) return true;
-  try {
-    const { isFeatureEnabled } = await import("@/lib/flags");
-    return await isFeatureEnabled(LUNA_FREE_PLAN_FLAG, userId);
-  } catch {
-    return false;
-  }
-}
-
 export async function backgroundClaudeModelEnabled(userId: number | null | undefined): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import("@/lib/flags");
@@ -162,7 +149,6 @@ export async function assertModelAllowedForPlan(
   modelOption: TAiModelOption | undefined,
   teamId?: string | null,
   credential?: unknown,
-  lunaFree = false,
 ) {
   if (
     !modelOption ||
@@ -170,8 +156,7 @@ export async function assertModelAllowedForPlan(
   ) {
     return;
   }
-  const lunaIncludedOnFree =
-    lunaFree && modelOption.modelKey === LUNA_FREE_MODEL_KEY;
+  const lunaIncludedOnFree = modelOption.modelKey === LUNA_FREE_MODEL_KEY;
   const sharedKey = process.env.AI_GATEWAY_API_KEY?.trim();
   const resolvedCredential =
     typeof credential === "string" ? credential.trim() : credential;

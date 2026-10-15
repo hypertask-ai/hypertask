@@ -92,13 +92,12 @@ async function main() {
       const context = await h.byok.getAiDefaultModelContext({ trustedTeamId: "fixture-team", userId: 7 });
       assert.equal(context.haikuDefaultEnabled, enabled);
       assert.equal(context.haiku55Enabled, enabled);
-      const option = catalog.getDefaultAiModelOptionForPlan(plan, false, true, context.haiku55Enabled, context.haikuDefaultEnabled);
+      const option = catalog.getDefaultAiModelOptionForPlan(plan, false, context.haiku55Enabled, context.haikuDefaultEnabled);
       assert.equal(option.id, enabled ? "claude-haiku-5-5" : plan === "BYOK" ? "gemini-3.5-flash-lite" : "gpt-6-luna");
       assert.equal(catalog.resolveAiModelOption(["gpt-6-luna"], option, context.haiku55Enabled).id, "gpt-6-luna");
       if (enabled) {
-        assert.equal(await h.gate.lunaFreePlanEnabled(7), true);
         await h.gate.assertModelAllowedForPlan(null, option, null);
-        const mobile = composer.buildComposerConfig({ settings: {}, customEndpointConfigured: false, storePlanId: plan, providersWithByok: new Set(), haiku55Enabled: true, haikuDefaultEnabled: true, lunaFree: true });
+        const mobile = composer.buildComposerConfig({ settings: {}, customEndpointConfigured: false, storePlanId: plan, providersWithByok: new Set(), haiku55Enabled: true, haikuDefaultEnabled: true });
         assert.equal(mobile.selectedModelId, "claude-haiku-5-5");
         assert.ok(mobile.models.some((model) => model.id === "gpt-6-luna") || plan === "BYOK");
         assert.ok(catalog.isAiModelOptionVisible(option, context.haiku55Enabled));
@@ -122,7 +121,7 @@ async function main() {
       if (plan !== "BYOK") {
         const request = { userId: 7, aiFeature: "taskWriter", teamContext: { teamId: "fixture-team", settings: {} } };
         const selected = await editor.selectTaskWriterModel(request);
-        assert.equal(selected.modelId, enabled ? "claude-haiku-5.5" : plan === "Free" ? "google/gemini-3.5-flash-lite" : "gpt-6-luna");
+        assert.equal(selected.modelId, enabled ? "claude-haiku-5.5" : "gpt-6-luna");
         if (enabled) {
           storedPreference = { taskWriter: "gpt-6-luna" };
           const saved = await editor.selectTaskWriterModel(request);

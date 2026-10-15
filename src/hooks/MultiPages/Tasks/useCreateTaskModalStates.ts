@@ -1,5 +1,5 @@
 import { hasHaikuByokProviderFlags } from "@/lib/byokSelectedProviderGate";
-import { HTPR_7010_HAIKU_5_5_FLAG, LUNA_FREE_PLAN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7010_HAIKU_5_5_FLAG } from "@/lib/flags/keys";
 import { useHaikuDefaultFlag } from "@/hooks/useHaikuDefaultFlag";
 
 import {
@@ -153,10 +153,9 @@ const useCreateTaskModalGlobalStates = () => {
   const { data: userPreferences } = useGetUserPreferences();
   const haikuDefaultEnabled = useHaikuDefaultFlag();
   const haiku55Enabled = useFlag(HTPR_7010_HAIKU_5_5_FLAG) || haikuDefaultEnabled;
-  const lunaFree = useFlag(LUNA_FREE_PLAN_FLAG) || haikuDefaultEnabled;
   const defaultBilling = deriveCurrentBoardBilling(_currentProject);
   const defaultModelOption = haikuDefaultEnabled || haiku55Enabled
-    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+    ? getDefaultAiModelOptionForPlan(defaultBilling?.storePlanId, hasHaikuByokProviderFlags(defaultBilling?.byokProviderFlags), true, haikuDefaultEnabled)
     : defaultAiModelOption;
   const improveWritingOptionIds = getAiModelPreferenceIds(
     userPreferences.aiModelPreferences,
@@ -370,7 +369,7 @@ const useCreateTaskModalGlobalStates = () => {
       (haiku55Enabled ? getAiModelOptionById(project.ai_custom_instructions?.[0]?.model_selected, true) : undefined);
     const titleBilling = deriveCurrentBoardBilling(project);
     const titleDefaultOption = haiku55Enabled
-      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), lunaFree, true, haikuDefaultEnabled)
+      ? getDefaultAiModelOptionForPlan(titleBilling?.storePlanId, hasHaikuByokProviderFlags(titleBilling?.byokProviderFlags), true, haikuDefaultEnabled)
       : defaultModelOption;
     const titleModel =
       titleOption?.id ??
@@ -412,7 +411,7 @@ const useCreateTaskModalGlobalStates = () => {
       .trim();
     if (!generatedTitle) throw new Error("No title was generated");
     return generatedTitle.slice(0, 80);
-  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption, lunaFree]);
+  }, [haiku55Enabled, haikuDefaultEnabled, defaultModelOption]);
 
   const scheduleTitleGeneration = useCallback((description: string) => {
     const plainDescription = descriptionText(description);
