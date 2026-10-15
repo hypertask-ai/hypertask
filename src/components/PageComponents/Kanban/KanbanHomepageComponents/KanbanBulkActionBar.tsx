@@ -1,11 +1,17 @@
-import React from "react";
+import React, { useContext } from "react";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7260_KANBAN_SELECT_ALL_FLAG } from "@/lib/flags/keys";
 import { BulkActionButtons } from "@/components/PageComponents/MyTasks/MyTasksBulkActionBar";
+import { MobileViewContext } from "@/lib/contexts/mobileContext";
+import { MOBILE_TARGET } from "@/lib/configs/general.config";
 
 import { useKanbanBulkSelection } from "@/lib/contexts/Kanban/BulkSelectionContext";
 
+const ghostIconButtonClass =
+  "rounded-[4px] p-1.5 text-text-light-gray transition-colors hover:bg-hover-active hover:text-white-black disabled:cursor-not-allowed disabled:opacity-40";
+
 const KanbanBulkActionBar = () => {
+  const isMobile = useContext(MobileViewContext);
   const selectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const {
     selectedCount,
@@ -33,6 +39,7 @@ const KanbanBulkActionBar = () => {
           isProcessing={isProcessing}
           archiveSelected={archiveSelected}
           openBulkCommand={openBulkCommand}
+          buttonClassName={`${ghostIconButtonClass} ${isMobile ? MOBILE_TARGET : ""}`}
         />
       )}
       <button

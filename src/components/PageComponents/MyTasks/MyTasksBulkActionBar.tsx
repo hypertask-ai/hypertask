@@ -16,16 +16,18 @@ export const BulkActionButtons = ({
   sameBoard = true,
   archiveSelected,
   openBulkCommand,
+  buttonClassName = iconButtonClass,
 }: {
   isProcessing: boolean;
   sameBoard?: boolean;
   archiveSelected: () => Promise<void>;
   openBulkCommand: (mode?: CommandMode) => void;
+  buttonClassName?: string;
 }) => (
   <>
     <button
       type="button"
-      className={iconButtonClass}
+      className={buttonClassName}
       aria-label="Archive selected"
       disabled={isProcessing}
       onClick={() => void archiveSelected()}
@@ -34,7 +36,7 @@ export const BulkActionButtons = ({
     </button>
     <button
       type="button"
-      className={iconButtonClass}
+      className={buttonClassName}
       aria-label="Assign selected"
       disabled={isProcessing || !sameBoard}
       title={sameBoard ? undefined : "Select tasks from one board"}
@@ -44,7 +46,7 @@ export const BulkActionButtons = ({
     </button>
     <button
       type="button"
-      className={iconButtonClass}
+      className={buttonClassName}
       aria-label="Label selected"
       disabled={isProcessing || !sameBoard}
       title={sameBoard ? undefined : "Select tasks from one board"}
@@ -54,7 +56,7 @@ export const BulkActionButtons = ({
     </button>
     <button
       type="button"
-      className={iconButtonClass}
+      className={buttonClassName}
       aria-label="Move selected"
       disabled={isProcessing || !sameBoard}
       title={sameBoard ? undefined : "Select tasks from one board"}
