@@ -87,6 +87,8 @@ type Props = {
   focusProxy?: { current: HTMLInputElement | null };
 };
 
+const DESTRUCTIVE_COMMAND_MODES = [CommandMode.DeleteBoard, CommandMode.DeleteColumn];
+
 const Commands = (props: Props) => {
   const {
     handleAction,
@@ -330,12 +332,13 @@ const Commands = (props: Props) => {
         .flatMap((group) => group.commandLists)
         .map((command) => [command.key, command])
     );
-    const topCommands = Object.entries(frequentlyUsed)
-      .filter(([key]) => canonicalCommands.has(key) &&
-        (!kanbanSelectAllEnabled || ![
-          CommandMode.DeleteBoard,
-          CommandMode.DeleteColumn,
-        ].includes(canonicalCommands.get(key)!.commandMode)))
+    const knownFrequentlyUsed = Object.entries(frequentlyUsed)
+      .filter(([key]) => canonicalCommands.has(key));
+    const suggestableFrequentlyUsed = kanbanSelectAllEnabled
+      ? knownFrequentlyUsed.filter(([key]) =>
+        !DESTRUCTIVE_COMMAND_MODES.includes(canonicalCommands.get(key)!.commandMode))
+      : knownFrequentlyUsed;
+    const topCommands = suggestableFrequentlyUsed
       .sort(
         (left, right) =>
           getHTCFrecencyScore(right[1].frequency, right[1].lastUsedAt, now)
