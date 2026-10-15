@@ -20,6 +20,7 @@ import {
   shouldInstallAuthenticatedProjectWebVitals,
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
+import { dropResizeObserverLoopException } from "@/lib/analytics/browserNoise";
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
@@ -364,10 +365,13 @@ export default function PostHogAnalytics({
           capture_performance: false,
           before_send: (event) => {
             if (!identityReadyRef.current) return null;
-            return scopeProjectWebVitalsEvent(event, {
-              userId: latestIdentityRef.current.userId,
-              isGuest: latestIdentityRef.current.isGuest,
-            });
+            return scopeProjectWebVitalsEvent(
+              dropResizeObserverLoopException(event),
+              {
+                userId: latestIdentityRef.current.userId,
+                isGuest: latestIdentityRef.current.isGuest,
+              },
+            );
           },
           loaded: (loadedPostHog) => {
             const loadedIdentity = latestIdentityRef.current;
