@@ -114,6 +114,12 @@
     "reason": "Output of an interactive terminal session on the VPS, not a service failure."
   },
   {
+    "id": "ssh-client-hung-up",
+    "service": "vps-journal",
+    "match": "^ssh\\.service: fatal: ssh_packet_send_debug: send DEBUG: Broken pipe\\n",
+    "reason": "An SSH client closed its connection while the server was still sending it a debug notice; the client went away, the server is fine (YPER4-406)."
+  },
+  {
     "id": "outside-pr-guard-dry-run",
     "service": "github-actions",
     "match": "^Outside PR guard failed\\b",
