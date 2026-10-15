@@ -81,7 +81,7 @@ export function observeFeedbackTools(tools: readonly PortableTool[], userId: num
         return text
       } catch (error) {
         const status = error instanceof ZodError ? 400 : feedbackStatus(error) ?? 500
-        queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
+        if (status !== 403) queueAiFeedback({ surface: 'mcp', tool: tool.name, status, errorCode: 'tool-exception' }, userId)
         throw error
       }
     },
