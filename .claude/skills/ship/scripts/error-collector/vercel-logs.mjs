@@ -2,7 +2,7 @@
 import { pathToFileURL } from 'node:url';
 import { key, query } from './io.mjs';
 
-const usage = 'usage: vercel-logs.mjs [--since 10m|2h|<ISO time>] [-n 50] [--level error|warning|info] [--path /api/route] [--search text]';
+const usage = 'usage: vercel-logs.mjs [--since 10m|2h|<ISO time>] [-n 50] [--level error|warn|info] [--path /api/route] [--search text]';
 const units = { s: 1e3, m: 60e3, h: 3600e3, d: 86400e3 };
 
 export function parseArgs(argv, now = Date.now()) {
@@ -14,7 +14,7 @@ export function parseArgs(argv, now = Date.now()) {
     index += 1;
     if (flag === '--since') options.since = value;
     if (flag === '-n') options.limit = Number(value);
-    if (flag === '--level') options.level = value;
+    if (flag === '--level') options.level = value === 'warning' ? 'warn' : value;
     if (flag === '--path') options.path = value;
     if (flag === '--search') options.search = value;
   }
@@ -22,7 +22,7 @@ export function parseArgs(argv, now = Date.now()) {
   const start = relative ? now - Number(relative[1]) * units[relative[2]] : Date.parse(options.since);
   if (!Number.isFinite(start) || start >= now) throw new Error(`invalid --since: ${options.since}`);
   if (!Number.isSafeInteger(options.limit) || options.limit < 1 || options.limit > 500) throw new Error('-n must be 1 to 500');
-  if (options.level && !['error', 'warning', 'info'].includes(options.level)) throw new Error('--level must be error, warning or info');
+  if (options.level && !['error', 'warn', 'info'].includes(options.level)) throw new Error('--level must be error, warn or info');
   if (options.path && !/^\/[\w\-./[\]]*$/.test(options.path)) throw new Error('--path must be a plain route like /api/ai/chat/stream');
   return { ...options, start: new Date(start).toISOString(), end: new Date(now).toISOString() };
 }
