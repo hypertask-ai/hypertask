@@ -14,6 +14,7 @@ const desktopBarClass =
   "fixed bottom-5 left-1/2 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
 const phoneBarClass =
   "fixed inset-x-2 z-[210] flex flex-wrap items-center justify-center gap-2 rounded-[5px] bg-modalBackground px-3 py-2 text-content text-white-black customshadow-4";
+const desktopFlaggedBarStyle = { bottom: "var(--quick-tips-clearance, 20px)" };
 const phoneBarStyle = { bottom: "calc(var(--mobile-dock-h, 0px) + 16px + env(safe-area-inset-bottom))" };
 
 const KanbanBulkActionBar = () => {
@@ -31,11 +32,14 @@ const KanbanBulkActionBar = () => {
   if (selectedCount === 0) return null;
 
   const phoneBar = selectAllEnabled && isMobile;
+  let barStyle: React.CSSProperties | undefined;
+  if (phoneBar) barStyle = phoneBarStyle;
+  else if (selectAllEnabled) barStyle = desktopFlaggedBarStyle;
 
   return (
     <div
       className={phoneBar ? phoneBarClass : desktopBarClass}
-      style={phoneBar ? phoneBarStyle : selectAllEnabled ? { bottom: "var(--quick-tips-clearance, 20px)" } : undefined}
+      style={barStyle}
       role="status"
       aria-live="polite"
     >
