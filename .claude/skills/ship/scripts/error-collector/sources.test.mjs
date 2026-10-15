@@ -502,7 +502,7 @@ test('YPER4-360: realtime reads production warning/error logs, pages and dedupes
   const calls = mockHTTP([[200, first], [200, realtimeFixture.page]]);
   const events = await realtime.fetch(context);
   assert.equal(calls[0].body.event, 'vercel.log');
-  assert.equal(calls[0].body.filter, '(level:warning OR level:error) AND environment:production');
+  assert.equal(calls[0].body.filter, '(level:warn OR level:error) AND environment:production');
   assert.equal(calls[0].headers['x-vercel-observability-query-reason'], 'cli/logs-runtime');
   assert.equal(calls[0].body.limit, 500);
   assert.equal(calls[1].body.cursor, 'realtime-page-2');
@@ -528,6 +528,17 @@ test('YPER4-360: realtime ignores unrelated warnings and near-matching text; ord
   assert.equal(vercel.parseEvents([{ ...row, message: '[realtime] broadcast failed' }], realtime.name).length, 1);
   const callers = ['[cycle-rollover] realtime broadcast failed', '[tasks/single] task realtime broadcast failed', '[agent-run] runtime run board broadcast failed'];
   assert.equal(vercel.parseEvents(callers.map(message => ({ ...row, message })), realtime.name).length, callers.length);
+});
+
+test('YPER4-402: realtime collects console.warn broadcast failures, which Vercel stores as level warn', async () => {
+  const messages = ['[feature-flags] realtime broadcast failed Error: socket hang up', '[agent-run] Agent Chat activity broadcast failed Error: 500'];
+  const rows = messages.map(message => ({ ...realtimeFixture.page.events[0], level: 'warn', message }));
+  const calls = mockHTTP([[200, { events: rows, pagination: { hasMore: false } }]]);
+  const events = await realtime.fetch(context);
+  assert.match(calls[0].body.filter, /\blevel:warn\b/);
+  assert.doesNotMatch(calls[0].body.filter, /level:warning/);
+  assert.deepEqual(events.map(event => event.message.split(' Error')[0]), ['[feature-flags] realtime broadcast failed', '[agent-run] Agent Chat activity broadcast failed']);
+  assert.ok(events.every(event => event.service === 'realtime' && event.board === 4060));
 });
 
 test('YPER4-360: realtime query failures/incomplete pages fail closed without exposing provider bodies', async () => {
