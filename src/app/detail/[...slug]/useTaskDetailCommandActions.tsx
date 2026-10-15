@@ -233,11 +233,11 @@ function createTaskDetailCommandActions(getContext: () => TaskDetailContext) {
         );
         return;
       case taskDetailConfig.copyTypes.public:
-        copySharedTaskURL(sharedLink.id);
+        copySharedTaskURL(sharedLink?.id);
         return;
       case taskDetailConfig.copyTypes.publicFormatted:
         copySharedTaskFormattedURL(
-          sharedLink.id,
+          sharedLink?.id,
           currentTask?.title!,
           currentTask?.ticketNumber!
         );

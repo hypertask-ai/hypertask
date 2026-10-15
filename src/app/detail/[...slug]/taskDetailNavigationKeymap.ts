@@ -183,7 +183,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       matches: () => e.keyCode === KeyCodes.PERIOD && cmdControl && e.shiftKey,
       run: () => {
       e.preventDefault();
-      return { stop: true, value: copySharedTaskURL(sharedLink.id) };
+      return { stop: true, value: copySharedTaskURL(sharedLink?.id) };
     },
     },
 
@@ -193,7 +193,7 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       run: () => {
       e.preventDefault();
       return { stop: true, value: copySharedTaskFormattedURL(
-        sharedLink.id,
+        sharedLink?.id,
         currentTask?.title!,
         currentTask?.ticketNumber!
       ) };
