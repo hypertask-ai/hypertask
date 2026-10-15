@@ -67,6 +67,8 @@ Warning rules explicitly opted in with `alert: true` stay out of error totals an
 
 Fingerprints drop a leading ISO timestamp, turn any other ISO timestamp into `<time>`, and turn a URL after `Invalid <thing>: ` (Better Auth's rejected origin or callback) into `<url>`. Before this, each Vercel line kept its own timestamp fraction and preview URL path, so one Better Auth "Invalid origin" error filed four tickets (HTPR-7240 to HTPR-7243).
 
+Pending groups carry the fingerprint rules version (`rules`). A group parked under older rules is re-keyed from its saved sample before reporting and joins the current fingerprint's ticket or pending group. Without this, four groups held by the hourly cap before the fix still filed HTPR-7244 to HTPR-7247.
+
 ## Forced test errors (YPER4-384)
 
 A test that throws an error on purpose in production puts `[ht-forced-test]` in the error message, for example `throw new Error("[ht-forced-test] YPER4-384 forced browser test 1")`. The collector counts it as noise for every source and prints `skipped forced test error`; the native PostHog issue writer (`.github/scripts/posthog-error-issues.mjs`) returns `skip` and files nothing. An error without the marker still becomes a ticket. CLI error reports only allow a plain error name, so a live check of `/api/mcp/cli-error` sends the error name `HtForcedTest` instead (YPER4-396): the collector skips `[cli-error] <command>: HtForcedTest` the same way, and any other CLI error name still files. The nightly `PostHog pipeline canary` keeps its own rule: it must file and then close its ticket to prove the pipeline works.
