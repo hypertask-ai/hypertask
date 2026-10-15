@@ -67,9 +67,12 @@ export function includedAllowanceError(error: unknown) {
 }
 
 export function userFacingErrorMessage(error: unknown, stage: string) {
-  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   const allowanceError = includedAllowanceError(error);
-  if (allowanceError) return allowanceError.message;
+  if (allowanceError) {
+    console.info(`[ai/chat/stream] ${stage} refused: included AI allowance used up`);
+    return allowanceError.message;
+  }
+  console.error(`[ai/chat/stream] ${stage} user-facing error`, error);
   return "Sorry, something went wrong while generating a response. Please try again.";
 }
 
