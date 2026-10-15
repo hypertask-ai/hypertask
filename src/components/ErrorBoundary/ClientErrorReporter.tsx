@@ -7,6 +7,7 @@ import {
 } from '@/lib/telemetry/reportClientError'
 import { wasShareHydrationErrorReported } from '@/lib/telemetry/shareHydrationDiagnostics'
 import { axiosErrorDiagnostics } from '@/lib/telemetry/axiosErrorDiagnostics'
+import { isResizeObserverLoopMessage } from '@/lib/analytics/browserNoise'
 import { isChunkLoadError } from '@/utils/helperFunctions/isChunkLoadError'
 import {
   buildChunkRecoveryUrl,
@@ -84,9 +85,7 @@ export default function ClientErrorReporter() {
 
     const onError = (e: ErrorEvent) => {
       if (wasShareHydrationErrorReported(e.error)) return
-      if (e.message === 'ResizeObserver loop completed with undelivered notifications.') {
-        return
-      }
+      if (isResizeObserverLoopMessage(e.message)) return
       reportClientError({
         source: 'window.onerror',
         message: e.message,
