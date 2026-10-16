@@ -58,6 +58,8 @@ export default defineConfig([
       "src/app/qa/login/page.tsx",
       // Server component; gates ticket-number detail URL resolution.
       "src/app/detail/\\[...slug\\]/page.tsx",
+      // HTPR-7278: server root layout; reads the memory-only tracking flag for PostHog.
+      "src/app/layout.tsx",
     ],
     rules: {
       // Types are erased, so a type-only import never reaches the bundle.
