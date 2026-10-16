@@ -17,7 +17,7 @@ process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
 
 function loadTs(relativePath, aliases = {}) {
   aliases = {
-    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { prepareSignupContext: async () => {}, getSignupContextInput: () => ({}) },
     ...aliases,
   }

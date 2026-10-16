@@ -24,7 +24,7 @@ import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFun
 import { addUserToTeamFromShareRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import authConfig from "@/lib/configs/auth.config";
-import { prepareSignupContext } from "@/lib/analytics/signupIdentityClient";
+import { googleSignupAdditionalData } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 import { clearAddAccountFlag } from "@/lib/auth/accounts";
 import { useMobileBlocking } from "@/lib/contexts/mobileBlockingContext";
@@ -121,9 +121,10 @@ export const AuthProvider = ({
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
-      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
+      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
       const { error } = await authClient.signIn.social({
         provider: "google",
+        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });
@@ -144,9 +145,10 @@ export const AuthProvider = ({
   ) => {
     try {
       setIsAuthenticating(true);
-      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
+      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
       const { error } = await authClient.signIn.social({
         provider: "google",
+        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });

@@ -7,7 +7,7 @@ import { useSearchParams } from "next/navigation";
 import React from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import authConfig from "@/lib/configs/auth.config";
-import { prepareSignupContext } from "@/lib/analytics/signupIdentityClient";
+import { googleSignupAdditionalData } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 
 interface LoginButtonProps {
@@ -44,9 +44,10 @@ const LoginButton = ({
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
-      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
+      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
       void authClient.signIn.social({
         provider: "google",
+        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });

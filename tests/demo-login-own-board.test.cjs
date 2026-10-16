@@ -13,7 +13,7 @@ const demoBoardId = 42
 
 function loadTs(relativePath, aliases) {
   aliases = {
-    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     ...aliases,
   }
 

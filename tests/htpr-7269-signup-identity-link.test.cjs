@@ -97,7 +97,7 @@ function betterAuthHarness(h) {
   const plugin = () => ({})
   Object.assign(h.aliases, {
     'better-auth': { betterAuth: (options) => options },
-    'better-auth/api': { createAuthMiddleware: (handler) => handler },
+    'better-auth/api': { createAuthMiddleware: (handler) => handler, getOAuthState: async () => h.oauthState ?? null },
     'better-auth/adapters/prisma': { prismaAdapter: plugin },
     'better-auth/plugins': { emailOTP: plugin, magicLink: plugin, multiSession: plugin },
     '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
@@ -355,7 +355,8 @@ test('Better Auth new-user hook links and clears; existing-session hook only dis
     const auth = betterAuthHarness(h)
     const id = await h.context.createSignupContext({ ...input, method: 'google' }, 600, allowedCookie)
     const clears = []
-    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: `${allowedCookie}; ht_signup_ctx=${id}` } }), path: '/callback/google', setCookie: (...args) => clears.push(args), context: { newSession: { user: h.user } } }
+    h.oauthState = { signupContextId: id }
+    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: allowedCookie } }), path: '/callback/google', setCookie: (...args) => clears.push(args), context: { newSession: { user: h.user } } }
     if (isNew) await auth.databaseHooks.user.create.after({ ...h.user, name: 'New' }, context)
     await auth.hooks.after(context)
     assert.equal(h.calls.captures.length, isNew ? 1 : 0)
@@ -368,7 +369,7 @@ test('Better Auth new-user hook links and clears; existing-session hook only dis
 test('all browser auth starts carry context before sign-in; identify and reset calls stay in place', () => {
   for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8')
-    const calls = source.match(/if \(signupIdentityLinkEnabled\) await prepareSignupContext\("google"\);\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(/g)
+    const calls = source.match(/const googleSignupData = await googleSignupAdditionalData\(signupIdentityLinkEnabled\);\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(\{\s*provider: "google",\s*\.\.\.googleSignupData,/g)
     assert.equal(calls.length, file.includes('useAuth') ? 2 : 1)
   }
   const email = fs.readFileSync(path.join(root, 'src/app/login/EmailAuth/useEmailAuth.ts'), 'utf8')
@@ -510,7 +511,8 @@ test('Google completion vetoes consent withdrawal, withholds attribution, and co
     const auth = betterAuthHarness(h)
     const id = await h.context.createSignupContext({ ...input, method: 'google' }, 600, allowedCookie)
     warnings.length = 0
-    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: `${cookie}; ht_signup_ctx=${id}` } }), path: '/callback/google' }
+    h.oauthState = { signupContextId: id }
+    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie } }), path: '/callback/google' }
     await auth.databaseHooks.user.create.after(h.user, context)
     assert.equal(h.calls.captures.length, cookie === allowedCookie ? 1 : 0)
     assert.equal(await h.context.consumeSignupContext(id), null)
@@ -535,7 +537,7 @@ test('Better Auth cookie context is bound to the flow and normalized email hash,
     const h = harness()
     const auth = betterAuthHarness(h)
     const response = await h.load('src/app/api/auth/signup-context/route.ts').POST(request('/api/auth/signup-context', { ...input, method, email }))
-    const id = response.cookies.get('ht_signup_ctx').value
+    const id = method === 'google' ? (await response.json()).signupContextId : response.cookies.get('ht_signup_ctx').value
     const stored = JSON.parse([...h.values.values()][0].value)
     assert.equal(stored.method, method)
     assert.equal(stored.email, undefined)
@@ -543,12 +545,15 @@ test('Better Auth cookie context is bound to the flow and normalized email hash,
     else assert.equal(stored.emailHash, undefined)
     warnings.length = 0
     const clears = []
-    await auth.databaseHooks.user.create.after(h.user, { path: flow, request: new Request(`https://app.hypertask.ai/api/auth${flow}`, { headers: { cookie: `${allowedCookie}; ht_signup_ctx=${id}` } }), setCookie: (...args) => clears.push(args) })
+    const viaOAuthState = flow === '/callback/google'
+    h.oauthState = viaOAuthState ? { signupContextId: id } : null
+    const cookie = viaOAuthState ? allowedCookie : `${allowedCookie}; ht_signup_ctx=${id}`
+    await auth.databaseHooks.user.create.after(h.user, { path: flow, request: new Request(`https://app.hypertask.ai/api/auth${flow}`, { headers: { cookie } }), setCookie: (...args) => clears.push(args) })
     assert.equal(h.calls.captures.length, allowed ? 1 : 0)
     assert.equal(h.calls.events.length, 1)
     assert.equal(await h.context.consumeSignupContext(id), null)
-    assert.equal(clears.length, 1)
-    assert.equal(clears[0][2].maxAge, 0)
+    assert.equal(clears.length, viaOAuthState ? 0 : 1)
+    if (!viaOAuthState) assert.equal(clears[0][2].maxAge, 0)
     if (!allowed) assert.deepEqual(warnings, [['[signup-identity] unlinked', { reason: 'attempt_mismatch' }]])
   }
 }))
@@ -630,4 +635,27 @@ test('all four UI entries use the recognized ticket flag; SDK registration is gu
   apply(false)
   assert.deepEqual(calls, [sdk, null])
   assert.equal(ref.current, false)
+})
+
+test('Google context id travels in the OAuth state, never in a cookie, and only once', async () => {
+  const h = harness()
+  const { POST } = h.load('src/app/api/auth/signup-context/route.ts')
+  const response = await POST(request('/api/auth/signup-context', { ...input, method: 'google' }, { origin: 'https://app.hypertask.ai' }))
+  assert.equal(response.status, 200)
+  assert.equal(response.headers.get('set-cookie'), null)
+  const { signupContextId } = await response.json()
+  assert.match(signupContextId, /^[0-9a-f-]{36}$/)
+  const first = await h.context.consumeGoogleSignupContext({ signupContextId })
+  assert.equal(first.anonymousId, input.anonymousId)
+  assert.equal(await h.context.consumeGoogleSignupContext({ signupContextId }), null)
+  assert.equal(await h.context.consumeGoogleSignupContext(null), null)
+  const client = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'all' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) } })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  try {
+    global.fetch = async () => new Response(JSON.stringify({ signupContextId }), { status: 200 })
+    assert.deepEqual(await client.googleSignupAdditionalData(true), { additionalData: { signupContextId } })
+    assert.deepEqual(await client.googleSignupAdditionalData(false), {})
+    global.fetch = async () => { throw new Error('offline') }
+    assert.deepEqual(await client.googleSignupAdditionalData(true), {})
+  } finally { global.fetch = previous }
 })

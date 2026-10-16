@@ -14,7 +14,7 @@ const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
   aliases = {
-    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
     '@/lib/analytics/signupIdentityClient': { prepareSignupContext: async () => {}, getSignupContextInput: () => ({}) },
     '@/lib/telemetry/signupIdentityLink': { recordSignupIdentityLink: async () => null },
     ...aliases,
@@ -115,7 +115,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
     '@better-auth/infra': { dash: pluginStub },
     '@better-auth/passkey': { passkey: pluginStub },
-    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler },
+    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler, getOAuthState: async () => null },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: pluginStub },
     '@/lib/email/sendEmail': {},
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },

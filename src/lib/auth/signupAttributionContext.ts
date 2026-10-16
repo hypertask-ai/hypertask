@@ -83,6 +83,14 @@ export async function takeSignupCodeContext(email: string, code: string): Promis
   }
 }
 
+export async function consumeGoogleSignupContext(oauthState: Record<string, unknown> | null): Promise<SignupIdentityContext | null> {
+  const stored = await consumeSignupContext(oauthState?.signupContextId);
+  if (stored && stored.reason !== "context_unavailable" && stored.method !== "google") {
+    return { ...normalizeSignupContext(null), reason: "attempt_mismatch", attributionStatus: "unknown" };
+  }
+  return stored;
+}
+
 type SignupCookieContext = {
   request?: Request;
   setCookie?: (name: string, value: string, options: typeof signupContextCookieOptions) => unknown;

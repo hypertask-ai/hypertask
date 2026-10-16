@@ -26,14 +26,24 @@ export function getSignupContextInput() {
   };
 }
 
-export async function prepareSignupContext(method: "google" | "magic_link", email?: string): Promise<void> {
+export async function prepareSignupContext(method: "google" | "magic_link", email?: string): Promise<string | null> {
   try {
-    await fetch("/api/auth/signup-context", {
+    const response = await fetch("/api/auth/signup-context", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
       body: JSON.stringify({ ...getSignupContextInput(), method, ...(method === "magic_link" ? { email } : {}) }),
       signal: AbortSignal.timeout(1500),
     });
-  } catch {}
+    if (method !== "google" || !response.ok) return null;
+    const { signupContextId } = await response.json() as { signupContextId?: unknown };
+    return typeof signupContextId === "string" ? signupContextId : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function googleSignupAdditionalData(enabled: boolean) {
+  const signupContextId = enabled ? await prepareSignupContext("google") : null;
+  return signupContextId ? { additionalData: { signupContextId } } : {};
 }
