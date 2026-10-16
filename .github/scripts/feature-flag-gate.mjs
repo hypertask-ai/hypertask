@@ -473,9 +473,28 @@ function negatedConditionTerm(node) {
     : `!(${normalizedCondition(expression)})`;
 }
 
-function rendersTag(node, tag) {
-  if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) && node.tagName.getText() === tag) return true;
-  return Boolean(typescript.forEachChild(node, (child) => rendersTag(child, tag) || undefined));
+function addTagCounts(target, source, combine) {
+  for (const [tag, count] of source) target.set(tag, combine(target.get(tag) ?? 0, count));
+  return target;
+}
+
+function renderedTagCounts(node) {
+  if (!node) return new Map();
+  if (typescript.isConditionalExpression(node)) {
+    return addTagCounts(renderedTagCounts(node.condition),
+      addTagCounts(renderedTagCounts(node.whenTrue), renderedTagCounts(node.whenFalse), Math.max), (a, b) => a + b);
+  }
+  if (typescript.isIfStatement(node)) {
+    return addTagCounts(renderedTagCounts(node.expression),
+      addTagCounts(renderedTagCounts(node.thenStatement), renderedTagCounts(node.elseStatement), Math.max), (a, b) => a + b);
+  }
+  const counts = new Map();
+  if (typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) {
+    const tag = node.tagName.getText();
+    if (/^[A-Z]/.test(tag) || typescript.isPropertyAccessExpression(node.tagName)) counts.set(tag, 1);
+  }
+  typescript.forEachChild(node, (child) => { addTagCounts(counts, renderedTagCounts(child), (a, b) => a + b); });
+  return counts;
 }
 
 function exposureSnapshot(ref, path, mergeBase) {
@@ -563,15 +582,7 @@ function exposureSnapshot(ref, path, mergeBase) {
             if (child === parent.elseStatement) guards.add(`!(${normalizedCondition(parent.expression)})`);
           }
         }
-        let exclusive = false;
-        child = node;
-        for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
-          if ((typescript.isConditionalExpression(parent) && child === parent.whenFalse && rendersTag(parent.whenTrue, tag)) ||
-              (typescript.isIfStatement(parent) && child === parent.elseStatement && rendersTag(parent.thenStatement, tag))) {
-            exclusive = true;
-          }
-        }
-        occurrences.push({ tag, guards, exclusive });
+        occurrences.push({ tag, guards });
       }
     }
     if (typescript.isFunctionLike(node)) {
@@ -585,6 +596,11 @@ function exposureSnapshot(ref, path, mergeBase) {
             if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
             if (typescript.isReturnStatement(branch) && branchIsNullishOrEmpty(branch)) {
               returns.push(disjuncts(child.expression));
+            } else if (typescript.isReturnStatement(branch) && !child.elseStatement && typescript.isBlock(child.parent)) {
+              const next = child.parent.statements[child.parent.statements.indexOf(child) + 1];
+              if (next && typescript.isReturnStatement(next) && branchIsNullishOrEmpty(next)) {
+                returns.push(hiddenUnless(child.expression));
+              }
             }
           }
           const arrowBody = typescript.isArrowFunction(node) && child === node.body;
@@ -606,7 +622,7 @@ function exposureSnapshot(ref, path, mergeBase) {
     typescript.forEachChild(node, visit);
   }
   visit(file);
-  return { occurrences, names, functions, existingImports };
+  return { occurrences, names, functions, existingImports, counts: renderedTagCounts(file) };
 }
 
 function widenedUiExposure(mergeBase, headSha, uiFiles) {
@@ -619,8 +635,8 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   const baseCounts = new Map();
   const headCounts = new Map();
   for (const { base, head } of files) {
-    for (const { tag, exclusive } of base.occurrences) if (!exclusive) baseCounts.set(tag, (baseCounts.get(tag) ?? 0) + 1);
-    for (const { tag, exclusive } of head.occurrences) if (!exclusive) headCounts.set(tag, (headCounts.get(tag) ?? 0) + 1);
+    addTagCounts(baseCounts, base.counts, (a, b) => a + b);
+    addTagCounts(headCounts, head.counts, (a, b) => a + b);
   }
   for (const { path, base, head } of files) {
     const remaining = [...base.occurrences];

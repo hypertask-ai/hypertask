@@ -1824,6 +1824,22 @@ test("mutually exclusive branches of one placement do not count as extra renders
   assert.match(doubled.reason, /Banner rendered 1 more times/);
 });
 
+test("branch order and positive if-returns keep the same exposure", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = () => <div />;\n");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner /> : <><Banner /><Banner /></>);\n');
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { return ready && <div>Card</div>; }\n");
+  const base = commit(git, "base");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (!wide ? <><Banner /><Banner /></> : <Banner />);\n');
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { if (ready) return <div>Card</div>; return null; }\n");
+  const rewritten = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "equivalent rewrites"), dir);
+  assert.equal(rewritten.pass, true, rewritten.reason);
+  writeFile(dir, "src/components/Card.tsx", "export function Card() { return <div>Card</div>; }\n");
+  const dropped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop ready"), dir);
+  assert.equal(dropped.pass, false);
+  assert.match(dropped.reason, /Card.tsx:Card early return removed/);
+});
+
 test("existing banner added in another file fails, but moving it between files passes", async (t) => {
   for (const moving of [false, true]) {
     const { dir, git } = makeRepo(t);
