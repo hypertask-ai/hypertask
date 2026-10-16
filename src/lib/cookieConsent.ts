@@ -90,10 +90,10 @@ export function clearTrackingStorage() {
 
 export function setCookieConsent(value: CookieConsent): void {
   writeConsentCookie(value);
-  if (value === "essential") clearTrackingStorage();
   window.dispatchEvent(
     new CustomEvent<CookieConsent>(COOKIE_CONSENT_CHANGE_EVENT, { detail: value }),
   );
+  if (value === "essential") clearTrackingStorage();
 }
 
 export function onCookieConsentChange(
