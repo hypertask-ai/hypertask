@@ -28,7 +28,7 @@ class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
 const APPROVAL_ERROR = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?"
-  + " To switch to Everyone, an unedited comment on the flag's own ticket also counts when Valentin wrote it himself,"
+  + " To switch to Everyone, an unedited comment on the flag's own ticket that asks for Everyone with no hold-back words also counts when Valentin wrote it himself,"
   + " or when it quotes him (Valentin, YYYY-MM-DD: \"...\") and he gave it a thumbs up within 7 days.";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
 stubModule("src/lib/mcp/auth.ts", {
@@ -405,6 +405,8 @@ for (const rejected of [
   "agent comment on Valentin's account", "deleted agent comment", "another user's comment", "missing comment",
   "edited comment", "quote without his thumbs up", "quote with an agent thumbs up", "agent comment without a quote",
   "another ticket", "another board", "a mode other than Everyone", "a deleted ticket",
+  "his unrelated comment", "his refusal", "his refusal with a curly apostrophe", "his hold for later",
+  "a quoted refusal with his thumbs up", "a quote keeping it to Owner + QA",
 ]) {
   test(`PATCH refuses starting on Everyone from ${rejected}`, async () => {
     startOnEveryone();
@@ -419,7 +421,7 @@ for (const rejected of [
     if (rejected === "edited comment") approvalComment.editedAt = new Date();
     if (rejected === "quote without his thumbs up") Object.assign(approvalComment, quote);
     if (rejected === "quote with an agent thumbs up") Object.assign(approvalComment, quote, { reactions: [{ ...thumbsUp, agentId: "runner-3" }] });
-    if (rejected === "agent comment without a quote") Object.assign(approvalComment, quote, { commentText: "Valentin wants this live", reactions: [thumbsUp] });
+    if (rejected === "agent comment without a quote") Object.assign(approvalComment, quote, { commentText: "Valentin wants this live for everyone", reactions: [thumbsUp] });
     if (rejected === "another ticket") {
       approvalComment.task.uniqueIndex = 7279; approvalLink.ticketNumber = 7279;
       reasonLink = "https://app.hypertask.ai/detail/project-15/7279#comment-123";
@@ -430,6 +432,12 @@ for (const rejected of [
     }
     if (rejected === "a mode other than Everyone") mode = "OWNER_AND_QA";
     if (rejected === "a deleted ticket") approvalComment.task.status = "Deleted";
+    if (rejected === "his unrelated comment") approvalComment.commentText = "Looks good, thanks";
+    if (rejected === "his refusal") approvalComment.commentText = "Do not release this to everyone";
+    if (rejected === "his refusal with a curly apostrophe") approvalComment.commentText = "Don\u2019t put this live for everyone";
+    if (rejected === "his hold for later") approvalComment.commentText = "Everyone can get it later";
+    if (rejected === "a quoted refusal with his thumbs up") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "keep it private, everyone gets it next week"', reactions: [thumbsUp] });
+    if (rejected === "a quote keeping it to Owner + QA") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "everyone on the team, so Owner + QA for now"', reactions: [thumbsUp] });
     assert.deepEqual(await patchEveryone(mode, reasonLink), { status: 403, body: { error: APPROVAL_ERROR } });
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);

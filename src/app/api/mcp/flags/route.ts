@@ -27,6 +27,8 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
 const QUOTES_OWNER = /\bValentin(?: Yeo)?, \d{4}-\d{2}-\d{2}\b[^:"]{0,60}: ["“]/;
 const FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-/;
+const ASKS_FOR_EVERYONE = /\b(?:everyone|everybody|all users)\b/i;
+const HOLDS_BACK = /\b(?:not|no|never|nobody|don't|dont|stop|wait|hold|later|private|hidden|only me|owner|qa|off)\b|n't\b|n’t\b/i;
 
 type ApprovalComment = {
   creatorId: number | null;
@@ -44,7 +46,8 @@ function approvesStartOnEveryone(
   comment: ApprovalComment, words: string, key: string, mode: FeatureFlagMode, projectId: number, ticketNumber: number,
 ) {
   if (mode !== "EVERYONE" || projectId !== FEATURE_FLAG_TICKET_PROJECT_ID
-    || FLAG_KEY_TICKET_NUMBER.exec(key)?.[1] !== String(ticketNumber)) return false;
+    || FLAG_KEY_TICKET_NUMBER.exec(key)?.[1] !== String(ticketNumber)
+    || !ASKS_FOR_EVERYONE.test(words) || HOLDS_BACK.test(words)) return false;
   const writtenByOwner = comment.creatorId === FEATURE_FLAG_OWNER_USER_ID
     && comment.agentId === null && comment.agentDisplayName === null;
   return writtenByOwner || (comment.reactions.length > 0 && QUOTES_OWNER.test(words));
@@ -148,7 +151,7 @@ export async function PATCH(request: NextRequest) {
         || approvesStartOnEveryone(comment, words, key, mode, Number(link[1]), Number(link[2])))) {
         throw new FeatureFlagApprovalError(
           "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?"
-          + " To switch to Everyone, an unedited comment on the flag's own ticket also counts when Valentin wrote it himself,"
+          + " To switch to Everyone, an unedited comment on the flag's own ticket that asks for Everyone with no hold-back words also counts when Valentin wrote it himself,"
           + " or when it quotes him (Valentin, YYYY-MM-DD: \"...\") and he gave it a thumbs up within 7 days.",
         );
       }
