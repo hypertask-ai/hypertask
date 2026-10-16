@@ -10,9 +10,10 @@ const occurredAt = new Date("2026-10-16T12:00:00.000Z");
 const marker = "analytics:payment_succeeded:in_paid";
 const properties = { invoice_id: "in_paid", amount_paid: 1200, occurred_at: occurredAt.toISOString() };
 
-function harness() {
+function harness(configure?: (h: ReturnType<typeof activationHarness>) => void) {
   const h = activationHarness();
   h.setFlagEnabled(flag, true);
+  configure?.(h);
   const rows: any[] = [];
   const phases: string[] = [];
   const locks: any[] = [];
@@ -252,9 +253,11 @@ test("turning the flag off or losing eligibility pauses durable delivery", async
   assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
   h.setFlagEnabled(flag, true);
   h.setEnabled(false);
+  h.rows[0].nextAttemptAt = new Date(0);
   assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 1 });
   assert.equal(h.captureAttempts.length, 1);
   h.setEnabled(true);
+  h.rows[0].nextAttemptAt = new Date(0);
   assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 0 });
 });
 
@@ -356,3 +359,37 @@ test("cron is scheduled every five minutes and considers at most 100 due records
   const config = JSON.parse(fs.readFileSync("vercel.json", "utf8"));
   assert.deepEqual(config.crons.filter((cron: any) => cron.path === "/api/cron/analytics-outbox"), [{ path: "/api/cron/analytics-outbox", schedule: "*/5 * * * *" }]);
 });
+
+for (const reason of ["flag", "eligibility"]) {
+  test(`100+ ${reason}-paused rows yield to an eligible row on the next cron run without consuming attempts`, async () => {
+    let paused = false;
+    const h = harness((h) => {
+      const isFeatureEnabled = h.mocks["@/lib/flags"].isFeatureEnabled;
+      h.mocks["@/lib/flags"].isFeatureEnabled = async (key: string, userId: number) =>
+        !(paused && userId === 123 && key === (reason === "flag" ? flag : "htpr-7034-activation-analytics")) && await isFeatureEnabled(key, userId);
+    });
+    h.setFailure("capture");
+    await h.capture();
+    h.setFailure(null);
+    paused = true;
+    const original = { ...h.rows[0], nextAttemptAt: new Date(0) };
+    h.rows.splice(0);
+    for (let i = 0; i < 101; i++) h.rows.push({ ...original, id: `paused-${i}`, key: `paused-${i}`, uuid: `paused-${i}` });
+    h.users.set(234, { id: 234, uid: "real_234", email: "other@example.test" });
+    h.rows.push({ ...original, id: "eligible", key: "eligible", uuid: "eligible", userId: 234, nextAttemptAt: new Date(1) });
+    const before = Date.now();
+    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 0, failed: 0, skipped: 100 });
+    for (const row of h.rows.slice(0, 100)) {
+      assert.ok(row.nextAttemptAt.getTime() >= before + 3600000);
+      assert.ok(row.nextAttemptAt.getTime() <= Date.now() + 3600000);
+      assert.equal(row.attempts, original.attempts);
+      assert.equal(row.lastError, original.lastError);
+      assert.equal(row.deliveredAt, null);
+    }
+    assert.deepEqual(await h.outbox.retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 1 });
+    assert.equal(h.captures.length, 1);
+    assert.equal(h.captures[0].distinctId, "234");
+    assert.equal(h.captureAttempts.length, 2);
+    assert.ok(h.rows[101].deliveredAt);
+  });
+}

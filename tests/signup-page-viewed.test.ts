@@ -48,12 +48,12 @@ function harness() {
     "next/headers": { cookies: async () => ({ get: () => ({ value: "session-token" }) }) },
     "@/lib/auth/session": { SESSION_COOKIE: "ht_session", verifySession: () => state.session },
     "@/lib/flags": {
+      HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: flag,
       isFeatureEnabled: async (...args: any[]) => { flagCalls.push(args); if (state.failure === "flag") throw Error("flag lookup failed"); return state.enabled; },
       featureFlagCandidateUserIds: async (key: string) => { flagCalls.push([key]); if (state.failure === "flag") throw Error("flag lookup failed"); return state.candidates; },
     },
     "@/lib/flags/keys": { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: flag },
     "@/lib/telemetry/activationAnalytics": { isActivationEligible: async () => { if (state.failure === "eligibility") throw Error("eligibility lookup failed"); return state.eligible; } },
-    "@/hooks/useFlag": { useFlag: (key: string) => { assert.equal(key, flag); return state.enabled; } },
     "@/lib/cookieConsent": { getCookieConsent: () => state.consent, onCookieConsentChange: () => () => {} },
     "@/lib/analytics/productPerformance": { installProductPerformanceSink: () => () => {} },
     "@/lib/analytics/appPerformanceScope": { scopeProjectWebVitalsEvent: (event: any) => event },
@@ -61,6 +61,23 @@ function harness() {
     "@/lib/analytics/browserNoise": { dropResizeObserverLoopException: (event: any) => event },
     "posthog-js/dist/module.slim": { default: posthog },
     "posthog-js/dist/extension-bundles": { ErrorTrackingExtensions: {} },
+    "@/utils/Providers": { default: "Provider" },
+    "@/components/Analytics/PostHogAnalytics": { default: "PostHogAnalytics" },
+    "@vercel/speed-insights/next": { SpeedInsights: "SpeedInsights" },
+    "@/components/ErrorBoundary/ClientErrorReporter": { default: "ClientErrorReporter" },
+    "@/components/System/DeploySkewGuard": { default: "DeploySkewGuard" },
+    "@/components/FilesImageFallback": { default: "FilesImageFallback" },
+    "@/utils/serverActions": { isMobileDevice: async () => ({ isMobile: false, isApple: false }) },
+    "@/lib/firstScreen/serverBoardDocument": { getServerBoardDocument: async () => null },
+    "@/lib/firstScreen/serverInboxDocument": { getServerInboxDocument: async () => null },
+    "@/lib/configs/auth.config": { default: { cookies: { theme: "theme", defaultTheme: "porcelain" } } },
+    "@/lib/configs/general.config": { DIV_ID_CONSTANTS: { bodyLayout: "body-layout" } },
+    "@/lib/fonts/inter": { inter: {}, INTER_LATIN_FONT_HREF: "inter.woff2" },
+    "@/lib/fonts/newsreader": { newsreader: {}, NEWSREADER_LATIN_FONT_HREFS: [] },
+    "@/lib/fonts/ibmPlexSans": { ibmPlexSans: {} },
+    "@/lib/themePreferences": { normalizeThemePreference: () => "porcelain", resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain" },
+    "@/lib/themeBootScript": { buildThemeBootScript: () => "" },
+    "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/components/analytics/StoreUTM": { default: "UTMCookieHandler" },
     "@/app/login/LoginComponent": { default: "LoginComponent" },
   };
@@ -73,6 +90,7 @@ function harness() {
       compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, esModuleInterop: true },
     }).outputText;
     const requireMock = (name: string) => {
+      if (name.endsWith(".css") || name.endsWith(".scss")) return {};
       if (name.startsWith(".")) name = "@/" + path.relative(path.resolve("src"), path.resolve(path.dirname(absolute), name)).replace(/\.[jt]sx?$/, "");
       if (name in mocks) return { __esModule: true, ...mocks[name] };
       if (name.startsWith("@/")) {
@@ -97,21 +115,16 @@ function harness() {
     const result = Component(props);
     return { result, effects: [...effects] };
   }
-  return { load, render, state, captures, flagCalls, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
+  return { load, render, state, mocks, captures, flagCalls, posthog, refs, get config() { return config; }, initialize: () => initialize?.() };
 }
 
 function plain<T>(value: T): T {
   return JSON.parse(JSON.stringify(value));
 }
 
-function renderIdentifyFlag(h: ReturnType<typeof harness>) {
-  return h.render(h.load("src/components/Analytics/IdentifyEventIdFlag.tsx").default, {});
-}
-
 async function startAnalytics(h: ReturnType<typeof harness>, userId: number | null = null) {
-  renderIdentifyFlag(h).effects.forEach((effect) => effect());
   const Analytics = h.load("src/components/Analytics/PostHogAnalytics.tsx").default;
-  const rendered = h.render(Analytics, { authenticatedUserId: userId, authenticatedIsGuest: false });
+  const rendered = h.render(Analytics, { authenticatedUserId: userId, authenticatedIsGuest: false, identifyEventIds: h.state.enabled });
   const cleanup = rendered.effects.map((effect) => effect()).filter((value) => typeof value === "function");
   await h.initialize();
   await new Promise((resolve) => setImmediate(resolve));
@@ -232,22 +245,20 @@ test("queued events are discarded after an account change or consent withdrawal"
 test("identify receives event ID and source only with signed-in flag enabled, and reads flag changes at send time", async () => {
   const h = harness();
   h.state.enabled = false;
-  await startAnalytics(h, 123);
+  const { Analytics } = await startAnalytics(h, 123);
   const beforeSend = h.config.before_send;
   const event = () => ({ event: "$identify", uuid: randomUUID(), properties: { preserved: true } });
   const off = event();
   assert.equal(beforeSend(off), off);
   assert.deepEqual(off.properties, { preserved: true });
-  h.state.enabled = true;
-  renderIdentifyFlag(h).effects.forEach((effect) => effect());
+  h.render(Analytics, { authenticatedUserId: 123, authenticatedIsGuest: false, identifyEventIds: true }).effects[0]();
   const on = event();
   assert.equal(beforeSend(on), on);
   assert.deepEqual(on.properties, { preserved: true, event_id: on.uuid, source: "web" });
   const other = { ...event(), event: "$pageview" };
   beforeSend(other);
   assert.deepEqual(other.properties, { preserved: true });
-  h.state.enabled = false;
-  renderIdentifyFlag(h).effects.forEach((effect) => effect());
+  h.render(Analytics, { authenticatedUserId: 123, authenticatedIsGuest: false, identifyEventIds: false }).effects[0]();
   const offAgain = event();
   beforeSend(offAgain);
   assert.deepEqual(offAgain.properties, { preserved: true });
@@ -261,20 +272,15 @@ test("anonymous identify stays untouched even with the flag enabled", async () =
   assert.deepEqual(event.properties, {});
 });
 
-test("identify switch defaults off and resets on flag component unmount", () => {
+test("identify prop defaults off for callers without the switch", async () => {
   const h = harness();
-  const api = h.load("src/lib/analytics/browserCapture.ts");
-  assert.equal(api.identifyEventIdsEnabled(), false);
-  const cleanups = renderIdentifyFlag(h).effects.map((effect) => effect());
-  assert.equal(api.identifyEventIdsEnabled(), true);
-  cleanups.forEach((cleanup) => cleanup());
-  assert.equal(api.identifyEventIdsEnabled(), false);
-});
-
-test("flag bridge is the first provider child while PostHog stays outside the provider", () => {
-  const layout = fs.readFileSync("src/app/layout.tsx", "utf8");
-  assert.match(layout, /<Provider\b[\s\S]*?>\s*<IdentifyEventIdFlag \/>/);
-  assert.ok(layout.indexOf("<PostHogAnalytics") < layout.indexOf("<Provider"));
+  const Analytics = h.load("src/components/Analytics/PostHogAnalytics.tsx").default;
+  h.render(Analytics, { authenticatedUserId: 123, authenticatedIsGuest: false }).effects.forEach((effect) => effect());
+  await h.initialize();
+  await new Promise((resolve) => setImmediate(resolve));
+  const event = { event: "$identify", uuid: randomUUID(), properties: {} };
+  h.config.before_send(event);
+  assert.deepEqual(event.properties, {});
 });
 
 for (const failure of ["anonymous-flag", "signed-in-flag", "eligibility"]) {
@@ -287,3 +293,49 @@ for (const failure of ["anonymous-flag", "signed-in-flag", "eligibility"]) {
     assert.deepEqual(plain(page.props.children.slice(1).map((child: any) => child.type)), ["UTMCookieHandler", "LoginComponent"]);
   });
 }
+
+for (const session of [null, { id: 123 }]) {
+  for (const enabled of [false, true]) {
+    test(`layout passes server identify flag before the provider, user=${session?.id ?? "anonymous"}, enabled=${enabled}`, async () => {
+      const h = harness();
+      Object.assign(h.state, { session, enabled });
+      const layout = await h.load("src/app/layout.tsx").default({ children: "existing-content" });
+      const children = layout.props.children[1].props.children;
+      const analytics = children.find((child: any) => child?.type === "PostHogAnalytics");
+      assert.equal(analytics.props.identifyEventIds, session !== null && enabled);
+      assert.equal(analytics.props.authenticatedUserId, session?.id ?? null);
+      const provider = children.find((child: any) => child?.type === "Provider");
+      assert.equal(provider.props.children, "existing-content");
+      assert.ok(children.indexOf(analytics) < children.indexOf(provider));
+      assert.deepEqual(h.flagCalls, session === null ? [] : [[flag, 123]]);
+    });
+  }
+}
+
+test("layout starts identify lookup concurrently and fails closed without blocking content", async () => {
+  const h = harness();
+  h.state.session = { id: 123 };
+  let rejectFlag!: (error: Error) => void;
+  const started: string[] = [];
+  h.mocks["@/lib/flags"].isFeatureEnabled = () => {
+    started.push("flag");
+    return new Promise((_resolve, reject) => { rejectFlag = reject; });
+  };
+  h.mocks["@/lib/firstScreen/serverBoardDocument"].getServerBoardDocument = async () => { started.push("board"); return null; };
+  h.mocks["@/lib/firstScreen/serverInboxDocument"].getServerInboxDocument = async () => { started.push("inbox"); return null; };
+  const rendering = h.load("src/app/layout.tsx").default({ children: "existing-content" });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(started, ["board", "inbox", "flag"]);
+  rejectFlag(Error("flag lookup failed"));
+  const layout = await rendering;
+  const children = layout.props.children[1].props.children;
+  assert.equal(children.find((child: any) => child?.type === "PostHogAnalytics").props.identifyEventIds, false);
+  assert.equal(children.find((child: any) => child?.type === "Provider").props.children, "existing-content");
+});
+
+test("identify failure isolation does not swallow an existing board document failure", async () => {
+  const h = harness();
+  h.state.session = { id: 123 };
+  h.mocks["@/lib/firstScreen/serverBoardDocument"].getServerBoardDocument = async () => { throw Error("board lookup failed"); };
+  await assert.rejects(h.load("src/app/layout.tsx").default({ children: "existing-content" }), /board lookup failed/);
+});

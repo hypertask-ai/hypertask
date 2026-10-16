@@ -17,7 +17,14 @@ export async function deliverAnalyticsOutbox(row: AnalyticsOutbox): Promise<Deli
   let lease: Date | undefined;
   try {
     const client = postHogClient();
-    if (!client || !(await isAnalyticsOutboxEnabled(row.userId))) return "skipped";
+    if (!client) return "skipped";
+    if (!(await isAnalyticsOutboxEnabled(row.userId))) {
+      await prisma.analyticsOutbox.updateMany({
+        where: { id: row.id, deliveredAt: null, nextAttemptAt: { lte: new Date() }, attempts: { lt: 10 } },
+        data: { nextAttemptAt: new Date(Date.now() + 3600000) },
+      });
+      return "skipped";
+    }
     const now = new Date();
     const leasedUntil = new Date(now.getTime() + LEASE_MS);
     const claimed = await prisma.analyticsOutbox.updateMany({

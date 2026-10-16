@@ -21,7 +21,7 @@ import {
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
 import { dropResizeObserverLoopException } from "@/lib/analytics/browserNoise";
-import { identifyEventIdsEnabled, installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
+import { installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
@@ -75,11 +75,14 @@ const reconcilePersistedIdentity = (
 export default function PostHogAnalytics({
   authenticatedUserId,
   authenticatedIsGuest,
+  identifyEventIds = false,
 }: {
   authenticatedUserId: number | null;
   authenticatedIsGuest: boolean;
+  identifyEventIds?: boolean;
 }) {
   const currentPathname = usePathname();
+  const identifyEventIdsRef = useRef(identifyEventIds);
   const latestIdentityRef = useRef<AnalyticsIdentity>({
     userId: authenticatedUserId,
     isGuest: authenticatedIsGuest,
@@ -125,6 +128,7 @@ export default function PostHogAnalytics({
     const committedIdentityKey = identityKey(committedIdentity);
 
     latestIdentityRef.current = committedIdentity;
+    identifyEventIdsRef.current = identifyEventIds;
     if (
       posthogRef.current &&
       identityKey(appliedIdentityRef.current) !== committedIdentityKey
@@ -148,7 +152,7 @@ export default function PostHogAnalytics({
       performanceIdentityStartedAtRef.current = Number.POSITIVE_INFINITY;
       pendingWebVitalsRef.current = [];
     }
-  }, [authenticatedIsGuest, authenticatedUserId, currentPathname]);
+  }, [authenticatedIsGuest, authenticatedUserId, currentPathname, identifyEventIds]);
 
   const sendProjectWebVital = useCallback(
     (
@@ -370,7 +374,7 @@ export default function PostHogAnalytics({
             if (
               event?.event === "$identify" &&
               latestIdentityRef.current.userId !== null &&
-              identifyEventIdsEnabled()
+              identifyEventIdsRef.current
             ) {
               event.properties.event_id = event.uuid;
               event.properties.source = "web";

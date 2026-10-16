@@ -268,7 +268,7 @@ test('server rendering the link pages does not redeem; the first subsequent POST
       aliases['@/components/analytics/StoreUTM'] = { default: () => null }
       aliases['next/headers'] = { cookies: async () => ({ get: () => undefined }) }
       aliases['@/lib/auth/session'] = { SESSION_COOKIE: 'ht_session', verifySession: () => null }
-      aliases['@/lib/flags/keys'] = { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: 'htpr-7272-payment-login-agent-events' }
+      aliases['@/lib/flags'] = { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: 'htpr-7272-payment-login-agent-events', featureFlagCandidateUserIds: async () => [], isFeatureEnabled: async () => false }
       aliases['@/lib/telemetry/activationAnalytics'] = { isActivationEligible: async () => false }
       aliases['./SignupPageViewed'] = { default: () => null }
       Page = loadTs('src/app/login/page.tsx', aliases).default

@@ -7,16 +7,6 @@ type BrowserAnalyticsEvent = {
 
 type BrowserAnalyticsSink = (event: BrowserAnalyticsEvent) => void;
 
-let identifyEventIds = false;
-
-export function setIdentifyEventIds(enabled: boolean): void {
-  identifyEventIds = enabled;
-}
-
-export function identifyEventIdsEnabled(): boolean {
-  return identifyEventIds;
-}
-
 let sink: BrowserAnalyticsSink | null = null;
 const queue: BrowserAnalyticsEvent[] = [];
 
