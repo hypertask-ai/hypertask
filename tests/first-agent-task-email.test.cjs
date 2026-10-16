@@ -272,7 +272,8 @@ test("integration uses committed fenced task state and excludes trusted backgrou
 
 test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
-  const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
+  const base = execFileSync("git", ["merge-base", "HEAD", "origin/production"], { cwd: root, encoding: "utf8" }).trim();
+  const baseline = execFileSync("git", ["show", `${base}:src/prisma/schema.prisma`], { cwd: root, encoding: "utf8" });
   const schema = read("src/prisma/schema.prisma");
   // The email reuses existing models; unrelated tickets may add models, migrations and indexes.
   const fields = (model) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\])?\s*$/.test(line)).join("\n");

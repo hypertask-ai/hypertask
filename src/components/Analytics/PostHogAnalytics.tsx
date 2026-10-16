@@ -21,6 +21,7 @@ import {
   type AppWebVitalMetric,
 } from "@/lib/analytics/appWebVitals";
 import { dropResizeObserverLoopException } from "@/lib/analytics/browserNoise";
+import { identifyEventIdsEnabled, installBrowserCaptureSink } from "@/lib/analytics/browserCapture";
 
 const AUTHENTICATED_ANALYTICS_PAINT_SETTLE_MS = 2_500;
 const AUTHENTICATED_ANALYTICS_MAX_WAIT_MS = 8_000;
@@ -314,6 +315,7 @@ export default function PostHogAnalytics({
     let cancelled = false;
     let initializationStarted = false;
     let uninstallSink: () => void = () => undefined;
+    let uninstallBrowserSink: () => void = () => undefined;
     let idleId: number | null = null;
     let paintSettleTimer: ReturnType<typeof setTimeout> | null = null;
     let fallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -365,6 +367,14 @@ export default function PostHogAnalytics({
           capture_performance: false,
           before_send: (event) => {
             if (!identityReadyRef.current) return null;
+            if (
+              event?.event === "$identify" &&
+              latestIdentityRef.current.userId !== null &&
+              identifyEventIdsEnabled()
+            ) {
+              event.properties.event_id = event.uuid;
+              event.properties.source = "web";
+            }
             return scopeProjectWebVitalsEvent(
               dropResizeObserverLoopException(event),
               {
@@ -387,6 +397,14 @@ export default function PostHogAnalytics({
             }
             posthogRef.current = loadedPostHog;
             appliedIdentityRef.current = loadedIdentity;
+            uninstallBrowserSink = installBrowserCaptureSink(({ event, properties }) => {
+              if (
+                getCookieConsent() === "essential" ||
+                !identityReadyRef.current ||
+                properties.user_id !== (latestIdentityRef.current.userId === null ? null : String(latestIdentityRef.current.userId))
+              ) return;
+              loadedPostHog.capture(event, properties, { uuid: properties.event_id });
+            });
             pendingWebVitalsRef.current
               .splice(0)
               .forEach((queued) =>
@@ -500,6 +518,7 @@ export default function PostHogAnalytics({
       }
       clearSchedule();
       uninstallSink();
+      uninstallBrowserSink();
       posthogRef.current = null;
       if (scheduleControllerRef.current === scheduleController) {
         scheduleControllerRef.current = null;

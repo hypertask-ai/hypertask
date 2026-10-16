@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { postHogClient } from "./signupAnalytics";
+import { deliverAnalyticsOutbox, isAnalyticsOutboxEnabled } from "./analyticsOutbox";
 
 function occurrenceUuid(userId: number | "business", marker: string): string {
   const hash = createHash("sha1")
@@ -18,10 +19,30 @@ export async function captureAnalyticsOccurrence(
   event: string,
   marker: string,
   properties: Record<string, unknown> | ((tx: Prisma.TransactionClient) => Promise<Record<string, unknown>>),
-  { createdAt, scope = "user" }: { createdAt?: Date; scope?: "user" | "business" } = {},
+  { createdAt, scope = "user", occurredAt = createdAt ?? new Date() }: { createdAt?: Date; scope?: "user" | "business"; occurredAt?: Date } = {},
 ): Promise<void> {
   const client = postHogClient();
   if (!client) return;
+  if (await isAnalyticsOutboxEnabled(userId)) {
+    const key = `${scope === "user" ? userId : "business"}:${marker}`;
+    const row = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
+      if (scope === "business") await tx.$executeRaw`SELECT pg_advisory_xact_lock(7268::int, hashtext(${marker}))`;
+      if (await tx.logs.findFirst({ where: { ...(scope === "user" ? { LoggedById: userId } : {}), log: marker } })) return;
+      if (await tx.analyticsOutbox.findUnique({ where: { key } })) return;
+      const capturedProperties = typeof properties === "function" ? await properties(tx) : properties;
+      await tx.logs.create({ data: {
+        log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal,
+        ...(createdAt ? { createdAt } : {}),
+      } });
+      return tx.analyticsOutbox.create({ data: {
+        key, userId, event, uuid: occurrenceUuid(scope === "business" ? "business" : userId, marker),
+        properties: capturedProperties as Prisma.InputJsonObject, occurredAt,
+      } });
+    }, { timeout: 20000, maxWait: 1500 });
+    if (row) await deliverAnalyticsOutbox(row);
+    return;
+  }
   await prisma.$transaction(async (tx) => {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
     if (scope === "business") await tx.$executeRaw`SELECT pg_advisory_xact_lock(7268::int, hashtext(${marker}))`;
