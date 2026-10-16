@@ -1,22 +1,13 @@
 import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { isOAuthAccessTokenPayload } from "@/lib/mcp/oauthTokenContract";
-import { LogType, Prisma, Status } from "@prisma/client";
+import { Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { identifyMcpCli } from "@/lib/mcp/clientTelemetry";
 import type { ActivationEvent } from "./activationAnalytics";
 import { postHogClient, scheduleAnalytics } from "./signupAnalytics";
-
-function activationUuid(userId: number, marker: string): string {
-  const hash = createHash("sha1")
-    .update(Buffer.from("6ba7b8109dad11d180b400c04fd430c8", "hex"))
-    .update(`hypertask:activation:${userId}:${marker}`).digest();
-  hash[6] = (hash[6] & 0x0f) | 0x50;
-  hash[8] = (hash[8] & 0x3f) | 0x80;
-  const hex = hash.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
-}
+import { captureAnalyticsOccurrence } from "./analyticsOccurrences";
 
 const connectionHistory = {
   OR: [{ log: { startsWith: "cli_token_exchange" } }, { log: { startsWith: "mcp_connected" } }],
@@ -30,28 +21,28 @@ export function recordActivationOccurrence(
   completionTime?: Date,
 ): void {
   const completedAt = event === "agent_task_completed" ? completionTime ?? new Date() : undefined;
-  scheduleAnalytics(async () => {
-    const { isActivationEligible } = await import("./activationAnalytics");
-    if (!(await isActivationEligible(userId))) return;
-    const client = postHogClient();
-    if (!client) return;
-    const marker = `activation:${event}:${occurrence}`;
-    await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
-      if (await tx.logs.findFirst({ where: { LoggedById: userId, log: marker } })) return null;
-      const previous = event === "agent_task_completed"
-        ? await tx.logs.findFirst({ where: { LoggedById: userId, log: { startsWith: "activation:agent_task_completed:" }, createdAt: { lt: completedAt } } })
-        : null;
-      const historicalCompletion = event === "agent_task_completed" && !previous
-        ? await hasHistoricalAgentCompletion(tx, userId, completedAt)
-        : false;
-      await client.captureImmediate({
-        distinctId: String(userId), event, uuid: activationUuid(userId, marker),
-        properties: event === "agent_task_completed" ? { ...props, is_first: !previous && !historicalCompletion } : props,
-      });
-      await tx.logs.create({ data: { log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal, ...(completedAt ? { createdAt: completedAt } : {}) } });
-    }, { timeout: 20000, maxWait: 1500 });
-  });
+  scheduleAnalytics(() => captureActivationOccurrence(userId, event, occurrence, props, completedAt));
+}
+
+export async function captureActivationOccurrence(
+  userId: number,
+  event: ActivationEvent,
+  occurrence: string,
+  props: Record<string, unknown>,
+  completedAt?: Date,
+): Promise<void> {
+  const { isActivationEligible } = await import("./activationAnalytics");
+  if (!(await isActivationEligible(userId))) return;
+  const marker = `activation:${event}:${occurrence}`;
+  await captureAnalyticsOccurrence(userId, event, marker, async (tx) => {
+    const previous = event === "agent_task_completed"
+      ? await tx.logs.findFirst({ where: { LoggedById: userId, log: { startsWith: "activation:agent_task_completed:" }, createdAt: { lt: completedAt } } })
+      : null;
+    const historicalCompletion = event === "agent_task_completed" && !previous
+      ? await hasHistoricalAgentCompletion(tx, userId, completedAt)
+      : false;
+    return event === "agent_task_completed" ? { ...props, is_first: !previous && !historicalCompletion } : props;
+  }, { createdAt: completedAt });
 }
 
 async function hasHistoricalAgentCompletion(tx: Prisma.TransactionClient, ownerId: number, before?: Date): Promise<boolean> {
@@ -112,27 +103,18 @@ export function recordAgentConnection(
         seenConnections.delete(cacheKey);
         return;
       }
-      const client = postHogClient();
-      if (!client) {
+      if (!postHogClient()) {
         seenConnections.delete(cacheKey);
         return;
       }
       const marker = `activation:agent_connected:${fingerprint}`;
-      await prisma.$transaction(async (tx) => {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
-        if (await tx.logs.findFirst({ where: { LoggedById: userId, log: marker } })) return;
+      await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
         const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
           { log: { startsWith: "activation:agent_connected:" } },
           { ...connectionHistory, createdAt: { lt: connectedAt } },
         ] } });
-        await client.captureImmediate({
-          distinctId: String(userId), event: "agent_connected", uuid: activationUuid(userId, marker),
-          properties: { client: activationClient(clientName), transport, is_first: !previous },
-        });
-        await tx.logs.create({ data: {
-          log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal,
-        } });
-      }, { timeout: 20000, maxWait: 1500 });
+        return { client: activationClient(clientName), transport, is_first: !previous };
+      });
     } catch {
       seenConnections.delete(cacheKey);
     }

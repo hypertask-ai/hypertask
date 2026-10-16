@@ -13,6 +13,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
+  const disabledFlags = new Set<string>();
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member" }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
@@ -64,9 +65,10 @@ export function activationHarness() {
       update: async () => ({}),
     },
     member: {
-      count: async () => 0,
+      count: async ({ where }: any) => members.filter((member) => member.projectId === where.projectId && member.agentId == null && member.userId !== where.userId?.not).length,
+      findUnique: async ({ where }: any) => members.find((member) => member.id === where.id),
       findFirst: async ({ where }: any) => members.find((member) => matches(member, where)),
-      create: async ({ data }: any) => { const member = { ...data, user: users.get(data.userId) }; members.push(member); return member; },
+      create: async ({ data }: any) => { const member = { id: members.length + 1, role: "Member", acceptedAt: null, agentId: null, ...data, user: users.get(data.userId) }; members.push(member); return member; },
       deleteMany: async () => ({}), updateMany: async () => ({}),
     },
     team: { findFirst: async () => ({ googleAccount: { userId: 123 }, members: [] }), findUnique: async () => ({ googleAccount: { userId: 123 } }), updateMany: async () => ({}) },
@@ -99,7 +101,7 @@ export function activationHarness() {
   const mocks: Record<string, any> = {
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled; } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }
@@ -131,7 +133,7 @@ export function activationHarness() {
     "@/utils/controllers/projects/createProjectWithStableName": { createProjectWithStableName: async (data: any) => prisma.project.create({ data }) },
     "@/utils/controllers/tasks/createTaskCore": { createTaskCore: async () => ({ task: { id: 8 } }) },
     "@/utils/controllers/assignees/assign": { default: noop },
-    "@/pages/api/invite/createInviteLink": { generateInviteLink: (id: string) => `http://localhost/invite?key=${id}`, setViewSlug: () => undefined },
+    "@/pages/api/invite/createInviteLink": { createNotification: noop, generateInviteLink: (id: string) => `http://localhost/invite?key=${id}`, setViewSlug: () => undefined },
     "@/utils/controllers/projects/create": { createProjectViewAndCreateDefault: noop },
     "@/lib/seatBillingLock": { withTeamSeatBillingLock: async (_id: any, callback: any) => callback(() => {}) },
     "@/lib/teamMembership": {},
@@ -160,5 +162,5 @@ export function activationHarness() {
     return loaded.exports;
   }
   async function drain() { for (let index = 0; index < jobs.length; index++) await jobs[index]; }
-  return { captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFailure: (value: typeof failure) => { failure = value; } };
+  return { captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
 }

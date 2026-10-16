@@ -66,7 +66,7 @@ const membersShare = async (userId: number, shareId: string) => {
           return { status: 200, json: { taskShared, allowShare: false } };
         }
       } else if (taskShared?.shareType === "Anyone") {
-        const res = await addToTeam(taskShared.projectId, user.id);
+        const res = await addToTeam(taskShared.projectId, user.id, taskShared.userId);
         if (res)
           return { status: 200, json: { taskShared, allowShare: true } };
         else
@@ -89,9 +89,9 @@ const membersShare = async (userId: number, shareId: string) => {
   }
 };
 
-const addToTeam = async (projectId: number, userId: number) => {
+const addToTeam = async (projectId: number, userId: number, inviterUserId: number) => {
   try {
-    const result = await addExistingUserToProject(projectId, userId);
+    const result = await addExistingUserToProject(projectId, userId, inviterUserId);
     if (!result.ok && result.status === 404) return false;
     return true;
   } catch (error: any) {
