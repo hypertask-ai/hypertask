@@ -40,18 +40,6 @@ type WebVitalsInstallState = "idle" | "installing" | "installed";
 const identityKey = ({ userId, isGuest }: AnalyticsIdentity) =>
   `${userId ?? "anonymous"}:${isGuest ? "guest" : "standard"}`;
 
-const trackingConsented = () => getCookieConsent() === "all";
-
-const applyConsentedIdentity = (
-  posthog: PostHogInterface,
-  identity: AnalyticsIdentity,
-) => {
-  if (!trackingConsented()) return;
-  if (posthog.has_opted_out_capturing()) posthog.opt_in_capturing();
-  if (identity.userId !== null) posthog.identify(String(identity.userId));
-  if (identity.isGuest) posthog.startSessionRecording();
-};
-
 const reconcilePersistedIdentity = (
   posthog: PostHogInterface,
   identity: AnalyticsIdentity,
@@ -79,7 +67,8 @@ const reconcilePersistedIdentity = (
 
   posthog.set_config({ disable_session_recording: !identity.isGuest });
   markIdentitySafe();
-  applyConsentedIdentity(posthog, identity);
+  if (expectedAccountId !== null) posthog.identify(expectedAccountId);
+  if (identity.isGuest) posthog.startSessionRecording();
 };
 
 export default function PostHogAnalytics({
@@ -302,7 +291,8 @@ export default function PostHogAnalytics({
     if (previousIdentity.userId !== null) posthog.reset();
     posthog.set_config({ disable_session_recording: !identity.isGuest });
     identityReadyRef.current = true;
-    applyConsentedIdentity(posthog, identity);
+    if (identity.userId !== null) posthog.identify(String(identity.userId));
+    if (identity.isGuest) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
       console.error("[posthog] web vitals initialization failed", error);
@@ -365,14 +355,13 @@ export default function PostHogAnalytics({
             process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           ui_host: "https://eu.posthog.com",
           defaults: "2025-05-24",
-          persistence: trackingConsented() ? "localStorage+cookie" : "memory",
-          person_profiles: "identified_only",
+          persistence: "localStorage+cookie",
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
           __extensionClasses: ErrorTrackingExtensions,
           capture_exceptions: true,
-          disable_session_recording: !identity.isGuest || !trackingConsented(),
+          disable_session_recording: !identity.isGuest,
           capture_performance: false,
           before_send: (event) => {
             if (!identityReadyRef.current) return null;
@@ -522,15 +511,9 @@ export default function PostHogAnalytics({
     () =>
       onCookieConsentChange((consent) => {
         const posthog = posthogRef.current;
-        if (!posthog) return;
-        if (consent === "essential") {
-          posthog.stopSessionRecording();
-          posthog.opt_out_capturing();
-          return;
-        }
-        posthog.set_config({ persistence: "localStorage+cookie" });
-        applyConsentedIdentity(posthog, latestIdentityRef.current);
-        posthog.capture("consent_updated", { consent });
+        if (!posthog || consent !== "essential") return;
+        posthog.stopSessionRecording();
+        posthog.opt_out_capturing();
       }),
     [],
   );

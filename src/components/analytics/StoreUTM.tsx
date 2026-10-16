@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-import { getCookieConsent, onCookieConsentChange } from "@/lib/cookieConsent";
+import { getCookieConsent } from "@/lib/cookieConsent";
 import { 
   extractUTMFromURL, 
   storeUTMInCookies, 
@@ -55,13 +55,7 @@ const UTMCookieHandler = () => {
       }
     };
 
-    if (getCookieConsent() === "all") {
-      void captureUTMData();
-      return;
-    }
-    return onCookieConsentChange((consent) => {
-      if (consent === "all") void captureUTMData();
-    });
+    if (getCookieConsent() !== "essential") void captureUTMData();
   }, []);
 
   return null;

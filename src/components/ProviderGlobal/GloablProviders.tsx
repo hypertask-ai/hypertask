@@ -1280,7 +1280,7 @@ export default function GlobalProvider({
         !pathname?.startsWith("/inbox") &&
         !pathname?.startsWith("/calendar") && <GuestAuthLinks floating />}
       {!mbl && <NotificationPromoteBanner />}
-      <CookieConsentBanner />
+      {!currentUser && <CookieConsentBanner />}
       {showShortcuts && <KeyboardShortcuts />}
       {showGuestLogin === true && (
         <GuestLoginModal onClose={() => setShowGuestLogin(false)} />
