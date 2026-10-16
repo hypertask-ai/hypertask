@@ -317,7 +317,8 @@ test("layout starts identify lookup concurrently and fails closed without blocki
   h.state.session = { id: 123 };
   let rejectFlag!: (error: Error) => void;
   const started: string[] = [];
-  h.mocks["@/lib/flags"].isFeatureEnabled = () => {
+  h.mocks["@/lib/flags"].isFeatureEnabled = (key: string) => {
+    if (key !== flag) return Promise.resolve(false);
     started.push("flag");
     return new Promise((_resolve, reject) => { rejectFlag = reject; });
   };

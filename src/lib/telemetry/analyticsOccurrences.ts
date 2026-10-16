@@ -14,12 +14,17 @@ function occurrenceUuid(userId: number | "business", marker: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
 }
 
+function businessTime(value: unknown): Date | undefined {
+  const time = typeof value === "string" ? new Date(value) : undefined;
+  return time && Number.isFinite(time.getTime()) ? time : undefined;
+}
+
 export async function captureAnalyticsOccurrence(
   userId: number,
   event: string,
   marker: string,
   properties: Record<string, unknown> | ((tx: Prisma.TransactionClient) => Promise<Record<string, unknown>>),
-  { createdAt, scope = "user", occurredAt = createdAt ?? new Date() }: { createdAt?: Date; scope?: "user" | "business"; occurredAt?: Date } = {},
+  { createdAt, scope = "user", occurredAt }: { createdAt?: Date; scope?: "user" | "business"; occurredAt?: Date } = {},
 ): Promise<void> {
   const client = postHogClient();
   if (!client) return;
@@ -37,7 +42,8 @@ export async function captureAnalyticsOccurrence(
       } });
       return tx.analyticsOutbox.create({ data: {
         key, userId, event, uuid: occurrenceUuid(scope === "business" ? "business" : userId, marker),
-        properties: capturedProperties as Prisma.InputJsonObject, occurredAt,
+        properties: capturedProperties as Prisma.InputJsonObject,
+        occurredAt: occurredAt ?? businessTime(capturedProperties.occurred_at) ?? createdAt ?? new Date(),
       } });
     }, { timeout: 20000, maxWait: 1500 });
     if (row) await deliverAnalyticsOutbox(row);

@@ -65,6 +65,20 @@ test("a validated agent's rotated credentials share one durable occurrence and c
   assert.equal(cold.captures.length, 0);
 });
 
+test("a credential counted before the rollout claims its durable connection without a second event", async () => {
+  const h = harness();
+  const fingerprint = createHash("sha256").update("credential-before-rollout").digest("hex");
+  h.logs.push({ log: `activation:agent_connected:${fingerprint}`, LoggedById: 123, createdAt: new Date("2026-10-01T00:00:00Z") });
+  const validate = authenticated(h);
+  await validate(request("credential-before-rollout"));
+  await h.drain();
+  assert.equal(h.captures.length, 0);
+  assert.ok(h.logs.some(({ log }) => log === `activation:agent_connected:connection:${connectionId("agent:agent-one")}`));
+  await validate(request("credential-rotated-after-rollout"));
+  await h.drain();
+  assert.equal(h.captures.length, 0);
+});
+
 test("two different validated agents produce first then non-first connections", async () => {
   const h = harness();
   const validate = authenticated(h);

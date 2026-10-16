@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
 import { isOAuthAccessTokenPayload, oauthClientIdFromPayload } from "@/lib/mcp/oauthTokenContract";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { Prisma, Status } from "@prisma/client";
+import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { identifyMcpCli } from "@/lib/mcp/clientTelemetry";
@@ -121,7 +121,9 @@ export function recordAgentConnection(
           : clientId ? `oauth_client:${clientId}` : `user_token:${transport}:${agentType}`;
       }
       const connectionId = durable ? createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32) : null;
-      const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : `activation:agent_connected:${fingerprint}`;
+      const legacyMarker = `activation:agent_connected:${fingerprint}`;
+      const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : legacyMarker;
+      if (connectionId && await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
       await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
         const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
           { log: { startsWith: "activation:agent_connected:" } },
@@ -138,6 +140,19 @@ export function recordAgentConnection(
     } catch {
       seenConnections.delete(cacheKey);
     }
+  });
+}
+
+async function claimConnectionCountedBeforeRollout(userId: number, legacyMarker: string, marker: string): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
+    const [legacy, durable] = await Promise.all([
+      tx.logs.findFirst({ where: { LoggedById: userId, log: legacyMarker }, select: { id: true } }),
+      tx.logs.findFirst({ where: { LoggedById: userId, log: marker }, select: { id: true } }),
+    ]);
+    if (!legacy) return false;
+    if (!durable) await tx.logs.create({ data: { log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal } });
+    return true;
   });
 }
 

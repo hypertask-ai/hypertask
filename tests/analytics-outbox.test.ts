@@ -120,6 +120,14 @@ test("flag on commits marker and durable occurrence before delivery with stable 
   assert.deepEqual(h.locks[1][1], [marker]);
 });
 
+test("without an explicit time the outbox keeps the business occurred_at as the envelope timestamp", async () => {
+  const h = harness();
+  const paidAt = "2026-10-01T08:30:00.000Z";
+  await h.api.captureAnalyticsOccurrence(123, "subscription_canceled", marker, { ...properties, occurred_at: paidAt }, { scope: "business" });
+  assert.equal(h.rows[0].occurredAt.toISOString(), paidAt);
+  assert.equal(h.captureAttempts[0].timestamp.toISOString(), paidAt);
+});
+
 test("parallel and later replays keep one outbox row and one capture", async () => {
   const h = harness();
   await Promise.all([h.capture(), h.capture(), h.capture()]);

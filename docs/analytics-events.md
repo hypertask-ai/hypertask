@@ -47,4 +47,6 @@ Browser `$identify` gets `event_id` (its envelope uuid) and `source=web` for sig
 
 **Delivery record.** For flagged users every server occurrence from `captureAnalyticsOccurrence` (HTPR-7268 and HTPR-7272 events, plus activation events) is first written to the `AnalyticsOutbox` table with a unique business key (`<user id or business>:<marker>`), in the same transaction as the existing logs marker, then sent to PostHog after commit with the stored deterministic `uuid` and original timestamp. A failed send stays pending; `/api/cron/analytics-outbox` retries due rows every 5 minutes (backoff 1m, 5m, 30m, 2h, then 12h, at most 10 attempts) under a short lease so two runs never send the same row. Delivery pauses while the flag is off for that user and resumes when it is back on. Occurrences already marked before this change are never resent.
 
+A credential already counted under the old per-credential key claims its durable connection silently when the flag reaches its user, so the rollout does not recount it. A `signup_page_viewed` queued before PostHog loads is dropped if the visitor signs in before that load, so very fast sign-ins can be undercounted.
+
 Not covered here: unmapped Stripe customers are still skipped rather than queued (there is no user to attach the record to); first-touch attribution and consent fields remain HTPR-7269.
