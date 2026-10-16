@@ -190,7 +190,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
-  if (sent) recordInviteSent(invite, "email");
+  if (sent) recordInviteSent(invite, "email", invite.userId, userId);
 }
 
 export const generateInviteLink = async (

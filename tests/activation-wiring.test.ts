@@ -508,8 +508,8 @@ test("every additional server boundary is wired and lifecycle emails are owned b
     ["src/lib/onboarding/emails/agentNudge.ts", /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/],
     ["src/app/oauth/token/route.ts", /recordAgentConnection\(authCode.user.id, session.accessToken, "mcp", client.client_name\)/],
     ["src/lib/mcp/auth/session.ts", /recordAuthenticatedConnection\(request, ctx.user.id, token\)/],
-    ["src/pages/api/invite/generatePublicInvite.ts", /recordInviteSent\(newInvite, "link", session.userId\)/],
-    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordInviteSent\(invite, "email"\)/],
+    ["src/pages/api/invite/generatePublicInvite.ts", /recordInviteSent\(newInvite, "link", session.userId, newInvite.userId\)/],
+    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordInviteSent\(invite, "email", invite.userId, user.id\)/],
   ] as const;
   for (const [file, pattern] of checks) assert.match(fs.readFileSync(file, "utf8"), pattern);
   assert.doesNotMatch(fs.readFileSync("src/lib/telemetry/activationOccurrences.ts", "utf8"), /"lifecycle_email_sent"/);

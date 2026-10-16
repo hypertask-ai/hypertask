@@ -104,7 +104,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
-      if (sent) recordInviteSent(invite, "email");
+      if (sent) recordInviteSent(invite, "email", invite.userId, user.id);
       return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)

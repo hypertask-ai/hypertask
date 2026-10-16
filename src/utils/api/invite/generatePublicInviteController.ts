@@ -44,7 +44,7 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
         },
         include:{project:{select:{name:true}}},
     })
-    recordInviteSent(newInvite, "link", userId);
+    recordInviteSent(newInvite, "link", userId, newInvite.userId);
     return {inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, userId), amountUsed:(newInvite.uses*-1)-1}
 
 }

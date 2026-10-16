@@ -505,3 +505,31 @@ test("with the HTPR-7268 flag off, invites keep the legacy events and Stripe sen
     ["teammate_invited", "123", { method: "email" }],
   ]);
 });
+
+test("first-for-user is unknown when the billed user owns another billed workspace", async () => {
+  const h = harness();
+  const findTeam = h.prisma.team.findFirst;
+  h.prisma.team.findFirst = async (args: any) => typeof args.where.stripe_customer_id === "object" ? { id: "other-team" } : findTeam(args);
+  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
+  await h.drain();
+  assert.equal(h.captures[0].properties.is_first_subscription_for_user, null);
+});
+
+test("an invoice paid earlier wins over one created earlier but paid later", async () => {
+  const h = harness();
+  const createdFirstPaidLater = { ...(paidEvent().data.object as any), id: "in_created_first", created: 1760000000, status_transitions: { paid_at: 1770000500 } };
+  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent({ created: 1765000000 }), async () => subscription(),
+    async () => ({ data: [createdFirstPaidLater], has_more: false }));
+  await h.drain();
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].properties.invoice_id, "in_paid");
+});
+
+test("with the flag off, legacy teammate_invited keeps the original caller attribution", async () => {
+  const h = harness();
+  h.setFlagEnabled("htpr-7268-invite-seat-analytics", false);
+  h.users.set(234, { id: 234, uid: "real_resender", email: "resender@example.test" });
+  h.load("src/lib/telemetry/inviteAnalytics.ts").recordInviteSent({ id: "invitation", userId: 123, projectId: 15 }, "email", 123, 234);
+  await h.drain();
+  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["teammate_invited", "234"]]);
+});

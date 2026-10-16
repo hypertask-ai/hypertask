@@ -21,11 +21,12 @@ export function recordInviteSent(
   invite: Invitation,
   method: "email" | "link",
   inviterUserId = invite.userId,
+  legacyUserId = inviterUserId,
 ): void {
   const occurredAt = new Date();
   scheduleAnalytics(async () => {
     if (!(await isInviteSeatAnalyticsEnabled(inviterUserId))) {
-      await captureActivationOccurrence(inviterUserId, "teammate_invited", invite.id, { method });
+      await captureActivationOccurrence(legacyUserId, "teammate_invited", invite.id, { method });
       return;
     }
     const project = await prisma.project.findUnique({ where: { id: invite.projectId }, select: { teamId: true } });

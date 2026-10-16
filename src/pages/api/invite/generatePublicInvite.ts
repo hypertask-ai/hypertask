@@ -82,7 +82,7 @@ export default  async function handler(
             },
             include:{project:{select:{name:true}}},
         })
-        recordInviteSent(newInvite, "link", session.userId);
+        recordInviteSent(newInvite, "link", session.userId, newInvite.userId);
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)

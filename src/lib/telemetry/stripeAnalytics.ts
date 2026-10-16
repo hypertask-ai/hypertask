@@ -97,6 +97,13 @@ export function subscriptionAnalyticsProperties(subscription: AnalyticsSubscript
   };
 }
 
+async function ownsOtherBilledTeam(userId: number, customerId: string): Promise<boolean> {
+  return !!(await prisma.team.findFirst({
+    where: { googleAccount: { userId }, stripe_customer_id: { not: null, notIn: [customerId] } },
+    select: { id: true },
+  }));
+}
+
 async function billedTeam(customerId: string | null) {
   const team = customerId ? await prisma.team.findFirst({
     where: { stripe_customer_id: customerId }, select: { id: true, googleAccount: { select: { userId: true } } },
@@ -144,10 +151,15 @@ function invoiceSubscriptionId(invoice: PaidInvoice): string | null {
   return idOf(invoice.subscription ?? invoice.parent?.subscription_details?.subscription);
 }
 
+function paidTime(invoice: PaidInvoice): number {
+  return invoice.status_transitions?.paid_at ?? invoice.created;
+}
+
 function paidInvoiceHistory(invoice: PaidInvoice, subscriptionId: string, page: PaidInvoicePage) {
   const positive = [invoice, ...page.data.filter((candidate) => candidate.id !== invoice.id)]
     .filter((candidate) => candidate.status === "paid" && candidate.amount_paid > 0);
-  const earlier = positive.filter((candidate) => candidate.created < invoice.created);
+  const earlier = positive.filter((candidate) => paidTime(candidate) < paidTime(invoice)
+    || (paidTime(candidate) === paidTime(invoice) && candidate.id < invoice.id));
   const isFirstForSubscription = !page.has_more
     && !earlier.some((candidate) => invoiceSubscriptionId(candidate) === subscriptionId);
   const isFirstForCustomer = page.has_more ? null : earlier.length === 0;
@@ -176,12 +188,14 @@ export function recordStripeInvoicePaid(
     const userId = team.googleAccount.userId;
     const eventId = `subscription_started:${subscriptionId}`;
     const paidAt = invoice.status_transitions.paid_at;
+    let isFirstForUser = history.isFirstForCustomer;
+    if (isFirstForUser && await ownsOtherBilledTeam(userId, customerId)) isFirstForUser = null;
     await captureAnalyticsOccurrence(userId, "subscription_started", `analytics:${eventId}`, {
       ...serverAnalyticsProperties(userId, team.id, null, eventId, new Date((paidAt ?? event.created) * 1000)),
       ...properties, stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscriptionId,
       seats_before: 0, invoice_id: invoice.id, amount_paid: invoice.amount_paid,
       paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
-      is_first_subscription_for_user: history.isFirstForCustomer,
+      is_first_subscription_for_user: isFirstForUser,
     }, { scope: "business" });
   });
 }
