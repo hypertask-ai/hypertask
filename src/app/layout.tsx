@@ -2,7 +2,7 @@ import "@/styles/globals.scss";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
-import PostHogAnalytics, { type TrackingPersistence } from "@/components/Analytics/PostHogAnalytics";
+import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
@@ -13,7 +13,7 @@ import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
 import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
-import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
@@ -42,15 +42,6 @@ export async function generateViewport() {
   };
 }
 
-async function browserTrackingPersistence(userId: number | null): Promise<TrackingPersistence> {
-  if (userId === null) {
-    const releasedToEveryone = (await featureFlagCandidateUserIds(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG)) === null;
-    return releasedToEveryone ? "memory" : "localStorage+cookie";
-  }
-  const memoryOnly = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, userId);
-  return memoryOnly ? "memory" : "localStorage+cookie";
-}
-
 export default async function RootLayout(
   {
     children,
@@ -69,10 +60,7 @@ export default async function RootLayout(
   );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
-  const trackingPersistence = await browserTrackingPersistence(analyticsSession?.id ?? null).catch((error) => {
-    console.error("[posthog] memory-only tracking flag unreadable, keeping browser storage", error);
-    return "localStorage+cookie" as const;
-  });
+  const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -156,7 +144,7 @@ export default async function RootLayout(
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
-          trackingPersistence={trackingPersistence}
+          trackingPersistence={memoryOnlyTracking ? "memory" : "localStorage+cookie"}
         />
         <DeploySkewGuard />
         <SpeedInsights />

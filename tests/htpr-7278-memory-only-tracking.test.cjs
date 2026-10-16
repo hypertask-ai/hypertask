@@ -15,14 +15,8 @@ test("the flag is an honest improvement flag on the repo default", () => {
 });
 
 test("the layout reads the flag on the server for signed-in and signed-out visitors", () => {
-  assert.match(layout, /const memoryOnly = await isFeatureEnabled\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, userId\);\s*return memoryOnly \? "memory" : "localStorage\+cookie";/);
-  assert.match(layout, /\(await featureFlagCandidateUserIds\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG\)\) === null;\s*return releasedToEveryone \? "memory" : "localStorage\+cookie";/);
-  assert.match(layout, /browserTrackingPersistence\(analyticsSession\?\.id \?\? null\)/);
-  assert.match(layout, /trackingPersistence=\{trackingPersistence\}/);
-});
-
-test("an unreadable flag keeps the previous browser storage", () => {
-  assert.match(layout, /\.catch\(\(error\) => \{[\s\S]*?return "localStorage\+cookie" as const;/);
+  assert.match(layout, /const memoryOnlyTracking = await isFeatureEnabled\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession\?\.id \?\? -1\);/);
+  assert.match(layout, /trackingPersistence=\{memoryOnlyTracking \? "memory" : "localStorage\+cookie"\}/);
 });
 
 test("PostHog stores exactly where the server said", () => {
