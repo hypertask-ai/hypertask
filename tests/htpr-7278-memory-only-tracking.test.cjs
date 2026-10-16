@@ -15,29 +15,30 @@ test("the flag is an honest improvement flag on the repo default", () => {
 });
 
 test("the layout reads the flag on the server for signed-in and signed-out visitors", () => {
-  assert.match(layout, /isFeatureEnabled\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession\.id\)/);
-  assert.match(layout, /featureFlagCandidateUserIds\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG\)\.then\(\(ids\) => ids === null\)/);
-  assert.match(layout, /memoryOnlyTracking=\{memoryOnlyTracking\}/);
+  assert.match(layout, /const memoryOnly = await isFeatureEnabled\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, userId\);\s*return memoryOnly \? "memory" : "localStorage\+cookie";/);
+  assert.match(layout, /\(await featureFlagCandidateUserIds\(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG\)\) === null;\s*return releasedToEveryone \? "memory" : "localStorage\+cookie";/);
+  assert.match(layout, /browserTrackingPersistence\(analyticsSession\?\.id \?\? null\)/);
+  assert.match(layout, /trackingPersistence=\{trackingPersistence\}/);
 });
 
 test("an unreadable flag keeps the previous browser storage", () => {
-  assert.match(layout, /\.catch\(\(error\) => \{[\s\S]*?return false;/);
+  assert.match(layout, /\.catch\(\(error\) => \{[\s\S]*?return "localStorage\+cookie" as const;/);
 });
 
-test("flag on keeps PostHog in memory, flag off keeps cookie and localStorage", () => {
-  assert.match(analytics, /persistence: memoryOnlyRef\.current \? "memory" : "localStorage\+cookie"/);
+test("PostHog stores exactly where the server said", () => {
+  assert.match(analytics, /persistence: persistenceRef\.current,/);
+  assert.doesNotMatch(analytics, /persistence: "localStorage\+cookie"/);
 });
 
-test("flag on never records sessions, even for demo guests", () => {
+test("memory-only never records sessions, even for demo guests", () => {
   const recordsSessions = new Function(
     "identity",
-    "memoryOnly",
-    `return ${analytics.match(/const recordsSessions = \(identity: AnalyticsIdentity, memoryOnly: boolean\) =>\s*([^;]+);/)[1]};`,
+    "persistence",
+    `return ${analytics.match(/const recordsSessions = \(identity: AnalyticsIdentity, persistence: TrackingPersistence\) =>\s*([^;]+);/)[1]};`,
   );
-  assert.equal(recordsSessions({ isGuest: true }, true), false);
-  assert.equal(recordsSessions({ isGuest: true }, false), true);
-  assert.equal(recordsSessions({ isGuest: false }, false), false);
-  assert.doesNotMatch(analytics, /if \(identity\.isGuest\) posthog\.startSessionRecording\(\)/);
+  assert.equal(recordsSessions({ isGuest: true }, "memory"), false);
+  assert.equal(recordsSessions({ isGuest: true }, "localStorage+cookie"), true);
+  assert.equal(recordsSessions({ isGuest: false }, "localStorage+cookie"), false);
   assert.equal((analytics.match(/startSessionRecording\(\)/g) ?? []).length, 2);
   assert.equal((analytics.match(/if \(recordsSessions\(identity, [^)]+\)\) posthog\.startSessionRecording\(\)/g) ?? []).length, 2);
 });

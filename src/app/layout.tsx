@@ -2,7 +2,7 @@ import "@/styles/globals.scss";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
-import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
+import PostHogAnalytics, { type TrackingPersistence } from "@/components/Analytics/PostHogAnalytics";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
@@ -42,6 +42,15 @@ export async function generateViewport() {
   };
 }
 
+async function browserTrackingPersistence(userId: number | null): Promise<TrackingPersistence> {
+  if (userId === null) {
+    const releasedToEveryone = (await featureFlagCandidateUserIds(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG)) === null;
+    return releasedToEveryone ? "memory" : "localStorage+cookie";
+  }
+  const memoryOnly = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, userId);
+  return memoryOnly ? "memory" : "localStorage+cookie";
+}
+
 export default async function RootLayout(
   {
     children,
@@ -60,12 +69,9 @@ export default async function RootLayout(
   );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
-  const memoryOnlyTracking = await (analyticsSession
-    ? isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession.id)
-    : featureFlagCandidateUserIds(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG).then((ids) => ids === null)
-  ).catch((error) => {
+  const trackingPersistence = await browserTrackingPersistence(analyticsSession?.id ?? null).catch((error) => {
     console.error("[posthog] memory-only tracking flag unreadable, keeping browser storage", error);
-    return false;
+    return "localStorage+cookie" as const;
   });
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
@@ -150,7 +156,7 @@ export default async function RootLayout(
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
-          memoryOnlyTracking={memoryOnlyTracking}
+          trackingPersistence={trackingPersistence}
         />
         <DeploySkewGuard />
         <SpeedInsights />
