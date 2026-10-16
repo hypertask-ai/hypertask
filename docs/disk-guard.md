@@ -79,7 +79,16 @@ in place. Reinstall to update the installed copy. No crontab is used.
      A detached worktree, a non-GitHub origin, or a failed, malformed or
      truncated (500 rows) list keeps the folder.
      The `~/projects/hypertask` main checkout is never touched.
-  6. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
+  6. `worktree-deps` (YPER4-421, https://app.hypertask.ai/detail/project-4060/421):
+     the `node_modules` folder of a linked worktree whose files outside
+     `.git`, `node_modules` and `.next` have not changed for 3 days and whose
+     `node_modules` had no write for 3 days, oldest first. Only that folder
+     goes: the worktree, its branch and any uncommitted or untracked work stay,
+     so dirty, detached and unmerged worktrees qualify too. Git must report
+     `node_modules` as ignored. Main checkouts, locked or prunable worktrees, a
+     worktree with an open PR and any worktree a process, command line or
+     container uses are never touched. `npm ci` brings it back.
+  7. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
      process runs at all and nothing was written to it for one hour. npm is
      found by the first word of each command line and by `/proc/<pid>/comm`,
      because npm rewrites its title to one string such as `npm ci`.

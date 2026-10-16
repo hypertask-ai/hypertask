@@ -28,7 +28,8 @@ CACHE_AT, CACHE_TARGET, CLEAN_AT, CRITICAL_AT = 75, 70, 80, 90
 # Only caches the owning tool rebuilds on its own. puppeteer, prisma and current
 # Playwright browsers are only fetched by an install step, so they are never listed here.
 TOOL_CACHES = ('go-build', 'node-gyp', 'zig', 'uv')
-CACHE_CATEGORIES = ('docker-volumes', 'playwright-old', 'tool-caches', 'npx-cache', 'next-build', 'npm-cache')
+CACHE_CATEGORIES = ('docker-volumes', 'playwright-old', 'tool-caches', 'npx-cache', 'next-build', 'worktree-deps',
+                    'npm-cache')
 # Named volumes scripts/run-app-smoke-isolated.sh leaves behind when its cleanup trap is killed.
 SMOKE_VOLUME = re.compile(r'^ht-smoke-(build|state|dependencies)-[a-z0-9_-]+$')
 BROWSER_DIR = re.compile(r'^([a-z][a-z0-9_]*)-([0-9]+)$')
@@ -886,6 +887,38 @@ class Guard:
             raise ValueError('open PR list unavailable, malformed or truncated')
         return self.open_cache[slug]
 
+    def worktree_deps(self, repos):
+        """node_modules of linked worktrees; main checkouts are skipped."""
+        found = []
+        for repo, rows in repos:
+            for row in rows[1:]:
+                tree = row['path']
+                if tree in self.failed_repos or tree == self.protected or inside(tree, self.protected):
+                    continue
+                if 'locked' in row or 'prunable' in row:
+                    continue
+                modules = tree / 'node_modules'
+                try:
+                    if modules.is_dir() and not modules.is_symlink():
+                        found.append((modules.lstat().st_mtime, str(modules), modules, tree, repo, row))
+                except OSError:
+                    continue
+        return found
+
+    def deps_kept(self, tree):
+        """Reason to keep a worktree's node_modules: git must ignore it and the worktree must be idle."""
+        try:
+            ignored = subprocess.run(['git', 'check-ignore', '-q', 'node_modules'], cwd=tree,
+                                     capture_output=True, timeout=60)
+            if ignored.returncode != 0:
+                return 'node_modules is tracked or not ignored by git'
+            newest, _ = inventory(tree, {'.git', 'node_modules', '.next'})
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return 'worktree activity unreadable'
+        if self.now - newest <= 3 * DAY:
+            return 'worktree changed in the last 3 days'
+        return None
+
     def caches(self, repos):
         """Free re-creatable caches, cheapest to rebuild first, until the disk is below CACHE_TARGET."""
         self.empty_trash()
@@ -938,6 +971,10 @@ class Guard:
             # and a worktree with an open PR is never touched at all.
             groups.append(('next-build', build, 2 * DAY, 'next build output of an idle worktree', tree,
                            lambda repo=repo, row=row: self.open_pr(repo, row)))
+        for _, _, modules, tree, repo, row in sorted(self.worktree_deps(repos), key=lambda d: d[:2]):
+            # Only the dependency folder goes; the worktree and any uncommitted work in it stay.
+            groups.append(('worktree-deps', modules, 3 * DAY, 'dependencies of a worktree idle for 3 days', tree,
+                           lambda tree=tree, repo=repo, row=row: self.open_pr(repo, row) or self.deps_kept(tree)))
         cacache = self.home / '.npm/_cacache'
         if cacache.is_dir() and not cacache.is_symlink():
             # No npm running at all and one quiet hour since the last cache write.

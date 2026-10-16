@@ -1030,6 +1030,76 @@ class CacheTests(Fixture):
         self.assertTrue(build.exists())
         self.assertIn('docker mount scan failed', self.output.getvalue())
 
+    def deps_tree(self, ignore='node_modules/\n'):
+        repo, tree = self.repo()
+        (self.root / 'ignore').write_text(ignore)
+        self.git(tree, 'config', 'core.excludesFile', str(self.root / 'ignore'))
+        modules = self.output_dir(tree / 'node_modules')
+        self.old(tree)
+        return repo, tree, modules
+
+    def test_cache_idle_dirty_worktree_loses_only_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (tree / 'file').write_text('uncommitted work\n')
+        (tree / 'notes').write_text('untracked work\n')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertEqual((tree / 'file').read_text(), 'uncommitted work\n')
+        self.assertTrue((tree / 'notes').exists())
+        self.assertIn('M file', self.git(tree, 'status', '--porcelain'))
+        self.assertEqual(self.stats('worktree-deps')['paths'], 1)
+        self.assertIn('worktree-deps: dependencies of a worktree idle for 3 days',
+                      (self.guard.state / 'log').read_text())
+
+    def test_cache_still_allowed_idle_clean_worktree_node_modules_removed(self):
+        _, tree, modules = self.deps_tree()
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+
+    def test_cache_recent_edit_in_worktree_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (tree / 'file').write_text('edited today\n')
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: worktree changed in the last 3 days', self.output.getvalue())
+
+    def test_cache_fresh_install_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (modules / 'output').touch()
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: newest mtime is not older than 3 days', self.output.getvalue())
+
+    def test_cache_open_pr_or_busy_worktree_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        os.environ['GH_ROWS'] = json.dumps([{'state': 'OPEN', 'headRefName': 'feature'}])
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: OPEN PR for branch; worktree never touched', self.output.getvalue())
+        os.environ['GH_ROWS'] = '[]'
+        self.guard.open_cache.clear()
+        self.paths.return_value = ({tree / 'src'}, False)
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: process has cwd/fd/root inside', self.output.getvalue())
+
+    def test_cache_unignored_node_modules_kept(self):
+        _, tree, modules = self.deps_tree(ignore='')
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: node_modules is tracked or not ignored by git', self.output.getvalue())
+
+    def test_cache_main_checkout_and_locked_worktree_node_modules_kept(self):
+        repo, tree, modules = self.deps_tree()
+        main = self.output_dir(repo / 'node_modules')
+        self.git(repo, 'worktree', 'lock', str(tree))
+        self.sweep()
+        self.assertTrue(main.exists())
+        self.assertTrue(modules.exists())
+        self.assertEqual(self.stats('worktree-deps')['paths'], 0)
+
     def test_cache_young_files_keep_every_category(self):
         _, tree = self.repo()
         paths = [self.output_dir(tree / '.next', 1), self.output_dir(self.home / '.cache/go-build', 1),
