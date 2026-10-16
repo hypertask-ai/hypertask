@@ -1058,6 +1058,15 @@ class CacheTests(Fixture):
         self.assertFalse(modules.exists())
         self.assertTrue((tree / 'file').exists())
 
+    def test_cache_idle_worktree_loses_next_and_node_modules_in_one_sweep(self):
+        _, tree, modules = self.deps_tree()
+        build = self.output_dir(tree / '.next')
+        os.utime(tree, (self.guard.now - 4 * disk.DAY,) * 2)
+        self.sweep()
+        self.assertFalse(build.exists())
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+
     def test_cache_recent_edit_in_worktree_keeps_node_modules(self):
         _, tree, modules = self.deps_tree()
         (tree / 'file').write_text('edited today\n')
@@ -1090,17 +1099,21 @@ class CacheTests(Fixture):
         doc = modules / 'playwright-core/references/storage-state.md'
         doc.parent.mkdir(parents=True)
         doc.write_text('docs\n')
+        (modules / 'playwright-core/package.json').write_text('{}\n')
         self.old(tree)
         self.sweep()
         self.assertFalse(modules.exists())
 
     def test_cache_saved_login_or_env_inside_node_modules_kept(self):
-        for name in ('.cache/auth/storageState.json', 'pkg/.env', 'pkg/.env.local'):
+        for name in ('.cache/auth/storageState.json', 'pkg/.env', 'pkg/.env.local', 'pkg/.env.local.js',
+                     'storageState.js', '.cache/auth/storage-state.ts'):
             with self.subTest(name=name):
                 _, tree, modules = self.deps_tree()
                 saved = modules / name
                 saved.parent.mkdir(parents=True, exist_ok=True)
                 saved.write_text('secret\n')
+                (modules / 'pkg').mkdir(exist_ok=True)
+                (modules / 'pkg/package.json').write_text('{}\n')
                 self.old(tree)
                 self.sweep()
                 self.assertTrue(saved.exists())

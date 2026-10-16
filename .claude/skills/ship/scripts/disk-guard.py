@@ -186,14 +186,27 @@ SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
 PACKAGE_SOURCE = ('.md', '.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.map')
 
 
+def package_file(item, modules):
+    """A doc or code file inside an installed package folder; .env* never qualifies."""
+    if item.name.lower().startswith('.env') or not item.name.endswith(PACKAGE_SOURCE):
+        return False
+    if not stat.S_ISREG(item.lstat().st_mode):
+        return False
+    folder = item.parent
+    while folder != modules and inside(folder, modules):
+        if (folder / 'package.json').is_file():
+            return True
+        folder = folder.parent
+    return False
+
+
 def sensitive_inside(path, package_source_ok=False):
     """Credential-looking files keep a cache candidate. Inspection errors count as found."""
     pending = [path]
     try:
         while pending:
             item = pending.pop()
-            if SENSITIVE_NAME.search(item.name) and not (package_source_ok and item.name.endswith(PACKAGE_SOURCE)
-                                                         and stat.S_ISREG(item.lstat().st_mode)):
+            if SENSITIVE_NAME.search(item.name) and not (package_source_ok and package_file(item, path)):
                 return True
             if stat.S_ISDIR(item.lstat().st_mode):
                 pending.extend(item.iterdir())
@@ -915,7 +928,9 @@ class Guard:
                                      capture_output=True, timeout=60)
             if ignored.returncode != 0:
                 return 'node_modules is tracked or not ignored by git'
-            newest, _ = inventory(tree, {'.git', 'node_modules', '.next'})
+            # The worktree folder's own mtime changes when the guard removes .next, so only its contents count.
+            skip = {'.git', 'node_modules', '.next'}
+            newest = max((inventory(child, skip)[0] for child in tree.iterdir() if child.name not in skip), default=0)
         except (OSError, ValueError, subprocess.SubprocessError):
             return 'worktree activity unreadable'
         if self.now - newest <= 3 * DAY:
