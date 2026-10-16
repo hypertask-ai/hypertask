@@ -5,6 +5,7 @@ import { noStore } from "@/lib/flags/http";
 import {
   FEATURE_FLAG_MODES,
   FEATURE_FLAG_OWNER_USER_ID,
+  FEATURE_FLAG_TICKET_PROJECT_ID,
   FeatureFlagInputError,
   FeatureFlagApprovalError,
   defaultFeatureFlagMode,
@@ -24,6 +25,30 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OFF: "Off",
 };
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
+const QUOTES_OWNER = /\bValentin(?: Yeo)?, \d{4}-\d{2}-\d{2}\b[^:"]{0,60}: ["“]/;
+const FLAG_KEY_TICKET_NUMBER = /^htpr-([1-9]\d*)-/;
+
+type ApprovalComment = {
+  creatorId: number | null;
+  agentId: string | null;
+  agentDisplayName: string | null;
+  reactions: unknown[];
+};
+
+function approvesSwitchRequest(comment: ApprovalComment, words: string, key: string, mode: FeatureFlagMode) {
+  const ask = SWITCH_REQUEST.exec(words);
+  return comment.reactions.length > 0 && ask?.[1] === key && ask[2] === MODE_APPROVAL_WORDS[mode];
+}
+
+function approvesStartOnEveryone(
+  comment: ApprovalComment, words: string, key: string, mode: FeatureFlagMode, projectId: number, ticketNumber: number,
+) {
+  if (mode !== "EVERYONE" || projectId !== FEATURE_FLAG_TICKET_PROJECT_ID
+    || FLAG_KEY_TICKET_NUMBER.exec(key)?.[1] !== String(ticketNumber)) return false;
+  const writtenByOwner = comment.creatorId === FEATURE_FLAG_OWNER_USER_ID
+    && comment.agentId === null && comment.agentDisplayName === null;
+  return writtenByOwner || (comment.reactions.length > 0 && QUOTES_OWNER.test(words));
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -102,20 +127,29 @@ export async function PATCH(request: NextRequest) {
           id: commentId,
           editedAt: null,
           task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
-          reactions: { some: {
-            userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
-            unified: { startsWith: "1f44d" },
-            createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-          } },
         },
-        select: { commentText: true, text: true },
+        select: {
+          creatorId: true, agentId: true, agentDisplayName: true, commentText: true, text: true,
+          reactions: {
+            where: {
+              userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
+              unified: { startsWith: "1f44d" },
+              createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
+            },
+            select: { id: true },
+            take: 1,
+          },
+        },
       });
-      const words = parse(comment?.text || comment?.commentText || "").text;
-      const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
-      if (!comment || !ask || ask[1] !== body.key
-        || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+      const words = parse(comment?.text || comment?.commentText || "").text.replace(/\s+/g, " ").trim();
+      const key = body.key as string;
+      const mode = body.mode as FeatureFlagMode;
+      if (!comment || !(approvesSwitchRequest(comment, words, key, mode)
+        || approvesStartOnEveryone(comment, words, key, mode, Number(link[1]), Number(link[2])))) {
         throw new FeatureFlagApprovalError(
-          "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
+          "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?"
+          + " To switch to Everyone, an unedited comment on the flag's own ticket also counts when Valentin wrote it himself,"
+          + " or when it quotes him (Valentin, YYYY-MM-DD: \"...\") and he gave it a thumbs up within 7 days.",
         );
       }
     });
