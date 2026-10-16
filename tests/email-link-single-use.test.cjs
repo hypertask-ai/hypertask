@@ -16,6 +16,12 @@ process.env.RESEND_API_KEY = 'email-link-test-key'
 process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
 
 function loadTs(relativePath, aliases = {}) {
+  aliases = {
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/analytics/signupIdentityClient': { prepareSignupContext: async () => {}, getSignupContextInput: () => ({}) },
+    ...aliases,
+  }
+
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: {
       esModuleInterop: true,

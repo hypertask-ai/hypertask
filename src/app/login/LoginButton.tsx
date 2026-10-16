@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import React from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import authConfig from "@/lib/configs/auth.config";
+import { prepareSignupContext } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 
 interface LoginButtonProps {
@@ -28,7 +29,7 @@ const LoginButton = ({
   const searchParams = useSearchParams();
   const { isFunnelUserAndTutorialCompleted } = useFunnelCookies();
 
-  const googleLogin = () => {
+  const googleLogin = async () => {
     const hasOAuthParams = searchParams?.has('client_id') && searchParams?.has('redirect_uri');
     
     const shouldSkipInteractive =
@@ -40,6 +41,7 @@ const LoginButton = ({
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
+      await prepareSignupContext();
       void authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,

@@ -22,6 +22,7 @@ import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFun
 import { addUserToTeamFromShareRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import authConfig from "@/lib/configs/auth.config";
+import { prepareSignupContext } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 import { clearAddAccountFlag } from "@/lib/auth/accounts";
 import { useMobileBlocking } from "@/lib/contexts/mobileBlockingContext";
@@ -117,6 +118,7 @@ export const AuthProvider = ({
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
+      await prepareSignupContext();
       const { error } = await authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,
@@ -139,6 +141,7 @@ export const AuthProvider = ({
   ) => {
     try {
       setIsAuthenticating(true);
+      await prepareSignupContext();
       const { error } = await authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,

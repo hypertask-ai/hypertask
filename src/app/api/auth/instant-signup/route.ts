@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createSignupContext, consumeSignupContext } from '@/lib/auth/signupAttributionContext'
 import updateUsers from '@/utils/controllers/users/update_or_create_user'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -108,7 +109,7 @@ function buildVerificationLinkWithUTM(baseUrl: string, token: string, utmData: R
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData } = await request.json()
+    const { email, utmData, signupContext } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -132,9 +133,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
     const existingUser = await findUserByEmail(normalizedEmail)
 
     if (existingUser) {
+      await consumeSignupContext(signupContextId)
       try {
         await sendVerificationEmail(
           normalizedEmail,
@@ -168,6 +171,7 @@ export async function POST(request: NextRequest) {
         'email',
         typeof utmData?.utm_source === 'string' ? utmData.utm_source : undefined,
       ),
+      signupContextId,
     )
 
     if (userUpdateResult.status !== 200) {

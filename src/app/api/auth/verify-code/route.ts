@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { waitUntil } from '@vercel/functions'
 import { maybeSendWelcomeEmail } from '@/lib/onboarding/emails/welcome'
 import { maybeScheduleAgentNudge } from '@/lib/onboarding/emails/agentNudge'
+import { takeSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
 import update_or_create_user from '@/utils/controllers/users/update_or_create_user'
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
       authConfig.onboarding.skipOnboarding,
       true,
       signupAttributionFromHeaders(request.headers, 'email'),
+      await takeSignupCodeContext(verifiedEmail, code),
     )
 
     if (userUpdateResult.status !== 200) {

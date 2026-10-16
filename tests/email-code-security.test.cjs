@@ -8,6 +8,11 @@ const { NextRequest } = require('next/server')
 const root = path.resolve(__dirname, '..')
 
 function loadTypescriptModule(relativePath, aliases = {}) {
+  aliases = {
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    ...aliases,
+  }
+
   const filename = path.join(root, relativePath)
   const source = fs.readFileSync(filename, 'utf8')
   const javascript = ts.transpileModule(source, {

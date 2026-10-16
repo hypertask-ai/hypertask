@@ -4,6 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
 
+import { setSignupIdentitySdk } from "@/lib/analytics/signupIdentityClient";
 import { getCookieConsent } from "@/lib/cookieConsent";
 import {
   installProductPerformanceSink,
@@ -385,6 +386,7 @@ export default function PostHogAnalytics({
                 $title: initialPageview.title,
               });
             }
+            setSignupIdentitySdk(loadedPostHog);
             posthogRef.current = loadedPostHog;
             appliedIdentityRef.current = loadedIdentity;
             pendingWebVitalsRef.current
@@ -500,6 +502,7 @@ export default function PostHogAnalytics({
       }
       clearSchedule();
       uninstallSink();
+      setSignupIdentitySdk(null);
       posthogRef.current = null;
       if (scheduleControllerRef.current === scheduleController) {
         scheduleControllerRef.current = null;

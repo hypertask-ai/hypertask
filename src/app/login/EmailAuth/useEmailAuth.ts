@@ -4,6 +4,7 @@ import authConfig from '@/lib/configs/auth.config'
 import { useUTM } from '@/hooks/General/useUTMs'
 import { useSearchParams } from 'next/navigation'
 import { parseSafeReturnTo, POST_LOGIN_REDIRECT_STORAGE_KEY } from '@/lib/auth/safeReturnTo'
+import { getSignupContextInput, prepareSignupContext } from '@/lib/analytics/signupIdentityClient'
 import { authClient } from '@/lib/auth/betterAuthClient'
 
 export type EmailAuthStep = 'form' | 'link-sent' | 'signing-in' | 'code-input'
@@ -157,6 +158,7 @@ export function useEmailAuth(initialEmail = '') {
           body: JSON.stringify({
             email: pendingEmail,
             utmData: getUTMData() || {},
+            signupContext: getSignupContextInput(),
           }),
         })
         const data = await response.json()
@@ -352,6 +354,7 @@ export function useEmailAuth(initialEmail = '') {
       console.log('📧 Sending custom sign-in link to:', email)
       if (isBetterAuthEnabled) {
         sessionStorage.setItem('ht_pending_ba_email', email)
+        await prepareSignupContext()
         const { error } = await authClient.signIn.magicLink({
           email,
           callbackURL: authConfig.redirect.afterLogin,
@@ -377,6 +380,7 @@ export function useEmailAuth(initialEmail = '') {
           body: JSON.stringify({
             email,
             utmData: utmData || {},
+            signupContext: getSignupContextInput(),
             inviteData: {
               project,
               key,
@@ -430,6 +434,7 @@ export function useEmailAuth(initialEmail = '') {
     try {
       if (isBetterAuthEnabled) {
         sessionStorage.setItem('ht_pending_ba_email', email)
+        await prepareSignupContext()
         const { error } = await authClient.signIn.magicLink({
           email,
           callbackURL: authConfig.redirect.afterLogin,
@@ -453,7 +458,8 @@ export function useEmailAuth(initialEmail = '') {
           },
           body: JSON.stringify({
             email,
-          utmData: utmData || {},
+            utmData: utmData || {},
+            signupContext: getSignupContextInput(),
             inviteData: {
               project,
               key,

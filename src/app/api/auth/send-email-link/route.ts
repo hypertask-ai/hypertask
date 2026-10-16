@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createSignupContext, bindSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
 import { VerificationCodeService } from '@/lib/services/verificationCodeService'
@@ -118,9 +119,9 @@ async function sendEmailWithResend(to: string, link: string, code: string, varia
   console.log('✅ Email sent via Resend with both link and code')
 }
 
-function createEmailLoginToken(email: string) {
+function createEmailLoginToken(email: string, signupContextId: string | null) {
   const jti = crypto.randomUUID()
-  const payload = { sub: email }
+  const payload = { sub: email, ...(signupContextId ? { signupContextId } : {}) }
   const token = jwt.sign(payload, getJwtSecret(), {
     expiresIn: LINK_EXPIRY_MINUTES * 60,
     issuer: JWT_ISSUER,
@@ -166,7 +167,7 @@ function buildSignInLinkWithUTM(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData, inviteData, returnTo: rawReturnTo } = await request.json()
+    const { email, utmData, inviteData, returnTo: rawReturnTo, signupContext } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -190,7 +191,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const token = createEmailLoginToken(normalizedEmail)
+    const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
+    const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
     
     const utmParams = utmData && typeof utmData === 'object' ? utmData : {}
@@ -209,6 +211,7 @@ export async function POST(request: NextRequest) {
     )
     
     await VerificationCodeService.storeCode(verificationCode, normalizedEmail, CODE_EXPIRY_MINUTES)
+    if (signupContextId) await bindSignupCodeContext(normalizedEmail, verificationCode, signupContextId)
 
     const existingUser = await prisma.user.findFirst({
       where: { email: normalizedEmail },

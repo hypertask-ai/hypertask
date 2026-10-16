@@ -4,6 +4,9 @@ import { emailOTP, magicLink, multiSession } from 'better-auth/plugins'
 import { apiKey } from '@better-auth/api-key'
 import { dash } from '@better-auth/infra'
 import { passkey } from '@better-auth/passkey'
+import { createAuthMiddleware } from 'better-auth/api'
+import { consumeSignupCookie } from '@/lib/auth/signupAttributionContext'
+import { recordSignupIdentityLink } from '@/lib/telemetry/signupIdentityLink'
 import { randomUUID } from 'crypto'
 
 import { bridgeSessionPlugin } from '@/lib/auth/bridgePlugin'
@@ -202,6 +205,8 @@ export const auth = betterAuth({
               throw new Error(`Invalid Better Auth user id: ${user.id}`)
             }
 
+            await recordSignupIdentityLink(userId, true, await consumeSignupCookie(context))
+
             recordUserSignedUp({
               isNewUser: true,
               userId,
@@ -236,6 +241,11 @@ export const auth = betterAuth({
         },
       },
     },
+  },
+  hooks: {
+    after: createAuthMiddleware(async (context) => {
+      if (context.context.newSession) await consumeSignupCookie(context)
+    }),
   },
   advanced: {
     database: {
