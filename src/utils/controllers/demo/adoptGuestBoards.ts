@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";
@@ -100,7 +100,7 @@ export async function adoptGuestBoards(
     });
 
     for (const projectId of projectIds) {
-      recordActivationOccurrence(targetUserId, "board_created", String(projectId), { source: "adopted_demo" });
+      recordBoardCreated(projectId, "adopted_demo", { userId: targetUserId });
     }
     return projectIds.length;
   } catch (error) {

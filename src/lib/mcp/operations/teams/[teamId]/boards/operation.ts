@@ -1,3 +1,4 @@
+import { getMcpOperationContext } from '@/lib/mcp/operationContext'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -187,7 +188,12 @@ export async function POST(
           manifest: validated.data,
           userId: user.id,
           userEmail: dbUser.email,
-          userDisplayName: dbUser.displayName
+          userDisplayName: dbUser.displayName,
+          creation: {
+            method: ctx.agentId ? 'agent' : 'api',
+            channel: getMcpOperationContext(request) ? 'mcp' : 'api',
+            agentId: ctx.agentId,
+          }
         })
 
       return {

@@ -119,6 +119,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             const taskCreatedActor = {
                 userId: currentUser.id,
                 agentId: agentId ?? null,
+                channel: "web" as const,
             }
             if (index==0 && count!==0){
 

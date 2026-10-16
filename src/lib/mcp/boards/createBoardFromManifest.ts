@@ -5,6 +5,7 @@ import {
   createProjectViewAndCreateDefault,
   updateUniqueIdentifier
 } from '@/utils/controllers/projects/create'
+import { recordBoardCreated, type CreationChannel } from '@/lib/telemetry/savedWorkAnalytics'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
 import { assertBoardQuota } from '@/utils/controllers/projects/boardQuota'
 import createLog from '@/utils/controllers/logs/createLog'
@@ -20,6 +21,13 @@ export interface CreateBoardFromManifestParams {
   userId: number
   userEmail: string
   userDisplayName?: string | null
+  creation: ManifestBoardCreation
+}
+
+export interface ManifestBoardCreation {
+  method: 'api' | 'agent'
+  channel: CreationChannel
+  agentId?: string | null
 }
 
 export interface CreateBoardSectionResult {
@@ -73,7 +81,7 @@ async function compensateFailedBoard(projectId: number): Promise<void> {
 export async function createBoardFromManifest(
   params: CreateBoardFromManifestParams
 ): Promise<CreateBoardFromManifestResult> {
-  const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName } = params
+  const { teamId, googleAccountId, manifest, userId, userEmail, userDisplayName, creation } = params
 
   await assertBoardQuota(userId)
 
@@ -189,7 +197,8 @@ export async function createBoardFromManifest(
         dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
         projectUniqueIdentifier: projectRow.uniqueIdentifier,
         teamId,
-        labels: labelIds
+        labels: labelIds,
+        creationChannel: creation.channel
       })
 
       const uniqueIndex = createdTask.uniqueIndex
@@ -257,6 +266,7 @@ export async function createBoardFromManifest(
       console.error('[MCP Create Board] log after success:', sideEffectErr)
     }
 
+    recordBoardCreated(projectId, creation.method, { userId, agentId: creation.agentId }, project.createdAt)
     return result
   } catch (err) {
     await compensateFailedBoard(projectId)

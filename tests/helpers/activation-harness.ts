@@ -13,7 +13,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
-  const disabledFlags = new Set<string>();
+  const disabledFlags = new Set<string>(["htpr-7271-saved-work-events"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member" }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
@@ -101,7 +101,7 @@ export function activationHarness() {
   const mocks: Record<string, any> = {
     "server-only": {},
     "@/lib/prisma": { default: prisma },
-    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
+    "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },
     "@vercel/functions": { waitUntil: (promise: Promise<unknown>) => { jobs.push(promise); if (failure === "schedule") throw Error("mock schedule unavailable"); } },
     "posthog-node": { PostHog: class {
       constructor() { if (failure === "constructor") throw Error("mock client unavailable"); }

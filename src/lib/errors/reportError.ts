@@ -202,6 +202,7 @@ async function reportErrorTicket(report: ErrorReport) {
 
     const { labelIds, ...boardTarget } = target;
     await createTask({
+      creationChannel: "api",
       ...boardTarget,
       title: ticketTitle(report),
       description: ticketDescription(report, firstSeen),

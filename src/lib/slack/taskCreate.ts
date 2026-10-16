@@ -139,6 +139,7 @@ export async function createSlackTaskFromThread(
       transcript: source.transcript,
     });
     const task = await createTask({
+      creationChannel: "api",
       projectId: project.id,
       title: draft.title,
       description: draft.description,

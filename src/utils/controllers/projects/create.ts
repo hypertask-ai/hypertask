@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
 import { LogType, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
@@ -96,7 +96,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       });
     });
 
-    recordActivationOccurrence(userId, "board_created", String(project.id), { source: "manual" });
+    recordBoardCreated(project.id, "manual", { userId });
 
     project = await prisma.project.update({
       where: { id: project.id },

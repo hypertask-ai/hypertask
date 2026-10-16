@@ -228,6 +228,7 @@ export function createCreateBoardTool(context: ToolContext) {
           userId: user.id,
           userEmail: dbUser.email,
           userDisplayName: dbUser.displayName,
+          creation: { method: "agent", channel: "agent" },
         });
 
         return sanitizeForJson({

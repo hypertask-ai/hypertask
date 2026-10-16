@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";
@@ -201,9 +201,10 @@ export const createOnboardingSampleBoardProject = async ({
     googleAccountId: googleAccount.id,
     uniqueIdentifier,
     sections: STARTER_BOARD_SECTIONS.map((s) => s.section_title),
+    seeded: true,
   });
 
-  recordActivationOccurrence(exist_user.id, "board_created", String(Project.id), { source: "seeded" });
+  recordBoardCreated(Project.id, "seeded", { userId: exist_user.id });
 
   const projectIdentifier = (
     Project.uniqueIdentifier ?? uniqueIdentifier
@@ -232,6 +233,7 @@ export const createOnboardingSampleBoardProject = async ({
     for (const task of SEED_STARTER_TASKS ? sectionDef.tasks : []) {
       try {
         await createTaskCore({
+          creationChannel: "api",
           title: task.title,
           description: task.description,
           userId: generalConfig.hyperAiId,
@@ -257,6 +259,7 @@ export const createOnboardingSampleBoardProject = async ({
         await isFeatureEnabled(HTPR_7033_CLI_INSTALL_COMMAND_FLAG, exist_user.id),
       );
       const { task } = await createTaskCore({
+        creationChannel: "api",
         title: connectAiTask.title,
         description: connectAiTask.description,
         userId: generalConfig.hyperAiId,
