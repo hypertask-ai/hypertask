@@ -182,15 +182,18 @@ def unreadable_but_harmless(process):
 # .env files and Playwright storageState logins (YPER4-228). Wider patterns would match
 # ordinary package files in node_modules and keep every npx cache forever.
 SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
+# Packages ship docs and code under these names (playwright-core's storage-state.md); saved logins are data files.
+PACKAGE_SOURCE = ('.md', '.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.map')
 
 
-def sensitive_inside(path):
+def sensitive_inside(path, package_source_ok=False):
     """Credential-looking files keep a cache candidate. Inspection errors count as found."""
     pending = [path]
     try:
         while pending:
             item = pending.pop()
-            if SENSITIVE_NAME.search(item.name):
+            if SENSITIVE_NAME.search(item.name) and not (package_source_ok and item.name.endswith(PACKAGE_SOURCE)
+                                                         and stat.S_ISREG(item.lstat().st_mode)):
                 return True
             if stat.S_ISDIR(item.lstat().st_mode):
                 pending.extend(item.iterdir())
@@ -737,7 +740,7 @@ class Guard:
             if time.monotonic() > self.deadline:
                 raise ValueError('time budget reached; next run continues')
             self.canonical(path)
-            if sensitive_inside(path):
+            if sensitive_inside(path, category == 'worktree-deps'):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, links=True)
             why = self.cache_busy(guard or path) or (check and check())
@@ -751,7 +754,7 @@ class Guard:
                 return
             # Recheck right before removal with fresh process, command-line and container mount scans.
             self.canonical(path)
-            if sensitive_inside(path):
+            if sensitive_inside(path, category == 'worktree-deps'):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, refresh=True, links=True)
             why = self.cache_busy(guard or path, refresh=True) or (check and check())

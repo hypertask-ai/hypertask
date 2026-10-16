@@ -1085,6 +1085,29 @@ class CacheTests(Fixture):
         self.assertTrue(modules.exists())
         self.assertIn('worktree-deps: process has cwd/fd/root inside', self.output.getvalue())
 
+    def test_cache_package_docs_named_storage_state_do_not_keep_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        doc = modules / 'playwright-core/references/storage-state.md'
+        doc.parent.mkdir(parents=True)
+        doc.write_text('docs\n')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+
+    def test_cache_saved_login_or_env_inside_node_modules_kept(self):
+        for name in ('.cache/auth/storageState.json', 'pkg/.env', 'pkg/.env.local'):
+            with self.subTest(name=name):
+                _, tree, modules = self.deps_tree()
+                saved = modules / name
+                saved.parent.mkdir(parents=True, exist_ok=True)
+                saved.write_text('secret\n')
+                self.old(tree)
+                self.sweep()
+                self.assertTrue(saved.exists())
+                self.assertIn('worktree-deps: .env or storageState file inside', self.output.getvalue())
+                shutil.rmtree(self.home / 'projects')
+                shutil.rmtree(self.root / 'bin')
+
     def test_cache_unignored_node_modules_kept(self):
         _, tree, modules = self.deps_tree(ignore='')
         self.sweep()

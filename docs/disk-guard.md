@@ -87,7 +87,10 @@ in place. Reinstall to update the installed copy. No crontab is used.
      so dirty, detached and unmerged worktrees qualify too. Git must report
      `node_modules` as ignored. Main checkouts, locked or prunable worktrees, a
      worktree with an open PR and any worktree a process, command line or
-     container uses are never touched. `npm ci` brings it back.
+     container uses are never touched. `npm ci` brings it back. Inside
+     `node_modules`, package docs and code named like a login file (such as
+     playwright-core's `storage-state.md`; `.md`, `.js`, `.ts` and similar) do
+     not keep the folder; any other `.env*` or storageState file still does.
   7. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
      process runs at all and nothing was written to it for one hour. npm is
      found by the first word of each command line and by `/proc/<pid>/comm`,
