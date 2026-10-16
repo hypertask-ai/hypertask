@@ -1792,6 +1792,14 @@ test("broadening a nullish early return narrows exposure and stays exempt", asyn
   const swapped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop guest guard"), dir);
   assert.equal(swapped.pass, false);
   assert.match(swapped.reason, /Banner.tsx:Banner early return removed/);
+  for (const rewrite of [
+    "export function Banner() { return guest ? null : <div>Consent</div>; }\n",
+    "export const Banner = () => (guest ? null : <div>Consent</div>);\n",
+  ]) {
+    writeFile(dir, "src/components/Banner.tsx", rewrite);
+    const ternary = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "ternary rewrite"), dir);
+    assert.equal(ternary.pass, true, ternary.reason);
+  }
 });
 
 test("existing banner added in another file fails, but moving it between files passes", async (t) => {

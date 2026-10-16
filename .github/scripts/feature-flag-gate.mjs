@@ -549,6 +549,12 @@ function exposureSnapshot(ref, path, mergeBase) {
               returns.push(disjuncts(child.expression));
             }
           }
+          const arrowBody = typescript.isArrowFunction(node) && child === node.body;
+          const returned = typescript.isReturnStatement(child) && child.expression ? unwrapExpr(child.expression)
+            : arrowBody ? unwrapExpr(child) : null;
+          if (returned && typescript.isConditionalExpression(returned) && branchIsNullishOrEmpty(returned.whenTrue)) {
+            returns.push(disjuncts(returned.condition));
+          }
           typescript.forEachChild(child, earlyReturns);
         }
         earlyReturns(node);
