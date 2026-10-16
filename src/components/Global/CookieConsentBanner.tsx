@@ -26,7 +26,7 @@ const CookieConsentBanner = () => {
     <div
       role="region"
       aria-label="Cookie consent"
-      className="fixed left-1/2 z-[200] w-[calc(100%-24px)] max-w-[600px] -translate-x-1/2 rounded-[5px] bg-modalBackground p-4 text-white-black shadow-customshadow-2"
+      className="fixed left-1/2 z-[201] w-[calc(100%-24px)] max-w-[600px] -translate-x-1/2 rounded-[5px] bg-modalBackground p-4 text-white-black shadow-customshadow-2"
       style={{
         bottom: "calc(var(--mobile-dock-h, 0px) + 72px + env(safe-area-inset-bottom))",
       }}
