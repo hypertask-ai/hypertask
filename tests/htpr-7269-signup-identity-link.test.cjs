@@ -42,6 +42,8 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
   let accountExists = existing
   const redis = {
     set: async (key, value, ex, ttl) => { calls.redis.push(['set', key, ex, ttl]); values.set(key, { value, expires: Date.now() + ttl * 1000 }); return 'OK' },
+    incr: async (key) => { const record = values.get(key); const next = Number(record?.value ?? 0) + 1; values.set(key, { value: String(next), expires: record?.expires ?? Infinity }); return next },
+    expire: async (key, ttl) => { const record = values.get(key); if (record) record.expires = Date.now() + ttl * 1000; return 1 },
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
@@ -635,6 +637,16 @@ test('all four UI entries use the recognized ticket flag; SDK registration is gu
   apply(false)
   assert.deepEqual(calls, [sdk, null])
   assert.equal(ref.current, false)
+})
+
+test('one IP gets at most 30 signup contexts per 10 minutes; other IPs still get theirs', async () => {
+  const h = harness()
+  const { POST } = h.load('src/app/api/auth/signup-context/route.ts')
+  const ask = (ip) => POST(request('/api/auth/signup-context', { ...input, method: 'google' }, { origin: 'https://app.hypertask.ai', 'x-forwarded-for': `${ip}, 10.0.0.1` })).then((response) => response.json())
+  for (let i = 0; i < 30; i++) assert.match((await ask('203.0.113.7')).signupContextId, /^[0-9a-f-]{36}$/)
+  assert.equal((await ask('203.0.113.7')).signupContextId, null)
+  assert.match((await ask('198.51.100.9')).signupContextId, /^[0-9a-f-]{36}$/)
+  assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, 31)
 })
 
 test('Google context id travels in the OAuth state, never in a cookie, and only once', async () => {

@@ -12,7 +12,8 @@ export async function POST(request: NextRequest) {
   } catch {
     return new NextResponse(null, { status: 400 });
   }
-  const id = await createSignupContext(input, 600, request.headers.get("cookie"));
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip");
+  const id = await createSignupContext(input, 600, request.headers.get("cookie"), ip);
   if ((input as { method?: unknown } | null)?.method === "google") {
     return NextResponse.json({ signupContextId: id });
   }

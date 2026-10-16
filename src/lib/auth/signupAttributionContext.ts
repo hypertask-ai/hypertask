@@ -16,6 +16,7 @@ export const signupContextCookieOptions = {
 const validId = (id: unknown): id is string => typeof id === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
 const hash = (value: string) => createHash("sha256").update(value).digest("hex");
 const contextKey = (id: string) => `auth:signup-context:${hash(id)}`;
+const SIGNUP_CONTEXTS_PER_IP_PER_10_MINUTES = 30;
 async function codeAttemptKey(email: string, code: string, used: boolean): Promise<string | null> {
   const normalizedEmail = email.trim().toLowerCase();
   const attempt = await prisma.verificationCode.findUnique({
@@ -30,12 +31,28 @@ export function warnSignupContextUnavailable(): void {
   console.warn("[signup-identity] unlinked", { reason: "context_unavailable" });
 }
 
-export async function createSignupContext(input: unknown, ttlSeconds = 1800, cookieHeader: string | null = null): Promise<string | null> {
+async function withinIpBudget(ip: string | null): Promise<boolean> {
+  if (!ip) return true;
+  const redis = await getRedis();
+  const key = `auth:signup-context-ip:${hash(ip)}`;
+  const count = await redis.incr(key);
+  if (count === 1) await redis.expire(key, 600);
+  if (count > SIGNUP_CONTEXTS_PER_IP_PER_10_MINUTES) console.warn("[signup-identity] unlinked", { reason: "ip_budget_exceeded" });
+  return count <= SIGNUP_CONTEXTS_PER_IP_PER_10_MINUTES;
+}
+
+export async function createSignupContext(
+  input: unknown,
+  ttlSeconds = 1800,
+  cookieHeader: string | null = null,
+  ip: string | null = null,
+): Promise<string | null> {
   if (!input || typeof input !== "object") return null;
   const consent = (input as Record<string, unknown>).consent;
   if (consent !== null && consent !== "all" && consent !== "essential") return null;
   try {
     if (!await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)) return null;
+    if (!await withinIpBudget(ip)) return null;
     const id = randomUUID();
     const context = normalizeSignupContext({ ...input, consent: strictestConsent(consent, cookieHeader) });
     const { method, email } = input as Record<string, unknown>;
