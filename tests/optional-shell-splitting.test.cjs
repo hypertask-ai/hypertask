@@ -78,7 +78,7 @@ test("mobile visibility checks live outside the optional component chunks", () =
   );
   assert.match(provider, /allowShowSettings && !mbl/);
   assert.match(provider, /!mbl && <NotificationPromoteBanner \/>/);
-  assert.match(provider, /!currentUser && <CookieConsentBanner \/>/);
+  assert.match(provider, /^\s*<CookieConsentBanner \/>$/m);
 });
 
 test("the disabled tutorial runtime never enters the app shell", () => {

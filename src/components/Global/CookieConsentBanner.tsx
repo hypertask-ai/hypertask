@@ -3,7 +3,6 @@
 import { X } from "lucide-react";
 import { useContext, useEffect, useState } from "react";
 
-import { isGuestCookieUser } from "@/lib/demo/isGuestClient";
 import { getCookieConsent, setCookieConsent } from "@/lib/cookieConsent";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -13,7 +12,7 @@ const CookieConsentBanner = () => {
   const _mbl = useContext(MobileViewContext);
 
   useEffect(() => {
-    setShouldRender(isGuestCookieUser() && getCookieConsent() === null);
+    setShouldRender(getCookieConsent() === null);
   }, []);
 
   const choose = (value: "all" | "essential") => {
