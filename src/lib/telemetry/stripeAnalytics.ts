@@ -162,7 +162,7 @@ function paidInvoiceHistory(invoice: PaidInvoice, subscriptionId: string, page: 
     || (paidTime(candidate) === paidTime(invoice) && candidate.id < invoice.id));
   const isFirstForSubscription = !page.has_more
     && !earlier.some((candidate) => invoiceSubscriptionId(candidate) === subscriptionId);
-  const isFirstForCustomer = page.has_more ? null : earlier.length === 0;
+  const isFirstForCustomer = page.has_more ? null : !earlier.some((candidate) => invoiceSubscriptionId(candidate) !== null);
   return { isFirstForSubscription, isFirstForCustomer };
 }
 

@@ -533,3 +533,11 @@ test("with the flag off, legacy teammate_invited keeps the original caller attri
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["teammate_invited", "234"]]);
 });
+
+test("an earlier one-off invoice does not make the first subscription a repeat", async () => {
+  const h = harness();
+  const oneOff = { ...(paidEvent().data.object as any), id: "in_one_off", subscription: null, created: 1767000000, status_transitions: { paid_at: 1767000000 } };
+  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => subscription(), async () => ({ data: [oneOff], has_more: false }));
+  await h.drain();
+  assert.equal(h.captures[0].properties.is_first_subscription_for_user, true);
+});
