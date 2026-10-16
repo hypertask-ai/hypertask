@@ -1756,7 +1756,7 @@ test("ticket flag gates widened banner exposure through the shared feature check
   writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nexport const Providers = () => <>{!currentUser && <Banner />}</>;\n');
   const base = commit(git, "guest banner");
   writeFile(dir, "src/lib/flags/definitions/htpr-7274-banner.ts", `export const HTPR_7274_BANNER_FLAG = "htpr-7274-banner";\nexport default { key: HTPR_7274_BANNER_FLAG, kind: "bugfix", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "Consent banner", releaseRisk: { risk: "small", reason: "Shows the banner to signed-in users." } } as const;\n`);
-  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nimport { useFlag } from "@/hooks/useFlag";\nimport { HTPR_7274_BANNER_FLAG } from "@/lib/flags/keys";\nexport const Providers = () => useFlag(HTPR_7274_BANNER_FLAG) ? <Banner /> : <>{!currentUser && <Banner />}</>;\n');
+  writeFile(dir, "src/components/Providers.tsx", 'import { Banner } from "./Global/Banner";\nimport { useFlag } from "@/hooks/useFlag";\nimport { HTPR_7274_BANNER_FLAG } from "@/lib/flags/keys";\nexport const Providers = () => <>{useFlag(HTPR_7274_BANNER_FLAG) && <aside><Banner /></aside>}{!currentUser && <Banner />}</>;\n');
   const head = commit(git, "gate wider banner");
   for (const tag of ["BUGFIX", "INFRA", "FEATURE"]) {
     const result = await evaluate(`HTPR-7274 [${tag}] consent`, base, head, dir);
@@ -1800,6 +1800,28 @@ test("broadening a nullish early return narrows exposure and stays exempt", asyn
     const ternary = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "ternary rewrite"), dir);
     assert.equal(ternary.pass, true, ternary.reason);
   }
+  for (const rewrite of [
+    "export function Banner() { return !guest && <div>Consent</div>; }\n",
+    "export function Banner() { return !guest ? <div>Consent</div> : null; }\n",
+  ]) {
+    writeFile(dir, "src/components/Banner.tsx", rewrite);
+    const shortCircuit = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "short-circuit rewrite"), dir);
+    assert.equal(shortCircuit.pass, true, shortCircuit.reason);
+  }
+});
+
+test("mutually exclusive branches of one placement do not count as extra renders", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export const Banner = (props) => <div>{props.title}</div>;\n");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => <Banner />;\n');
+  const base = commit(git, "one banner");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner title="A" /> : <Banner title="B" />);\n');
+  const exclusive = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "conditional props"), dir);
+  assert.equal(exclusive.pass, true, exclusive.reason);
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (<><Banner title="A" /><Banner title="B" /></>);\n');
+  const doubled = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "two banners"), dir);
+  assert.equal(doubled.pass, false);
+  assert.match(doubled.reason, /Banner rendered 1 more times/);
 });
 
 test("existing banner added in another file fails, but moving it between files passes", async (t) => {

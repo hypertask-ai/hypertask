@@ -459,6 +459,25 @@ function normalizedCondition(node) {
   return unwrapExpr(node).getText().replace(/\s+/g, " ").trim().replace(/;$/, "").trim();
 }
 
+function conditionTerm(node) {
+  const expression = unwrapExpr(node);
+  return typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken
+    ? `!(${normalizedCondition(expression.operand)})`
+    : normalizedCondition(expression);
+}
+
+function negatedConditionTerm(node) {
+  const expression = unwrapExpr(node);
+  return typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken
+    ? normalizedCondition(expression.operand)
+    : `!(${normalizedCondition(expression)})`;
+}
+
+function rendersTag(node, tag) {
+  if ((typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) && node.tagName.getText() === tag) return true;
+  return Boolean(typescript.forEachChild(node, (child) => rendersTag(child, tag) || undefined));
+}
+
 function exposureSnapshot(ref, path, mergeBase) {
   let source = "";
   try { source = git(["show", `${ref}:${path}`]); } catch {}
@@ -510,7 +529,18 @@ function exposureSnapshot(ref, path, mergeBase) {
       disjuncts(expression.left, terms);
       disjuncts(expression.right, terms);
     } else {
-      terms.add(normalizedCondition(expression));
+      terms.add(conditionTerm(expression));
+    }
+    return terms;
+  }
+  function hiddenUnless(node, terms = new Set()) {
+    const expression = unwrapExpr(node);
+    if (typescript.isBinaryExpression(expression) &&
+        expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+      hiddenUnless(expression.left, terms);
+      hiddenUnless(expression.right, terms);
+    } else {
+      terms.add(negatedConditionTerm(expression));
     }
     return terms;
   }
@@ -533,7 +563,15 @@ function exposureSnapshot(ref, path, mergeBase) {
             if (child === parent.elseStatement) guards.add(`!(${normalizedCondition(parent.expression)})`);
           }
         }
-        occurrences.push({ tag, guards });
+        let exclusive = false;
+        child = node;
+        for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
+          if ((typescript.isConditionalExpression(parent) && child === parent.whenFalse && rendersTag(parent.whenTrue, tag)) ||
+              (typescript.isIfStatement(parent) && child === parent.elseStatement && rendersTag(parent.thenStatement, tag))) {
+            exclusive = true;
+          }
+        }
+        occurrences.push({ tag, guards, exclusive });
       }
     }
     if (typescript.isFunctionLike(node)) {
@@ -552,8 +590,12 @@ function exposureSnapshot(ref, path, mergeBase) {
           const arrowBody = typescript.isArrowFunction(node) && child === node.body;
           const returned = typescript.isReturnStatement(child) && child.expression ? unwrapExpr(child.expression)
             : arrowBody ? unwrapExpr(child) : null;
-          if (returned && typescript.isConditionalExpression(returned) && branchIsNullishOrEmpty(returned.whenTrue)) {
-            returns.push(disjuncts(returned.condition));
+          if (returned && typescript.isConditionalExpression(returned)) {
+            if (branchIsNullishOrEmpty(returned.whenTrue)) returns.push(disjuncts(returned.condition));
+            else if (branchIsNullishOrEmpty(returned.whenFalse)) returns.push(hiddenUnless(returned.condition));
+          } else if (returned && typescript.isBinaryExpression(returned) &&
+              returned.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+            returns.push(hiddenUnless(returned.left));
           }
           typescript.forEachChild(child, earlyReturns);
         }
@@ -577,8 +619,8 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   const baseCounts = new Map();
   const headCounts = new Map();
   for (const { base, head } of files) {
-    for (const { tag } of base.occurrences) baseCounts.set(tag, (baseCounts.get(tag) ?? 0) + 1);
-    for (const { tag } of head.occurrences) headCounts.set(tag, (headCounts.get(tag) ?? 0) + 1);
+    for (const { tag, exclusive } of base.occurrences) if (!exclusive) baseCounts.set(tag, (baseCounts.get(tag) ?? 0) + 1);
+    for (const { tag, exclusive } of head.occurrences) if (!exclusive) headCounts.set(tag, (headCounts.get(tag) ?? 0) + 1);
   }
   for (const { path, base, head } of files) {
     const remaining = [...base.occurrences];

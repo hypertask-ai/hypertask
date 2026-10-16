@@ -211,7 +211,7 @@ export function parseFlagFile(source, path) {
   if (!typescript.isExportAssignment(exported) || exported.isExportEquals) fail("expected a default definition object");
   const object = unwrapExpr(exported.expression);
   if (!object || !typescript.isObjectLiteralExpression(object)) fail("definition must be an object literal");
-  const allowed = new Set(["key", "kind", "defaultMode", "everyoneApproval", "shippedOn", "description", "related", "releaseRisk"]);
+  const allowed = new Set(["key", "kind", "defaultMode", "shippedOn", "description", "related", "releaseRisk"]);
   const fields = new Map();
   for (const property of object.properties) {
     if (!typescript.isPropertyAssignment(property) ||
@@ -223,7 +223,7 @@ export function parseFlagFile(source, path) {
   const keyField = fields.get("key");
   if (!keyField || !typescript.isIdentifier(keyField) || keyField.text !== declaration.name.text) fail("definition key must use its exported constant");
   const definition = { key: key.text };
-  for (const name of ["kind", "defaultMode", "everyoneApproval", "shippedOn", "description"]) {
+  for (const name of ["kind", "defaultMode", "shippedOn", "description"]) {
     const value = fields.get(name);
     if (!value) {
       if (["shippedOn", "description"].includes(name)) fail(`missing ${name}`);
@@ -234,16 +234,7 @@ export function parseFlagFile(source, path) {
   }
   if (definition.kind && !["feature", "bugfix", "improvement"].includes(definition.kind)) fail("kind must be feature, bugfix or improvement");
   if (definition.defaultMode && !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(definition.defaultMode)) fail("invalid defaultMode");
-  if (fields.has("everyoneApproval")) {
-    const approval = definition.everyoneApproval.match(/^https:\/\/app\.hypertask\.ai\/detail\/project-\d+\/(\d+)#comment-\d+$/);
-    if (!approval || approval[1] !== key.text.split("-")[1]) {
-      fail("everyoneApproval must match https://app.hypertask.ai/detail/project-<projectId>/<ticketNumber>#comment-<commentId> with the flag key's ticket number");
-    }
-    if (definition.defaultMode !== "EVERYONE") fail("everyoneApproval only goes with defaultMode EVERYONE");
-  }
-  if (definition.defaultMode === "EVERYONE" && definition.kind !== "bugfix" && !definition.everyoneApproval) {
-    fail("only bugfix flags may default to Everyone without everyoneApproval");
-  }
+  if (definition.defaultMode === "EVERYONE" && definition.kind !== "bugfix") fail("only bugfix flags may default to Everyone");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(definition.shippedOn) || !Number.isFinite(Date.parse(definition.shippedOn)) ||
       new Date(definition.shippedOn).toISOString().slice(0, 10) !== definition.shippedOn) fail("shippedOn must be a calendar date");
   if (!definition.description.trim()) fail("description must not be empty");

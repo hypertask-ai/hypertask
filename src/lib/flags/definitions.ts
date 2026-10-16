@@ -7,7 +7,6 @@ export type FeatureFlagDefinition = {
   key: string;
   kind?: FeatureFlagKind;
   defaultMode?: FeatureFlagMode;
-  everyoneApproval?: string;
   description: string;
   shippedOn: string;
   related?: readonly string[];
