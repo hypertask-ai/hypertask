@@ -48,7 +48,11 @@ export default async function checkoutsWebhooksHandler(
     try {
       switch (event.type) {
         case StripeWebhooks.InvoicePaid: {
-          recordStripeInvoicePaid(event, (id) => stripe.subscriptions.retrieve(id));
+          recordStripeInvoicePaid(
+            event,
+            (id) => stripe.subscriptions.retrieve(id),
+            (customer) => stripe.invoices.list({ customer, status: "paid", limit: 100 }),
+          );
           return res.status(200).json({ message: "success" });
         }
 

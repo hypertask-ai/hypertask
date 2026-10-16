@@ -21,20 +21,28 @@ export function recordActivationOccurrence(
   completionTime?: Date,
 ): void {
   const completedAt = event === "agent_task_completed" ? completionTime ?? new Date() : undefined;
-  scheduleAnalytics(async () => {
-    const { isActivationEligible } = await import("./activationAnalytics");
-    if (!(await isActivationEligible(userId))) return;
-    const marker = `activation:${event}:${occurrence}`;
-    await captureAnalyticsOccurrence(userId, event, marker, async (tx) => {
-      const previous = event === "agent_task_completed"
-        ? await tx.logs.findFirst({ where: { LoggedById: userId, log: { startsWith: "activation:agent_task_completed:" }, createdAt: { lt: completedAt } } })
-        : null;
-      const historicalCompletion = event === "agent_task_completed" && !previous
-        ? await hasHistoricalAgentCompletion(tx, userId, completedAt)
-        : false;
-      return event === "agent_task_completed" ? { ...props, is_first: !previous && !historicalCompletion } : props;
-    }, { createdAt: completedAt });
-  });
+  scheduleAnalytics(() => captureActivationOccurrence(userId, event, occurrence, props, completedAt));
+}
+
+export async function captureActivationOccurrence(
+  userId: number,
+  event: ActivationEvent,
+  occurrence: string,
+  props: Record<string, unknown>,
+  completedAt?: Date,
+): Promise<void> {
+  const { isActivationEligible } = await import("./activationAnalytics");
+  if (!(await isActivationEligible(userId))) return;
+  const marker = `activation:${event}:${occurrence}`;
+  await captureAnalyticsOccurrence(userId, event, marker, async (tx) => {
+    const previous = event === "agent_task_completed"
+      ? await tx.logs.findFirst({ where: { LoggedById: userId, log: { startsWith: "activation:agent_task_completed:" }, createdAt: { lt: completedAt } } })
+      : null;
+    const historicalCompletion = event === "agent_task_completed" && !previous
+      ? await hasHistoricalAgentCompletion(tx, userId, completedAt)
+      : false;
+    return event === "agent_task_completed" ? { ...props, is_first: !previous && !historicalCompletion } : props;
+  }, { createdAt: completedAt });
 }
 
 async function hasHistoricalAgentCompletion(tx: Prisma.TransactionClient, ownerId: number, before?: Date): Promise<boolean> {

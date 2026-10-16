@@ -37,6 +37,12 @@ function paidEvent(overrides: Record<string, any> = {}, id = "evt_paid") {
   });
 }
 
+const noPaidHistory = async () => ({ data: [], has_more: false });
+
+function invitationRef(id: string) {
+  return require("node:crypto").createHash("sha256").update(`hypertask:invitation:${id}`).digest("hex").slice(0, 32);
+}
+
 function common(userId: number, eventId: string, boardId: string | null = null) {
   return {
     user_id: String(userId), workspace_id: "team", board_id: boardId, source: "server", event_id: eventId,
@@ -65,8 +71,9 @@ test("invite_sent captures email/link once per invitation, including resends and
     const capture = h.captures[0];
     assert.equal(capture.event, "invite_sent");
     assert.equal(capture.distinctId, "123");
-    assertCommon(capture.properties, 123, "invite_sent:invitation", "15");
-    assert.equal(capture.properties.invitation_id, "invitation");
+    assertCommon(capture.properties, 123, `invite_sent:${invitationRef("invitation")}`, "15");
+    assert.equal(capture.properties.invitation_id, invitationRef("invitation"));
+    assert.equal(JSON.stringify(capture).includes('"invitation"'), false);
     assert.equal(capture.properties.invite_method, method);
     assert.equal(capture.properties.role, "Member");
     assert.match(h.captureAttempts[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
@@ -141,7 +148,7 @@ test("member_joined uses the joiner and membership ID, counts human board member
   assert.equal(h.captures[0].event, "member_joined");
   assert.deepEqual(h.captures[0].properties, {
     ...common(234, "member_joined:7", "15"), occurred_at: new Date(1769999000000).toISOString(),
-    membership_id: "7", invitation_id: "invitation", inviter_user_id: "123", role: "Member", member_count: 2,
+    membership_id: "7", invitation_id: invitationRef("invitation"), inviter_user_id: "123", role: "Member", member_count: 2,
   });
 });
 
@@ -156,7 +163,7 @@ for (const key of ["SOME-KEY", "public"]) {
     await h.drain();
     assert.equal(h.captures.length, 1);
     assert.equal(h.captures[0].event, "member_joined");
-    assert.equal(h.captures[0].properties.invitation_id, "invite");
+    assert.equal(h.captures[0].properties.invitation_id, invitationRef("invite"));
   });
 }
 
@@ -239,10 +246,12 @@ test("subscription_started requires a paid invoice, records the contract and sea
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
   const retrieve = async () => subscription();
-  api.recordStripeInvoicePaid(paidEvent(), retrieve);
-  api.recordStripeInvoicePaid(paidEvent(), retrieve);
+  api.recordStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
+  api.recordStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
   await h.drain();
-  api.recordStripeInvoicePaid(paidEvent({ id: "in_renewal" }, "evt_renewal"), retrieve);
+  const firstInvoice = paidEvent().data.object as any;
+  api.recordStripeInvoicePaid(paidEvent({ id: "in_renewal", created: firstInvoice.created + 2592000 }, "evt_renewal"), retrieve,
+    async () => ({ data: [firstInvoice], has_more: false }));
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captures[0].distinctId, "123");
@@ -266,23 +275,36 @@ for (const scenario of ["trial", "zero-invoice", "unpaid", "zero-price", "fully-
     if (scenario === "zero-price") sub.items.data.forEach((item: { price: { unit_amount: number } }) => { item.price.unit_amount = 0; });
     if (scenario === "fully-discounted") sub.discount.coupon.percent_off = 100;
     if (scenario === "customer-mismatch") sub.customer = "cus_other";
-    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(invoice, async () => sub);
+    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(invoice, async () => sub, noPaidHistory);
     await h.drain();
     assert.deepEqual(h.captures, []);
     assert.deepEqual(h.logs, []);
   });
 }
 
-test("first paid subscription is classified across workspaces; ambiguous historic billing is null", async () => {
+test("a renewal of a subscription paid before analytics existed is never a new start", async () => {
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
-  h.prisma.subscriptionPlan.findFirst = async () => ({ id: "historical" });
-  api.recordStripeInvoicePaid(paidEvent(), async () => subscription());
+  const earlier = { ...(paidEvent().data.object as any), id: "in_before_analytics", created: 1767000000 };
+  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [earlier], has_more: false }));
   await h.drain();
-  assert.equal(h.captures[0].properties.is_first_subscription_for_user, null);
-  api.recordStripeInvoicePaid(paidEvent({ subscription: "sub_second" }, "evt_second"), async () => subscription({ id: "sub_second" }));
+  assert.deepEqual(h.captures, []);
+  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [], has_more: true }));
   await h.drain();
-  assert.equal(h.captures[1].properties.is_first_subscription_for_user, false);
+  assert.deepEqual(h.captures, []);
+});
+
+test("first-for-user is false after another subscription was paid and null when history is cut off", async () => {
+  const h = harness();
+  const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
+  const other = { ...(paidEvent().data.object as any), id: "in_other", subscription: "sub_other", created: 1767000000 };
+  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [other], has_more: false }));
+  await h.drain();
+  assert.equal(h.captures[0].properties.is_first_subscription_for_user, false);
+  api.recordStripeInvoicePaid(paidEvent({ subscription: "sub_second" }, "evt_second"), async () => subscription({ id: "sub_second" }),
+    async () => ({ data: [], has_more: true }));
+  await h.drain();
+  assert.equal(h.captures.length, 1);
 });
 
 test("discounted interval amount covers every item, amount-off, item coupons, and product restrictions", () => {
@@ -349,7 +371,7 @@ test("unresolved Stripe customer emits nothing, never matches email, and warns o
   console.warn = (...args) => { warnings.push(args); };
   try {
     h.prisma.team.findFirst = async ({ where }: any) => { assert.deepEqual(Object.keys(where), ["stripe_customer_id"]); return null; };
-    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); });
+    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); }, async () => { throw Error("must not list unresolved customer"); });
     await h.drain();
     assert.deepEqual(h.captures, []);
     assert.deepEqual(h.logs, []);
@@ -368,7 +390,7 @@ for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
     const record = () => {
       if (kind === "invite") invites.recordInviteSent({ id: "invite", userId: 123, projectId: 15 }, "link");
       if (kind === "join") invites.recordMemberJoined(7, 123, 15);
-      if (kind === "paid") stripe.recordStripeInvoicePaid(paidEvent(), async () => subscription());
+      if (kind === "paid") stripe.recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
       if (kind === "seats") stripe.recordStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
       if (kind === "canceled") stripe.recordStripeSubscriptionEvent(event("customer.subscription.deleted"), subscription({ ended_at: 1769990000 }));
     };
@@ -396,7 +418,7 @@ function response() {
 function webhook(h: ReturnType<typeof harness>, evt: Stripe.Event, retrieve: any = async () => subscription()) {
   const calls: any[] = [];
   h.mocks["raw-body"] = { default: async () => Buffer.from("verified fixture") };
-  h.mocks["stripe"] = { Stripe: class { webhooks = { constructEvent: () => evt }; subscriptions = { retrieve }; } };
+  h.mocks["stripe"] = { Stripe: class { webhooks = { constructEvent: () => evt }; subscriptions = { retrieve }; invoices = { list: noPaidHistory }; } };
   h.mocks["@/utils/controllers/stripe/webhook/onCheckoutSuccess"] = { default: async (...args: any[]) => { calls.push(["checkout", ...args]); } };
   h.mocks["@/utils/controllers/stripe/webhook/onSubscriptionUpdated"] = { default: async (...args: any[]) => { calls.push(["update", ...args]); } };
   return { calls, handle: h.load("src/pages/api/stripe/webhook.ts").default };
@@ -453,12 +475,33 @@ test("paid webhook returns without awaiting analytics-only Stripe retrieval", as
 
 test("invite requests return before analytics eligibility resolves", async () => {
   const h = harness();
-  let release!: (enabled: boolean) => void;
-  h.mocks["@/lib/flags"].isFeatureEnabled = () => new Promise((resolve) => { release = resolve; });
+  let released = false;
+  const pending: ((enabled: boolean) => void)[] = [];
+  h.mocks["@/lib/flags"].isFeatureEnabled = () => released ? Promise.resolve(true) : new Promise((resolve) => { pending.push(resolve); });
   const result = await h.load("src/utils/api/invite/generatePublicInviteController.ts").getInviteFromProjectId(15, 123);
   assert.ok(result.inviteLink);
   assert.equal(h.captures.length, 0);
-  release(true);
+  released = true;
+  pending.forEach((resolve) => resolve(true));
   await h.drain();
   assert.equal(h.captures.length, 1);
+});
+
+test("with the HTPR-7268 flag off, invites keep the legacy events and Stripe sends nothing", async () => {
+  const h = harness();
+  h.setFlagEnabled("htpr-7268-invite-seat-analytics", false);
+  h.users.set(234, { id: 234, uid: "real_joiner", email: "joiner@example.test" });
+  h.members.push({ id: 7, projectId: 15, userId: 234, agentId: null, role: "Member", acceptedAt: new Date(1769999000000) });
+  const invites = h.load("src/lib/telemetry/inviteAnalytics.ts");
+  const stripe = h.load("src/lib/telemetry/stripeAnalytics.ts");
+  invites.recordInviteSent({ id: "invitation", userId: 123, projectId: 15 }, "email");
+  invites.recordMemberJoined(7, 234, 15, "invitation", 123);
+  invites.recordMemberJoined(7, 234, 15);
+  stripe.recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
+  stripe.recordStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
+  await h.drain();
+  assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId, capture.properties]).sort(), [
+    ["invite_accepted", "123", { inviteeId: 234 }],
+    ["teammate_invited", "123", { method: "email" }],
+  ]);
 });

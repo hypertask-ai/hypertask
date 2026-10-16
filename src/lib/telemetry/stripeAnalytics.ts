@@ -1,6 +1,6 @@
 import type Stripe from "stripe";
 import prisma from "@/lib/prisma";
-import { isActivationEligible } from "./activationAnalytics";
+import { isInviteSeatAnalyticsEnabled } from "./inviteAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { scheduleAnalytics } from "./signupAnalytics";
 
@@ -113,7 +113,7 @@ export function recordStripeSubscriptionEvent(
   scheduleAnalytics(async () => {
     const customerId = idOf(subscription.customer);
     const team = await billedTeam(customerId);
-    if (!team || !(await isActivationEligible(team.googleAccount.userId))) return;
+    if (!team || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
     const properties = subscriptionAnalyticsProperties(subscription);
     const canceled = event.type === "customer.subscription.deleted";
     const previousItems = previousAttributes?.items?.data.map((item) => ({
@@ -138,18 +138,37 @@ export function recordStripeSubscriptionEvent(
   });
 }
 
+export type PaidInvoicePage = { data: PaidInvoice[]; has_more: boolean };
+
+function invoiceSubscriptionId(invoice: PaidInvoice): string | null {
+  return idOf(invoice.subscription ?? invoice.parent?.subscription_details?.subscription);
+}
+
+function paidInvoiceHistory(invoice: PaidInvoice, subscriptionId: string, page: PaidInvoicePage) {
+  const positive = [invoice, ...page.data.filter((candidate) => candidate.id !== invoice.id)]
+    .filter((candidate) => candidate.status === "paid" && candidate.amount_paid > 0);
+  const earlier = positive.filter((candidate) => candidate.created < invoice.created);
+  const isFirstForSubscription = !page.has_more
+    && !earlier.some((candidate) => invoiceSubscriptionId(candidate) === subscriptionId);
+  const isFirstForCustomer = page.has_more ? null : earlier.length === 0;
+  return { isFirstForSubscription, isFirstForCustomer };
+}
+
 export function recordStripeInvoicePaid(
   event: Stripe.Event,
   retrieveSubscription: (id: string) => Promise<AnalyticsSubscription>,
+  listPaidInvoices: (customerId: string) => Promise<PaidInvoicePage>,
 ): void {
   scheduleAnalytics(async () => {
     const invoice = event.data.object as PaidInvoice;
     if (invoice.status !== "paid" || invoice.amount_paid <= 0) return;
-    const subscriptionId = idOf(invoice.subscription ?? invoice.parent?.subscription_details?.subscription);
+    const subscriptionId = invoiceSubscriptionId(invoice);
     if (!subscriptionId) return;
     const customerId = idOf(invoice.customer);
     const team = await billedTeam(customerId);
-    if (!team || !(await isActivationEligible(team.googleAccount.userId))) return;
+    if (!team || !customerId || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
+    const history = paidInvoiceHistory(invoice, subscriptionId, await listPaidInvoices(customerId));
+    if (!history.isFirstForSubscription) return;
     const subscription = await retrieveSubscription(subscriptionId);
     if (idOf(subscription.customer) !== customerId || subscription.status !== "active") return;
     const properties = subscriptionAnalyticsProperties(subscription);
@@ -157,18 +176,12 @@ export function recordStripeInvoicePaid(
     const userId = team.googleAccount.userId;
     const eventId = `subscription_started:${subscriptionId}`;
     const paidAt = invoice.status_transitions.paid_at;
-    await captureAnalyticsOccurrence(userId, "subscription_started", `analytics:${eventId}`, async (tx) => {
-      const previous = await tx.logs.findFirst({ where: { LoggedById: userId, log: { startsWith: "analytics:subscription_started:" } } });
-      const historicalPlan = previous ? null : await tx.subscriptionPlan.findFirst({
-        where: { team: { googleAccount: { userId } }, subscriptionId: { not: subscriptionId } }, select: { id: true },
-      });
-      return {
-        ...serverAnalyticsProperties(userId, team.id, null, eventId, new Date((paidAt ?? event.created) * 1000)),
-        ...properties, stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscriptionId,
-        seats_before: 0, invoice_id: invoice.id, amount_paid: invoice.amount_paid,
-        paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
-        is_first_subscription_for_user: previous ? false : historicalPlan ? null : true,
-      };
+    await captureAnalyticsOccurrence(userId, "subscription_started", `analytics:${eventId}`, {
+      ...serverAnalyticsProperties(userId, team.id, null, eventId, new Date((paidAt ?? event.created) * 1000)),
+      ...properties, stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscriptionId,
+      seats_before: 0, invoice_id: invoice.id, amount_paid: invoice.amount_paid,
+      paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
+      is_first_subscription_for_user: history.isFirstForCustomer,
     }, { scope: "business" });
   });
 }
