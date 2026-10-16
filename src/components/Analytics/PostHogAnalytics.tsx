@@ -4,6 +4,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { setSignupIdentitySdk } from "@/lib/analytics/signupIdentityClient";
 import { getCookieConsent } from "@/lib/cookieConsent";
 import {
@@ -79,6 +81,8 @@ export default function PostHogAnalytics({
   authenticatedUserId: number | null;
   authenticatedIsGuest: boolean;
 }) {
+  const signupIdentityLinkEnabled = useFlag(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG);
+  const signupIdentityLinkEnabledRef = useRef(signupIdentityLinkEnabled);
   const currentPathname = usePathname();
   const latestIdentityRef = useRef<AnalyticsIdentity>({
     userId: authenticatedUserId,
@@ -116,6 +120,17 @@ export default function PostHogAnalytics({
   const analyticsInitializationReadyRef = useRef(false);
   const webVitalsInstallStateRef = useRef<WebVitalsInstallState>("idle");
   const webVitalsInstallAttemptRef = useRef(0);
+
+  useLayoutEffect(signupIdentityLinkEnabled ? () => {
+    signupIdentityLinkEnabledRef.current = true;
+    if (posthogRef.current) setSignupIdentitySdk(posthogRef.current);
+    return () => {
+      signupIdentityLinkEnabledRef.current = false;
+      setSignupIdentitySdk(null);
+    };
+  } : () => {
+    signupIdentityLinkEnabledRef.current = false;
+  }, [signupIdentityLinkEnabled]);
 
   useLayoutEffect(() => {
     const committedIdentity = {
@@ -386,7 +401,7 @@ export default function PostHogAnalytics({
                 $title: initialPageview.title,
               });
             }
-            setSignupIdentitySdk(loadedPostHog);
+            if (signupIdentityLinkEnabledRef.current) setSignupIdentitySdk(loadedPostHog);
             posthogRef.current = loadedPostHog;
             appliedIdentityRef.current = loadedIdentity;
             pendingWebVitalsRef.current
@@ -502,7 +517,6 @@ export default function PostHogAnalytics({
       }
       clearSchedule();
       uninstallSink();
-      setSignupIdentitySdk(null);
       posthogRef.current = null;
       if (scheduleControllerRef.current === scheduleController) {
         scheduleControllerRef.current = null;

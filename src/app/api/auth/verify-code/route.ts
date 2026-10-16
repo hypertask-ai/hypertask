@@ -116,6 +116,7 @@ export async function POST(request: NextRequest) {
       true,
       signupAttributionFromHeaders(request.headers, 'email'),
       await takeSignupCodeContext(verifiedEmail, code),
+      request.headers.get("cookie"),
     )
 
     if (userUpdateResult.status !== 200) {

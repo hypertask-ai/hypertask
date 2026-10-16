@@ -172,6 +172,7 @@ export async function POST(request: NextRequest) {
         typeof utmData?.utm_source === 'string' ? utmData.utm_source : undefined,
       ),
       signupContextId,
+      request.headers.get("cookie"),
     )
 
     if (userUpdateResult.status !== 200) {

@@ -1,4 +1,6 @@
 "use client";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { useAuth } from "@/hooks/General/useAuth";
 import useFunnelCookies from "@/hooks/MultiPages/useFunnelCookies";
 import { useSearchParams } from "next/navigation";
@@ -25,6 +27,7 @@ const LoginButton = ({
   labelClassName,
   align = "center",
 }: LoginButtonProps) => {
+  const signupIdentityLinkEnabled = useFlag(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG);
   const { loginWithGoogle } = useAuth();
   const searchParams = useSearchParams();
   const { isFunnelUserAndTutorialCompleted } = useFunnelCookies();
@@ -41,7 +44,7 @@ const LoginButton = ({
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
-      await prepareSignupContext();
+      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
       void authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,

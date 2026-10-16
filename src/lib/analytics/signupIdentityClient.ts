@@ -26,13 +26,13 @@ export function getSignupContextInput() {
   };
 }
 
-export async function prepareSignupContext(): Promise<void> {
+export async function prepareSignupContext(method: "google" | "magic_link", email?: string): Promise<void> {
   try {
     await fetch("/api/auth/signup-context", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify(getSignupContextInput()),
+      body: JSON.stringify({ ...getSignupContextInput(), method, ...(method === "magic_link" ? { email } : {}) }),
       signal: AbortSignal.timeout(1500),
     });
   } catch {}

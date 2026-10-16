@@ -38,6 +38,9 @@ export async function createSignupContext(input: unknown, ttlSeconds = 1800, coo
     if (!await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)) return null;
     const id = randomUUID();
     const context = normalizeSignupContext({ ...input, consent: strictestConsent(consent, cookieHeader) });
+    const { method, email } = input as Record<string, unknown>;
+    if (method === "google" || method === "magic_link") context.method = method;
+    if (method === "magic_link" && typeof email === "string") context.emailHash = hash(email.trim().toLowerCase());
     await (await getRedis()).set(contextKey(id), JSON.stringify(context), "EX", ttlSeconds);
     return id;
   } catch {
@@ -85,13 +88,21 @@ type SignupCookieContext = {
   setCookie?: (name: string, value: string, options: typeof signupContextCookieOptions) => unknown;
 };
 
-export async function consumeSignupCookie(context: SignupCookieContext | null | undefined): Promise<SignupIdentityContext | null> {
+export async function consumeSignupCookie(
+  context: SignupCookieContext | null | undefined,
+  attempt?: { method: "google" | "magic_link"; email: string },
+): Promise<SignupIdentityContext | null> {
   try {
     const id = context?.request?.headers.get("cookie")?.split(";").map((part) => part.trim())
       .find((part) => part.startsWith(`${SIGNUP_CONTEXT_COOKIE}=`))?.slice(SIGNUP_CONTEXT_COOKIE.length + 1);
     if (!id) return null;
     context?.setCookie?.(SIGNUP_CONTEXT_COOKIE, "", { ...signupContextCookieOptions, maxAge: 0 });
-    return await consumeSignupContext(id);
+    const stored = await consumeSignupContext(id);
+    if (stored && attempt && (stored.method !== attempt.method ||
+      (attempt.method === "magic_link" && stored.emailHash !== hash(attempt.email.trim().toLowerCase())))) {
+      return { ...normalizeSignupContext(null), reason: "attempt_mismatch", attributionStatus: "unknown" };
+    }
+    return stored;
   } catch {
     warnSignupContextUnavailable();
     return { ...normalizeSignupContext(null), reason: "context_unavailable", attributionStatus: "unknown" };

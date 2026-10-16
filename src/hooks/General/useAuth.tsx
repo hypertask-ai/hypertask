@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import nookies from "nookies";
@@ -93,6 +95,7 @@ export const AuthProvider = ({
   children: React.ReactNode;
   authenticatedUserId: number | null;
 }) => {
+  const signupIdentityLinkEnabled = useFlag(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG);
   const [________, _setCurrentUser] = useRecoilState(currentUserAtom);
   const currentUserCookie = useCurrentUser(authenticatedUserId);
   const [currentUser, __] = useState<HUser | null>(null);
@@ -118,7 +121,7 @@ export const AuthProvider = ({
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
-      await prepareSignupContext();
+      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
       const { error } = await authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,
@@ -141,7 +144,7 @@ export const AuthProvider = ({
   ) => {
     try {
       setIsAuthenticating(true);
-      await prepareSignupContext();
+      if (signupIdentityLinkEnabled) await prepareSignupContext("google");
       const { error } = await authClient.signIn.social({
         provider: "google",
         callbackURL: authConfig.redirect.afterLogin,

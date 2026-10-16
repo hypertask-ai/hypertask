@@ -205,7 +205,10 @@ export const auth = betterAuth({
               throw new Error(`Invalid Better Auth user id: ${user.id}`)
             }
 
-            await recordSignupIdentityLink(userId, true, await consumeSignupCookie(context))
+            await recordSignupIdentityLink(userId, true, await consumeSignupCookie(context, {
+              method: context?.path === '/callback/google' ? 'google' : 'magic_link',
+              email: user.email,
+            }), context?.request?.headers.get('cookie'))
 
             recordUserSignedUp({
               isNewUser: true,

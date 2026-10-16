@@ -93,9 +93,25 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
   aliases['@/utils/controllers/users/update_or_create_user'] = load('src/utils/controllers/users/update_or_create_user.ts').default
   return { load, context, identity, pure, aliases, calls, values, user, setAttempt: (attempt) => { codeAttempt = attempt } }
 }
+function betterAuthHarness(h) {
+  const plugin = () => ({})
+  Object.assign(h.aliases, {
+    'better-auth': { betterAuth: (options) => options },
+    'better-auth/api': { createAuthMiddleware: (handler) => handler },
+    'better-auth/adapters/prisma': { prismaAdapter: plugin },
+    'better-auth/plugins': { emailOTP: plugin, magicLink: plugin, multiSession: plugin },
+    '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
+    '@better-auth/infra': { dash: plugin }, '@better-auth/passkey': { passkey: plugin },
+    '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: plugin },
+    '@/lib/auth/legacyCookiePlugin': { legacyCookiePlugin: plugin, newGoogleSignupRequests: new WeakMap() },
+    '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
+  })
+  return h.load('src/lib/auth/betterAuth.ts').auth
+}
+const allowedCookie = 'ht_cookie_consent=all'
 const input = { anonymousId: 'anon-visitor-abc', consent: 'all', attribution: { utm_source: 'website' } }
 function request(url, body, headers = {}) {
-  return new NextRequest(`https://app.hypertask.ai${url}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: JSON.stringify(body) })
+  return new NextRequest(`https://app.hypertask.ai${url}`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: allowedCookie, ...headers }, body: JSON.stringify(body) })
 }
 
 async function quiet(work) {
@@ -107,29 +123,29 @@ async function quiet(work) {
 
 test('consented anonymous signup links once; retries reuse a deterministic UUID', async () => {
   const h = harness()
-  const id = await h.context.createSignupContext(input)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   assert.match(id, /^[0-9a-f-]{36}$/)
   const stored = [...h.values.values()][0]
   assert.deepEqual(Object.keys(JSON.parse(stored.value)).sort(), ['v', 'consent', 'anonymousId', 'reason', 'attribution', 'attributionStatus', 'createdAt'].sort())
   assert.equal(h.calls.redis[0][3], 1800)
   const consumed = await h.context.consumeSignupContext(id)
-  await h.identity.recordSignupIdentityLink(123, true, consumed)
+  await h.identity.recordSignupIdentityLink(123, true, consumed, allowedCookie)
   assert.equal(h.calls.captures.length, 1)
   assert.deepEqual(h.calls.captures[0], { distinctId: '123', event: '$identify', properties: { $anon_distinct_id: input.anonymousId }, uuid: h.identity.signupIdentityUuid(123) })
-  await h.identity.recordSignupIdentityLink(123, true, consumed)
+  await h.identity.recordSignupIdentityLink(123, true, consumed, allowedCookie)
   assert.equal(h.calls.captures[0].uuid, h.calls.captures[1].uuid)
-  assert.match(h.calls.captures[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+  assert.match(h.calls.captures[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   assert.notEqual(h.identity.signupIdentityUuid(124), h.identity.signupIdentityUuid(123))
   assert.deepEqual(h.calls.flags.map(([, id]) => id), [0, 123, 123])
 })
 
 test('essential consent strips identity and attribution, and never identifies', async () => quiet(async () => {
   const h = harness()
-  const id = await h.context.createSignupContext({ ...input, consent: 'essential' })
+  const id = await h.context.createSignupContext({ ...input, consent: 'essential' }, 1800, allowedCookie)
   const stored = JSON.parse([...h.values.values()][0].value)
   assert.equal(stored.anonymousId, null)
   assert.deepEqual(stored.attribution, {})
-  const decision = await h.identity.recordSignupIdentityLink(123, true, id)
+  const decision = await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie)
   assert.equal(decision.link, false)
   assert.equal(decision.reason, 'consent_denied')
   assert.equal(decision.attributionStatus, 'withheld')
@@ -161,8 +177,8 @@ test('server consent cookie overrides the browser report only towards denial', a
   }
   assert.equal(h.pure.strictestConsent('all', 'ht_cookie_consent=all'), 'all')
   assert.equal(h.pure.strictestConsent(null, 'ht_cookie_consent=all'), null)
-  assert.equal(h.pure.strictestConsent('all', null), 'all')
-  assert.equal(h.pure.strictestConsent('all', 'other=1'), 'all')
+  assert.equal(h.pure.strictestConsent('all', null), 'essential')
+  assert.equal(h.pure.strictestConsent('all', 'other=1'), 'essential')
   const id = await h.context.createSignupContext(input, 1800, 'ht_cookie_consent=essential')
   const stored = await h.context.consumeSignupContext(id)
   assert.equal(stored.consent, 'essential')
@@ -189,14 +205,14 @@ test('browser only uses loaded anonymous SDK identity, never a guest or previous
 
 test('replayed, expired and malformed contexts cannot identify and have unknown attribution', async () => quiet(async () => {
   const h = harness()
-  const id = await h.context.createSignupContext(input)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   const winners = await Promise.all([h.context.consumeSignupContext(id), h.context.consumeSignupContext(id)])
   assert.equal(winners.filter(Boolean).length, 1)
   assert.equal(await h.context.consumeSignupContext(id), null)
-  const decision = await h.identity.recordSignupIdentityLink(123, true, id)
+  const decision = await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie)
   assert.equal(decision.link, false)
   assert.equal(decision.attributionStatus, 'unknown')
-  const expired = await h.context.createSignupContext(input)
+  const expired = await h.context.createSignupContext(input, 1800, allowedCookie)
   for (const value of h.values.values()) value.expires = 0
   assert.equal(await h.context.consumeSignupContext(expired), null)
   const redisCalls = h.calls.redis.length
@@ -207,14 +223,14 @@ test('replayed, expired and malformed contexts cannot identify and have unknown 
 
 test('existing login discards its context; feature off creates nothing and preserves signup event', async () => {
   const h = harness({ existing: true })
-  const id = await h.context.createSignupContext(input)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   const result = await h.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', { displayName: 'New' }, false, false, true, { signupMethod: 'email' }, id)
   assert.equal(result.status, 200)
   assert.equal(await h.context.consumeSignupContext(id), null)
   assert.equal(h.calls.captures.length, 0)
   assert.equal(h.calls.events.length, 0)
   const off = harness({ enabled: false })
-  assert.equal(await off.context.createSignupContext(input), null)
+  assert.equal(await off.context.createSignupContext(input, 1800, allowedCookie), null)
   await off.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', {}, false, false, true)
   assert.equal(off.calls.redis.length, 0)
   assert.equal(off.calls.captures.length, 0)
@@ -224,8 +240,8 @@ test('existing login discards its context; feature off creates nothing and prese
 
 test('Redis failure is non-fatal at account insert and reports only context_unavailable', async () => quiet(async (warnings) => {
   const h = harness({ redisFailure: true })
-  assert.equal(await h.context.createSignupContext(input), null)
-  const result = await h.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', {}, false, false, true, { signupMethod: 'email' }, 'c32c4a49-423a-4cf0-a487-b28f788166a6')
+  assert.equal(await h.context.createSignupContext(input, 1800, allowedCookie), null)
+  const result = await h.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', {}, false, false, true, { signupMethod: 'email' }, 'c32c4a49-423a-4cf0-a487-b28f788166a6', allowedCookie)
   assert.equal(result.status, 200)
   assert.equal(h.calls.events.length, 1)
   assert.equal(h.calls.captures.length, 0)
@@ -311,7 +327,7 @@ test('email binding refuses wrong email/code and a later reused-code attempt', a
   const h = harness()
   const attempt = { code: '123456', createdAt: new Date('2026-10-16T01:00:00Z'), used: false }
   h.setAttempt(attempt)
-  const id = await h.context.createSignupContext(input)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   await h.context.bindSignupCodeContext('new@example.test', '123456', id)
   assert.equal(await h.context.takeSignupCodeContext('new@example.test', '999999'), null)
   h.setAttempt({ ...attempt, used: true, createdAt: new Date('2026-10-16T01:01:00Z') })
@@ -336,22 +352,10 @@ test('instant signup consumes at insert; existing login discards with no second 
 test('Better Auth new-user hook links and clears; existing-session hook only discards', async () => {
   for (const isNew of [false, true]) {
     const h = harness()
-    const plugin = () => ({})
-    Object.assign(h.aliases, {
-      'better-auth': { betterAuth: (options) => options },
-      'better-auth/api': { createAuthMiddleware: (handler) => handler },
-      'better-auth/adapters/prisma': { prismaAdapter: plugin },
-      'better-auth/plugins': { emailOTP: plugin, magicLink: plugin, multiSession: plugin },
-      '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
-      '@better-auth/infra': { dash: plugin }, '@better-auth/passkey': { passkey: plugin },
-      '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: plugin },
-      '@/lib/auth/legacyCookiePlugin': { legacyCookiePlugin: plugin, newGoogleSignupRequests: new WeakMap() },
-      '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
-    })
-    const auth = h.load('src/lib/auth/betterAuth.ts').auth
-    const id = await h.context.createSignupContext(input, 600)
+    const auth = betterAuthHarness(h)
+    const id = await h.context.createSignupContext({ ...input, method: 'google' }, 600, allowedCookie)
     const clears = []
-    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: `ht_signup_ctx=${id}` } }), path: '/callback/google', setCookie: (...args) => clears.push(args), context: { newSession: { user: h.user } } }
+    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: `${allowedCookie}; ht_signup_ctx=${id}` } }), path: '/callback/google', setCookie: (...args) => clears.push(args), context: { newSession: { user: h.user } } }
     if (isNew) await auth.databaseHooks.user.create.after({ ...h.user, name: 'New' }, context)
     await auth.hooks.after(context)
     assert.equal(h.calls.captures.length, isNew ? 1 : 0)
@@ -364,12 +368,13 @@ test('Better Auth new-user hook links and clears; existing-session hook only dis
 test('all browser auth starts carry context before sign-in; identify and reset calls stay in place', () => {
   for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8')
-    const calls = source.match(/await prepareSignupContext\(\);\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(/g)
+    const calls = source.match(/if \(signupIdentityLinkEnabled\) await prepareSignupContext\("google"\);\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(/g)
     assert.equal(calls.length, file.includes('useAuth') ? 2 : 1)
   }
   const email = fs.readFileSync(path.join(root, 'src/app/login/EmailAuth/useEmailAuth.ts'), 'utf8')
-  assert.equal((email.match(/signupContext: getSignupContextInput\(\)/g) || []).length, 3)
-  assert.equal((email.match(/await prepareSignupContext\(\)\s*const \{ error \} = await authClient.signIn.magicLink/g) || []).length, 2)
+  assert.equal((email.match(/signupIdentityLinkEnabled \? \{ signupContext: getSignupContextInput\(\) \} : \{\}/g) || []).length, 3)
+  assert.match(email, /signupIdentityLinkEnabled \? prepareSignupContext.bind\(null, 'magic_link', email\) : null/)
+  assert.equal((email.match(/await prepareSignupAttempt\?\.\(\)\s*const \{ error \} = await authClient.signIn.magicLink/g) || []).length, 2)
 })
 
 test('installed posthog-node accepts $identify and preserves the UUID on the wire', async () => {
@@ -397,8 +402,8 @@ test('installed posthog-node accepts $identify and preserves the UUID on the wir
 test('missing SDK and persisted identity report their reasons without a server identify', async () => quiet(async () => {
   for (const reason of ['sdk_not_ready', 'already_identified']) {
     const h = harness()
-    const id = await h.context.createSignupContext({ anonymousId: null, consent: 'all', reason, attribution: {} })
-    const decision = await h.identity.recordSignupIdentityLink(123, true, id)
+    const id = await h.context.createSignupContext({ anonymousId: null, consent: 'all', reason, attribution: {} }, 1800, allowedCookie)
+    const decision = await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie)
     assert.equal(decision.reason, reason)
     assert.equal(decision.attributionStatus, 'direct')
     assert.equal(h.calls.captures.length, 0)
@@ -407,9 +412,9 @@ test('missing SDK and persisted identity report their reasons without a server i
 
 test('commit-time flag still refuses linking after an enabled auth start', async () => {
   const h = harness()
-  const id = await h.context.createSignupContext(input)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
   h.aliases['@/lib/flags'].isFeatureEnabled = async (_key, id) => { assert.equal(id, 123); return false }
-  assert.equal(await h.identity.recordSignupIdentityLink(123, true, id), null)
+  assert.equal(await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie), null)
   assert.equal(await h.context.consumeSignupContext(id), null)
   assert.equal(h.calls.captures.length, 0)
 })
@@ -434,12 +439,195 @@ test('browser preparation reads current UTM storage only and network failure can
   let sent
   global.fetch = async (url, options) => { sent = { url, ...options }; throw new Error('network unavailable') }
   try {
-    await client.prepareSignupContext()
+    await client.prepareSignupContext("google")
     assert.equal(sent.url, '/api/auth/signup-context')
     assert.equal(sent.credentials, 'same-origin')
     assert.ok(sent.signal instanceof AbortSignal)
-    assert.deepEqual(JSON.parse(sent.body), { consent: 'all', reason: null, anonymousId: 'anon-browser', attribution: { utm_source: 'web', utm_content: 'button' } })
+    assert.deepEqual(JSON.parse(sent.body), { consent: 'all', reason: null, anonymousId: 'anon-browser', attribution: { utm_source: 'web', utm_content: 'button' }, method: 'google' })
     client.setSignupIdentitySdk(null)
     assert.equal(client.getSignupBrowserIdentity().anonymousId, null)
   } finally { global.fetch = previousFetch }
+})
+
+test('server opt-in requires both the request cookie and browser report', async () => {
+  for (const cookie of [null, '', 'other=1', 'ht_cookie_consent=essential', allowedCookie]) {
+    for (const consent of ['all', 'essential', null]) {
+      const h = harness()
+      const id = await h.context.createSignupContext({ ...input, consent }, 1800, cookie)
+      const context = await h.context.consumeSignupContext(id)
+      const allowed = cookie === allowedCookie && consent === 'all'
+      assert.equal(context.anonymousId, allowed ? input.anonymousId : null)
+      assert.deepEqual(context.attribution, allowed ? input.attribution : {})
+      assert.equal(context.attributionStatus, allowed ? 'known' : 'withheld')
+      assert.equal(h.pure.decideSignupIdentityLink(123, context).link, allowed)
+    }
+  }
+})
+
+test('UUID is derived from SHA-256 with version 8 and RFC 4122 variant bits', () => {
+  const { createHash } = require('node:crypto')
+  const { signupIdentityUuid } = harness().identity
+  for (const userId of [1, 123, 124]) {
+    const actual = Buffer.from(signupIdentityUuid(userId).replaceAll('-', ''), 'hex')
+    const expected = createHash('sha256').update(`hypertask:signup-identity:${userId}`).digest().subarray(0, 16)
+    expected[6] = (expected[6] & 0x0f) | 0x80
+    expected[8] = (expected[8] & 0x3f) | 0x80
+    assert.deepEqual(actual, expected)
+  }
+})
+
+test('email completions veto withdrawn or missing consent and preserve accepted consent', async () => quiet(async (warnings) => {
+  for (const completion of ['verify-code', 'verify-email-token']) {
+    for (const cookie of ['', 'ht_cookie_consent=essential', allowedCookie]) {
+      const h = harness()
+      await h.load('src/app/api/auth/send-email-link/route.ts').POST(request('/api/auth/send-email-link', { email: h.user.email, signupContext: input }))
+      const id = h.calls.jwt.signupContextId
+      warnings.length = 0
+      const completed = await h.load(`src/app/api/auth/${completion}/route.ts`).POST(request(`/api/auth/${completion}`, { email: h.user.email, code: h.calls.code, token: 'signed-token' }, { cookie }))
+      assert.equal(completed.status, 200)
+      assert.equal(h.calls.captures.length, cookie === allowedCookie ? 1 : 0)
+      assert.equal(h.calls.events.length, 1)
+      assert.equal(await h.context.consumeSignupContext(id), null)
+      if (cookie !== allowedCookie) assert.deepEqual(warnings, [['[signup-identity] unlinked', { reason: 'consent_withdrawn' }]])
+    }
+  }
+}))
+
+test('completion consent cannot upgrade a previously denied context', async () => quiet(async () => {
+  const h = harness()
+  const id = await h.context.createSignupContext(input, 1800, null)
+  const decision = await h.identity.recordSignupIdentityLink(123, true, id, allowedCookie)
+  assert.equal(decision.link, false)
+  assert.equal(decision.reason, 'consent_denied')
+  assert.equal(decision.attributionStatus, 'withheld')
+  assert.deepEqual(decision.attribution, {})
+  assert.equal(h.calls.captures.length, 0)
+}))
+
+test('Google completion vetoes consent withdrawal, withholds attribution, and consumes context', async () => quiet(async (warnings) => {
+  for (const cookie of ['', 'ht_cookie_consent=essential', allowedCookie]) {
+    const h = harness()
+    const auth = betterAuthHarness(h)
+    const id = await h.context.createSignupContext({ ...input, method: 'google' }, 600, allowedCookie)
+    warnings.length = 0
+    const context = { request: new Request('https://app.hypertask.ai/api/auth/callback/google', { headers: { cookie: `${cookie}; ht_signup_ctx=${id}` } }), path: '/callback/google' }
+    await auth.databaseHooks.user.create.after(h.user, context)
+    assert.equal(h.calls.captures.length, cookie === allowedCookie ? 1 : 0)
+    assert.equal(await h.context.consumeSignupContext(id), null)
+    if (cookie !== allowedCookie) assert.deepEqual(warnings, [['[signup-identity] unlinked', { reason: 'consent_withdrawn' }]])
+  }
+  const h = harness()
+  const decision = await h.identity.recordSignupIdentityLink(123, true, h.pure.normalizeSignupContext(input))
+  assert.equal(decision.reason, 'consent_withdrawn')
+  assert.equal(decision.attributionStatus, 'withheld')
+  assert.deepEqual(decision.attribution, {})
+}))
+
+test('Better Auth cookie context is bound to the flow and normalized email hash, never raw email', async () => quiet(async (warnings) => {
+  for (const [method, email, flow, allowed] of [
+    ['magic_link', 'new@example.test', '/callback/google', false],
+    ['google', undefined, '/magic-link/verify', false],
+    ['magic_link', 'other@example.test', '/magic-link/verify', false],
+    ['magic_link', ' New@Example.Test ', '/magic-link/verify', true],
+    ['google', undefined, '/callback/google', true],
+    [undefined, undefined, '/callback/google', false],
+  ]) {
+    const h = harness()
+    const auth = betterAuthHarness(h)
+    const response = await h.load('src/app/api/auth/signup-context/route.ts').POST(request('/api/auth/signup-context', { ...input, method, email }))
+    const id = response.cookies.get('ht_signup_ctx').value
+    const stored = JSON.parse([...h.values.values()][0].value)
+    assert.equal(stored.method, method)
+    assert.equal(stored.email, undefined)
+    if (method === 'magic_link') assert.equal(stored.emailHash, require('node:crypto').createHash('sha256').update(email.trim().toLowerCase()).digest('hex'))
+    else assert.equal(stored.emailHash, undefined)
+    warnings.length = 0
+    const clears = []
+    await auth.databaseHooks.user.create.after(h.user, { path: flow, request: new Request(`https://app.hypertask.ai/api/auth${flow}`, { headers: { cookie: `${allowedCookie}; ht_signup_ctx=${id}` } }), setCookie: (...args) => clears.push(args) })
+    assert.equal(h.calls.captures.length, allowed ? 1 : 0)
+    assert.equal(h.calls.events.length, 1)
+    assert.equal(await h.context.consumeSignupContext(id), null)
+    assert.equal(clears.length, 1)
+    assert.equal(clears[0][2].maxAge, 0)
+    if (!allowed) assert.deepEqual(warnings, [['[signup-identity] unlinked', { reason: 'attempt_mismatch' }]])
+  }
+}))
+
+test('browser magic-link preparation includes the method and sign-in email', async () => {
+  const client = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'all' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) } })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  let payload
+  global.fetch = async (_url, options) => { payload = JSON.parse(options.body) }
+  try {
+    await client.prepareSignupContext('magic_link', ' New@Example.Test ')
+    assert.equal(payload.method, 'magic_link')
+    assert.equal(payload.email, ' New@Example.Test ')
+  } finally { global.fetch = previous }
+})
+
+test('email browser starts omit signupContext and preparation when the feature flag is off', async () => {
+  const previous = { fetch: global.fetch, sessionStorage: global.sessionStorage, betterAuth: process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL }
+  try {
+    global.sessionStorage = { setItem: () => {} }
+    for (const enabled of [false, true]) {
+      for (const betterAuth of [false, true]) {
+        process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = betterAuth ? '1' : '0'
+        const payloads = [], prepared = [], signIns = []
+        global.fetch = async (_url, options) => { payloads.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ success: true }) } }
+        const load = loader({
+          react: { useState: (value) => [value, () => {}], useEffect: () => {}, useRef: (current) => ({ current }) },
+          '@/hooks/useFlag': { useFlag: (key) => { assert.equal(key, 'htpr-7269-signup-identity-link'); return enabled } },
+          '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
+          '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
+          '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
+          'next/navigation': { useSearchParams: () => new URLSearchParams() },
+          '@/lib/configs/auth.config': { abTest: {}, redirect: { afterLogin: '/app' } },
+          '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
+          '@/lib/analytics/signupIdentityClient': {
+            getSignupContextInput: () => { assert.equal(enabled, true); return input },
+            prepareSignupContext: async (...args) => { assert.equal(enabled, true); prepared.push(args) },
+          },
+          '@/lib/auth/betterAuthClient': { authClient: { signIn: { magicLink: async (options) => { signIns.push(options); return {} } } } },
+        })
+        const hook = load('src/app/login/EmailAuth/useEmailAuth.ts').useEmailAuth('new@example.test')
+        await hook.handlers.handleSubmit({ preventDefault: () => {} })
+        if (betterAuth) {
+          assert.equal(signIns.length, 1)
+          assert.deepEqual(prepared, enabled ? [['magic_link', 'new@example.test']] : [])
+          assert.equal(payloads.length, 0)
+        } else {
+          assert.equal(payloads.length, 1)
+          assert.equal(Object.hasOwn(payloads[0], 'signupContext'), enabled)
+          assert.deepEqual(prepared, [])
+        }
+      }
+    }
+  } finally {
+    global.fetch = previous.fetch
+    global.sessionStorage = previous.sessionStorage
+    if (previous.betterAuth === undefined) delete process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL
+    else process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = previous.betterAuth
+  }
+})
+
+test('all four UI entries use the recognized ticket flag; SDK registration is guarded and cleared on disable', () => {
+  for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx', 'src/app/login/EmailAuth/useEmailAuth.ts', 'src/components/Analytics/PostHogAnalytics.tsx']) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8')
+    assert.match(source, /useFlag\(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG\)/)
+    assert.match(source, /import \{ HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG \} from ["']@\/lib\/flags\/keys["']/)
+  }
+  const source = fs.readFileSync(path.join(root, 'src/components/Analytics/PostHogAnalytics.tsx'), 'utf8')
+  assert.match(source, /if \(signupIdentityLinkEnabledRef.current\) setSignupIdentitySdk\(loadedPostHog\)/)
+  const effect = source.match(/useLayoutEffect\((signupIdentityLinkEnabled \? \(\) => \{[\s\S]*?)\n  \}, \[signupIdentityLinkEnabled\]\)/)[1] + '\n  }'
+  const calls = [], ref = { current: false }, sdk = {}
+  const selectEffect = new Function('signupIdentityLinkEnabled', 'signupIdentityLinkEnabledRef', 'posthogRef', 'setSignupIdentitySdk', `return (${effect})`)
+  const apply = (enabled) => selectEffect(enabled, ref, { current: sdk }, (value) => calls.push(value))()
+  assert.equal(apply(false), undefined)
+  assert.deepEqual(calls, [])
+  const cleanup = apply(true)
+  assert.deepEqual(calls, [sdk])
+  cleanup()
+  apply(false)
+  assert.deepEqual(calls, [sdk, null])
+  assert.equal(ref.current, false)
 })

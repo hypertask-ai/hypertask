@@ -12,6 +12,8 @@ export type SignupIdentityContext = {
   attribution: SignupVisitAttribution;
   attributionStatus: AttributionStatus;
   createdAt: number;
+  method?: "google" | "magic_link";
+  emailHash?: string;
 };
 
 export function consentAllowsLinking(consent: SignupConsent): boolean {
@@ -21,7 +23,6 @@ export function consentAllowsLinking(consent: SignupConsent): boolean {
 export function strictestConsent(reported: SignupConsent, cookieHeader: string | null | undefined): SignupConsent {
   const stored = cookieHeader?.split(";").map((part) => part.trim())
     .find((part) => part.startsWith("ht_cookie_consent="))?.slice("ht_cookie_consent=".length);
-  if (stored === undefined) return reported;
   return stored === "all" ? reported : "essential";
 }
 
