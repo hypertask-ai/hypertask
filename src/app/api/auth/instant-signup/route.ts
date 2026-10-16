@@ -1,4 +1,7 @@
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from 'next/server'
+import { createSignupContext, consumeSignupContext } from '@/lib/auth/signupAttributionContext'
 import updateUsers from '@/utils/controllers/users/update_or_create_user'
 import jwt from 'jsonwebtoken'
 import crypto from 'crypto'
@@ -108,7 +111,7 @@ function buildVerificationLinkWithUTM(baseUrl: string, token: string, utmData: R
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, utmData } = await request.json()
+    const { email, utmData, signupContext } = await request.json()
 
     if (!email || typeof email !== 'string') {
       return NextResponse.json(
@@ -132,9 +135,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const signupIdentityLinkEnabled = await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)
+    const signupContextId = signupIdentityLinkEnabled ? await createSignupContext(signupContext, 1800, request.headers.get("cookie")) : null
     const existingUser = await findUserByEmail(normalizedEmail)
 
     if (existingUser) {
+      await consumeSignupContext(signupContextId)
       try {
         await sendVerificationEmail(
           normalizedEmail,
@@ -168,6 +174,8 @@ export async function POST(request: NextRequest) {
         'email',
         typeof utmData?.utm_source === 'string' ? utmData.utm_source : undefined,
       ),
+      signupContextId,
+      request.headers.get("cookie"),
     )
 
     if (userUpdateResult.status !== 200) {

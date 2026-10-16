@@ -38,6 +38,7 @@ const getBoardTasks = async (
       select: {
         ...projectBootstrapSelect,
         sections: true,
+        seeded: true,
         targetDate: true,
         ...getProjectIncludeWithoutTasks({
           userId,

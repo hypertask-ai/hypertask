@@ -36,14 +36,20 @@ type AnalyticsScheduleController = {
   setAuthenticated: (authenticated: boolean) => void;
 };
 
+export type TrackingPersistence = "memory" | "localStorage+cookie";
+
 type WebVitalsInstallState = "idle" | "installing" | "installed";
 
 const identityKey = ({ userId, isGuest }: AnalyticsIdentity) =>
   `${userId ?? "anonymous"}:${isGuest ? "guest" : "standard"}`;
 
+const recordsSessions = (identity: AnalyticsIdentity, persistence: TrackingPersistence) =>
+  identity.isGuest && persistence !== "memory";
+
 const reconcilePersistedIdentity = (
   posthog: PostHogInterface,
   identity: AnalyticsIdentity,
+  persistence: TrackingPersistence,
   markIdentitySafe: () => void,
 ) => {
   const expectedAccountId =
@@ -66,21 +72,24 @@ const reconcilePersistedIdentity = (
     posthog.reset();
   }
 
-  posthog.set_config({ disable_session_recording: !identity.isGuest });
+  posthog.set_config({ disable_session_recording: !recordsSessions(identity, persistence) });
   markIdentitySafe();
   if (expectedAccountId !== null) posthog.identify(expectedAccountId);
-  if (identity.isGuest) posthog.startSessionRecording();
+  if (recordsSessions(identity, persistence)) posthog.startSessionRecording();
 };
 
 export default function PostHogAnalytics({
   authenticatedUserId,
   authenticatedIsGuest,
   identifyEventIds = false,
+  trackingPersistence,
 }: {
   authenticatedUserId: number | null;
   authenticatedIsGuest: boolean;
   identifyEventIds?: boolean;
+  trackingPersistence: TrackingPersistence;
 }) {
+  const persistenceRef = useRef(trackingPersistence);
   const currentPathname = usePathname();
   const identifyEventIdsRef = useRef(identifyEventIds);
   const latestIdentityRef = useRef<AnalyticsIdentity>({
@@ -294,10 +303,10 @@ export default function PostHogAnalytics({
     identityReadyRef.current = false;
     posthog.stopSessionRecording();
     if (previousIdentity.userId !== null) posthog.reset();
-    posthog.set_config({ disable_session_recording: !identity.isGuest });
+    posthog.set_config({ disable_session_recording: !recordsSessions(identity, persistenceRef.current) });
     identityReadyRef.current = true;
     if (identity.userId !== null) posthog.identify(String(identity.userId));
-    if (identity.isGuest) posthog.startSessionRecording();
+    if (recordsSessions(identity, persistenceRef.current)) posthog.startSessionRecording();
     appliedIdentityRef.current = identity;
     void installAuthenticatedProjectWebVitals().catch((error) => {
       console.error("[posthog] web vitals initialization failed", error);
@@ -361,13 +370,13 @@ export default function PostHogAnalytics({
             process.env.NEXT_PUBLIC_POSTHOG_HOST || "https://eu.i.posthog.com",
           ui_host: "https://eu.posthog.com",
           defaults: "2025-05-24",
-          persistence: "localStorage+cookie",
+          persistence: persistenceRef.current,
           persistence_name: "posthog_hypertask",
           cross_subdomain_cookie: true,
           autocapture: true,
           __extensionClasses: ErrorTrackingExtensions,
           capture_exceptions: true,
-          disable_session_recording: !identity.isGuest,
+          disable_session_recording: !recordsSessions(identity, persistenceRef.current),
           capture_performance: false,
           before_send: (event) => {
             if (!identityReadyRef.current) return null;
@@ -389,7 +398,7 @@ export default function PostHogAnalytics({
           },
           loaded: (loadedPostHog) => {
             const loadedIdentity = latestIdentityRef.current;
-            reconcilePersistedIdentity(loadedPostHog, loadedIdentity, () => {
+            reconcilePersistedIdentity(loadedPostHog, loadedIdentity, persistenceRef.current, () => {
               identityReadyRef.current = true;
             });
             if (window.location.href !== initialPageview.href) {

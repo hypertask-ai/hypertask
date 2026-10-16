@@ -234,6 +234,7 @@ export async function POST(request: NextRequest) {
       ? text.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim()
       : text;
     const { task } = await createTaskCore({
+      creationChannel: "web",
       title: `${kind}: ${titleSource.split(/\r\n?|\n/, 1)[0].trim()}`.slice(
         0,
         MAX_TITLE_LENGTH

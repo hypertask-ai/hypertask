@@ -273,6 +273,7 @@ async function provisionGeneratedBoard(
     teamId: owner.teamId,
     googleAccountId: owner.googleAccountId,
     uniqueIdentifier,
+    seeded: true,
   });
   await prisma.member.create({
     data: {
@@ -310,6 +311,7 @@ async function provisionGeneratedBoard(
           ? dueDateFromDays(-1, dueDateBase)
           : dueDateFromDays(task.dueInDays, dueDateBase);
       const created = await createTaskCore({
+        creationChannel: "api",
         title: task.title,
         description:
           seedTasks.find((seed) => seed.title === task.title)?.description ??

@@ -1,3 +1,4 @@
+import { recordSignupIdentityLink } from "@/lib/telemetry/signupIdentityLink";
 import prisma from "@/lib/prisma";
 import authConfig from "@/lib/configs/auth.config";
 import { generalConfig } from "@/lib/configs/general.config";
@@ -18,6 +19,8 @@ const update_or_create_user = async (
   skipOnboarding: boolean = authConfig.onboarding.skipOnboarding,
   isVerified: boolean = true,
   signupAttribution: SignupAttribution = { signupMethod: "email" },
+  signupContextId: string | null = null,
+  cookieHeader: string | null = null,
 ) => {
   try {
     if (!email || !user) {
@@ -52,6 +55,8 @@ const update_or_create_user = async (
         },
       });
 
+      await recordSignupIdentityLink(exist_user.id, true, signupContextId, cookieHeader);
+
       recordUserSignedUp({
         isNewUser: true,
         userId: exist_user.id,
@@ -71,6 +76,7 @@ const update_or_create_user = async (
     }
 
     else {
+      await recordSignupIdentityLink(exist_user.id, false, signupContextId, cookieHeader);
       const googleAc = await prisma.googleAccount.findFirst({
         where: {
           userId: exist_user.id,

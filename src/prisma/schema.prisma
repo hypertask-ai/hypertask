@@ -837,6 +837,7 @@ model Project {
   tasks                  Task[]
   pages                  Page[]
   createdAt              DateTime                 @default(now())
+  seeded                 Boolean                  @default(false)
   members                Member[]
   sections               String[]                 @default(["Todo", "Doing", "Done"])
   section                Section[]

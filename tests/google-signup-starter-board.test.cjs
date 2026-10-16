@@ -13,6 +13,13 @@ const guestId = 900
 const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 
 function loadTs(relativePath, aliases) {
+  aliases = {
+    '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
+    '@/lib/telemetry/signupIdentityLink': { recordSignupIdentityLink: async () => null },
+    ...aliases,
+  }
+
   if (/src\/lib\/flags\/(?:keys|definitions)\.ts$/.test(relativePath)) return require("./helpers/flag-files.cjs").load(relativePath);
   const javascript = ts.transpileModule(fs.readFileSync(path.join(root, relativePath), 'utf8'), {
     compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, jsx: ts.JsxEmit.ReactJSX },
@@ -108,7 +115,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@better-auth/api-key': { apiKey: () => ({ schema: { apikey: { fields: { referenceId: {} } } } }) },
     '@better-auth/infra': { dash: pluginStub },
     '@better-auth/passkey': { passkey: pluginStub },
-    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler },
+    'better-auth/api': { createAuthMiddleware: (handler) => handler, createAuthEndpoint: (route, options, handler) => handler, getOAuthState: async () => null },
     '@/lib/auth/bridgePlugin': { bridgeSessionPlugin: pluginStub },
     '@/lib/email/sendEmail': {},
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },
@@ -117,6 +124,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
     '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)
@@ -194,7 +202,7 @@ test('Better Auth SDK carries the same request from database creation hooks into
   const { pathToFileURL } = require('node:url')
   const { getWithHooks } = await import(new URL('./db/with-hooks.mjs', pathToFileURL(require.resolve('better-auth'))))
   const legacy = loadTs('src/lib/auth/legacyCookiePlugin.ts', { ...h.aliases, 'better-auth/api': api })
-  const auth = loadTs('src/lib/auth/betterAuth.ts', { ...h.aliases, '@/lib/auth/legacyCookiePlugin': legacy }).auth
+  const auth = loadTs('src/lib/auth/betterAuth.ts', { ...h.aliases, 'better-auth/api': api, '@/lib/auth/legacyCookiePlugin': legacy }).auth
   const adapter = { create: async ({ data }) => ({ ...data, id: String(userId) }) }
   const hooks = getWithHooks(adapter, { options: auth, hooks: [{ source: 'user', hooks: auth.databaseHooks }] })
   const endpoint = api.createAuthEndpoint('/callback/google', { method: 'GET' }, async (ctx) => {

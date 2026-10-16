@@ -134,6 +134,7 @@ export async function fileAiFeedback(raw: unknown, userId?: number) {
         }
         const count = 1
         const { task } = await createTaskCore({
+          creationChannel: "agent",
           title: `AI feedback: ${input.surface} ${input.tool ?? input.errorCode ?? input.status ?? 'unexpected-result'}`.slice(0, 80),
           description: description(input, fingerprint, displayName),
           userId: actorId, projectId: PROJECT_ID, sectionId: section.id, sectionTitle: section.section_title,

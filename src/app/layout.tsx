@@ -3,8 +3,6 @@ import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
 import PostHogAnalytics from "@/components/Analytics/PostHogAnalytics";
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import ClientErrorReporter from "@/components/ErrorBoundary/ClientErrorReporter";
 import DeploySkewGuard from "@/components/System/DeploySkewGuard";
@@ -14,7 +12,8 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG } from "@/lib/flags/keys";
+import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
+import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
@@ -72,6 +71,7 @@ export default async function RootLayout(
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -156,6 +156,7 @@ export default async function RootLayout(
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
           identifyEventIds={identifyEventIds}
+          trackingPersistence={memoryOnlyTracking ? "memory" : "localStorage+cookie"}
         />
         <DeploySkewGuard />
         <SpeedInsights />

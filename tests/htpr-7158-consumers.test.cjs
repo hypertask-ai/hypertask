@@ -123,6 +123,7 @@ test('guest adoption rejects revoked and outage cookies before any DB read or mu
       ...h.imports, '@prisma/client': { Status: { Normal: 'Normal' } },
       '@/lib/demo/guest': { GUEST_UID_PREFIX: 'guest_' },
       '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => h.events.push('telemetry') },
+      '@/lib/telemetry/savedWork': { recordBoardCreated: () => h.events.push('telemetry') },
       '@/lib/prisma': { __esModule: true, default: {
         user: { findUnique: async ({ where }) => { h.events.push('read'); return where.id === 7 ? { id: 7, uid: 'guest_fixture' } : { accountId: 10 } } },
         project: { count: async () => 0, findMany: async () => [{ id: 42 }] }, member: { count: async () => 0 },

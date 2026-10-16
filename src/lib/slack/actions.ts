@@ -152,6 +152,7 @@ async function createTask(
   const activityUser = toActivityUser(actor);
   const description = optionalString(params.description);
   const result = await createTaskCore({
+    creationChannel: "api",
     title,
     description: description ? toStoredHtml(description) : "",
     userId: actor.user.id,

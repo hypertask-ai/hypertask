@@ -113,6 +113,8 @@ export async function POST(request: NextRequest) {
       shouldSkipOnboarding,
       shouldSetVerified,
       signupAttributionFromHeaders(request.headers, 'email'),
+      typeof decoded.signupContextId === 'string' ? decoded.signupContextId : null,
+      request.headers.get("cookie"),
     )
 
     if (userUpdateResult.status !== 200) {
