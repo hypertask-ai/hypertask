@@ -92,6 +92,7 @@ function makeHarness({ existing = true, membershipOnly = false, flagMode = 'EVER
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
     '@/lib/onboarding/emails/agentNudge': { maybeScheduleAgentNudge: async () => 'flag_off' },
     '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel' },
     '@vercel/functions': { waitUntil: () => {} },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/onboarding/emails/welcome': { maybeSendWelcomeEmail: async () => 'flag_off' },

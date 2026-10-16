@@ -328,6 +328,7 @@ test('actual create endpoint rejects disabled Compose before database work and p
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {},
+    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel' },
     '@/utils/controllers/activities/createAssignedActivity': {},
   };
   const created = loadCreateGlobal(stubs);
@@ -452,6 +453,7 @@ test('save existing target enforces both flags, edit permissions, board match an
     '@prisma/client': {}, '@/utils/generateRank': {}, '@vercel/functions': {},
     '@/utils/controllers/tasks/getNextUniqueTaskIndex': {}, '@/lib/mcp/webhooks/taskEvents': {},
     '@/lib/mcp/webhooks/outbox': {}, '@/lib/agentWebhooks/outbox': {}, '@/utils/controllers/activities/createAssignedActivity': {},
+    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel' },
   };
   const created = loadCreateGlobal(stubs);
   const handler = sharedRoute.taskWriteHandler({ POST: async () => created.POST });
