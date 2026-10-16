@@ -51,7 +51,6 @@ export async function createSignupContext(
   const consent = (input as Record<string, unknown>).consent;
   if (consent !== null && consent !== "all" && consent !== "essential") return null;
   try {
-    if (!await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)) return null;
     if (!await withinIpBudget(ip)) return null;
     const id = randomUUID();
     const context = normalizeSignupContext({ ...input, consent: strictestConsent(consent, cookieHeader) });

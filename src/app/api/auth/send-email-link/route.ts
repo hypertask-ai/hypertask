@@ -1,3 +1,4 @@
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignupContext, bindSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import jwt from 'jsonwebtoken'
@@ -191,7 +192,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const signupContextId = await createSignupContext(signupContext, 1800, request.headers.get("cookie"))
+    const signupIdentityLinkEnabled = await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, 0)
+    const signupContextId = signupIdentityLinkEnabled ? await createSignupContext(signupContext, 1800, request.headers.get("cookie")) : null
     const token = createEmailLoginToken(normalizedEmail, signupContextId)
     const verificationCode = generateVerificationCode()
     

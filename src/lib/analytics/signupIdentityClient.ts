@@ -2,18 +2,20 @@ import { getCookieConsent } from "@/lib/cookieConsent";
 import { getUTMDataFromCookies } from "@/lib/utils/utm/client";
 import { consentAllowsLinking, readSignupBrowserIdentity, sanitizeSignupAttribution, type SignupIdentitySdk } from "./signupIdentity";
 
-let loadedSdk: SignupIdentitySdk | null = null;
-
-export function setSignupIdentitySdk(sdk: SignupIdentitySdk | null): void {
-  loadedSdk = sdk;
+export async function getSignupBrowserIdentity() {
+  const consent = getCookieConsent();
+  let sdk: SignupIdentitySdk | null = null;
+  if (consentAllowsLinking(consent)) {
+    try {
+      const { default: posthog } = await import("posthog-js/dist/module.slim");
+      if (posthog.__loaded === true) sdk = posthog;
+    } catch {}
+  }
+  return readSignupBrowserIdentity(sdk, consent);
 }
 
-export function getSignupBrowserIdentity() {
-  return readSignupBrowserIdentity(loadedSdk, getCookieConsent());
-}
-
-export function getSignupContextInput() {
-  const identity = getSignupBrowserIdentity();
+export async function getSignupContextInput() {
+  const identity = await getSignupBrowserIdentity();
   const allowed = consentAllowsLinking(identity.consent);
   return {
     consent: identity.consent,
@@ -32,7 +34,7 @@ export async function prepareSignupContext(method: "google" | "magic_link", emai
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "same-origin",
-      body: JSON.stringify({ ...getSignupContextInput(), method, ...(method === "magic_link" ? { email } : {}) }),
+      body: JSON.stringify({ ...await getSignupContextInput(), method, ...(method === "magic_link" ? { email } : {}) }),
       signal: AbortSignal.timeout(1500),
     });
     if (method !== "google" || !response.ok) return null;
@@ -43,7 +45,17 @@ export async function prepareSignupContext(method: "google" | "magic_link", emai
   }
 }
 
-export async function googleSignupAdditionalData() {
-  const signupContextId = await prepareSignupContext("google");
-  return signupContextId ? { additionalData: { signupContextId } } : {};
+export async function attachSignupContext(context: { url: URL | string; body?: unknown }) {
+  try {
+    const pathname = new URL(context.url, "https://app.hypertask.ai").pathname;
+    if (!pathname.endsWith("/sign-in/social") && !pathname.endsWith("/sign-in/magic-link")) return;
+    if (typeof context.body !== "string") return;
+    const body = JSON.parse(context.body);
+    if (pathname.endsWith("/sign-in/social") && body.provider === "google") {
+      const id = await prepareSignupContext("google");
+      if (id) return { body: JSON.stringify({ ...body, additionalData: { ...body.additionalData, signupContextId: id } }) };
+    } else if (pathname.endsWith("/sign-in/magic-link") && typeof body.email === "string") {
+      await prepareSignupContext("magic_link", body.email);
+    }
+  } catch {}
 }

@@ -1,13 +1,10 @@
 "use client";
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { useAuth } from "@/hooks/General/useAuth";
 import useFunnelCookies from "@/hooks/MultiPages/useFunnelCookies";
 import { useSearchParams } from "next/navigation";
 import React from "react";
 import { cn } from "@/utils/undoActions/helperFuncs";
 import authConfig from "@/lib/configs/auth.config";
-import { googleSignupAdditionalData } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 
 interface LoginButtonProps {
@@ -27,12 +24,11 @@ const LoginButton = ({
   labelClassName,
   align = "center",
 }: LoginButtonProps) => {
-  const signupIdentityLinkEnabled = useFlag(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG);
   const { loginWithGoogle } = useAuth();
   const searchParams = useSearchParams();
   const { isFunnelUserAndTutorialCompleted } = useFunnelCookies();
 
-  const googleLogin = async () => {
+  const googleLogin = () => {
     const hasOAuthParams = searchParams?.has('client_id') && searchParams?.has('redirect_uri');
     
     const shouldSkipInteractive =
@@ -44,10 +40,8 @@ const LoginButton = ({
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
-      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       void authClient.signIn.social({
         provider: "google",
-        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });

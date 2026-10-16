@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 
 import { createContext, useContext, useState, useEffect, useRef } from "react";
 import nookies from "nookies";
@@ -24,7 +22,6 @@ import { getViewFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFun
 import { addUserToTeamFromShareRoute } from "@/lib/constants/APIRouteConstants";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import authConfig from "@/lib/configs/auth.config";
-import { googleSignupAdditionalData } from "@/lib/analytics/signupIdentityClient";
 import { authClient } from "@/lib/auth/betterAuthClient";
 import { clearAddAccountFlag } from "@/lib/auth/accounts";
 import { useMobileBlocking } from "@/lib/contexts/mobileBlockingContext";
@@ -95,7 +92,6 @@ export const AuthProvider = ({
   children: React.ReactNode;
   authenticatedUserId: number | null;
 }) => {
-  const signupIdentityLinkEnabled = useFlag(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG);
   const [________, _setCurrentUser] = useRecoilState(currentUserAtom);
   const currentUserCookie = useCurrentUser(authenticatedUserId);
   const [currentUser, __] = useState<HUser | null>(null);
@@ -121,10 +117,8 @@ export const AuthProvider = ({
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
-      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       const { error } = await authClient.signIn.social({
         provider: "google",
-        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });
@@ -145,10 +139,8 @@ export const AuthProvider = ({
   ) => {
     try {
       setIsAuthenticating(true);
-      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       const { error } = await authClient.signIn.social({
         provider: "google",
-        ...googleSignupData,
         callbackURL: authConfig.redirect.afterLogin,
         errorCallbackURL: "/login?authError=google_signup_disabled",
       });
