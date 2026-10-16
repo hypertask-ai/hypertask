@@ -455,6 +455,234 @@ function branchIsNullishOrEmpty(node) {
   return false;
 }
 
+function normalizedCondition(node) {
+  return unwrapExpr(node).getText().replace(/\s+/g, " ").trim().replace(/;$/, "").trim();
+}
+
+function conditionTerm(node) {
+  const expression = unwrapExpr(node);
+  return typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken
+    ? `!(${normalizedCondition(expression.operand)})`
+    : normalizedCondition(expression);
+}
+
+function negatedConditionTerm(node) {
+  const expression = unwrapExpr(node);
+  return typescript.isPrefixUnaryExpression(expression) && expression.operator === typescript.SyntaxKind.ExclamationToken
+    ? normalizedCondition(expression.operand)
+    : `!(${normalizedCondition(expression)})`;
+}
+
+function addTagCounts(target, source, combine) {
+  for (const [tag, count] of source) target.set(tag, combine(target.get(tag) ?? 0, count));
+  return target;
+}
+
+function renderedTagCounts(node) {
+  if (!node) return new Map();
+  if (typescript.isConditionalExpression(node)) {
+    return addTagCounts(renderedTagCounts(node.condition),
+      addTagCounts(renderedTagCounts(node.whenTrue), renderedTagCounts(node.whenFalse), Math.max), (a, b) => a + b);
+  }
+  if (typescript.isIfStatement(node)) {
+    return addTagCounts(renderedTagCounts(node.expression),
+      addTagCounts(renderedTagCounts(node.thenStatement), renderedTagCounts(node.elseStatement), Math.max), (a, b) => a + b);
+  }
+  const counts = new Map();
+  if (typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) {
+    const tag = node.tagName.getText();
+    if (/^[A-Z]/.test(tag) || typescript.isPropertyAccessExpression(node.tagName)) counts.set(tag, 1);
+  }
+  typescript.forEachChild(node, (child) => { addTagCounts(counts, renderedTagCounts(child), (a, b) => a + b); });
+  return counts;
+}
+
+function exposureSnapshot(ref, path, mergeBase) {
+  let source = "";
+  try { source = git(["show", `${ref}:${path}`]); } catch {}
+  const scriptKind = path.endsWith(".tsx") ? typescript.ScriptKind.TSX :
+    path.endsWith(".jsx") ? typescript.ScriptKind.JSX :
+    path.endsWith(".ts") ? typescript.ScriptKind.TS : typescript.ScriptKind.JS;
+  const file = typescript.createSourceFile(path, source, typescript.ScriptTarget.Latest, true, scriptKind);
+  if (file.parseDiagnostics.length) throw new Error(`invalid ${path}: ${file.parseDiagnostics[0].messageText}`);
+  const occurrences = [];
+  const names = new Set();
+  const functions = new Map();
+  const existingImports = new Set();
+  for (const statement of file.statements) {
+    if (!typescript.isImportDeclaration(statement) || !typescript.isStringLiteral(statement.moduleSpecifier)) continue;
+    const moduleName = statement.moduleSpecifier.text;
+    if (!moduleName.startsWith("@/") && !moduleName.startsWith(".")) continue;
+    const base = moduleName.startsWith("@/") ? `src/${moduleName.slice(2)}` :
+      pathPosix.normalize(pathPosix.join(pathPosix.dirname(path), moduleName));
+    const candidates = /\.[jt]sx?$/.test(base) ? [base] : [
+      `${base}.tsx`, `${base}.ts`, `${base}.jsx`, `${base}.js`,
+      `${base}/index.tsx`, `${base}/index.ts`, `${base}/index.jsx`, `${base}/index.js`,
+    ];
+    if (!candidates.some((candidate) => {
+      try { git(["cat-file", "-e", `${mergeBase}:${candidate}`]); return true; } catch { return false; }
+    })) continue;
+    const clause = statement.importClause;
+    if (clause?.name) existingImports.add(clause.name.text);
+    const bindings = clause?.namedBindings;
+    if (bindings && typescript.isNamedImports(bindings)) {
+      for (const element of bindings.elements) existingImports.add(element.name.text);
+    } else if (bindings && typescript.isNamespaceImport(bindings)) {
+      existingImports.add(bindings.name.text);
+    }
+  }
+  function conjuncts(node, guards) {
+    const expression = unwrapExpr(node);
+    if (typescript.isBinaryExpression(expression) &&
+        expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+      conjuncts(expression.left, guards);
+      conjuncts(expression.right, guards);
+    } else {
+      guards.add(normalizedCondition(expression));
+    }
+  }
+  function disjuncts(node, terms = new Set()) {
+    const expression = unwrapExpr(node);
+    if (typescript.isBinaryExpression(expression) &&
+        expression.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
+      disjuncts(expression.left, terms);
+      disjuncts(expression.right, terms);
+    } else {
+      terms.add(conditionTerm(expression));
+    }
+    return terms;
+  }
+  function hiddenUnless(node, terms = new Set()) {
+    const expression = unwrapExpr(node);
+    if (typescript.isBinaryExpression(expression) &&
+        expression.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+      hiddenUnless(expression.left, terms);
+      hiddenUnless(expression.right, terms);
+    } else {
+      terms.add(negatedConditionTerm(expression));
+    }
+    return terms;
+  }
+  function visit(node) {
+    if (typescript.isIdentifier(node) || typescript.isPropertyAccessExpression(node)) names.add(node.getText());
+    if (typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) {
+      const tag = node.tagName.getText();
+      if (/^[A-Z]/.test(tag) || typescript.isPropertyAccessExpression(node.tagName)) {
+        const guards = new Set();
+        let child = node;
+        for (let parent = node.parent; parent && !typescript.isFunctionLike(parent); child = parent, parent = parent.parent) {
+          if (typescript.isBinaryExpression(parent) && child === parent.right &&
+              parent.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) conjuncts(parent.left, guards);
+          if (typescript.isConditionalExpression(parent)) {
+            if (child === parent.whenTrue) guards.add(normalizedCondition(parent.condition));
+            if (child === parent.whenFalse) guards.add(`!(${normalizedCondition(parent.condition)})`);
+          }
+          if (typescript.isIfStatement(parent)) {
+            if (child === parent.thenStatement) guards.add(normalizedCondition(parent.expression));
+            if (child === parent.elseStatement) guards.add(`!(${normalizedCondition(parent.expression)})`);
+          }
+        }
+        occurrences.push({ tag, guards });
+      }
+    }
+    if (typescript.isFunctionLike(node)) {
+      const name = functionBindingName(node)?.text;
+      if (name) {
+        const returns = [];
+        function earlyReturns(child) {
+          if (child !== node && typescript.isFunctionLike(child)) return;
+          if (typescript.isIfStatement(child)) {
+            let branch = child.thenStatement;
+            if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
+            if (typescript.isReturnStatement(branch) && branchIsNullishOrEmpty(branch)) {
+              returns.push(disjuncts(child.expression));
+            } else if (typescript.isReturnStatement(branch)) {
+              const next = child.elseStatement ?? (typescript.isBlock(child.parent)
+                ? child.parent.statements[child.parent.statements.indexOf(child) + 1] : null);
+              if (next && branchIsNullishOrEmpty(next) &&
+                  (typescript.isReturnStatement(next) || typescript.isBlock(next))) {
+                returns.push(hiddenUnless(child.expression));
+              }
+            }
+          }
+          const arrowBody = typescript.isArrowFunction(node) && child === node.body;
+          const returned = typescript.isReturnStatement(child) && child.expression ? unwrapExpr(child.expression)
+            : arrowBody ? unwrapExpr(child) : null;
+          if (returned && typescript.isConditionalExpression(returned)) {
+            if (branchIsNullishOrEmpty(returned.whenTrue)) returns.push(disjuncts(returned.condition));
+            else if (branchIsNullishOrEmpty(returned.whenFalse)) returns.push(hiddenUnless(returned.condition));
+          } else if (returned && typescript.isBinaryExpression(returned) &&
+              returned.operatorToken.kind === typescript.SyntaxKind.AmpersandAmpersandToken) {
+            returns.push(hiddenUnless(returned.left));
+          }
+          typescript.forEachChild(child, earlyReturns);
+        }
+        earlyReturns(node);
+        functions.set(name, { returns, jsx: functionContainsJsx(node) });
+      }
+    }
+    typescript.forEachChild(node, visit);
+  }
+  visit(file);
+  return { occurrences, names, functions, existingImports, counts: renderedTagCounts(file) };
+}
+
+function widenedUiExposure(mergeBase, headSha, uiFiles) {
+  const files = uiFiles.filter((path) => /\.[jt]sx?$/.test(path)).map((path) => ({
+    path,
+    base: exposureSnapshot(mergeBase, path, mergeBase),
+    head: exposureSnapshot(headSha, path, mergeBase),
+  }));
+  const baseNames = new Set(files.flatMap(({ base }) => [...base.names]));
+  const baseCounts = new Map();
+  const headCounts = new Map();
+  for (const { base, head } of files) {
+    addTagCounts(baseCounts, base.counts, (a, b) => a + b);
+    addTagCounts(headCounts, head.counts, (a, b) => a + b);
+  }
+  for (const { path, base, head } of files) {
+    const remaining = [...base.occurrences];
+    for (const [index, first] of base.occurrences.entries()) {
+      for (const second of base.occurrences.slice(index + 1)) {
+        if (first.tag !== second.tag || first.guards.size !== second.guards.size) continue;
+        const onlyFirst = [...first.guards].filter((guard) => !second.guards.has(guard));
+        const onlySecond = [...second.guards].filter((guard) => !first.guards.has(guard));
+        if (onlyFirst.length === 1 && onlySecond.length === 1 &&
+            (onlySecond[0] === `!(${onlyFirst[0]})` || onlyFirst[0] === `!(${onlySecond[0]})`)) {
+          remaining.push({ tag: first.tag, guards: new Set([...first.guards].filter((guard) => second.guards.has(guard))) });
+        }
+      }
+    }
+    const added = head.occurrences.filter(({ tag, guards }) => {
+      const index = remaining.findIndex((old) => old.tag === tag && old.guards.size === guards.size &&
+        [...guards].every((guard) => old.guards.has(guard)));
+      if (index === -1) return true;
+      remaining.splice(index, 1);
+      return false;
+    });
+    for (const { tag, guards } of added) {
+      if (remaining.some((old) => old.tag === tag && old.guards.size > guards.size &&
+          [...guards].every((guard) => old.guards.has(guard)))) return `${path}:${tag} condition removed`;
+    }
+    for (const [name, fn] of base.functions) {
+      const next = head.functions.get(name);
+      const keptOrBroadened = (terms) => next.returns.some((nextTerms) => [...terms].every((term) => nextTerms.has(term)));
+      if (fn.jsx && next && fn.returns.some((terms) => !keptOrBroadened(terms))) {
+        return `${path}:${name} early return removed`;
+      }
+    }
+  }
+  for (const { path, head } of files) {
+    for (const { tag } of head.occurrences) {
+      const extra = headCounts.get(tag) - (baseCounts.get(tag) ?? 0);
+      if (extra > 0 && (baseNames.has(tag) || head.existingImports.has(tag.split(".")[0]))) {
+        return `${path}:${tag} rendered ${extra} more times`;
+      }
+    }
+  }
+  return null;
+}
+
 function collectLiveFunctions(sourceFile, checker) {
   const functions = [];
   function collect(node) {
@@ -1351,6 +1579,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
   const titleExempt = isExemptTitleTag(tag);
   const aiChatLabel = hasAiChatLabel(labels);
   const exempt = autoRevert || titleExempt || aiChatLabel;
+  let widened = null;
   if (exempt) {
     const uiAdded = git(["diff", "--numstat", "--no-renames", `${baseSha}...${headSha}`])
       .split("\n").filter(Boolean)
@@ -1371,12 +1600,19 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         `(over the ${CROSS_CHECK_LINE_BUDGET}-line budget). Retitle it as [FEATURE] and add a feature flag.`,
       );
     }
+    if (titleExempt && ["BUGFIX", "INFRA"].includes(normalizePolicyToken(tag)) && !autoRevert && !aiChatLabel) {
+      try {
+        widened = widenedUiExposure(git(["merge-base", baseSha, headSha]).trim(), headSha, uiFiles);
+      } catch (error) {
+        return failure(`UI exposure could not be parsed safely: ${error.message}`);
+      }
+    }
     const reasonPrefix = autoRevert
       ? "Verified auto-revert"
       : titleExempt
         ? `[${tag}]`
         : "AI CHAT label";
-    return { pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` };
+    if (!widened) return { pass: true, ownerReview: "exempt-ui", reason: `${reasonPrefix} is exempt (${uiAdded} UI lines added).` };
   }
   if (!titleMatch) {
     return failure("The pull request title has no valid HTPR or HYFA ticket and tag, so the feature flag requirement cannot be checked.");
@@ -1439,6 +1675,14 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return failure(`Feature flag files or imports could not be parsed safely: ${error.message}`);
   }
 
+  if (widened) {
+    return failure(
+      `[${tag}] shows existing UI in new places or to more users (${widened}) without a flag.` +
+      " Legal, privacy, compliance and urgent work still need a flag. Add " +
+      `src/lib/flags/definitions/${title.slice(0, 4).toLowerCase()}-${titleMatch[1]}-<name>.ts ` +
+      '(kind "bugfix" only if it restores intended behaviour) and gate the change with useFlag/isFeatureEnabled.',
+    );
+  }
   const shownFiles = `${uiFiles.slice(0, 5).join(", ")}${uiFiles.length > 5 ? ", ..." : ""}`;
   return failure(
     `[${tag}] touches UI files (${shownFiles}) without a feature flag. Define a ticket-specific key in ` +
