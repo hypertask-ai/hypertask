@@ -1,5 +1,7 @@
 let sent = 0
 
+const CHUNK_LOAD_TIMEOUT_MS = 120_000
+
 export type ClientErrorPayload = {
   source: string
   message?: string
@@ -47,6 +49,11 @@ export function reportClientError(payload: ClientErrorPayload) {
   if (payload.message === 'Network Error') return
   if (/\bRequest failed with status code 401\b/.test(payload.message || '')) return
   if (navigator.webdriver === true || /HeadlessChrome/i.test(navigator.userAgent)) return
+  if (
+    /^Loading chunk \S+ failed\.\n\(timeout: /.test(payload.message || '') &&
+    typeof performance !== 'undefined' &&
+    performance.now() < CHUNK_LOAD_TIMEOUT_MS
+  ) return
   if (/(?:chrome|moz|safari|ms-browser)-extension:\/\//i.test(diagnostic)) return
   if (sent >= 3) return
   sent++
