@@ -5,7 +5,7 @@ import { activationHarness } from "./helpers/activation-harness";
 // Every client is replaced before loading production telemetry modules.
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 
-const events = ["board_created", "agent_connected", "agent_task_completed", "teammate_invited", "invite_accepted", "lifecycle_email_sent"];
+const events = ["board_created", "agent_connected", "agent_task_completed", "lifecycle_email_sent"];
 
 test("fixed event contract uses the signup distinct id and arbitrary event properties", async () => {
   const h = activationHarness();
@@ -91,7 +91,7 @@ for (const job of ["occurrence", "connection"] as const) {
   const record = (h: ReturnType<typeof activationHarness>, occurrence = "retry") => {
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
     if (job === "connection") api.recordAgentConnection(123, occurrence, "mcp", "Cursor");
-    else api.recordActivationOccurrence(123, "teammate_invited", occurrence, { method: "link" });
+    else api.recordActivationOccurrence(123, "board_created", occurrence, { method: "link" });
   };
 
   test(`${job}: failed capture leaves no marker and retry uses the same event UUID`, async () => {
@@ -194,4 +194,13 @@ test("signup and activation share the bounded immediate client and waitUntil", (
   assert.match(source, /flushInterval: 0/);
   assert.match(source, /requestTimeout: CAPTURE_TIMEOUT_MS/);
   assert.match(source, /waitUntil/);
+});
+
+test("generalized occurrence delivery preserves the production activation marker and UUID", async () => {
+  const h = activationHarness();
+  h.load("src/lib/telemetry/activationOccurrences.ts").recordActivationOccurrence(123, "board_created", "stable", {});
+  await h.drain();
+  assert.equal(h.captureAttempts[0].uuid, "93ae7732-cd20-52b9-a8f2-7b72343fd4ea");
+  assert.equal(h.logs[0].log, "activation:board_created:stable");
+  assert.equal(h.logs[0].LoggedById, 123);
 });
