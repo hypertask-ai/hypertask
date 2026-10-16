@@ -478,7 +478,7 @@ test("persisted and live auth changes cannot leak a prior PostHog identity", () 
   );
   assert.match(
     analyticsSource,
-    /markIdentitySafe\(\);\s*applyConsentedIdentity\(posthog, identity\)/,
+    /markIdentitySafe\(\);[\s\S]*posthog\.identify\(expectedAccountId\)/,
   );
   assert.match(
     analyticsSource,
