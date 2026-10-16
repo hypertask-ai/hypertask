@@ -1,0 +1,11 @@
+# Server signup analytics
+
+`signup_completed` fires after a new account is committed, from the shared email-code, email-link, instant-signup and invite signup controller, or the Better Auth Google callback / magic-link create hook. Existing-user logins and later verification of an instant-signup account do not emit it.
+
+Flag `htpr-7270-signup-completed` defaults to Owner + QA. Off preserves `user_signed_up` unchanged; on sends only `signup_completed`. The cutover date for each user is when the flag reaches them; no historical backfill occurs.
+
+Properties follow `docs/analytics-events.md`: string user/workspace IDs, null board ID, server source, `event_id=signup_completed:<userId>`, occurrence time from `joinedAt`, environment, null `is_seeded`, and the shared account category. Signup adds `signup_method=email|google|invite` and `signup_at` (joinedAt ISO). Workspace is the earliest owned team through `googleAccount.userId`; a brand-new account usually owns none yet, so it is normally null. The event is scheduled after the new account is provisioned. Guests and invalid/missing users are excluded; QA/internal accounts remain labeled and do not depend on the activation-analytics flag.
+
+Only the server cookie `ht_cookie_consent=all` allows anonymous identity, UTMs or initial referrer. Essential or missing consent still sends the unlinked event with `attribution_status=withheld`, no `anonymous_id`, and null attribution fields. With consent, a linked identity decision supplies `anonymous_id`; its attribution supplies `utm_source`, `utm_medium`, `utm_campaign` and `initial_referrer`. Without a decision, only a trimmed, 200-character `utm_source` is available (known if present, otherwise unknown); no anonymous ID is inferred. No names, emails, tokens or other free text are added.
+
+Work runs through `scheduleAnalytics` without delaying signup. `captureAnalyticsOccurrence` serializes per-user capture and writes the logs marker `analytics:signup_completed` only after success, with user scope and a deterministic PostHog UUID. A replay after success sends nothing; failed captures remain retryable with the same UUID. Analytics failures never fail signup. There is no automatic retry queue.
