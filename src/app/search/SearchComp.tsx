@@ -16,7 +16,6 @@ import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
@@ -48,9 +47,7 @@ const SearchComp = ({
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
-  const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const autocompleteEnabled = autocompleteFlagEnabled && operatorsFlagEnabled;
+  const autocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
@@ -69,7 +66,6 @@ const SearchComp = ({
     selectedIndex,
     tasksInputRef,
     inputValue,
-    handleChange,
     responseMessage,
     typedTasks,
     isSearchDraft,
@@ -83,13 +79,11 @@ const SearchComp = ({
     updateSearchHistory,
     showCommands,
     setInputValue,
-    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
     updateSplitAndTasks,
     results,
-    suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
   } = useSearch(searchTerm, _initialTabIndex, _includeArchived, _fromProject);
@@ -98,8 +92,6 @@ const SearchComp = ({
     : undefined;
   const showAskAiRow =
     !layoutEnabled && inputValue.trim().length >= 2 && typedTasks.length === 0;
-  const searchTextClassName =
-    "w-full px-4 @md:!px-9 text-subheading font-medium leading-normal rounded-b-[4px] bg-inherit outline-none";
 
   function openAskAi(readableQuery?: string) {
     const query = labelScopeFlagEnabled && layoutEnabled && readableQuery !== undefined ? readableQuery : inputValue.trim();
@@ -132,62 +124,28 @@ const SearchComp = ({
         className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
       >
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          {operatorsFlagEnabled && searchChipsEnabled ? (
-            autocompleteFlagEnabled ? (
-              <SearchChipsInput
-                value={inputValue}
-                onChange={setInputValue}
-                onRun={updateSearchHistory}
-                boardId={_fromProject}
-                inputRef={tasksInputRef}
-                recentSearches={searchCache.history}
-                layoutEnabled={layoutEnabled}
-                availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
-                onAskAi={openAskAi}
-                showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
-                autocompleteEnabled
-              />
-            ) : (
-              <SearchChipsInput
-                value={inputValue}
-                onChange={setInputValue}
-                onRun={updateSearchHistory}
-                boardId={_fromProject}
-                inputRef={tasksInputRef}
-              />
-            )
+          {autocompleteEnabled ? (
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+              recentSearches={searchCache.history}
+              layoutEnabled={layoutEnabled}
+              availableBoards={labelScopeFlagEnabled && layoutEnabled ? availableSearchBoards : undefined}
+              onAskAi={openAskAi}
+              showSuggestions={isSearchDraft || (searchEscBackFlagEnabled && layoutEnabled && !inputValue.trim())}
+              autocompleteEnabled
+            />
           ) : (
-          <div className="relative w-full">
-              <span
-                className={`${searchTextClassName} text-icon-hover-gray`}
-                aria-hidden="true"
-              >
-                {suggestedValue}
-              </span>
-
-              <input
-                id={searchConfig.elementIds.input.id}
-                placeholder={searchConfig.elementIds.input.placeholder}
-                tabIndex={0}
-                type="search"
-                inputMode="search"
-                enterKeyHint="search"
-                autoComplete="off"
-                ref={tasksInputRef}
-                className={`${searchTextClassName} absolute left-0 top-0 z-10 text-white-black [&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none`}
-                value={inputValue}
-                onChange={handleChange}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown" && showAskAiRow) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    document
-                      .getElementById(searchConfig.elementIds.askAiRow.id)
-                      ?.focus();
-                  }
-                }}
-              />
-            </div>
+            <SearchChipsInput
+              value={inputValue}
+              onChange={setInputValue}
+              onRun={updateSearchHistory}
+              boardId={_fromProject}
+              inputRef={tasksInputRef}
+            />
           )}
 
           <>

@@ -144,7 +144,6 @@ const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).de
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
-    [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true,
     [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
@@ -380,17 +379,13 @@ test('API and MCP honor both person and commenter flags independently', async ()
   assert.equal(state.peopleQueries.length, 0)
 })
 
-test('commenter values still require session authentication and the operators flag', async () => {
-  for (const [session, enabled, code] of [[null, true, 401], [{ userId: 42 }, false, 404]] as const) {
-    reset({ session })
-    state.flags[keys.HTPR_6369_SEARCH_OPERATORS_FLAG] = enabled
-    const res = response()
-    await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', value: 'hi' } }, res)
-    assert.equal(res.code, code)
-    assert.equal(state.peopleQueries.length, 0)
-  }
+test('commenter values still require session authentication', async () => {
+  reset({ session: null })
+  const res = response()
+  await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', value: 'hi' } }, res)
+  assert.equal(res.code, 401)
+  assert.equal(state.peopleQueries.length, 0)
 })
-
 
 test('review flag-off preserves ordinary indexed comment metadata and production timestamps', async () => {
   for (const enabled of [false, true]) {

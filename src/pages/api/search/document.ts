@@ -1,6 +1,6 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
@@ -47,8 +47,7 @@ const handler: NextApiHandler = async (
           .json({ error: "Unauthorized", code: "SESSION_REQUIRED" });
       }
 
-      const operatorsEnabled = await isFeatureEnabled(HTPR_6369_SEARCH_OPERATORS_FLAG, session.userId);
-      if (operatorsEnabled && (normalizedSearchQuery.length > 200 || searchOperatorClauseCount(normalizedSearchQuery) > MAX_SEARCH_OPERATOR_CLAUSES)) {
+      if (normalizedSearchQuery.length > 200 || searchOperatorClauseCount(normalizedSearchQuery) > MAX_SEARCH_OPERATOR_CLAUSES) {
         return res.status(400).json({ message: "Search query exceeds the operator limit or 200 characters" });
       }
       const accessibleProjects = await prisma.project.findMany({
@@ -63,17 +62,14 @@ const handler: NextApiHandler = async (
         return res.status(403).json({ message: "Project access denied" });
       }
 
-      const fuzzyPersonEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, session.userId);
-      const matchHighlightsEnabled = operatorsEnabled &&
-        await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, session.userId) &&
+      const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, session.userId);
+      const matchHighlightsEnabled = await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId);
-      const commenterEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, session.userId);
-      const logicEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, session.userId);
-      const parsed = operatorsEnabled
-        ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled)
-        : null;
-      if (parsed?.filters.label &&
+      const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, session.userId);
+      const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, session.userId);
+      const parsed = await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled);
+      if (parsed.filters.label &&
         ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
@@ -87,7 +83,7 @@ const handler: NextApiHandler = async (
           return matching.length ? matching.map((label) => ({ ...filter, value: label.id })) : [filter];
         });
       }
-      if (parsed && Object.keys(parsed.filters).length) {
+      if (Object.keys(parsed.filters).length) {
         const { where, rankedIds, descriptionById, commentById, partial, commentMode } = await rankedSearchWhere(
           parsed, requestedProjectIds, archive === "Normal" || archive === "Archive" ? archive : null,
           50, {}, undefined, false, commenterEnabled,

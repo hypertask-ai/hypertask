@@ -29,7 +29,7 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async (key) => key === 'htpr-6878-search-label-scope' ? false : key === 'htpr-6865-search-layout' ? state.layoutFlag : key === 'htpr-6688-search-autocomplete' ? state.autocompleteFlag : state.flag }],
+  ['src/lib/flags.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async (key) => key === 'htpr-6878-search-label-scope' ? false : key === 'htpr-6865-search-layout' ? state.layoutFlag : key === 'htpr-6688-search-autocomplete' ? state.autocompleteFlag : true }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
@@ -69,7 +69,7 @@ const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') 
 const handler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default
 const person = (id, name) => ({ id, displayName: name, email: `${id}@example.com`, members: [{ projectId: 7 }], tasks: [], assignees: [] })
 async function lookup(operator, value, overrides = {}) {
-  state = { session: { userId: 6 }, flag: true, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
+  state = { session: { userId: 6 }, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
   const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
   await handler({ method: 'GET', headers: {}, query: { operator, value, ...(overrides.resolve ? { resolve: overrides.resolve } : {}), ...(overrides.noBoard ? {} : { boardId: '7' }) } }, res)
   return { res, state }
@@ -180,9 +180,8 @@ test('recent collaborator beats the alphabetical cap and fuzzy scans are name-fi
   assert.equal(fuzzy.res.body.candidates[0].id, 999)
   assert.equal(fuzzy.state.peopleQueries.at(-1).where.AND[1].OR[0].displayName.contains, 'z')
 })
-test('lookup requires authorization and feature flag', async () => {
+test('lookup requires authorization', async () => {
   assert.equal((await lookup('from', 'a', { session: null })).res.statusCode, 401)
-  assert.equal((await lookup('from', 'a', { flag: false })).res.statusCode, 404)
 })
 
 test('layout people emails require every flag and retain session-scoped authorization', async () => {
@@ -199,5 +198,4 @@ test('layout people emails require every flag and retain session-scoped authoriz
     assert.ok(res.body.candidates.every((row) => !('email' in row)))
   }
   assert.equal((await lookup('from', 'mal', { session: null, layoutFlag: true })).res.statusCode, 401)
-  assert.equal((await lookup('from', 'mal', { flag: false, layoutFlag: true })).res.statusCode, 404)
 })

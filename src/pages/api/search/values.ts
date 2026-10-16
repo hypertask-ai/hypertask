@@ -1,7 +1,7 @@
 import type { NextApiHandler } from 'next'
 import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
-import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
+import { isFeatureEnabled } from '@/lib/flags'
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -10,9 +10,6 @@ const handler: NextApiHandler = async (req, res) => {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
   const session = await getSessionUser(new Headers(req.headers as Record<string, string>))
   if (!session) return res.status(401).json({ error: 'Unauthorized' })
-  if (!await isFeatureEnabled(HTPR_6369_SEARCH_OPERATORS_FLAG, session.userId)) {
-    return res.status(404).json({ error: 'Not found' })
-  }
   const operator = String(req.query.operator ?? '').toLowerCase()
   const value = String(req.query.value ?? '').replace(/^@/, '').trim().toLowerCase().slice(0, 100)
   const boardId = Number(req.query.boardId)

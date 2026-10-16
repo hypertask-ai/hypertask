@@ -6,7 +6,7 @@ const { JSDOM } = require('jsdom')
 const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 
-test('URL searches retry the full operator query when flags load after projects', async (t) => {
+test('URL searches preserve operators and chip keyboard ownership', async (t) => {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://app.hypertask.ai/search?searchTerm=is:open' })
   const globals = ['window', 'document', 'navigator', 'HTMLElement', 'IS_REACT_ACT_ENVIRONMENT']
   const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
@@ -23,8 +23,6 @@ test('URL searches retry the full operator query when flags load after projects'
     stubs.push([filename, require.cache[filename]])
     require.cache[filename] = { id: filename, filename, loaded: true, exports }
   }
-  let enabled = false
-  let chipUI = false
   let resultMode = false
   let pickerOpen = false
   let searchState
@@ -33,8 +31,8 @@ test('URL searches retry the full operator query when flags load after projects'
   let reactRoot
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] } } })
-    stub('src/lib/flags/keys.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
-    stub('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6369-search-operators' ? enabled : false })
+    stub('src/lib/flags/keys.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
+    stub('src/hooks/useFlag.tsx', { useFlag: () => false })
     stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     stub('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -63,24 +61,16 @@ test('URL searches retry the full operator query when flags load after projects'
     const { useSearch } = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true })(path.join(root, 'src/hooks/Search/useSearch.ts'))
     const Search = ({ term }) => {
       searchState = useSearch(term)
-      chipUI = searchState.searchChipsEnabled
       return React.createElement('input', { id: 'search-input', ref: searchState.tasksInputRef, 'aria-expanded': String(pickerOpen) })
     }
     const { createRoot } = require('react-dom/client')
     reactRoot = createRoot(document.getElementById('root'))
     for (const term of ['is:open', 'Login is:open']) {
-      enabled = false
       await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
       const count = posts.length
-      assert.equal(posts.at(-1).searchQuery, term === 'is:open' ? '' : 'login')
-      assert.equal(chipUI, false)
-      enabled = true
-      await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
-      assert.equal(posts.length, count + 1)
       assert.equal(posts.at(-1).searchQuery, term)
       await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
-      assert.equal(posts.length, count + 1)
-      assert.equal(chipUI, true)
+      assert.equal(posts.length, count)
     }
     resultMode = true
     await React.act(async () => { reactRoot.render(React.createElement(Search, { term: 'login' })) })
@@ -96,7 +86,7 @@ test('URL searches retry the full operator query when flags load after projects'
     await React.act(async () => { searchState.setSelectedIndex(0) })
     await React.act(async () => { down() })
     assert.equal(searchState.selectedIndex, 0, 'open picker owns ArrowDown')
-    await t.test('page Back yields Escape to an open picker, then resumes when closed or flags are off', async () => {
+    await t.test('page Back yields Escape to an open picker, then resumes when closed', async () => {
       const escape = () => input.dispatchEvent(new dom.window.KeyboardEvent('keydown', { key: 'Escape', keyCode: 27, bubbles: true, cancelable: true }))
       await React.act(async () => searchState.setInputValue('from:val'))
       await React.act(async () => escape())
@@ -106,12 +96,6 @@ test('URL searches retry the full operator query when flags load after projects'
       await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
       await React.act(async () => escape())
       assert.equal(backs, 1, 'second Escape with no picker retains Back')
-      pickerOpen = true
-      enabled = false
-      await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
-      const previousBacks = backs
-      await React.act(async () => escape())
-      assert.equal(backs, previousBacks + 1, 'operators-off Escape remains Back')
     })
   } finally {
     if (reactRoot) await React.act(async () => { reactRoot.unmount() })
