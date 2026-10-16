@@ -55,13 +55,6 @@ const update_or_create_user = async (
 
       const decision = await recordSignupIdentityLink(exist_user.id, true, signupContextId, cookieHeader);
 
-      recordSignupCompleted({
-        decision,
-        cookieHeader,
-        userId: exist_user.id,
-        ...signupAttribution,
-      });
-
       exist_user = await provisionNewUser({
         userId: exist_user.id,
         email,
@@ -71,6 +64,13 @@ const update_or_create_user = async (
         shouldSkipInteractive,
         skipOnboarding,
         isVerified,
+      });
+
+      recordSignupCompleted({
+        decision,
+        cookieHeader,
+        userId: exist_user.id,
+        ...signupAttribution,
       });
     }
 

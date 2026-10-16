@@ -208,16 +208,6 @@ export const auth = betterAuth({
               : await consumeSignupCookie(context, { method: 'magic_link', email: user.email }),
             context?.request?.headers.get('cookie'))
 
-            recordSignupCompleted({
-              decision,
-              cookieHeader: context?.request?.headers.get('cookie') ?? null,
-              userId,
-              ...signupAttributionFromHeaders(
-                context?.request?.headers,
-                context?.path === '/callback/google' ? 'google' : 'email',
-              ),
-            })
-
             await provisionNewUser({
               userId,
               email: user.email,
@@ -228,6 +218,16 @@ export const auth = betterAuth({
               skipOnboarding: authConfig.onboarding.skipOnboarding,
               isVerified: true,
               createGoogleAccount: context?.path === '/callback/google',
+            })
+
+            recordSignupCompleted({
+              decision,
+              cookieHeader: context?.request?.headers.get('cookie') ?? null,
+              userId,
+              ...signupAttributionFromHeaders(
+                context?.request?.headers,
+                context?.path === '/callback/google' ? 'google' : 'email',
+              ),
             })
             if (context?.path === '/callback/google' && context.request) {
               newGoogleSignupRequests.set(context.request, userId)
