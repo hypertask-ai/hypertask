@@ -89,9 +89,9 @@ function assertCurrent(text) {
 }
 
 test("canonical commands use the short hypertask.ai installers and Settings MCP URL", () => {
-  assert.equal(commands.CLI_INSTALL_COMMAND, "curl -fsSL hypertask.ai/install | sh");
+  assert.equal(commands.CLI_INSTALL_COMMAND, "curl -fsSL https://hypertask.ai/install | sh");
   assert.equal(commands.CLI_LOGIN_COMMAND, "hypertask login");
-  assert.equal(commands.CLI_WINDOWS_NOTE, "Windows (PowerShell): irm hypertask.ai/install.ps1 | iex");
+  assert.equal(commands.CLI_WINDOWS_NOTE, "Windows (PowerShell): irm https://hypertask.ai/install.ps1 | iex");
   assert.equal(commands.MCP_ADD_COMMAND, "claude mcp add --transport http hypertask https://mcp.hypertask.ai/mcp");
   const mcp = load("src/components/Modals/McpToken/utils.ts");
   assert.equal(commands.MCP_ADD_COMMAND.split(" ").at(-1), mcp.MCP_SERVER_URL);
