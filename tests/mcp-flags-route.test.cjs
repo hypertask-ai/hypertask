@@ -28,8 +28,8 @@ class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
 const APPROVAL_ERROR = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?"
-  + " To switch to Everyone, an unedited comment on the flag's own ticket that asks for Everyone with no hold-back words also counts when Valentin wrote it himself,"
-  + " or when it quotes him (Valentin, YYYY-MM-DD: \"...\") and he gave it a thumbs up within 7 days.";
+  + " To switch to Everyone, an unedited comment on the flag's own ticket also counts when its whole text is a release sentence"
+  + " such as \"Go live for everyone\" written by Valentin himself, or is Valentin, YYYY-MM-DD: \"Go live for everyone\" with his thumbs up within 7 days.";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => { calls.push("rate-limit"); return limited; },
@@ -370,7 +370,7 @@ function startOnEveryone(overrides = {}) {
   Object.assign(approvalComment, {
     task: { projectId: 15, uniqueIndex: 7278, status: "Normal" },
     creatorId: 6, agentId: null, agentDisplayName: null, reactions: [],
-    commentText: "Please build this and put it live for everyone.", text: null,
+    commentText: "Go live for everyone", text: null,
   }, overrides);
 }
 async function patchEveryone(mode = "EVERYONE", reasonLink = everyoneReason) {
@@ -386,7 +386,7 @@ test("PATCH starts a flag on Everyone from a comment Valentin wrote himself on t
 test("PATCH starts a flag on Everyone from a comment quoting Valentin with his thumbs up", async () => {
   startOnEveryone({
     agentId: "ht-product-lead", agentDisplayName: "HT Product Lead",
-    commentText: "", text: '<p>Valentin, 2026-10-16, in chat: “ship it live for everyone, it is urgent”</p>',
+    commentText: "", text: '<p>Valentin, 2026-10-16, in chat: “Yes, ship it to everyone!”</p>',
     reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
   });
   assert.equal((await patchEveryone()).status, 200);
@@ -407,12 +407,13 @@ for (const rejected of [
   "another ticket", "another board", "a mode other than Everyone", "a deleted ticket",
   "his unrelated comment", "his refusal", "his refusal with a curly apostrophe", "his hold for later",
   "a quoted refusal with his thumbs up", "a quote keeping it to Owner + QA",
+  "his disable request", "his crash report", "a quote inside other text", "an agent comment with the release words and his thumbs up",
 ]) {
   test(`PATCH refuses starting on Everyone from ${rejected}`, async () => {
     startOnEveryone();
     let mode = "EVERYONE";
     let reasonLink = everyoneReason;
-    const quote = { agentId: "ht-product-lead", agentDisplayName: "HT Product Lead", commentText: 'Valentin, 2026-10-16: "ship it to everyone"' };
+    const quote = { agentId: "ht-product-lead", agentDisplayName: "HT Product Lead", commentText: 'Valentin, 2026-10-16: "Release it to everyone."' };
     const thumbsUp = { userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() };
     if (rejected === "agent comment on Valentin's account") approvalComment.agentId = "ht-product-lead";
     if (rejected === "deleted agent comment") approvalComment.agentDisplayName = "Deleted agent";
@@ -437,6 +438,10 @@ for (const rejected of [
     if (rejected === "his refusal with a curly apostrophe") approvalComment.commentText = "Don\u2019t put this live for everyone";
     if (rejected === "his hold for later") approvalComment.commentText = "Everyone can get it later";
     if (rejected === "a quoted refusal with his thumbs up") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "keep it private, everyone gets it next week"', reactions: [thumbsUp] });
+    if (rejected === "his disable request") approvalComment.commentText = "Disable this for everyone";
+    if (rejected === "his crash report") approvalComment.commentText = "Everyone is seeing crashes, go live for everyone later";
+    if (rejected === "a quote inside other text") Object.assign(approvalComment, quote, { commentText: 'He refused. Valentin, 2026-10-16: "Go live for everyone"', reactions: [thumbsUp] });
+    if (rejected === "an agent comment with the release words and his thumbs up") Object.assign(approvalComment, quote, { commentText: "Go live for everyone", reactions: [thumbsUp] });
     if (rejected === "a quote keeping it to Owner + QA") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "everyone on the team, so Owner + QA for now"', reactions: [thumbsUp] });
     assert.deepEqual(await patchEveryone(mode, reasonLink), { status: 403, body: { error: APPROVAL_ERROR } });
     assert.equal(writes.length, 0);
