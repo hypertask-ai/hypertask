@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { persistBoardWebhookEvent } from './outbox'
 import type { WebhookDelivery, WebhookTaskStatus } from './events'
+import { recordTaskCreated, type CreationChannel } from '../../telemetry/savedWork'
 
 
 type TaskCreatedDb = {
@@ -40,9 +41,11 @@ export async function createTaskWithBoardWebhookOutbox<T>(
   actor: TaskCreatedActor,
   createTask: (
     tx: Prisma.TransactionClient
-  ) => Promise<CreatedTaskResult<T>>
+  ) => Promise<CreatedTaskResult<T>>,
+  channel: CreationChannel,
+  analyticsAgentId: string | null = null
 ): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
-  return db.$transaction(async (tx) => {
+  const committed = await db.$transaction(async (tx) => {
     const created = await createTask(tx)
     const boardWebhookDeliveryIds = await persistTaskCreatedWebhook(
       tx,
@@ -50,8 +53,10 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
-    return { result: created.result, boardWebhookDeliveryIds }
+    return { taskId: created.taskId, result: created.result, boardWebhookDeliveryIds }
   })
+  recordTaskCreated(committed.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
+  return { result: committed.result, boardWebhookDeliveryIds: committed.boardWebhookDeliveryIds }
 }
 
 export async function persistTaskCreatedWebhook(

@@ -60,6 +60,7 @@ function loadPost({ flagOn, knownLabelIds }) {
     "@/lib/mcp/agents/scopes": { requireRole: async () => null },
     "@/utils/controllers/agents/boardMembers": { isAgentOnBoard: async () => true },
     "@/lib/mcp/agents": { getMcpSessionAgentSummary: async () => null },
+    "@/lib/mcp/operationContext": { getMcpOperationContext: () => undefined },
     "@/lib/flags": { isFeatureEnabled: async () => flagOn },
     "@/lib/prisma": {
       __esModule: true,

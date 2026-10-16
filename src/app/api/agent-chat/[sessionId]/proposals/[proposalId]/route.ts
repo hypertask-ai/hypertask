@@ -185,6 +185,7 @@ export async function POST(
     let task;
     try {
       const created = await createTaskCore({
+        creationChannel: "agent",
         title: proposal.ticketTitle,
         description: chatProposalDescriptionHtml({
           outcome: proposal.outcome,

@@ -1,4 +1,5 @@
 import prisma from '@/lib/prisma';
+import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWork';
 import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { taskDetailInclude } from './mappers';
@@ -428,8 +429,10 @@ export async function createTask(data: {
     parentTaskId?: number;
     assigneeIds?: number[];
     agentId?: string | null;
+    creationChannel: CreationChannel;
+    analyticsAgentId?: string | null;
 }) {
-    const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds } = data;
+    const { projectId, title, description, sectionId, sectionTitle, userId, priorityIndex, estimateIndex, projectUniqueIdentifier, labels: labelIds, parentTaskId, agentId, assigneeIds, creationChannel, analyticsAgentId } = data;
 
     if (!projectUniqueIdentifier) {
         throw new Error('Project identifier is required');
@@ -564,7 +567,9 @@ export async function createTask(data: {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Cookie': authCookieHeader
+            'Cookie': authCookieHeader,
+            [CREATION_CHANNEL_HEADER]: creationChannel,
+            ...(analyticsAgentId ? { [CREATION_AGENT_HEADER]: analyticsAgentId } : {}),
         },
         body: JSON.stringify({
             title,

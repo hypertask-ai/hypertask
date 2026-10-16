@@ -145,6 +145,7 @@ async function sweep() {
             prisma,
             { agentId: FEATURE_FLAG_SWEEP_AGENT_ID, userId: FEATURE_FLAG_OWNER_USER_ID },
             () => createTaskCore({
+              creationChannel: "api",
               title,
               description,
               userId: FEATURE_FLAG_OWNER_USER_ID,

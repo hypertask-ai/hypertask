@@ -14,6 +14,7 @@ import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
+import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, creationChannelFromHeader } from "@/lib/telemetry/savedWork";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -298,6 +299,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
       userId: currentUser.id,
       agentId: agentId ?? null,
     };
+    const requestedAnalyticsAgentId = agentId ? null : request.headers.get(CREATION_AGENT_HEADER);
+    const analyticsAgentId = requestedAnalyticsAgentId && (await getActiveAgentOwnerId(requestedAnalyticsAgentId)) === session.userId
+      ? requestedAnalyticsAgentId
+      : null;
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${TASK_UNIQUE_INDEX_ADVISORY_LOCK_CLASS}::int, ${projectId}::int)`;
@@ -424,7 +429,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
               : null,
           },
         };
-      });
+      }, creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)), analyticsAgentId);
       newTask = created.result.task as TaskCreatedGlobally;
       boardWebhookDeliveryIds = created.boardWebhookDeliveryIds;
       priorityCreated = created.result.priority;

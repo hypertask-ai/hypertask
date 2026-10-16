@@ -274,8 +274,8 @@ test("email models stay unchanged and flag defaults to Owner + QA", () => {
   const { execFileSync } = require("node:child_process");
   const baseline = execFileSync("git", ["show", "origin/production:src/prisma/schema.prisma"], { cwd: root, encoding: "utf8" });
   const schema = read("src/prisma/schema.prisma");
-  // The email reuses existing models; unrelated tickets may add models, migrations and indexes.
-  const fields = (model) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\])?\s*$/.test(line)).join("\n");
+  // The email reuses existing models; unrelated tickets may add models, migrations, indexes and the HTPR-7271 Project.seeded flag.
+  const fields = (model) => model.split("\n").filter((line) => !/^\s*(\/\/.*|@@index\(.*\)|featureFlagChanges\s+FeatureFlagChange\[\]|seeded\s+Boolean\s+@default\(false\))?\s*$/.test(line)).join("\n");
   for (const name of ["Logs", "User", "Section", "Agent", "Project", "Task"]) {
     const pattern = new RegExp(`^model ${name} \\{[\\s\\S]*?^\\}`, "m");
     assert.match(baseline, pattern, name);

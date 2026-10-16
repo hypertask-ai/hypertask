@@ -155,6 +155,7 @@ export function createCreateTaskTool(context: ToolContext) {
 
           try {
             const task = await createTask({
+              creationChannel: "agent",
               projectId: input.project_id,
               title: input.title,
               description: input.description ? toStoredHtml(input.description) : "",
