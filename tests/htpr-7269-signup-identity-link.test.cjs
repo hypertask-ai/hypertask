@@ -42,6 +42,8 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
   let accountExists = existing
   const redis = {
     set: async (key, value, ex, ttl, nx) => { calls.redis.push(['set', key, ex, ttl]); if (nx === 'NX' && values.get(key)?.expires > Date.now()) return null; values.set(key, { value, expires: Date.now() + ttl * 1000 }); return 'OK' },
+    ttl: async (key) => { const record = values.get(key); return !record ? -2 : record.expires === Infinity ? -1 : Math.ceil((record.expires - Date.now()) / 1000) },
+    expire: async (key, ttl) => { const record = values.get(key); if (record) record.expires = Date.now() + ttl * 1000; return 1 },
     incr: async (key) => { const record = values.get(key); const next = Number(record?.value ?? 0) + 1; values.set(key, { value: String(next), expires: record?.expires ?? Infinity }); return next },
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
@@ -654,6 +656,11 @@ test('one IP gets at most 30 signup contexts per 10 minutes; other IPs still get
   assert.equal(counters.length, 2)
   for (const [, record] of counters) assert.ok(record.expires <= Date.now() + 600_000)
   assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, 31)
+  const [stuckKey, stuck] = counters[0]
+  stuck.expires = Infinity
+  await ask('203.0.113.7')
+  await ask('198.51.100.9')
+  assert.ok(h.values.get(stuckKey).expires <= Date.now() + 600_000)
 })
 
 test('Google context id travels in the OAuth state, never in a cookie, and only once', async () => {
