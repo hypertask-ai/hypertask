@@ -121,7 +121,7 @@ export const AuthProvider = ({
   const signupWithGoogle = async () => {
     try {
       setIsAuthenticating(true);
-      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
+      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       const { error } = await authClient.signIn.social({
         provider: "google",
         ...googleSignupData,
@@ -145,7 +145,7 @@ export const AuthProvider = ({
   ) => {
     try {
       setIsAuthenticating(true);
-      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
+      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       const { error } = await authClient.signIn.social({
         provider: "google",
         ...googleSignupData,

@@ -369,7 +369,7 @@ test('Better Auth new-user hook links and clears; existing-session hook only dis
 test('all browser auth starts carry context before sign-in; identify and reset calls stay in place', () => {
   for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx']) {
     const source = fs.readFileSync(path.join(root, file), 'utf8')
-    const calls = source.match(/const googleSignupData = await googleSignupAdditionalData\(signupIdentityLinkEnabled\);\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(\{\s*provider: "google",\s*\.\.\.googleSignupData,/g)
+    const calls = source.match(/const googleSignupData = signupIdentityLinkEnabled \? await googleSignupAdditionalData\(\) : \{\};\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(\{\s*provider: "google",\s*\.\.\.googleSignupData,/g)
     assert.equal(calls.length, file.includes('useAuth') ? 2 : 1)
   }
   const email = fs.readFileSync(path.join(root, 'src/app/login/EmailAuth/useEmailAuth.ts'), 'utf8')
@@ -653,9 +653,8 @@ test('Google context id travels in the OAuth state, never in a cookie, and only 
   const previous = global.fetch
   try {
     global.fetch = async () => new Response(JSON.stringify({ signupContextId }), { status: 200 })
-    assert.deepEqual(await client.googleSignupAdditionalData(true), { additionalData: { signupContextId } })
-    assert.deepEqual(await client.googleSignupAdditionalData(false), {})
+    assert.deepEqual(await client.googleSignupAdditionalData(), { additionalData: { signupContextId } })
     global.fetch = async () => { throw new Error('offline') }
-    assert.deepEqual(await client.googleSignupAdditionalData(true), {})
+    assert.deepEqual(await client.googleSignupAdditionalData(), {})
   } finally { global.fetch = previous }
 })

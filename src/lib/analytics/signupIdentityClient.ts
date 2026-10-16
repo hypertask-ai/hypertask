@@ -43,7 +43,7 @@ export async function prepareSignupContext(method: "google" | "magic_link", emai
   }
 }
 
-export async function googleSignupAdditionalData(enabled: boolean) {
-  const signupContextId = enabled ? await prepareSignupContext("google") : null;
+export async function googleSignupAdditionalData() {
+  const signupContextId = await prepareSignupContext("google");
   return signupContextId ? { additionalData: { signupContextId } } : {};
 }

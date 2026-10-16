@@ -44,7 +44,7 @@ const LoginButton = ({
     const skipOnboarding = hasOAuthParams || authConfig.onboarding.skipOnboarding;
 
     if (process.env.NEXT_PUBLIC_BETTER_AUTH_ENABLED === "1") {
-      const googleSignupData = await googleSignupAdditionalData(signupIdentityLinkEnabled);
+      const googleSignupData = signupIdentityLinkEnabled ? await googleSignupAdditionalData() : {};
       void authClient.signIn.social({
         provider: "google",
         ...googleSignupData,
