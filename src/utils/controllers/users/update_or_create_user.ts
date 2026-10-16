@@ -2,10 +2,8 @@ import { recordSignupIdentityLink } from "@/lib/telemetry/signupIdentityLink";
 import prisma from "@/lib/prisma";
 import authConfig from "@/lib/configs/auth.config";
 import { generalConfig } from "@/lib/configs/general.config";
-import {
-  recordUserSignedUp,
-  type SignupAttribution,
-} from "@/lib/telemetry/signupAnalytics";
+import type { SignupAttribution } from "@/lib/telemetry/signupAnalytics";
+import { recordSignupCompleted } from "@/lib/telemetry/signupCompleted";
 import {
   provisionNewUser,
   updateUserProfilePicture,
@@ -55,10 +53,11 @@ const update_or_create_user = async (
         },
       });
 
-      await recordSignupIdentityLink(exist_user.id, true, signupContextId, cookieHeader);
+      const decision = await recordSignupIdentityLink(exist_user.id, true, signupContextId, cookieHeader);
 
-      recordUserSignedUp({
-        isNewUser: true,
+      recordSignupCompleted({
+        decision,
+        cookieHeader,
         userId: exist_user.id,
         ...signupAttribution,
       });

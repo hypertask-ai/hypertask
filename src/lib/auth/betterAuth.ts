@@ -15,10 +15,8 @@ import { legacyCookiePlugin, newGoogleSignupRequests } from '@/lib/auth/legacyCo
 import { sendEmail } from '@/lib/email/sendEmail'
 import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
-import {
-  recordUserSignedUp,
-  signupAttributionFromHeaders,
-} from '@/lib/telemetry/signupAnalytics'
+import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
+import { recordSignupCompleted } from '@/lib/telemetry/signupCompleted'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
@@ -205,13 +203,14 @@ export const auth = betterAuth({
               throw new Error(`Invalid Better Auth user id: ${user.id}`)
             }
 
-            await recordSignupIdentityLink(userId, true, context?.path === '/callback/google'
+            const decision = await recordSignupIdentityLink(userId, true, context?.path === '/callback/google'
               ? await consumeGoogleSignupContext(await getOAuthState().catch(() => null))
               : await consumeSignupCookie(context, { method: 'magic_link', email: user.email }),
             context?.request?.headers.get('cookie'))
 
-            recordUserSignedUp({
-              isNewUser: true,
+            recordSignupCompleted({
+              decision,
+              cookieHeader: context?.request?.headers.get('cookie') ?? null,
               userId,
               ...signupAttributionFromHeaders(
                 context?.request?.headers,
