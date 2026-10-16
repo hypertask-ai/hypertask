@@ -351,6 +351,7 @@ export async function POST(request: NextRequest) {
         userId: user.id,
         userEmail: user.email || "",
         userDisplayName: user.displayName,
+        creation: { method: "agent", channel: "agent" },
       });
 
       return {

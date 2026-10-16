@@ -474,7 +474,7 @@ test("persisted and live auth changes cannot leak a prior PostHog identity", () 
   );
   assert.match(
     analyticsSource,
-    /reconcilePersistedIdentity\(loadedPostHog, loadedIdentity, \(\) => {[\s\S]*identityReadyRef\.current = true/,
+    /reconcilePersistedIdentity\(loadedPostHog, loadedIdentity, persistenceRef\.current, \(\) => {[\s\S]*identityReadyRef\.current = true/,
   );
   assert.match(
     analyticsSource,

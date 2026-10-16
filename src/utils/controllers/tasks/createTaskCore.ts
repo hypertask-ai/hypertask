@@ -8,6 +8,7 @@ import upsertTaskDescription from '@/utils/controllers/description/common-descri
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
 import { createTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
+import type { CreationChannel } from '@/lib/telemetry/savedWork';
 import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox';
 import {
     emitAgentTaskCreatedWebhook,
@@ -20,6 +21,7 @@ export interface CreateTaskCoreOptions {
     description: string;
     userId: number;
     agentId?: string | null;
+    creationChannel: CreationChannel;
     projectId: number;
     sectionId: number;
     sectionTitle: string;
@@ -46,6 +48,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         description,
         userId,
         agentId,
+        creationChannel,
         projectId,
         sectionId,
         sectionTitle,
@@ -173,7 +176,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     : null
             }
         };
-    });
+    }, creationChannel);
     const newTask = createdTask.result;
     const boardWebhookDeliveryIds = createdTask.boardWebhookDeliveryIds;
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
