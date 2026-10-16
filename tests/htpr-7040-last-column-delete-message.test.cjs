@@ -38,6 +38,7 @@ function serverFixture() {
     "@/lib/flags": { isFeatureEnabled: async () => true },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: () => ({ ownerId: 985 }) },
     "@/utils/controllers/notifications/agentFirstTaskEmail": {},
+    "@/lib/telemetry/savedWork": { recordColumnCreated: () => {}, recordColumnRenamed: () => {} },
     "./viewHelpers": {},
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/realtime/server": { broadcastBoardChange: (...args) => effects.push(args) },
