@@ -1,5 +1,7 @@
 import type Stripe from "stripe";
 import prisma from "@/lib/prisma";
+import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { isActivationEligible } from "./activationAnalytics";
 import { isInviteSeatAnalyticsEnabled } from "./inviteAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { scheduleAnalytics } from "./signupAnalytics";
@@ -38,6 +40,7 @@ type PreviousAttributes = {
   quantity?: number;
   items?: { data: { id: string; quantity?: number }[] };
 };
+type InvoiceLine = Stripe.InvoiceLineItem & { type?: string; price?: string | { id: string } | null };
 type PaidInvoice = Stripe.Invoice & { subscription?: string | { id: string } | null };
 
 function idOf(value: string | { id: string } | null | undefined): string | null {
@@ -171,13 +174,37 @@ export function recordStripeInvoicePaid(
   retrieveSubscription: (id: string) => Promise<AnalyticsSubscription>,
   listPaidInvoices: (customerId: string) => Promise<PaidInvoicePage>,
 ): void {
+  let teamLookup: ReturnType<typeof billedTeam> | undefined;
   scheduleAnalytics(async () => {
     const invoice = event.data.object as PaidInvoice;
     if (invoice.status !== "paid" || invoice.amount_paid <= 0) return;
     const subscriptionId = invoiceSubscriptionId(invoice);
     if (!subscriptionId) return;
     const customerId = idOf(invoice.customer);
-    const team = await billedTeam(customerId);
+    const team = await (teamLookup ??= billedTeam(customerId));
+    if (!team || !customerId) return;
+    const userId = team.googleAccount.userId;
+    if (!(await isActivationEligible(userId)) || !(await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId))) return;
+    const eventId = `payment_succeeded:${invoice.id}`;
+    const paidAt = invoice.status_transitions?.paid_at ?? null;
+    const occurredAt = new Date((paidAt ?? event.created) * 1000);
+    const line = (invoice.lines?.data as InvoiceLine[] | undefined)?.find((item) =>
+      item.type === "subscription" || item.parent?.type === "subscription_item_details");
+    await captureAnalyticsOccurrence(userId, "payment_succeeded", `analytics:${eventId}`, {
+      ...serverAnalyticsProperties(userId, team.id, null, eventId, occurredAt),
+      stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscriptionId, invoice_id: invoice.id,
+      plan: idOf(line?.price ?? line?.pricing?.price_details?.price), currency: invoice.currency,
+      amount_paid: invoice.amount_paid, paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
+      billing_reason: invoice.billing_reason ?? null,
+    }, { scope: "business", occurredAt });
+  });
+  scheduleAnalytics(async () => {
+    const invoice = event.data.object as PaidInvoice;
+    if (invoice.status !== "paid" || invoice.amount_paid <= 0) return;
+    const subscriptionId = invoiceSubscriptionId(invoice);
+    if (!subscriptionId) return;
+    const customerId = idOf(invoice.customer);
+    const team = await (teamLookup ??= billedTeam(customerId));
     if (!team || !customerId || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
     const history = paidInvoiceHistory(invoice, subscriptionId, await listPaidInvoices(customerId));
     if (!history.isFirstForSubscription) return;

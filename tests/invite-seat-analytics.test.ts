@@ -477,7 +477,7 @@ test("invite requests return before analytics eligibility resolves", async () =>
   const h = harness();
   let released = false;
   const pending: ((enabled: boolean) => void)[] = [];
-  h.mocks["@/lib/flags"].isFeatureEnabled = () => released ? Promise.resolve(true) : new Promise((resolve) => { pending.push(resolve); });
+  h.mocks["@/lib/flags"].isFeatureEnabled = (key: string) => key === "htpr-7272-payment-login-agent-events" ? Promise.resolve(false) : released ? Promise.resolve(true) : new Promise((resolve) => { pending.push(resolve); });
   const result = await h.load("src/utils/api/invite/generatePublicInviteController.ts").getInviteFromProjectId(15, 123);
   assert.ok(result.inviteLink);
   assert.equal(h.captures.length, 0);

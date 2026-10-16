@@ -54,16 +54,17 @@ export async function validateMcpAuth(
     }
 
     console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
-    recordAuthenticatedConnection(request, managementCtx.user.id, token)
+    recordAuthenticatedConnection(request, managementCtx.user.id, token, undefined, `management_key:${managementCtx.management!.keyId}`)
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
 
   if (token.startsWith('htk_')) {
-    const ctx = await validateApiKey(token)
-    if (ctx) {
+    const validated = await validateApiKey(token)
+    if (validated) {
+      const { context: ctx, keyId } = validated
       console.log('[MCP Auth] API key validated for user:', ctx.user.id)
-      recordAuthenticatedConnection(request, ctx.user.id, token)
+      recordAuthenticatedConnection(request, ctx.user.id, token, undefined, `api_key:${keyId}`)
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
@@ -77,7 +78,7 @@ export async function validateMcpAuth(
   if (ctx) {
     const log = options.boundedLogging ? boundedMcpAuthLog : console.log
     log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
-    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt)
+    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt, ctx.agentId ? `agent:${ctx.agentId}` : undefined)
     logMcpCliUsage(request, token, ctx, options.boundedLogging ? boundedMcpAuthLog : undefined)
     return ctx
   }
@@ -87,7 +88,7 @@ export async function validateMcpAuth(
   return null
 }
 
-async function validateApiKey(token: string): Promise<McpAuthContext | null> {
+async function validateApiKey(token: string): Promise<{ context: McpAuthContext; keyId: string } | null> {
   try {
     const keyHash = hashApiKey(token)
     const apiKey = await prisma.apiKey.findFirst({
@@ -130,12 +131,15 @@ async function validateApiKey(token: string): Promise<McpAuthContext | null> {
     }
 
     return {
-      user: {
-        id: apiKey.user.id,
-        email: apiKey.user.email,
-        displayName: apiKey.user.displayName ?? undefined,
+      keyId: String(apiKey.id),
+      context: {
+        user: {
+          id: apiKey.user.id,
+          email: apiKey.user.email,
+          displayName: apiKey.user.displayName ?? undefined,
+        },
+        agentId: null,
       },
-      agentId: null,
     }
   } catch {
     console.log('[MCP Auth] API key lookup failed')
