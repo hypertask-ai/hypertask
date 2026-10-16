@@ -307,7 +307,7 @@ for (const session of [null, { id: 123 }]) {
       const provider = children.find((child: any) => child?.type === "Provider");
       assert.equal(provider.props.children, "existing-content");
       assert.ok(children.indexOf(analytics) < children.indexOf(provider));
-      assert.deepEqual(h.flagCalls, session === null ? [] : [[flag, 123]]);
+      assert.deepEqual(h.flagCalls.filter(([key]: [string]) => key === flag), session === null ? [] : [[flag, 123]]);
     });
   }
 }

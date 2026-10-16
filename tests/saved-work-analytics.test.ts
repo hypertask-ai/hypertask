@@ -139,7 +139,7 @@ test("a manifest task made for an agent is sent as agent-made without changing t
 
 test("a collaborator outside the rollout sends nothing on an enabled owner's board", async () => {
   const h = harness();
-  h.mocks["@/lib/flags"] = { ...h.mocks["@/lib/flags"], isFeatureEnabled: async (_key: string, userId: number) => userId === 123 };
+  h.mocks["@/lib/flags"] = { ...h.mocks["@/lib/flags"], isFeatureEnabled: async (key: string, userId: number) => key !== "htpr-7272-payment-login-agent-events" && userId === 123 };
   await saveTask(h, 46, { userId: 777, agentId: null }, "web");
   await saveTask(h, 47, { userId: 123, agentId: null }, "web");
   await h.drain();
