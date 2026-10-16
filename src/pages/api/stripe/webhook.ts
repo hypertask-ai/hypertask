@@ -3,6 +3,8 @@ import getRawBody from "raw-body";
 import { NextApiRequest, NextApiResponse } from "next";
 import sessionOnSuccess from "@/utils/controllers/stripe/webhook/onCheckoutSuccess";
 import onSubscriptionUpdated from "@/utils/controllers/stripe/webhook/onSubscriptionUpdated";
+import { recordStripeInvoicePaid, recordStripeSubscriptionEvent } from "@/lib/telemetry/stripeAnalytics";
+import type { AnalyticsSubscription } from "@/lib/telemetry/stripeAnalytics";
 import type { PinnedApiVersionSubscription } from "@/lib/subscription";
 
 export const config = {
@@ -17,6 +19,7 @@ export enum StripeWebhooks {
   SubscriptionDeleted = "customer.subscription.deleted",
   SubscriptionUpdated = "customer.subscription.updated",
   SubscriptionCreated = "customer.subscription.created",
+  InvoicePaid = "invoice.paid",
 }
 
 function getStripeInstance() {
@@ -44,6 +47,11 @@ export default async function checkoutsWebhooksHandler(
     console.log("🚀 ~ event:", event)
     try {
       switch (event.type) {
+        case StripeWebhooks.InvoicePaid: {
+          recordStripeInvoicePaid(event, (id) => stripe.subscriptions.retrieve(id));
+          return res.status(200).json({ message: "success" });
+        }
+
         case StripeWebhooks.SubscriptionCreated: {
           const subscription = await getSubscription(event);
           console.log("🚀 ~ file: webhook.ts:54 ~ subscription:", subscription )
@@ -75,6 +83,7 @@ export default async function checkoutsWebhooksHandler(
             .object as PinnedApiVersionSubscription;
           console.log("🚀 ~ subscription:", subscription);
           await onSubscriptionUpdated(subscription);
+          recordStripeSubscriptionEvent(event, event.data.object as unknown as AnalyticsSubscription);
           return res.status(200).json({ message: "success" });
         }
 
@@ -82,6 +91,7 @@ export default async function checkoutsWebhooksHandler(
           const subscription = await getSubscription(event);
           console.log("🚀 ~ subscription:", subscription);
           await onSubscriptionUpdated(subscription, subscription.plan);
+          recordStripeSubscriptionEvent(event, event.data.object as unknown as AnalyticsSubscription, event.data.previous_attributes);
           return res.status(200).json({ message: "success" });
 
           break;

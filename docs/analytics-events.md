@@ -1,0 +1,34 @@
+# Server invite and subscription analytics
+
+HTPR-7268 cutover (2026-10-16): `invite_sent` replaces `teammate_invited` and `member_joined` replaces `invite_accepted`. The old names stop at deployment; historical events are unchanged. Contract: `ht-marketing/seo/tracking/tracking-plan-2026-10-16.html`, commit `14b6866`.
+
+All five events use `distinctId=String(user_id)` and include `user_id`, `workspace_id` (team ID), `board_id` (project ID or null), `source=server`, `event_id` (event name plus business ID), `occurred_at` (ISO), and `environment` (`VERCEL_ENV`, then `NODE_ENV`, then `unknown`). IDs are strings. The contract also requires `utm_source`, `utm_medium`, `utm_campaign`, `initial_referrer`, `is_seeded`, `account_category`, and `attribution_status`. There is no cheap existing attribution/category/seed classifier at these boundaries: those values are null, with `attribution_status=unknown`, rather than inferred. Names, emails, tokens, credentials and free text are never included.
+
+| Event | Trigger and business ID | Additional properties |
+| --- | --- | --- |
+| `invite_sent` | Accepted email delivery or successful public-link creation; invitation ID. Resends and link reuse do not count again. User is the inviter (the actual creator for public links). | `invitation_id`, `invite_method=email\|link`, `role` (current invite paths create the schema-default `Member` role) |
+| `member_joined` | A committed invited/shared/direct human board membership; membership row ID. User is the joiner; the board owner's own membership is excluded. | `membership_id`, `invitation_id` (null for share/direct adds), `inviter_user_id` (null when unavailable), `role`, `member_count` (accepted human board members plus the owner, excluding agents) |
+| `subscription_started` | Verified `invoice.paid` with positive `amount_paid`, a stored customer mapping, and an active subscription with positive discounted recurring amount; subscription ID. Trials, free invoices and full discounts are excluded. | Stripe fields below, `invoice_id`, `amount_paid`, `paid_at`, `is_first_subscription_for_user`; `seats_before=0` |
+| `subscription_seats_changed` | Verified `customer.subscription.updated` with different known before/after quantities; Stripe event ID. The before quantity comes only from `previous_attributes`, never the current database. | Stripe fields below |
+| `subscription_canceled` | Verified `customer.subscription.deleted` with an actual `ended_at`; subscription ID. Scheduled cancellation alone does not count. | Stripe fields below, `canceled_at=ended_at` (ISO), `cancellation_reason` (Stripe reason category or `unknown`); `seats_after=0` |
+
+Every Stripe event includes `stripe_event_id`, `stripe_customer_id`, `subscription_id`, `seats_before`, `seats_after`, `plan` (first item's price ID), `interval=month|year` (null if unavailable or mixed), `currency`, and `discounted_amount` (integer minor units per billing interval across all items, after item/subscription percent-off or amount-off coupons). Unexpanded discounts or unknown amounts produce null, not an undiscounted guess. Account-level Stripe events have `board_id=null` and resolve `workspace_id` and the billed owner only through `team.stripe_customer_id -> team.googleAccount.userId`, never email. Unmapped customers are skipped with one data-free warning; no marker is consumed, so replay after mapping can succeed. Historical subscription plans without prior analytics make `is_first_subscription_for_user=null`; a previously captured paid start makes it false.
+
+All work is scheduled with `scheduleAnalytics`, outside invite/webhook response latency. Successful captures write a logs-table marker under advisory locks; retries use a deterministic PostHog envelope `uuid`. Business keys dedupe independently of the attributed user; existing activation markers and UUIDs are unchanged. Failures leave the occurrence retryable on replay; this change does not add an automatic retry queue or historical backfill. The existing `isActivationEligible` flag/guest/QA gate still applies.
+
+## Covered join and invite paths
+
+- Email creation: `createInviteLink` / `addMemberController`, including MCP email invitations; successful delivery only.
+- Email resend: `reSendInvite`, reusing the invitation ID and original inviter.
+- Public link GET/controller creation and POST rotation: `generatePublicInvite` / `getInviteFromProjectId`; link reuse is not a new send.
+- Email and public-link acceptance: `members/invite`, after board membership creation.
+- Existing teammate added by email: `sendInviteToAlreadyExistingMember`, with no fabricated invitation ID.
+- Anyone task/board-share join: `members/share -> addExistingUserToProject`, attributing the sharer as inviter.
+- MCP direct user-ID adds: `addExistingUserToProject`, attributing the authenticated caller as inviter. Both new-team-seat and existing-team-seat branches are covered, after transaction commit.
+- Domain auto-join is not an invited membership and is excluded. Initial owner rows and agent memberships are excluded.
+
+## Contract differences and rollout
+
+The contract requires `subscription_started` after a positive **paid invoice**, not merely an active subscription at checkout/update. It adds `invoice_id`, `amount_paid`, `paid_at`, `is_first_subscription_for_user`, and the common attribution fields above. It has no `subscription_seats_changed` row; that event and seat-count/interval/discount properties follow the seat-tracking brief. There are no event-name conflicts. Existing Stripe billing controllers, billing writes and webhook response bodies are unchanged.
+
+The production Stripe endpoint must deliver `invoice.paid` for subscription starts. The owning runner must verify that registration and live delivery; this helper does not call live Stripe/PostHog APIs. The broader tracking plan's automatic unresolved-mapping retry queue and attribution capture are not implemented by this analytics-only cutover; replay is supported without consuming failed/unmapped occurrences.
