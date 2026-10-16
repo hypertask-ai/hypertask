@@ -1,13 +1,14 @@
 import { createHash } from "node:crypto";
 import jwt from "jsonwebtoken";
-import { isOAuthAccessTokenPayload } from "@/lib/mcp/oauthTokenContract";
-import { Prisma, Status } from "@prisma/client";
+import { isOAuthAccessTokenPayload, oauthClientIdFromPayload } from "@/lib/mcp/oauthTokenContract";
+import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { identifyMcpCli } from "@/lib/mcp/clientTelemetry";
 import type { ActivationEvent } from "./activationAnalytics";
 import { postHogClient, scheduleAnalytics } from "./signupAnalytics";
-import { captureAnalyticsOccurrence } from "./analyticsOccurrences";
+import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 
 const connectionHistory = {
   OR: [{ log: { startsWith: "cli_token_exchange" } }, { log: { startsWith: "mcp_connected" } }],
@@ -90,6 +91,7 @@ export function recordAgentConnection(
   transport: "mcp" | "cli" | "api",
   clientName?: string | null,
   connectedAt = new Date(),
+  connectionKey?: string,
 ): void {
   const fingerprint = createHash("sha256").update(token).digest("hex");
   const cacheKey = `${userId}:${fingerprint}`;
@@ -107,26 +109,59 @@ export function recordAgentConnection(
         seenConnections.delete(cacheKey);
         return;
       }
-      const marker = `activation:agent_connected:${fingerprint}`;
+      const durable = await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
+      const agentType = identifyMcpCli(clientName ?? null) ? "hypertask_cli" : activationClient(clientName);
+      let key = connectionKey;
+      if (durable && !key) {
+        const decoded = jwt.decode(token);
+        const oauth = decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded) ? decoded : null;
+        const clientId = oauth ? oauthClientIdFromPayload(oauth) : null;
+        key = oauth && typeof oauth.agentId === "string" && oauth.agentId
+          ? `agent:${oauth.agentId}`
+          : clientId ? `oauth_client:${clientId}` : `user_token:${transport}:${agentType}`;
+      }
+      const connectionId = durable ? createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32) : null;
+      const legacyMarker = `activation:agent_connected:${fingerprint}`;
+      const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : legacyMarker;
+      if (connectionId && await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
       await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
         const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
           { log: { startsWith: "activation:agent_connected:" } },
           { ...connectionHistory, createdAt: { lt: connectedAt } },
         ] } });
-        return { client: activationClient(clientName), transport, is_first: !previous };
-      });
+        return {
+          ...(connectionId ? {
+            ...serverAnalyticsProperties(userId, null, null, `agent_connected:${connectionId}`, connectedAt),
+            connection_id: connectionId, agent_type: agentType,
+          } : {}),
+          client: activationClient(clientName), transport, is_first: !previous,
+        };
+      }, connectionId ? { occurredAt: connectedAt } : undefined);
     } catch {
       seenConnections.delete(cacheKey);
     }
   });
 }
 
-export function recordAuthenticatedConnection(request: Pick<Request, "headers" | "url">, userId: number, token: string, connectedAt?: Date): void {
+async function claimConnectionCountedBeforeRollout(userId: number, legacyMarker: string, marker: string): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
+    const [legacy, durable] = await Promise.all([
+      tx.logs.findFirst({ where: { LoggedById: userId, log: legacyMarker }, select: { id: true } }),
+      tx.logs.findFirst({ where: { LoggedById: userId, log: marker }, select: { id: true } }),
+    ]);
+    if (!legacy) return false;
+    if (!durable) await tx.logs.create({ data: { log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal } });
+    return true;
+  });
+}
+
+export function recordAuthenticatedConnection(request: Pick<Request, "headers" | "url">, userId: number, token: string, connectedAt?: Date, connectionKey?: string): void {
   const decoded = jwt.decode(token);
   if (decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded)) return;
   const userAgent = request.headers.get("user-agent");
   const transport = identifyMcpCli(userAgent) ? "cli" : /^\/(mcp|sse)(\/|$)/.test(new URL(request.url).pathname) ? "mcp" : "api";
-  recordAgentConnection(userId, token, transport, userAgent, connectedAt);
+  recordAgentConnection(userId, token, transport, userAgent, connectedAt, connectionKey);
 }
 
 type TaskState = { id: number; projectId: number; sectionId: number | null; section: string | null; status: Status; updatedAt?: Date | null };

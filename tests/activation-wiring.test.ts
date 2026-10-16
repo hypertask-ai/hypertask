@@ -507,7 +507,7 @@ test("every additional server boundary is wired and lifecycle emails are owned b
   const checks = [
     ["src/lib/onboarding/emails/agentNudge.ts", /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/],
     ["src/app/oauth/token/route.ts", /recordAgentConnection\(authCode.user.id, session.accessToken, "mcp", client.client_name\)/],
-    ["src/lib/mcp/auth/session.ts", /recordAuthenticatedConnection\(request, ctx.user.id, token\)/],
+    ["src/lib/mcp/auth/session.ts", /recordAuthenticatedConnection\(request, ctx\.user\.id, token(?:, [^;\n]+)?\)/],
     ["src/pages/api/invite/generatePublicInvite.ts", /recordInviteSent\(newInvite, "link", session.userId, newInvite.userId\)/],
     ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordInviteSent\(invite, "email", invite.userId, user.id\)/],
   ] as const;

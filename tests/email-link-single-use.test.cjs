@@ -273,11 +273,16 @@ test('server rendering the link pages does not redeem; the first subsequent POST
         return React.createElement('div', null, step)
       } }
       aliases['@/components/analytics/StoreUTM'] = { default: () => null }
+      aliases['next/headers'] = { cookies: async () => ({ get: () => undefined }) }
+      aliases['@/lib/auth/session'] = { SESSION_COOKIE: 'ht_session', verifySession: () => null }
+      aliases['@/lib/flags'] = { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: 'htpr-7272-payment-login-agent-events', featureFlagCandidateUserIds: async () => [], isFeatureEnabled: async () => false }
+      aliases['@/lib/telemetry/activationAnalytics'] = { isActivationEligible: async () => false }
+      aliases['./SignupPageViewed'] = { default: () => null }
       Page = loadTs('src/app/login/page.tsx', aliases).default
     } else {
       Page = loadTs('src/app/verify-email/page.tsx', aliases).default
     }
-    assert.ok(renderToString(React.createElement(Page)).length > 0)
+    assert.ok(renderToString(type === 'login' ? await Page() : React.createElement(Page)).length > 0)
     assert.equal(harness.redis.calls.length, 0)
     assert.equal(harness.calls.updates.length, 0)
     assert.equal(harness.route.GET, undefined, 'the redemption API must remain POST-only')

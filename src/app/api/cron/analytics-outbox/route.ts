@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from "next/server";
+
+import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { retryAnalyticsOutbox } from "@/lib/telemetry/analyticsOutbox";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const maxDuration = 300;
+
+export async function GET(request: NextRequest) {
+  if (
+    !hasValidCronAuthorization(
+      request.headers.get("authorization"),
+      process.env.CRON_SECRET,
+    )
+  ) {
+    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+  }
+
+  return NextResponse.json(await retryAnalyticsOutbox());
+}

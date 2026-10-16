@@ -2780,3 +2780,20 @@ model TaskSession {
 
   @@index([taskId])
 }
+
+model AnalyticsOutbox {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  userId        Int
+  event         String
+  uuid          String
+  properties    Json
+  occurredAt    DateTime
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  deliveredAt   DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([deliveredAt, nextAttemptAt])
+}

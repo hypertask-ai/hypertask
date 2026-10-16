@@ -12,7 +12,7 @@ import authConfig from "@/lib/configs/auth.config";
 import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
-import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG, HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/keys";
 import { isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
@@ -50,14 +50,25 @@ export default async function RootLayout(
   }
 ) {
   const cookieStore = await cookies();
-  const [device, boardDocument, inboxDocument] = await Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  const analyticsSession = verifySession(
+    cookieStore.get(SESSION_COOKIE)?.value,
+  );
+  const firstScreenPromise = Promise.all([isMobileDevice(), getServerBoardDocument(), getServerInboxDocument()]);
+  let identifyEventIds = false;
+  if (analyticsSession) {
+    try {
+      const [enabled] = await Promise.all([
+        isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, analyticsSession.id),
+        firstScreenPromise,
+      ]);
+      if (enabled) identifyEventIds = true;
+    } catch {}
+  }
+  const [device, boardDocument, inboxDocument] = await firstScreenPromise;
   const firstScreen = boardDocument ?? inboxDocument;
   const deferUnusedBoardFonts = boardDocument?.flags.values[HTPR_7016_PHONE_BOARD_COLD_START_FLAG] === true &&
     (boardDocument.display as BoardDisplay).isMobile &&
     ["amoled", "graphite", "porcelain"].includes(boardDocument.display.theme);
-  const analyticsSession = verifySession(
-    cookieStore.get(SESSION_COOKIE)?.value,
-  );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
   const memoryOnlyTracking = await isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession?.id ?? -1);
@@ -144,6 +155,7 @@ export default async function RootLayout(
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
+          identifyEventIds={identifyEventIds}
           trackingPersistence={memoryOnlyTracking ? "memory" : "localStorage+cookie"}
         />
         <DeploySkewGuard />

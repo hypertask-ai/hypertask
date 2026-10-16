@@ -62,8 +62,10 @@ export async function persistTaskUpdates(context: TaskUpdateFieldContext, tasks:
 
             return { success: true, taskId: task.id }
         } catch (error) {
-            console.error(`[MCP Update Task] Error updating task ${task.id}:`, error)
             const codedError = error instanceof PullRequestLinkError || isCallerRefusal(error) ? error : null
+            const callerMistake = codedError !== null && codedError.status < 500
+            const log = callerMistake ? console.warn : console.error
+            log(`[MCP Update Task] ${callerMistake ? 'Refused update of' : 'Error updating'} task ${task.id}:`, error)
             return {
                 success: false,
                 taskId: task.id,
