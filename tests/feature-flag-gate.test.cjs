@@ -1834,6 +1834,16 @@ test("branch order and positive if-returns keep the same exposure", async (t) =>
   writeFile(dir, "src/components/Card.tsx", "export function Card() { if (ready) return <div>Card</div>; return null; }\n");
   const rewritten = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "equivalent rewrites"), dir);
   assert.equal(rewritten.pass, true, rewritten.reason);
+  for (const elseForm of ["else return null;", "else { return null; }"]) {
+    writeFile(dir, "src/components/Card.tsx", `export function Card() { if (ready) return <div>Card</div>; ${elseForm} }\n`);
+    const withElse = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "else form"), dir);
+    assert.equal(withElse.pass, true, withElse.reason);
+  }
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => (wide ? <Banner /> : <Banner />);\n');
+  const split = commit(git, "same banner in both branches");
+  writeFile(dir, "src/components/Page.tsx", 'import { Banner } from "./Banner";\nexport const Page = () => <Banner />;\n');
+  const collapsed = await evaluate("HTPR-7274 [BUGFIX] consent", split, commit(git, "collapse branches"), dir);
+  assert.equal(collapsed.pass, true, collapsed.reason);
   writeFile(dir, "src/components/Card.tsx", "export function Card() { return <div>Card</div>; }\n");
   const dropped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop ready"), dir);
   assert.equal(dropped.pass, false);

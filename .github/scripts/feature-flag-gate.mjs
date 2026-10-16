@@ -596,9 +596,11 @@ function exposureSnapshot(ref, path, mergeBase) {
             if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
             if (typescript.isReturnStatement(branch) && branchIsNullishOrEmpty(branch)) {
               returns.push(disjuncts(child.expression));
-            } else if (typescript.isReturnStatement(branch) && !child.elseStatement && typescript.isBlock(child.parent)) {
-              const next = child.parent.statements[child.parent.statements.indexOf(child) + 1];
-              if (next && typescript.isReturnStatement(next) && branchIsNullishOrEmpty(next)) {
+            } else if (typescript.isReturnStatement(branch)) {
+              const next = child.elseStatement ?? (typescript.isBlock(child.parent)
+                ? child.parent.statements[child.parent.statements.indexOf(child) + 1] : null);
+              if (next && branchIsNullishOrEmpty(next) &&
+                  (typescript.isReturnStatement(next) || typescript.isBlock(next))) {
                 returns.push(hiddenUnless(child.expression));
               }
             }
@@ -640,6 +642,17 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
   }
   for (const { path, base, head } of files) {
     const remaining = [...base.occurrences];
+    for (const [index, first] of base.occurrences.entries()) {
+      for (const second of base.occurrences.slice(index + 1)) {
+        if (first.tag !== second.tag || first.guards.size !== second.guards.size) continue;
+        const onlyFirst = [...first.guards].filter((guard) => !second.guards.has(guard));
+        const onlySecond = [...second.guards].filter((guard) => !first.guards.has(guard));
+        if (onlyFirst.length === 1 && onlySecond.length === 1 &&
+            (onlySecond[0] === `!(${onlyFirst[0]})` || onlyFirst[0] === `!(${onlySecond[0]})`)) {
+          remaining.push({ tag: first.tag, guards: new Set([...first.guards].filter((guard) => second.guards.has(guard))) });
+        }
+      }
+    }
     const added = head.occurrences.filter(({ tag, guards }) => {
       const index = remaining.findIndex((old) => old.tag === tag && old.guards.size === guards.size &&
         [...guards].every((guard) => old.guards.has(guard)));
