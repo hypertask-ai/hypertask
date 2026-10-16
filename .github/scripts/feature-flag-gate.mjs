@@ -503,6 +503,17 @@ function exposureSnapshot(ref, path, mergeBase) {
       guards.add(normalizedCondition(expression));
     }
   }
+  function disjuncts(node, terms = new Set()) {
+    const expression = unwrapExpr(node);
+    if (typescript.isBinaryExpression(expression) &&
+        expression.operatorToken.kind === typescript.SyntaxKind.BarBarToken) {
+      disjuncts(expression.left, terms);
+      disjuncts(expression.right, terms);
+    } else {
+      terms.add(normalizedCondition(expression));
+    }
+    return terms;
+  }
   function visit(node) {
     if (typescript.isIdentifier(node) || typescript.isPropertyAccessExpression(node)) names.add(node.getText());
     if (typescript.isJsxOpeningElement(node) || typescript.isJsxSelfClosingElement(node)) {
@@ -528,14 +539,14 @@ function exposureSnapshot(ref, path, mergeBase) {
     if (typescript.isFunctionLike(node)) {
       const name = functionBindingName(node)?.text;
       if (name) {
-        const returns = new Set();
+        const returns = [];
         function earlyReturns(child) {
           if (child !== node && typescript.isFunctionLike(child)) return;
           if (typescript.isIfStatement(child)) {
             let branch = child.thenStatement;
             if (typescript.isBlock(branch) && branch.statements.length === 1) branch = branch.statements[0];
             if (typescript.isReturnStatement(branch) && branchIsNullishOrEmpty(branch)) {
-              returns.add(normalizedCondition(child.expression));
+              returns.push(disjuncts(child.expression));
             }
           }
           typescript.forEachChild(child, earlyReturns);
@@ -578,7 +589,8 @@ function widenedUiExposure(mergeBase, headSha, uiFiles) {
     }
     for (const [name, fn] of base.functions) {
       const next = head.functions.get(name);
-      if (fn.jsx && next && [...fn.returns].some((condition) => !next.returns.has(condition))) {
+      const keptOrBroadened = (terms) => next.returns.some((nextTerms) => [...terms].every((term) => nextTerms.has(term)));
+      if (fn.jsx && next && fn.returns.some((terms) => !keptOrBroadened(terms))) {
         return `${path}:${name} early return removed`;
       }
     }

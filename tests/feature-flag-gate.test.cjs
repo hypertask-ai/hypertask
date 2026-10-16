@@ -1781,6 +1781,19 @@ test("removing a named JSX function's nullish early return widens exposure", asy
   }
 });
 
+test("broadening a nullish early return narrows exposure and stays exempt", async (t) => {
+  const { dir, git } = makeRepo(t);
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (guest) return null; return <div>Consent</div>; }\n");
+  const base = commit(git, "guarded banner");
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (guest || loading) return null; return <div>Consent</div>; }\n");
+  const narrowed = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "hide while loading"), dir);
+  assert.equal(narrowed.pass, true, narrowed.reason);
+  writeFile(dir, "src/components/Banner.tsx", "export function Banner() { if (loading) return null; return <div>Consent</div>; }\n");
+  const swapped = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "drop guest guard"), dir);
+  assert.equal(swapped.pass, false);
+  assert.match(swapped.reason, /Banner.tsx:Banner early return removed/);
+});
+
 test("existing banner added in another file fails, but moving it between files passes", async (t) => {
   for (const moving of [false, true]) {
     const { dir, git } = makeRepo(t);
