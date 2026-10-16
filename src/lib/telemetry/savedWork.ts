@@ -5,6 +5,7 @@ export type BoardCreationMethod = "manual" | "api" | "agent" | "auto" | "seeded"
 export type SavedWorkActor = { userId: number | null; agentId?: string | null };
 
 export const CREATION_CHANNEL_HEADER = "X-Hypertask-Creation-Channel";
+export const CREATION_AGENT_HEADER = "X-Hypertask-Creation-Agent";
 
 export function creationChannelFromHeader(value: string | null | undefined): CreationChannel {
   return value === "api" || value === "mcp" || value === "agent" ? value : "web";

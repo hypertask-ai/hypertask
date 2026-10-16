@@ -357,7 +357,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
     "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
-    "@/lib/telemetry/savedWork": { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel' },
+    "@/lib/telemetry/savedWork": { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },
     "@/lib/projectPrefix": prefix,

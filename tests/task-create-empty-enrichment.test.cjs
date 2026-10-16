@@ -160,6 +160,7 @@ function loadCreateRoute() {
     },
     "@/lib/telemetry/savedWork": {
       CREATION_CHANNEL_HEADER: "X-Hypertask-Creation-Channel",
+      CREATION_AGENT_HEADER: "X-Hypertask-Creation-Agent",
       creationChannelFromHeader: () => "web",
     },
     "@/lib/agentWebhooks/outbox": {

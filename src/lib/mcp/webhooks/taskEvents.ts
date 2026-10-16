@@ -42,7 +42,8 @@ export async function createTaskWithBoardWebhookOutbox<T>(
   createTask: (
     tx: Prisma.TransactionClient
   ) => Promise<CreatedTaskResult<T>>,
-  channel: CreationChannel
+  channel: CreationChannel,
+  analyticsAgentId: string | null = null
 ): Promise<{ result: T; boardWebhookDeliveryIds: string[] }> {
   const committed = await db.$transaction(async (tx) => {
     const created = await createTask(tx)
@@ -54,7 +55,7 @@ export async function createTaskWithBoardWebhookOutbox<T>(
     )
     return { taskId: created.taskId, result: created.result, boardWebhookDeliveryIds }
   })
-  recordTaskCreated(committed.taskId, actor, channel)
+  recordTaskCreated(committed.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
   return { result: committed.result, boardWebhookDeliveryIds: committed.boardWebhookDeliveryIds }
 }
 

@@ -117,7 +117,7 @@ function makeHarness({ guestBoard = false, ownedBoard = false, memberships = 0, 
     '@/lib/mcp/managementPermissions': { MANAGEMENT_KEY_PERMISSIONS: {} },
     '@/lib/telemetry/signupAnalytics': { recordUserSignedUp: () => {}, signupAttributionFromHeaders: () => ({}) },
     '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
-    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel' },
+    '@/lib/telemetry/savedWork': { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async () => { calls.events.push('user-provisioned'); return user } },
   }
   aliases['@/lib/flags/definitions'] = loadTs('src/lib/flags/definitions.ts', aliases)

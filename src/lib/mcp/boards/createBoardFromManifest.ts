@@ -198,7 +198,8 @@ export async function createBoardFromManifest(
         projectUniqueIdentifier: projectRow.uniqueIdentifier,
         teamId,
         labels: labelIds,
-        creationChannel: creation.channel
+        creationChannel: creation.channel,
+        analyticsAgentId: creation.agentId
       })
 
       const uniqueIndex = createdTask.uniqueIndex

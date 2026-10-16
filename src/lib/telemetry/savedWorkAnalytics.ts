@@ -70,7 +70,7 @@ export async function captureBoardCreated(
 ): Promise<void> {
   const board = await loadBoard(boardId);
   if (!board) return;
-  if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) {
+  if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id))) {
     if (LEGACY_BOARD_SOURCES.has(method)) {
       recordActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
     }
@@ -90,7 +90,7 @@ export async function captureTaskCreated(taskId: number, actor: SavedWorkActor, 
   const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, createdAt: true } });
   if (!task) return;
   const board = await loadBoard(task.projectId);
-  if (!board || !(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) return;
+  if (!board || !(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id))) return;
   await captureAnalyticsOccurrence(
     board.owner.id,
     "task_created",

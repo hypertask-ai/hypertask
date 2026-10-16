@@ -19,11 +19,11 @@ function taskEvents(h: ReturnType<typeof activationHarness>) {
   return h.load("src/lib/mcp/webhooks/taskEvents.ts");
 }
 
-function saveTask(h: ReturnType<typeof activationHarness>, id: number, actor: Record<string, unknown>, channel: string) {
+function saveTask(h: ReturnType<typeof activationHarness>, id: number, actor: Record<string, unknown>, channel: string, analyticsAgentId?: string) {
   h.tasks.set(id, { id, projectId: 15, createdAt: new Date("2026-10-16T12:00:00Z") });
   return taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, actor, async () => ({
     taskId: id, result: { id }, webhookTask: { id, projectId: 15, sectionId: 1, section: "Doing", status: "Normal" },
-  }), channel);
+  }), channel, analyticsAgentId);
 }
 
 const common = {
@@ -120,6 +120,30 @@ test("an agent task on a seeded board is flagged seeded and agent-made", async (
   assert.equal(properties.creation_channel, "mcp");
   assert.equal(properties.creator_type, "agent");
   assert.equal(properties.actor_id, "agent:agent-1");
+});
+
+test("a manifest task made for an agent is sent as agent-made without changing the webhook actor", async () => {
+  const h = harness();
+  const webhookActors: unknown[] = [];
+  h.mocks["@/lib/mcp/webhooks/outbox"] = { persistBoardWebhookEvent: async (_tx: unknown, _id: unknown, event: any) => { webhookActors.push(event.data.actor); return []; } };
+  const { createTaskWithBoardWebhookOutbox } = h.load("src/lib/mcp/webhooks/taskEvents.ts");
+  h.tasks.set(45, { id: 45, projectId: 15, createdAt: new Date("2026-10-16T12:00:00Z") });
+  await createTaskWithBoardWebhookOutbox(h.prisma, { userId: 123, agentId: null }, async () => ({
+    taskId: 45, result: { id: 45 }, webhookTask: { id: 45, projectId: 15, sectionId: 1, section: "Doing", status: "Normal" },
+  }), "mcp", "agent-9");
+  await h.drain();
+  assert.deepEqual(webhookActors, [{ userId: 123, agentId: null }]);
+  assert.equal(h.captures[0].properties.creator_type, "agent");
+  assert.equal(h.captures[0].properties.actor_id, "agent:agent-9");
+});
+
+test("a collaborator outside the rollout sends nothing on an enabled owner's board", async () => {
+  const h = harness();
+  h.mocks["@/lib/flags"] = { ...h.mocks["@/lib/flags"], isFeatureEnabled: async (_key: string, userId: number) => userId === 123 };
+  await saveTask(h, 46, { userId: 777, agentId: null }, "web");
+  await saveTask(h, 47, { userId: 123, agentId: null }, "web");
+  await h.drain();
+  assert.deepEqual(h.captures.map((capture) => capture.properties.task_id), ["47"]);
 });
 
 test("replaying the same task sends no duplicate", async () => {
