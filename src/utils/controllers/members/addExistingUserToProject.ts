@@ -1,6 +1,7 @@
 import { LogType, Status } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
+import { recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import { mutateAndSyncSeatBilling } from "@/lib/syncSeatBilling";
 import { ensureTeamMembership } from "@/lib/teamMembership";
@@ -35,6 +36,7 @@ type JoinMutationResult = {
 export async function addExistingUserToProject(
   projectId: number,
   userId: number,
+  inviterUserId: number | null = null,
 ): Promise<AddExistingUserToProjectResult> {
   const targetUser = await prisma.user.findUnique({
     where: { id: userId },
@@ -198,6 +200,7 @@ export async function addExistingUserToProject(
             };
           });
 
+          if (joined.outcome === "added") recordMemberJoined(joined.memberId, userId, projectId, null, inviterUserId);
           return {
             value: {
               memberId: joined.memberId,
@@ -282,6 +285,7 @@ export async function addExistingUserToProject(
       ownsTheTeam,
       teamId,
     });
+    if (join.outcome === "added" && join.memberId !== null) recordMemberJoined(join.memberId, userId, projectId, null, inviterUserId);
   });
 
   if (join.memberId == null) {

@@ -271,7 +271,9 @@ test("public invitation link creation records method link and reuse does not fir
   await getInviteFromProjectId(15, 123);
   await getInviteFromProjectId(15, 123);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "teammate_invited", properties: { method: "link" } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "invite_sent");
+  assert.equal(h.captures[0].properties.invite_method, "link");
   save(h);
 });
 
@@ -283,7 +285,9 @@ test("email invite controller only emits after successful sending and skips exis
   assert.equal((await addMemberController(123, 15, ["invited@example.test"])).status, 200);
   await addMemberController(123, 15, ["invited@example.test"]);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "teammate_invited", properties: { method: "email" } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].event, "invite_sent");
+  assert.equal(h.captures[0].properties.invite_method, "email");
   save(h);
   const failed = activationHarness();
   failed.projects.get(15).members = [];
@@ -294,7 +298,7 @@ test("email invite controller only emits after successful sending and skips exis
   assert.equal(failed.captures.length, 0);
 });
 
-test("invite acceptance emits for the inviter, includes invitee id and ignores repeated acceptance", async () => {
+test("invite acceptance emits for the joiner, includes membership id and ignores repeated acceptance", async () => {
   const h = activationHarness();
   h.users.set(234, { id: 234, uid: "real_invitee", email: "invitee@example.test" });
   h.projects.get(15).ownerId = 789;
@@ -303,7 +307,10 @@ test("invite acceptance emits for the inviter, includes invitee id and ignores r
   assert.equal((await accept(234, 15, "invitation")).status, 200);
   await accept(234, 15, "invitation");
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "invite_accepted", properties: { inviteeId: 234 } }]);
+  assert.equal(h.captures.length, 1);
+  assert.equal(h.captures[0].distinctId, "234");
+  assert.equal(h.captures[0].event, "member_joined");
+  assert.equal(h.captures[0].properties.membership_id, String(h.members[0].id));
   save(h);
 });
 
@@ -501,8 +508,8 @@ test("every additional server boundary is wired and lifecycle emails are owned b
     ["src/lib/onboarding/emails/agentNudge.ts", /await sendEmail\([\s\S]*?sent = true;\s*void trackActivation\(userId, "lifecycle_email_sent", \{ type: "agent_nudge" \}\)/],
     ["src/app/oauth/token/route.ts", /recordAgentConnection\(authCode.user.id, session.accessToken, "mcp", client.client_name\)/],
     ["src/lib/mcp/auth/session.ts", /recordAuthenticatedConnection\(request, ctx.user.id, token\)/],
-    ["src/pages/api/invite/generatePublicInvite.ts", /recordActivationOccurrence\(newInvite.userId, "teammate_invited", newInvite.id, \{ method: "link" \}\)/],
-    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordActivationOccurrence\(user.id, "teammate_invited", invite.id, \{ method: "email" \}\)/],
+    ["src/pages/api/invite/generatePublicInvite.ts", /recordInviteSent\(newInvite, "link", session.userId\)/],
+    ["src/pages/api/invite/reSendInvite.ts", /if \(sent\) recordInviteSent\(invite, "email"\)/],
   ] as const;
   for (const [file, pattern] of checks) assert.match(fs.readFileSync(file, "utf8"), pattern);
   assert.doesNotMatch(fs.readFileSync("src/lib/telemetry/activationOccurrences.ts", "utf8"), /"lifecycle_email_sent"/);
@@ -524,7 +531,7 @@ test("ineligible users never start activation transactions or write markers in a
         h.projects.get(15).ownerId = userId;
         const api = h.load("src/lib/telemetry/activationOccurrences.ts");
         const before = h.tasks.get(9);
-        if (job === "occurrence") api.recordActivationOccurrence(userId, "invite_accepted", "invite", { inviteeId: 234 });
+        if (job === "occurrence") api.recordActivationOccurrence(userId, "board_created", "invite", { inviteeId: 234 });
         if (job === "connection") api.recordAgentConnection(userId, "mock-ineligible-connection", "mcp");
         if (job === "authenticated") api.recordAuthenticatedConnection(new Request("http://localhost/mcp"), userId, "mock-ineligible-direct");
         if (job === "completion") api.recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
@@ -551,7 +558,7 @@ test("when the flag turns on, skipped credentials and occurrences remain eligibl
   const record = () => {
     api.recordAgentConnection(123, "mock-later-enabled", "mcp", "Cursor");
     api.recordAgentTaskCompletion(before, after, "managed");
-    api.recordActivationOccurrence(123, "teammate_invited", "invite", { method: "link" });
+    api.recordActivationOccurrence(123, "board_created", "invite", { method: "link" });
   };
   h.setEnabled(false);
   record();
@@ -582,7 +589,7 @@ test("scheduled occurrence callers return before a pending eligibility check", a
     h.mocks["@/lib/flags"].isFeatureEnabled = () => new Promise((resolve) => { release = resolve; checkStarted(); });
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
     const before = h.tasks.get(9);
-    const result = job === "occurrence" ? api.recordActivationOccurrence(123, "teammate_invited", "invite", { method: "link" })
+    const result = job === "occurrence" ? api.recordActivationOccurrence(123, "board_created", "invite", { method: "link" })
       : job === "connection" ? api.recordAgentConnection(123, "mock-pending-eligibility", "mcp")
       : api.recordAgentTaskCompletion(before, { ...before, sectionId: 2, section: "Done" }, "managed");
     assert.equal(result, undefined);

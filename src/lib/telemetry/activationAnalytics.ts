@@ -8,8 +8,6 @@ export type ActivationEvent =
   | "board_created"
   | "agent_connected"
   | "agent_task_completed"
-  | "teammate_invited"
-  | "invite_accepted"
   | "lifecycle_email_sent";
 
 export async function isActivationEligible(userId: number): Promise<boolean> {
