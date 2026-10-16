@@ -84,7 +84,8 @@ in place. Reinstall to update the installed copy. No crontab is used.
      `.git`, `node_modules` and `.next` have not changed for 3 days and whose
      `node_modules` had no write for 3 days, oldest first. Only that folder
      goes: the worktree, its branch and any uncommitted or untracked work stay,
-     so dirty, detached and unmerged worktrees qualify too. Git must report
+     so dirty, detached and unmerged worktrees qualify too (a detached
+     worktree has no branch a PR could come from). Git must report
      `node_modules` as ignored. Main checkouts, locked or prunable worktrees, a
      worktree with an open PR and any worktree a process, command line or
      container uses are never touched. `npm ci` brings it back. Inside

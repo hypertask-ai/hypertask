@@ -1067,6 +1067,15 @@ class CacheTests(Fixture):
         self.assertFalse(modules.exists())
         self.assertTrue((tree / 'file').exists())
 
+    def test_cache_idle_detached_worktree_loses_only_node_modules(self):
+        repo, tree, modules = self.deps_tree()
+        self.git(tree, 'checkout', '-q', '--detach')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+        self.assertIn('refs/heads/feature', self.git(repo, 'for-each-ref', '--format=%(refname)'))
+
     def test_cache_recent_edit_in_worktree_keeps_node_modules(self):
         _, tree, modules = self.deps_tree()
         (tree / 'file').write_text('edited today\n')

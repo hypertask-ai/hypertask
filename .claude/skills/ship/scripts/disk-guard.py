@@ -921,8 +921,13 @@ class Guard:
                     continue
         return found
 
-    def deps_kept(self, tree):
-        """Reason to keep a worktree's node_modules: git must ignore it and the worktree must be idle."""
+    def deps_kept(self, tree, repo, row):
+        """Reason to keep a worktree's node_modules: no open PR, git must ignore it and the worktree must be idle.
+        A detached worktree has no branch a PR could come from, so only idleness and use decide."""
+        if row.get('branch'):
+            reason = self.open_pr(repo, row)
+            if reason:
+                return reason
         try:
             ignored = subprocess.run(['git', 'check-ignore', '-q', 'node_modules'], cwd=tree,
                                      capture_output=True, timeout=60)
@@ -992,7 +997,7 @@ class Guard:
         for _, _, modules, tree, repo, row in sorted(self.worktree_deps(repos), key=lambda d: d[:2]):
             # Only the dependency folder goes; the worktree and any uncommitted work in it stay.
             groups.append(('worktree-deps', modules, 3 * DAY, 'dependencies of a worktree idle for 3 days', tree,
-                           lambda tree=tree, repo=repo, row=row: self.open_pr(repo, row) or self.deps_kept(tree)))
+                           lambda tree=tree, repo=repo, row=row: self.deps_kept(tree, repo, row)))
         cacache = self.home / '.npm/_cacache'
         if cacache.is_dir() and not cacache.is_symlink():
             # No npm running at all and one quiet hour since the last cache write.
