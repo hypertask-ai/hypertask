@@ -1,6 +1,5 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
-import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
@@ -63,8 +62,6 @@ export function useSearch(
   >(_initialTabIndex);
   const [tabs, setTabs] = useState<string[]>([]);
   const [results, setResults] = useState<Record<string, any[]> | null>(null);
-  const [filterModifiers, setFilterModifiers] = useState<any>(null);
-  const [suggestedValue, setSuggestedValue] = useState<string>("");
   const [includeArchived, setIncludeArchived] =
     useState<boolean>(_includeArchived);
 
@@ -85,9 +82,7 @@ export function useSearch(
   const router = useRouter();
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
-  const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
-  const searchChipsEnabled = searchOperatorsEnabled;
-  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
+  const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
   const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;
   const searchLabelScopeFlagEnabled = useFlag(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG);
@@ -96,48 +91,12 @@ export function useSearch(
   const searchEscLeavesEnabled = useFlag(HTPR_6994_SEARCH_ESC_LEAVES_FLAG);
   const isSearchDraft = searchLayoutEnabled && submittedQuery !== inputValue.trim();
 
-  function handleProjectsFromCache() {
-    setProjects(allProjects);
-    const boardNames = allProjects.map((project: any) =>
-      project.title.toLowerCase()
-    );
-    setFilterModifiers({
-      "is:": ["archived", "open"],
-      "board:": boardNames,
-    });
-  }
-
-  function handleInputAutoComplete(currentText: string): string {
-    const regex = /(.*)(is:|priority:|board:)(.*)$/;
-    const match = currentText.match(regex);
-
-    if (!match) return "";
-
-    const textBeforePrefix = match[1];
-    const potentialPrefix = match[2].toLowerCase();
-    const partialValue = match[3].toLowerCase();
-    if (!filterModifiers[potentialPrefix]) return "";
-
-    const validValues = filterModifiers[potentialPrefix];
-    const bestMatchValue = validValues.find((value: string) => {
-      return value.toLowerCase().startsWith(partialValue);
-    });
-
-    if (bestMatchValue && bestMatchValue.toLowerCase() !== partialValue) {
-      const completedTerm = potentialPrefix + bestMatchValue;
-      return textBeforePrefix + completedTerm;
-    }
-
-    return "";
-  }
-
   function currentSearchKey(searchTerm: string, showArchived: boolean, searchProjects = projects) {
     return JSON.stringify([
       searchTerm.trim(),
       showArchived,
       _fromProject,
       searchProjects.map((project) => project.id),
-      searchOperatorsEnabled,
     ]);
   }
 
@@ -169,19 +128,11 @@ export function useSearch(
     if (_searchTerm && _searchTerm.length >= 2) {
       const requestId = beginSearch(_searchTerm, showArchived);
       if (searchLayoutEnabled) tasksInputRef.current?.blur();
-      const { searchProjectIds, processedSearchTerm, archive } =
-        searchOperatorsEnabled
-          ? { searchProjectIds: [], processedSearchTerm: _searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
-          : searchBoards(_searchTerm, showArchived);
-
       try {
         const response = await axios.post(searchDocumentsRoute, {
-          projectIds:
-            searchProjectIds.length > 0
-              ? searchProjectIds
-              : projects.map((item) => item.id),
-          searchQuery: processedSearchTerm,
-          archive,
+          projectIds: projects.map((item) => item.id),
+          searchQuery: _searchTerm,
+          archive: defaultSearchArchiveStatus(showArchived),
           contextProjectId: _fromProject,
         });
 
@@ -204,12 +155,6 @@ export function useSearch(
         handleStatesOnResponse(searchConfig.responseMessages.error);
       }
     }
-  }
-
-  function handleChange(e: any) {
-    setInputValue(e.target.value);
-    setSuggestedValue(handleInputAutoComplete(e.target.value));
-    if (searchChipsEnabled) setSuggestedValue("");
   }
 
   async function handleLinkClick(task: ITypedTask) {
@@ -291,53 +236,6 @@ export function useSearch(
     return buildSearchUrl(searchTerm, tabIndex, showArchived, _fromProject);
   }
 
-  function searchBoards(input: string, showArchived = includeArchived, searchProjects = projects): {
-    searchProjectIds: number[];
-    archive: null | "Normal" | "Archive";
-    processedSearchTerm: string;
-  } {
-    const searchProjectIds: number[] = [];
-    let lowerInput = input.toLowerCase();
-    let archive: null | "Normal" | "Archive" =
-      defaultSearchArchiveStatus(showArchived);
-    if (!lowerInput.includes("board:") && !lowerInput.includes("is:")) {
-      return {
-        searchProjectIds: [],
-        archive,
-        processedSearchTerm: input,
-      };
-    }
-
-    if (lowerInput.includes("board:")) {
-      for (const project of searchProjects) {
-        if (lowerInput.includes(("board:" + project.title).toLowerCase()))
-          searchProjectIds.push(project.id);
-      }
-
-      for (const project of searchProjects) {
-        if (lowerInput.includes(("board:" + project.title).toLowerCase()))
-          lowerInput = lowerInput.replaceAll(
-            ("board:" + project.title).toLowerCase(),
-            ""
-          );
-      }
-    }
-
-    if (lowerInput.includes("is:archived")) {
-      archive = "Archive";
-      lowerInput = lowerInput.replaceAll("is:archived".toLowerCase(), "");
-    } else if (lowerInput.includes("is:open")) {
-      archive = "Normal";
-      lowerInput = lowerInput.replaceAll("is:open".toLowerCase(), "");
-    }
-
-    return {
-      searchProjectIds: searchProjectIds,
-      archive,
-      processedSearchTerm: lowerInput.trim(),
-    };
-  }
-
   function updateSearchHistory(searchTerm: string) {
     if (searchTerm.length < 2) {
       searchRequestGate.invalidate();
@@ -382,18 +280,10 @@ export function useSearch(
           showArchived
         )
       );
-      const { searchProjectIds, processedSearchTerm, archive } =
-        searchOperatorsEnabled
-          ? { searchProjectIds: [], processedSearchTerm: searchTerm, archive: defaultSearchArchiveStatus(showArchived) }
-          : searchBoards(searchTerm, showArchived, searchProjects);
-
       const response = await axios.post(searchDocumentsRoute, {
-        projectIds:
-          searchProjectIds.length > 0
-            ? searchProjectIds
-            : searchProjects.map((item) => item.id),
-        searchQuery: processedSearchTerm,
-        archive,
+        projectIds: searchProjects.map((item) => item.id),
+        searchQuery: searchTerm,
+        archive: defaultSearchArchiveStatus(showArchived),
         contextProjectId: _fromProject,
       });
 
@@ -471,12 +361,12 @@ export function useSearch(
       document.activeElement === document.body &&
       !event.ctrlKey && !event.metaKey && !event.altKey &&
       ["ArrowDown", "ArrowUp"].includes(event.key);
-    if (searchChipsEnabled && ((event.defaultPrevented && !resultArrow) ||
-      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
+    if ((event.defaultPrevented && !resultArrow) ||
+      (event.key === "Escape" && !searchEscLeavesEnabled && tasksInputRef.current?.getAttribute("aria-expanded") === "true")) return;
     const cycleSearchTabs = searchLayoutEnabled && !isSearchDraft && event.key === "Tab" &&
       !event.isComposing && !event.ctrlKey && !event.metaKey && !event.altKey &&
       tasksInputRef.current?.getAttribute("aria-expanded") !== "true";
-    if (searchChipsEnabled && document.activeElement === tasksInputRef.current &&
+    if (document.activeElement === tasksInputRef.current &&
       (["Enter", "Backspace"].includes(event.key) || (event.key === "Tab" && !cycleSearchTabs) ||
         (["ArrowDown", "ArrowUp"].includes(event.key) && tasksInputRef.current?.getAttribute("aria-expanded") === "true"))) return;
     let cmdControl = (isApple && event.metaKey) || (!isApple && event.ctrlKey);
@@ -649,16 +539,6 @@ export function useSearch(
     }
 
     if (
-      event.keyCode === KeyCodes.TAB &&
-      document.activeElement === tasksInputRef.current &&
-      suggestedValue
-    ) {
-      event.preventDefault();
-      setInputValue(suggestedValue);
-      setSuggestedValue("");
-    }
-
-    if (
       event.keyCode === KeyCodes.G &&
       !isInputFocused &&
       !event.ctrlKey &&
@@ -810,9 +690,7 @@ export function useSearch(
     inputValue,
     searchCache,
     selectedHistory,
-    suggestedValue,
     includeArchived,
-    searchChipsEnabled,
     searchAutocompleteEnabled,
     searchLayoutEnabled,
     searchEscBackEnabled,
@@ -823,7 +701,7 @@ export function useSearch(
     results,
   ]);
 
-  useEffect(() => handleProjectsFromCache(), [allProjects]);
+  useEffect(() => setProjects(allProjects), [allProjects]);
 
   useEffect(() => {
     setExplicitTabIndex(_initialTabIndex);
@@ -844,7 +722,7 @@ export function useSearch(
       lastSearchKey.current = currentSearchKey("", _includeArchived);
       handleStatesOnResponse(searchConfig.responseMessages.default);
     }
-  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchOperatorsEnabled, searchEscBackEnabled]);
+  }, [_searchTerm.length >= 2 ? projects : null, _includeArchived, _searchTerm, _fromProject, searchEscBackEnabled]);
 
   useEffect(() => {
     if (!searchAutocompleteEnabled || !projects.length) return;
@@ -868,7 +746,7 @@ export function useSearch(
       }
     }, 300);
     return () => clearTimeout(timer);
-  }, [inputValue, includeArchived, projects, _fromProject, searchOperatorsEnabled, searchAutocompleteEnabled, searchLayoutEnabled]);
+  }, [inputValue, includeArchived, projects, _fromProject, searchAutocompleteEnabled, searchLayoutEnabled]);
 
   return {
     availableSearchBoards: searchLabelScopeFlagEnabled && searchLayoutEnabled ? projects : [],
@@ -876,7 +754,6 @@ export function useSearch(
     selectedIndex,
     tasksInputRef,
     inputValue,
-    handleChange,
     responseMessage: isSearchDraft ? searchConfig.responseMessages.default : responseMessage,
     typedTasks: isSearchDraft ? [] : typedTasks,
     isSearchDraft,
@@ -890,13 +767,11 @@ export function useSearch(
     updateSearchHistory,
     showCommands,
     setInputValue,
-    searchChipsEnabled,
     liSelectedRef,
     tabs,
     activeSplit,
     updateSplitAndTasks,
     results: isSearchDraft ? null : results,
-    suggestedValue,
     includeArchived,
     setIncludeArchivedResults,
   };

@@ -7,7 +7,6 @@ import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents'
 import prisma from '@/lib/prisma'
 import { turbopufferSearchTaskIds } from '@/utils/controllers/search/document'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6369_SEARCH_OPERATORS_FLAG } from '@/lib/flags'
 import { HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from '@/lib/flags'
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount } from '@/lib/search/operators'
 import { resultKinds } from '@/lib/search/filters'
@@ -138,7 +137,6 @@ export async function GET(request: NextRequest) {
     }
     const sortOrder = listQuery?.sortOrder ?? 'asc'
 
-    const operatorsEnabled = await isFeatureEnabled(HTPR_6369_SEARCH_OPERATORS_FLAG, user.id)
     if (!query || query.length > 200) {
       return NextResponse.json(
         {
@@ -149,7 +147,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    if (operatorsEnabled && searchOperatorClauseCount(query) > MAX_SEARCH_OPERATOR_CLAUSES) {
+    if (searchOperatorClauseCount(query) > MAX_SEARCH_OPERATOR_CLAUSES) {
       return NextResponse.json({ success: false, error: 'Search query exceeds the operator limit' }, { status: 400 })
     }
 
@@ -281,66 +279,64 @@ export async function GET(request: NextRequest) {
     let operatorPartial = false
     let commentById: Awaited<ReturnType<typeof rankedSearchWhere>>['commentById'] | undefined
 
-    if (operatorsEnabled) {
-      const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
-      const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, user.id)
-      const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, user.id)
-      const personProjectIds = (fuzzyPersonEnabled || commenterEnabled) && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
-      const parsedQuery = await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled, logicEnabled)
-      const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
-      if (parsed) {
-        const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
-          { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true, commenterEnabled,
-          sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
-        if (commenterEnabled || (logicEnabled && resultKinds(parsed).commentOnly)) commentById = filtered.commentById
-        const rankedResults = Boolean(parsed.text || filtered.commentMode)
-        operatorPartial = parsed.text ? filtered.partial : false
-        where.AND = filtered.where.AND
-        if (parsed.filters.is) where.status = filtered.where.status
-        if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
-        const total = await prisma.task.count({ where })
-        const rankedIds = filtered.rankedIds
-        const rankedCursor = cursorId ? rankedIds.indexOf(cursorId) : -1
-        if (rankedResults && cursorId && !sortField && (filtered.paged ? !filtered.cursorValid : rankedCursor < 0)) {
-          return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
-        }
-        const primaryIds = filtered.paged ? rankedIds : cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
-        const operatorTasks = await prisma.task.findMany({
-          where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
-          select: {
-            id: true,
-            ticketNumber: true,
-            uniqueIndex: true,
-            title: true,
-            description: true,
-            section: true,
-            projectId: true,
-            project: {
-              select: {
-                id: true,
-                title: true
-              }
-            },
-            dueDate: true,
-            createdAt: true,
-            updatedAt: true,
-            agent: {
-              select: mcpVisibleAgentSelect(user.id),
-            },
-          },
-          ...(!rankedResults || sortField ? { orderBy: sortField
-            ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
-            : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
-          ...(filtered.paged || rankedResults && !sortField ? {} : {
-            take: limit,
-            skip: cursorId ? 1 : 0,
-            ...(cursorId ? { cursor: { id: cursorId } } : {}),
-          }),
-        })
-        const orderedTasks = sortField ? operatorTasks : operatorTasks
-          .toSorted((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id)).slice(0, limit)
-        operatorResult = { orderedTasks, total }
+    const fuzzyPersonEnabled = await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, user.id)
+    const commenterEnabled = await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, user.id)
+    const logicEnabled = await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, user.id)
+    const personProjectIds = (fuzzyPersonEnabled || commenterEnabled) && targetProjectId != null ? [targetProjectId] : accessibleProjectIds
+    const parsedQuery = await parseSearchWithChipNames(query, accessibleProjectIds, fuzzyPersonEnabled, personProjectIds, commenterEnabled, logicEnabled)
+    const parsed = Object.keys(parsedQuery.filters).length ? parsedQuery : null
+    if (parsed) {
+      const filtered = await rankedSearchWhere(parsed, accessibleProjectIds, status, limit,
+        { ...where, ...(parsed.filters.is ? { status: undefined } : {}) }, cursorId, true, commenterEnabled,
+        sortField ? [{ [sortField]: sortOrder }, { id: 'asc' }] : undefined)
+      if (commenterEnabled || (logicEnabled && resultKinds(parsed).commentOnly)) commentById = filtered.commentById
+      const rankedResults = Boolean(parsed.text || filtered.commentMode)
+      operatorPartial = parsed.text ? filtered.partial : false
+      where.AND = filtered.where.AND
+      if (parsed.filters.is) where.status = filtered.where.status
+      if (rankedResults && !filtered.paged) where.id = { in: filtered.rankedIds }
+      const total = await prisma.task.count({ where })
+      const rankedIds = filtered.rankedIds
+      const rankedCursor = cursorId ? rankedIds.indexOf(cursorId) : -1
+      if (rankedResults && cursorId && !sortField && (filtered.paged ? !filtered.cursorValid : rankedCursor < 0)) {
+        return NextResponse.json({ success: false, error: 'Validation error', message: 'cursor must be a previous nextCursor value' }, { status: 400 })
       }
+      const primaryIds = filtered.paged ? rankedIds : cursorId && rankedCursor < 0 ? [] : rankedIds.slice(rankedCursor + 1, rankedCursor + 1 + limit)
+      const operatorTasks = await prisma.task.findMany({
+        where: filtered.paged || rankedResults && !sortField ? { ...where, id: { in: primaryIds } } : where,
+        select: {
+          id: true,
+          ticketNumber: true,
+          uniqueIndex: true,
+          title: true,
+          description: true,
+          section: true,
+          projectId: true,
+          project: {
+            select: {
+              id: true,
+              title: true
+            }
+          },
+          dueDate: true,
+          createdAt: true,
+          updatedAt: true,
+          agent: {
+            select: mcpVisibleAgentSelect(user.id),
+          },
+        },
+        ...(!rankedResults || sortField ? { orderBy: sortField
+          ? [{ [sortField]: sortOrder }, { id: 'asc' as const }]
+          : [{ updatedAt: 'desc' as const }, { id: 'asc' as const }] } : {}),
+        ...(filtered.paged || rankedResults && !sortField ? {} : {
+          take: limit,
+          skip: cursorId ? 1 : 0,
+          ...(cursorId ? { cursor: { id: cursorId } } : {}),
+        }),
+      })
+      const orderedTasks = sortField ? operatorTasks : operatorTasks
+        .toSorted((a, b) => rankedIds.indexOf(a.id) - rankedIds.indexOf(b.id)).slice(0, limit)
+      operatorResult = { orderedTasks, total }
     }
     async function legacySearch(query: string) {
     const turbopufferIds = await turbopufferSearchTaskIds({

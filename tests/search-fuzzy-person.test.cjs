@@ -73,7 +73,6 @@ const mocks = new Map([
   ['src/lib/mcp/auth.ts', { validateMcpAuth: async () => ({ user: { id: 42 }, agentId: null }), checkMcpRateLimit: async () => null }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: flag,
-    HTPR_6369_SEARCH_OPERATORS_FLAG: 'operators',
     HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
@@ -84,7 +83,7 @@ const mocks = new Map([
       assert.equal(userId, 42)
       return key === flag ? state.fuzzy
         : ['htpr-6882-search-match-highlights', 'htpr-6865-search-layout', 'htpr-6688-search-autocomplete'].includes(key) ? state.match
-        : key === 'operators'
+        : false
     },
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: () => ({}), projectContentAccessWhere: () => ({}) }],

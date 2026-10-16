@@ -48,13 +48,12 @@ const mocks = new Map([
   ['src/lib/prisma.ts', { default: db }],
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
-    HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : state.flag,
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : true,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -89,7 +88,7 @@ function row(id, projectId = 7, label = 'bug') {
     project: { title: projectId === 7 ? 'Visible board' : 'Private' }, updatedAt: new Date('2026-09-01') }
 }
 async function search(searchQuery, overrides = {}) {
-  state = { flag: true, session: { userId: 6 }, boards: [7], rows: [row(123), row(8, 8)],
+  state = { session: { userId: 6 }, boards: [7], rows: [row(123), row(8, 8)],
     taskHits: [], commentHits: [], windows: [], commentWindows: [], legacyCalls: 0, labelQueries: 0, ...overrides }
   const res = response()
   await handler({ method: 'POST', headers: {}, body: {
@@ -140,9 +139,6 @@ test('has:comment excludes activity-only tickets, including automatic entries at
     const predicate = query.startsWith('-') ? state.where.AND[0].NOT : state.where.AND[0].OR[0]
     assert.deepEqual(predicate, { comments: { some: { activity: { equals: Prisma.DbNull } } } })
   }
-  const off = await search('has:comment search', { rows, flag: false })
-  assert.equal(off.state.legacyCalls, 1)
-  assert.equal(off.state.where, undefined)
 })
 
 test('from and assignee match the email shown for a user without a display name', async () => {
@@ -199,15 +195,14 @@ test('rare filters stop after bounded windows and expose a partial result', asyn
   assert.deepEqual(state.windows, [100, 200, 400, 800])
 })
 
-test('repeated prefixes are looked up once; oversized flagged queries are rejected', async () => {
+test('repeated prefixes are looked up once; oversized queries are rejected', async () => {
   const repeated = await search('label:BUG label:bug label:BUG')
   assert.equal(repeated.state.labelQueries, 1)
   const clauses = await search('label:bug '.repeat(13))
   assert.equal(clauses.res.statusCode, 400)
   assert.equal(clauses.state.labelQueries, 0)
   assert.equal((await search('a'.repeat(201))).res.statusCode, 400)
-  const flagOff = await search('a'.repeat(201), { flag: false })
-  assert.equal(flagOff.state.legacyCalls, 1)
+  assert.equal((await search('')).res.statusCode, 400)
 })
 
 test('unquoted board names with # resolve to the accessible board', async () => {
@@ -234,23 +229,15 @@ test('in:8 never widens the accessible-board scope even with a private row in th
   assert.equal((await search('in:8', { requested: [7, 8] })).res.statusCode, 403)
 })
 
-test('flag off preserves legacy behavior and rejects operator-only query', async () => {
-  const { res, state } = await search('label:bug', { flag: false })
-  assert.equal(res.statusCode, 200)
-  assert.equal(state.legacyCalls, 1)
-  assert.equal((await search('', { flag: false })).res.statusCode, 400)
-})
-
-test('web posts the untouched input in both search flows only when operators are enabled', () => {
+test('web posts the untouched input and full board scope in both search flows', () => {
   const source = readFileSync(path.join(root, 'src/hooks/Search/useSearch.ts'), 'utf8')
-  assert.match(source, /useFlag\(HTPR_6369_SEARCH_OPERATORS_FLAG\)/)
-  for (const term of ['_searchTerm', 'searchTerm']) {
-    assert.match(source, new RegExp(`searchOperatorsEnabled\\s*\\? \\{ searchProjectIds: \\[\\], processedSearchTerm: ${term}, archive: defaultSearchArchiveStatus\\(showArchived\\) \\}\\s*: searchBoards\\(${term}, showArchived${term === 'searchTerm' ? ', searchProjects' : ''}\\)`))
+  for (const [term, projects] of [['_searchTerm', 'projects'], ['searchTerm', 'searchProjects']]) {
+    assert.match(source, new RegExp(`projectIds: ${projects}\\.map\\(\\(item\\) => item\\.id\\),\\s*searchQuery: ${term},\\s*archive: defaultSearchArchiveStatus\\(showArchived\\)`))
   }
-  assert.equal(source.match(/searchQuery: processedSearchTerm/g)?.length, 2)
+  assert.doesNotMatch(source, /searchBoards/)
 })
 
-test('local fixture times filtered query against flag-off search path', async () => {
+test('local fixture times filtered query against plain-text search path', async () => {
   const taskHits = [...Array.from({ length: 240 }, (_, i) => ({ id: String(i + 1000), descriptionText: 'zebra-quark' })),
     { id: '123', descriptionText: 'zebra-quark' }]
   const samples = { filtered: [], unfiltered: [] }
@@ -258,7 +245,7 @@ test('local fixture times filtered query against flag-off search path', async ()
     for (const kind of ['filtered', 'unfiltered']) {
       const start = performance.now()
       const { res } = await search(kind === 'filtered' ? 'zebra-quark label:bug' : 'zebra-quark',
-        kind === 'filtered' ? { taskHits } : { flag: false })
+        kind === 'filtered' ? { taskHits } : {})
       assert.equal(res.statusCode, 200)
       samples[kind].push(performance.now() - start)
     }

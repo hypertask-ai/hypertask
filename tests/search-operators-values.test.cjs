@@ -27,7 +27,7 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => state.flag }],
+  ['src/lib/flags.ts', { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => false }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
@@ -50,7 +50,6 @@ const mocks = new Map([
     } },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6369-search-operators' && state.flag
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
@@ -59,7 +58,7 @@ const jiti = require('jiti')(__filename, { alias: { '@': path.join(root, 'src') 
 const handler = jiti(path.join(root, 'src/pages/api/search/values.ts')).default
 const person = (id, name) => ({ id, displayName: name, email: `${id}@example.com`, members: [{ projectId: 7 }], tasks: [], assignees: [] })
 async function lookup(operator, value, overrides = {}) {
-  state = { session: { userId: 6 }, flag: true, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
+  state = { session: { userId: 6 }, people: [], labels: [], labelQueries: [], peopleQueries: [], ...overrides }
   const res = { statusCode: 200, body: null, status(code) { this.statusCode = code; return this }, json(body) { this.body = body; return this } }
   await handler({ method: 'GET', headers: {}, query: { operator, value, ...(overrides.noBoard ? {} : { boardId: '7' }) } }, res)
   return { res, state }
@@ -100,7 +99,6 @@ test('prefixes rank ahead of contains matches and email fallback works', async (
   assert.ok(snapshot.recentScope.gte instanceof Date)
   assert.deepEqual(res.body.candidates.map((item) => item.id), [2, 4, 3])
 })
-test('lookup requires authorization and feature flag', async () => {
+test('lookup requires authorization', async () => {
   assert.equal((await lookup('from', 'a', { session: null })).res.statusCode, 401)
-  assert.equal((await lookup('from', 'a', { flag: false })).res.statusCode, 404)
 })
