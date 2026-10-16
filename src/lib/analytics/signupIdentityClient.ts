@@ -45,7 +45,7 @@ export async function prepareSignupContext(method: "google" | "magic_link", emai
   }
 }
 
-export async function attachSignupContext(context: { url: URL | string; body?: unknown }) {
+export async function attachSignupContext<T extends { url: URL | string; body?: unknown }>(context: T) {
   try {
     const pathname = new URL(context.url, "https://app.hypertask.ai").pathname;
     if (!pathname.endsWith("/sign-in/social") && !pathname.endsWith("/sign-in/magic-link")) return;
@@ -53,7 +53,7 @@ export async function attachSignupContext(context: { url: URL | string; body?: u
     const body = JSON.parse(context.body);
     if (pathname.endsWith("/sign-in/social") && body.provider === "google") {
       const id = await prepareSignupContext("google");
-      if (id) return { body: JSON.stringify({ ...body, additionalData: { ...body.additionalData, signupContextId: id } }) };
+      if (id) return { ...context, body: JSON.stringify({ ...body, additionalData: { ...body.additionalData, signupContextId: id } }) };
     } else if (pathname.endsWith("/sign-in/magic-link") && typeof body.email === "string") {
       await prepareSignupContext("magic_link", body.email);
     }

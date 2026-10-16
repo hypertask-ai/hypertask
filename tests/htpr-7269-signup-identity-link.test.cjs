@@ -47,6 +47,7 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
+    '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
     '@/lib/flags': { isFeatureEnabled: async (key, id) => { calls.flags.push([key, id]); return enabled } },
     '@/lib/prisma': {
@@ -138,7 +139,7 @@ test('consented anonymous signup links once; retries reuse a deterministic UUID'
   assert.equal(h.calls.captures[0].uuid, h.calls.captures[1].uuid)
   assert.match(h.calls.captures[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
   assert.notEqual(h.identity.signupIdentityUuid(124), h.identity.signupIdentityUuid(123))
-  assert.deepEqual(h.calls.flags.map(([, id]) => id), [0, 123, 123])
+  assert.deepEqual(h.calls.flags.map(([, id]) => id), [123, 123])
 })
 
 test('essential consent strips identity and attribution, and never identifies', async () => quiet(async () => {
@@ -232,7 +233,6 @@ test('existing login discards its context; feature off creates nothing and prese
   assert.equal(h.calls.captures.length, 0)
   assert.equal(h.calls.events.length, 0)
   const off = harness({ enabled: false })
-  assert.equal(await off.context.createSignupContext(input, 1800, allowedCookie), null)
   await off.aliases['@/utils/controllers/users/update_or_create_user']('new@example.test', {}, false, false, true)
   assert.equal(off.calls.redis.length, 0)
   assert.equal(off.calls.captures.length, 0)
@@ -267,11 +267,48 @@ test('attribution is allowlisted, capped and external-only; direct is not unknow
   assert.equal(h.pure.normalizeSignupContext(input).attributionStatus, 'known')
 })
 
-test('browser payload with denied consent has no anonymous id or free-form attribution', () => {
-  const load = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'essential' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({ email: 'private', utm_source: 'web' }) } })
-  const client = load('src/lib/analytics/signupIdentityClient.ts')
-  client.setSignupIdentitySdk({ get_property: () => 'anonymous', get_distinct_id: () => { throw new Error('must not read ID') } })
-  assert.deepEqual(client.getSignupContextInput(), { consent: 'essential', reason: 'consent_denied', attribution: {} })
+for (const consent of ['essential', null]) {
+  test(`browser payload with ${consent} consent never imports PostHog or reads attribution`, async () => {
+    let imports = 0
+    const client = loader({
+      '@/lib/cookieConsent': { getCookieConsent: () => consent },
+      '@/lib/utils/utm/client': { getUTMDataFromCookies: () => { throw new Error('must not read attribution') } },
+      get 'posthog-js/dist/module.slim'() { imports++; throw new Error('must not import PostHog') },
+    })('src/lib/analytics/signupIdentityClient.ts')
+    assert.deepEqual(await client.getSignupContextInput(), { consent, reason: 'consent_denied', attribution: {} })
+    assert.equal(imports, 0)
+  })
+}
+
+for (const loaded of [true, false, undefined]) {
+  test(`accepted consent reads the shared PostHog singleton only when __loaded is true (${loaded})`, async () => {
+    let imports = 0, reads = 0
+    const client = loader({
+      '@/lib/cookieConsent': { getCookieConsent: () => 'all' },
+      '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+      get 'posthog-js/dist/module.slim'() {
+        imports++
+        return { __loaded: loaded, get_property: () => { reads++; return 'anonymous' }, get_distinct_id: () => 'anon-browser' }
+      },
+    })('src/lib/analytics/signupIdentityClient.ts')
+    assert.deepEqual(await client.getSignupContextInput(), {
+      consent: 'all', reason: loaded === true ? null : 'sdk_not_ready',
+      anonymousId: loaded === true ? 'anon-browser' : null, attribution: {},
+    })
+    assert.equal(imports, 1)
+    assert.equal(reads, loaded === true ? 2 : 0)
+  })
+}
+
+test('PostHog import failure is treated as an unavailable SDK', async () => {
+  let imports = 0
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'all' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+    get 'posthog-js/dist/module.slim'() { imports++; throw new Error('import unavailable') },
+  })('src/lib/analytics/signupIdentityClient.ts')
+  assert.deepEqual(await client.getSignupContextInput(), { consent: 'all', reason: 'sdk_not_ready', anonymousId: null, attribution: {} })
+  assert.equal(imports, 1)
 })
 
 test('Google cookie route stores only opaque id with 10 minute secure HttpOnly options, then consumes and clears', async () => {
@@ -368,18 +405,6 @@ test('Better Auth new-user hook links and clears; existing-session hook only dis
   }
 })
 
-test('all browser auth starts carry context before sign-in; identify and reset calls stay in place', () => {
-  for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx']) {
-    const source = fs.readFileSync(path.join(root, file), 'utf8')
-    const calls = source.match(/const googleSignupData = signupIdentityLinkEnabled \? await googleSignupAdditionalData\(\) : \{\};\s*(?:const \{ error \} = await|void) authClient\.signIn\.social\(\{\s*provider: "google",\s*\.\.\.googleSignupData,/g)
-    assert.equal(calls.length, file.includes('useAuth') ? 2 : 1)
-  }
-  const email = fs.readFileSync(path.join(root, 'src/app/login/EmailAuth/useEmailAuth.ts'), 'utf8')
-  assert.equal((email.match(/signupIdentityLinkEnabled \? \{ signupContext: getSignupContextInput\(\) \} : \{\}/g) || []).length, 3)
-  assert.match(email, /signupIdentityLinkEnabled \? prepareSignupContext.bind\(null, 'magic_link', email\) : null/)
-  assert.equal((email.match(/await prepareSignupAttempt\?\.\(\)\s*const \{ error \} = await authClient.signIn.magicLink/g) || []).length, 2)
-})
-
 test('installed posthog-node accepts $identify and preserves the UUID on the wire', async () => {
   const { PostHog } = require('posthog-node')
   const bodies = []
@@ -433,22 +458,23 @@ test('registry defaults remain Owner + QA and unsupported consent creates no con
   assert.equal(h.calls.redis.length, 0)
 })
 
-test('browser preparation reads current UTM storage only and network failure cannot block auth', async () => {
-  const load = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'all' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({ utm_source: 'web', utm_content: 'button', email: 'private', inviteKey: 'private' }) } })
-  const client = load('src/lib/analytics/signupIdentityClient.ts')
-  assert.equal(client.getSignupBrowserIdentity().reason, 'sdk_not_ready')
-  client.setSignupIdentitySdk({ get_property: (key) => key === '$user_state' ? 'anonymous' : undefined, get_distinct_id: () => 'anon-browser' })
+test('browser preparation sends allowlisted current UTM data and tolerates network failure', async () => {
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'all' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({ utm_source: 'web', utm_content: 'button', email: 'private', inviteKey: 'private' }) },
+    'posthog-js/dist/module.slim': { __loaded: true, get_property: () => 'anonymous', get_distinct_id: () => 'anon-browser' },
+  })('src/lib/analytics/signupIdentityClient.ts')
   const previousFetch = global.fetch
   let sent
   global.fetch = async (url, options) => { sent = { url, ...options }; throw new Error('network unavailable') }
   try {
-    await client.prepareSignupContext("google")
+    assert.equal(await client.prepareSignupContext('google'), null)
     assert.equal(sent.url, '/api/auth/signup-context')
+    assert.equal(sent.method, 'POST')
     assert.equal(sent.credentials, 'same-origin')
+    assert.equal(sent.headers['Content-Type'], 'application/json')
     assert.ok(sent.signal instanceof AbortSignal)
     assert.deepEqual(JSON.parse(sent.body), { consent: 'all', reason: null, anonymousId: 'anon-browser', attribution: { utm_source: 'web', utm_content: 'button' }, method: 'google' })
-    client.setSignupIdentitySdk(null)
-    assert.equal(client.getSignupBrowserIdentity().anonymousId, null)
   } finally { global.fetch = previousFetch }
 })
 
@@ -560,83 +586,62 @@ test('Better Auth cookie context is bound to the flow and normalized email hash,
   }
 }))
 
-test('browser magic-link preparation includes the method and sign-in email', async () => {
-  const client = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'all' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) } })('src/lib/analytics/signupIdentityClient.ts')
-  const previous = global.fetch
-  let payload
-  global.fetch = async (_url, options) => { payload = JSON.parse(options.body) }
-  try {
-    await client.prepareSignupContext('magic_link', ' New@Example.Test ')
-    assert.equal(payload.method, 'magic_link')
-    assert.equal(payload.email, ' New@Example.Test ')
-  } finally { global.fetch = previous }
+test('Better Auth client registers signup context as its request hook', () => {
+  const attachSignupContext = () => {}
+  const plugin = () => ({})
+  const { authClient } = loader({
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext },
+    'better-auth/react': { createAuthClient: (options) => options },
+    'better-auth/client/plugins': { emailOTPClient: plugin, magicLinkClient: plugin, multiSessionClient: plugin },
+    '@better-auth/passkey/client': { passkeyClient: plugin },
+  })('src/lib/auth/betterAuthClient.ts')
+  assert.equal(authClient.fetchOptions.onRequest, attachSignupContext)
+  assert.equal(authClient.plugins.length, 4)
 })
 
-test('email browser starts omit signupContext and preparation when the feature flag is off', async () => {
-  const previous = { fetch: global.fetch, sessionStorage: global.sessionStorage, betterAuth: process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL }
+test('email browser starts always prepare legacy payloads without consulting client flags', async () => {
+  const previous = { fetch: global.fetch, sessionStorage: global.sessionStorage, alert: global.alert, betterAuth: process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL }
   try {
     global.sessionStorage = { setItem: () => {} }
-    for (const enabled of [false, true]) {
-      for (const betterAuth of [false, true]) {
-        process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = betterAuth ? '1' : '0'
-        const payloads = [], prepared = [], signIns = []
-        global.fetch = async (_url, options) => { payloads.push(JSON.parse(options.body)); return { ok: true, json: async () => ({ success: true }) } }
-        const load = loader({
-          react: { useState: (value) => [value, () => {}], useEffect: () => {}, useRef: (current) => ({ current }) },
-          '@/hooks/useFlag': { useFlag: (key) => { assert.equal(key, 'htpr-7269-signup-identity-link'); return enabled } },
-          '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
-          '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
-          '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
-          'next/navigation': { useSearchParams: () => new URLSearchParams() },
-          '@/lib/configs/auth.config': { abTest: {}, redirect: { afterLogin: '/app' } },
-          '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
-          '@/lib/analytics/signupIdentityClient': {
-            getSignupContextInput: () => { assert.equal(enabled, true); return input },
-            prepareSignupContext: async (...args) => { assert.equal(enabled, true); prepared.push(args) },
-          },
-          '@/lib/auth/betterAuthClient': { authClient: { signIn: { magicLink: async (options) => { signIns.push(options); return {} } } } },
-        })
-        const hook = load('src/app/login/EmailAuth/useEmailAuth.ts').useEmailAuth('new@example.test')
-        await hook.handlers.handleSubmit({ preventDefault: () => {} })
-        if (betterAuth) {
-          assert.equal(signIns.length, 1)
-          assert.deepEqual(prepared, enabled ? [['magic_link', 'new@example.test']] : [])
-          assert.equal(payloads.length, 0)
-        } else {
-          assert.equal(payloads.length, 1)
-          assert.equal(Object.hasOwn(payloads[0], 'signupContext'), enabled)
-          assert.deepEqual(prepared, [])
+    global.alert = () => {}
+    for (const betterAuth of [false, true]) {
+      process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = betterAuth ? '1' : '0'
+      const payloads = [], signIns = []
+      let prepared = 0
+      global.fetch = async (url, options) => { payloads.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true }) } }
+      const hook = loader({
+        react: { useState: (value) => [value, () => {}], useEffect: () => {}, useRef: (current) => ({ current }) },
+        '@/hooks/useFlag': { useFlag: () => { throw new Error('logged-out flags are unavailable') } },
+        '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
+        '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
+        'next/navigation': { useSearchParams: () => new URLSearchParams() },
+        '@/lib/configs/auth.config': { abTest: {}, redirect: { afterLogin: '/app' } },
+        '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
+        '@/lib/analytics/signupIdentityClient': { getSignupContextInput: async () => { prepared++; return input } },
+        '@/lib/auth/betterAuthClient': { authClient: { signIn: { magicLink: async (options) => { signIns.push(options); return {} } } } },
+      })('src/app/login/EmailAuth/useEmailAuth.ts').useEmailAuth('new@example.test')
+      await hook.handlers.handleSubmit({ preventDefault: () => {} })
+      await hook.handlers.resendLink()
+      if (betterAuth) {
+        assert.equal(signIns.length, 2)
+        assert.equal(prepared, 0)
+        assert.equal(payloads.length, 0)
+      } else {
+        assert.equal(payloads.length, 2)
+        assert.equal(prepared, 2)
+        for (const payload of payloads) {
+          assert.equal(payload.url, '/api/auth/send-email-link')
+          assert.deepEqual(payload.body.signupContext, input)
         }
       }
     }
   } finally {
     global.fetch = previous.fetch
     global.sessionStorage = previous.sessionStorage
+    global.alert = previous.alert
     if (previous.betterAuth === undefined) delete process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL
     else process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = previous.betterAuth
   }
-})
-
-test('all four UI entries use the recognized ticket flag; SDK registration is guarded and cleared on disable', () => {
-  for (const file of ['src/hooks/General/useAuth.tsx', 'src/app/login/LoginButton.tsx', 'src/app/login/EmailAuth/useEmailAuth.ts', 'src/components/Analytics/PostHogAnalytics.tsx']) {
-    const source = fs.readFileSync(path.join(root, file), 'utf8')
-    assert.match(source, /useFlag\(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG\)/)
-    assert.match(source, /import \{ HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG \} from ["']@\/lib\/flags\/keys["']/)
-  }
-  const source = fs.readFileSync(path.join(root, 'src/components/Analytics/PostHogAnalytics.tsx'), 'utf8')
-  assert.match(source, /if \(signupIdentityLinkEnabledRef.current\) setSignupIdentitySdk\(loadedPostHog\)/)
-  const effect = source.match(/useLayoutEffect\((signupIdentityLinkEnabled \? \(\) => \{[\s\S]*?)\n  \}, \[signupIdentityLinkEnabled\]\)/)[1] + '\n  }'
-  const calls = [], ref = { current: false }, sdk = {}
-  const selectEffect = new Function('signupIdentityLinkEnabled', 'signupIdentityLinkEnabledRef', 'posthogRef', 'setSignupIdentitySdk', `return (${effect})`)
-  const apply = (enabled) => selectEffect(enabled, ref, { current: sdk }, (value) => calls.push(value))()
-  assert.equal(apply(false), undefined)
-  assert.deepEqual(calls, [])
-  const cleanup = apply(true)
-  assert.deepEqual(calls, [sdk])
-  cleanup()
-  apply(false)
-  assert.deepEqual(calls, [sdk, null])
-  assert.equal(ref.current, false)
 })
 
 test('one IP gets at most 30 signup contexts per 10 minutes; other IPs still get theirs', async () => {
@@ -661,12 +666,223 @@ test('Google context id travels in the OAuth state, never in a cookie, and only 
   assert.equal(first.anonymousId, input.anonymousId)
   assert.equal(await h.context.consumeGoogleSignupContext({ signupContextId }), null)
   assert.equal(await h.context.consumeGoogleSignupContext(null), null)
-  const client = loader({ '@/lib/cookieConsent': { getCookieConsent: () => 'all' }, '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) } })('src/lib/analytics/signupIdentityClient.ts')
+})
+
+test('social request hook preserves Google fields and existing additionalData', async () => {
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'essential' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+  })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  const calls = []
+  const signupContextId = 'c32c4a49-423a-4cf0-a487-b28f788166a6'
+  global.fetch = async (url, options) => { calls.push({ url, ...options }); return Response.json({ signupContextId }) }
+  try {
+    for (const url of ['/api/auth/sign-in/social', new URL('https://app.hypertask.ai/api/auth/sign-in/social?redirect=1')]) {
+      const body = { provider: 'google', callbackURL: '/app', disableRedirect: true, additionalData: { invite: 'keep', signupContextId: 'old' } }
+      const context = { url, body: JSON.stringify(body), headers: new Headers(), method: 'POST' }
+      const before = { ...context }
+      const result = await client.attachSignupContext(context)
+      assert.deepEqual(JSON.parse(result.body), { ...body, additionalData: { ...body.additionalData, signupContextId } })
+      assert.deepEqual(context, before)
+      assert.equal(calls.at(-1).url, '/api/auth/signup-context')
+      assert.equal(JSON.parse(calls.at(-1).body).method, 'google')
+    }
+    const result = await client.attachSignupContext({ url: '/api/auth/sign-in/social', body: JSON.stringify({ provider: 'google' }) })
+    assert.deepEqual(JSON.parse(result.body), { provider: 'google', additionalData: { signupContextId } })
+  } finally { global.fetch = previous }
+})
+
+test('signup request hook leaves requests unchanged on a null id or any preparation error', async () => {
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'essential' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+  })('src/lib/analytics/signupIdentityClient.ts')
   const previous = global.fetch
   try {
-    global.fetch = async () => new Response(JSON.stringify({ signupContextId }), { status: 200 })
-    assert.deepEqual(await client.googleSignupAdditionalData(), { additionalData: { signupContextId } })
+    for (const fetch of [
+      async () => Response.json({ signupContextId: null }),
+      async () => Response.json({ signupContextId: 42 }),
+      async () => Response.json({ signupContextId: 'ignored' }, { status: 500 }),
+      async () => new Response('invalid JSON'),
+      async () => { throw new Error('offline') },
+    ]) {
+      global.fetch = fetch
+      const context = { url: '/api/auth/sign-in/social', body: JSON.stringify({ provider: 'google', additionalData: { invite: 'keep' } }) }
+      const before = { ...context }
+      assert.equal(await client.attachSignupContext(context), undefined)
+      assert.deepEqual(context, before)
+    }
+  } finally { global.fetch = previous }
+})
+
+test('signup request hook never prepares other providers, unrelated paths or malformed bodies', async () => {
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'essential' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+  })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  let calls = 0
+  global.fetch = async () => { calls++; throw new Error('must not fetch') }
+  try {
+    for (const context of [
+      { url: '/api/auth/sign-in/social', body: JSON.stringify({ provider: 'github' }) },
+      { url: '/api/auth/sign-in/social/extra', body: JSON.stringify({ provider: 'google' }) },
+      { url: '/api/auth/get-session', body: JSON.stringify({ provider: 'google' }) },
+      { url: '/api/auth/sign-in/social', body: 'invalid JSON' },
+      { url: '/api/auth/sign-in/social', body: 'null' },
+      { url: '/api/auth/sign-in/social', body: { provider: 'google' } },
+      { url: '/api/auth/sign-in/social' },
+      { url: '/api/auth/sign-in/magic-link', body: JSON.stringify({ email: 123 }) },
+    ]) {
+      const before = { ...context }
+      assert.equal(await client.attachSignupContext(context), undefined)
+      assert.deepEqual(context, before)
+    }
+    assert.equal(calls, 0)
+  } finally { global.fetch = previous }
+})
+
+test('magic-link request hook prepares the cookie context with that email and never changes the body', async () => {
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'essential' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+  })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  const calls = []
+  global.fetch = async (url, options) => { calls.push({ url, ...options }); return new Response(null, { status: 204 }) }
+  try {
+    const context = { url: '/api/auth/sign-in/magic-link', body: JSON.stringify({ email: ' New@Example.Test ', callbackURL: '/app' }) }
+    const before = { ...context }
+    assert.equal(await client.attachSignupContext(context), undefined)
+    assert.deepEqual(context, before)
+    assert.equal(calls.length, 1)
+    assert.equal(calls[0].url, '/api/auth/signup-context')
+    assert.equal(calls[0].method, 'POST')
+    assert.equal(calls[0].credentials, 'same-origin')
+    assert.deepEqual(JSON.parse(calls[0].body), { consent: 'essential', reason: 'consent_denied', attribution: {}, method: 'magic_link', email: ' New@Example.Test ' })
     global.fetch = async () => { throw new Error('offline') }
-    assert.deepEqual(await client.googleSignupAdditionalData(), {})
+    assert.equal(await client.attachSignupContext(context), undefined)
+    assert.deepEqual(context, before)
+  } finally { global.fetch = previous }
+})
+
+for (const route of ['signup-context', 'send-email-link', 'instant-signup']) {
+  for (const enabled of [false, true]) {
+    test(`${route}: still allowed with signup linking ${enabled ? 'on creates one context' : 'off creates no context'}`, async () => {
+      const h = harness({ enabled })
+      const created = []
+      h.aliases['@/lib/auth/signupAttributionContext'] = {
+        ...h.context,
+        createSignupContext: async (...args) => { created.push(args); return h.context.createSignupContext(...args) },
+      }
+      const body = { email: h.user.email, signupContext: input, ...input, method: 'google' }
+      const response = await h.load(`src/app/api/auth/${route}/route.ts`).POST(request(`/api/auth/${route}`, body))
+      assert.equal(response.status, 200)
+      assert.equal(created.length, enabled ? 1 : 0)
+      assert.ok(h.calls.flags.some(([key, id]) => key === 'htpr-7269-signup-identity-link' && id === 0))
+      assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, enabled ? 1 : 0)
+      const result = await response.json()
+      if (route === 'signup-context') {
+        if (enabled) assert.match(result.signupContextId, /^[0-9a-f-]{36}$/)
+        else assert.deepEqual(result, { signupContextId: null })
+        assert.equal(response.headers.get('set-cookie'), null)
+      } else if (route === 'send-email-link') {
+        assert.deepEqual(result, { success: true, message: 'Sign-in email sent with both link and code!' })
+        assert.ok(h.calls.code)
+        if (enabled) assert.match(h.calls.jwt.signupContextId, /^[0-9a-f-]{36}$/)
+        else assert.deepEqual(h.calls.jwt, { sub: h.user.email })
+      } else {
+        assert.deepEqual(result, { success: true, message: 'Account created successfully! Please check your email to verify your account.' })
+        assert.equal(h.calls.provision.length, 1)
+        assert.equal(h.calls.events.length, 1)
+        assert.equal(h.calls.captures.length, enabled ? 1 : 0)
+      }
+    })
+  }
+}
+
+test('magic-link context route still succeeds with the flag off and clears any previous cookie', async () => {
+  const h = harness({ enabled: false })
+  const response = await h.load('src/app/api/auth/signup-context/route.ts').POST(request('/api/auth/signup-context', { ...input, method: 'magic_link', email: h.user.email }))
+  assert.equal(response.status, 204)
+  assert.equal(await response.text(), '')
+  assert.equal(response.cookies.get('ht_signup_ctx').value, '')
+  assert.match(response.headers.get('set-cookie'), /Max-Age=0/)
+  assert.equal(h.calls.redis.length, 0)
+})
+
+test('email code context consumption retains its own feature flag check', async () => {
+  const h = harness()
+  const attempt = { code: '123456', createdAt: new Date(), used: false }
+  h.setAttempt(attempt)
+  const id = await h.context.createSignupContext(input, 1800, allowedCookie)
+  await h.context.bindSignupCodeContext(h.user.email, attempt.code, id)
+  h.setAttempt({ ...attempt, used: true })
+  h.aliases['@/lib/flags'].isFeatureEnabled = async (key, userId) => { assert.equal(key, 'htpr-7269-signup-identity-link'); assert.equal(userId, 0); return false }
+  assert.equal(await h.context.takeSignupCodeContext(h.user.email, attempt.code), null)
+  h.aliases['@/lib/flags'].isFeatureEnabled = async () => true
+  assert.equal(await h.context.takeSignupCodeContext(h.user.email, attempt.code), id)
+})
+
+test('logged-out account recovery always includes awaited signup context in instant signup', async () => {
+  const previous = { fetch: global.fetch, window: global.window, sessionStorage: global.sessionStorage, betterAuth: process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL }
+  try {
+    process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
+    global.window = { location: { search: '?authError=account_not_found', pathname: '/login' }, history: { replaceState: () => {} } }
+    global.sessionStorage = { getItem: () => 'new@example.test', removeItem: () => {} }
+    const effects = []
+    let resolveSent
+    const sent = new Promise((resolve) => { resolveSent = resolve })
+    global.fetch = async (url, options) => { resolveSent({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true }) } }
+    const hook = loader({
+      react: { useState: (value) => [value, () => {}], useEffect: (effect) => effects.push(effect), useRef: (current) => ({ current }) },
+      '@/hooks/useFlag': { useFlag: () => { throw new Error('logged-out flags are unavailable') } },
+      '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: () => {} }) },
+      '@/hooks/General/useUTMs': { useUTM: () => ({ getUTMData: () => ({}) }) },
+      'next/navigation': { useSearchParams: () => new URLSearchParams() },
+      '@/lib/configs/auth.config': { abTest: {}, redirect: { afterLogin: '/app' } },
+      '@/lib/auth/safeReturnTo': { parseSafeReturnTo: () => null },
+      '@/lib/analytics/signupIdentityClient': { getSignupContextInput: async () => input },
+      '@/lib/auth/betterAuthClient': { authClient: {} },
+    })('src/app/login/EmailAuth/useEmailAuth.ts')
+    hook.useEmailAuth()
+    for (const effect of effects) effect()
+    assert.deepEqual(await sent, { url: '/api/auth/instant-signup', body: { email: 'new@example.test', utmData: {}, signupContext: input } })
+  } finally {
+    global.fetch = previous.fetch
+    global.window = previous.window
+    global.sessionStorage = previous.sessionStorage
+    if (previous.betterAuth === undefined) delete process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL
+    else process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = previous.betterAuth
+  }
+})
+
+test('installed Better Fetch applies the signup hook after serializing the social request body', async () => {
+  const { betterFetch } = require('@better-fetch/fetch')
+  const client = loader({
+    '@/lib/cookieConsent': { getCookieConsent: () => 'essential' },
+    '@/lib/utils/utm/client': { getUTMDataFromCookies: () => ({}) },
+  })('src/lib/analytics/signupIdentityClient.ts')
+  const previous = global.fetch
+  const signupContextId = 'c32c4a49-423a-4cf0-a487-b28f788166a6'
+  const requests = []
+  global.fetch = async (url, options) => {
+    requests.push({ ...options, url: String(url) })
+    return Response.json(String(url) === '/api/auth/signup-context' ? { signupContextId } : { url: 'https://accounts.google.com/' })
+  }
+  try {
+    const result = await betterFetch('https://app.hypertask.ai/api/auth/sign-in/social', {
+      method: 'POST', body: { provider: 'google', callbackURL: '/app', additionalData: { invite: 'keep' } },
+      onRequest: client.attachSignupContext,
+    })
+    assert.equal(result.error, null)
+    assert.equal(requests.length, 2)
+    assert.equal(requests[0].url, '/api/auth/signup-context')
+    assert.equal(requests[1].url, 'https://app.hypertask.ai/api/auth/sign-in/social')
+    assert.deepEqual(JSON.parse(requests[1].body), { provider: 'google', callbackURL: '/app', additionalData: { invite: 'keep', signupContextId } })
+    assert.equal(requests[1].headers.get('content-type'), 'application/json')
+    assert.equal(requests[1].method, 'POST')
+    assert.ok(requests[1].signal instanceof AbortSignal)
   } finally { global.fetch = previous }
 })

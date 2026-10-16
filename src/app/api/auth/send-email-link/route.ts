@@ -1,4 +1,4 @@
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignupContext, bindSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import jwt from 'jsonwebtoken'

@@ -15,7 +15,7 @@ const connectTaskTitle = 'Connect Hypertask to Claude or ChatGPT'
 function loadTs(relativePath, aliases) {
   aliases = {
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
-    '@/lib/analytics/signupIdentityClient': { prepareSignupContext: async () => {}, getSignupContextInput: () => ({}) },
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
     '@/lib/telemetry/signupIdentityLink': { recordSignupIdentityLink: async () => null },
     ...aliases,
   }

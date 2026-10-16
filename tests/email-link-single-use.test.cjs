@@ -17,8 +17,9 @@ process.env.NEXT_PUBLIC_BETTER_AUTH_EMAIL = '0'
 
 function loadTs(relativePath, aliases = {}) {
   aliases = {
+    '@/lib/flags/keys': require('./helpers/flag-files.cjs').load('src/lib/flags/keys.ts'),
     '@/lib/auth/signupAttributionContext': { createSignupContext: async () => null, consumeSignupContext: async () => null, consumeSignupCookie: async () => null, consumeGoogleSignupContext: async () => null, bindSignupCodeContext: async () => {}, takeSignupCodeContext: async () => null },
-    '@/lib/analytics/signupIdentityClient': { prepareSignupContext: async () => {}, getSignupContextInput: () => ({}) },
+    '@/lib/analytics/signupIdentityClient': { attachSignupContext: async () => {}, getSignupContextInput: async () => ({}) },
     ...aliases,
   }
 
@@ -236,8 +237,6 @@ test('Redis errors fail closed without minting a session or mutating a user', ()
 
 function makeClientAliases(harness, token) {
   const aliases = {
-    '@/hooks/useFlag': { useFlag: () => false },
-    '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     react: React,
     'next/navigation': { useSearchParams: () => new URLSearchParams({ token }) },
     '@/hooks/General/useAuth': { useAuth: () => ({ loginWithEmail: async () => {} }) },
