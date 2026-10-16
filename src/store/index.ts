@@ -139,6 +139,11 @@ export const showQuickTipsAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 
 });
+export const shortcutTipsEnabledAtom = atom<boolean>({
+    key: "shortcutTipsEnabled",
+    default: true,
+    effects_UNSTABLE: [persistAtom],
+});
 export const archiveShortcutNudgeAtom = atom<ArchiveShortcutNudgeState>({
     key: "archiveShortcutNudge",
     default: EMPTY_ARCHIVE_SHORTCUT_NUDGE,

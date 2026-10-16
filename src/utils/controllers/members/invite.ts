@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import createLog from "../logs/createLog";
@@ -253,7 +253,7 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                                 }
                             })
 
-                            recordActivationOccurrence(fetchedInvite.userId, "invite_accepted", `${fetchedInvite.id}:${userId}`, { inviteeId: userId });
+                            recordMemberJoined(member.id, userId, projectId, fetchedInvite.id, fetchedInvite.userId);
 
                             if(PaymentResponse ==="OK" || PaymentResponse === "Awaiting") {
                                 await updateTrial(userId)

@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -82,7 +82,7 @@ export default  async function handler(
             },
             include:{project:{select:{name:true}}},
         })
-        recordActivationOccurrence(newInvite.userId, "teammate_invited", newInvite.id, { method: "link" });
+        recordInviteSent(newInvite, "link", session.userId, newInvite.userId);
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)

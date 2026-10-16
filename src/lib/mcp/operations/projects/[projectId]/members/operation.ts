@@ -196,7 +196,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     }
 
     if (target.kind === "user_id") {
-      const result = await addExistingUserToProject(projectId, target.userId);
+      const result = await addExistingUserToProject(projectId, target.userId, ctx.user.id);
       if (!result.ok) {
         return NextResponse.json(
           {

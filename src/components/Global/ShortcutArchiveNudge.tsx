@@ -4,13 +4,10 @@ import { useContext, useEffect } from "react";
 import { X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useRecoilState, useRecoilValue } from "@/lib/state";
-import {
-  archiveShortcutNudgeAtom,
-  currentUserAtom,
-  showQuickTipsAtom,
-} from "@/store";
+import { archiveShortcutNudgeAtom, currentUserAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MOBILE_TARGET } from "@/lib/configs/general.config";
 import {
@@ -25,7 +22,7 @@ export default function ShortcutArchiveNudge() {
   const isMobile = useContext(MobileViewContext);
   const flagEnabled = useFlag(SHORTCUT_NUDGES_FLAG);
   const currentUser = useRecoilValue(currentUserAtom);
-  const [tipsEnabled, setTipsEnabled] = useRecoilState(showQuickTipsAtom);
+  const { tipsEnabled, turnOffAllTips } = useShortcutTipsSetting();
   const [nudge, setNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const accountId = typeof currentUser?.id === "number" ? currentUser.id : null;
   const onTaskPage = isTaskDetailPath(pathname);
@@ -103,7 +100,7 @@ export default function ShortcutArchiveNudge() {
           type="button"
           className="rounded-sm text-meta text-text-light-gray underline underline-offset-2 hover:text-white-black focus-visible:bg-hover-active focus-visible:text-white-black focus-visible:outline-none"
           onClick={() => {
-            setTipsEnabled(false);
+            turnOffAllTips();
             dismiss();
           }}
         >

@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next/dist/shared/lib/utils'
 import prisma from "@/lib/prisma";
@@ -104,7 +104,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
-      if (sent) recordActivationOccurrence(user.id, "teammate_invited", invite.id, { method: "email" });
+      if (sent) recordInviteSent(invite, "email", invite.userId, user.id);
       return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)

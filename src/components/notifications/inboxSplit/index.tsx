@@ -20,12 +20,12 @@ import { useRecoilState } from "@/lib/state";
 import {
   archiveShortcutNudgeAtom,
   showCommandsAtom,
-  showQuickTipsAtom,
   tasksPlayListAtom,
   globalNotificationFocusAtom,
   currentProjectAtom,
 } from "@/store";
 import { SHORTCUT_NUDGES_FLAG } from "@/lib/flags/keys";
+import { useShortcutTipsSetting } from "@/hooks/useShortcutTipsSetting";
 import {
   clearArchiveShortcutNudge,
   recordArchiveShortcutAction,
@@ -325,7 +325,7 @@ const InboxSplit = ({
   const [showCommands, ____] = useRecoilState(showCommandsAtom);
   const [_, setTasksPlayList] = useRecoilState(tasksPlayListAtom);
   const [currentProject, _____] = useRecoilState(currentProjectAtom);
-  const [tipsEnabled] = useRecoilState(showQuickTipsAtom);
+  const { tipsEnabled } = useShortcutTipsSetting();
   const [, setArchiveNudge] = useRecoilState(archiveShortcutNudgeAtom);
   const typedWrites = useFlag(HTPR_6979_TYPED_WRITES_FLAG);
   let typedWrite: typeof setNotificationSeen | undefined;

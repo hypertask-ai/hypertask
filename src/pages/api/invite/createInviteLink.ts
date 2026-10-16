@@ -1,4 +1,4 @@
-import { recordActivationOccurrence } from "@/lib/telemetry/activationOccurrences";
+import { recordInviteSent, recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -108,7 +108,7 @@ export const addMemberController = async (
       );
 
       if (!isInTeamAlready) await sendInviteToNonMember(userId, projectId, email);
-      else await sendInviteToAlreadyExistingMember(email, currentProject.id);
+      else await sendInviteToAlreadyExistingMember(email, currentProject.id, userId);
     }
 
     return {
@@ -190,7 +190,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
-  if (sent) recordActivationOccurrence(userId, "teammate_invited", invite.id, { method: "email" });
+  if (sent) recordInviteSent(invite, "email", invite.userId, userId);
 }
 
 export const generateInviteLink = async (
@@ -287,6 +287,7 @@ const createUserNotificationInvite = async (userId: number) => {
 const sendInviteToAlreadyExistingMember = async (
   email: string,
   projectId: number,
+  inviterUserId: number,
 ) => {
   let user = await prisma.user.findFirst({ where: { email } });
   if (user) {
@@ -299,6 +300,7 @@ const sendInviteToAlreadyExistingMember = async (
         user: true,
       },
     });
+    recordMemberJoined(member.id, user.id, projectId, null, inviterUserId);
     console.log("Member created: ", member);
   }
 };
