@@ -73,7 +73,7 @@ const handler: NextApiHandler = async (
       const parsed = operatorsEnabled
         ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled)
         : null;
-      if (parsed?.filters.label && operatorsEnabled &&
+      if (parsed?.filters.label &&
         ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
