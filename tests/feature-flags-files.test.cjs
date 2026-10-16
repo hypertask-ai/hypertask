@@ -87,3 +87,34 @@ test("two independent flag PRs merge without registry conflicts and regenerate b
   assert.equal(git("status", "--porcelain"), "");
   assert.equal(git("ls-files", `${folder}/index.generated.ts`), "");
 });
+
+test("Everyone defaults require bugfix kind or a matching explicit approval comment", async (t) => {
+  const root = fixture(t);
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const { generateFlagIndex } = await import("../scripts/generate-flag-index.mjs");
+  const key = "htpr-7278-approved";
+  const filename = `${folder}/${key}.ts`;
+  const approval = "https://app.hypertask.ai/detail/project-15/7278#comment-123";
+  const source = (extra) => `export const APPROVED_FLAG = "${key}";\nexport default { key: APPROVED_FLAG, shippedOn: "2026-10-10", description: "Fixture", ${extra} } as const;`;
+  assert.throws(() => parseFlagFile(source('kind: "feature", defaultMode: "EVERYONE"'), filename), /only bugfix flags may default to Everyone/);
+  assert.doesNotThrow(() => parseFlagFile(source('kind: "bugfix", defaultMode: "EVERYONE"'), filename));
+  for (const kind of ["feature", "improvement", "bugfix"]) {
+    const text = source(`kind: "${kind}", defaultMode: "EVERYONE", everyoneApproval: "${approval}"`);
+    assert.equal(parseFlagFile(text, filename).definition.everyoneApproval, approval);
+    fs.writeFileSync(path.join(root, filename), text);
+    assert.match(generateFlagIndex(root), /import flag0 from "\.\/htpr-7278-approved"/);
+  }
+  for (const url of [
+    approval.replace("/7278#", "/7279#"),
+    approval.replace("https:", "http:"),
+    approval.replace("#comment-123", ""),
+    approval + "/extra",
+    approval.replace("app.hypertask.ai", "appXhypertaskXai"),
+  ]) {
+    assert.throws(() => parseFlagFile(source(`defaultMode: "EVERYONE", everyoneApproval: "${url}"`), filename), /everyoneApproval must match https:\/\/app\.hypertask\.ai\/detail\/project-<projectId>\/<ticketNumber>#comment-<commentId> with the flag key's ticket number/);
+  }
+  for (const mode of ["", 'defaultMode: "OWNER_AND_QA",', 'defaultMode: "OFF",']) {
+    assert.throws(() => parseFlagFile(source(`${mode} everyoneApproval: "${approval}"`), filename), /everyoneApproval only goes with defaultMode EVERYONE/);
+  }
+  assert.throws(() => parseFlagFile(source('defaultMode: "EVERYONE", everyoneApproval: getApproval()'), filename), /everyoneApproval must be a string literal/);
+});
