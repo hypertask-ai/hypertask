@@ -2,7 +2,7 @@ import type { NextApiHandler } from 'next'
 import { Prisma } from '@prisma/client'
 import { getSessionUser } from '@/lib/auth/getSessionUser'
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
+import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from '@/lib/flags'
 import prisma from '@/lib/prisma'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -13,7 +13,6 @@ const handler: NextApiHandler = async (req, res) => {
   if (!await isFeatureEnabled(HTPR_6369_SEARCH_OPERATORS_FLAG, session.userId)) {
     return res.status(404).json({ error: 'Not found' })
   }
-  const chipsEnabled = await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, session.userId)
   const operator = String(req.query.operator ?? '').toLowerCase()
   const value = String(req.query.value ?? '').replace(/^@/, '').trim().toLowerCase().slice(0, 100)
   const boardId = Number(req.query.boardId)
@@ -28,8 +27,7 @@ const handler: NextApiHandler = async (req, res) => {
   const ids = boards.map((board) => board.id)
   if (!ids.length) return res.status(200).json({ candidates: [] })
   const activeBoardId = ids.includes(boardId) ? boardId : null
-  const layoutEnabled = chipsEnabled &&
-    await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
+  const layoutEnabled = await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
     await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId)
   const labelScopeEnabled = operator === 'label' && layoutEnabled &&
     await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId)
@@ -38,7 +36,7 @@ const handler: NextApiHandler = async (req, res) => {
   let candidates: { id: string | number; name: string; email?: string; count?: number; byName?: boolean; preferred: boolean; recent: number }[]
   let resolved: string | undefined
   let resolvedId: string | undefined
-  const rawTail = chipsEnabled && typeof req.query.resolve === 'string' ? req.query.resolve.replace(/^[@#]/, '').trim().slice(0, 100) : ''
+  const rawTail = typeof req.query.resolve === 'string' ? req.query.resolve.replace(/^[@#]/, '').trim().slice(0, 100) : ''
   const words = rawTail.split(/\s+/)
   const variants = words.map((_, i) => words.slice(0, i + 1).join(' ')).reverse().slice(0, 10)
   if (operator === 'in' || operator === 'board') {
@@ -46,8 +44,7 @@ const handler: NextApiHandler = async (req, res) => {
     resolved = boards.filter((board) => variants.some((part) => part === String(board.id) || part.toLowerCase() === board.title?.toLowerCase())).map((board) => board.title ?? '')
       .sort((a, b) => b.length - a.length)[0]
   } else if (operator === 'label') {
-    const scope = { projectId: { in: activeBoardId ? [activeBoardId] : ids } }
-    if (chipsEnabled) scope.projectId.in = ids
+    const scope = { projectId: { in: ids } }
     if (labelScopeEnabled) {
       scope.projectId.in = pickedBoardIds.length ? ids.filter((id) => pickedBoardIds.includes(id)) : ids
       const labels = await prisma.label.findMany({
@@ -99,7 +96,7 @@ const handler: NextApiHandler = async (req, res) => {
         take: 100 - prefix.length,
       }) : []
       const seen = new Set([...prefix, ...contains].map((label) => label.id))
-      const fuzzy = chipsEnabled && value.length >= 2 && seen.size < 10 ? await prisma.label.findMany({
+      const fuzzy = value.length >= 2 && seen.size < 10 ? await prisma.label.findMany({
         where: { ...scope, AND: [...new Set(value)].map((letter) => ({ value: { contains: letter, mode: 'insensitive' as const } })) },
         select: { id: true, value: true, projectId: true },
         orderBy: [{ value: 'asc' }, { id: 'asc' }], take: 500,
@@ -117,11 +114,11 @@ const handler: NextApiHandler = async (req, res) => {
     }
   } else {
     const scope = activeBoardId ? [activeBoardId] : ids
-    if (chipsEnabled) scope.push(...ids.filter((id) => !scope.includes(id)))
+    scope.push(...ids.filter((id) => !scope.includes(id)))
     const recent = new Date(Date.now() - 90 * 86400000)
     const where = { OR: [
       ...(activeBoardId ? [{ members: { some: { projectId: activeBoardId } } }] : []),
-      ...(chipsEnabled ? [{ members: { some: { projectId: { in: ids } } } }] : []),
+      { members: { some: { projectId: { in: ids } } } },
       { tasks: { some: { projectId: { in: scope }, ...(!activeBoardId ? { createdAt: { gte: recent } } : {}) } } },
       { assignees: { some: { task: { projectId: { in: scope } }, ...(!activeBoardId ? { assignedAt: { gte: recent } } : {}) } } },
       ...(operator === 'commenter' ? [{ comments: { some: { activity: { equals: Prisma.DbNull }, task: { projectId: { in: scope }, status: { in: ['Normal' as const, 'Archive' as const] } } } } }] : []),
@@ -139,10 +136,10 @@ const handler: NextApiHandler = async (req, res) => {
         { email: { [kind]: value, mode: 'insensitive' as const } },
       ] },
     ] })
-    const recentIds = chipsEnabled ? [
+    const recentIds = [
       ...await prisma.task.findMany({ where: { projectId: { in: scope }, createdAt: { gte: recent } }, select: { userId: true }, orderBy: { createdAt: 'desc' }, take: 100 }),
       ...await prisma.assignees.findMany({ where: { task: { projectId: { in: scope } }, assignedAt: { gte: recent } }, select: { userId: true }, orderBy: { assignedAt: 'desc' }, take: 100 }),
-    ].map((row) => row.userId) : []
+    ].map((row) => row.userId)
     const recentPeople = recentIds.length ? await prisma.user.findMany({
       where: { AND: [where, { id: { in: recentIds } }] }, select, take: 200,
     }) : []
@@ -155,7 +152,7 @@ const handler: NextApiHandler = async (req, res) => {
       select, orderBy: [{ displayName: 'asc' }, { email: 'asc' }, { id: 'asc' }], take: 100 - prefix.length,
     }) : []
     const seen = new Set([...prefix, ...contains].map((person) => person.id))
-    const fuzzy = chipsEnabled && value.length >= 2 && seen.size < 10 ? await prisma.user.findMany({
+    const fuzzy = value.length >= 2 && seen.size < 10 ? await prisma.user.findMany({
       where: { AND: [where, ...[...new Set(value)].map((letter) => ({ OR: [
         { displayName: { contains: letter, mode: 'insensitive' as const } },
         { AND: [{ OR: [{ displayName: null }, { displayName: '' }] }, { email: { contains: letter, mode: 'insensitive' as const } }] },
@@ -163,10 +160,8 @@ const handler: NextApiHandler = async (req, res) => {
       orderBy: [{ displayName: 'asc' }, { email: 'asc' }, { id: 'asc' }], take: 500,
     }) : []
     const people = [...prefix, ...contains]
-    if (chipsEnabled) {
-      const unique = new Map([...recentPeople, ...fuzzy, ...people].map((person) => [person.id, person]))
-      people.splice(0, people.length, ...unique.values())
-    }
+    const unique = new Map([...recentPeople, ...fuzzy, ...people].map((person) => [person.id, person]))
+    people.splice(0, people.length, ...unique.values())
     candidates = people.map((person) => ({
       id: person.id, name: person.displayName || person.email,
       ...(layoutEnabled ? { email: person.email } : {}),

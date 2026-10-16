@@ -49,13 +49,12 @@ const mocks = new Map([
   ['src/lib/flags.ts', {
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
     HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
-    HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope',
     HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter',
     HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'htpr-6882-search-match-highlights',
     HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete',
-    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : key === 'htpr-6370-search-chips' ? state.chipsFlag ?? state.flag : state.flag,
+    isFeatureEnabled: async (key) => ['htpr-6878-search-label-scope', 'htpr-6881-search-fuzzy-person', 'htpr-6882-search-match-highlights'].includes(key) ? false : state.flag,
   }],
   ['src/utils/controllers/projects/getAllIncludes.ts', {
     projectContentAccessWhere: (userId) => ({ ownerId: userId }),
@@ -224,10 +223,8 @@ test('chip parsing retains resolved unquoted people and labels instead of search
     assert.deepEqual(state.windows, [], `${query} must not search the rest of the name as text`)
   }
 })
-test('hash board marker is inert on the server while the chips flag is off', async () => {
-  const off = await search('in:#Visible board', { chipsFlag: false })
-  assert.equal(off.res.statusCode, 204)
-  const on = await search('in:#Visible board', { chipsFlag: true })
+test('hash board marker resolves on the server', async () => {
+  const on = await search('in:#Visible board')
   assert.equal(on.res.statusCode, 200)
 })
 test('in:8 never widens the accessible-board scope even with a private row in the DB', async () => {

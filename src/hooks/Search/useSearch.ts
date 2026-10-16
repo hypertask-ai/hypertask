@@ -1,7 +1,7 @@
 import { parseSearchQuery } from "@/lib/search/operators";
 import { searchConfig } from "@/lib/configs/search.config";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
+import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6879_SEARCH_ESC_BACK_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG, HTPR_6994_SEARCH_ESC_LEAVES_FLAG } from "@/lib/flags/keys";
 import { useFlag } from "@/hooks/useFlag";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { useQueryClient } from "@tanstack/react-query";
@@ -86,7 +86,7 @@ export function useSearch(
   const queryClient = useQueryClient();
   const isApple = useDeviceContext();
   const searchOperatorsEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
-  const searchChipsEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG) && searchOperatorsEnabled;
+  const searchChipsEnabled = searchOperatorsEnabled;
   const searchAutocompleteEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG) && searchChipsEnabled;
   const searchLayoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const searchLayoutEnabled = searchLayoutFlagEnabled && searchAutocompleteEnabled;

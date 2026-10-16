@@ -19,10 +19,10 @@ let commentRows: any[] = []
 let databaseRows: any[] = []
 let highlights = false
 const flags = {
-  HTPR_6369_SEARCH_OPERATORS_FLAG: 'operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'chips',
+  HTPR_6369_SEARCH_OPERATORS_FLAG: 'operators',
   HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'layout',
   HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG: 'highlights',
-  isFeatureEnabled: async (flag: string) => flag === 'highlights' ? highlights : ['operators', 'chips', 'autocomplete', 'layout'].includes(flag),
+  isFeatureEnabled: async (flag: string) => flag === 'highlights' ? highlights : ['operators', 'autocomplete', 'layout'].includes(flag),
 }
 for (const [file, exports] of [
   ['src/lib/prisma.ts', { default: {

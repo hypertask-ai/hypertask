@@ -16,7 +16,7 @@ import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_
 import { highlightedSearchSnippet, highlightedTitle } from "@/lib/search/autocomplete";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6909_SEARCH_ONE_BOARD_TABS_FLAG, HTPR_6911_SEARCH_ROW_HIGHLIGHT_FLAG } from "@/lib/flags/keys";
 import LabelWrapper from "@/components/Labels/LabelWrapper";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
+import { HTPR_6369_SEARCH_OPERATORS_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { aiChatPendingPromptAtom, appShellRailAtom } from "@/store";
@@ -48,10 +48,9 @@ const SearchComp = ({
   const searchTerm = askAiFullscreenEnabled && askAiFullscreenFlagEnabled
     ? searchParams?.get("searchTerm") ?? _searchTerm
     : _searchTerm;
-  const chipsFlagEnabled = useFlag(HTPR_6370_SEARCH_CHIPS_FLAG);
   const operatorsFlagEnabled = useFlag(HTPR_6369_SEARCH_OPERATORS_FLAG);
   const autocompleteFlagEnabled = useFlag(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG);
-  const autocompleteEnabled = autocompleteFlagEnabled && chipsFlagEnabled && operatorsFlagEnabled;
+  const autocompleteEnabled = autocompleteFlagEnabled && operatorsFlagEnabled;
   const layoutFlagEnabled = useFlag(HTPR_6865_SEARCH_LAYOUT_FLAG);
   const layoutEnabled = layoutFlagEnabled && autocompleteEnabled;
   const matchHighlightsFlagEnabled = useFlag(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG);
@@ -133,7 +132,7 @@ const SearchComp = ({
         className={cn(`py-9 min-h-screen bg-containerBackground flex-col rounded-[4px] my-0 global-view-width flex items-center  search-input  ${styles.links_modal}`, autocompleteEnabled && 'search-autocomplete')}
       >
         <div className={cn('w-full px-0', appShellRailOn && 'pl-[64px] @xl:pl-0')}>
-          {chipsFlagEnabled && operatorsFlagEnabled && searchChipsEnabled ? (
+          {operatorsFlagEnabled && searchChipsEnabled ? (
             autocompleteFlagEnabled ? (
               <SearchChipsInput
                 value={inputValue}

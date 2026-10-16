@@ -46,7 +46,7 @@ for (const scenario of [
     try {
       source("src/utils/index.ts", { taskBaseUri: "/detail/" });
       source("src/utils/undoActions/helperFuncs.ts", { cn: (...values) => values.filter(Boolean).join(" ") });
-      source("src/hooks/useFlag.tsx", { useFlag: (key) => !scenario.legacy && (key === "htpr-6369-search-operators" || (scenario.modern && ["htpr-6370-search-chips", "htpr-6688-search-autocomplete", "htpr-6865-search-layout"].includes(key))) });
+      source("src/hooks/useFlag.tsx", { useFlag: (key) => !scenario.legacy && (key === "htpr-6369-search-operators" || (scenario.modern && ["htpr-6688-search-autocomplete", "htpr-6865-search-layout"].includes(key))) });
       source("src/lib/contexts/deviceContext.tsx", { useDeviceContext: () => false });
       source("src/hooks/MultiPages/useGetAllProjectsMinimal.ts", { useGetAllProjectsMinimal: (queryKey) => useQuery({ queryKey, initialData: [], queryFn: () => boardsPromise }) });
       source("src/hooks/RecoilRoot/useHypertasksRecoilStates.ts", { default: () => ({ toggleShowCommands() {} }) });
@@ -76,13 +76,13 @@ for (const scenario of [
       delete require.cache[inputPath];
       const jiti = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, interopDefault: true, fsCache: false, jsx: { runtime: "automatic" } });
       const { useSearch } = jiti(hookPath);
-      const SearchChipsInput = scenario.modern ? jiti(inputPath).default : null;
+      const SearchChipsInput = jiti(inputPath).default;
       const Harness = () => {
         const [urlTerm, setUrlTerm] = React.useState("");
         navigate = setUrlTerm;
         state = useSearch(urlTerm);
-        return scenario.modern
-          ? React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: [], boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: true })
+        return state.searchChipsEnabled
+          ? React.createElement(SearchChipsInput, { value: state.inputValue, onChange: state.setInputValue, onRun: state.updateSearchHistory, recentSearches: [], boardId: null, inputRef: state.tasksInputRef, autocompleteEnabled: Boolean(scenario.modern) })
           : React.createElement("input", { id: "search-input", ref: state.tasksInputRef, value: state.inputValue, onChange: () => {} });
       };
       reactRoot = require("react-dom/client").createRoot(document.getElementById("root"));

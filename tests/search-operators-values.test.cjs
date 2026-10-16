@@ -27,7 +27,7 @@ const query = (rows, args) => rows.filter((row) => matches(row, args.where))
   }).slice(0, args.take)
 const mocks = new Map([
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
-  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => state.flag }],
+  ['src/lib/flags.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: 'htpr-6865-search-layout', HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: 'htpr-6878-search-label-scope', HTPR_6880_SEARCH_COMMENTER_FLAG: 'htpr-6880-search-commenter', isFeatureEnabled: async () => state.flag }],
   ['src/utils/controllers/projects/getAllIncludes.ts', { getProjectWhere: (id) => ({ ownerId: id }) }],
   ['src/lib/prisma.ts', { default: {
     project: { findMany: async ({ where }) => {
@@ -39,16 +39,18 @@ const mocks = new Map([
       assert.deepEqual(args.where.projectId.in, [7])
       return query(state.labels, args)
     } },
+    task: { findMany: async () => [] },
+    assignees: { findMany: async () => [] },
     user: { findMany: async (args) => {
       state.peopleQueries.push(args)
       const scope = args.where.AND?.[0] ?? args.where
       state.peopleScope = scope.OR[0].members?.some.projectId ?? scope.OR[0].tasks.some.projectId.in
-      state.recentScope = scope.OR[0].tasks?.some.createdAt
+      state.recentScope = scope.OR.find((part) => part.tasks)?.tasks.some.createdAt
       return query(state.people, args)
     } },
   } }],
 ])
-mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key !== 'htpr-6370-search-chips' && state.flag
+mocks.get('src/lib/flags.ts').isFeatureEnabled = async (key) => key === 'htpr-6369-search-operators' && state.flag
 for (const [file, exports] of mocks) {
   const filename = path.join(root, file)
   require.cache[filename] = { id: filename, filename, loaded: true, exports }
