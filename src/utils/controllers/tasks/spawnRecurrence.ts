@@ -64,6 +64,7 @@ export async function spawnNextRecurrence(
   let newTask;
   try {
     ({ task: newTask } = await createTaskCore({
+      creationChannel: "api",
       title: task.title,
       description: task.description_?.content ?? "",
       userId: task.userId,

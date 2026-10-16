@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
+import { recordBoardCreated } from "@/lib/telemetry/savedWork";
 
 const getFirst = async (userId:number, { withTasks = false }: { withTasks?: boolean } = {}) => {
         try {
@@ -70,6 +71,7 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                     projectId: created.id,
                     userId,
                 });
+                recordBoardCreated(created.id, "auto", { userId });
                 project = await prisma.project.findFirst({
                     where: { id: created.id },
                     include: projectInclude,

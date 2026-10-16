@@ -2,6 +2,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 
 import type { McpAgentSummary } from '@/lib/mcp/agents';
 import { getMcpSessionAgentSummary } from '@/lib/mcp/agents';
+import { getMcpOperationContext } from '@/lib/mcp/operationContext';
 import { NextRequest, NextResponse } from 'next/server';
 import { validateCreateTaskBody } from '@/lib/mcp/tasks/validators';
 import { validateProjectAccess, getSectionForTask, createTask, validateParentTask, validateProjectMemberIds, matchLabelIds } from '@/lib/mcp/tasks/services';
@@ -258,7 +259,8 @@ export async function POST(request: NextRequest) {
                     labels: labelIds || [],
                     parentTaskId: parent_task_id || undefined,
                     assigneeIds: assignee_ids && assignee_ids.length > 0 ? assignee_ids : undefined,
-                    agentId: ctx.agentId || undefined
+                    agentId: ctx.agentId || undefined,
+                    creationChannel: getMcpOperationContext(request) ? 'mcp' : 'api',
                 });
 
                 const sessionAgent = await getMcpSessionAgentSummary(ctx.agentId, user.id);

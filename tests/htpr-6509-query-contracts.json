@@ -384,6 +384,7 @@
         "description": null,
         "ownerId": 7,
         "createdAt": null,
+        "seeded": null,
         "sections": [],
         "status": "Normal",
         "googleAccountId": null,
