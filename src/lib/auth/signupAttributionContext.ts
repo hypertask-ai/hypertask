@@ -35,8 +35,8 @@ async function withinIpBudget(ip: string | null): Promise<boolean> {
   if (!ip) return true;
   const redis = await getRedis();
   const key = `auth:signup-context-ip:${hash(ip)}`;
+  await redis.set(key, "0", "EX", 600, "NX");
   const count = await redis.incr(key);
-  if (count === 1) await redis.expire(key, 600);
   if (count > SIGNUP_CONTEXTS_PER_IP_PER_10_MINUTES) console.warn("[signup-identity] unlinked", { reason: "ip_budget_exceeded" });
   return count <= SIGNUP_CONTEXTS_PER_IP_PER_10_MINUTES;
 }

@@ -41,15 +41,14 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
   let codeConsumed = false
   let accountExists = existing
   const redis = {
-    set: async (key, value, ex, ttl) => { calls.redis.push(['set', key, ex, ttl]); values.set(key, { value, expires: Date.now() + ttl * 1000 }); return 'OK' },
+    set: async (key, value, ex, ttl, nx) => { calls.redis.push(['set', key, ex, ttl]); if (nx === 'NX' && values.get(key)?.expires > Date.now()) return null; values.set(key, { value, expires: Date.now() + ttl * 1000 }); return 'OK' },
     incr: async (key) => { const record = values.get(key); const next = Number(record?.value ?? 0) + 1; values.set(key, { value: String(next), expires: record?.expires ?? Infinity }); return next },
-    expire: async (key, ttl) => { const record = values.get(key); if (record) record.expires = Date.now() + ttl * 1000; return 1 },
     getdel: async (key) => { calls.redis.push(['getdel', key]); const record = values.get(key); values.delete(key); return record && record.expires > Date.now() ? record.value : null },
   }
   const aliases = {
     '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { isFeatureEnabled: async (key, id) => { calls.flags.push([key, id]); return enabled } },
+    '@/lib/flags': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link', isFeatureEnabled: async (key, id) => { calls.flags.push([key, id]); return enabled } },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },
@@ -651,6 +650,9 @@ test('one IP gets at most 30 signup contexts per 10 minutes; other IPs still get
   for (let i = 0; i < 30; i++) assert.match((await ask('203.0.113.7')).signupContextId, /^[0-9a-f-]{36}$/)
   assert.equal((await ask('203.0.113.7')).signupContextId, null)
   assert.match((await ask('198.51.100.9')).signupContextId, /^[0-9a-f-]{36}$/)
+  const counters = [...h.values].filter(([key]) => key.startsWith('auth:signup-context-ip:'))
+  assert.equal(counters.length, 2)
+  for (const [, record] of counters) assert.ok(record.expires <= Date.now() + 600_000)
   assert.equal(h.calls.redis.filter(([op, key]) => op === 'set' && key.startsWith('auth:signup-context:')).length, 31)
 })
 

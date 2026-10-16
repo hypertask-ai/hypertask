@@ -1,4 +1,3 @@
-import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/keys";
 import { NextRequest, NextResponse } from 'next/server'
 import { createSignupContext, bindSignupCodeContext } from '@/lib/auth/signupAttributionContext'
 import jwt from 'jsonwebtoken'
@@ -11,6 +10,7 @@ import prisma from '@/lib/prisma'
 import {
   HTPR_7032_EMAIL_EXPIRY_COPY_FLAG,
   HTPR_7032_FIRST_TIME_EMAIL_FLAG,
+  HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG,
   isFeatureEnabled,
 } from '@/lib/flags'
 
