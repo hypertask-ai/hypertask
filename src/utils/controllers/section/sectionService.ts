@@ -4,6 +4,7 @@ import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notificati
 import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
+import { recordColumnCreated, recordColumnRenamed } from '@/lib/telemetry/savedWork'
 import {
   appendSectionToAllViews,
   updateSectionInAllViews,
@@ -71,6 +72,7 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
     })
 
     await appendSectionToAllViews(projectId, section, userId)
+    recordColumnCreated(section.id, { userId, agentId })
 
     return {
       status: 200,
@@ -202,6 +204,8 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
 
       return updated
     })
+
+    if (titleChanged && !toUpdate.deleted) recordColumnRenamed(sectionId, { userId, agentId })
 
     if (toUpdate.deleted) {
       await removeSectionFromAllViews(sectionId, toUpdate.projectId)

@@ -121,6 +121,7 @@ function fixture(options = {}) {
       assert.equal(id, userId); assert.equal(actor, agentId); return { ownerId: id };
     } },
     "@/utils/generateRank": { default: () => "A0100" },
+    "@/lib/telemetry/savedWork": { recordColumnCreated: () => {}, recordColumnRenamed: () => {} },
     "./viewHelpers": { appendSectionToAllViews: async () => {}, updateSectionInAllViews: async () => {}, removeSectionFromAllViews: async () => {} },
   });
   const services = load("src/lib/mcp/sections/services.ts", {

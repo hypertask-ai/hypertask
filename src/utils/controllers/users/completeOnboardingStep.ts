@@ -204,8 +204,6 @@ export const createOnboardingSampleBoardProject = async ({
     seeded: true,
   });
 
-  recordBoardCreated(Project.id, "seeded", { userId: exist_user.id });
-
   const projectIdentifier = (
     Project.uniqueIdentifier ?? uniqueIdentifier
   ).toUpperCase();
@@ -252,6 +250,8 @@ export const createOnboardingSampleBoardProject = async ({
       }
     }
   }
+
+  recordBoardCreated(Project.id, "seeded", { userId: exist_user.id });
 
   if (firstSection) {
     try {
