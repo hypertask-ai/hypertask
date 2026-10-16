@@ -41,7 +41,6 @@ test('URL searches retry the full operator query when flags load after projects'
     stub('node_modules/axios/dist/node/axios.cjs', { default: { post: async (_url, body) => { posts.push(body); return { status: 204 } } }, post: async (_url, body) => { posts.push(body); return { status: 204 } } })
     stub('node_modules/next/navigation.js', { useRouter: () => ({ replace() {}, push() {} }) })
     stub('node_modules/@tanstack/react-query/build/modern/index.cjs', { useQueryClient: () => ({ invalidateQueries() {} }) })
-    require.cache[path.join(root, 'src/lib/flags/keys.ts')].exports.HTPR_6370_SEARCH_CHIPS_FLAG = 'htpr-6370-search-chips'
     require.cache[path.join(root, 'src/hooks/useFlag.tsx')].exports.useFlag = (key) => key === 'htpr-6369-search-operators' && enabled
     for (const [name, exports] of [
       ['next/navigation', { useRouter: () => ({ replace() {}, push() {} }) }],

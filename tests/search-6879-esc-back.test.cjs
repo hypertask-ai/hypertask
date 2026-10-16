@@ -10,7 +10,7 @@ const escFlag = 'htpr-6879-search-esc-back'
 const commenterFlag = 'htpr-6880-search-commenter'
 const labelFlag = 'htpr-6878-search-label-scope'
 const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
+const prerequisites = ['htpr-6369-search-operators', 'htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })

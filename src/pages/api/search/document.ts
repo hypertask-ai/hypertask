@@ -1,10 +1,10 @@
 import { httpStatusConfig } from "@/lib/configs/http-status.config";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { HTPR_6369_SEARCH_OPERATORS_FLAG, isFeatureEnabled } from "@/lib/flags";
-import { HTPR_6370_SEARCH_CHIPS_FLAG, HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
+import { HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, HTPR_6865_SEARCH_LAYOUT_FLAG, HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, HTPR_6880_SEARCH_COMMENTER_FLAG } from "@/lib/flags";
 import { HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG } from "@/lib/flags";
 import { MAX_SEARCH_OPERATOR_CLAUSES, searchOperatorClauseCount, type SearchFilter } from "@/lib/search/operators";
-import { parseSearchWithChipNames, parseSearchWithNames } from "@/lib/search/serverOperators";
+import { parseSearchWithChipNames } from "@/lib/search/serverOperators";
 import { rankedSearchWhere } from "@/lib/search/rankedWhere";
 import { resultKinds } from "@/lib/search/filters";
 import prisma from "@/lib/prisma";
@@ -63,18 +63,17 @@ const handler: NextApiHandler = async (
         return res.status(403).json({ message: "Project access denied" });
       }
 
-      const chipsEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6370_SEARCH_CHIPS_FLAG, session.userId);
       const fuzzyPersonEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6881_SEARCH_FUZZY_PERSON_FLAG, session.userId);
-      const matchHighlightsEnabled = chipsEnabled &&
+      const matchHighlightsEnabled = operatorsEnabled &&
         await isFeatureEnabled(HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, session.userId);
       const commenterEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6880_SEARCH_COMMENTER_FLAG, session.userId);
       const logicEnabled = operatorsEnabled && await isFeatureEnabled(HTPR_6368_SEARCH_OPERATOR_LOGIC_FLAG, session.userId);
-      const parsed = chipsEnabled
+      const parsed = operatorsEnabled
         ? await parseSearchWithChipNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled)
-        : operatorsEnabled ? await parseSearchWithNames(normalizedSearchQuery, requestedProjectIds, fuzzyPersonEnabled, requestedProjectIds, commenterEnabled, logicEnabled) : null;
-      if (parsed?.filters.label && chipsEnabled &&
+        : null;
+      if (parsed?.filters.label && operatorsEnabled &&
         ![...(parsed.filters.in ?? []), ...(parsed.filters.board ?? [])].some((filter) => !filter.negated) &&
         await isFeatureEnabled(HTPR_6878_SEARCH_LABEL_SCOPE_FLAG, session.userId) &&
         await isFeatureEnabled(HTPR_6865_SEARCH_LAYOUT_FLAG, session.userId) &&

@@ -13,7 +13,7 @@ const layoutFlag = 'htpr-6865-search-layout'
 type Label = { id: string; value: string; projectId: number }
 type Link = { labelId: string; task: { projectId: number; status: string } }
 let state: { flags: Record<string, boolean>; labels: Label[]; links: Link[]; labelQueries: any[]; countQueries: any[]; searchWhere?: any; session: { userId: number } | null }
-const defaults = { 'htpr-6369-search-operators': true, 'htpr-6370-search-chips': true, 'htpr-6688-search-autocomplete': true, [layoutFlag]: true, [flag]: true }
+const defaults = { 'htpr-6369-search-operators': true, 'htpr-6688-search-autocomplete': true, [layoutFlag]: true, [flag]: true }
 const matches = (row: Label, where: any): boolean => {
   if (where.projectId && !where.projectId.in.includes(row.projectId)) return false
   if (where.AND && !where.AND.every((part: any) => matches(row, part))) return false
@@ -30,7 +30,7 @@ const matches = (row: Label, where: any): boolean => {
 for (const [file, exports] of [
   ['src/lib/auth/getSessionUser.ts', { getSessionUser: async () => state.session }],
   ['src/lib/flags.ts', {
-    HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips',
+    HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators',
     HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete', HTPR_6865_SEARCH_LAYOUT_FLAG: layoutFlag,
     HTPR_6878_SEARCH_LABEL_SCOPE_FLAG: flag,
     HTPR_6881_SEARCH_FUZZY_PERSON_FLAG: 'htpr-6881-search-fuzzy-person',
@@ -157,9 +157,9 @@ test('dedupe does not merge IDs after a board is explicitly picked', async () =>
 })
 
 test('flag off preserves legacy response bytes, ignores boards and never queries counts', async () => {
-  for (const disabled of [flag, layoutFlag, 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']) {
+  for (const disabled of [flag, layoutFlag, 'htpr-6688-search-autocomplete']) {
     const result = await lookup({ boards: '7', boardId: '7', value: 'bu' }, { labels, flags: { ...defaults, [disabled]: false } })
-    assert.equal(JSON.stringify(result.body), JSON.stringify({ candidates: disabled === 'htpr-6370-search-chips' ? [{ id: 'one', name: 'Bug' }] : [{ id: 'one', name: 'Bug' }, { id: 'two', name: 'bug' }] }))
+    assert.equal(JSON.stringify(result.body), JSON.stringify({ candidates: [{ id: 'one', name: 'Bug' }, { id: 'two', name: 'bug' }] }))
     assert.equal(result.countQueries.length, 0)
   }
 })

@@ -144,7 +144,7 @@ const valuesHandler = jiti(path.join(root, 'src/pages/api/search/values.ts')).de
 const { GET } = jiti(path.join(root, 'src/lib/mcp/operations/tasks/search/operation.ts')) as any
 function reset(overrides: any = {}) {
   state = { session: { userId: 42 }, flags: { [flag]: true, [fuzzyFlag]: true,
-    [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true, [keys.HTPR_6370_SEARCH_CHIPS_FLAG]: true,
+    [keys.HTPR_6369_SEARCH_OPERATORS_FLAG]: true,
     [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG]: true, [keys.HTPR_6865_SEARCH_LAYOUT_FLAG]: true },
     indexComments: [], countQueries: [], anchorQueries: [], peopleQueries: [], taskQueries: [], commentQueries: [], detailQueries: [], flagCalls: [], deleted: [], indexCalls: 0, ...overrides }
 }
@@ -259,7 +259,7 @@ test('comment author pill falls back to email and highlight prerequisites do not
     reset()
     state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
     assert.equal((await search('needle commenter:1')).body.processedData.All[0].searchMatch.commentAuthor, 'one@example.test')
-    for (const prerequisite of [keys.HTPR_6370_SEARCH_CHIPS_FLAG, keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
+    for (const prerequisite of [keys.HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG, keys.HTPR_6865_SEARCH_LAYOUT_FLAG]) {
       reset()
       state.flags[keys.HTPR_6882_SEARCH_MATCH_HIGHLIGHTS_FLAG] = true
       state.flags[prerequisite] = false
@@ -358,20 +358,17 @@ test('MCP shares authorization, parser, comment snippets and newest-comment pagi
 })
 
 
-test('API and MCP honor both person and commenter flags independently in both chip modes', async () => {
-  for (const chips of [false, true]) {
-    for (const fuzzy of [false, true]) {
-      for (const surface of ['API', 'MCP']) {
-        reset()
-        state.flags[keys.HTPR_6370_SEARCH_CHIPS_FLAG] = chips
-        state.flags[fuzzyFlag] = fuzzy
-        const ids = surface === 'API'
-          ? (await search('commenter:hicham')).body.processedData.All.map((row: any) => row.taskId)
-          : (await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:hicham&board_id=7'))).json()).tasks.map((row: any) => row.id)
-        assert.deepEqual(ids, fuzzy ? [103, 102, 101] : [102, 101])
-        assert.ok(state.flagCalls.includes(flag))
-        assert.ok(state.flagCalls.includes(fuzzyFlag))
-      }
+test('API and MCP honor both person and commenter flags independently', async () => {
+  for (const fuzzy of [false, true]) {
+    for (const surface of ['API', 'MCP']) {
+      reset()
+      state.flags[fuzzyFlag] = fuzzy
+      const ids = surface === 'API'
+        ? (await search('commenter:hicham')).body.processedData.All.map((row: any) => row.taskId)
+        : (await (await GET(new NextRequest('http://localhost/api/mcp/tasks/search?q=commenter:hicham&board_id=7'))).json()).tasks.map((row: any) => row.id)
+      assert.deepEqual(ids, fuzzy ? [103, 102, 101] : [102, 101])
+      assert.ok(state.flagCalls.includes(flag))
+      assert.ok(state.flagCalls.includes(fuzzyFlag))
     }
   }
   reset()
@@ -437,9 +434,8 @@ test('review comment-only authors appear only in bounded accessible commenter re
   ]
   people.push(...added)
   try {
-    for (const chips of [false, true]) {
+    for (const parser of [parseSearchWithNames, parseSearchWithChipNames]) {
       reset()
-      const parser = chips ? parseSearchWithChipNames : parseSearchWithNames
       const parsed = await parser('commenter:comment from:comment assignee:comment', [7], true, [7], true)
       assert.deepEqual(parsed.filters.commenter[0].userIds, [40])
       assert.deepEqual(parsed.filters.from[0].userIds, [])
@@ -449,7 +445,6 @@ test('review comment-only authors appear only in bounded accessible commenter re
       assert.equal(full.text, '')
       // Resolver must match before limiting, so it never caps the people pool (review on PR 977).
       assert.ok(state.peopleQueries.filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take === undefined))
-      state.flags[keys.HTPR_6370_SEARCH_CHIPS_FLAG] = chips
       const pickerStart = state.peopleQueries.length
       for (const operator of ['commenter', 'from', 'assignee']) {
         const res = response()
@@ -459,7 +454,7 @@ test('review comment-only authors appear only in bounded accessible commenter re
       assert.ok(state.peopleQueries.slice(pickerStart).filter((args: any) => JSON.stringify(args.where).includes('comments')).every((args: any) => args.take <= 1000))
       const resolved = response()
       await valuesHandler({ method: 'GET', headers: {}, query: { operator: 'commenter', resolve: 'Comment Only trailing text', boardId: '7' } }, resolved)
-      assert.equal(resolved.body.resolved, chips ? 'Comment Only' : undefined)
+      assert.equal(resolved.body.resolved, 'Comment Only')
       assert.deepEqual((await parser('commenter:comment@example', [7], true, [7], true)).filters.commenter[0].userIds, [40])
       assert.deepEqual((await parser('commenter:comment', [7, 8], true, [7], true)).filters.commenter[0].userIds, [40])
       assert.deepEqual((await parser('commenter:comment', [7, 8], true, [8], true)).filters.commenter[0].userIds, [44])

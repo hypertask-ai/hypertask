@@ -1,6 +1,6 @@
 # Search suggestions
 
-The existing search screen can show an aligned, full-width list under its input when `htpr-6865-search-layout`, `htpr-6688-search-autocomplete`, `htpr-6370-search-chips`, and `htpr-6369-search-operators` are enabled. The new flag defaults to Owner + QA; the owner controls rollout at `/admin/flags`.
+The existing search screen can show an aligned, full-width list under its input when `htpr-6865-search-layout`, `htpr-6688-search-autocomplete`, and `htpr-6369-search-operators` are enabled. The new flag defaults to Owner + QA; the owner controls rollout at `/admin/flags`.
 
 - Empty search shows recent queries once, with readable filter chips, then operator examples and meanings. Tips use two columns on desktop and one on phones.
 - Typing shows Ask AI first, matching operators next, then matching people, labels and boards. People include their email and the existing avatar; matching letters are bold.

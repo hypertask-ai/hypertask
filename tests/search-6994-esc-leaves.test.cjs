@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '..')
 const escFlag = 'htpr-6879-search-esc-back'
 const leavesFlag = 'htpr-6994-search-esc-leaves'
 const layoutFlag = 'htpr-6865-search-layout'
-const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
+const prerequisites = ['htpr-6369-search-operators', 'htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })

@@ -24,7 +24,6 @@ test('URL searches retry the full operator query when flags load after projects'
     require.cache[filename] = { id: filename, filename, loaded: true, exports }
   }
   let enabled = false
-  let chipsEnabled = false
   let chipUI = false
   let resultMode = false
   let pickerOpen = false
@@ -34,8 +33,8 @@ test('URL searches retry the full operator query when flags load after projects'
   let reactRoot
   try {
     stub('src/lib/configs/search.config.ts', { searchConfig: { responseMessages: { default: '', fail: 'No results', error: 'Error' }, elementIds: { input: { id: 'search-input' }, history: { id: 'search-history' } }, handleKeyDown: { classNamesToReturnFrom: [] } } })
-    stub('src/lib/flags/keys.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6370_SEARCH_CHIPS_FLAG: 'htpr-6370-search-chips', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
-    stub('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6369-search-operators' ? enabled : key === 'htpr-6370-search-chips' ? chipsEnabled : false })
+    stub('src/lib/flags/keys.ts', { HTPR_6369_SEARCH_OPERATORS_FLAG: 'htpr-6369-search-operators', HTPR_6688_SEARCH_AUTOCOMPLETE_FLAG: 'htpr-6688-search-autocomplete' })
+    stub('src/hooks/useFlag.tsx', { useFlag: (key) => key === 'htpr-6369-search-operators' ? enabled : false })
     stub('src/lib/contexts/deviceContext.tsx', { useDeviceContext: () => false })
     const allProjects = [{ id: 7, title: 'Visible' }]
     stub('src/hooks/MultiPages/useGetAllProjectsMinimal.ts', { useGetAllProjectsMinimal: () => ({ data: allProjects }) })
@@ -74,19 +73,15 @@ test('URL searches retry the full operator query when flags load after projects'
       await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
       const count = posts.length
       assert.equal(posts.at(-1).searchQuery, term === 'is:open' ? '' : 'login')
+      assert.equal(chipUI, false)
       enabled = true
       await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
       assert.equal(posts.length, count + 1)
       assert.equal(posts.at(-1).searchQuery, term)
       await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
       assert.equal(posts.length, count + 1)
-      assert.equal(chipUI, false)
-      chipsEnabled = true
-      await React.act(async () => { reactRoot.render(React.createElement(Search, { term })) })
       assert.equal(chipUI, true)
-      chipsEnabled = false
     }
-    chipsEnabled = true
     resultMode = true
     await React.act(async () => { reactRoot.render(React.createElement(Search, { term: 'login' })) })
     assert.equal(searchState.typedTasks.length, 2)
@@ -112,13 +107,11 @@ test('URL searches retry the full operator query when flags load after projects'
       await React.act(async () => escape())
       assert.equal(backs, 1, 'second Escape with no picker retains Back')
       pickerOpen = true
-      for (const flags of [[false, true], [true, false], [false, false]]) {
-        ;[enabled, chipsEnabled] = flags
-        await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
-        const previousBacks = backs
-        await React.act(async () => escape())
-        assert.equal(backs, previousBacks + 1, 'flag-off Escape remains Back')
-      }
+      enabled = false
+      await React.act(async () => reactRoot.render(React.createElement(Search, { term: 'login' })))
+      const previousBacks = backs
+      await React.act(async () => escape())
+      assert.equal(backs, previousBacks + 1, 'operators-off Escape remains Back')
     })
   } finally {
     if (reactRoot) await React.act(async () => { reactRoot.unmount() })

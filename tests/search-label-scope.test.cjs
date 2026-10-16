@@ -8,7 +8,7 @@ const { createJiti } = require('jiti')
 const root = path.resolve(__dirname, '..')
 const layoutFlag = 'htpr-6865-search-layout'
 const labelFlag = 'htpr-6878-search-label-scope'
-const prerequisites = ['htpr-6369-search-operators', 'htpr-6370-search-chips', 'htpr-6688-search-autocomplete']
+const prerequisites = ['htpr-6369-search-operators', 'htpr-6688-search-autocomplete']
 
 async function withSearch(t, config, check) {
   const dom = new JSDOM('<div id="root"></div>', { url: 'https://example.test/search' })
