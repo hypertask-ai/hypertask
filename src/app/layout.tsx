@@ -13,6 +13,8 @@ import { DIV_ID_CONSTANTS } from "@/lib/configs/general.config";
 import { inter, INTER_LATIN_FONT_HREF } from "@/lib/fonts/inter";
 import { newsreader, NEWSREADER_LATIN_FONT_HREFS } from "@/lib/fonts/newsreader";
 import { HTPR_7016_PHONE_BOARD_COLD_START_FLAG } from "@/lib/flags/keys";
+import { HTPR_7278_MEMORY_ONLY_TRACKING_FLAG } from "@/lib/flags/definitions/htpr-7278-memory-only-tracking";
+import { featureFlagCandidateUserIds, isFeatureEnabled } from "@/lib/flags";
 import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexSans";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
@@ -59,6 +61,13 @@ export default async function RootLayout(
   );
   const analyticsIsGuest =
     analyticsSession?.email?.endsWith("@demo.hypertask.ai") ?? false;
+  const memoryOnlyTracking = await (analyticsSession
+    ? isFeatureEnabled(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG, analyticsSession.id)
+    : featureFlagCandidateUserIds(HTPR_7278_MEMORY_ONLY_TRACKING_FLAG).then((ids) => ids === null)
+  ).catch((error) => {
+    console.error("[posthog] memory-only tracking flag unreadable, keeping browser storage", error);
+    return false;
+  });
 
   const theme = cookieStore.get(authConfig.cookies.theme) ?? {
     value: authConfig.cookies.defaultTheme,
@@ -142,6 +151,7 @@ export default async function RootLayout(
         <PostHogAnalytics
           authenticatedUserId={analyticsSession?.id ?? null}
           authenticatedIsGuest={analyticsIsGuest}
+          memoryOnlyTracking={memoryOnlyTracking}
         />
         <DeploySkewGuard />
         <SpeedInsights />
