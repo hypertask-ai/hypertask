@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+
+import { getCookieConsent } from "@/lib/cookieConsent";
 import { 
   extractUTMFromURL, 
   storeUTMInCookies, 
@@ -53,7 +55,7 @@ const UTMCookieHandler = () => {
       }
     };
 
-    captureUTMData();
+    if (getCookieConsent() !== "essential") void captureUTMData();
   }, []);
 
   return null;

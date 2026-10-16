@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import type { PostHogInterface } from "posthog-js/dist/module.slim";
 
-import { getCookieConsent } from "@/lib/cookieConsent";
+import { getCookieConsent, onCookieConsentChange } from "@/lib/cookieConsent";
 import {
   installProductPerformanceSink,
   isProductReadinessEvent,
@@ -506,6 +506,17 @@ export default function PostHogAnalytics({
       }
     };
   }, [installAuthenticatedProjectWebVitals, sendProjectWebVital]);
+
+  useEffect(
+    () =>
+      onCookieConsentChange((consent) => {
+        const posthog = posthogRef.current;
+        if (!posthog || consent !== "essential") return;
+        posthog.stopSessionRecording();
+        posthog.opt_out_capturing();
+      }),
+    [],
+  );
 
   useEffect(() => {
     scheduleControllerRef.current?.setAuthenticated(
