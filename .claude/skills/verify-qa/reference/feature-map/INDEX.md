@@ -16,6 +16,7 @@ each ticket only needs the one or two areas it touches.
 |---|---|---|
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Login | [login.md](login.md) | `login` (write journey) |
+| Cookie consent | [cookie-consent.md](cookie-consent.md) | no smoke id; fresh-context storage before and after Reject and Accept |
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
