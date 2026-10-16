@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
-import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
+import { recordBoardCreated } from "@/lib/telemetry/savedWork";
 
 const getFirst = async (userId:number, { withTasks = false }: { withTasks?: boolean } = {}) => {
         try {

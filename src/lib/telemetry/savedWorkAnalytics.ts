@@ -4,14 +4,9 @@ import { isGuestUser } from "@/lib/demo/guest";
 import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7271_SAVED_WORK_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { recordActivationOccurrence } from "./activationOccurrences";
-import { scheduleAnalytics } from "./signupAnalytics";
+import type { BoardCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
 
-export type CreationChannel = "web" | "api" | "mcp" | "agent";
-export const CREATION_CHANNEL_HEADER = "X-Hypertask-Creation-Channel";
-export type BoardCreationMethod = "manual" | "api" | "agent" | "auto" | "seeded" | "adopted_demo";
 export type AccountCategory = "customer" | "internal" | "qa" | "guest";
-
-export type SavedWorkActor = { userId: number | null; agentId?: string | null };
 
 const LEGACY_BOARD_SOURCES: ReadonlySet<BoardCreationMethod> = new Set(["manual", "seeded", "adopted_demo"]);
 
@@ -22,10 +17,6 @@ export function accountCategory(user: { id: number; uid?: string | null; email: 
   if (user.id === FEATURE_FLAG_QA_USER_ID || (qaEmail && email === qaEmail)) return "qa";
   if (user.id === FEATURE_FLAG_OWNER_USER_ID || email.endsWith("@hypertask.ai")) return "internal";
   return "customer";
-}
-
-export function creationChannelFromHeader(value: string | null | undefined): CreationChannel {
-  return value === "api" || value === "mcp" || value === "agent" ? value : "web";
 }
 
 function actorProperties(actor: SavedWorkActor) {
@@ -71,44 +62,40 @@ export function buildTaskCreatedProperties(
   };
 }
 
-export function recordBoardCreated(
+export async function captureBoardCreated(
   boardId: number,
   method: BoardCreationMethod,
   actor: SavedWorkActor,
-  occurredAt = new Date(),
-): void {
-  scheduleAnalytics(async () => {
-    const board = await loadBoard(boardId);
-    if (!board) return;
-    if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) {
-      if (LEGACY_BOARD_SOURCES.has(method)) {
-        recordActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
-      }
-      return;
+  occurredAt: Date,
+): Promise<void> {
+  const board = await loadBoard(boardId);
+  if (!board) return;
+  if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) {
+    if (LEGACY_BOARD_SOURCES.has(method)) {
+      recordActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
     }
-    if (isGuestUser(board.owner)) return;
-    await captureAnalyticsOccurrence(
-      board.owner.id,
-      "board_created",
-      `analytics:board_created:${board.id}`,
-      buildBoardCreatedProperties(board, method, actor, occurredAt),
-      { scope: "business" },
-    );
-  });
+    return;
+  }
+  if (isGuestUser(board.owner)) return;
+  await captureAnalyticsOccurrence(
+    board.owner.id,
+    "board_created",
+    `analytics:board_created:${board.id}`,
+    buildBoardCreatedProperties(board, method, actor, occurredAt),
+    { scope: "business" },
+  );
 }
 
-export function recordTaskCreated(taskId: number, actor: SavedWorkActor, channel: CreationChannel): void {
-  scheduleAnalytics(async () => {
-    const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, createdAt: true } });
-    if (!task) return;
-    const board = await loadBoard(task.projectId);
-    if (!board || !(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) return;
-    await captureAnalyticsOccurrence(
-      board.owner.id,
-      "task_created",
-      `analytics:task_created:${task.id}`,
-      buildTaskCreatedProperties(board, task, actor, channel),
-      { scope: "business" },
-    );
-  });
+export async function captureTaskCreated(taskId: number, actor: SavedWorkActor, channel: CreationChannel): Promise<void> {
+  const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, createdAt: true } });
+  if (!task) return;
+  const board = await loadBoard(task.projectId);
+  if (!board || !(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, board.owner.id))) return;
+  await captureAnalyticsOccurrence(
+    board.owner.id,
+    "task_created",
+    `analytics:task_created:${task.id}`,
+    buildTaskCreatedProperties(board, task, actor, channel),
+    { scope: "business" },
+  );
 }

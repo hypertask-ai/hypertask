@@ -119,7 +119,6 @@ const create = async ({title, description, section, userId, ranking, projectId,s
             const taskCreatedActor = {
                 userId: currentUser.id,
                 agentId: agentId ?? null,
-                channel: "web" as const,
             }
             if (index==0 && count!==0){
 
@@ -150,7 +149,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
                   return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                })
+                }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({
@@ -182,7 +181,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                   })
                   await persistAgentTaskCreatedPending(tx, row.id)
                   return { taskId: row.id, result: row, webhookTask: buildWebhookTaskSnapshot(row, sectionExists.section_title) }
-                })
+                }, "web")
                 task = created.result
                 boardWebhookDeliveryIds = created.boardWebhookDeliveryIds
                 await prisma.team_Activity.update({

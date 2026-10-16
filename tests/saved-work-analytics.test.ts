@@ -19,11 +19,11 @@ function taskEvents(h: ReturnType<typeof activationHarness>) {
   return h.load("src/lib/mcp/webhooks/taskEvents.ts");
 }
 
-function saveTask(h: ReturnType<typeof activationHarness>, id: number, actor: Record<string, unknown>) {
+function saveTask(h: ReturnType<typeof activationHarness>, id: number, actor: Record<string, unknown>, channel: string) {
   h.tasks.set(id, { id, projectId: 15, createdAt: new Date("2026-10-16T12:00:00Z") });
   return taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, actor, async () => ({
     taskId: id, result: { id }, webhookTask: { id, projectId: 15, sectionId: 1, section: "Doing", status: "Normal" },
-  }));
+  }), channel);
 }
 
 const common = {
@@ -87,14 +87,14 @@ test("guest-owned boards are not sent before adoption", async () => {
   const h = harness();
   h.users.set(50, { id: 50, uid: "guest_local", email: "guest@example.test" });
   h.projects.get(15).owner = h.users.get(50);
-  h.load("src/lib/telemetry/savedWorkAnalytics.ts").recordBoardCreated(15, "seeded", { userId: 50 });
+  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "seeded", { userId: 50 });
   await h.drain();
   assert.equal(h.captures.length, 0);
 });
 
 test("a saved task sends task_created with board, seeded and channel properties", async () => {
   const h = harness();
-  await saveTask(h, 41, { userId: 123, agentId: null, channel: "web" });
+  await saveTask(h, 41, { userId: 123, agentId: null }, "web");
   await h.drain();
   assert.equal(h.captures.length, 1);
   const [{ distinctId, event, properties }] = h.captures;
@@ -113,7 +113,7 @@ test("a saved task sends task_created with board, seeded and channel properties"
 test("an agent task on a seeded board is flagged seeded and agent-made", async () => {
   const h = harness();
   h.projects.get(15).seeded = true;
-  await saveTask(h, 42, { userId: 123, agentId: "agent-1", channel: "mcp" });
+  await saveTask(h, 42, { userId: 123, agentId: "agent-1" }, "mcp");
   await h.drain();
   const { properties } = h.captures[0];
   assert.equal(properties.is_seeded, true);
@@ -124,8 +124,8 @@ test("an agent task on a seeded board is flagged seeded and agent-made", async (
 
 test("replaying the same task sends no duplicate", async () => {
   const h = harness();
-  const { recordTaskCreated } = h.load("src/lib/telemetry/savedWorkAnalytics.ts");
-  await saveTask(h, 43, { userId: 123, agentId: null, channel: "api" });
+  const { recordTaskCreated } = h.load("src/lib/telemetry/savedWork.ts");
+  await saveTask(h, 43, { userId: 123, agentId: null }, "api");
   recordTaskCreated(43, { userId: 123 }, "api");
   recordTaskCreated(43, { userId: 123 }, "api");
   await h.drain();
@@ -135,16 +135,16 @@ test("replaying the same task sends no duplicate", async () => {
 
 test("a failed save sends nothing", async () => {
   const h = harness();
-  await assert.rejects(taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, { userId: 123, agentId: null, channel: "web" }, async () => {
+  await assert.rejects(taskEvents(h).createTaskWithBoardWebhookOutbox(h.prisma, { userId: 123, agentId: null }, async () => {
     throw new Error("mock save failed");
-  }));
+  }, "web"));
   await h.drain();
   assert.equal(h.captures.length, 0);
 });
 
 test("with the flag off, no task_created is sent", async () => {
   const h = activationHarness();
-  await saveTask(h, 44, { userId: 123, agentId: null, channel: "web" });
+  await saveTask(h, 44, { userId: 123, agentId: null }, "web");
   await h.drain();
   assert.equal(h.captures.length, 0);
 });
@@ -160,7 +160,7 @@ test("account category tags QA, internal, guest and customer accounts", () => {
 });
 
 test("only known channels pass the internal header; anything else counts as web", () => {
-  const { creationChannelFromHeader } = harness().load("src/lib/telemetry/savedWorkAnalytics.ts");
+  const { creationChannelFromHeader } = harness().load("src/lib/telemetry/savedWork.ts");
   assert.equal(creationChannelFromHeader("mcp"), "mcp");
   assert.equal(creationChannelFromHeader("api"), "api");
   assert.equal(creationChannelFromHeader("agent"), "agent");
@@ -179,7 +179,7 @@ test("every task row is created through the analytics-aware save wrapper", () =>
     }
   };
   walk(path.join(root, "src"));
-  const taskWriters = files.filter((file) => /\b(?:tx|prisma)\.task\.create(?:Many)?\(/.test(fs.readFileSync(file, "utf8")));
+  const taskWriters = files.filter((file) => /\.task\.create(?:Many|ManyAndReturn)?\(/.test(fs.readFileSync(file, "utf8")));
   const relative = taskWriters.map((file) => path.relative(root, file)).sort();
   assert.deepEqual(relative, [
     "src/lib/api/task-writes/create-global.ts",

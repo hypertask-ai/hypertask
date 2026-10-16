@@ -158,6 +158,10 @@ function loadCreateRoute() {
     "@/lib/mcp/webhooks/outbox": {
       publishBoardWebhookDeliveries: async () => undefined,
     },
+    "@/lib/telemetry/savedWork": {
+      CREATION_CHANNEL_HEADER: "X-Hypertask-Creation-Channel",
+      creationChannelFromHeader: () => "web",
+    },
     "@/lib/agentWebhooks/outbox": {
       persistAgentRunTriggerWebhooks: async () => [],
       persistAgentWebhookEvent: async () => null,

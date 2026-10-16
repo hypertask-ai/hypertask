@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
+import { recordBoardCreated } from "@/lib/telemetry/savedWork";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";

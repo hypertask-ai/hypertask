@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
+import { recordBoardCreated } from "@/lib/telemetry/savedWork";
 import { LogType, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";

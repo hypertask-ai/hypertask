@@ -5,7 +5,7 @@ import {
   createProjectViewAndCreateDefault,
   updateUniqueIdentifier
 } from '@/utils/controllers/projects/create'
-import { recordBoardCreated, type CreationChannel } from '@/lib/telemetry/savedWorkAnalytics'
+import { recordBoardCreated, type CreationChannel } from '@/lib/telemetry/savedWork'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
 import { assertBoardQuota } from '@/utils/controllers/projects/boardQuota'
 import createLog from '@/utils/controllers/logs/createLog'

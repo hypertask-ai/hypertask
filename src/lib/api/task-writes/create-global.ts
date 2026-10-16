@@ -14,7 +14,7 @@ import generateRank from "@/utils/generateRank";
 import { createTaskWithBoardWebhookOutbox } from "@/lib/mcp/webhooks/taskEvents";
 import { publishBoardWebhookDeliveries } from "@/lib/mcp/webhooks/outbox";
 import { persistAgentTaskCreatedPending } from "@/lib/agentWebhooks/outbox";
-import { CREATION_CHANNEL_HEADER, creationChannelFromHeader } from "@/lib/telemetry/savedWorkAnalytics";
+import { CREATION_CHANNEL_HEADER, creationChannelFromHeader } from "@/lib/telemetry/savedWork";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -298,7 +298,6 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     const taskCreatedActor = {
       userId: currentUser.id,
       agentId: agentId ?? null,
-      channel: creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)),
     };
     try {
       const created = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
@@ -426,7 +425,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
               : null,
           },
         };
-      });
+      }, creationChannelFromHeader(request.headers.get(CREATION_CHANNEL_HEADER)));
       newTask = created.result.task as TaskCreatedGlobally;
       boardWebhookDeliveryIds = created.boardWebhookDeliveryIds;
       priorityCreated = created.result.priority;

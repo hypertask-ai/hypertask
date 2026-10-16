@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWorkAnalytics";
+import { recordBoardCreated } from "@/lib/telemetry/savedWork";
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";

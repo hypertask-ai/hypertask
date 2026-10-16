@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWorkAnalytics';
+import { CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWork';
 import type { Prisma } from '@prisma/client';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 import { taskDetailInclude } from './mappers';

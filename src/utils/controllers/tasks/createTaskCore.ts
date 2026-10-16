@@ -8,7 +8,7 @@ import upsertTaskDescription from '@/utils/controllers/description/common-descri
 import { PriorityConstants, EstimateConstants } from '@/lib/constants/constants';
 import { autoAssignForSection } from '@/utils/controllers/assignees/autoAssignForSection';
 import { createTaskWithBoardWebhookOutbox } from '@/lib/mcp/webhooks/taskEvents';
-import type { CreationChannel } from '@/lib/telemetry/savedWorkAnalytics';
+import type { CreationChannel } from '@/lib/telemetry/savedWork';
 import { publishBoardWebhookDeliveries } from '@/lib/mcp/webhooks/outbox';
 import {
     emitAgentTaskCreatedWebhook,
@@ -139,7 +139,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
         }
     }
 
-    const taskCreatedActor = { userId, agentId: agentId ?? null, channel: creationChannel };
+    const taskCreatedActor = { userId, agentId: agentId ?? null };
     const createdTask = await createTaskWithBoardWebhookOutbox(prisma, taskCreatedActor, async (tx) => {
         const created = await tx.task.create({
             data: taskData,
@@ -176,7 +176,7 @@ export async function createTaskCore(options: CreateTaskCoreOptions): Promise<Cr
                     : null
             }
         };
-    });
+    }, creationChannel);
     const newTask = createdTask.result;
     const boardWebhookDeliveryIds = createdTask.boardWebhookDeliveryIds;
     await publishBoardWebhookDeliveries(boardWebhookDeliveryIds);
