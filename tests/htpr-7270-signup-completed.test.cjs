@@ -66,6 +66,7 @@ function harness({ enabled = true, redisFailure = false, existing = false, compl
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async (data) => { calls.provision.push(data); return user }, updateUserProfilePicture: async () => {} },
     'server-only': {},
     '@/lib/telemetry/activationOccurrences': {},
+    './analyticsOutbox': { isAnalyticsOutboxEnabled: async () => false, deliverAnalyticsOutbox: async () => 'skipped' },
     '@/lib/services/verificationCodeService': { VerificationCodeService: {
       isRateLimited: () => ({ limited: false }), generateCode: () => codeAttempt.code,
       storeCode: async (code) => { calls.code = code },
