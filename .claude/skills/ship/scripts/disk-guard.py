@@ -183,7 +183,7 @@ def unreadable_but_harmless(process):
 # ordinary package files in node_modules and keep every npx cache forever.
 SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
 # Known package docs that only look like saved logins; every other match keeps node_modules.
-PACKAGE_DOCS = re.compile(r'(^|/)playwright-core/lib/tools/skills/[\w-]+/references/storage-state\.md$')
+PACKAGE_DOCS = re.compile(r'(^|/)playwright-core/lib/tools/(skills/[\w-]+|cli-client/skill)/references/storage-state\.md$')
 
 
 def package_file(item, modules):

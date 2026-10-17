@@ -1105,10 +1105,10 @@ class CacheTests(Fixture):
 
     def test_cache_package_docs_named_storage_state_do_not_keep_node_modules(self):
         _, tree, modules = self.deps_tree()
-        doc = modules / 'playwright-core/lib/tools/skills/playwright-cli/references/storage-state.md'
-        doc.parent.mkdir(parents=True)
-        doc.write_text('docs\n')
-        (modules / 'playwright-core/package.json').write_text('{}\n')
+        for name in ('skills/playwright-cli', 'cli-client/skill'):
+            doc = modules / 'playwright-core/lib/tools' / name / 'references/storage-state.md'
+            doc.parent.mkdir(parents=True)
+            doc.write_text('docs\n')
         self.old(tree)
         self.sweep()
         self.assertFalse(modules.exists())

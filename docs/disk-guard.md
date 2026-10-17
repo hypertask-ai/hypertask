@@ -90,7 +90,8 @@ in place. Reinstall to update the installed copy. No crontab is used.
      worktree with an open PR and any worktree a process, command line or
      container uses are never touched. `npm ci` brings it back. Inside
      `node_modules`, only playwright-core's own doc
-     `lib/tools/skills/<skill>/references/storage-state.md` does not keep the
+     `lib/tools/skills/<skill>/references/storage-state.md` (older releases:
+     `lib/tools/cli-client/skill/references/storage-state.md`) does not keep the
      folder. Every other `.env*` or storageState file, at any depth and with
      any extension, still does. The worktree folder's own timestamp does not count as
      activity, because removing `.next` in the same run changes it.
