@@ -61,7 +61,7 @@ export async function adoptGuestBoards(
       });
       await tx.project.updateMany({
         where: { id: { in: projectIds } },
-        data: { ownerId: targetUserId, googleAccountId: accountId },
+        data: { ownerId: targetUserId, googleAccountId: accountId, seeded: true },
       });
 
       await tx.member.deleteMany({

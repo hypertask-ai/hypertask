@@ -76,6 +76,7 @@ test("adopted demo board is sent once, flagged, for the new owner", async () => 
   h.projects.get(15).ownerId = 50;
   const { adoptGuestBoards } = h.load("src/utils/controllers/demo/adoptGuestBoards.ts");
   assert.equal(await adoptGuestBoards("mock-session", 123), 1);
+  assert.equal(h.projects.get(15).seeded, true);
   assert.equal(await adoptGuestBoards("mock-session", 123), 0);
   await h.drain();
   assert.equal(h.captures.length, 1);
