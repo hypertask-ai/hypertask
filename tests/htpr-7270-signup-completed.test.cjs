@@ -94,6 +94,7 @@ function harness({ enabled = true, redisFailure = false, existing = false, compl
     jsonwebtoken: { sign: (payload) => { calls.jwt = payload; return 'signed-token' }, verify: () => ({ sub: user.email, signupContextId: calls.jwt?.signupContextId }) },
   }
   aliases['./provisionNewUser'] = aliases['@/utils/controllers/users/provisionNewUser']
+  aliases['./resumeIncompleteSignup'] = { resumeIncompleteSignup: async () => false }
   aliases['./findUserByEmail'] = aliases['@/utils/controllers/users/findUserByEmail']
   const prisma = aliases['@/lib/prisma']
   prisma.team = { findFirst: async ({ where, orderBy, select }) => {
