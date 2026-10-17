@@ -13,7 +13,6 @@ export type SignupCompletedPayload = {
   userId: number;
   signupMethod: SignupMethod;
   utmSource: string | null;
-  legacyUserSignedUpUtmSource: string | null;
   consentAll: boolean;
   anonymousId: string | null;
   attribution: { utm_source?: string; utm_medium?: string; utm_campaign?: string; initial_referrer?: string } | null;
@@ -32,7 +31,6 @@ export async function enqueueSignupCompleted(db: Pick<Prisma.TransactionClient, 
   const attribution = decision?.attribution;
   return enqueueAnalyticsIntent(db, { kind: "signup_completed", payload: {
     userId, signupMethod, consentAll, utmSource: consentAll ? input.utmSource?.trim().slice(0, 200) || null : null,
-    legacyUserSignedUpUtmSource: input.utmSource ?? null,
     anonymousId: consentAll && decision?.link ? decision.anonymousId : null,
     attribution: consentAll && attribution ? {
       ...(attribution.utm_source ? { utm_source: attribution.utm_source } : {}),
@@ -47,7 +45,7 @@ export async function enqueueSignupCompleted(db: Pick<Prisma.TransactionClient, 
 export async function captureSignupCompleted(payload: SignupCompletedPayload): Promise<void> {
   const { userId, signupMethod, utmSource, consentAll, anonymousId, attribution, attributionStatus } = payload;
   if (!(await isFeatureEnabled(HTPR_7270_SIGNUP_COMPLETED_FLAG, userId))) {
-    await postHogClient()?.captureImmediate(buildUserSignedUpCapture({ userId, signupMethod, utmSource: payload.legacyUserSignedUpUtmSource ?? undefined }));
+    await postHogClient()?.captureImmediate(buildUserSignedUpCapture({ userId, signupMethod, utmSource: utmSource ?? undefined }));
     return;
   }
   if (!Number.isSafeInteger(userId) || userId <= 0) return;

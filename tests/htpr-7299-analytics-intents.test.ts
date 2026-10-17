@@ -108,8 +108,8 @@ test("signup without consent never persists anonymous identity or unused attribu
   assert.equal(h.intentRows[0].payload.anonymousId, null);
   assert.equal(h.intentRows[0].payload.attribution, null);
   assert.equal(h.intentRows[0].payload.utmSource, null);
-  assert.equal(h.intentRows[0].payload.legacyUserSignedUpUtmSource, "website");
   assert.equal(JSON.stringify(h.intentRows[0].payload).includes("anon-visitor"), false);
+  assert.equal(JSON.stringify(h.intentRows[0].payload).includes("website"), false);
 });
 
 test("invite_sent link save survives death before its kick", async () => {

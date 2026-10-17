@@ -191,10 +191,18 @@ test('flag defaults to Owner + QA and is generated through the existing key expo
 
 test('flag off still allows exactly one unchanged user_signed_up and no signup_completed', async () => {
   const h = harness({ completedEnabled: false })
-  record(h, { decision: linked, cookieHeader: null })
+  record(h, { decision: linked })
   await h.drain()
   assert.deepEqual(h.captures, [{ distinctId: '123', event: 'user_signed_up', properties: { signup_method: 'email', utm_source: 'legacy' } }])
   assert.deepEqual(h.logs, [])
+  assert.deepEqual(h.calls.flags, [['htpr-7270-signup-completed', 123]])
+})
+
+test('flag off user_signed_up carries no source without analytics consent', async () => {
+  const h = harness({ completedEnabled: false })
+  record(h, { decision: linked, cookieHeader: null })
+  await h.drain()
+  assert.deepEqual(h.captures, [{ distinctId: '123', event: 'user_signed_up', properties: { signup_method: 'email' } }])
   assert.deepEqual(h.calls.flags, [['htpr-7270-signup-completed', 123]])
 })
 
