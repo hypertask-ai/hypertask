@@ -19,6 +19,10 @@ function businessTime(value: unknown): Date | undefined {
   return time && Number.isFinite(time.getTime()) ? time : undefined;
 }
 
+function occurrenceTime(properties: Record<string, unknown>, occurredAt?: Date, createdAt?: Date): Date {
+  return occurredAt ?? businessTime(properties.occurred_at) ?? createdAt ?? new Date();
+}
+
 export async function captureAnalyticsOccurrence(
   userId: number,
   event: string,
@@ -43,7 +47,7 @@ export async function captureAnalyticsOccurrence(
       return tx.analyticsOutbox.create({ data: {
         key, userId, event, uuid: occurrenceUuid(scope === "business" ? "business" : userId, marker),
         properties: capturedProperties as Prisma.InputJsonObject,
-        occurredAt: occurredAt ?? businessTime(capturedProperties.occurred_at) ?? createdAt ?? new Date(),
+        occurredAt: occurrenceTime(capturedProperties, occurredAt, createdAt),
       } });
     }, { timeout: 20000, maxWait: 1500 });
     if (row) await deliverAnalyticsOutbox(row);
@@ -53,9 +57,10 @@ export async function captureAnalyticsOccurrence(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
     if (scope === "business") await tx.$executeRaw`SELECT pg_advisory_xact_lock(7268::int, hashtext(${marker}))`;
     if (await tx.logs.findFirst({ where: { ...(scope === "user" ? { LoggedById: userId } : {}), log: marker } })) return;
+    const capturedProperties = typeof properties === "function" ? await properties(tx) : properties;
     await client.captureImmediate({
       distinctId: String(userId), event, uuid: occurrenceUuid(scope === "business" ? "business" : userId, marker),
-      properties: typeof properties === "function" ? await properties(tx) : properties,
+      properties: capturedProperties, timestamp: occurrenceTime(capturedProperties, occurredAt, createdAt),
     });
     await tx.logs.create({ data: {
       log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal,
