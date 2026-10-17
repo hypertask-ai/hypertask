@@ -1335,7 +1335,7 @@ printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-ac
 chmod +x "$DP/bin/ht"; export DP
 DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
-full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | proof gate: YPER4-902.deeper-ci'
+full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | breaks if: another suite turns red | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
 printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
 act "$full"; DE YPER4-902 | grep -qx 'deeper ok' && ok "deeper passes with all parts and a runnable proof gate" || bad "deeper pass: $(DE YPER4-902)"
@@ -1344,6 +1344,7 @@ DSID= DE YPER4-902 | grep -q "needs this session's id" && ok "deeper refuses wit
 echo '{"success":true,"activities":[]}' > "$DP/acts"
 DE YPER4-902 | grep -q 'no agent activity starting with "Deeper:"' && ok "deeper refuses a ticket with no Deeper: activity" || bad "deeper no activity"
 act "${full/ | method: stub tests/}"; DE YPER4-902 | grep -q 'no "method:" part' && ok "deeper refuses a missing part" || bad "deeper missing part"
+act "${full/ | breaks if: another suite turns red/}"; DE YPER4-902 | grep -q 'no "breaks if:" part' && ok "deeper refuses a Deeper: activity without breaks if" || bad "deeper missing breaks if"
 act "${full/YPER4-902.deeper-ci/YPER4-903.deeper-ci}"; DE YPER4-902 | grep -q 'must name its proof gate' && ok "deeper refuses another ticket's proof gate" || bad "deeper wrong ticket gate"
 act "$full"; printf -- '- [ ] YPER4-902.deeper-ci: CI is green\n  EVIDENCE: I looked at it\n' > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
 DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper refuses a manual proof gate" || bad "deeper manual gate"

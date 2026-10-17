@@ -14,7 +14,7 @@
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
-#   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof and a
+#   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof, breaks if and a
 #                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in this session's .unlazy/s-<id>/gates/*.md
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
@@ -62,7 +62,7 @@ check_deeper() {
   text=$(jq -er '[.activities[] | select(.type == "thought" and ((.text // "") | test("^\\s*Deeper:")))]
     | max_by(.createdAt) | .text' <<<"$acts" 2>/dev/null) \
     || fail "$t has no agent activity starting with \"Deeper:\"; write it right after ship-gates (/ship step 3a)"
-  for label in field 'raw source' method 'outside proof' 'proof gate'; do
+  for label in field 'raw source' method 'outside proof' 'breaks if' 'proof gate'; do
     grep -qi "$label:" <<<"$text" || fail "the Deeper: activity on $t has no \"$label:\" part"
   done
   id=$(grep -oE "proof gate: *$t\.deeper-[a-z0-9-]+" <<<"$text" | head -1 | sed -E 's/^proof gate: *//')
