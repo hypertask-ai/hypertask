@@ -16,6 +16,29 @@ export function signupIdentityUuid(userId: number): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+function queueSignupIdentify(userId: number, anonymousId: string) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(7290::int, hashtext(${anonymousId}))`;
+    const key = `${userId}:analytics:signup_identify`;
+    const existing = await tx.analyticsOutbox.findUnique({ where: { key } });
+    if (existing) return existing;
+    const linkedToAnotherAccount = await tx.analyticsOutbox.findFirst({ where: {
+      event: "$identify", userId: { not: userId },
+      properties: { path: ["$anon_distinct_id"], equals: anonymousId },
+    } });
+    if (linkedToAnotherAccount) return null;
+    return tx.analyticsOutbox.create({ data: {
+      key, userId, event: "$identify", uuid: signupIdentityUuid(userId),
+      properties: { $anon_distinct_id: anonymousId }, occurredAt: new Date(),
+    } });
+  }, { timeout: 20000, maxWait: 1500 });
+}
+
+function unlinked(decision: SignupLinkDecision, reason: string): SignupLinkDecision {
+  console.warn("[signup-identity] unlinked", { reason });
+  return { link: false, reason, attribution: decision.attribution, attributionStatus: decision.attributionStatus };
+}
+
 export async function recordSignupIdentityLink(
   userId: number,
   isNewUser: boolean,
@@ -29,28 +52,13 @@ export async function recordSignupIdentityLink(
       ? { link: false, reason: "consent_withdrawn", attribution: {}, attributionStatus: "withheld" }
       : decideSignupIdentityLink(userId, context);
     if (decision.link && await isFeatureEnabled(HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG, userId)) {
-      const anonymousId = decision.anonymousId;
       let row;
       try {
-        row = await prisma.$transaction(async (tx) => {
-          await tx.$executeRaw`SELECT pg_advisory_xact_lock(7290::int, hashtext(${anonymousId}))`;
-          const key = `${userId}:analytics:signup_identify`;
-          const existing = await tx.analyticsOutbox.findUnique({ where: { key } });
-          if (existing) return existing;
-          if (await tx.analyticsOutbox.findFirst({ where: {
-            event: "$identify", userId: { not: userId },
-            properties: { path: ["$anon_distinct_id"], equals: anonymousId },
-          } })) return null;
-          return tx.analyticsOutbox.create({ data: {
-            key, userId, event: "$identify", uuid: signupIdentityUuid(userId),
-            properties: { $anon_distinct_id: anonymousId }, occurredAt: new Date(),
-          } });
-        }, { timeout: 20000, maxWait: 1500 });
+        row = await queueSignupIdentify(userId, decision.anonymousId);
       } catch {
-        console.warn("[signup-identity] unlinked", { reason: "link_not_persisted" });
-        return { link: false, reason: "link_not_persisted", attribution: decision.attribution, attributionStatus: decision.attributionStatus };
+        return unlinked(decision, "link_not_persisted");
       }
-      if (!row) return { link: false, reason: "anonymous_id_already_linked", attribution: decision.attribution, attributionStatus: decision.attributionStatus };
+      if (!row) return unlinked(decision, "anonymous_id_already_linked");
       if (!row.deliveredAt) scheduleAnalytics(() => deliverAnalyticsOutbox(row));
     } else if (decision.link) {
       recordServerCapture({
