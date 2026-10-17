@@ -1984,6 +1984,7 @@ model Notification {
   @@index([userId, status, archivedAt])
   @@index([agentId, taskId, type, agentReplyConsumedAt])
   @@index([assignId])
+  @@index([commentId])
 }
 
 model Reminder {
