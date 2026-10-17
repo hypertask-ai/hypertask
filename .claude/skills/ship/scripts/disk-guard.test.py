@@ -1030,6 +1030,122 @@ class CacheTests(Fixture):
         self.assertTrue(build.exists())
         self.assertIn('docker mount scan failed', self.output.getvalue())
 
+    def deps_tree(self, ignore='node_modules/\n'):
+        repo, tree = self.repo()
+        (self.root / 'ignore').write_text(ignore)
+        self.git(tree, 'config', 'core.excludesFile', str(self.root / 'ignore'))
+        modules = self.output_dir(tree / 'node_modules')
+        self.old(tree)
+        return repo, tree, modules
+
+    def test_cache_idle_dirty_worktree_loses_only_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (tree / 'file').write_text('uncommitted work\n')
+        (tree / 'notes').write_text('untracked work\n')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertEqual((tree / 'file').read_text(), 'uncommitted work\n')
+        self.assertTrue((tree / 'notes').exists())
+        self.assertIn('M file', self.git(tree, 'status', '--porcelain'))
+        self.assertEqual(self.stats('worktree-deps')['paths'], 1)
+        self.assertIn('worktree-deps: dependencies of a worktree idle for 3 days',
+                      (self.guard.state / 'log').read_text())
+
+    def test_cache_still_allowed_idle_clean_worktree_node_modules_removed(self):
+        _, tree, modules = self.deps_tree()
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+
+    def test_cache_idle_worktree_loses_next_and_node_modules_in_one_sweep(self):
+        _, tree, modules = self.deps_tree()
+        build = self.output_dir(tree / '.next')
+        os.utime(tree, (self.guard.now - 4 * disk.DAY,) * 2)
+        self.sweep()
+        self.assertFalse(build.exists())
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+
+    def test_cache_idle_detached_worktree_loses_only_node_modules(self):
+        repo, tree, modules = self.deps_tree()
+        self.git(tree, 'checkout', '-q', '--detach')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+        self.assertTrue((tree / 'file').exists())
+        self.assertIn('refs/heads/feature', self.git(repo, 'for-each-ref', '--format=%(refname)'))
+
+    def test_cache_recent_edit_in_worktree_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (tree / 'file').write_text('edited today\n')
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: worktree changed in the last 3 days', self.output.getvalue())
+
+    def test_cache_fresh_install_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        (modules / 'output').touch()
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: newest mtime is not older than 3 days', self.output.getvalue())
+
+    def test_cache_open_pr_or_busy_worktree_keeps_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        os.environ['GH_ROWS'] = json.dumps([{'state': 'OPEN', 'headRefName': 'feature'}])
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: OPEN PR for branch; worktree never touched', self.output.getvalue())
+        os.environ['GH_ROWS'] = '[]'
+        self.guard.open_cache.clear()
+        self.paths.return_value = ({tree / 'src'}, False)
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: process has cwd/fd/root inside', self.output.getvalue())
+
+    def test_cache_package_docs_named_storage_state_do_not_keep_node_modules(self):
+        _, tree, modules = self.deps_tree()
+        for name in ('skills/playwright-cli', 'cli-client/skill'):
+            doc = modules / 'playwright-core/lib/tools' / name / 'references/storage-state.md'
+            doc.parent.mkdir(parents=True)
+            doc.write_text('docs\n')
+        self.old(tree)
+        self.sweep()
+        self.assertFalse(modules.exists())
+
+    def test_cache_saved_login_or_env_inside_node_modules_kept(self):
+        for name in ('.cache/auth/storageState.json', 'pkg/.env', 'pkg/.env.local', 'pkg/.env.local.js',
+                     'storageState.js', '.cache/auth/storage-state.ts', 'pkg/auth/storageState.js',
+                     'pkg/storage-state.md', 'playwright-core/lib/tools/skills/x/references/storage-state.json'):
+            with self.subTest(name=name):
+                _, tree, modules = self.deps_tree()
+                saved = modules / name
+                saved.parent.mkdir(parents=True, exist_ok=True)
+                saved.write_text('secret\n')
+                (modules / 'pkg').mkdir(exist_ok=True)
+                (modules / 'pkg/package.json').write_text('{}\n')
+                self.old(tree)
+                self.sweep()
+                self.assertTrue(saved.exists())
+                self.assertIn('worktree-deps: .env or storageState file inside', self.output.getvalue())
+                shutil.rmtree(self.home / 'projects')
+                shutil.rmtree(self.root / 'bin')
+
+    def test_cache_unignored_node_modules_kept(self):
+        _, tree, modules = self.deps_tree(ignore='')
+        self.sweep()
+        self.assertTrue(modules.exists())
+        self.assertIn('worktree-deps: node_modules is tracked or not ignored by git', self.output.getvalue())
+
+    def test_cache_main_checkout_and_locked_worktree_node_modules_kept(self):
+        repo, tree, modules = self.deps_tree()
+        main = self.output_dir(repo / 'node_modules')
+        self.git(repo, 'worktree', 'lock', str(tree))
+        self.sweep()
+        self.assertTrue(main.exists())
+        self.assertTrue(modules.exists())
+        self.assertEqual(self.stats('worktree-deps')['paths'], 0)
+
     def test_cache_young_files_keep_every_category(self):
         _, tree = self.repo()
         paths = [self.output_dir(tree / '.next', 1), self.output_dir(self.home / '.cache/go-build', 1),

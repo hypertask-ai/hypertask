@@ -28,7 +28,8 @@ CACHE_AT, CACHE_TARGET, CLEAN_AT, CRITICAL_AT = 75, 70, 80, 90
 # Only caches the owning tool rebuilds on its own. puppeteer, prisma and current
 # Playwright browsers are only fetched by an install step, so they are never listed here.
 TOOL_CACHES = ('go-build', 'node-gyp', 'zig', 'uv')
-CACHE_CATEGORIES = ('docker-volumes', 'playwright-old', 'tool-caches', 'npx-cache', 'next-build', 'npm-cache')
+CACHE_CATEGORIES = ('docker-volumes', 'playwright-old', 'tool-caches', 'npx-cache', 'next-build', 'worktree-deps',
+                    'npm-cache')
 # Named volumes scripts/run-app-smoke-isolated.sh leaves behind when its cleanup trap is killed.
 SMOKE_VOLUME = re.compile(r'^ht-smoke-(build|state|dependencies)-[a-z0-9_-]+$')
 BROWSER_DIR = re.compile(r'^([a-z][a-z0-9_]*)-([0-9]+)$')
@@ -181,15 +182,21 @@ def unreadable_but_harmless(process):
 # .env files and Playwright storageState logins (YPER4-228). Wider patterns would match
 # ordinary package files in node_modules and keep every npx cache forever.
 SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
+# Known package docs that only look like saved logins; every other match keeps node_modules.
+PACKAGE_DOCS = re.compile(r'(^|/)playwright-core/lib/tools/(skills/[\w-]+|cli-client/skill)/references/storage-state\.md$')
 
 
-def sensitive_inside(path):
+def package_file(item, modules):
+    return stat.S_ISREG(item.lstat().st_mode) and bool(PACKAGE_DOCS.search(item.relative_to(modules).as_posix()))
+
+
+def sensitive_inside(path, package_source_ok=False):
     """Credential-looking files keep a cache candidate. Inspection errors count as found."""
     pending = [path]
     try:
         while pending:
             item = pending.pop()
-            if SENSITIVE_NAME.search(item.name):
+            if SENSITIVE_NAME.search(item.name) and not (package_source_ok and package_file(item, path)):
                 return True
             if stat.S_ISDIR(item.lstat().st_mode):
                 pending.extend(item.iterdir())
@@ -736,7 +743,7 @@ class Guard:
             if time.monotonic() > self.deadline:
                 raise ValueError('time budget reached; next run continues')
             self.canonical(path)
-            if sensitive_inside(path):
+            if sensitive_inside(path, category == 'worktree-deps'):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, links=True)
             why = self.cache_busy(guard or path) or (check and check())
@@ -750,7 +757,7 @@ class Guard:
                 return
             # Recheck right before removal with fresh process, command-line and container mount scans.
             self.canonical(path)
-            if sensitive_inside(path):
+            if sensitive_inside(path, category == 'worktree-deps'):
                 raise ValueError('.env or storageState file inside')
             size = self.safety(path, age, refresh=True, links=True)
             why = self.cache_busy(guard or path, refresh=True) or (check and check())
@@ -886,6 +893,45 @@ class Guard:
             raise ValueError('open PR list unavailable, malformed or truncated')
         return self.open_cache[slug]
 
+    def worktree_deps(self, repos):
+        """node_modules of linked worktrees; main checkouts are skipped."""
+        found = []
+        for repo, rows in repos:
+            for row in rows[1:]:
+                tree = row['path']
+                if tree in self.failed_repos or tree == self.protected or inside(tree, self.protected):
+                    continue
+                if 'locked' in row or 'prunable' in row:
+                    continue
+                modules = tree / 'node_modules'
+                try:
+                    if modules.is_dir() and not modules.is_symlink():
+                        found.append((modules.lstat().st_mtime, str(modules), modules, tree, repo, row))
+                except OSError:
+                    continue
+        return found
+
+    def deps_kept(self, tree, repo, row):
+        """Reason to keep a worktree's node_modules: no open PR, git must ignore it and the worktree must be idle.
+        A detached worktree has no branch a PR could come from, so only idleness and use decide."""
+        if row.get('branch'):
+            reason = self.open_pr(repo, row)
+            if reason:
+                return reason
+        try:
+            ignored = subprocess.run(['git', 'check-ignore', '-q', 'node_modules'], cwd=tree,
+                                     capture_output=True, timeout=60)
+            if ignored.returncode != 0:
+                return 'node_modules is tracked or not ignored by git'
+            # The worktree folder's own mtime changes when the guard removes .next, so only its contents count.
+            skip = {'.git', 'node_modules', '.next'}
+            newest = max((inventory(child, skip)[0] for child in tree.iterdir() if child.name not in skip), default=0)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return 'worktree activity unreadable'
+        if self.now - newest <= 3 * DAY:
+            return 'worktree changed in the last 3 days'
+        return None
+
     def caches(self, repos):
         """Free re-creatable caches, cheapest to rebuild first, until the disk is below CACHE_TARGET."""
         self.empty_trash()
@@ -938,6 +984,10 @@ class Guard:
             # and a worktree with an open PR is never touched at all.
             groups.append(('next-build', build, 2 * DAY, 'next build output of an idle worktree', tree,
                            lambda repo=repo, row=row: self.open_pr(repo, row)))
+        for _, _, modules, tree, repo, row in sorted(self.worktree_deps(repos), key=lambda d: d[:2]):
+            # Only the dependency folder goes; the worktree and any uncommitted work in it stay.
+            groups.append(('worktree-deps', modules, 3 * DAY, 'dependencies of a worktree idle for 3 days', tree,
+                           lambda tree=tree, repo=repo, row=row: self.deps_kept(tree, repo, row)))
         cacache = self.home / '.npm/_cacache'
         if cacache.is_dir() and not cacache.is_symlink():
             # No npm running at all and one quiet hour since the last cache write.
