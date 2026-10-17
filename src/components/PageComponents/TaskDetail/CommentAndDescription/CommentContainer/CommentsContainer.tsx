@@ -177,6 +177,7 @@ const CommentsContainer = () => {
         id={`comment-${i}`}
         data-testid="ticket-comment"
         data-task-comment-box={!comment.activity || undefined}
+        data-task-comment-collapsed={isStacked || undefined}
         data-task-comment-state={
           comment.activity
             ? undefined
