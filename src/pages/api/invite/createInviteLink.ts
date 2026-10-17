@@ -1,4 +1,5 @@
-import { recordInviteSent, recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
+import { enqueueOutsideSaveAndProcessSoon, processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent, enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput, IMember, IViewType } from "@/models/model";
@@ -190,7 +191,7 @@ async function sendInviteToNonMember(
     title: invite.project.title ?? "",
     link: inviteLink,
   });
-  if (sent) recordInviteSent(invite, "email", invite.userId, userId);
+  if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, userId));
 }
 
 export const generateInviteLink = async (
@@ -289,18 +290,22 @@ const sendInviteToAlreadyExistingMember = async (
   projectId: number,
   inviterUserId: number,
 ) => {
-  let user = await prisma.user.findFirst({ where: { email } });
+  const user = await prisma.user.findFirst({ where: { email } });
   if (user) {
-    const member = await prisma.member.create({
-      data: {
-        userId: user.id,
-        projectId: projectId,
-      },
-      include: {
-        user: true,
-      },
+    const { member, analyticsKey } = await prisma.$transaction(async (tx) => {
+      const member = await tx.member.create({
+        data: {
+          userId: user.id,
+          projectId: projectId,
+        },
+        include: {
+          user: true,
+        },
+      });
+      const analyticsKey = await enqueueMemberJoined(tx, member.id, user.id, projectId, null, inviterUserId);
+      return { member, analyticsKey };
     });
-    recordMemberJoined(member.id, user.id, projectId, null, inviterUserId);
+    processAnalyticsIntentSoon(analyticsKey);
     console.log("Member created: ", member);
   }
 };

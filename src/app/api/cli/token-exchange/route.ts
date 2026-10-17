@@ -1,9 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRedis } from '@/lib/redis';
 import { createMcpToken } from '@/lib/mcp/auth';
-import createLog from '@/utils/controllers/logs/createLog';
+import prisma from "@/lib/prisma";
+import createLog from "@/utils/controllers/logs/createLog";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { LogType, Status } from '@prisma/client';
-import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
+import { enqueueAgentConnection } from "@/lib/telemetry/activationOccurrences";
 
 export const runtime = 'nodejs';
 
@@ -83,7 +85,7 @@ export async function POST(request: NextRequest) {
       status: Status.Normal,
       LoggedById: payload.userId,
     });
-    recordAgentConnection(payload.userId, token, "cli", request.headers.get("user-agent"), connectedAt);
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAgentConnection(prisma, payload.userId, token, "cli", request.headers.get("user-agent"), connectedAt));
 
     return NextResponse.json({ token });
   } catch (error) {

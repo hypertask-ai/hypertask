@@ -25,7 +25,8 @@ function sessionHarness({ authFails = false } = {}) {
   const sessionHeaders = []
   const permissions = load('src/lib/mcp/managementPermissions.ts', {}).exports
   const loaded = load('src/lib/mcp/auth/session.ts', {
-    '@/lib/telemetry/activationOccurrences': () => ({ recordAuthenticatedConnection: () => {} }),
+    '@/lib/telemetry/analyticsIntents': () => ({ enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } }),
+    '@/lib/telemetry/activationOccurrences': () => ({ enqueueAuthenticatedConnection: async () => null }),
     '@/lib/prisma': () => ({ user: { findUnique: async () => user } }),
     jsonwebtoken: () => ({ decode: () => ({ aud: 'mcp-api' }) }),
     '@/lib/apiKeys': () => ({}),

@@ -356,7 +356,7 @@ function creation({ enabled = true, clash = false, boards = [] } = {}) {
     $transaction: async callback => callback(prisma),
   };
   const controller = load("src/utils/controllers/projects/create.ts", {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null },
     "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "../logs/createLog": { __esModule: true, default: () => {} },

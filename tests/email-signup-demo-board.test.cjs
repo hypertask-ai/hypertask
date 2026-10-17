@@ -114,7 +114,7 @@ function makeHarness({ guestBoard = true, existing = false, memberships = 0, fla
     '@/lib/auth/slimUserCookie': { slimUserForCookie: (value) => value },
     '@/lib/auth/themeCookie': { seedResponseThemeCookie: () => {} },
     '@/lib/telemetry/signupAnalytics': { signupAttributionFromHeaders: () => ({}) },
-    '@/lib/telemetry/activationOccurrences': { recordActivationOccurrence: () => {} },
+    '@/lib/telemetry/activationOccurrences': { captureActivationOccurrence: async () => null },
     '@/lib/telemetry/savedWork': { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     '@/lib/auth/emailLinkToken': { consumeEmailLinkToken: async () => true },
     '@/lib/auth/emailCodeRateLimit': {

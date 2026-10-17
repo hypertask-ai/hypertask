@@ -1,4 +1,5 @@
-import { recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { LogType, PrismaClient, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import createLog from "../logs/createLog";
@@ -238,22 +239,28 @@ const membersInvite = async (userId:number, projectId:number, inviteKey?:string)
                             })
                         if (!doubleCheck){
                             assertHeld();
-                            member = await prisma.member.create({
-                                data: {
-                                    userId: userId,
-                                    projectId: projectId
-                                },
-                                include:{
-                                    user:true,
-                                    project:{
-                                        include:{
-                                            team:true
+                            const joined = await prisma.$transaction(async (tx) => {
+                                assertHeld();
+                                const member = await tx.member.create({
+                                    data: {
+                                        userId: userId,
+                                        projectId: projectId
+                                    },
+                                    include:{
+                                        user:true,
+                                        project:{
+                                            include:{
+                                                team:true
+                                            }
                                         }
                                     }
-                                }
-                            })
+                                })
 
-                            recordMemberJoined(member.id, userId, projectId, fetchedInvite.id, fetchedInvite.userId);
+                                const analyticsKey = await enqueueMemberJoined(tx, member.id, userId, projectId, fetchedInvite.id, fetchedInvite.userId);
+                                return { member, analyticsKey };
+                            });
+                            member = joined.member;
+                            processAnalyticsIntentSoon(joined.analyticsKey);
 
                             if(PaymentResponse ==="OK" || PaymentResponse === "Awaiting") {
                                 await updateTrial(userId)

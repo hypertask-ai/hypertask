@@ -1,3 +1,4 @@
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { betterAuth } from 'better-auth'
 import { prismaAdapter } from 'better-auth/adapters/prisma'
 import { emailOTP, magicLink, multiSession } from 'better-auth/plugins'
@@ -16,7 +17,7 @@ import { sendEmail } from '@/lib/email/sendEmail'
 import { MANAGEMENT_KEY_PERMISSIONS } from '@/lib/mcp/managementPermissions'
 import prisma from '@/lib/prisma'
 import { signupAttributionFromHeaders } from '@/lib/telemetry/signupAnalytics'
-import { recordSignupCompleted } from '@/lib/telemetry/signupCompleted'
+import { enqueueSignupCompleted } from '@/lib/telemetry/signupCompleted'
 import { provisionNewUser } from '@/utils/controllers/users/provisionNewUser'
 
 const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@hypertask.ai'
@@ -220,7 +221,7 @@ export const auth = betterAuth({
               createGoogleAccount: context?.path === '/callback/google',
             })
 
-            recordSignupCompleted({
+            await enqueueOutsideSaveAndProcessSoon(() => enqueueSignupCompleted(prisma, {
               decision,
               cookieHeader: context?.request?.headers.get('cookie') ?? null,
               userId,
@@ -228,7 +229,7 @@ export const auth = betterAuth({
                 context?.request?.headers,
                 context?.path === '/callback/google' ? 'google' : 'email',
               ),
-            })
+            }))
             if (context?.path === '/callback/google' && context.request) {
               newGoogleSignupRequests.set(context.request, userId)
             }

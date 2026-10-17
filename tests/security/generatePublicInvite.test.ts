@@ -118,8 +118,14 @@ async function demo() {
   const originalInviteFindFirst = prismaMock.invite.findFirst
   const originalInviteCreate = prismaMock.invite.create
   const originalInviteUpdate = prismaMock.invite.update
+  const originalTransaction = prismaMock.$transaction
+  const originalIntentCreateMany = prismaMock.analyticsIntent.createMany
+  const originalIntentUpdateMany = prismaMock.analyticsIntent.updateMany
 
   try {
+    prismaMock.$transaction = async (callback: (tx: any) => Promise<unknown>) => callback(prismaMock)
+    prismaMock.analyticsIntent.createMany = async () => ({ count: 1 })
+    prismaMock.analyticsIntent.updateMany = async () => ({ count: 0 })
     prismaMock.project.findUnique = async () => {
       assert.fail('unauthenticated requests must not query projects')
     }
@@ -385,6 +391,9 @@ async function demo() {
     prismaMock.invite.findFirst = originalInviteFindFirst
     prismaMock.invite.create = originalInviteCreate
     prismaMock.invite.update = originalInviteUpdate
+    prismaMock.$transaction = originalTransaction
+    prismaMock.analyticsIntent.createMany = originalIntentCreateMany
+    prismaMock.analyticsIntent.updateMany = originalIntentUpdateMany
   }
 }
 

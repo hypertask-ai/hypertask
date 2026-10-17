@@ -30,7 +30,7 @@ stub("src/lib/flags.ts", {
     return enabled;
   },
 });
-stub("src/lib/prisma.ts", { default: {
+const prisma = {
   user: { findUnique: async () => inviter, findFirst: async () => null },
   project: {
     findFirst: async () => ({ ...board, members: [], teamId: "team" }),
@@ -43,7 +43,10 @@ stub("src/lib/prisma.ts", { default: {
     update: async () => ({}),
     create: async () => ({ id: "invite&#+?日本語", invitedBy: inviter, project: board }),
   },
-} });
+};
+prisma.$transaction = async (callback) => callback(prisma);
+stub("src/lib/prisma.ts", { default: prisma });
+stub("src/lib/telemetry/analyticsIntents.ts", { processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } });
 stub("src/utils/controllers/logs/createLog.ts", { default: async () => {} });
 stub("src/utils/controllers/projects/getAll.ts", { getProjectViewInclude: ({ currentUserId }) => { viewUserIds.push(currentUserId); return {}; } });
 stub("src/utils/helperFunctions/Views/ViewsHelperFunctions.ts", { getViewFromProject: () => undefined });
@@ -51,7 +54,7 @@ stub("src/lib/demo/guestGuard.ts", { isGuestRequest: async () => false });
 stub("src/lib/auth/getSessionUser.ts", { getSessionUser: async () => ({ userId: 7 }) });
 stub("src/utils/controllers/getMemberAndOwnerForBoard.ts", { default: async () => boardMemberIds });
 stub("src/pages/api/invite/cancelInvite.ts", { cancelInvite: async (...args) => { cancelled.push(args); } });
-stub("src/lib/telemetry/inviteAnalytics.ts", { recordInviteSent: () => {}, recordMemberJoined: () => {} });
+stub("src/lib/telemetry/inviteAnalytics.ts", { enqueueInviteSent: async () => null, enqueueMemberJoined: async () => null });
 stub("src/lib/email/sendEmail.ts", { sendEmail: async (email) => { sent.push(email); return { id: "test-email" }; } });
 stub("src/utils/controllers/notifications/digest.ts", { enqueueDigest: async () => false });
 stub("src/utils/controllers/notifications/projectMute.ts", { isTaskProjectMuted: async () => false });

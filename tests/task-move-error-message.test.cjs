@@ -101,7 +101,8 @@ function loadDeleteController(deleteOutcome) {
   const stubs = {
     "@/lib/tasks/sameBoardRelations": execute(compile("src/lib/tasks/sameBoardRelations.ts"), {}),
     "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
     "@/lib/mcp/tasks/agentDoneLifecycle": execute(
       compile("src/lib/mcp/tasks/agentDoneLifecycle.ts"),
       {

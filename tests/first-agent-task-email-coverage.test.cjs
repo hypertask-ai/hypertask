@@ -116,7 +116,7 @@ function fixture(options = {}) {
   const service = load(serviceFile, {
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/utils/controllers/notifications/agentFirstTaskEmail": scheduler,
-    "@/lib/telemetry/activationOccurrences": { recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/activationOccurrences": { enqueueAgentTaskCompletion: async () => null },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (id, actor) => {
       assert.equal(id, userId); assert.equal(actor, agentId); return { ownerId: id };
     } },

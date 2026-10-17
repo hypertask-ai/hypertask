@@ -1,7 +1,7 @@
 import type { Task } from '@prisma/client'
 import prisma from '@/lib/prisma'
 import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notifications/agentFirstTaskEmail'
-import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
+import { enqueueAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
 import { enqueueColumnCreated, enqueueColumnRenamed, processAnalyticsIntentSoon } from '@/lib/telemetry/savedWork'
@@ -333,15 +333,22 @@ export async function deleteSection(input: DeleteSectionInput): Promise<DeleteSe
           }))
         })
       }
-      return { tasks, beforeTasks, timestamp }
+      const analyticsKeys: string[] = []
+      for (const before of beforeTasks) {
+        const after = tasks.find((task) => task.id === before.id)
+        if (!after) continue
+        const key = await enqueueAgentTaskCompletion(tx, before, { ...after, updatedAt: timestamp }, agentId)
+        if (key) analyticsKeys.push(key)
+      }
+      return { tasks, beforeTasks, timestamp, analyticsKeys }
     })
+    moved.analyticsKeys.forEach(processAnalyticsIntentSoon)
     movedTaskCount = moved.tasks.length
     if (agentId && moved.beforeTasks.length) {
       const afterTasks = new Map(moved.tasks.map((task) => [task.id, task]))
       scheduleAgentFirstTaskEmailBatch(moved.beforeTasks.flatMap((before) => {
         const after = afterTasks.get(before.id)
         if (!after) return []
-        recordAgentTaskCompletion(before, { ...after, updatedAt: moved.timestamp }, agentId)
         return [{ before, after }]
       }), userId, agentId)
     }

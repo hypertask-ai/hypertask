@@ -98,15 +98,15 @@ test("OAuth authorization-code reauthorization dedupes by client or bound agent,
     iss: contract.JWT_OAUTH_ISSUER, aud: contract.JWT_OAUTH_AUDIENCE,
     [contract.OAUTH_CLIENT_ID_CLAIM]: clientId, jti, agentId,
   }, "mock-local-signing");
-  api.recordAgentConnection(123, token("first", "oauth-client-one"), "mcp", "Cursor");
-  api.recordAgentConnection(123, token("reauthorized", "oauth-client-one"), "mcp", "Cursor");
-  api.recordAgentConnection(123, token("bound", "oauth-client-one", "bound-agent"), "mcp", "Cursor");
-  api.recordAgentConnection(123, token("bound-again", "oauth-client-two", "bound-agent"), "mcp", "Cursor");
+  await h.connect(123, token("first", "oauth-client-one"), "mcp", "Cursor");
+  await h.connect(123, token("reauthorized", "oauth-client-one"), "mcp", "Cursor");
+  await h.connect(123, token("bound", "oauth-client-one", "bound-agent"), "mcp", "Cursor");
+  await h.connect(123, token("bound-again", "oauth-client-two", "bound-agent"), "mcp", "Cursor");
   await h.drain();
   assert.deepEqual(h.captures.map(({ properties }) => properties.connection_id), [
     connectionId("oauth_client:oauth-client-one"), connectionId("agent:bound-agent"),
   ]);
-  api.recordAuthenticatedConnection(request(token("access-use", "unused-client")), 123, token("access-use", "unused-client"));
+  await h.authenticate(request(token("access-use", "unused-client")), 123, token("access-use", "unused-client"));
   await h.drain();
   assert.equal(h.captures.length, 2);
 });
@@ -132,7 +132,7 @@ test("a second CLI login with a new credential is not a second connection", asyn
   assert.equal(h.captures[0].properties.connection_id, connectionId("user_token:cli:hypertask_cli"));
   assert.equal(h.captures[0].properties.agent_type, "hypertask_cli");
   assert.equal(h.captures[0].properties.client, "other");
-  h.load("src/lib/telemetry/activationOccurrences.ts").recordAuthenticatedConnection(request("cli-credential-3", "hypertask-cli/0.3.0", "/api/mcp/tasks"), 123, "cli-credential-3");
+  await h.authenticate(request("cli-credential-3", "hypertask-cli/0.3.0", "/api/mcp/tasks"), 123, "cli-credential-3");
   await h.drain();
   assert.equal(h.captures.length, 1);
 });
@@ -155,7 +155,7 @@ test("management and API keys use database IDs without changing returned auth co
 
 test("connection properties follow the server contract and exclude credentials and free text", async () => {
   const h = harness();
-  h.load("src/lib/telemetry/activationOccurrences.ts").recordAgentConnection(
+  await h.connect(
     123, "secret-credential-member@example.test", "mcp", "Claude Code private free text", connectedAt, "agent:internal-agent-id",
   );
   await h.drain();
@@ -179,8 +179,8 @@ for (const [name, agentType] of [["Claude Code", "claude_code"], ["Cursor", "cur
   test(`plain user credentials classify ${agentType} and use transport/client identity`, async () => {
     const h = harness();
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-    api.recordAuthenticatedConnection(request("plain-one", name, "/api/mcp/tasks"), 123, "plain-one");
-    api.recordAuthenticatedConnection(request("plain-two", name, "/api/mcp/tasks"), 123, "plain-two");
+    await h.authenticate(request("plain-one", name, "/api/mcp/tasks"), 123, "plain-one");
+    await h.authenticate(request("plain-two", name, "/api/mcp/tasks"), 123, "plain-two");
     await h.drain();
     const transport = agentType === "hypertask_cli" ? "cli" : "api";
     assert.equal(h.captures.length, 1);
@@ -193,9 +193,9 @@ test("flag off preserves the exact fingerprint events and properties", async () 
   const h = harness();
   h.setFlagEnabled(flag, false);
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-  api.recordAgentConnection(123, "old-credential-one", "mcp", "Cursor", connectedAt, "agent:same-agent");
-  api.recordAgentConnection(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
-  api.recordAgentConnection(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
+  await h.connect(123, "old-credential-one", "mcp", "Cursor", connectedAt, "agent:same-agent");
+  await h.connect(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
+  await h.connect(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
   await h.drain();
   assert.ok(h.captures.every(({ timestamp }) => timestamp instanceof Date));
   assert.deepEqual(h.captures.map(({ timestamp, ...capture }) => capture), [
@@ -209,7 +209,7 @@ for (const historical of ["mcp_connected", "cli_token_exchange", "activation:age
   test(`${historical} prevents a false first durable connection`, async () => {
     const h = harness();
     h.logs.push({ LoggedById: 123, log: historical, createdAt: new Date(connectedAt.getTime() - 1000) });
-    h.load("src/lib/telemetry/activationOccurrences.ts").recordAgentConnection(123, "new-credential", "mcp", "Cursor", connectedAt, "agent:new-agent");
+    await h.connect(123, "new-credential", "mcp", "Cursor", connectedAt, "agent:new-agent");
     await h.drain();
     assert.equal(h.captures[0].properties.is_first, false);
   });
@@ -219,13 +219,13 @@ test("failed captures retry the same durable event UUID after credential rotatio
   const h = harness();
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
   h.setFailure("capture");
-  api.recordAgentConnection(123, "failed-credential", "mcp", "Codex", connectedAt, "agent:retry-agent");
+  await h.connect(123, "failed-credential", "mcp", "Codex", connectedAt, "agent:retry-agent");
   await h.drain();
   assert.equal(h.captures.length, 0);
   assert.equal(h.logs.length, 0);
   const uuid = h.captureAttempts[0].uuid;
   h.setFailure(null);
-  api.recordAgentConnection(123, "retry-credential", "mcp", "Codex", connectedAt, "agent:retry-agent");
+  await h.connect(123, "retry-credential", "mcp", "Codex", connectedAt, "agent:retry-agent");
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captureAttempts[1].uuid, uuid);
@@ -254,12 +254,12 @@ test("real outbox delivery keeps one durable row and the original connection tim
   };
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
   h.setFailure("capture");
-  api.recordAgentConnection(123, "outbox-original", "mcp", "Cursor", connectedAt, "agent:outbox");
+  await h.connect(123, "outbox-original", "mcp", "Cursor", connectedAt, "agent:outbox");
   await h.drain();
   assert.equal(rows.length, 1);
   assert.equal(h.logs.length, 1);
   assert.equal(h.captures.length, 0);
-  api.recordAgentConnection(123, "outbox-rotated", "mcp", "Cursor", new Date(), "agent:outbox");
+  await h.connect(123, "outbox-rotated", "mcp", "Cursor", new Date(), "agent:outbox");
   await h.drain();
   assert.equal(rows.length, 1);
   const uuid = h.captureAttempts[0].uuid;
@@ -268,7 +268,7 @@ test("real outbox delivery keeps one durable row and the original connection tim
   assert.deepEqual(await h.load("src/lib/telemetry/analyticsOutbox.ts").retryAnalyticsOutbox(), { delivered: 1, failed: 0, skipped: 0 });
   assert.equal(h.captures.length, 1);
   assert.equal(h.captureAttempts[1].uuid, uuid);
-  assert.equal(h.captureAttempts[1].timestamp, connectedAt);
+  assert.deepEqual(h.captureAttempts[1].timestamp, connectedAt);
   assert.equal(h.captures[0].properties.occurred_at, connectedAt.toISOString());
   assert.equal(h.captures[0].properties.connection_id, connectionId("agent:outbox"));
 });
@@ -277,25 +277,22 @@ test("the same durable key belongs to separate connections for different users",
   const h = harness();
   h.users.set(234, { id: 234, uid: "real_234", email: "other@example.test" });
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-  api.recordAgentConnection(123, "shared-credential", "mcp", "Cursor", connectedAt, "agent:shared");
-  api.recordAgentConnection(234, "shared-credential", "mcp", "Cursor", connectedAt, "agent:shared");
+  await h.connect(123, "shared-credential", "mcp", "Cursor", connectedAt, "agent:shared");
+  await h.connect(234, "shared-credential", "mcp", "Cursor", connectedAt, "agent:shared");
   await h.drain();
   assert.deepEqual(h.captures.map(({ distinctId, properties }) => [distinctId, properties.connection_id, properties.is_first]), [
     ["123", connectionId("agent:shared"), true], ["234", connectionId("agent:shared", 234), true],
   ]);
 });
 
-test("ineligible connections do not consume identity and become eligible later", async () => {
+test("a connection seen while ineligible is not consumed and counts on a later request", async () => {
   const h = harness();
   h.setEnabled(false);
   const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-  api.recordAgentConnection(123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later");
-  await h.drain();
-  assert.equal(h.captures.length, 0);
-  assert.equal(h.logs.length, 0);
-  assert.equal(h.prismaCalls.includes("$transaction"), false);
+  assert.equal(await api.enqueueAgentConnection(h.prisma, 123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later"), null);
+  assert.equal(h.intentRows.length, 0);
   h.setEnabled(true);
-  api.recordAgentConnection(123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later");
-  await h.drain();
+  const key = await api.enqueueAgentConnection(h.prisma, 123, "eligible-later", "mcp", "Cursor", connectedAt, "agent:later");
+  assert.equal(await h.load("src/lib/telemetry/analyticsIntents.ts").processAnalyticsIntent(key), "processed");
   assert.equal(h.captures.length, 1);
 });
