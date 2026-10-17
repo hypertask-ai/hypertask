@@ -91,6 +91,11 @@ compliance. The upkeep test checks the script, not the truth of its reports.
 | Before coding in valentin-review, judge design reviews from all three named Codex models. Ordinary ai-review must not use interrogate. | interrogate, ship | Skill text, not enforced |
 | Keep code comments only for non-obvious reasons; remove code restatements. | simplify-before-pr | Skill text, not enforced |
 | Weekly map upkeep reports source/live drift read-only, never as Valentin, with no edits or PR. | verify-qa, scripts/map-upkeep | Skill text for agent conduct, not enforced; script installs the timer and saves output |
+| Deeper names what the change breaks (`breaks if:`) and the proof gate must fail on that harm. | ship, ship-check deeper | `ship-check deeper` requires the `breaks if:` part; gate honesty is skill text |
+| Before adding a job, alert, check or component, find what already does it live and prove no duplicate. | ship | Skill text, not enforced |
+| Run each shared cache, global layer or state file with its other users, in CI or app order. | blast-radius | Skill text, not enforced |
+| After two failed or undone fixes, write the shared belief down and test it before a third. | fix-bug/principles | Skill text, not enforced |
+| Pick a speed fix by the performance mantras, cheapest first; the user wait must not grow on any measured profile. | fix-slow-page | Skill text, not enforced |
 
 ## Logins
 

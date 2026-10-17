@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.5 - 2026-10-17
+
+- Adopt five more pstack pieces, each aimed at a ticket the YPER4-435 blind
+  replay missed: a `breaks if:` part in the Deeper step (enforced by
+  ship-check), a check for what already does the job live, shared-state runs
+  in blast-radius, attack-the-premise in fix-bug and the performance mantras
+  in fix-slow-page. https://app.hypertask.ai/detail/project-4060/440
+
 ## 1.1.4 - 2026-10-12
 
 - Add a weekly scriptify scan of repeated Claude and Codex shell routines.
