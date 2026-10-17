@@ -1166,6 +1166,8 @@ import json, sys
 path = sys.argv[1]; cache = json.load(open(path)); cache['999']['checked'] = 0
 json.dump(cache, open(path, 'w'))
 PY
+W 0 1 FLAG_POST_ERROR=1
+W 0 1 FLAG_POST_ERROR=1
 W 1 1 FLAG_POST_ERROR=1
 W 0 1
 
