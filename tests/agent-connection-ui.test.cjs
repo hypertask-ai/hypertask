@@ -149,8 +149,9 @@ test("board card honors server eligibility with flag off, existing connection, d
       global.fetch = async (url, options) => { requests.push({ url, method: options?.method }); return { ok: true, json: async () => state }; };
       global.IntersectionObserver = class { observe() {} disconnect() {} };
       const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
-        "@/hooks/useFlag": { useFlag: () => enabled },
-        "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+        "@/hooks/useFlag": { useFlag: (key) => key === FLAG && enabled },
+        "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG, HTPR_7041_AGENT_CONNECT_OVERLAY_FLAG: "htpr-7041-agent-connect-overlay" },
+        "./AgentConnectOverlay": { AgentConnectOverlay: () => null },
         "next/dynamic": () => (props) => { assert.equal(props.compact, true); assert.equal(props.serverEligible, state.eligible === true); return React.createElement("div", null, "Shared connection screen"); },
       });
       await act(async () => reactRoot.render(React.createElement(AgentConnectCard, { projectId: 7, userId: 42 })));
@@ -175,6 +176,7 @@ test("board card clears armed eligibility when user or board changes and ignores
     const { AgentConnectCard } = load("src/components/PageComponents/Onboarding/AgentConnectCard.tsx", {
       "@/hooks/useFlag": { useFlag: () => false },
       "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
+      "./AgentConnectOverlay": { AgentConnectOverlay: () => null },
       "next/dynamic": () => () => React.createElement("div", null, "Shared connection screen"),
     });
     const render = (userId, projectId) => reactRoot.render(React.createElement(AgentConnectCard, { userId, projectId }));

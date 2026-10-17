@@ -220,7 +220,7 @@ function routeHarness(enabled = true, user = { id: 42 }) {
   const common = {
     "next/server": { NextResponse: responses },
     "@/app/api/ai/_lib/editorAi": { getCurrentUserFromCookies: async () => user },
-    "@/lib/onboarding/agentConnection": { isAgentConnectCheckEnabledFor: async (id) => { assert.equal(id, 42); return enabled; }, getFirstAgentConnection: async () => null, getAgentConnectCardState: async (id) => { calls.push(id); return { eligible: enabled, connected: false }; }, dismissAgentConnectCard: async (id) => { calls.push(id); } },
+    "@/lib/onboarding/agentConnection": { isAgentConnectCheckEnabledFor: async (id) => { assert.equal(id, 42); return enabled; }, isAgentConnectStateEnabledFor: async (id) => { assert.equal(id, 42); return enabled; }, getFirstAgentConnection: async () => null, getAgentConnectCardState: async (id) => { calls.push(id); return { eligible: enabled, connected: false }; }, dismissAgentConnectCard: async (id) => { calls.push(id); } },
     "@prisma/client": enums,
     "@/utils/controllers/logs/createLog": async (data) => calls.push(data),
   };
