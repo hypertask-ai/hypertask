@@ -9,6 +9,7 @@ const root = path.resolve(__dirname, "..");
 const load = createJiti(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const key = "htpr-7054-ctrlj-due-date";
 const now = new Date("2026-10-10T02:00:00Z");
+test.mock.timers.enable({ apis: ["Date"], now });
 const example = "Review onboarding, due 2026-10-16";
 const html = '<h1 id="ai-generated-task-title">Review onboarding, due 2026-10-16</h1><p>Review onboarding by the deadline.</p><span id="ai-generated-task-due-date" style="display:none">2026-10-16</span>';
 
