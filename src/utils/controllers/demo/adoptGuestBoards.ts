@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWork";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { Status } from "@prisma/client";
 
 import { verifySession } from "@/lib/auth/session";
@@ -54,7 +54,7 @@ export async function adoptGuestBoards(
     const projectIds = projects.map((project) => project.id);
 
     const accountId = target.accountId;
-    await prisma.$transaction(async (tx) => {
+    const analyticsKeys = await prisma.$transaction(async (tx) => {
       await tx.team.updateMany({
         where: { googleAccount: { userId: guestId } },
         data: { googleAccountId: accountId },
@@ -97,11 +97,14 @@ export async function adoptGuestBoards(
           uid: guestUid.replace(GUEST_UID_PREFIX, ADOPTED_GUEST_UID_PREFIX),
         },
       });
+      const keys: string[] = [];
+      for (const projectId of projectIds) {
+        keys.push(await enqueueBoardCreated(tx, projectId, "adopted_demo", { userId: targetUserId }));
+      }
+      return keys;
     });
 
-    for (const projectId of projectIds) {
-      recordBoardCreated(projectId, "adopted_demo", { userId: targetUserId });
-    }
+    for (const key of analyticsKeys) processAnalyticsIntentSoon(key);
     return projectIds.length;
   } catch (error) {
     console.error("Guest board adoption failed (non-fatal):", error);

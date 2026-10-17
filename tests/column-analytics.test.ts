@@ -28,7 +28,7 @@ function harness(columns: Column[] = []) {
   const transaction = h.prisma.$transaction;
   h.prisma.$transaction = (work: any, options: any) => transaction((tx: any) => work({
     ...tx,
-    section: { update: async ({ where, data }: any) => Object.assign(rows.find((row) => row.id === where.id)!, data) },
+    section: { ...tx.section, update: async ({ where, data }: any) => Object.assign(rows.find((row) => row.id === where.id)!, data) },
     task: { updateManyAndReturn: async () => [] },
     taskSectionEvent: { createMany: async () => ({}) },
   }), options);
@@ -102,15 +102,15 @@ test("replaying the same column capture sends no duplicate", async () => {
   const { h, rows } = harness();
   rows.push(column(7, "Review"));
   const savedWork = h.load("src/lib/telemetry/savedWork.ts");
-  savedWork.recordColumnCreated(7, { userId: 123 });
-  savedWork.recordColumnCreated(7, { userId: 123 });
+  savedWork.processAnalyticsIntentSoon(await savedWork.enqueueColumnCreated(h.prisma, 7, { userId: 123 }));
+  savedWork.processAnalyticsIntentSoon(await savedWork.enqueueColumnCreated(h.prisma, 7, { userId: 123 }));
   await h.drain();
   assert.equal(h.captures.length, 1);
 });
 
 test("columns made with a new board are sent once each, marked default", async () => {
   const { h, rows } = harness([column(1, "Todo"), column(2, "Doing")]);
-  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "manual", { userId: 123 });
+  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "manual", { userId: 123 }));
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => capture.event), ["board_created", "column_created", "column_created"]);
   assert.deepEqual(h.captures.slice(1).map((capture) => [capture.properties.column_id, capture.properties.creation_method, capture.properties.is_seeded]), [["1", "default", false], ["2", "default", false]]);
@@ -120,7 +120,7 @@ test("columns made with a new board are sent once each, marked default", async (
 test("starter and adopted demo board columns are marked seeded", async () => {
   for (const method of ["seeded", "adopted_demo"]) {
     const { h } = harness([column(1, "To Do")]);
-    h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, method, { userId: 123 });
+    h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, method, { userId: 123 }));
     await h.drain();
     const columnEvent = h.captures.find((capture) => capture.event === "column_created")!;
     assert.equal(columnEvent.properties.creation_method, "seeded");
@@ -141,7 +141,7 @@ test("guest boards send no column events", async () => {
   const { h, service } = harness([column(1, "Todo")]);
   h.projects.get(15).owner = h.users.get(50);
   await service().createSection({ projectId: 15, title: "Guest column", userId: 50 });
-  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "seeded", { userId: 50 });
+  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "seeded", { userId: 50 }));
   await h.drain();
   assert.equal(h.captures.filter((capture) => capture.event.startsWith("column_")).length, 0);
 });
@@ -151,7 +151,7 @@ test("with the column flag off, no column events are sent and board_created is u
   h.setFlagEnabled("htpr-7273-column-events", false);
   await service().createSection({ projectId: 15, title: "Review", userId: 123 });
   await service().updateSection({ sectionId: 1, section_title: "Backlog", userId: 123 });
-  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "manual", { userId: 123 });
+  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "manual", { userId: 123 }));
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => capture.event), ["board_created"]);
 });

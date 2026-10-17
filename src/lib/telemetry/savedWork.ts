@@ -1,4 +1,7 @@
-import { waitUntil } from "@vercel/functions";
+import type { Prisma } from "@prisma/client";
+import { enqueueAnalyticsIntent, processAnalyticsIntentSoon } from "./analyticsIntents";
+
+export { processAnalyticsIntentSoon };
 
 export type CreationChannel = "web" | "api" | "mcp" | "agent";
 export type BoardCreationMethod = "manual" | "api" | "agent" | "auto" | "seeded" | "adopted_demo";
@@ -12,27 +15,20 @@ export function creationChannelFromHeader(value: string | null | undefined): Cre
   return value === "api" || value === "mcp" || value === "agent" ? value : "web";
 }
 
-function afterResponse(work: () => Promise<unknown>): void {
-  const promise = work().catch(() => undefined);
-  try {
-    waitUntil(promise);
-  } catch {
-    void promise;
-  }
+type IntentDb = Pick<Prisma.TransactionClient, "analyticsIntent">;
+
+export function enqueueBoardCreated(db: IntentDb, boardId: number, method: BoardCreationMethod, actor: SavedWorkActor, occurredAt = new Date()): Promise<string> {
+  return enqueueAnalyticsIntent(db, { kind: "board_created", payload: { boardId, method, actor, occurredAt: occurredAt.toISOString() } });
 }
 
-export function recordBoardCreated(boardId: number, method: BoardCreationMethod, actor: SavedWorkActor, occurredAt = new Date()): void {
-  afterResponse(async () => (await import("./savedWorkAnalytics")).captureBoardCreated(boardId, method, actor, occurredAt));
+export function enqueueTaskCreated(db: IntentDb, taskId: number, actor: SavedWorkActor, channel: CreationChannel): Promise<string> {
+  return enqueueAnalyticsIntent(db, { kind: "task_created", payload: { taskId, actor, channel } });
 }
 
-export function recordTaskCreated(taskId: number, actor: SavedWorkActor, channel: CreationChannel): void {
-  afterResponse(async () => (await import("./savedWorkAnalytics")).captureTaskCreated(taskId, actor, channel));
+export function enqueueColumnCreated(db: IntentDb, columnId: number, actor: SavedWorkActor, occurredAt = new Date()): Promise<string> {
+  return enqueueAnalyticsIntent(db, { kind: "column_created", payload: { columnId, actor, occurredAt: occurredAt.toISOString() } });
 }
 
-export function recordColumnCreated(columnId: number, actor: SavedWorkActor): void {
-  afterResponse(async () => (await import("./savedWorkAnalytics")).captureColumnCreated(columnId, "user", actor, new Date()));
-}
-
-export function recordColumnRenamed(columnId: number, actor: SavedWorkActor, occurredAt = new Date()): void {
-  afterResponse(async () => (await import("./savedWorkAnalytics")).captureColumnRenamed(columnId, actor, occurredAt));
+export function enqueueColumnRenamed(db: IntentDb, columnId: number, actor: SavedWorkActor, occurredAt = new Date()): Promise<string> {
+  return enqueueAnalyticsIntent(db, { kind: "column_renamed", payload: { columnId, actor, occurredAt: occurredAt.toISOString() } });
 }

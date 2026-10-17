@@ -102,7 +102,7 @@ function harness() {
     "@/lib/prisma": { __esModule: true, default: prisma },
   });
   const webhookModule = load("src/lib/mcp/webhooks/taskEvents.ts", {
-    "../../telemetry/savedWork": { recordTaskCreated: () => undefined },
+    "../../telemetry/savedWork": { enqueueTaskCreated: async () => "task-key", processAnalyticsIntentSoon: () => undefined },
     "./outbox": {
       persistBoardWebhookEvent: async (_tx, _projectId, event) => {
         deliveries.push(event);

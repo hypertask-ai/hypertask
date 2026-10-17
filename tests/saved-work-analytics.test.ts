@@ -88,7 +88,7 @@ test("guest-owned boards are not sent before adoption", async () => {
   const h = harness();
   h.users.set(50, { id: 50, uid: "guest_local", email: "guest@example.test" });
   h.projects.get(15).owner = h.users.get(50);
-  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "seeded", { userId: 50 });
+  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "seeded", { userId: 50 }));
   await h.drain();
   assert.equal(h.captures.length, 0);
 });
@@ -149,10 +149,10 @@ test("a collaborator outside the rollout sends nothing on an enabled owner's boa
 
 test("replaying the same task sends no duplicate", async () => {
   const h = harness();
-  const { recordTaskCreated } = h.load("src/lib/telemetry/savedWork.ts");
+  const { enqueueTaskCreated, processAnalyticsIntentSoon } = h.load("src/lib/telemetry/savedWork.ts");
   await saveTask(h, 43, { userId: 123, agentId: null }, "api");
-  recordTaskCreated(43, { userId: 123 }, "api");
-  recordTaskCreated(43, { userId: 123 }, "api");
+  processAnalyticsIntentSoon(await enqueueTaskCreated(h.prisma, 43, { userId: 123 }, "api"));
+  processAnalyticsIntentSoon(await enqueueTaskCreated(h.prisma, 43, { userId: 123 }, "api"));
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(new Set(h.captureAttempts.map((capture) => capture.uuid)).size, 1);
@@ -176,12 +176,12 @@ test("with the flag off, no task_created is sent", async () => {
 
 test("account category tags QA, internal, guest and customer accounts", () => {
   const h = harness();
-  const { accountCategory } = h.load("src/lib/telemetry/savedWorkAnalytics.ts");
-  assert.equal(accountCategory({ id: 985, email: "qa@example.test" }), "qa");
-  assert.equal(accountCategory({ id: 6, email: "owner@example.test" }), "internal");
-  assert.equal(accountCategory({ id: 7, email: "Someone@Hypertask.ai" }), "internal");
-  assert.equal(accountCategory({ id: 8, uid: "guest_x", email: "g@example.test" }), "guest");
-  assert.equal(accountCategory({ id: 9, email: "user@example.test" }), "customer");
+  const { legacyAccountCategory } = h.load("src/lib/telemetry/savedWorkAnalytics.ts");
+  assert.equal(legacyAccountCategory({ id: 985, email: "qa@example.test" }), "qa");
+  assert.equal(legacyAccountCategory({ id: 6, email: "owner@example.test" }), "internal");
+  assert.equal(legacyAccountCategory({ id: 7, email: "Someone@Hypertask.ai" }), "internal");
+  assert.equal(legacyAccountCategory({ id: 8, uid: "guest_x", email: "g@example.test" }), "guest");
+  assert.equal(legacyAccountCategory({ id: 9, email: "user@example.test" }), "customer");
 });
 
 test("only known channels pass the internal header; anything else counts as web", () => {

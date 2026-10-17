@@ -48,7 +48,7 @@ function subscription(): any {
 }
 
 function record(h: ReturnType<typeof harness>, evt = event(), retrieve = async () => subscription(), history = async (): Promise<any> => ({ data: [], has_more: true })) {
-  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(evt, retrieve, history);
+  return h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(evt, retrieve, history);
 }
 
 function expected(evt = event(), plan: string | null = "price_month", time: number | null = paidAt) {
@@ -74,26 +74,33 @@ function payments(h: ReturnType<typeof harness>) {
 
 test("renewals capture exact payment properties once per invoice, not per Stripe delivery", async () => {
   const h = harness();
-  record(h);
-  record(h);
-  record(h, event(invoice(), "evt_another_delivery"));
+  await record(h);
+  await record(h);
+  await record(h, event(invoice(), "evt_another_delivery"));
   await h.drain();
-  record(h, event(invoice(), "evt_late_replay"));
+  await record(h, event(invoice(), "evt_late_replay"));
   await h.drain();
   assert.deepEqual(h.captures, [expected()]);
   assert.equal(h.logs.length, 1);
   assert.equal(h.logs[0].log, "analytics:payment_succeeded:in_renewal");
   assert.match(h.captureAttempts[0].uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   assert.ok(h.flagChecks.some(({ key, userId }) => key === paymentFlag && userId === 123));
-  record(h, event(invoice({ id: "in_next_renewal" }), "evt_next"));
+  await record(h, event(invoice({ id: "in_next_renewal" }), "evt_next"));
   await h.drain();
   assert.equal(payments(h).length, 2);
+});
+
+test("payment_succeeded rejects an unmapped customer so the intent is retried once the mapping exists", async () => {
+  const h = harness();
+  h.setFlagEnabled(subscriptionFlag, false);
+  await assert.rejects(record(h, event(invoice({ customer: "cus_unmapped" }))), /No stored customer mapping/);
+  assert.deepEqual(h.captures, []);
+  assert.deepEqual(h.logs, []);
 });
 
 for (const [scenario, overrides] of Object.entries({
   zero: { amount_paid: 0 }, negative: { amount_paid: -1 }, unpaid: { status: "open" },
   missingSubscription: { subscription: null }, missingCustomer: { customer: null },
-  unmappedCustomer: { customer: "cus_unmapped" },
 })) {
   test(`payment_succeeded skips ${scenario}`, async () => {
     const h = harness();
@@ -101,7 +108,7 @@ for (const [scenario, overrides] of Object.entries({
     const warn = console.warn;
     console.warn = () => {};
     try {
-      record(h, event(invoice(overrides)), async () => { throw Error("must not retrieve subscription"); });
+      await record(h, event(invoice(overrides)), async () => { throw Error("must not retrieve subscription"); });
       await h.drain();
       assert.deepEqual(h.captures, []);
       assert.deepEqual(h.logs, []);
@@ -118,7 +125,7 @@ test("payment and legacy paths share one stored customer lookup and never fall b
     return { id: "team", googleAccount: { userId: 123 } };
   };
   h.setFlagEnabled(subscriptionFlag, false);
-  record(h);
+  await record(h);
   await h.drain();
   assert.equal(lookups, 1);
   assert.deepEqual(payments(h), [expected()]);
@@ -131,7 +138,7 @@ test("payment flag is independent from subscription_started and flag off preserv
       h.setFlagEnabled(paymentFlag, paymentEnabled);
       h.setFlagEnabled(subscriptionFlag, subscriptionEnabled);
       const evt = event(invoice({ billing_reason: "subscription_create" }));
-      record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
+      await record(h, evt, async () => subscription(), async () => ({ data: [], has_more: false }));
       await h.drain();
       assert.deepEqual(h.captures.map((capture) => capture.event).sort(), [
         ...(paymentEnabled ? ["payment_succeeded"] : []), ...(subscriptionEnabled ? ["subscription_started"] : []),
@@ -139,7 +146,7 @@ test("payment flag is independent from subscription_started and flag off preserv
       if (!paymentEnabled && subscriptionEnabled) {
         const legacy = harness();
         legacy.setFlagEnabled(paymentFlag, false);
-        legacy.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(evt, async () => subscription(), async () => ({ data: [], has_more: false }));
+        await legacy.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(evt, async () => subscription(), async () => ({ data: [], has_more: false }));
         await legacy.drain();
         assert.deepEqual(h.captures, legacy.captures);
       }
@@ -156,7 +163,7 @@ test("payment eligibility excludes QA, guests, missing users and activation-disa
     if (scenario === "guest") h.users.get(123).uid = "guest_123";
     if (scenario === "missing") h.users.delete(123);
     if (scenario === "disabled") h.setFlagEnabled("htpr-7034-activation-analytics", false);
-    record(h);
+    await record(h);
     await h.drain();
     assert.deepEqual(h.captures, [], scenario);
     assert.deepEqual(h.logs, [], scenario);
@@ -166,10 +173,10 @@ test("payment eligibility excludes QA, guests, missing users and activation-disa
 test("subscription lookup failures cannot suppress an independent payment", async () => {
   for (const failure of ["history", "subscription"]) {
     const h = harness();
-    record(h, event(), async () => { throw Error("Stripe subscription unavailable"); }, async () => {
+    await assert.rejects(record(h, event(), async () => { throw Error("Stripe subscription unavailable"); }, async () => {
       if (failure === "history") throw Error("Stripe history unavailable");
       return { data: [], has_more: false };
-    });
+    }), /Stripe .* unavailable/);
     await h.drain();
     assert.deepEqual(payments(h), [expected()]);
   }
@@ -186,7 +193,7 @@ test("modern invoice parent and price payloads work without extra Stripe calls",
       { parent: { type: "subscription_item_details" }, pricing: { price_details: { price: { id: "price_modern" } } } },
     ] },
   }));
-  record(h, evt, async () => { throw Error("must not retrieve subscription"); }, async () => { throw Error("must not list invoices"); });
+  await record(h, evt, async () => { throw Error("must not retrieve subscription"); }, async () => { throw Error("must not list invoices"); });
   await h.drain();
   assert.deepEqual(h.captures, [expected(evt, "price_modern")]);
 });
@@ -196,7 +203,7 @@ for (const lines of [undefined, { data: [] }, { data: [{ type: "invoiceitem", pr
     const h = harness();
     h.setFlagEnabled(subscriptionFlag, false);
     const evt = event(invoice({ lines, billing_reason: null, status_transitions: { paid_at: null } }));
-    record(h, evt);
+    await record(h, evt);
     await h.drain();
     assert.deepEqual(h.captures, [expected(evt, null, null)]);
   });
@@ -206,7 +213,7 @@ test("failed payment delivery retries with the same business UUID even after the
   const h = harness();
   h.setFlagEnabled(subscriptionFlag, false);
   h.setFailure("capture");
-  record(h);
+  await assert.rejects(record(h), /mock capture unavailable/);
   await h.drain();
   assert.equal(h.captures.length, 0);
   assert.equal(h.logs.length, 0);
@@ -214,11 +221,11 @@ test("failed payment delivery retries with the same business UUID even after the
   h.setFailure(null);
   h.users.set(234, { id: 234, uid: "real_234", email: "private@example.test" });
   h.prisma.team.findFirst = async () => ({ id: "team", googleAccount: { userId: 234 } });
-  record(h, event(invoice(), "evt_retry"));
+  await record(h, event(invoice(), "evt_retry"));
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captureAttempts[1].uuid, uuid);
-  record(h);
+  await record(h);
   await h.drain();
   assert.equal(h.captures.length, 1);
 });
@@ -231,6 +238,7 @@ function webhook(h: ReturnType<typeof harness>, evt: Stripe.Event, verified = tr
   const billing: string[] = [];
   h.mocks["raw-body"] = { default: async () => Buffer.from("signed fixture") };
   h.mocks["stripe"] = { Stripe: class {
+    events = { retrieve: async () => evt };
     webhooks = { constructEvent: () => { if (!verified) throw Error("invalid signature"); return evt; } };
     subscriptions = { retrieve: async () => subscription() };
     invoices = { list: async () => ({ data: [], has_more: false }) };
@@ -244,7 +252,9 @@ test("verified first-invoice webhook returns unchanged response before analytics
   const h = harness();
   const original = h.prisma.team.findFirst;
   const pending: ((value: any) => void)[] = [];
-  h.prisma.team.findFirst = (args: any) => new Promise((resolve) => { pending.push(async () => resolve(await original(args))); });
+  let started!: () => void;
+  const lookupStarted = new Promise<void>((resolve) => { started = resolve; });
+  h.prisma.team.findFirst = (args: any) => new Promise((resolve) => { pending.push(async () => resolve(await original(args))); started(); });
   const evt = event(invoice({ billing_reason: "subscription_create" }));
   const { billing, handle } = webhook(h, evt);
   const res = response();
@@ -253,6 +263,7 @@ test("verified first-invoice webhook returns unchanged response before analytics
   assert.deepEqual(res.body, { message: "success" });
   assert.deepEqual(billing, []);
   assert.equal(h.captures.length, 0);
+  await lookupStarted;
   h.prisma.team.findFirst = original;
   pending.forEach((resolve) => resolve(null));
   await h.drain();

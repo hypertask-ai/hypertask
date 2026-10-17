@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
+import { HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { accountCategory, type AccountCategory } from "./accountCategory";
 import { postHogClient } from "./signupAnalytics";
 import { deliverAnalyticsOutbox, isAnalyticsOutboxEnabled } from "./analyticsOutbox";
 
@@ -23,15 +25,32 @@ function occurrenceTime(properties: Record<string, unknown>, occurredAt?: Date, 
   return occurredAt ?? businessTime(properties.occurred_at) ?? createdAt ?? new Date();
 }
 
+async function sharedAccountCategory(userId: number): Promise<AccountCategory | null> {
+  if (!(await isFeatureEnabled(HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, userId))) return null;
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, uid: true, email: true } });
+  return user ? accountCategory(user) : null;
+}
+
+type OccurrenceProperties = Record<string, unknown> | ((tx: Prisma.TransactionClient) => Promise<Record<string, unknown>>);
+
+async function withAccountCategory(userId: number, properties: OccurrenceProperties) {
+  const category = await sharedAccountCategory(userId);
+  return async (tx: Prisma.TransactionClient) => {
+    const resolved = typeof properties === "function" ? await properties(tx) : properties;
+    return category === null ? resolved : { ...resolved, account_category: category };
+  };
+}
+
 export async function captureAnalyticsOccurrence(
   userId: number,
   event: string,
   marker: string,
-  properties: Record<string, unknown> | ((tx: Prisma.TransactionClient) => Promise<Record<string, unknown>>),
+  rawProperties: OccurrenceProperties,
   { createdAt, scope = "user", occurredAt }: { createdAt?: Date; scope?: "user" | "business"; occurredAt?: Date } = {},
 ): Promise<void> {
   const client = postHogClient();
   if (!client) return;
+  const properties = await withAccountCategory(userId, rawProperties);
   if (await isAnalyticsOutboxEnabled(userId)) {
     const key = `${scope === "user" ? userId : "business"}:${marker}`;
     const row = await prisma.$transaction(async (tx) => {
@@ -39,7 +58,7 @@ export async function captureAnalyticsOccurrence(
       if (scope === "business") await tx.$executeRaw`SELECT pg_advisory_xact_lock(7268::int, hashtext(${marker}))`;
       if (await tx.logs.findFirst({ where: { ...(scope === "user" ? { LoggedById: userId } : {}), log: marker } })) return;
       if (await tx.analyticsOutbox.findUnique({ where: { key } })) return;
-      const capturedProperties = typeof properties === "function" ? await properties(tx) : properties;
+      const capturedProperties = await properties(tx);
       await tx.logs.create({ data: {
         log: marker, LoggedById: userId, type: LogType.Signup, status: Status.Normal,
         ...(createdAt ? { createdAt } : {}),
@@ -57,7 +76,7 @@ export async function captureAnalyticsOccurrence(
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(7034::int, ${userId}::int)`;
     if (scope === "business") await tx.$executeRaw`SELECT pg_advisory_xact_lock(7268::int, hashtext(${marker}))`;
     if (await tx.logs.findFirst({ where: { ...(scope === "user" ? { LoggedById: userId } : {}), log: marker } })) return;
-    const capturedProperties = typeof properties === "function" ? await properties(tx) : properties;
+    const capturedProperties = await properties(tx);
     await client.captureImmediate({
       distinctId: String(userId), event, uuid: occurrenceUuid(scope === "business" ? "business" : userId, marker),
       properties: capturedProperties, timestamp: occurrenceTime(capturedProperties, occurredAt, createdAt),

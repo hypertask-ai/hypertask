@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWork";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";
@@ -251,7 +251,11 @@ export const createOnboardingSampleBoardProject = async ({
     }
   }
 
-  recordBoardCreated(Project.id, "seeded", { userId: exist_user.id });
+  try {
+    processAnalyticsIntentSoon(await enqueueBoardCreated(prisma, Project.id, "seeded", { userId: exist_user.id }));
+  } catch {
+    console.error("[saved-work-analytics] intent enqueue failed");
+  }
 
   if (firstSection) {
     try {

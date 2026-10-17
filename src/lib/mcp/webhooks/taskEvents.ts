@@ -1,7 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client'
 import { persistBoardWebhookEvent } from './outbox'
 import type { WebhookDelivery, WebhookTaskStatus } from './events'
-import { recordTaskCreated, type CreationChannel } from '../../telemetry/savedWork'
+import { enqueueTaskCreated, processAnalyticsIntentSoon, type CreationChannel } from '../../telemetry/savedWork'
 
 
 type TaskCreatedDb = {
@@ -53,9 +53,10 @@ export async function createTaskWithBoardWebhookOutbox<T>(
       actor.userId,
       actor.agentId
     )
-    return { taskId: created.taskId, result: created.result, boardWebhookDeliveryIds }
+    const analyticsKey = await enqueueTaskCreated(tx, created.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
+    return { analyticsKey, result: created.result, boardWebhookDeliveryIds }
   })
-  recordTaskCreated(committed.taskId, { userId: actor.userId, agentId: actor.agentId ?? analyticsAgentId }, channel)
+  processAnalyticsIntentSoon(committed.analyticsKey)
   return { result: committed.result, boardWebhookDeliveryIds: committed.boardWebhookDeliveryIds }
 }
 

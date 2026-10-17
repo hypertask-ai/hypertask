@@ -52,3 +52,7 @@ Browser `$identify` gets `event_id` (its envelope uuid) and `source=web` for sig
 A credential already counted under the old per-credential key claims its durable connection silently when the flag reaches its user, so the rollout does not recount it. A `signup_page_viewed` queued before PostHog loads is dropped if the visitor signs in before that load, so very fast sign-ins can be undercounted.
 
 Not covered here: unmapped Stripe customers are still skipped rather than queued (there is no user to attach the record to); first-touch attribution and consent fields remain HTPR-7269.
+
+### Durable analytics intents
+
+Saved tasks, boards, and columns record an ids-only analytics intent inside the save transaction. Onboarding and manifest boards enqueue immediately after their project is created; Stripe intents contain only the verified event id, and invoice acknowledgements wait for that insert. Post-response processing is a best-effort kick: the analytics outbox cron replays due intents before delivering occurrences, retries failed lookups, and removes processed intents after seven days. Stripe replay retrieves the event for analytics only and never reruns billing handlers.
