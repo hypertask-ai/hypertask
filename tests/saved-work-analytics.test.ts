@@ -87,7 +87,7 @@ test("guest-owned boards are not sent before adoption", async () => {
   const h = harness();
   h.users.set(50, { id: 50, uid: "guest_local", email: "guest@example.test" });
   h.projects.get(15).owner = h.users.get(50);
-  h.load("src/lib/telemetry/savedWork.ts").recordBoardCreated(15, "seeded", { userId: 50 });
+  h.load("src/lib/telemetry/savedWork.ts").processAnalyticsIntentSoon(await h.load("src/lib/telemetry/savedWork.ts").enqueueBoardCreated(h.prisma, 15, "seeded", { userId: 50 }));
   await h.drain();
   assert.equal(h.captures.length, 0);
 });
@@ -148,10 +148,10 @@ test("a collaborator outside the rollout sends nothing on an enabled owner's boa
 
 test("replaying the same task sends no duplicate", async () => {
   const h = harness();
-  const { recordTaskCreated } = h.load("src/lib/telemetry/savedWork.ts");
+  const { enqueueTaskCreated, processAnalyticsIntentSoon } = h.load("src/lib/telemetry/savedWork.ts");
   await saveTask(h, 43, { userId: 123, agentId: null }, "api");
-  recordTaskCreated(43, { userId: 123 }, "api");
-  recordTaskCreated(43, { userId: 123 }, "api");
+  processAnalyticsIntentSoon(await enqueueTaskCreated(h.prisma, 43, { userId: 123 }, "api"));
+  processAnalyticsIntentSoon(await enqueueTaskCreated(h.prisma, 43, { userId: 123 }, "api"));
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(new Set(h.captureAttempts.map((capture) => capture.uuid)).size, 1);

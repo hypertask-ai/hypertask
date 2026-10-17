@@ -5,7 +5,7 @@ import {
   createProjectViewAndCreateDefault,
   updateUniqueIdentifier
 } from '@/utils/controllers/projects/create'
-import { recordBoardCreated, type CreationChannel } from '@/lib/telemetry/savedWork'
+import { enqueueBoardCreated, processAnalyticsIntentSoon, type CreationChannel } from '@/lib/telemetry/savedWork'
 import { createProjectWithStableName } from '@/utils/controllers/projects/createProjectWithStableName'
 import { assertBoardQuota } from '@/utils/controllers/projects/boardQuota'
 import createLog from '@/utils/controllers/logs/createLog'
@@ -112,6 +112,12 @@ export async function createBoardFromManifest(
   })
 
   const projectId = projectCore.id
+  let analyticsKey: string | undefined
+  try {
+    analyticsKey = await enqueueBoardCreated(prisma, projectId, creation.method, { userId, agentId: creation.agentId }, projectCore.createdAt)
+  } catch {
+    console.error('[saved-work-analytics] intent enqueue failed')
+  }
 
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
@@ -267,7 +273,7 @@ export async function createBoardFromManifest(
       console.error('[MCP Create Board] log after success:', sideEffectErr)
     }
 
-    recordBoardCreated(projectId, creation.method, { userId, agentId: creation.agentId }, project.createdAt)
+    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey)
     return result
   } catch (err) {
     await compensateFailedBoard(projectId)

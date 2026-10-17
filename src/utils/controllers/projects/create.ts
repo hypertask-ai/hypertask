@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWork";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { LogType, Status } from "@prisma/client";
 import createLog from "../logs/createLog";
 import { CreateLogInput } from "@/models/model";
@@ -66,7 +66,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       return { status: 403, json: { message: "Custom ticket prefixes are not enabled" } };
     }
     const prefix = hasPrefix ? normalizeProjectPrefix(ticketPrefix) : undefined;
-    project = await prisma.$transaction(async (tx) => {
+    const committed = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${teamId}))`;
       if (prefix && await tx.project.findFirst({
         where: { teamId, OR: [
@@ -77,7 +77,7 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
       })) {
         throw new Error("Ticket prefix is already used by another board in this team");
       }
-      return tx.project.create({
+      const created = await tx.project.create({
         data: {
           ownerId: userId,
           uniqueIdentifier: prefix,
@@ -94,9 +94,12 @@ const create = async (userId: number, title: string, teamId: string, googleAccou
           },
         },
       });
+      const analyticsKey = await enqueueBoardCreated(tx, created.id, "manual", { userId });
+      return { project: created, analyticsKey };
     });
 
-    recordBoardCreated(project.id, "manual", { userId });
+    project = committed.project;
+    processAnalyticsIntentSoon(committed.analyticsKey);
 
     project = await prisma.project.update({
       where: { id: project.id },

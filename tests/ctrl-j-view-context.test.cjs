@@ -222,7 +222,7 @@ test("existing create validation rejects foreign labels, users and agents before
       "@/utils/controllers/tasks/getNextUniqueTaskIndex": {},
       "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: () => assert.fail("validation must finish before writes") },
       "@/lib/mcp/webhooks/outbox": {}, "@/lib/agentWebhooks/outbox": {},
-      "@/lib/telemetry/savedWork": { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
+      "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
       "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
       "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },
       "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },

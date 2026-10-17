@@ -1,4 +1,4 @@
-import { recordBoardCreated } from "@/lib/telemetry/savedWork";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 import { CreateLogInput, IUser } from "@/models/model";
 import { getSequentialLetters } from "@/utils/helperFunctions/helperFunctions";
 import { LogType, Status } from "@prisma/client";
@@ -204,6 +204,8 @@ export const createOnboardingSampleBoardProject = async ({
     seeded: true,
   });
 
+  const analyticsKey = await enqueueBoardCreated(prisma, Project.id, "seeded", { userId: exist_user.id });
+
   const projectIdentifier = (
     Project.uniqueIdentifier ?? uniqueIdentifier
   ).toUpperCase();
@@ -251,7 +253,7 @@ export const createOnboardingSampleBoardProject = async ({
     }
   }
 
-  recordBoardCreated(Project.id, "seeded", { userId: exist_user.id });
+  processAnalyticsIntentSoon(analyticsKey);
 
   if (firstSection) {
     try {

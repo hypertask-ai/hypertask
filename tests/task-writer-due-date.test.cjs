@@ -227,7 +227,7 @@ function saveHarness(enabled) {
     "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_prisma, _actor, callback) => ({ ...(await callback(prisma)), boardWebhookDeliveryIds: [] }) },
     "@/lib/mcp/webhooks/outbox": { publishBoardWebhookDeliveries: async () => {} },
     "@/lib/agentWebhooks/outbox": { persistAgentTaskCreatedPending: async () => {} },
-    "@/lib/telemetry/savedWork": { recordBoardCreated: () => {}, recordTaskCreated: () => {}, creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board-key", processAnalyticsIntentSoon: () => {}, enqueueTaskCreated: async () => "task-key", creationChannelFromHeader: () => 'web', CREATION_CHANNEL_HEADER: 'X-Hypertask-Creation-Channel', CREATION_AGENT_HEADER: 'X-Hypertask-Creation-Agent' },
     "@/lib/auth/getSessionUser": { getSessionUser: async () => ({ userId: 985 }) },
     "@/lib/auth/resolveActingAgent": { resolveActingAgent: () => ({ ok: true, agentId: null }) },
     "@/lib/auth/session": { SESSION_COOKIE: "session", verifySession: () => null },

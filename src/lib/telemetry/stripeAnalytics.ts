@@ -4,7 +4,6 @@ import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/l
 import { isActivationEligible } from "./activationAnalytics";
 import { isInviteSeatAnalyticsEnabled } from "./inviteAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
-import { scheduleAnalytics } from "./signupAnalytics";
 
 type Coupon = {
   percent_off: number | null;
@@ -115,37 +114,35 @@ async function billedTeam(customerId: string | null) {
   return team;
 }
 
-export function recordStripeSubscriptionEvent(
+export async function captureStripeSubscriptionEvent(
   event: Pick<Stripe.Event, "id" | "type" | "created">,
   subscription: AnalyticsSubscription,
   previousAttributes?: PreviousAttributes,
-): void {
-  scheduleAnalytics(async () => {
-    const customerId = idOf(subscription.customer);
-    const team = await billedTeam(customerId);
-    if (!team || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
-    const properties = subscriptionAnalyticsProperties(subscription);
-    const canceled = event.type === "customer.subscription.deleted";
-    const previousItems = previousAttributes?.items?.data.map((item) => ({
-      quantity: item.quantity ?? subscription.items.data.find((current) => current.id === item.id)?.quantity,
-    }));
-    const seatsBefore = previousItems ? seatCount(previousItems) : previousAttributes?.quantity ?? null;
-    if (!canceled && (event.type !== "customer.subscription.updated" || seatsBefore === null || properties.seats_after === null || seatsBefore === properties.seats_after)) return;
-    if (canceled && !subscription.ended_at) return;
-    const name = canceled ? "subscription_canceled" : "subscription_seats_changed";
-    const eventId = `${name}:${canceled ? subscription.id : event.id}`;
-    const userId = team.googleAccount.userId;
-    const reason = subscription.cancellation_details?.reason;
-    await captureAnalyticsOccurrence(userId, name, `analytics:${eventId}`, {
-      ...serverAnalyticsProperties(userId, team.id, null, eventId, new Date((canceled ? subscription.ended_at! : event.created) * 1000)),
-      ...properties, stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscription.id,
-      seats_before: canceled ? properties.seats_after : seatsBefore, seats_after: canceled ? 0 : properties.seats_after,
-      ...(canceled ? {
-        canceled_at: new Date(subscription.ended_at! * 1000).toISOString(),
-        cancellation_reason: reason && ["canceled_by_retention_policy", "cancellation_requested", "payment_disputed", "payment_failed"].includes(reason) ? reason : "unknown",
-      } : {}),
-    }, { scope: "business" });
-  });
+): Promise<void> {
+  const customerId = idOf(subscription.customer);
+  const team = await billedTeam(customerId);
+  if (!team || !(await isInviteSeatAnalyticsEnabled(team.googleAccount.userId))) return;
+  const properties = subscriptionAnalyticsProperties(subscription);
+  const canceled = event.type === "customer.subscription.deleted";
+  const previousItems = previousAttributes?.items?.data.map((item) => ({
+    quantity: item.quantity ?? subscription.items.data.find((current) => current.id === item.id)?.quantity,
+  }));
+  const seatsBefore = previousItems ? seatCount(previousItems) : previousAttributes?.quantity ?? null;
+  if (!canceled && (event.type !== "customer.subscription.updated" || seatsBefore === null || properties.seats_after === null || seatsBefore === properties.seats_after)) return;
+  if (canceled && !subscription.ended_at) return;
+  const name = canceled ? "subscription_canceled" : "subscription_seats_changed";
+  const eventId = `${name}:${canceled ? subscription.id : event.id}`;
+  const userId = team.googleAccount.userId;
+  const reason = subscription.cancellation_details?.reason;
+  await captureAnalyticsOccurrence(userId, name, `analytics:${eventId}`, {
+    ...serverAnalyticsProperties(userId, team.id, null, eventId, new Date((canceled ? subscription.ended_at! : event.created) * 1000)),
+    ...properties, stripe_event_id: event.id, stripe_customer_id: customerId, subscription_id: subscription.id,
+    seats_before: canceled ? properties.seats_after : seatsBefore, seats_after: canceled ? 0 : properties.seats_after,
+    ...(canceled ? {
+      canceled_at: new Date(subscription.ended_at! * 1000).toISOString(),
+      cancellation_reason: reason && ["canceled_by_retention_policy", "cancellation_requested", "payment_disputed", "payment_failed"].includes(reason) ? reason : "unknown",
+    } : {}),
+  }, { scope: "business" });
 }
 
 export type PaidInvoicePage = { data: PaidInvoice[]; has_more: boolean };
@@ -169,13 +166,13 @@ function paidInvoiceHistory(invoice: PaidInvoice, subscriptionId: string, page: 
   return { isFirstForSubscription, isFirstForCustomer };
 }
 
-export function recordStripeInvoicePaid(
+export async function captureStripeInvoicePaid(
   event: Stripe.Event,
   retrieveSubscription: (id: string) => Promise<AnalyticsSubscription>,
   listPaidInvoices: (customerId: string) => Promise<PaidInvoicePage>,
-): void {
+): Promise<void> {
   let teamLookup: ReturnType<typeof billedTeam> | undefined;
-  scheduleAnalytics(async () => {
+  const payment = (async () => {
     const invoice = event.data.object as PaidInvoice;
     if (invoice.status !== "paid" || invoice.amount_paid <= 0) return;
     const subscriptionId = invoiceSubscriptionId(invoice);
@@ -197,8 +194,8 @@ export function recordStripeInvoicePaid(
       amount_paid: invoice.amount_paid, paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
       billing_reason: invoice.billing_reason ?? null,
     }, { scope: "business", occurredAt });
-  });
-  scheduleAnalytics(async () => {
+  })();
+  const subscriptionStarted = (async () => {
     const invoice = event.data.object as PaidInvoice;
     if (invoice.status !== "paid" || invoice.amount_paid <= 0) return;
     const subscriptionId = invoiceSubscriptionId(invoice);
@@ -224,5 +221,8 @@ export function recordStripeInvoicePaid(
       paid_at: paidAt === null ? null : new Date(paidAt * 1000).toISOString(),
       is_first_subscription_for_user: isFirstForUser,
     }, { scope: "business" });
-  });
+  })();
+  const results = await Promise.allSettled([payment, subscriptionStarted]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed?.status === "rejected") throw failed.reason;
 }

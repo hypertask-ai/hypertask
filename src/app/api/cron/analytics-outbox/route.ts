@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { hasValidCronAuthorization } from "@/lib/cronAuthorization";
+import { retryAnalyticsIntents } from "@/lib/telemetry/analyticsIntents";
 import { retryAnalyticsOutbox } from "@/lib/telemetry/analyticsOutbox";
 
 export const runtime = "nodejs";
@@ -17,5 +18,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
-  return NextResponse.json(await retryAnalyticsOutbox());
+  const intents = await retryAnalyticsIntents();
+  const outbox = await retryAnalyticsOutbox();
+  return NextResponse.json({ ...outbox, intents });
 }
