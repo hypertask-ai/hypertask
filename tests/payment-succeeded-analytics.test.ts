@@ -64,6 +64,7 @@ function expected(evt = event(), plan: string | null = "price_month", time: numb
       plan, currency: "usd", amount_paid: 3000, paid_at: time === null ? null : new Date(time * 1000).toISOString(),
       billing_reason: paidInvoice.billing_reason ?? null,
     },
+    timestamp: new Date((time ?? evt.created) * 1000),
   };
 }
 
