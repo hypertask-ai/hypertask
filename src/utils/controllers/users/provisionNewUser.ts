@@ -95,7 +95,7 @@ export const provisionNewUser = async ({
     },
   });
 
-  const googleAccount = createGoogleAccount ? await findOrCreateGoogleAccount(userId) : null;
+  const googleAccount = await findOrCreateGoogleAccount(userId, createGoogleAccount);
   const customerId = await findOrCreateSignupStripeCustomer({
     userId,
     googleAccount,
@@ -125,15 +125,14 @@ export const provisionNewUser = async ({
   });
 };
 
-const findOrCreateGoogleAccount = async (userId: number) => {
+const findOrCreateGoogleAccount = async (userId: number, createIfMissing: boolean) => {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { accountId: true } });
   const linked = user?.accountId
     ? await prisma.googleAccount.findFirst({ where: { id: user.accountId, userId } })
     : null;
-  const googleAccount =
-    linked ??
-    (await prisma.googleAccount.findFirst({ where: { userId } })) ??
-    (await prisma.googleAccount.create({ data: { userId, stripe_customer_id: "" } }));
+  const existing = linked ?? (await prisma.googleAccount.findFirst({ where: { userId } }));
+  if (!existing && !createIfMissing) return null;
+  const googleAccount = existing ?? (await prisma.googleAccount.create({ data: { userId, stripe_customer_id: "" } }));
   await prisma.user.update({ where: { id: userId }, data: { accountId: googleAccount.id } });
   return googleAccount;
 };
