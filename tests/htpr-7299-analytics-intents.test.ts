@@ -107,6 +107,8 @@ test("signup without consent never persists anonymous identity or unused attribu
   await h.signup.enqueueSignupCompleted(h.prisma, { ...signupInput(), cookieHeader: "ht_cookie_consent=essential" });
   assert.equal(h.intentRows[0].payload.anonymousId, null);
   assert.equal(h.intentRows[0].payload.attribution, null);
+  assert.equal(h.intentRows[0].payload.utmSource, null);
+  assert.equal(h.intentRows[0].payload.legacyUserSignedUpUtmSource, "website");
   assert.equal(JSON.stringify(h.intentRows[0].payload).includes("anon-visitor"), false);
 });
 
