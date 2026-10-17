@@ -7,11 +7,11 @@ import { recordActivationOccurrence } from "./activationOccurrences";
 import { captureActivationCompleted } from "./activationCompleted";
 import type { BoardCreationMethod, ColumnCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
 
-export type AccountCategory = "customer" | "internal" | "qa" | "guest";
+type AccountCategory = "customer" | "internal" | "qa" | "guest";
 
 const LEGACY_BOARD_SOURCES: ReadonlySet<BoardCreationMethod> = new Set(["manual", "seeded", "adopted_demo"]);
 
-export function accountCategory(user: { id: number; uid?: string | null; email: string }): AccountCategory {
+export function legacyAccountCategory(user: { id: number; uid?: string | null; email: string }): AccountCategory {
   if (isGuestUser(user)) return "guest";
   const email = user.email.trim().toLowerCase();
   const qaEmail = process.env.QA_LOGIN_EMAIL?.trim().toLowerCase();
@@ -41,7 +41,7 @@ export function buildBoardCreatedProperties(board: Board, method: BoardCreationM
   return {
     ...serverAnalyticsProperties(board.owner.id, board.teamId, board.id, `board_created:${board.id}`, occurredAt),
     is_seeded: isSeeded,
-    account_category: accountCategory(board.owner),
+    account_category: legacyAccountCategory(board.owner),
     creation_method: method,
     ...actorProperties(actor),
   };
@@ -57,7 +57,7 @@ export function buildTaskCreatedProperties(
     ...serverAnalyticsProperties(board.owner.id, board.teamId, board.id, `task_created:${task.id}`, task.createdAt),
     task_id: String(task.id),
     is_seeded: board.seeded,
-    account_category: accountCategory(board.owner),
+    account_category: legacyAccountCategory(board.owner),
     creation_channel: channel,
     ...actorProperties(actor),
   };
@@ -108,7 +108,7 @@ export function buildColumnProperties(
     ...serverAnalyticsProperties(board.owner.id, board.teamId, board.id, eventId, occurredAt),
     column_id: String(columnId),
     is_seeded: board.seeded || extra.creation_method === "seeded",
-    account_category: accountCategory(board.owner),
+    account_category: legacyAccountCategory(board.owner),
     ...extra,
     ...actorProperties(actor),
   };

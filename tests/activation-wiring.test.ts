@@ -541,7 +541,8 @@ test("ineligible users never start activation transactions or write markers in a
         assert.deepEqual(h.prismaCalls, expectedCalls, `${scenario}/${job}: only owner and eligibility reads allowed, no writes or transactions`);
         assert.deepEqual(h.logs, []);
         assert.deepEqual(h.captures, []);
-        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7034-activation-analytics", userId }]);
+        const categoryCheck = scenario === "off" ? [] : [{ key: "htpr-7292-shared-account-category", userId }];
+        if (!["qa-id", "invalid"].includes(scenario)) assert.deepEqual(h.flagChecks, [{ key: "htpr-7034-activation-analytics", userId }, ...categoryCheck]);
       }
     }
   } finally {
