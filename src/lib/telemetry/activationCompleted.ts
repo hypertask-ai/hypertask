@@ -24,7 +24,7 @@ export async function captureActivationCompleted(userId: number, occurredAt = ne
     const { boardId, teamId, signupAt, activatedAt, taskIds, version } = activation;
     await captureAnalyticsOccurrence(userId, "activation_completed", "analytics:activation_completed", {
       ...serverAnalyticsProperties(userId, teamId, boardId, `activation_completed:${userId}`, activatedAt),
-      account_category: accountCategory(user),
+      account_category: legacyAccountCategory(user),
       signup_at: signupAt.toISOString(),
       activated_at: activatedAt.toISOString(),
       hours_since_signup: Math.round((activatedAt.getTime() - signupAt.getTime()) / 360000) / 10,
