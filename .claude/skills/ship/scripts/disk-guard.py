@@ -182,22 +182,12 @@ def unreadable_but_harmless(process):
 # .env files and Playwright storageState logins (YPER4-228). Wider patterns would match
 # ordinary package files in node_modules and keep every npx cache forever.
 SENSITIVE_NAME = re.compile(r'^\.env|storage[-_]?state', re.IGNORECASE)
-# Packages ship docs and code under these names (playwright-core's storage-state.md); saved logins are data files.
-PACKAGE_SOURCE = ('.md', '.js', '.cjs', '.mjs', '.ts', '.cts', '.mts', '.map')
+# Known package docs that only look like saved logins; every other match keeps node_modules.
+PACKAGE_DOCS = re.compile(r'(^|/)playwright-core/lib/tools/skills/[\w-]+/references/storage-state\.md$')
 
 
 def package_file(item, modules):
-    """A doc or code file inside an installed package folder; .env* never qualifies."""
-    if item.name.lower().startswith('.env') or not item.name.endswith(PACKAGE_SOURCE):
-        return False
-    if not stat.S_ISREG(item.lstat().st_mode):
-        return False
-    folder = item.parent
-    while folder != modules and inside(folder, modules):
-        if (folder / 'package.json').is_file():
-            return True
-        folder = folder.parent
-    return False
+    return stat.S_ISREG(item.lstat().st_mode) and bool(PACKAGE_DOCS.search(item.relative_to(modules).as_posix()))
 
 
 def sensitive_inside(path, package_source_ok=False):

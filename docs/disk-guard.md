@@ -89,11 +89,10 @@ in place. Reinstall to update the installed copy. No crontab is used.
      `node_modules` as ignored. Main checkouts, locked or prunable worktrees, a
      worktree with an open PR and any worktree a process, command line or
      container uses are never touched. `npm ci` brings it back. Inside
-     `node_modules`, package docs and code named like a login file (such as
-     playwright-core's `storage-state.md`: `.md`, `.js`, `.ts` and similar,
-     inside a folder with its own `package.json`) do not keep the folder. Any
-     `.env*` file, whatever its extension, and any other storageState file
-     still do. The worktree folder's own timestamp does not count as
+     `node_modules`, only playwright-core's own doc
+     `lib/tools/skills/<skill>/references/storage-state.md` does not keep the
+     folder. Every other `.env*` or storageState file, at any depth and with
+     any extension, still does. The worktree folder's own timestamp does not count as
      activity, because removing `.next` in the same run changes it.
   7. `npm-cache`: the whole `~/.npm/_cacache` only when no `npm` or `npx`
      process runs at all and nothing was written to it for one hour. npm is

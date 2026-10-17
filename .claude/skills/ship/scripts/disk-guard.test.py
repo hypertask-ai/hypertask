@@ -1105,7 +1105,7 @@ class CacheTests(Fixture):
 
     def test_cache_package_docs_named_storage_state_do_not_keep_node_modules(self):
         _, tree, modules = self.deps_tree()
-        doc = modules / 'playwright-core/references/storage-state.md'
+        doc = modules / 'playwright-core/lib/tools/skills/playwright-cli/references/storage-state.md'
         doc.parent.mkdir(parents=True)
         doc.write_text('docs\n')
         (modules / 'playwright-core/package.json').write_text('{}\n')
@@ -1115,7 +1115,8 @@ class CacheTests(Fixture):
 
     def test_cache_saved_login_or_env_inside_node_modules_kept(self):
         for name in ('.cache/auth/storageState.json', 'pkg/.env', 'pkg/.env.local', 'pkg/.env.local.js',
-                     'storageState.js', '.cache/auth/storage-state.ts'):
+                     'storageState.js', '.cache/auth/storage-state.ts', 'pkg/auth/storageState.js',
+                     'pkg/storage-state.md', 'playwright-core/lib/tools/skills/x/references/storage-state.json'):
             with self.subTest(name=name):
                 _, tree, modules = self.deps_tree()
                 saved = modules / name
