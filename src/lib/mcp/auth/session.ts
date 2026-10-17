@@ -1,4 +1,5 @@
-import { recordAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
 import prisma from '@/lib/prisma';
 import jwt from 'jsonwebtoken';
@@ -54,7 +55,7 @@ export async function validateMcpAuth(
     }
 
     console.log('[MCP Auth] Management API key validated for user:', managementCtx.user.id)
-    recordAuthenticatedConnection(request, managementCtx.user.id, token, undefined, `management_key:${managementCtx.management!.keyId}`)
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, managementCtx.user.id, token, undefined, `management_key:${managementCtx.management!.keyId}`))
     logMcpCliUsage(request, token, managementCtx)
     return managementCtx
   }
@@ -64,7 +65,7 @@ export async function validateMcpAuth(
     if (validated) {
       const { context: ctx, keyId } = validated
       console.log('[MCP Auth] API key validated for user:', ctx.user.id)
-      recordAuthenticatedConnection(request, ctx.user.id, token, undefined, `api_key:${keyId}`)
+      await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, ctx.user.id, token, undefined, `api_key:${keyId}`))
       logMcpCliUsage(request, token, ctx)
       return ctx
     }
@@ -78,7 +79,7 @@ export async function validateMcpAuth(
   if (ctx) {
     const log = options.boundedLogging ? boundedMcpAuthLog : console.log
     log('[MCP Auth] JWT validated for user:', ctx.user.id, 'agentId:', ctx.agentId ?? '(none)')
-    recordAuthenticatedConnection(request, ctx.user.id, token, connectedAt, ctx.agentId ? `agent:${ctx.agentId}` : undefined)
+    await enqueueOutsideSaveAndProcessSoon(() => enqueueAuthenticatedConnection(prisma, request, ctx.user.id, token, connectedAt, ctx.agentId ? `agent:${ctx.agentId}` : undefined))
     logMcpCliUsage(request, token, ctx, options.boundedLogging ? boundedMcpAuthLog : undefined)
     return ctx
   }

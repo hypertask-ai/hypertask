@@ -4,7 +4,7 @@ import { isGuestUser } from "@/lib/demo/guest";
 import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7271_SAVED_WORK_EVENTS_FLAG, HTPR_7273_COLUMN_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import type { AccountCategory } from "./accountCategory";
-import { recordActivationOccurrence } from "./activationOccurrences";
+import { captureActivationOccurrence } from "./activationOccurrences";
 import { captureActivationCompleted } from "./activationCompleted";
 import type { BoardCreationMethod, ColumnCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
 
@@ -72,7 +72,7 @@ export async function captureBoardCreated(
   if (!board) return;
   if (!(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id))) {
     if (LEGACY_BOARD_SOURCES.has(method)) {
-      recordActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
+      await captureActivationOccurrence(board.owner.id, "board_created", String(board.id), { source: method });
     }
   } else if (!isGuestUser(board.owner)) {
     await captureAnalyticsOccurrence(

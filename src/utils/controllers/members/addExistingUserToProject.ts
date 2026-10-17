@@ -1,7 +1,8 @@
-import { LogType, Status } from "@prisma/client";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { LogType, Status, type Prisma } from "@prisma/client";
 
 import prisma from "@/lib/prisma";
-import { recordMemberJoined } from "@/lib/telemetry/inviteAnalytics";
+import { enqueueMemberJoined } from "@/lib/telemetry/inviteAnalytics";
 import { withTeamSeatBillingLock } from "@/lib/seatBillingLock";
 import { mutateAndSyncSeatBilling } from "@/lib/syncSeatBilling";
 import { ensureTeamMembership } from "@/lib/teamMembership";
@@ -193,14 +194,16 @@ export async function addExistingUserToProject(
               });
             }
 
+            const analyticsKey = await enqueueMemberJoined(tx, member.id, userId, projectId, null, inviterUserId);
             return {
+              analyticsKey,
               memberId: member.id,
               outcome: "added" as const,
               created,
             };
           });
 
-          if (joined.outcome === "added") recordMemberJoined(joined.memberId, userId, projectId, null, inviterUserId);
+          if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
           return {
             value: {
               memberId: joined.memberId,
@@ -278,14 +281,20 @@ export async function addExistingUserToProject(
   };
 
   await withTeamSeatBillingLock(teamId, async (assertHeld) => {
-    join = await ensureProjectMemberRow({
-      assertHeld,
-      projectId,
-      userId,
-      ownsTheTeam,
-      teamId,
+    const joined = await prisma.$transaction(async (tx) => {
+      const result = await ensureProjectMemberRow(tx, {
+        assertHeld,
+        projectId,
+        userId,
+        ownsTheTeam,
+        teamId,
+      });
+      const analyticsKey = result.outcome === "added" && result.memberId !== null
+        ? await enqueueMemberJoined(tx, result.memberId, userId, projectId, null, inviterUserId) : null;
+      return { result, analyticsKey };
     });
-    if (join.outcome === "added" && join.memberId !== null) recordMemberJoined(join.memberId, userId, projectId, null, inviterUserId);
+    join = joined.result;
+    if (joined.analyticsKey) processAnalyticsIntentSoon(joined.analyticsKey);
   });
 
   if (join.memberId == null) {
@@ -324,7 +333,7 @@ export async function addExistingUserToProject(
   };
 }
 
-async function ensureProjectMemberRow(input: {
+async function ensureProjectMemberRow(db: Prisma.TransactionClient, input: {
   assertHeld: () => void;
   projectId: number;
   userId: number;
@@ -333,7 +342,7 @@ async function ensureProjectMemberRow(input: {
 }): Promise<JoinMutationResult> {
   const { assertHeld, projectId, userId, ownsTheTeam, teamId } = input;
   assertHeld();
-  const acceptedTeamMember = await prisma.member_Team.findUnique({
+  const acceptedTeamMember = await db.member_Team.findUnique({
     where: { userId_teamId: { userId, teamId } },
     select: { status: true },
   });
@@ -347,7 +356,7 @@ async function ensureProjectMemberRow(input: {
     };
   }
 
-  const alreadyMember = await prisma.member.findFirst({
+  const alreadyMember = await db.member.findFirst({
     where: {
       projectId,
       userId,
@@ -359,7 +368,7 @@ async function ensureProjectMemberRow(input: {
   }
 
   assertHeld();
-  const member = await prisma.member.create({
+  const member = await db.member.create({
     data: {
       userId,
       projectId,

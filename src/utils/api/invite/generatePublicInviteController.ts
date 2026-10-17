@@ -1,4 +1,5 @@
-import { recordInviteSent } from "@/lib/telemetry/inviteAnalytics";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 import prisma from "@/lib/prisma"
 import { generateInviteLink, setViewSlug } from "@/pages/api/invite/createInviteLink"
 import { getProjectViewInclude } from "@/utils/controllers/projects/getAll"
@@ -34,17 +35,21 @@ export const getInviteFromProjectId = async(projectId:number, userId: number)=>{
     viewSlug = setViewSlug(activeView)
     if (invite) return {inviteLink:await generateInviteLink(invite.id, projectId, invite.project.name, viewSlug, userId), amountUsed:(invite.uses*-1)-1}
 
-    const newInvite = await prisma.invite.create({
-        data:{
-            key:"public",
-            projectId,
-            uses:-1,
-            expired:false,
-            userId:project?.ownerId
-        },
-        include:{project:{select:{name:true}}},
-    })
-    recordInviteSent(newInvite, "link", userId, newInvite.userId);
+    const { newInvite, analyticsKey } = await prisma.$transaction(async (tx) => {
+        const newInvite = await tx.invite.create({
+            data:{
+                key:"public",
+                projectId,
+                uses:-1,
+                expired:false,
+                userId:project?.ownerId
+            },
+            include:{project:{select:{name:true}}},
+        })
+        const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", userId, newInvite.userId);
+        return { newInvite, analyticsKey };
+    });
+    processAnalyticsIntentSoon(analyticsKey);
     return {inviteLink:await generateInviteLink(newInvite.id, projectId, newInvite.project.name, viewSlug, userId), amountUsed:(newInvite.uses*-1)-1}
 
 }

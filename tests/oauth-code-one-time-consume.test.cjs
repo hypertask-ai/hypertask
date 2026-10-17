@@ -93,8 +93,8 @@ function holdUntilConcurrentReads(expectedReads = 2) {
 }
 
 stubModule('src/lib/telemetry/activationOccurrences.ts', {
-  recordAgentConnection: (...args) => calls.connections.push(args),
-  recordAuthenticatedConnection: () => {},
+  enqueueAgentConnection: async (_db, ...args) => { calls.connections.push(args); return "connection-key" },
+  enqueueAuthenticatedConnection: async () => null,
 })
 
 stubModule('src/lib/prisma.ts', {

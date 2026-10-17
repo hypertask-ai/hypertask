@@ -7,23 +7,13 @@ import prisma from "@/lib/prisma";
 import { columnRoleFor } from "@/lib/mcp/boards/columnRole";
 import { identifyMcpCli } from "@/lib/mcp/clientTelemetry";
 import type { ActivationEvent } from "./activationAnalytics";
-import { postHogClient, scheduleAnalytics } from "./signupAnalytics";
+import { AnalyticsIntentDeferred, enqueueAnalyticsIntent } from "./analyticsIntents";
+import { postHogClient } from "./signupAnalytics";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 
 const connectionHistory = {
   OR: [{ log: { startsWith: "cli_token_exchange" } }, { log: { startsWith: "mcp_connected" } }],
 };
-
-export function recordActivationOccurrence(
-  userId: number,
-  event: ActivationEvent,
-  occurrence: string,
-  props: Record<string, unknown>,
-  completionTime?: Date,
-): void {
-  const completedAt = event === "agent_task_completed" ? completionTime ?? new Date() : undefined;
-  scheduleAnalytics(() => captureActivationOccurrence(userId, event, occurrence, props, completedAt));
-}
 
 export async function captureActivationOccurrence(
   userId: number,
@@ -85,62 +75,64 @@ export function activationClient(name: string | null | undefined): "claude_code"
 
 const seenConnections = new Set<string>();
 
-export function recordAgentConnection(
+export type AgentConnectionPayload = { userId: number; transport: "mcp" | "cli" | "api"; clientName: string | null; connectedAt: string; fingerprint: string; connectionKey: string };
+
+export async function enqueueAgentConnection(
+  db: Pick<Prisma.TransactionClient, "analyticsIntent">,
   userId: number,
   token: string,
   transport: "mcp" | "cli" | "api",
   clientName?: string | null,
   connectedAt = new Date(),
   connectionKey?: string,
-): void {
+): Promise<string | null> {
   const fingerprint = createHash("sha256").update(token).digest("hex");
   const cacheKey = `${userId}:${fingerprint}`;
-  if (seenConnections.has(cacheKey)) return;
-  if (seenConnections.size >= 1000) seenConnections.delete(seenConnections.values().next().value!);
-  seenConnections.add(cacheKey);
-  scheduleAnalytics(async () => {
-    try {
-      const { isActivationEligible } = await import("./activationAnalytics");
-      if (!(await isActivationEligible(userId))) {
-        seenConnections.delete(cacheKey);
-        return;
-      }
-      if (!postHogClient()) {
-        seenConnections.delete(cacheKey);
-        return;
-      }
-      const durable = await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
-      const agentType = identifyMcpCli(clientName ?? null) ? "hypertask_cli" : activationClient(clientName);
-      let key = connectionKey;
-      if (durable && !key) {
-        const decoded = jwt.decode(token);
-        const oauth = decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded) ? decoded : null;
-        const clientId = oauth ? oauthClientIdFromPayload(oauth) : null;
-        key = oauth && typeof oauth.agentId === "string" && oauth.agentId
-          ? `agent:${oauth.agentId}`
-          : clientId ? `oauth_client:${clientId}` : `user_token:${transport}:${agentType}`;
-      }
-      const connectionId = durable ? createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32) : null;
-      const legacyMarker = `activation:agent_connected:${fingerprint}`;
-      const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : legacyMarker;
-      if (connectionId && await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
-      await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
-        const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
-          { log: { startsWith: "activation:agent_connected:" } },
-          { ...connectionHistory, createdAt: { lt: connectedAt } },
-        ] } });
-        return {
-          ...(connectionId ? {
-            ...serverAnalyticsProperties(userId, null, null, `agent_connected:${connectionId}`, connectedAt),
-            connection_id: connectionId, agent_type: agentType,
-          } : {}),
-          client: activationClient(clientName), transport, is_first: !previous,
-        };
-      }, connectionId ? { occurredAt: connectedAt } : undefined);
-    } catch {
-      seenConnections.delete(cacheKey);
-    }
-  });
+  if (seenConnections.has(cacheKey)) return null;
+  const { isActivationEligible } = await import("./activationAnalytics");
+  if (!postHogClient() || !(await isActivationEligible(userId))) return null;
+  if (db === prisma) {
+    if (seenConnections.size >= 1000) seenConnections.delete(seenConnections.values().next().value!);
+    seenConnections.add(cacheKey);
+  }
+  try {
+    const agentType = identifyMcpCli(clientName ?? null) ? "hypertask_cli" : activationClient(clientName);
+    const decoded = jwt.decode(token);
+    const oauth = decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded) ? decoded : null;
+    const clientId = oauth ? oauthClientIdFromPayload(oauth) : null;
+    const key = connectionKey ?? (oauth && typeof oauth.agentId === "string" && oauth.agentId
+      ? `agent:${oauth.agentId}` : clientId ? `oauth_client:${clientId}` : `user_token:${transport}:${agentType}`);
+    return await enqueueAnalyticsIntent(db, { kind: "agent_connected", payload: { userId, transport, clientName: clientName ?? null, connectedAt: connectedAt.toISOString(), fingerprint, connectionKey: key } });
+  } catch (error) {
+    seenConnections.delete(cacheKey);
+    throw error;
+  }
+}
+
+export async function captureAgentConnection(payload: AgentConnectionPayload): Promise<void> {
+  const { userId, transport, clientName, fingerprint, connectionKey: key } = payload;
+  const connectedAt = new Date(payload.connectedAt);
+  const { isActivationEligible } = await import("./activationAnalytics");
+  if (!(await isActivationEligible(userId)) || !postHogClient()) throw new AnalyticsIntentDeferred("Agent connection analytics is not available yet");
+  const durable = await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
+  const agentType = identifyMcpCli(clientName) ? "hypertask_cli" : activationClient(clientName);
+  const connectionId = durable ? createHash("sha256").update(`hypertask:connection:${userId}:${key}`).digest("hex").slice(0, 32) : null;
+  const legacyMarker = `activation:agent_connected:${fingerprint}`;
+  const marker = connectionId ? `activation:agent_connected:connection:${connectionId}` : legacyMarker;
+  if (connectionId && await claimConnectionCountedBeforeRollout(userId, legacyMarker, marker)) return;
+  await captureAnalyticsOccurrence(userId, "agent_connected", marker, async (tx) => {
+    const previous = await tx.logs.findFirst({ where: { LoggedById: userId, OR: [
+      { log: { startsWith: "activation:agent_connected:" } },
+      { ...connectionHistory, createdAt: { lt: connectedAt } },
+    ] } });
+    return {
+      ...(connectionId ? {
+        ...serverAnalyticsProperties(userId, null, null, `agent_connected:${connectionId}`, connectedAt),
+        connection_id: connectionId, agent_type: agentType,
+      } : {}),
+      client: activationClient(clientName), transport, is_first: !previous,
+    };
+  }, connectionId ? { occurredAt: connectedAt } : undefined);
 }
 
 async function claimConnectionCountedBeforeRollout(userId: number, legacyMarker: string, marker: string): Promise<boolean> {
@@ -156,28 +148,34 @@ async function claimConnectionCountedBeforeRollout(userId: number, legacyMarker:
   });
 }
 
-export function recordAuthenticatedConnection(request: Pick<Request, "headers" | "url">, userId: number, token: string, connectedAt?: Date, connectionKey?: string): void {
+export async function enqueueAuthenticatedConnection(db: Pick<Prisma.TransactionClient, "analyticsIntent">, request: Pick<Request, "headers" | "url">, userId: number, token: string, connectedAt?: Date, connectionKey?: string): Promise<string | null> {
   const decoded = jwt.decode(token);
-  if (decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded)) return;
+  if (decoded && typeof decoded !== "string" && isOAuthAccessTokenPayload(decoded)) return null;
   const userAgent = request.headers.get("user-agent");
   const transport = identifyMcpCli(userAgent) ? "cli" : /^\/(mcp|sse)(\/|$)/.test(new URL(request.url).pathname) ? "mcp" : "api";
-  recordAgentConnection(userId, token, transport, userAgent, connectedAt, connectionKey);
+  return enqueueAgentConnection(db, userId, token, transport, userAgent, connectedAt, connectionKey);
 }
 
 type TaskState = { id: number; projectId: number; sectionId: number | null; section: string | null; status: Status; updatedAt?: Date | null };
 
-export function recordAgentTaskCompletion(before: TaskState, after: TaskState, agentId?: string | null): void {
-  if (!agentId || after.status === Status.Deleted || (before.sectionId === after.sectionId && before.section === after.section && before.status === after.status)) return;
-  const completedAt = after.updatedAt ?? new Date();
-  scheduleAnalytics(async () => {
-    const project = await prisma.project.findUnique({ where: { id: after.projectId }, select: { ownerId: true } });
-    const { isActivationEligible } = await import("./activationAnalytics");
-    if (!project || !(await isActivationEligible(project.ownerId))) return;
-    const sections = await prisma.section.findMany({ where: { id: { in: [before.sectionId, after.sectionId].filter((id): id is number => id !== null) } }, select: { id: true, section_title: true, isDone: true } });
-    const done = (task: TaskState) => task.status === Status.Archive || columnRoleFor(
-      sections.find((section) => section.id === task.sectionId) ?? { section_title: task.section ?? "" },
-    ) === "done";
-    if (done(before) || !done(after)) return;
-    recordActivationOccurrence(project.ownerId, "agent_task_completed", String(after.id), { taskId: after.id, projectId: after.projectId }, completedAt);
-  });
+export type AgentTaskCompletionPayload = { before: Omit<TaskState, "updatedAt">; after: Omit<TaskState, "updatedAt">; completedAt: string };
+
+export async function enqueueAgentTaskCompletion(db: Pick<Prisma.TransactionClient, "analyticsIntent">, before: TaskState, after: TaskState, agentId?: string | null): Promise<string | null> {
+  if (!agentId || after.status === Status.Deleted || (before.sectionId === after.sectionId && before.section === after.section && before.status === after.status)) return null;
+  const state = ({ id, projectId, sectionId, section, status }: TaskState) => ({ id, projectId, sectionId, section, status });
+  return enqueueAnalyticsIntent(db, { kind: "agent_task_completed", payload: { before: state(before), after: state(after), completedAt: (after.updatedAt ?? new Date()).toISOString() } });
+}
+
+export async function captureAgentTaskCompletion(payload: AgentTaskCompletionPayload): Promise<void> {
+  const { before, after } = payload;
+  const completedAt = new Date(payload.completedAt);
+  const project = await prisma.project.findUnique({ where: { id: after.projectId }, select: { ownerId: true } });
+  const { isActivationEligible } = await import("./activationAnalytics");
+  if (!project || !(await isActivationEligible(project.ownerId))) return;
+  const sections = await prisma.section.findMany({ where: { id: { in: [before.sectionId, after.sectionId].filter((id): id is number => id !== null) } }, select: { id: true, section_title: true, isDone: true } });
+  const done = (task: TaskState) => task.status === Status.Archive || columnRoleFor(
+    sections.find((section) => section.id === task.sectionId) ?? { section_title: task.section ?? "" },
+  ) === "done";
+  if (done(before) || !done(after)) return;
+  await captureActivationOccurrence(project.ownerId, "agent_task_completed", String(after.id), { taskId: after.id, projectId: after.projectId }, completedAt);
 }

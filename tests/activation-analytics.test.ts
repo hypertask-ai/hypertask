@@ -88,16 +88,16 @@ test("the request returns before database lookup and shared capture runs after l
 });
 
 for (const job of ["occurrence", "connection"] as const) {
-  const record = (h: ReturnType<typeof activationHarness>, occurrence = "retry") => {
+  const record = async (h: ReturnType<typeof activationHarness>, occurrence = "retry") => {
     const api = h.load("src/lib/telemetry/activationOccurrences.ts");
-    if (job === "connection") api.recordAgentConnection(123, occurrence, "mcp", "Cursor");
-    else api.recordActivationOccurrence(123, "board_created", occurrence, { method: "link" });
+    if (job === "connection") h.capture.connection(123, occurrence, "mcp", "Cursor");
+    else h.capture.activation(123, "board_created", occurrence, { method: "link" });
   };
 
   test(`${job}: failed capture leaves no marker and retry uses the same event UUID`, async () => {
     const h = activationHarness();
     h.setFailure("capture");
-    record(h);
+    await record(h);
     await h.drain();
     assert.deepEqual(h.logs, []);
     assert.equal(h.prismaCalls.includes("logs.create"), false);
@@ -105,13 +105,13 @@ for (const job of ["occurrence", "connection"] as const) {
     const uuid = h.captureAttempts[0].uuid;
     assert.match(uuid, /^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     h.setFailure(null);
-    record(h);
+    await record(h);
     await h.drain();
     assert.equal(h.captureAttempts[1].uuid, uuid);
     assert.equal(h.logs.length, 1);
     assert.equal(h.captures.length, 1);
     assert.ok(h.prismaCalls.indexOf("captureImmediate") < h.prismaCalls.indexOf("logs.create"));
-    record(h);
+    await record(h);
     await h.drain();
     assert.equal(h.captureAttempts.length, 2, "successful occurrence is not captured again");
   });
@@ -120,7 +120,7 @@ for (const job of ["occurrence", "connection"] as const) {
     const h = activationHarness();
     delete process.env.POSTHOG_SERVER_PROJECT_TOKEN;
     try {
-      record(h);
+      await record(h);
       await h.drain();
       assert.deepEqual(h.logs, []);
       assert.deepEqual(h.captureAttempts, []);
@@ -128,7 +128,7 @@ for (const job of ["occurrence", "connection"] as const) {
     } finally {
       process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
     }
-    record(h);
+    await record(h);
     await h.drain();
     assert.equal(h.captures.length, 1);
     assert.equal(h.logs.length, 1);
@@ -137,16 +137,16 @@ for (const job of ["occurrence", "connection"] as const) {
   test(`${job}: capture succeeded but marker failed, so a cold retry retains the PostHog UUID`, async () => {
     const h = activationHarness();
     h.prisma.logs.create = async () => { throw Error("mock marker unavailable"); };
-    record(h);
+    await record(h);
     await h.drain();
     assert.equal(h.captures.length, 1);
     assert.deepEqual(h.logs, []);
     const cold = activationHarness();
-    record(cold);
+    await record(cold);
     await cold.drain();
     assert.equal(cold.captureAttempts[0].uuid, h.captureAttempts[0].uuid);
     assert.equal(cold.logs.length, 1);
-    record(cold, "different-occurrence");
+    await record(cold, "different-occurrence");
     await cold.drain();
     assert.notEqual(cold.captureAttempts[1].uuid, cold.captureAttempts[0].uuid);
   });
@@ -174,13 +174,13 @@ test("the advisory lock covers capture and marker writes for concurrent cold con
   };
   const first = h.load("src/lib/telemetry/activationOccurrences.ts");
   const second = h.load("tests/cold-activation.ts", require("node:fs").readFileSync("src/lib/telemetry/activationOccurrences.ts", "utf8").replaceAll('"./', '"@/lib/telemetry/'));
-  first.recordAgentConnection(123, "concurrent-credential", "mcp");
-  second.recordAgentConnection(123, "concurrent-credential", "mcp");
+  const payload = { userId: 123, fingerprint: "same-fingerprint", transport: "mcp", clientName: null, connectedAt: new Date().toISOString(), connectionKey: "same-connection" };
+  const pendingCaptures = [first.captureAgentConnection(payload), second.captureAgentConnection(payload)];
   await capturing;
   assert.deepEqual(h.logs, [], "marker cannot precede the pending capture");
   assert.equal(locks, 1, "the competing transaction waits for capture to finish");
   release();
-  await h.drain();
+  await Promise.all(pendingCaptures);
   assert.equal(locks, 2);
   assert.equal(h.captures.length, 1);
   assert.equal(h.logs.length, 1);
@@ -198,7 +198,7 @@ test("signup and activation share the bounded immediate client and waitUntil", (
 
 test("generalized occurrence delivery preserves the production activation marker and UUID", async () => {
   const h = activationHarness();
-  h.load("src/lib/telemetry/activationOccurrences.ts").recordActivationOccurrence(123, "board_created", "stable", {});
+  h.capture.activation(123, "board_created", "stable", {});
   await h.drain();
   assert.equal(h.captureAttempts[0].uuid, "93ae7732-cd20-52b9-a8f2-7b72343fd4ea");
   assert.equal(h.logs[0].log, "activation:board_created:stable");

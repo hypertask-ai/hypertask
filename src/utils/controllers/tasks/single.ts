@@ -1,6 +1,7 @@
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
-import { recordAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
+import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrences";
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
@@ -203,6 +204,7 @@ export async function updateTaskSingle(
       moveActivity,
       boardWebhookDeliveryIds,
       agentWebhookDeliveryIds = [],
+      analyticsKey,
     } = await prisma.$transaction(
       async (tx) => {
         if (options.allowProjectChange && requestedMutation.projectId !== undefined) {
@@ -571,6 +573,7 @@ export async function updateTaskSingle(
             )
           : [];
         return {
+          analyticsKey: await enqueueAgentTaskCompletion(tx, currentState, updatedTask, agentId),
           task: updatedTask,
           newComment: descriptionActivity,
           moveActivity,
@@ -583,7 +586,7 @@ export async function updateTaskSingle(
     if (!options.trustedCaller) {
       scheduleAgentFirstTaskEmail(taskBeforeWrite, task, currentUser.id, agentId);
     }
-    recordAgentTaskCompletion(taskBeforeWrite, task, agentId);
+    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey);
     const moveNotification =
       moveActivity && options.taskMovedActivity?.sendNotification
         ? sendTaskMoveNotificationIfNeeded(

@@ -1,9 +1,10 @@
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { recordSignupIdentityLink } from "@/lib/telemetry/signupIdentityLink";
 import prisma from "@/lib/prisma";
 import authConfig from "@/lib/configs/auth.config";
 import { generalConfig } from "@/lib/configs/general.config";
 import type { SignupAttribution } from "@/lib/telemetry/signupAnalytics";
-import { recordSignupCompleted } from "@/lib/telemetry/signupCompleted";
+import { enqueueSignupCompleted } from "@/lib/telemetry/signupCompleted";
 import {
   provisionNewUser,
   updateUserProfilePicture,
@@ -66,12 +67,12 @@ const update_or_create_user = async (
         isVerified,
       });
 
-      recordSignupCompleted({
+      await enqueueOutsideSaveAndProcessSoon(() => enqueueSignupCompleted(prisma, {
         decision,
         cookieHeader,
         userId: exist_user.id,
         ...signupAttribution,
-      });
+      }));
     }
 
     else {

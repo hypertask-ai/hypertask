@@ -1,4 +1,5 @@
-import { recordInviteSent } from "@/lib/telemetry/inviteAnalytics";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import prisma from "@/lib/prisma";
@@ -72,17 +73,21 @@ export default  async function handler(
                 expiresAt:new Date()
             }
         })
-        const newInvite = await prisma.invite.create({
-            data:{
-                projectId,
-                uses:-1,
-                expired:false,
-                userId:project.ownerId,
-                key:"public"
-            },
-            include:{project:{select:{name:true}}},
-        })
-        recordInviteSent(newInvite, "link", session.userId, newInvite.userId);
+        const { newInvite, analyticsKey } = await prisma.$transaction(async (tx) => {
+            const newInvite = await tx.invite.create({
+                data:{
+                    projectId,
+                    uses:-1,
+                    expired:false,
+                    userId:project.ownerId,
+                    key:"public"
+                },
+                include:{project:{select:{name:true}}},
+            })
+            const analyticsKey = await enqueueInviteSent(tx, newInvite, "link", session.userId, newInvite.userId);
+            return { newInvite, analyticsKey };
+        });
+        processAnalyticsIntentSoon(analyticsKey);
         const activeView = getViewFromProject(project)
         let viewSlug: string | undefined;
         viewSlug = setViewSlug(activeView)

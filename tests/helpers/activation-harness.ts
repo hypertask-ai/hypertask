@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import vm from "node:vm";
@@ -72,7 +73,7 @@ export function activationHarness() {
       create: async ({ data }: any) => { const member = { id: members.length + 1, role: "Member", acceptedAt: null, agentId: null, ...data, user: users.get(data.userId) }; members.push(member); return member; },
       deleteMany: async () => ({}), updateMany: async () => ({}),
     },
-    team: { findFirst: async () => ({ googleAccount: { userId: 123 }, members: [] }), findUnique: async () => ({ googleAccount: { userId: 123 } }), updateMany: async () => ({}) },
+    team: { findFirst: async () => ({ id: "team", googleAccount: { userId: 123 }, members: [] }), findUnique: async () => ({ googleAccount: { userId: 123 } }), updateMany: async () => ({}) },
     member_Team: { findFirst: async () => ({ status: "Accepted" }), findUnique: async () => ({ status: "Accepted" }), updateMany: async () => ({}) },
     assignees: { updateMany: async () => ({}) },
     notification: { updateMany: async () => ({}) },
@@ -203,6 +204,29 @@ export function activationHarness() {
     vm.runInThisContext(`(function(require,module,exports){${compiled}\n})`, { filename: absolute })(requireMock, loaded, loaded.exports);
     return loaded.exports;
   }
+  function scheduleCapture(work: () => Promise<unknown>) {
+    jobs.push(Promise.resolve().then(work).catch(() => undefined));
+  }
+  const capture = {
+    connection: (userId: number, token: string, transport: string, clientName: string | null = null, connectedAt = new Date(), connectionKey = "test-connection") => scheduleCapture(() => load("src/lib/telemetry/activationOccurrences.ts").captureAgentConnection({ userId, transport, clientName, connectedAt: connectedAt.toISOString(), fingerprint: createHash("sha256").update(token).digest("hex"), connectionKey })),
+    activation: (...args: any[]) => scheduleCapture(() => load("src/lib/telemetry/activationOccurrences.ts").captureActivationOccurrence(...args)),
+    completion: (before: any, after: any, agentId?: string | null) => {
+      if (!agentId || after.status === "Deleted" || (before.sectionId === after.sectionId && before.section === after.section && before.status === after.status)) return;
+      scheduleCapture(() => load("src/lib/telemetry/activationOccurrences.ts").captureAgentTaskCompletion({ before, after, completedAt: (after.updatedAt ?? new Date()).toISOString() }));
+    },
+    invite: (invite: any, method: string, inviterUserId = invite.userId, legacyUserId = inviterUserId) => scheduleCapture(() => load("src/lib/telemetry/inviteAnalytics.ts").captureInviteSent({ invite, method, inviterUserId, legacyUserId, occurredAt: new Date().toISOString() })),
+    member: (membershipId: number, userId: number, projectId: number, invitationId: string | null = null, inviterUserId: number | null = null) => scheduleCapture(() => load("src/lib/telemetry/inviteAnalytics.ts").captureMemberJoined({ membershipId, userId, projectId, invitationId, inviterUserId, occurredAt: new Date().toISOString() })),
+  };
+  async function connect(...args: any[]) {
+    const key = await load("src/lib/telemetry/activationOccurrences.ts").enqueueAgentConnection(prisma, ...args);
+    if (key) load("src/lib/telemetry/analyticsIntents.ts").processAnalyticsIntentSoon(key);
+    return key;
+  }
+  async function authenticate(...args: any[]) {
+    const key = await load("src/lib/telemetry/activationOccurrences.ts").enqueueAuthenticatedConnection(prisma, ...args);
+    if (key) load("src/lib/telemetry/analyticsIntents.ts").processAnalyticsIntentSoon(key);
+    return key;
+  }
   async function drain() { for (let index = 0; index < jobs.length; index++) await jobs[index]; }
-  return { intentRows, captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
+  return { capture, connect, authenticate, intentRows, captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
 }

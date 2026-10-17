@@ -1,4 +1,5 @@
-import { recordAgentConnection } from "@/lib/telemetry/activationOccurrences";
+import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueAgentConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, randomBytes, randomUUID } from 'crypto'
 import jwt from 'jsonwebtoken'
@@ -448,7 +449,7 @@ export async function POST(request: NextRequest) {
     const accessTokenExpirySeconds = isRefreshCapableMobile
       ? MOBILE_ACCESS_TOKEN_EXPIRY_SECONDS
       : DEFAULT_ACCESS_TOKEN_EXPIRY_SECONDS
-    let session: { accessToken: string; refreshToken?: string } | null = null
+    let session: { accessToken: string; refreshToken?: string; analyticsKey?: string | null } | null = null
 
     try {
       for (let attempt = 0; attempt < SERIALIZABLE_ATTEMPTS; attempt += 1) {
@@ -531,7 +532,11 @@ export async function POST(request: NextRequest) {
                 agentTokenJti,
                 agentTeamScope
               )
-              if (!isRefreshCapableMobile) return { accessToken }
+              if (!isRefreshCapableMobile) {
+                const analyticsKey = authCode.redirect_uri !== MOBILE_REDIRECT_URI
+                  ? await enqueueAgentConnection(tx, authCode.user.id, accessToken, "mcp", client.client_name) : null
+                return { accessToken, analyticsKey }
+              }
 
               const accessIdentity = accessTokenIdentity(accessToken)
               const refreshToken = createRefreshToken()
@@ -598,9 +603,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (authCode.redirect_uri !== MOBILE_REDIRECT_URI) {
-      recordAgentConnection(authCode.user.id, session.accessToken, "mcp", client.client_name);
-    }
+    if (session.analyticsKey) processAnalyticsIntentSoon(session.analyticsKey)
     return tokenResponse(
       session.accessToken,
       agentId ? undefined : accessTokenExpirySeconds,

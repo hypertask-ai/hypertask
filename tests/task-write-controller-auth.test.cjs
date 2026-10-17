@@ -250,7 +250,8 @@ function loadUpdateController(
   const stubs = {
     "@/lib/tasks/sameBoardRelations": execute(compile("src/lib/tasks/sameBoardRelations.ts"), {}),
     "@/utils/controllers/tasks/parentTaskAccess": execute(compile("src/utils/controllers/tasks/parentTaskAccess.ts"), {}),
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null, enqueueAgentTaskCompletion: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/models/ActivityModels.ts": {},
@@ -850,7 +851,8 @@ function loadMoveController({
   };
   let taskCount = 0;
   const stubs = {
-    "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {}, recordAgentTaskCompletion: () => {} },
+    "@/lib/telemetry/analyticsIntents": { enqueueAnalyticsIntent: async () => "intent-key", processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    "@/lib/telemetry/activationOccurrences": { captureActivationOccurrence: async () => null, enqueueAgentTaskCompletion: async () => null },
     "@/lib/prisma": { __esModule: true, default: prisma },
     "@/lib/api/errorMessage": execute(compile("src/lib/api/errorMessage.ts"), {}),
     "@/utils/controllers/getMemberAndOwnerForBoard": async () => [],

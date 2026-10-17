@@ -115,12 +115,32 @@ function harness({ enabled = true, redisFailure = false, existing = false, compl
   const findUnique = prisma.user.findUnique
   prisma.user.findUnique = async (...args) => { if (failure === 'database') throw Error('database unavailable'); return findUnique(...args) }
 
+  const intents = []
+  const matches = (row, where) => Object.entries(where).every(([key, value]) => {
+    if (value instanceof Date) return row[key]?.getTime() === value.getTime()
+    if (value && typeof value === 'object') {
+      if ('lte' in value) return row[key] != null && row[key] <= value.lte
+      if ('lt' in value) return row[key] != null && row[key] < value.lt
+    }
+    return row[key] === value
+  })
+  prisma.analyticsIntent = {
+    createMany: async ({ data }) => { for (const row of data) if (!intents.some(({ key }) => key === row.key)) intents.push({ ...row, payload: JSON.parse(JSON.stringify(row.payload)), attempts: 0, processedAt: null, nextAttemptAt: new Date(), createdAt: new Date() }) },
+    findUniqueOrThrow: async ({ where }) => ({ ...intents.find((row) => matches(row, where)) }),
+    findMany: async ({ where }) => intents.filter((row) => matches(row, where)),
+    updateMany: async ({ where, data }) => {
+      const rows = intents.filter((row) => matches(row, where))
+      for (const row of rows) for (const [key, value] of Object.entries(data)) row[key] = value?.increment ? row[key] + value.increment : value
+      return { count: rows.length }
+    },
+    deleteMany: async () => ({ count: 0 }),
+  }
   const load = loader(aliases)
   const context = load('src/lib/auth/signupAttributionContext.ts')
   const identity = load('src/lib/telemetry/signupIdentityLink.ts')
   const pure = load('src/lib/analytics/signupIdentity.ts')
   aliases['@/utils/controllers/users/update_or_create_user'] = load('src/utils/controllers/users/update_or_create_user.ts').default
-  return { load, context, identity, pure, aliases, calls, values, user, jobs, captures, attempts, logs, locks, prisma, setFailure: (value) => { failure = value }, drain: async () => { for (let i = 0; i < jobs.length; i++) await jobs[i] }, setAttempt: (attempt) => { codeAttempt = attempt } }
+  return { intents, load, context, identity, pure, aliases, calls, values, user, jobs, captures, attempts, logs, locks, prisma, setFailure: (value) => { failure = value }, drain: async () => { for (let i = 0; i < jobs.length; i++) await jobs[i] }, setAttempt: (attempt) => { codeAttempt = attempt } }
 }
 function betterAuthHarness(h) {
   const plugin = () => ({})
@@ -145,7 +165,9 @@ function request(url, body, headers = {}) {
   return new NextRequest(`https://app.hypertask.ai${url}`, { method: 'POST', headers: { 'content-type': 'application/json', cookie: allowedCookie, ...headers }, body: JSON.stringify(body) })
 }
 function record(h, overrides = {}) {
-  return h.load('src/lib/telemetry/signupCompleted.ts').recordSignupCompleted({ userId: h.user.id, signupMethod: 'email', utmSource: ' legacy ', decision: null, cookieHeader: allowedCookie, ...overrides })
+  const work = h.load('src/lib/telemetry/signupCompleted.ts').enqueueSignupCompleted(h.prisma, { userId: h.user.id, signupMethod: 'email', utmSource: ' legacy ', decision: null, cookieHeader: allowedCookie, ...overrides }).then((key) => h.load('src/lib/telemetry/analyticsIntents.ts').processAnalyticsIntentSoon(key))
+  h.jobs.push(work)
+  return work
 }
 function signupEvents(h) { return h.captures.filter(({ event }) => event === 'signup_completed' || event === 'user_signed_up') }
 function controller(h) { return h.aliases['@/utils/controllers/users/update_or_create_user'] }
@@ -269,6 +291,7 @@ test('a missing personal team is null and needs no fabricated workspace', async 
   h.prisma.team.findFirst = async () => null
   record(h); await h.drain()
   assert.equal(h.captures[0].properties.workspace_id, null)
+  assert.ok(h.intents[0].processedAt)
 })
 
 for (const scenario of ['guest', 'missing', 'zero', 'fractional']) {
@@ -379,7 +402,8 @@ for (const failure of ['capture', 'database', 'constructor', 'schedule']) {
     if (failure === 'capture') {
       const uuid = h.attempts[0].uuid
       h.setFailure(null)
-      record(h); await h.drain()
+      h.intents[0].nextAttemptAt = new Date(0)
+      await h.load('src/lib/telemetry/analyticsIntents.ts').retryAnalyticsIntents()
       assert.equal(h.captures.length, 1)
       assert.equal(h.captures[0].uuid, uuid)
     }
@@ -389,11 +413,14 @@ for (const failure of ['capture', 'database', 'constructor', 'schedule']) {
 test('signup response does not wait for an unresolved analytics flag lookup', async () => quiet(async () => {
   const h = harness({ enabled: false })
   let release
+  let started
+  const checking = new Promise((resolve) => { started = resolve })
   const check = h.aliases['@/lib/flags'].isFeatureEnabled
-  h.aliases['@/lib/flags'].isFeatureEnabled = (key, id) => key === 'htpr-7270-signup-completed' ? new Promise((resolve) => { release = resolve }) : check(key, id)
+  h.aliases['@/lib/flags'].isFeatureEnabled = (key, id) => key === 'htpr-7270-signup-completed' ? new Promise((resolve) => { release = resolve; started() }) : check(key, id)
   const result = await controller(h)(h.user.email, {})
   assert.equal(result.status, 200)
   assert.deepEqual(h.captures, [])
+  await checking
   assert.equal(typeof release, 'function')
   release(true)
   await h.drain()

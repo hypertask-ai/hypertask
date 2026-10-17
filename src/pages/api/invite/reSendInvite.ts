@@ -1,4 +1,5 @@
-import { recordInviteSent } from "@/lib/telemetry/inviteAnalytics";
+import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
+import { enqueueInviteSent } from "@/lib/telemetry/inviteAnalytics";
 
 import type { NextApiRequest, NextApiResponse } from 'next/dist/shared/lib/utils'
 import prisma from "@/lib/prisma";
@@ -104,7 +105,7 @@ export default  async function handler(
         title: invite.project.title ?? "",
         link: inviteLink,
       })
-      if (sent) recordInviteSent(invite, "email", invite.userId, user.id);
+      if (sent) await enqueueOutsideSaveAndProcessSoon(() => enqueueInviteSent(prisma, invite, "email", invite.userId, user.id));
       return res.status(200).json({message:"Success!"})
   } catch (error) {
       console.log(error)

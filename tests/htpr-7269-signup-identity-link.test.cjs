@@ -60,7 +60,8 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
     '@/lib/configs/general.config': { generalConfig: { defaultPhotoURL: 'photo' } },
     '@/utils/controllers/users/findUserByEmail': { findUserByEmail: async () => accountExists ? user : null },
     '@/utils/controllers/users/provisionNewUser': { provisionNewUser: async (data) => { calls.provision.push(data); return user }, updateUserProfilePicture: async () => {} },
-    '@/lib/telemetry/signupCompleted': { recordSignupCompleted: ({ decision, cookieHeader, ...event }) => calls.events.push({ isNewUser: true, ...event }) },
+    '@/lib/telemetry/analyticsIntents': { processAnalyticsIntentSoon: () => {}, enqueueOutsideSaveAndProcessSoon: async (enqueue) => { await enqueue() } },
+    '@/lib/telemetry/signupCompleted': { enqueueSignupCompleted: async (_db, { decision, cookieHeader, ...event }) => { calls.events.push({ isNewUser: true, ...event }); return "signup-key" } },
     '@/lib/telemetry/signupAnalytics': {
       recordServerCapture: (capture) => calls.captures.push(capture),
       recordUserSignedUp: (event) => calls.events.push(event),

@@ -62,10 +62,10 @@ test("invite_sent captures email/link once per invitation, including resends and
     const h = harness();
     const api = h.load("src/lib/telemetry/inviteAnalytics.ts");
     const invite = { id: "invitation", userId: 123, projectId: 15 };
-    api.recordInviteSent(invite, method);
-    api.recordInviteSent(invite, method);
+    h.capture.invite(invite, method);
+    h.capture.invite(invite, method);
     await h.drain();
-    api.recordInviteSent(invite, method);
+    h.capture.invite(invite, method);
     await h.drain();
     assert.equal(h.captures.length, 1);
     const capture = h.captures[0];
@@ -88,7 +88,7 @@ test("the resend route reuses the invitation's inviter and cannot double count a
   h.mocks["@/utils/controllers/getMemberAndOwnerForBoard"].default = async () => [234];
   h.prisma.invite.findFirst = async () => invite;
   h.mocks["@/pages/api/invite/cancelInvite"] = { cancelInvite: async () => {} };
-  h.load("src/lib/telemetry/inviteAnalytics.ts").recordInviteSent(invite, "email");
+  h.capture.invite(invite, "email");
   await h.drain();
   const handler = h.load("src/pages/api/invite/reSendInvite.ts").default;
   for (let retry = 0; retry < 2; retry++) {
@@ -121,14 +121,14 @@ test("invitation dedupe and UUID survive a changed attributed inviter", async ()
   const api = h.load("src/lib/telemetry/inviteAnalytics.ts");
   const invite = { id: "shared-invitation", userId: 123, projectId: 15 };
   h.setFailure("capture");
-  api.recordInviteSent(invite, "link", 234);
+  h.capture.invite(invite, "link", 234);
   await h.drain();
   const uuid = h.captureAttempts[0].uuid;
   h.setFailure(null);
-  api.recordInviteSent(invite, "email");
+  h.capture.invite(invite, "email");
   await h.drain();
   assert.equal(h.captureAttempts[1].uuid, uuid);
-  api.recordInviteSent(invite, "link", 234);
+  h.capture.invite(invite, "link", 234);
   await h.drain();
   assert.equal(h.captures.length, 1);
 });
@@ -139,9 +139,9 @@ test("member_joined uses the joiner and membership ID, counts human board member
   h.members.push({ id: 7, projectId: 15, userId: 234, agentId: null, role: "Member", acceptedAt: new Date(1769999000000) });
   h.members.push({ id: 8, projectId: 15, userId: 123, agentId: "agent", role: "Member" });
   const api = h.load("src/lib/telemetry/inviteAnalytics.ts");
-  api.recordMemberJoined(7, 234, 15, "invitation", 123);
-  api.recordMemberJoined(7, 234, 15, "invitation", 123);
-  api.recordMemberJoined(8, 123, 15);
+  h.capture.member(7, 234, 15, "invitation", 123);
+  h.capture.member(7, 234, 15, "invitation", 123);
+  h.capture.member(8, 123, 15);
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captures[0].distinctId, "234");
@@ -386,8 +386,8 @@ for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
     const invites = h.load("src/lib/telemetry/inviteAnalytics.ts");
     const stripe = h.load("src/lib/telemetry/stripeAnalytics.ts");
     const record = async () => {
-      if (kind === "invite") invites.recordInviteSent({ id: "invite", userId: 123, projectId: 15 }, "link");
-      if (kind === "join") invites.recordMemberJoined(7, 123, 15);
+      if (kind === "invite") h.capture.invite({ id: "invite", userId: 123, projectId: 15 }, "link");
+      if (kind === "join") h.capture.member(7, 123, 15);
       if (kind === "paid") await stripe.captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
       if (kind === "seats") await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
       if (kind === "canceled") await stripe.captureStripeSubscriptionEvent(event("customer.subscription.deleted"), subscription({ ended_at: 1769990000 }));
@@ -497,9 +497,9 @@ test("with the HTPR-7268 flag off, invites keep the legacy events and Stripe sen
   h.members.push({ id: 7, projectId: 15, userId: 234, agentId: null, role: "Member", acceptedAt: new Date(1769999000000) });
   const invites = h.load("src/lib/telemetry/inviteAnalytics.ts");
   const stripe = h.load("src/lib/telemetry/stripeAnalytics.ts");
-  invites.recordInviteSent({ id: "invitation", userId: 123, projectId: 15 }, "email");
-  invites.recordMemberJoined(7, 234, 15, "invitation", 123);
-  invites.recordMemberJoined(7, 234, 15);
+  h.capture.invite({ id: "invitation", userId: 123, projectId: 15 }, "email");
+  h.capture.member(7, 234, 15, "invitation", 123);
+  h.capture.member(7, 234, 15);
   await stripe.captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
   await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
   await h.drain();
@@ -532,7 +532,7 @@ test("with the flag off, legacy teammate_invited keeps the original caller attri
   const h = harness();
   h.setFlagEnabled("htpr-7268-invite-seat-analytics", false);
   h.users.set(234, { id: 234, uid: "real_resender", email: "resender@example.test" });
-  h.load("src/lib/telemetry/inviteAnalytics.ts").recordInviteSent({ id: "invitation", userId: 123, projectId: 15 }, "email", 123, 234);
+  h.capture.invite({ id: "invitation", userId: 123, projectId: 15 }, "email", 123, 234);
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId]), [["teammate_invited", "234"]]);
 });
