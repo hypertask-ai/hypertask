@@ -1333,12 +1333,14 @@ N nochange YPER4-901 >/dev/null && bad "nochange accepted an unmerged remote bra
 DP="$E/deeper"; mkdir -p "$DP/bin" "$DP/repo/.unlazy/s-abcd1234/gates"
 printf '#!/usr/bin/env bash\n[[ $1 == GET && $2 == /mcp/tasks/YPER4-902/agent-activity* ]] && cat "$DP/acts" || exit 1\n' > "$DP/bin/ht"
 chmod +x "$DP/bin/ht"; export DP
-DE() { (cd "$DP/repo" && PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
+DE() { (cd "$DP/repo" && env -u CODEX_SESSION_ID -u CODEX_THREAD_ID CLAUDE_CODE_SESSION_ID="${DSID-abcd1234-full}" PATH="$DP/bin:$PATH" "$OLDPWD/ship-check" deeper "$@"); }
 act() { jq -nc --arg t "$1" '{success:true,activities:[{type:"thought",text:"Claimed.",createdAt:"2026-10-17T10:00:00Z"},{type:"thought",text:$t,createdAt:"2026-10-17T11:00:00Z"}]}' > "$DP/acts"; }
 full='Deeper: field: release engineering | raw source: ship-check source | method: stub tests | outside proof: CI run | proof gate: YPER4-902.deeper-ci'
 gate=$'- [ ] YPER4-902.deeper-ci: CI is green\n  CHECK: gh run list --limit 1\n  EXPECT: success\n'
 printf '%s' "$gate" > "$DP/repo/.unlazy/s-abcd1234/gates/extra.md"
 act "$full"; DE YPER4-902 | grep -qx 'deeper ok' && ok "deeper passes with all parts and a runnable proof gate" || bad "deeper pass: $(DE YPER4-902)"
+DSID=otherses-full DE YPER4-902 | grep -q 'a manual note does not count' && ok "deeper ignores another session's proof gate" || bad "deeper used another session's scope"
+DSID= DE YPER4-902 | grep -q "needs this session's id" && ok "deeper refuses without a session id" || bad "deeper without session id"
 echo '{"success":true,"activities":[]}' > "$DP/acts"
 DE YPER4-902 | grep -q 'no agent activity starting with "Deeper:"' && ok "deeper refuses a ticket with no Deeper: activity" || bad "deeper no activity"
 act "${full/ | method: stub tests/}"; DE YPER4-902 | grep -q 'no "method:" part' && ok "deeper refuses a missing part" || bad "deeper missing part"
