@@ -77,7 +77,7 @@ test("invite events carry the shared category instead of null", async () => {
   for (const [userId, expected] of [[CUSTOMER, "customer"], [AGENT, "internal"]] as const) {
     const h = harness();
     h.prisma.team.findFirst = async () => null;
-    h.load("src/lib/telemetry/inviteAnalytics.ts").recordInviteSent({ id: `invitation-${userId}`, userId, projectId: 15 }, "email");
+    h.capture.invite({ id: `invitation-${userId}`, userId, projectId: 15 }, "email");
     await h.drain();
     assert.equal(h.captures.length, 1);
     assert.equal(h.captures[0].event, "invite_sent");
@@ -87,14 +87,14 @@ test("invite events carry the shared category instead of null", async () => {
 
 test("smoke QA invites are kept out of the activation and invite funnel", async () => {
   const h = harness();
-  h.load("src/lib/telemetry/inviteAnalytics.ts").recordInviteSent({ id: "invitation-qa", userId: SMOKE_QA, projectId: 15 }, "email");
+  h.capture.invite({ id: "invitation-qa", userId: SMOKE_QA, projectId: 15 }, "email");
   await h.drain();
   assert.deepEqual(h.captures, []);
 });
 
 test("legacy activation events gain the shared category", async () => {
   const h = harness();
-  h.load("src/lib/telemetry/activationOccurrences.ts").recordActivationOccurrence(CUSTOMER, "board_created", "15", { source: "manual" });
+  h.capture.activation(CUSTOMER, "board_created", "15", { source: "manual" });
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => capture.properties), [{ source: "manual", account_category: "customer" }]);
 });

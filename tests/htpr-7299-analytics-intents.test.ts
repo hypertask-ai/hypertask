@@ -44,7 +44,7 @@ async function replayOnce(h: Harness, event: string) {
   assert.equal(h.intentRows[0].processedAt, null);
   assert.equal(h.captures.length, 0);
   assert.equal(h.jobs.length, 0);
-  const enqueueFlags = event === "agent_connected" ? ["htpr-7034-activation-analytics"] : [];
+  const enqueueFlags = event === "agent_connected" ? ["htpr-7034-activation-analytics", "htpr-7292-shared-account-category"] : [];
   assert.deepEqual([...new Set(h.flagChecks.map(({ key }: any) => key))], h.flagChecks.length ? enqueueFlags : []);
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 1, failed: 0, skipped: 0 });
   assert.deepEqual(await h.intents.retryAnalyticsIntents(), { processed: 0, failed: 0, skipped: 0 });
