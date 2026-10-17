@@ -34,6 +34,7 @@ function controller(user = { id: 6, accountId: "acct-own" }) {
   };
   const create = load("src/utils/controllers/projects/create.ts", {
     "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board_created:1", processAnalyticsIntentSoon: () => {} },
     "@/lib/prisma": { default: prisma },
     "../logs/createLog": { default: () => {} },
     "@/lib/flags": { isFeatureEnabled: async () => true },
