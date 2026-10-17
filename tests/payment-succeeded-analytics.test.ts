@@ -89,10 +89,17 @@ test("renewals capture exact payment properties once per invoice, not per Stripe
   assert.equal(payments(h).length, 2);
 });
 
+test("payment_succeeded rejects an unmapped customer so the intent is retried once the mapping exists", async () => {
+  const h = harness();
+  h.setFlagEnabled(subscriptionFlag, false);
+  await assert.rejects(record(h, event(invoice({ customer: "cus_unmapped" }))), /No stored customer mapping/);
+  assert.deepEqual(h.captures, []);
+  assert.deepEqual(h.logs, []);
+});
+
 for (const [scenario, overrides] of Object.entries({
   zero: { amount_paid: 0 }, negative: { amount_paid: -1 }, unpaid: { status: "open" },
   missingSubscription: { subscription: null }, missingCustomer: { customer: null },
-  unmappedCustomer: { customer: "cus_unmapped" },
 })) {
   test(`payment_succeeded skips ${scenario}`, async () => {
     const h = harness();

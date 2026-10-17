@@ -238,6 +238,22 @@ test("a failed payment capture waits for subscription analytics and replay dedup
   assert.deepEqual(h.captures.map((capture) => capture.event).sort(), ["payment_succeeded", "subscription_started"]);
 });
 
+test("an invoice paid before its customer mapping exists stays due and is captured once the mapping appears", async () => {
+  const h = stripeHarness();
+  let mapped = false;
+  h.prisma.team.findFirst = async ({ where }: any) => mapped && where.stripe_customer_id === "cus_stored"
+    ? { id: "team", googleAccount: { userId: 123 } } : null;
+  assert.equal((await h.request()).code, 200);
+  assert.deepEqual(await h.intents.retryAnalyticsIntents({ stripe: h.stripe }), { processed: 0, failed: 1, skipped: 0 });
+  assert.equal(h.intentRows[0].processedAt, null);
+  assert.equal(h.captures.length, 0);
+  mapped = true;
+  h.intentRows[0].nextAttemptAt = new Date(0);
+  assert.deepEqual(await h.intents.retryAnalyticsIntents({ stripe: h.stripe }), { processed: 1, failed: 0, skipped: 0 });
+  assert.equal(h.captures.filter((capture) => capture.event === "payment_succeeded").length, 1);
+  assert.equal(h.billing.length, 0);
+});
+
 for (const type of ["customer.subscription.updated", "customer.subscription.deleted"]) {
   test(`${type} replay only reads Stripe and captures analytics, never billing`, async () => {
     const event = { id: `evt_${type}`, type, created: 1770000000, data: {

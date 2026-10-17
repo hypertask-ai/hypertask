@@ -106,11 +106,17 @@ async function ownsOtherBilledTeam(userId: number, customerId: string): Promise<
   }));
 }
 
+export class StripeCustomerNotMappedError extends Error {
+  constructor() {
+    super("[stripe-analytics] No stored customer mapping yet; analytics retried later");
+  }
+}
+
 async function billedTeam(customerId: string | null) {
   const team = customerId ? await prisma.team.findFirst({
     where: { stripe_customer_id: customerId }, select: { id: true, googleAccount: { select: { userId: true } } },
   }) : null;
-  if (!team) console.warn("[stripe-analytics] No stored customer mapping; analytics skipped");
+  if (customerId && !team) throw new StripeCustomerNotMappedError();
   return team;
 }
 

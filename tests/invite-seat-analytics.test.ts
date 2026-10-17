@@ -364,20 +364,18 @@ test("subscription_canceled waits for actual end, uses ended_at and fixed reason
   assert.equal(JSON.stringify(h.captures).includes("personal free text"), false);
 });
 
-test("unresolved Stripe customer emits nothing, never matches email, and warns once without personal data", async () => {
+test("unresolved Stripe customer emits nothing, never matches email, and is retried without personal data", async () => {
   const h = harness();
-  const warnings: any[] = [];
-  const warn = console.warn;
-  console.warn = (...args) => { warnings.push(args); };
-  try {
-    h.prisma.team.findFirst = async ({ where }: any) => { assert.deepEqual(Object.keys(where), ["stripe_customer_id"]); return null; };
-    await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); }, async () => { throw Error("must not list unresolved customer"); });
-    await h.drain();
-    assert.deepEqual(h.captures, []);
-    assert.deepEqual(h.logs, []);
-    assert.equal(warnings.length, 1);
-    assert.equal(JSON.stringify(warnings).includes("cus_stored"), false);
-  } finally { console.warn = warn; }
+  let lookups = 0;
+  h.prisma.team.findFirst = async ({ where }: any) => { lookups++; assert.deepEqual(Object.keys(where), ["stripe_customer_id"]); return null; };
+  const error = await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); }, async () => { throw Error("must not list unresolved customer"); })
+    .then(() => null, (reason: Error) => reason);
+  await h.drain();
+  assert.match(String(error?.message), /No stored customer mapping/);
+  assert.equal(String(error?.message).includes("cus_stored"), false);
+  assert.equal(lookups, 1);
+  assert.deepEqual(h.captures, []);
+  assert.deepEqual(h.logs, []);
 });
 
 for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
