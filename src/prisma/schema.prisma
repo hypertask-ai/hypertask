@@ -1792,6 +1792,7 @@ model Comment {
   // createdAt threshold; the migration builds this index concurrently.
   @@index([taskId, createdAt])
   @@index([taskId, creatorId]) // For comment counting
+  @@index([creatorId])
 }
 
 model InboundEmailReceipt {
@@ -1867,6 +1868,8 @@ model Description {
 
   taskId Int  @unique
   task   Task @relation(fields: [taskId], references: [id])
+
+  @@index([creatorId])
 }
 
 model Attachment {
@@ -1980,6 +1983,7 @@ model Notification {
   @@index([userId, status, agentId, createdAt])
   @@index([userId, status, archivedAt])
   @@index([agentId, taskId, type, agentReplyConsumedAt])
+  @@index([assignId])
 }
 
 model Reminder {
