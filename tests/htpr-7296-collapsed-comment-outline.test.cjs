@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const fs = require("node:fs");
 const path = require("node:path");
 const test = require("node:test");
 const sass = require("sass");
@@ -21,6 +22,8 @@ ${comment("openActive", 'data-task-comment-state="active"')}
 ${comment("pinned", 'data-task-comment-state="pinned"')}
 </div></body></html>`;
 
+const browserMissing = !fs.existsSync(chromium.executablePath()) && "Playwright browser not installed";
+
 async function outlines(outlinesFlag) {
   const browser = await chromium.launch();
   try {
@@ -37,7 +40,7 @@ async function outlines(outlinesFlag) {
   }
 }
 
-test("collapsed comments have no outline at rest; active, open and pinned comments keep theirs", async () => {
+test("collapsed comments have no outline at rest; active, open and pinned comments keep theirs", { skip: browserMissing }, async () => {
   assert.deepEqual(await outlines(true), {
     collapsed: "rgba(0, 0, 0, 0)",
     collapsedActive: "rgb(10, 20, 30)",
@@ -47,7 +50,7 @@ test("collapsed comments have no outline at rest; active, open and pinned commen
   });
 });
 
-test("with the outline flag off no comment gets the HTPR-7194 outline", async () => {
+test("with the outline flag off no comment gets the HTPR-7194 outline", { skip: browserMissing }, async () => {
   const flagOff = await outlines(false);
   assert.ok(Object.values(flagOff).every((outline) => outline === "none"), JSON.stringify(flagOff));
 });
