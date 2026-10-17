@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { LogType, Status } from "@prisma/client";
 import { CreateLogInput } from "@/models/model";
 import { stripe } from "@/lib/subscription";
@@ -17,6 +18,7 @@ type ProvisionNewUserInput = {
   skipOnboarding: boolean;
   isVerified: boolean;
   createGoogleAccount?: boolean;
+  resumingEarlierAttempt?: boolean;
 };
 
 export const provisionNewUser = async ({
@@ -29,23 +31,34 @@ export const provisionNewUser = async ({
   skipOnboarding,
   isVerified,
   createGoogleAccount = true,
+  resumingEarlierAttempt = false,
 }: ProvisionNewUserInput) => {
-  await prisma.user_Activity.create({
-    data: {
+  await prisma.user_Activity.upsert({
+    where: { userId },
+    update: {},
+    create: {
       userId,
       totalTeamsOwned: 0,
       lastActiveAt: new Date(),
     },
   });
-  const createLogBody: CreateLogInput = {
-    log: `${email} just signed up for HyperTask`,
-    type: LogType.Signup,
-    status: Status.Normal,
-    LoggedById: userId,
-  };
-  createLog(createLogBody);
-  const userSetting = await prisma.userSetting.create({
-    data: {
+  const signupLog = await prisma.logs.findFirst({
+    where: { LoggedById: userId, type: LogType.Signup, log: `${email} just signed up for HyperTask` },
+    select: { id: true },
+  });
+  if (!signupLog) {
+    const createLogBody: CreateLogInput = {
+      log: `${email} just signed up for HyperTask`,
+      type: LogType.Signup,
+      status: Status.Normal,
+      LoggedById: userId,
+    };
+    createLog(createLogBody);
+  }
+  const userSetting = await prisma.userSetting.upsert({
+    where: { userId },
+    update: {},
+    create: {
       notification: true,
       userId,
       onboardingTourStatus: skipOnboarding,
@@ -54,8 +67,10 @@ export const provisionNewUser = async ({
     },
   });
 
-  await prisma.userPicture.create({
-    data: {
+  await prisma.userPicture.upsert({
+    where: { userId },
+    update: {},
+    create: {
       basePhotoURL: photoURL,
       userId,
       displayName,
@@ -63,13 +78,12 @@ export const provisionNewUser = async ({
   });
 
   const getAllAnnouncements = await prisma.announcments.findMany();
-  getAllAnnouncements.map(async (item) => {
-    await prisma.userAnnouncement.createMany({
-      data: {
-        userId,
-        announcementId: item.id,
-      },
-    });
+  await prisma.userAnnouncement.createMany({
+    data: getAllAnnouncements.map((item) => ({
+      userId,
+      announcementId: item.id,
+    })),
+    skipDuplicates: true,
   });
 
   await prisma.user.update({
@@ -79,45 +93,15 @@ export const provisionNewUser = async ({
     data: {
       UserSettingId: userSetting.id,
     },
-    include: {
-      UserSetting: true,
-      userPicture: true,
-    },
   });
 
-  const googleAccount = createGoogleAccount
-    ? await prisma.googleAccount.create({
-        data: {
-          userId,
-          stripe_customer_id: "",
-        },
-      })
-    : null;
-  if (googleAccount) {
-    await prisma.user.update({
-      where: {
-        id: userId,
-      },
-      data: {
-        accountId: googleAccount.id,
-      },
-    });
-  }
-  const customer = await stripe.customers.create({
+  const googleAccount = createGoogleAccount ? await findOrCreateGoogleAccount(userId) : null;
+  const customerId = await findOrCreateSignupStripeCustomer({
+    userId,
+    googleAccount,
     name: stripeCustomerName(stripeCustomerNameEmail),
-    ...(googleAccount ? { metadata: { googleAccountId: googleAccount.id } } : {}),
+    resumingEarlierAttempt,
   });
-
-  if (googleAccount) {
-    await prisma.googleAccount.update({
-      where: {
-        id: googleAccount.id,
-      },
-      data: {
-        stripe_customer_id: customer.id,
-      },
-    });
-  }
 
   if (isVerified) {
     try {
@@ -132,7 +116,7 @@ export const provisionNewUser = async ({
       id: userId,
     },
     data: {
-      stripe_customer_id: customer.id,
+      stripe_customer_id: customerId,
       ...(googleAccount ? { accountId: googleAccount.id } : {}),
     },
     include: {
@@ -140,6 +124,54 @@ export const provisionNewUser = async ({
     },
   });
 };
+
+const findOrCreateGoogleAccount = async (userId: number) => {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { accountId: true } });
+  const linked = user?.accountId
+    ? await prisma.googleAccount.findFirst({ where: { id: user.accountId, userId } })
+    : null;
+  const googleAccount =
+    linked ??
+    (await prisma.googleAccount.findFirst({ where: { userId } })) ??
+    (await prisma.googleAccount.create({ data: { userId, stripe_customer_id: "" } }));
+  await prisma.user.update({ where: { id: userId }, data: { accountId: googleAccount.id } });
+  return googleAccount;
+};
+
+const findOrCreateSignupStripeCustomer = async ({
+  userId,
+  googleAccount,
+  name,
+  resumingEarlierAttempt,
+}: {
+  userId: number;
+  googleAccount: { id: string; stripe_customer_id: string | null } | null;
+  name: string | undefined;
+  resumingEarlierAttempt: boolean;
+}) => {
+  if (googleAccount?.stripe_customer_id) return googleAccount.stripe_customer_id;
+  const metadata = { hypertaskUserId: String(userId), ...(googleAccount ? { googleAccountId: googleAccount.id } : {}) };
+  const earlier = resumingEarlierAttempt ? await findEarlierSignupStripeCustomer(metadata) : undefined;
+  const customer = earlier ?? await stripe.customers.create(
+    { name, metadata },
+    { idempotencyKey: `hypertask-user:${userId}:signup-stripe-customer:${requestFingerprint({ name, metadata })}` },
+  );
+  if (googleAccount) {
+    await prisma.googleAccount.updateMany({
+      where: { id: googleAccount.id, stripe_customer_id: "" },
+      data: { stripe_customer_id: customer.id },
+    });
+  }
+  return customer.id;
+};
+
+const findEarlierSignupStripeCustomer = async (metadata: Record<string, string>) => {
+  const query = Object.entries(metadata).map(([key, value]) => `metadata['${key}']:'${value}'`).join(" OR ");
+  return (await stripe.customers.search({ query, limit: 1 })).data[0];
+};
+
+const requestFingerprint = (request: unknown) =>
+  createHash("sha256").update(JSON.stringify(request)).digest("hex").slice(0, 16);
 
 export const updateUserProfilePicture = async (
   userId: number,
