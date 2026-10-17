@@ -22,10 +22,14 @@ let previousMode;
 let approvalComment;
 let approvalQueries;
 let lockQueries;
+let approvalLink;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
+const APPROVAL_ERROR = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?"
+  + " To switch to Everyone, an unedited comment on the flag's own ticket also counts when its whole text is a release sentence"
+  + " such as \"Go live for everyone\" written by Valentin himself, or is Valentin, YYYY-MM-DD: \"Go live for everyone\" with his thumbs up within 7 days.";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
 stubModule("src/lib/mcp/auth.ts", {
   checkMcpRateLimit: async () => { calls.push("rate-limit"); return limited; },
@@ -37,6 +41,7 @@ stubModule("src/lib/mcp/auth.ts", {
 });
 stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_OWNER_USER_ID: 6,
+  FEATURE_FLAG_TICKET_PROJECT_ID: 15,
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FeatureFlagInputError,
   FeatureFlagApprovalError,
@@ -73,11 +78,16 @@ const tx = {
       assert.equal(lockQueries.length, 2 * (approvalQueries.length + 1));
       calls.push("approval");
       approvalQueries.push(query);
-      const reaction = query.where.reactions.some;
-      assert.deepEqual(query.select, { commentText: true, text: true });
+      const reaction = query.select.reactions.where;
+      assert.deepEqual({ ...query.select, reactions: undefined }, {
+        creatorId: true, agentId: true, agentDisplayName: true, commentText: true, text: true, reactions: undefined,
+      });
+      assert.deepEqual(query.select.reactions.select, { id: true });
+      assert.equal(query.select.reactions.take, 1);
+      assert.equal(query.where.reactions, undefined);
       assert.equal(query.where.id, 123);
       assert.equal(query.where.editedAt, null);
-      assert.deepEqual(query.where.task, { projectId: 4060, uniqueIndex: 215, status: { not: "Deleted" } });
+      assert.deepEqual(query.where.task, { projectId: approvalLink.projectId, uniqueIndex: approvalLink.ticketNumber, status: { not: "Deleted" } });
       assert.deepEqual({ ...reaction, createdAt: undefined }, {
         userId: 6, agentId: null, agentDisplayName: null, isDeleted: false,
         unified: { startsWith: "1f44d" }, createdAt: undefined,
@@ -89,11 +99,12 @@ const tx = {
         || approvalComment.task.projectId !== query.where.task.projectId
         || approvalComment.task.uniqueIndex !== query.where.task.uniqueIndex
         || approvalComment.task.status === query.where.task.status.not) return null;
-      const approved = approvalComment.reactions.some(row => row.userId === reaction.userId
+      const reactions = approvalComment.reactions.filter(row => row.userId === reaction.userId
         && row.agentId === reaction.agentId && row.agentDisplayName === reaction.agentDisplayName
         && row.isDeleted === reaction.isDeleted && row.unified.startsWith(reaction.unified.startsWith)
-        && row.createdAt >= reaction.createdAt.gte);
-      return approved ? { commentText: approvalComment.commentText, text: approvalComment.text } : null;
+        && row.createdAt >= reaction.createdAt.gte).slice(0, 1).map((_, id) => ({ id }));
+      const { creatorId, agentId, agentDisplayName, commentText, text } = approvalComment;
+      return { creatorId, agentId, agentDisplayName, commentText, text, reactions };
     },
   },
 };
@@ -132,8 +143,10 @@ test.beforeEach(() => {
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
   approvalQueries = []; lockQueries = [];
+  approvalLink = { projectId: 4060, ticketNumber: 215 };
   approvalComment = {
     id: 123, task: { projectId: 4060, uniqueIndex: 215, status: "Normal" },
+    creatorId: 6, agentId: "ht-product-lead", agentDisplayName: "HT Product Lead",
     commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
     reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
   };
@@ -304,7 +317,7 @@ for (const rejected of ["missing key", "wrong mode", "refusal naming both modes"
     if (rejected === "deleted ticket") approvalComment.task.status = "Deleted";
     if (rejected === "unknown comment") approvalComment = null;
     assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
-      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?" },
+      status: 403, body: { error: APPROVAL_ERROR },
     });
     assert.equal(writes.length, 0);
     assert.equal(broadcasts, 0);
@@ -319,7 +332,7 @@ for (const edited of ["long ago", "before thumbs up", "at thumbs up", "after thu
     approvalComment.editedAt = edited === "long ago" ? new Date(0)
       : new Date(createdAt.getTime() + (edited === "before thumbs up" ? -1000 : edited === "after thumbs up" ? 1000 : 0));
     assert.deepEqual(await result(await PATCH(request("PATCH", { key, mode: "OFF", reason }))), {
-      status: 403, body: { error: "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?" },
+      status: 403, body: { error: APPROVAL_ERROR },
     });
     assert.equal(approvalQueries[0].where.editedAt, null);
     assert.equal(writes.length, 0);
@@ -349,3 +362,89 @@ test("PATCH locks the comment and task, then reactions before reading approval a
   ]);
   assert.deepEqual(calls.slice(-4), ["comment-lock", "reaction-lock", "approval", "write"]);
 });
+
+const everyoneKey = "htpr-7278-requested-work";
+const everyoneReason = "https://app.hypertask.ai/detail/project-15/7278#comment-123";
+function startOnEveryone(overrides = {}) {
+  approvalLink = { projectId: 15, ticketNumber: 7278 };
+  Object.assign(approvalComment, {
+    task: { projectId: 15, uniqueIndex: 7278, status: "Normal" },
+    creatorId: 6, agentId: null, agentDisplayName: null, reactions: [],
+    commentText: "Go live for everyone", text: null,
+  }, overrides);
+}
+async function patchEveryone(mode = "EVERYONE", reasonLink = everyoneReason) {
+  return result(await PATCH(request("PATCH", { key: everyoneKey, mode, reason: reasonLink })));
+}
+
+test("PATCH starts a flag on Everyone from a comment Valentin wrote himself on the flag's ticket", async () => {
+  startOnEveryone();
+  assert.equal((await patchEveryone()).status, 200);
+  assert.deepEqual(writes, [[everyoneKey, "EVERYONE", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: everyoneReason, source: "api" }]]);
+});
+
+test("PATCH starts a flag on Everyone from a comment quoting Valentin with his thumbs up", async () => {
+  startOnEveryone({
+    agentId: "ht-product-lead", agentDisplayName: "HT Product Lead",
+    commentText: "", text: '<p>Valentin, 2026-10-16, in chat: “Yes, ship it to everyone!”</p>',
+    reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
+  });
+  assert.equal((await patchEveryone()).status, 200);
+  assert.equal(writes.length, 1);
+});
+
+test("PATCH still accepts the Question thumbs up for Everyone on the flag's ticket", async () => {
+  startOnEveryone({
+    agentId: "runner-3", agentDisplayName: "Runner 3", commentText: `Question: Switch ${everyoneKey} to Everyone?`,
+    reactions: [{ userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() }],
+  });
+  assert.equal((await patchEveryone()).status, 200);
+});
+
+for (const rejected of [
+  "agent comment on Valentin's account", "deleted agent comment", "another user's comment", "missing comment",
+  "edited comment", "quote without his thumbs up", "quote with an agent thumbs up", "agent comment without a quote",
+  "another ticket", "another board", "a mode other than Everyone", "a deleted ticket",
+  "his unrelated comment", "his refusal", "his refusal with a curly apostrophe", "his hold for later",
+  "a quoted refusal with his thumbs up", "a quote keeping it to Owner + QA",
+  "his disable request", "his crash report", "a quote inside other text", "an agent comment with the release words and his thumbs up",
+]) {
+  test(`PATCH refuses starting on Everyone from ${rejected}`, async () => {
+    startOnEveryone();
+    let mode = "EVERYONE";
+    let reasonLink = everyoneReason;
+    const quote = { agentId: "ht-product-lead", agentDisplayName: "HT Product Lead", commentText: 'Valentin, 2026-10-16: "Release it to everyone."' };
+    const thumbsUp = { userId: 6, agentId: null, agentDisplayName: null, unified: "1f44d", isDeleted: false, createdAt: new Date() };
+    if (rejected === "agent comment on Valentin's account") approvalComment.agentId = "ht-product-lead";
+    if (rejected === "deleted agent comment") approvalComment.agentDisplayName = "Deleted agent";
+    if (rejected === "another user's comment") approvalComment.creatorId = 7;
+    if (rejected === "missing comment") approvalComment = null;
+    if (rejected === "edited comment") approvalComment.editedAt = new Date();
+    if (rejected === "quote without his thumbs up") Object.assign(approvalComment, quote);
+    if (rejected === "quote with an agent thumbs up") Object.assign(approvalComment, quote, { reactions: [{ ...thumbsUp, agentId: "runner-3" }] });
+    if (rejected === "agent comment without a quote") Object.assign(approvalComment, quote, { commentText: "Valentin wants this live for everyone", reactions: [thumbsUp] });
+    if (rejected === "another ticket") {
+      approvalComment.task.uniqueIndex = 7279; approvalLink.ticketNumber = 7279;
+      reasonLink = "https://app.hypertask.ai/detail/project-15/7279#comment-123";
+    }
+    if (rejected === "another board") {
+      approvalComment.task.projectId = 4060; approvalLink.projectId = 4060;
+      reasonLink = "https://app.hypertask.ai/detail/project-4060/7278#comment-123";
+    }
+    if (rejected === "a mode other than Everyone") mode = "OWNER_AND_QA";
+    if (rejected === "a deleted ticket") approvalComment.task.status = "Deleted";
+    if (rejected === "his unrelated comment") approvalComment.commentText = "Looks good, thanks";
+    if (rejected === "his refusal") approvalComment.commentText = "Do not release this to everyone";
+    if (rejected === "his refusal with a curly apostrophe") approvalComment.commentText = "Don\u2019t put this live for everyone";
+    if (rejected === "his hold for later") approvalComment.commentText = "Everyone can get it later";
+    if (rejected === "a quoted refusal with his thumbs up") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "keep it private, everyone gets it next week"', reactions: [thumbsUp] });
+    if (rejected === "his disable request") approvalComment.commentText = "Disable this for everyone";
+    if (rejected === "his crash report") approvalComment.commentText = "Everyone is seeing crashes, go live for everyone later";
+    if (rejected === "a quote inside other text") Object.assign(approvalComment, quote, { commentText: 'He refused. Valentin, 2026-10-16: "Go live for everyone"', reactions: [thumbsUp] });
+    if (rejected === "an agent comment with the release words and his thumbs up") Object.assign(approvalComment, quote, { commentText: "Go live for everyone", reactions: [thumbsUp] });
+    if (rejected === "a quote keeping it to Owner + QA") Object.assign(approvalComment, quote, { commentText: 'Valentin, 2026-10-16: "everyone on the team, so Owner + QA for now"', reactions: [thumbsUp] });
+    assert.deepEqual(await patchEveryone(mode, reasonLink), { status: 403, body: { error: APPROVAL_ERROR } });
+    assert.equal(writes.length, 0);
+    assert.equal(broadcasts, 0);
+  });
+}

@@ -2,7 +2,7 @@
 set -euo pipefail
 
 fail() { printf 'ht-flag: %s\n' "$*" >&2; exit 1; }
-usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>)'; }
+usage() { fail 'usage: ht-flag get [KEY] [--dry-run] | ht-flag set KEY MODE --reason URL [--dry-run]; reason must link to a Question comment naming the flag key and target mode, with a thumbs up from Valentin himself within 7 days (#comment-<id>); for everyone, also an unedited comment on the flag ticket written by Valentin, or quoting him with his thumbs up'; }
 
 dry_run=false
 args=()
