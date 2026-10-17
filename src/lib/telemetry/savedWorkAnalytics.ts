@@ -4,6 +4,7 @@ import { isGuestUser } from "@/lib/demo/guest";
 import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7271_SAVED_WORK_EVENTS_FLAG, HTPR_7273_COLUMN_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { recordActivationOccurrence } from "./activationOccurrences";
+import { captureActivationCompleted } from "./activationCompleted";
 import type { BoardCreationMethod, ColumnCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
 
 export type AccountCategory = "customer" | "internal" | "qa" | "guest";
@@ -151,12 +152,15 @@ export async function captureTaskCreated(taskId: number, actor: SavedWorkActor, 
   const task = await prisma.task.findUnique({ where: { id: taskId }, select: { id: true, projectId: true, createdAt: true } });
   if (!task) return;
   const board = await loadBoard(task.projectId);
-  if (!board || !(await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id))) return;
-  await captureAnalyticsOccurrence(
-    board.owner.id,
-    "task_created",
-    `analytics:task_created:${task.id}`,
-    buildTaskCreatedProperties(board, task, actor, channel),
-    { scope: "business" },
-  );
+  if (!board) return;
+  if (await isFeatureEnabled(HTPR_7271_SAVED_WORK_EVENTS_FLAG, actor.userId ?? board.owner.id)) {
+    await captureAnalyticsOccurrence(
+      board.owner.id,
+      "task_created",
+      `analytics:task_created:${task.id}`,
+      buildTaskCreatedProperties(board, task, actor, channel),
+      { scope: "business" },
+    );
+  }
+  await captureActivationCompleted(board.owner.id, task.createdAt);
 }
