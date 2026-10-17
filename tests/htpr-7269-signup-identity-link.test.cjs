@@ -50,7 +50,7 @@ function harness({ enabled = true, redisFailure = false, existing = false } = {}
   const aliases = {
     '@/lib/flags/keys': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link' },
     '@/lib/redis': { getRedis: async () => { if (redisFailure) throw new Error('Redis down'); return redis } },
-    '@/lib/flags': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link', isFeatureEnabled: async (key, id) => { calls.flags.push([key, id]); return enabled } },
+    '@/lib/flags': { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG: 'htpr-7269-signup-identity-link', isFeatureEnabled: async (key, id) => { if (key === 'htpr-7290-durable-signup-identify') return false; calls.flags.push([key, id]); return enabled } },
     '@/lib/prisma': {
       user: { create: async () => { accountExists = true; return user }, findFirst: async () => accountExists ? user : null, findUnique: async () => user, update: async () => user },
       googleAccount: { findFirst: async () => null },

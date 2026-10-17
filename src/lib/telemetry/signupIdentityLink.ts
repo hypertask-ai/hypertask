@@ -1,9 +1,12 @@
 import { createHash } from "node:crypto";
+import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
+import { HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG } from "@/lib/flags/definitions/htpr-7290-durable-signup-identify";
 import { decideSignupIdentityLink, strictestConsent, type SignupIdentityContext, type SignupLinkDecision } from "@/lib/analytics/signupIdentity";
 import { consumeSignupContext, warnSignupContextUnavailable } from "@/lib/auth/signupAttributionContext";
-import { recordServerCapture } from "./signupAnalytics";
+import { recordServerCapture, scheduleAnalytics } from "./signupAnalytics";
+import { deliverAnalyticsOutbox } from "./analyticsOutbox";
 
 export function signupIdentityUuid(userId: number): string {
   const bytes = createHash("sha256").update(`hypertask:signup-identity:${userId}`).digest().subarray(0, 16);
@@ -25,7 +28,31 @@ export async function recordSignupIdentityLink(
     const decision: SignupLinkDecision = context && strictestConsent("all", cookieHeader) !== "all"
       ? { link: false, reason: "consent_withdrawn", attribution: {}, attributionStatus: "withheld" }
       : decideSignupIdentityLink(userId, context);
-    if (decision.link) {
+    if (decision.link && await isFeatureEnabled(HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG, userId)) {
+      const anonymousId = decision.anonymousId;
+      let row;
+      try {
+        row = await prisma.$transaction(async (tx) => {
+          await tx.$executeRaw`SELECT pg_advisory_xact_lock(7290::int, hashtext(${anonymousId}))`;
+          const key = `${userId}:analytics:signup_identify`;
+          const existing = await tx.analyticsOutbox.findUnique({ where: { key } });
+          if (existing) return existing;
+          if (await tx.analyticsOutbox.findFirst({ where: {
+            event: "$identify", userId: { not: userId },
+            properties: { path: ["$anon_distinct_id"], equals: anonymousId },
+          } })) return null;
+          return tx.analyticsOutbox.create({ data: {
+            key, userId, event: "$identify", uuid: signupIdentityUuid(userId),
+            properties: { $anon_distinct_id: anonymousId }, occurredAt: new Date(),
+          } });
+        }, { timeout: 20000, maxWait: 1500 });
+      } catch {
+        console.warn("[signup-identity] unlinked", { reason: "link_not_persisted" });
+        return { link: false, reason: "link_not_persisted", attribution: decision.attribution, attributionStatus: decision.attributionStatus };
+      }
+      if (!row) return { link: false, reason: "anonymous_id_already_linked", attribution: decision.attribution, attributionStatus: decision.attributionStatus };
+      if (!row.deliveredAt) scheduleAnalytics(() => deliverAnalyticsOutbox(row));
+    } else if (decision.link) {
       recordServerCapture({
         distinctId: String(userId),
         event: "$identify",
