@@ -4,7 +4,7 @@ import { isGuestUser } from "@/lib/demo/guest";
 import { HTPR_7270_SIGNUP_COMPLETED_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { strictestConsent, type SignupLinkDecision } from "@/lib/analytics/signupIdentity";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
-import { accountCategory } from "./savedWorkAnalytics";
+import { legacyAccountCategory } from "./savedWorkAnalytics";
 import { recordUserSignedUp, scheduleAnalytics, type SignupMethod } from "./signupAnalytics";
 
 export function recordSignupCompleted(input: {
@@ -37,7 +37,7 @@ export function recordSignupCompleted(input: {
       ...serverAnalyticsProperties(userId, team?.id ?? null, null, `signup_completed:${userId}`, user.joinedAt),
       signup_method: signupMethod,
       signup_at: user.joinedAt.toISOString(),
-      account_category: accountCategory(user),
+      account_category: legacyAccountCategory(user),
       ...(decision?.link && consentAll ? { anonymous_id: decision.anonymousId } : {}),
       utm_source: consentAll ? decision ? decision.attribution.utm_source ?? null : source : null,
       utm_medium: consentAll ? decision?.attribution.utm_medium ?? null : null,

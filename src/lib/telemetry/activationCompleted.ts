@@ -3,7 +3,7 @@ import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
 import { HTPR_7284_ACTIVATION_COMPLETED_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
-import { accountCategory } from "./savedWorkAnalytics";
+import { legacyAccountCategory } from "./savedWorkAnalytics";
 
 const ACTIVATION_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -29,7 +29,7 @@ export async function captureActivationCompleted(userId: number, occurredAt = ne
   if (!board) return;
   await captureAnalyticsOccurrence(userId, "activation_completed", "analytics:activation_completed", {
     ...serverAnalyticsProperties(userId, board.teamId, board.id, `activation_completed:${userId}`, occurredAt),
-    account_category: accountCategory(user),
+    account_category: legacyAccountCategory(user),
     signup_at: user.joinedAt.toISOString(),
     activated_at: occurredAt.toISOString(),
     hours_since_signup: Math.round(elapsedMs / 360000) / 10,

@@ -176,12 +176,12 @@ test("with the flag off, no task_created is sent", async () => {
 
 test("account category tags QA, internal, guest and customer accounts", () => {
   const h = harness();
-  const { accountCategory } = h.load("src/lib/telemetry/savedWorkAnalytics.ts");
-  assert.equal(accountCategory({ id: 985, email: "qa@example.test" }), "qa");
-  assert.equal(accountCategory({ id: 6, email: "owner@example.test" }), "internal");
-  assert.equal(accountCategory({ id: 7, email: "Someone@Hypertask.ai" }), "internal");
-  assert.equal(accountCategory({ id: 8, uid: "guest_x", email: "g@example.test" }), "guest");
-  assert.equal(accountCategory({ id: 9, email: "user@example.test" }), "customer");
+  const { legacyAccountCategory } = h.load("src/lib/telemetry/savedWorkAnalytics.ts");
+  assert.equal(legacyAccountCategory({ id: 985, email: "qa@example.test" }), "qa");
+  assert.equal(legacyAccountCategory({ id: 6, email: "owner@example.test" }), "internal");
+  assert.equal(legacyAccountCategory({ id: 7, email: "Someone@Hypertask.ai" }), "internal");
+  assert.equal(legacyAccountCategory({ id: 8, uid: "guest_x", email: "g@example.test" }), "guest");
+  assert.equal(legacyAccountCategory({ id: 9, email: "user@example.test" }), "customer");
 });
 
 test("only known channels pass the internal header; anything else counts as web", () => {

@@ -1,7 +1,8 @@
 import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
-import { FEATURE_FLAG_QA_USER_ID, HTPR_7034_ACTIVATION_ANALYTICS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { FEATURE_FLAG_QA_USER_ID, HTPR_7034_ACTIVATION_ANALYTICS_FLAG, HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { accountCategory, isSyntheticAccount } from "./accountCategory";
 import { recordServerCapture, scheduleAnalytics } from "./signupAnalytics";
 
 export type ActivationEvent =
@@ -19,6 +20,9 @@ export async function isActivationEligible(userId: number): Promise<boolean> {
     where: { id: userId },
     select: { uid: true, email: true },
   });
+  if (await isFeatureEnabled(HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, userId)) {
+    return !!user && !isSyntheticAccount(accountCategory({ ...user, id: userId }));
+  }
   const qaEmail = process.env.QA_LOGIN_EMAIL?.trim().toLowerCase();
   return !!user && !isGuestUser(user) && !(qaEmail && user.email.trim().toLowerCase() === qaEmail);
 }
