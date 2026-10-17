@@ -112,12 +112,6 @@ export async function createBoardFromManifest(
   })
 
   const projectId = projectCore.id
-  let analyticsKey: string | undefined
-  try {
-    analyticsKey = await enqueueBoardCreated(prisma, projectId, creation.method, { userId, agentId: creation.agentId }, projectCore.createdAt)
-  } catch {
-    console.error('[saved-work-analytics] intent enqueue failed')
-  }
 
   const project = await prisma.project.findUniqueOrThrow({
     where: { id: projectId },
@@ -273,7 +267,11 @@ export async function createBoardFromManifest(
       console.error('[MCP Create Board] log after success:', sideEffectErr)
     }
 
-    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey)
+    try {
+      processAnalyticsIntentSoon(await enqueueBoardCreated(prisma, projectId, creation.method, { userId, agentId: creation.agentId }, project.createdAt))
+    } catch {
+      console.error('[saved-work-analytics] intent enqueue failed')
+    }
     return result
   } catch (err) {
     await compensateFailedBoard(projectId)

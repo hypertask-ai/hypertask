@@ -67,7 +67,6 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                     const analyticsKey = await enqueueBoardCreated(tx, created.id, "auto", { userId });
                     return { created, analyticsKey };
                 });
-                processAnalyticsIntentSoon(analyticsKey);
                 await prisma.project.update({
                     where: { id: created.id },
                     data: { name: `project-${created.id}` },
@@ -76,6 +75,7 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                     projectId: created.id,
                     userId,
                 });
+                processAnalyticsIntentSoon(analyticsKey);
                 project = await prisma.project.findFirst({
                     where: { id: created.id },
                     include: projectInclude,

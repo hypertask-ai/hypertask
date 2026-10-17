@@ -204,8 +204,6 @@ export const createOnboardingSampleBoardProject = async ({
     seeded: true,
   });
 
-  const analyticsKey = await enqueueBoardCreated(prisma, Project.id, "seeded", { userId: exist_user.id });
-
   const projectIdentifier = (
     Project.uniqueIdentifier ?? uniqueIdentifier
   ).toUpperCase();
@@ -253,7 +251,11 @@ export const createOnboardingSampleBoardProject = async ({
     }
   }
 
-  processAnalyticsIntentSoon(analyticsKey);
+  try {
+    processAnalyticsIntentSoon(await enqueueBoardCreated(prisma, Project.id, "seeded", { userId: exist_user.id }));
+  } catch {
+    console.error("[saved-work-analytics] intent enqueue failed");
+  }
 
   if (firstSection) {
     try {
