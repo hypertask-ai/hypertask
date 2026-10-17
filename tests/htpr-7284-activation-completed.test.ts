@@ -211,7 +211,8 @@ test("the shared occurrence path uses user scope and a durable deduplicated outb
 test("activation database failure is swallowed by the existing afterResponse boundary", async () => {
   const h = harness();
   h.setFailure("database");
-  h.load("src/lib/telemetry/savedWork.ts").recordTaskCreated(3, { userId: 123 }, "web");
+  const savedWork = h.load("src/lib/telemetry/savedWork.ts");
+  savedWork.processAnalyticsIntentSoon(await savedWork.enqueueTaskCreated(h.prisma, 3, { userId: 123 }, "web"));
   await h.drain();
   assert.equal(h.captures.length, 0);
 });

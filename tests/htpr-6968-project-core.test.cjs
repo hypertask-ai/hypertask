@@ -258,6 +258,7 @@ function createController(effects, quota = false) {
   const tx = { $executeRaw: record("lock", undefined), project: { findFirst: record("prefix-clash", null), create: record("write-board", board) } };
   const mocks = {
     "@/lib/telemetry/activationOccurrences": { recordActivationOccurrence: () => {} },
+    "@/lib/telemetry/savedWork": { enqueueBoardCreated: async () => "board_created:15", processAnalyticsIntentSoon: () => {} },
     "@/lib/prisma": { default: {
       user: { findUnique: record("user", { id: 985 }) },
       team: { findFirst: record("team", { googleAccountId: "calendar" }) },

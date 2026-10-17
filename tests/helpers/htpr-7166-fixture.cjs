@@ -64,6 +64,7 @@ function fixture(options = {}) {
   class ManagedSmartSplitMutationError extends Error { constructor() { super('Manage this smart split from Manage views'); this.status = 409; } }
   const lock = async () => { effects.push('lock'); if (options.race) options.race({ board, view, defaultView, uv }); };
   const mocks = {
+    '@/lib/telemetry/savedWork': { enqueueColumnCreated: async () => 'column-key', processAnalyticsIntentSoon: () => {} },
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/utils/controllers/tasks/attachWaitingOnUsers': { attachWaitingOnUsers: async rows => rows },
     '@/utils/controllers/tasks/attachOpenBlockingTasks': { attachOpenBlockingTasks: async rows => rows },

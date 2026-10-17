@@ -246,11 +246,11 @@ test("subscription_started requires a paid invoice, records the contract and sea
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
   const retrieve = async () => subscription();
-  api.recordStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
-  api.recordStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
+  await api.captureStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
+  await api.captureStripeInvoicePaid(paidEvent(), retrieve, noPaidHistory);
   await h.drain();
   const firstInvoice = paidEvent().data.object as any;
-  api.recordStripeInvoicePaid(paidEvent({ id: "in_renewal", created: firstInvoice.created + 2592000 }, "evt_renewal"), retrieve,
+  await api.captureStripeInvoicePaid(paidEvent({ id: "in_renewal", created: firstInvoice.created + 2592000 }, "evt_renewal"), retrieve,
     async () => ({ data: [firstInvoice], has_more: false }));
   await h.drain();
   assert.equal(h.captures.length, 1);
@@ -275,7 +275,7 @@ for (const scenario of ["trial", "zero-invoice", "unpaid", "zero-price", "fully-
     if (scenario === "zero-price") sub.items.data.forEach((item: { price: { unit_amount: number } }) => { item.price.unit_amount = 0; });
     if (scenario === "fully-discounted") sub.discount.coupon.percent_off = 100;
     if (scenario === "customer-mismatch") sub.customer = "cus_other";
-    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(invoice, async () => sub, noPaidHistory);
+    await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(invoice, async () => sub, noPaidHistory);
     await h.drain();
     assert.deepEqual(h.captures, []);
     assert.deepEqual(h.logs, []);
@@ -286,10 +286,10 @@ test("a renewal of a subscription paid before analytics existed is never a new s
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
   const earlier = { ...(paidEvent().data.object as any), id: "in_before_analytics", created: 1767000000 };
-  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [earlier], has_more: false }));
+  await api.captureStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [earlier], has_more: false }));
   await h.drain();
   assert.deepEqual(h.captures, []);
-  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [], has_more: true }));
+  await api.captureStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [], has_more: true }));
   await h.drain();
   assert.deepEqual(h.captures, []);
 });
@@ -298,10 +298,10 @@ test("first-for-user is false after another subscription was paid and null when 
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
   const other = { ...(paidEvent().data.object as any), id: "in_other", subscription: "sub_other", created: 1767000000 };
-  api.recordStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [other], has_more: false }));
+  await api.captureStripeInvoicePaid(paidEvent({ created: 1770000000 }), async () => subscription(), async () => ({ data: [other], has_more: false }));
   await h.drain();
   assert.equal(h.captures[0].properties.is_first_subscription_for_user, false);
-  api.recordStripeInvoicePaid(paidEvent({ subscription: "sub_second" }, "evt_second"), async () => subscription({ id: "sub_second" }),
+  await api.captureStripeInvoicePaid(paidEvent({ subscription: "sub_second" }, "evt_second"), async () => subscription({ id: "sub_second" }),
     async () => ({ data: [], has_more: true }));
   await h.drain();
   assert.equal(h.captures.length, 1);
@@ -321,8 +321,8 @@ test("subscription_seats_changed uses previous event quantities, stable Stripe e
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
   const previous = { items: { data: [{ id: "si_one", quantity: 1 }, { id: "si_two", quantity: 1 }] } };
   const evt = event();
-  api.recordStripeSubscriptionEvent(evt, subscription(), previous);
-  api.recordStripeSubscriptionEvent(evt, subscription(), previous);
+  await api.captureStripeSubscriptionEvent(evt, subscription(), previous);
+  await api.captureStripeSubscriptionEvent(evt, subscription(), previous);
   await h.drain();
   assert.equal(h.captures.length, 1);
   assertCommon(h.captures[0].properties, 123, "subscription_seats_changed:evt_seats");
@@ -331,11 +331,11 @@ test("subscription_seats_changed uses previous event quantities, stable Stripe e
     stripe_event_id: "evt_seats", stripe_customer_id: "cus_stored", subscription_id: "sub_paid",
     seats_before: 2, seats_after: 5, plan: "price_month", interval: "month", currency: "usd", discounted_amount: 3000,
   });
-  api.recordStripeSubscriptionEvent(event("customer.subscription.updated", "evt_decrease"), subscription(), { quantity: 7 });
+  await api.captureStripeSubscriptionEvent(event("customer.subscription.updated", "evt_decrease"), subscription(), { quantity: 7 });
   await h.drain();
   assert.equal(h.captures[1].properties.seats_before, 7);
   assert.equal(h.captures[1].properties.seats_after, 5);
-  for (const previous of [undefined, { quantity: 5 }, { items: { data: [{ id: "si_one" }, { id: "si_two" }] } }]) api.recordStripeSubscriptionEvent(evt, subscription(), previous);
+  for (const previous of [undefined, { quantity: 5 }, { items: { data: [{ id: "si_one" }, { id: "si_two" }] } }]) await api.captureStripeSubscriptionEvent(evt, subscription(), previous);
   await h.drain();
   assert.equal(h.captures.length, 2);
 });
@@ -343,12 +343,12 @@ test("subscription_seats_changed uses previous event quantities, stable Stripe e
 test("subscription_canceled waits for actual end, uses ended_at and fixed reason, and dedupes by subscription", async () => {
   const h = harness();
   const api = h.load("src/lib/telemetry/stripeAnalytics.ts");
-  api.recordStripeSubscriptionEvent(event(), subscription({ cancel_at_period_end: true }));
+  await api.captureStripeSubscriptionEvent(event(), subscription({ cancel_at_period_end: true }));
   await h.drain();
   assert.equal(h.captures.length, 0);
   const sub = subscription({ status: "canceled", ended_at: 1769990000, cancellation_details: { reason: "payment_failed" } });
-  api.recordStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_end"), sub);
-  api.recordStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_end_retry"), sub);
+  await api.captureStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_end"), sub);
+  await api.captureStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_end_retry"), sub);
   await h.drain();
   assert.equal(h.captures.length, 1);
   assert.equal(h.captures[0].event, "subscription_canceled");
@@ -358,26 +358,24 @@ test("subscription_canceled waits for actual end, uses ended_at and fixed reason
     seats_before: 5, seats_after: 0, plan: "price_month", interval: "month", currency: "usd", discounted_amount: 3000,
     canceled_at: new Date(sub.ended_at * 1000).toISOString(), cancellation_reason: "payment_failed",
   });
-  api.recordStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_other"), subscription({ id: "sub_other", ended_at: 1769990000, cancellation_details: { reason: "personal free text" } }));
+  await api.captureStripeSubscriptionEvent(event("customer.subscription.deleted", "evt_other"), subscription({ id: "sub_other", ended_at: 1769990000, cancellation_details: { reason: "personal free text" } }));
   await h.drain();
   assert.equal(h.captures[1].properties.cancellation_reason, "unknown");
   assert.equal(JSON.stringify(h.captures).includes("personal free text"), false);
 });
 
-test("unresolved Stripe customer emits nothing, never matches email, and warns once without personal data", async () => {
+test("unresolved Stripe customer emits nothing, never matches email, and is retried without personal data", async () => {
   const h = harness();
-  const warnings: any[] = [];
-  const warn = console.warn;
-  console.warn = (...args) => { warnings.push(args); };
-  try {
-    h.prisma.team.findFirst = async ({ where }: any) => { assert.deepEqual(Object.keys(where), ["stripe_customer_id"]); return null; };
-    h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); }, async () => { throw Error("must not list unresolved customer"); });
-    await h.drain();
-    assert.deepEqual(h.captures, []);
-    assert.deepEqual(h.logs, []);
-    assert.equal(warnings.length, 1);
-    assert.equal(JSON.stringify(warnings).includes("cus_stored"), false);
-  } finally { console.warn = warn; }
+  let lookups = 0;
+  h.prisma.team.findFirst = async ({ where }: any) => { lookups++; assert.deepEqual(Object.keys(where), ["stripe_customer_id"]); return null; };
+  const error = await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent(), async () => { throw Error("must not fetch unresolved customer"); }, async () => { throw Error("must not list unresolved customer"); })
+    .then(() => null, (reason: Error) => reason);
+  await h.drain();
+  assert.match(String(error?.message), /No stored customer mapping/);
+  assert.equal(String(error?.message).includes("cus_stored"), false);
+  assert.equal(lookups, 1);
+  assert.deepEqual(h.captures, []);
+  assert.deepEqual(h.logs, []);
 });
 
 for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
@@ -387,26 +385,28 @@ for (const kind of ["invite", "join", "paid", "seats", "canceled"]) {
     h.projects.get(15).ownerId = 234;
     const invites = h.load("src/lib/telemetry/inviteAnalytics.ts");
     const stripe = h.load("src/lib/telemetry/stripeAnalytics.ts");
-    const record = () => {
+    const record = async () => {
       if (kind === "invite") invites.recordInviteSent({ id: "invite", userId: 123, projectId: 15 }, "link");
       if (kind === "join") invites.recordMemberJoined(7, 123, 15);
-      if (kind === "paid") stripe.recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
-      if (kind === "seats") stripe.recordStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
-      if (kind === "canceled") stripe.recordStripeSubscriptionEvent(event("customer.subscription.deleted"), subscription({ ended_at: 1769990000 }));
+      if (kind === "paid") await stripe.captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
+      if (kind === "seats") await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
+      if (kind === "canceled") await stripe.captureStripeSubscriptionEvent(event("customer.subscription.deleted"), subscription({ ended_at: 1769990000 }));
     };
     h.setEnabled(false);
-    record(); await h.drain();
+    await record(); await h.drain();
     assert.equal(h.captures.length, 0);
     assert.equal(h.logs.length, 0);
     h.setEnabled(true); h.setFailure("capture");
-    record(); await h.drain();
+    if (["paid", "seats", "canceled"].includes(kind)) await assert.rejects(record(), /mock capture unavailable/);
+    else await record();
+    await h.drain();
     assert.equal(h.logs.length, 0);
     const uuid = h.captureAttempts[0].uuid;
     h.setFailure(null);
-    record(); await h.drain();
+    await record(); await h.drain();
     assert.equal(h.captures.length, 1);
     assert.equal(h.captureAttempts[1].uuid, uuid);
-    record(); await h.drain();
+    await record(); await h.drain();
     assert.equal(h.captures.length, 1);
   });
 }
@@ -418,7 +418,7 @@ function response() {
 function webhook(h: ReturnType<typeof harness>, evt: Stripe.Event, retrieve: any = async () => subscription()) {
   const calls: any[] = [];
   h.mocks["raw-body"] = { default: async () => Buffer.from("verified fixture") };
-  h.mocks["stripe"] = { Stripe: class { webhooks = { constructEvent: () => evt }; subscriptions = { retrieve }; invoices = { list: noPaidHistory }; } };
+  h.mocks["stripe"] = { Stripe: class { events = { retrieve: async () => evt }; webhooks = { constructEvent: () => evt }; subscriptions = { retrieve }; invoices = { list: noPaidHistory }; } };
   h.mocks["@/utils/controllers/stripe/webhook/onCheckoutSuccess"] = { default: async (...args: any[]) => { calls.push(["checkout", ...args]); } };
   h.mocks["@/utils/controllers/stripe/webhook/onSubscriptionUpdated"] = { default: async (...args: any[]) => { calls.push(["update", ...args]); } };
   return { calls, handle: h.load("src/pages/api/stripe/webhook.ts").default };
@@ -445,13 +445,16 @@ for (const failure of ["capture", "database", "constructor", "schedule"] as cons
 test("webhook passes previous_attributes through and returns without awaiting a stalled analytics lookup", async () => {
   const h = harness();
   let release!: (team: any) => void;
-  h.prisma.team.findFirst = () => new Promise((resolve) => { release = resolve; });
+  let started!: () => void;
+  const lookupStarted = new Promise<void>((resolve) => { started = resolve; });
+  h.prisma.team.findFirst = () => new Promise((resolve) => { release = resolve; started(); });
   const evt = event("customer.subscription.updated", "evt_nonblocking", subscription(), { quantity: 2 });
   const { handle } = webhook(h, evt);
   const res = response();
   await handle({ headers: { "stripe-signature": "verified" } }, res);
   assert.equal(res.code, 200);
   assert.equal(h.captures.length, 0);
+  await lookupStarted;
   release({ id: "team", googleAccount: { userId: 123 } });
   await h.drain();
   assert.equal(h.captures[0].properties.seats_before, 2);
@@ -497,8 +500,8 @@ test("with the HTPR-7268 flag off, invites keep the legacy events and Stripe sen
   invites.recordInviteSent({ id: "invitation", userId: 123, projectId: 15 }, "email");
   invites.recordMemberJoined(7, 234, 15, "invitation", 123);
   invites.recordMemberJoined(7, 234, 15);
-  stripe.recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
-  stripe.recordStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
+  await stripe.captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
+  await stripe.captureStripeSubscriptionEvent(event(), subscription(), { quantity: 1 });
   await h.drain();
   assert.deepEqual(h.captures.map((capture) => [capture.event, capture.distinctId, capture.properties]).sort(), [
     ["invite_accepted", "123", { inviteeId: 234 }],
@@ -510,7 +513,7 @@ test("first-for-user is unknown when the billed user owns another billed workspa
   const h = harness();
   const findTeam = h.prisma.team.findFirst;
   h.prisma.team.findFirst = async (args: any) => typeof args.where.stripe_customer_id === "object" ? { id: "other-team" } : findTeam(args);
-  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
+  await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent(), async () => subscription(), noPaidHistory);
   await h.drain();
   assert.equal(h.captures[0].properties.is_first_subscription_for_user, null);
 });
@@ -518,7 +521,7 @@ test("first-for-user is unknown when the billed user owns another billed workspa
 test("an invoice paid earlier wins over one created earlier but paid later", async () => {
   const h = harness();
   const createdFirstPaidLater = { ...(paidEvent().data.object as any), id: "in_created_first", created: 1760000000, status_transitions: { paid_at: 1770000500 } };
-  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent({ created: 1765000000 }), async () => subscription(),
+  await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent({ created: 1765000000 }), async () => subscription(),
     async () => ({ data: [createdFirstPaidLater], has_more: false }));
   await h.drain();
   assert.equal(h.captures.length, 1);
@@ -537,7 +540,7 @@ test("with the flag off, legacy teammate_invited keeps the original caller attri
 test("an earlier one-off invoice does not make the first subscription a repeat", async () => {
   const h = harness();
   const oneOff = { ...(paidEvent().data.object as any), id: "in_one_off", subscription: null, created: 1767000000, status_transitions: { paid_at: 1767000000 } };
-  h.load("src/lib/telemetry/stripeAnalytics.ts").recordStripeInvoicePaid(paidEvent(), async () => subscription(), async () => ({ data: [oneOff], has_more: false }));
+  await h.load("src/lib/telemetry/stripeAnalytics.ts").captureStripeInvoicePaid(paidEvent(), async () => subscription(), async () => ({ data: [oneOff], has_more: false }));
   await h.drain();
   assert.equal(h.captures[0].properties.is_first_subscription_for_user, true);
 });

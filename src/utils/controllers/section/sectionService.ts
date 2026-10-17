@@ -4,7 +4,7 @@ import { scheduleAgentFirstTaskEmailBatch } from '@/utils/controllers/notificati
 import { recordAgentTaskCompletion } from '@/lib/telemetry/activationOccurrences'
 import { getProjectWhere, savedViewBoardAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 import generateRank from '@/utils/generateRank'
-import { recordColumnCreated, recordColumnRenamed } from '@/lib/telemetry/savedWork'
+import { enqueueColumnCreated, enqueueColumnRenamed, processAnalyticsIntentSoon } from '@/lib/telemetry/savedWork'
 import {
   appendSectionToAllViews,
   updateSectionInAllViews,
@@ -61,18 +61,22 @@ export async function createSection(input: CreateSectionInput): Promise<CreateSe
   }
 
   try {
-    const section = await prisma.section.create({
-      data: {
-        project: { connect: { id: projectId } },
-        section_title: title,
-        visibility: true,
-        deleted: false,
-        ranking: ranking as string
-      }
-    })
+    const { section, analyticsKey } = await prisma.$transaction(async (tx) => {
+      const section = await tx.section.create({
+        data: {
+          project: { connect: { id: projectId } },
+          section_title: title,
+          visibility: true,
+          deleted: false,
+          ranking: ranking as string
+        }
+      })
 
+      const analyticsKey = await enqueueColumnCreated(tx, section.id, { userId, agentId })
+      return { section, analyticsKey }
+    })
+    processAnalyticsIntentSoon(analyticsKey)
     await appendSectionToAllViews(projectId, section, userId)
-    recordColumnCreated(section.id, { userId, agentId })
 
     return {
       status: 200,
@@ -168,7 +172,7 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
     }
 
     const finalRanking = resolvedRanking ?? ranking
-    const toUpdate = await prisma.$transaction(async (tx) => {
+    const { toUpdate, analyticsKey } = await prisma.$transaction(async (tx) => {
       const updated = await tx.section.update({
         where: { id: sectionId },
         data: {
@@ -202,10 +206,13 @@ export async function updateSection(input: UpdateSectionInput): Promise<UpdateSe
         }
       }
 
-      return updated
+      const analyticsKey = titleChanged && !updated.deleted
+        ? await enqueueColumnRenamed(tx, sectionId, { userId, agentId })
+        : null
+      return { toUpdate: updated, analyticsKey }
     })
 
-    if (titleChanged && !toUpdate.deleted) recordColumnRenamed(sectionId, { userId, agentId })
+    if (analyticsKey) processAnalyticsIntentSoon(analyticsKey)
 
     if (toUpdate.deleted) {
       await removeSectionFromAllViews(sectionId, toUpdate.projectId)
