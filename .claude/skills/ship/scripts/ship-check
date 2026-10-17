@@ -14,6 +14,8 @@
 #   ship-check title <pr>        PR title is "PREFIX-NNNN [TYPE] ..." and that ticket exists
 #   ship-check ci-tests <pr>     latest ci-tests on the PR head passes; failures name tests and production status
 #   ship-check ticket <T>        ticket exists on the board
+#   ship-check deeper <T>        newest "Deeper:" agent activity names field, raw source, method, outside proof and a
+#                                proof gate <T>.deeper-<name> with CHECK: and EXPECT: in $PWD/.unlazy/s-*/gates/*.md
 #   ship-check merged <T>        the ticket's newest PR is merged into the base branch
 #   ship-check deployed <T>      the Production deployment for that merge is success (app repo only)
 #   ship-check docs <T>          FEATURE/IMPROVE: docs PR merged and deployed, or a No user-visible change: reason
@@ -36,6 +38,36 @@ check_ticket() {
   hypertask tasks get "$1" --json 2>/dev/null | jq -e '.success == true and (.tasks | length) > 0' >/dev/null \
     || fail "ticket $1 not found on the board"
   echo "ticket ok"
+}
+
+deeper_gate_runnable() {
+  local f
+  for f in "$PWD"/.unlazy/s-*/gates/*.md; do
+    [ -f "$f" ] || continue
+    awk -v id="$1" '
+      /^- \[[ xX]\] / { inside = substr($0, 7, length(id) + 1) == id ":"; next }
+      /^[^ ]/ { inside = 0 }
+      inside && /^  CHECK: *[^ ]/ { check = 1 }
+      inside && /^  EXPECT: *[^ ]/ { expect = 1 }
+      END { exit !(check && expect) }' "$f" && return 0
+  done
+  return 1
+}
+
+check_deeper() {
+  local t=${1:-} acts text label id
+  [[ $t =~ ^(HTPR|YPER4|HYFA)-[0-9]+$ ]] || fail "deeper needs a ticket id like HTPR-123, YPER4-123 or HYFA-123; ${t:-<none>} is not one"
+  acts=$(ht GET "/mcp/tasks/$t/agent-activity?limit=100" 2>/dev/null) || fail "cannot read agent activity of $t"
+  text=$(jq -er '[.activities[] | select(.type == "thought" and ((.text // "") | test("^\\s*Deeper:")))]
+    | max_by(.createdAt) | .text' <<<"$acts" 2>/dev/null) \
+    || fail "$t has no agent activity starting with \"Deeper:\"; write it right after ship-gates (/ship step 3a)"
+  for label in field 'raw source' method 'outside proof' 'proof gate'; do
+    grep -qi "$label:" <<<"$text" || fail "the Deeper: activity on $t has no \"$label:\" part"
+  done
+  id=$(grep -oE "proof gate: *$t\.deeper-[a-z0-9-]+" <<<"$text" | head -1 | sed -E 's/^proof gate: *//')
+  [ -n "$id" ] || fail "the Deeper: activity on $t must name its proof gate as \"proof gate: $t.deeper-<name>\""
+  deeper_gate_runnable "$id" || fail "$id has no gate with CHECK: and EXPECT: in $PWD/.unlazy/s-*/gates/*.md; a manual note does not count"
+  echo "deeper ok"
 }
 
 check_title() {
@@ -966,6 +998,7 @@ case "${1:-}" in
   title) check_title "$2" ;;
   ci-tests) check_ci_tests "$2" ;;
   ticket) check_ticket "$2" ;;
+  deeper) check_deeper "${2:-}" ;;
   pr) check_pr "$2" ;;
   merged) check_merged "$2" ;;
   deployed) check_deployed "$2" ;;
@@ -974,5 +1007,5 @@ case "${1:-}" in
   done) check_done "$2" ;;
   cleaned) check_cleaned "$2" ;;
   guard) guard ;;
-  *) sed -n '2,23p' "$0"; exit 1 ;;
+  *) sed -n '2,25p' "$0"; exit 1 ;;
 esac

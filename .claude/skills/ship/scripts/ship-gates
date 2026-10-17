@@ -36,6 +36,7 @@ const { parseGates, readStableRegularFile, withFileLock, writeAtomic } = await i
 const quote = (s) => "'" + s.replaceAll("'", "'\\''") + "'";
 const gates = {
   ticket: ['The ticket exists on the board', 'ticket ok'],
+  deeper: ['A Deeper: agent activity names the field, raw source, method and outside proof, and its proof gate is a runnable CHECK', 'deeper ok'],
   pr: ['The PR is named HTPR-NNNN [TYPE] description', 'title ok'],
   merged: ['The PR is merged into production', 'merged ok'],
   deployed: ['The Production deployment for the merge is success', 'deployed ok'],
@@ -61,7 +62,7 @@ await withFileLock(root, ledger, () => {
   const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const generatedCheck = new RegExp(`^(SHIP_REPO=[A-Za-z0-9._-]+/[A-Za-z0-9._-]+ SHIP_BASE=[A-Za-z0-9._/-]+ SHIP_CHECKOUT='/[A-Za-z0-9._/ -]+' (SHIP_WORKER='[A-Za-z0-9._/ -]+' )?)?${escape(quote(check))} [a-z]+ (HTPR|HYFA|YPER4)-[0-9]+$`);
   for (const gate of doc.gates) {
-    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|pr|merged|deployed|proof|docs|done|cleaned)$/);
+    const match = gate.id.match(/^((?:HTPR|HYFA|YPER4)-[0-9]+)\.(ticket|deeper|pr|merged|deployed|proof|docs|done|cleaned)$/);
     if (!match && !gate.check) continue;
     if (!match || (match[2] === 'proof' && !match[1].startsWith('HTPR-')) ||
         !generatedCheck.test(gate.check) || !gate.check.endsWith(`${quote(check)} ${match[2]} ${match[1]}`) ||
