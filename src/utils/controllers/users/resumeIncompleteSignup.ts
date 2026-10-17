@@ -33,27 +33,36 @@ export async function resumeIncompleteSignup(input: {
   const { userId, signupAttribution, cookieHeader, ...provisioning } = input;
   if (!(await findRecoverableUser(prisma, userId))) return false;
   if (!(await isFeatureEnabled(HTPR_7289_RESUME_SIGNUP_PROVISIONING_FLAG, userId))) return false;
-  let resumed = false;
+  let provisioned = false;
   try {
-    resumed = await prisma.$transaction(async (tx) => {
+    await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(7289::int, ${userId}::int)`;
       const user = await findRecoverableUser(tx, userId);
-      if (!user) return false;
-      await provisionNewUser({ userId, email: user.email, ...provisioning, resumingEarlierAttempt: true });
-      return true;
+      if (!user) return;
+      await provisionNewUser({
+        userId,
+        email: user.email,
+        ...provisioning,
+        displayName: provisioning.displayName ?? user.displayName,
+        photoURL: provisioning.photoURL ?? user.photoURL,
+        stripeCustomerNameEmail: provisioning.stripeCustomerNameEmail ?? user.email,
+        resumingEarlierAttempt: true,
+      });
+      provisioned = true;
     }, { timeout: 30000, maxWait: 10000 });
   } catch (error) {
-    console.error("CRITICAL: resuming incomplete signup provisioning failed; the account stays incomplete", { userId, error });
-    return false;
+    console.error(provisioned
+      ? "Resumed signup provisioning finished but its lock transaction failed to commit"
+      : "CRITICAL: resuming incomplete signup provisioning failed; the account stays incomplete", { userId, error });
   }
-  if (resumed) recordSignupCompleted({ decision: null, cookieHeader, userId, ...signupAttribution });
-  return resumed;
+  if (provisioned) recordSignupCompleted({ decision: null, cookieHeader, userId, ...signupAttribution });
+  return provisioned;
 }
 
 async function findRecoverableUser(client: Pick<Prisma.TransactionClient, "user">, userId: number) {
   const user = await client.user.findUnique({
     where: { id: userId },
-    select: { uid: true, email: true, stripe_customer_id: true, joinedAt: true },
+    select: { uid: true, email: true, displayName: true, photoURL: true, stripe_customer_id: true, joinedAt: true },
   });
   return user && isRecoverableIncompleteSignup(user) ? user : null;
 }
