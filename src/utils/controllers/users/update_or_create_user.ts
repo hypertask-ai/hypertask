@@ -9,6 +9,7 @@ import {
   updateUserProfilePicture,
 } from "./provisionNewUser";
 import { findUserByEmail } from "./findUserByEmail";
+import { resumeIncompleteSignup } from "./resumeIncompleteSignup";
 
 const update_or_create_user = async (
   email: string,
@@ -76,6 +77,18 @@ const update_or_create_user = async (
 
     else {
       await recordSignupIdentityLink(exist_user.id, false, signupContextId, cookieHeader);
+      await resumeIncompleteSignup({
+        userId: exist_user.id,
+        displayName: user.displayName,
+        photoURL: user.photoURL,
+        stripeCustomerNameEmail: user?.email,
+        shouldSkipInteractive,
+        skipOnboarding,
+        isVerified,
+        createGoogleAccount: true,
+        signupAttribution,
+        cookieHeader,
+      });
       const googleAc = await prisma.googleAccount.findFirst({
         where: {
           userId: exist_user.id,
