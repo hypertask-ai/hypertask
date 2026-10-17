@@ -14,7 +14,7 @@ export function activationHarness() {
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
-  const disabledFlags = new Set<string>(["htpr-7271-saved-work-events", "htpr-7272-payment-login-agent-events", "htpr-7273-column-events", "htpr-7292-shared-account-category"]);
+  const disabledFlags = new Set<string>(["htpr-7271-saved-work-events", "htpr-7272-payment-login-agent-events", "htpr-7273-column-events", "htpr-7292-shared-account-category", "htpr-7293-activation-metric-v1"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
   const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member", joinedAt: new Date(0) }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
@@ -194,7 +194,7 @@ export function activationHarness() {
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
       if (key in mocks) return { __esModule: true, ...mocks[key] };
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/flags/definitions/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/flags/definitions/", "@/lib/analytics/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }

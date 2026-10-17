@@ -2,6 +2,8 @@ import "server-only";
 import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
 import { HTPR_7284_ACTIVATION_COMPLETED_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7293_ACTIVATION_METRIC_V1_FLAG } from "@/lib/flags/definitions/htpr-7293-activation-metric-v1";
+import { computeActivationForUser } from "@/lib/analytics/activationFacts";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
 import { legacyAccountCategory } from "./savedWorkAnalytics";
 
@@ -16,6 +18,23 @@ export async function captureActivationCompleted(userId: number, occurredAt = ne
   if (!user || isGuestUser(user)) return;
   const elapsedMs = occurredAt.getTime() - user.joinedAt.getTime();
   if (elapsedMs >= ACTIVATION_WINDOW_MS) return;
+  if (await isFeatureEnabled(HTPR_7293_ACTIVATION_METRIC_V1_FLAG, userId)) {
+    const activation = await computeActivationForUser(userId);
+    if (!activation) return;
+    const { boardId, teamId, signupAt, activatedAt, taskIds, version } = activation;
+    await captureAnalyticsOccurrence(userId, "activation_completed", "analytics:activation_completed", {
+      ...serverAnalyticsProperties(userId, teamId, boardId, `activation_completed:${userId}`, activatedAt),
+      account_category: legacyAccountCategory(user),
+      signup_at: signupAt.toISOString(),
+      activated_at: activatedAt.toISOString(),
+      hours_since_signup: Math.round((activatedAt.getTime() - signupAt.getTime()) / 360000) / 10,
+      task_count: 3,
+      is_seeded: false,
+      definition_version: version,
+      activation_task_ids: taskIds.map(String),
+    }, { scope: "user", occurredAt: activatedAt });
+    return;
+  }
   const boards = await prisma.project.findMany({
     where: { ownerId: userId, seeded: false, status: "Normal" },
     select: {
