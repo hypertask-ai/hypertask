@@ -2802,3 +2802,17 @@ model AnalyticsOutbox {
 
   @@index([deliveredAt, nextAttemptAt])
 }
+
+model AnalyticsIntent {
+  id            String    @id @default(cuid())
+  key           String    @unique
+  kind          String
+  payload       Json
+  attempts      Int       @default(0)
+  nextAttemptAt DateTime  @default(now())
+  processedAt   DateTime?
+  lastError     String?
+  createdAt     DateTime  @default(now())
+
+  @@index([processedAt, nextAttemptAt])
+}

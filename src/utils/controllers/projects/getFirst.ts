@@ -4,7 +4,7 @@ import { randomBytes } from "crypto";
 import prisma from "@/lib/prisma";
 import { createProjectViewAndCreateDefault } from "./create";
 import { getProjectViewInclude } from "./getAll";
-import { recordBoardCreated } from "@/lib/telemetry/savedWork";
+import { enqueueBoardCreated, processAnalyticsIntentSoon } from "@/lib/telemetry/savedWork";
 
 const getFirst = async (userId:number, { withTasks = false }: { withTasks?: boolean } = {}) => {
         try {
@@ -56,12 +56,16 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
             console.log("🚀 ~ getFirst ~ project:", project)
             if (!project) {
                 const provisionalName = `n${randomBytes(5).toString("hex")}`;
-                const created = await prisma.project.create({
-                    data: {
-                        ownerId: userId,
-                        name: provisionalName,
-                        uniqueIdentifier: "",
-                    },
+                const { created, analyticsKey } = await prisma.$transaction(async (tx) => {
+                    const created = await tx.project.create({
+                        data: {
+                            ownerId: userId,
+                            name: provisionalName,
+                            uniqueIdentifier: "",
+                        },
+                    });
+                    const analyticsKey = await enqueueBoardCreated(tx, created.id, "auto", { userId });
+                    return { created, analyticsKey };
                 });
                 await prisma.project.update({
                     where: { id: created.id },
@@ -71,7 +75,7 @@ const getFirst = async (userId:number, { withTasks = false }: { withTasks?: bool
                     projectId: created.id,
                     userId,
                 });
-                recordBoardCreated(created.id, "auto", { userId });
+                processAnalyticsIntentSoon(analyticsKey);
                 project = await prisma.project.findFirst({
                     where: { id: created.id },
                     include: projectInclude,

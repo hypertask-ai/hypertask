@@ -85,7 +85,7 @@ function fixture({ enabled = true, last = false, empty = false, denied = false, 
     "@/lib/flags": { isFeatureEnabled: async (...args) => { flags.push(args); return enabled; } },
     "@/utils/controllers/projects/getAllIncludes": { getProjectWhere: (userId) => ({ ownerId: userId }) },
     "@/utils/controllers/notifications/agentFirstTaskEmail": { scheduleAgentFirstTaskEmailBatch: () => assert.fail("No agent email for human deletion") },
-    "@/lib/telemetry/savedWork": { recordColumnCreated: () => {}, recordColumnRenamed: () => {} },
+    "@/lib/telemetry/savedWork": { enqueueColumnCreated: async () => "column-key", enqueueColumnRenamed: async () => "rename-key", processAnalyticsIntentSoon: () => {} },
     "./viewHelpers": {
       removeSectionFromAllViews: async (...args) => effects.push(["remove-views", ...args]),
       updateSectionInAllViews: async (...args) => effects.push(["update-views", ...args]),

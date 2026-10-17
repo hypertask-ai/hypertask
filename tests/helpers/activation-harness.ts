@@ -9,13 +9,14 @@ const nativeRequire = createRequire(__filename);
 
 export function activationHarness() {
   const captures: any[] = [];
+  const intentRows: any[] = [];
   const captureAttempts: any[] = [];
   const jobs: Promise<unknown>[] = [];
   const logs: any[] = [];
   let enabled = true;
   const disabledFlags = new Set<string>(["htpr-7271-saved-work-events", "htpr-7272-payment-login-agent-events", "htpr-7273-column-events"]);
   let failure: "capture" | "constructor" | "database" | "schedule" | null = null;
-  const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member" }]]);
+  const users = new Map<number, any>([[123, { id: 123, uid: "real_123", email: "member@example.test", displayName: "Member", joinedAt: new Date(0) }]]);
   const projects = new Map<number, any>([[15, { id: 15, ownerId: 123, title: "Board", teamId: "team", owner: users.get(123), team: { title: "Team" }, section: [] }]]);
   const sections = [{ id: 1, section_title: "Doing", isDone: false }, { id: 2, section_title: "Done", isDone: true }, { id: 3, section_title: "Delivered", isDone: true }, { id: 4, section_title: "Done", isDone: false }];
   const tasks = new Map<number, any>([[9, { id: 9, projectId: 15, sectionId: 1, section: "Doing", status: "Normal", userId: 123, title: "Task", updatedAt: new Date(0), uniqueIndex: 9 }]]);
@@ -76,6 +77,47 @@ export function activationHarness() {
     assignees: { updateMany: async () => ({}) },
     notification: { updateMany: async () => ({}) },
     $executeRaw: async () => 0,
+  };
+  const intentMatches = (row: any, where: any): boolean => Object.entries(where).every(([key, value]: [string, any]) => {
+    if (value instanceof Date) return row[key]?.getTime() === value.getTime();
+    if (value && typeof value === "object") {
+      if ("lte" in value) return row[key] !== null && row[key] <= value.lte;
+      if ("lt" in value) return row[key] !== null && row[key] < value.lt;
+    }
+    return row[key] === value;
+  });
+  prisma.analyticsIntent = {
+    createMany: async ({ data, skipDuplicates }: any) => {
+      if (!skipDuplicates) throw Error("intent insert must not abort on duplicates");
+      let count = 0;
+      for (const input of data) {
+        if (intentRows.some((row) => row.key === input.key)) continue;
+        intentRows.push({ id: `intent-${intentRows.length + 1}`, attempts: 0, nextAttemptAt: new Date(), processedAt: null,
+          lastError: null, createdAt: new Date(), ...input, payload: JSON.parse(JSON.stringify(input.payload)) });
+        count++;
+      }
+      return { count };
+    },
+    findUniqueOrThrow: async ({ where }: any) => {
+      const row = intentRows.find((row) => intentMatches(row, where));
+      if (!row) throw Error("intent not found");
+      return { ...row };
+    },
+    findMany: async ({ where, take, orderBy }: any) => intentRows.filter((row) => intentMatches(row, where))
+      .sort((a, b) => a[Object.keys(orderBy)[0]] - b[Object.keys(orderBy)[0]]).slice(0, take).map((row) => ({ ...row })),
+    updateMany: async ({ where, data }: any) => {
+      const rows = intentRows.filter((row) => intentMatches(row, where));
+      for (const row of rows) for (const [key, value] of Object.entries(data) as [string, any][]) {
+        row[key] = value && typeof value === "object" && "increment" in value ? row[key] + value.increment : value;
+      }
+      return { count: rows.length };
+    },
+    deleteMany: async ({ where }: any) => {
+      const rows = intentRows.filter((row) => !intentMatches(row, where));
+      const count = intentRows.length - rows.length;
+      intentRows.splice(0, intentRows.length, ...rows);
+      return { count };
+    },
   };
   prisma.user.update = async () => ({});
   // Serialized callbacks model the user advisory lock, including parallel claims.
@@ -162,5 +204,5 @@ export function activationHarness() {
     return loaded.exports;
   }
   async function drain() { for (let index = 0; index < jobs.length; index++) await jobs[index]; }
-  return { captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
+  return { intentRows, captures, captureAttempts, logs, jobs, users, projects, sections, tasks, invites, members, history, prisma, prismaCalls, flagChecks, mocks, load, drain, setEnabled: (value: boolean) => { enabled = value; }, setFlagEnabled: (key: string, value: boolean) => { if (value) disabledFlags.delete(key); else disabledFlags.add(key); }, setFailure: (value: typeof failure) => { failure = value; } };
 }

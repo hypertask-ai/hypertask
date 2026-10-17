@@ -344,7 +344,7 @@ test("cron authenticates with the shared authorization helper and returns delive
     h.rows[0].nextAttemptAt = new Date(0);
     const response = await route.GET({ headers: new Headers({ authorization: "Bearer local-cron-fixture" }) });
     assert.equal(response.status, 200);
-    assert.deepEqual(await response.json(), { delivered: 1, failed: 0, skipped: 0 });
+    assert.deepEqual(await response.json(), { delivered: 1, failed: 0, skipped: 0, intents: { processed: 0, failed: 0, skipped: 0 } });
     delete process.env.CRON_SECRET;
     assert.equal((await route.GET({ headers: new Headers({ authorization: "Bearer local-cron-fixture" }) })).status, 401);
   } finally {
