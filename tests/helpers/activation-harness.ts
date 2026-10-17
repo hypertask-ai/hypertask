@@ -152,7 +152,7 @@ export function activationHarness() {
       if (name.startsWith(".")) key = "@/" + path.relative(path.join(root, "src"), path.resolve(path.dirname(absolute), name)).replace(/\.ts$/, "");
       if (key in mocks) return { __esModule: true, ...mocks[key] };
       if (key.startsWith("@/")) {
-        const allowed = ["@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
+        const allowed = ["@/lib/flags/definitions/", "@/lib/telemetry/", "@/lib/demo/guest", "@/lib/mcp/clientTelemetry", "@/lib/mcp/oauthTokenContract", "@/lib/mcp/boards/columnRole", "@/lib/mcp/tasks/humanMutationOverride"];
         if (!allowed.some((prefix) => key.startsWith(prefix))) throw Error(`Unmocked dependency ${key}`);
         return load(`src/${key.slice(2)}.ts`);
       }

@@ -1,6 +1,8 @@
 import type { AnalyticsOutbox } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG } from "@/lib/flags/definitions/htpr-7269-signup-identity-link";
+import { HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG } from "@/lib/flags/definitions/htpr-7290-durable-signup-identify";
 import { isActivationEligible } from "./activationAnalytics";
 import { postHogClient } from "./signupAnalytics";
 
@@ -13,12 +15,16 @@ export async function isAnalyticsOutboxEnabled(userId: number): Promise<boolean>
   return await isActivationEligible(userId) && await isFeatureEnabled(HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG, userId);
 }
 
+export async function isSignupIdentifyOutboxEnabled(userId: number): Promise<boolean> {
+  return await isFeatureEnabled(HTPR_7269_SIGNUP_IDENTITY_LINK_FLAG, userId) && await isFeatureEnabled(HTPR_7290_DURABLE_SIGNUP_IDENTIFY_FLAG, userId);
+}
+
 export async function deliverAnalyticsOutbox(row: AnalyticsOutbox): Promise<DeliveryResult> {
   let lease: Date | undefined;
   try {
     const client = postHogClient();
     if (!client) return "skipped";
-    if (!(await isAnalyticsOutboxEnabled(row.userId))) {
+    if (!(await (row.event === "$identify" ? isSignupIdentifyOutboxEnabled(row.userId) : isAnalyticsOutboxEnabled(row.userId)))) {
       await prisma.analyticsOutbox.updateMany({
         where: { id: row.id, deliveredAt: null, nextAttemptAt: { lte: new Date() }, attempts: { lt: 10 } },
         data: { nextAttemptAt: new Date(Date.now() + 3600000) },
