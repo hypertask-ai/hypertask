@@ -3,11 +3,10 @@ import prisma from "@/lib/prisma";
 import { isGuestUser } from "@/lib/demo/guest";
 import { FEATURE_FLAG_OWNER_USER_ID, FEATURE_FLAG_QA_USER_ID, HTPR_7271_SAVED_WORK_EVENTS_FLAG, HTPR_7273_COLUMN_EVENTS_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { captureAnalyticsOccurrence, serverAnalyticsProperties } from "./analyticsOccurrences";
+import type { AccountCategory } from "./accountCategory";
 import { recordActivationOccurrence } from "./activationOccurrences";
 import { captureActivationCompleted } from "./activationCompleted";
 import type { BoardCreationMethod, ColumnCreationMethod, CreationChannel, SavedWorkActor } from "./savedWork";
-
-type AccountCategory = "customer" | "internal" | "qa" | "guest";
 
 const LEGACY_BOARD_SOURCES: ReadonlySet<BoardCreationMethod> = new Set(["manual", "seeded", "adopted_demo"]);
 
