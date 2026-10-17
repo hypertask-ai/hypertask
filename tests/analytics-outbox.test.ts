@@ -182,9 +182,61 @@ test("flag off preserves the exact inline envelope, ordering, and retry behavior
   assert.equal(h.rows.length, 0);
   assert.equal(h.logs.length, 1);
   assert.equal(h.captures.length, 1);
-  assert.deepEqual(h.captureAttempts[1], { distinctId: "123", event: "payment_succeeded", uuid, properties });
+  assert.deepEqual(h.captureAttempts[1], { distinctId: "123", event: "payment_succeeded", uuid, properties, timestamp: occurredAt });
+  assert.equal(h.captureAttempts[0].timestamp, occurredAt);
   assert.deepEqual(h.phases, ["inline-capture", "inline-capture", "commit", "commit"]);
 });
+
+const beforeMidnight = "2026-10-15T23:59:59.000Z";
+const afterMidnight = new Date("2026-10-16T00:00:05.000Z");
+
+for (const [mode, configure] of [
+  ["flag off", (h: any) => h.setFlagEnabled(flag, false)],
+  ["ineligible", (h: any) => h.setEnabled(false)],
+  ["outbox", () => {}],
+] as const) {
+  test(`${mode}: a business time just before midnight keeps its UTC day when delivery runs after midnight`, async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: afterMidnight });
+    const h = harness(configure);
+    await h.api.captureAnalyticsOccurrence(123, "task_created", marker, { ...properties, occurred_at: beforeMidnight });
+    assert.equal(h.captureAttempts[0].timestamp.toISOString(), beforeMidnight);
+  });
+}
+
+test("direct path: an explicit occurredAt wins over the property and createdAt", async () => {
+  const h = harness();
+  h.setFlagEnabled(flag, false);
+  const explicit = new Date(beforeMidnight);
+  await h.api.captureAnalyticsOccurrence(123, "task_created", marker, async () => ({ ...properties, occurred_at: "2026-10-01T00:00:00.000Z" }), {
+    occurredAt: explicit, createdAt: afterMidnight,
+  });
+  assert.equal(h.captureAttempts[0].timestamp, explicit);
+});
+
+test("direct path: a failed capture retries with the original business time, not the retry time", async (t) => {
+  t.mock.timers.enable({ apis: ["Date"], now: afterMidnight });
+  const h = harness();
+  h.setFlagEnabled(flag, false);
+  h.setFailure("capture");
+  const send = () => h.api.captureAnalyticsOccurrence(123, "task_created", marker, { ...properties, occurred_at: beforeMidnight });
+  await assert.rejects(send(), /mock capture unavailable/);
+  t.mock.timers.tick(3600000);
+  h.setFailure(null);
+  await send();
+  assert.deepEqual(h.captureAttempts.map((attempt: any) => attempt.timestamp.toISOString()), [beforeMidnight, beforeMidnight]);
+});
+
+for (const [mode, configure] of [["flag off", (h: any) => h.setFlagEnabled(flag, false)], ["outbox", () => {}]] as const) {
+  test(`${mode}: a malformed occurred_at falls back to createdAt, then to the capture time`, async (t) => {
+    t.mock.timers.enable({ apis: ["Date"], now: afterMidnight });
+    const withCreatedAt = harness(configure);
+    await withCreatedAt.api.captureAnalyticsOccurrence(123, "task_created", marker, { ...properties, occurred_at: "not a date" }, { createdAt: new Date(beforeMidnight) });
+    assert.equal(withCreatedAt.captureAttempts[0].timestamp.toISOString(), beforeMidnight);
+    const withoutTime = harness(configure);
+    await withoutTime.api.captureAnalyticsOccurrence(123, "task_created", marker, { ...properties, occurred_at: 42 });
+    assert.equal(withoutTime.captureAttempts[0].timestamp.toISOString(), afterMidnight.toISOString());
+  });
+}
 
 test("a pre-outbox log marker blocks repeats, including business scope with a different user", async () => {
   const h = harness();

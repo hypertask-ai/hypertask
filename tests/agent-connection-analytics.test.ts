@@ -168,6 +168,7 @@ test("connection properties follow the server contract and exclude credentials a
       is_seeded: null, account_category: null, attribution_status: "unknown",
       connection_id: id, agent_type: "claude_code", client: "claude_code", transport: "mcp", is_first: true,
     },
+    timestamp: connectedAt,
   });
   for (const sensitive of ["secret-credential", "member@example.test", "private free text", "internal-agent-id"]) {
     assert.equal(JSON.stringify(h.captures).includes(sensitive), false);
@@ -196,7 +197,8 @@ test("flag off preserves the exact fingerprint events and properties", async () 
   api.recordAgentConnection(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
   api.recordAgentConnection(123, "old-credential-two", "mcp", "Cursor", connectedAt, "agent:same-agent");
   await h.drain();
-  assert.deepEqual(h.captures, [
+  assert.ok(h.captures.every(({ timestamp }) => timestamp instanceof Date));
+  assert.deepEqual(h.captures.map(({ timestamp, ...capture }) => capture), [
     { distinctId: "123", event: "agent_connected", properties: { client: "cursor", transport: "mcp", is_first: true } },
     { distinctId: "123", event: "agent_connected", properties: { client: "cursor", transport: "mcp", is_first: false } },
   ]);

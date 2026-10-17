@@ -13,6 +13,7 @@ const productionSource = (file: string) =>
 process.env.POSTHOG_SERVER_PROJECT_TOKEN = "mock-local-only";
 const localCaptures: any[] = [];
 const save = (h: ReturnType<typeof activationHarness>) => { localCaptures.push(...h.captures); };
+const timed = (captures: any[]) => captures.map(({ timestamp, ...capture }) => { assert.ok(timestamp instanceof Date); return capture; });
 
 function taskController(h: ReturnType<typeof activationHarness>) {
   const noop = async () => undefined;
@@ -72,7 +73,7 @@ test("adopting guest boards emits once for the new owner; repeat adoption is ign
   assert.equal(await adoptGuestBoards("mock-session", 123), 1);
   assert.equal(await adoptGuestBoards("mock-session", 123), 0);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "board_created", properties: { source: "adopted_demo" } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "board_created", properties: { source: "adopted_demo" } }]);
   save(h);
 });
 
@@ -88,7 +89,7 @@ test("CLI code exchange is consumed atomically and emits once, not on credential
   const { recordAuthenticatedConnection } = h.load("src/lib/telemetry/activationOccurrences.ts");
   recordAuthenticatedConnection(request(), 123, "mock-cli-credential");
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "agent_connected", properties: { client: "other", transport: "cli", is_first: true } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "agent_connected", properties: { client: "other", transport: "cli", is_first: true } }]);
   save(h);
 });
 
@@ -203,7 +204,7 @@ test("managed agent completion passes through the task controller and repeat upd
   assert.equal((await update({ id: 9, sectionId: 2 }, h.users.get(123), "managed")).status, 200);
   assert.equal((await update({ id: 9, sectionId: 2 }, h.users.get(123), "managed")).status, 200);
   await h.drain();
-  assert.deepEqual(h.captures, [{ distinctId: "123", event: "agent_task_completed", properties: { taskId: 9, projectId: 15, is_first: true } }]);
+  assert.deepEqual(timed(h.captures), [{ distinctId: "123", event: "agent_task_completed", properties: { taskId: 9, projectId: 15, is_first: true } }]);
   h.tasks.set(10, { ...h.tasks.get(9), id: 10, sectionId: 1, section: "Doing" });
   await update({ id: 10, status: "Archive" }, h.users.get(123), "managed");
   await h.drain();
