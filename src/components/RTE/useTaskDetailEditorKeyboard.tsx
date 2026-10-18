@@ -1,4 +1,9 @@
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
+import { useSetRecoilState } from "@/lib/state";
+import { showCommandsAtom } from "@/store";
+import { CommandMode } from "@/models/enums";
 import { AI_SUGGEST_REPLY_EVENT } from "@/lib/constants/aiEvents";
 import { resolveCommentEnterShortcutAction } from "@/lib/taskDetailInboxFlow";
 
@@ -9,6 +14,8 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorContext) {
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const setCommands = useSetRecoilState(showCommandsAtom);
   const { isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
 
 
@@ -45,7 +52,12 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
     };
     const keyHandlers: Record<string, () => void> = {
       'Escape': handleEscape,
-      'j': () => cmdControl && (e.preventDefault(), toggleAiTaskWriter()),
+      'j': () => {
+        if (!cmdControl) return;
+        e.preventDefault();
+        if (editWithAiEnabled) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+        else toggleAiTaskWriter();
+      },
     };
 
     if (cmdControl) {

@@ -83,6 +83,7 @@ async function withTitle(t, { mobile = false, status = 200, id = 42, hydrate = f
   }
   const toast = Object.assign(noop, { error: (message) => errors.push(message) });
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
+    "@/models/enums": { CommandMode: {} },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(Context) },
     "@/utils/api/Task Detail": { updateTask: async (body) => { requests.push(body); return { status }; } },
     "react-hot-toast": { default: toast, __esModule: true },

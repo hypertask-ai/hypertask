@@ -1,3 +1,5 @@
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -7,6 +9,7 @@ import { useContext } from "react";
 import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import {
   currentUserAtom,
+  showCommandsAtom,
   showAIChatInterfaceAtom,
   aiChatSidebarWidthPxAtom,
 } from "@/store";
@@ -18,6 +21,7 @@ import useAutosizeTextArea from "@/hooks/General/useAutosizeTextarea";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import useDebounce from "@/hooks/General/useDebounce";
 import Tooltip from "@/components/Common/Tooltip";
+import { CommandMode } from "@/models/enums";
 import { Circle } from "lucide-react";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import RunningTimerIndicator from "./RunningTimerIndicator";
@@ -30,9 +34,11 @@ const TaskTitle = () => {
     currentTask,
     setCurrentTask,
   } = useTaskContext();
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const _parsedTask = JSON.parse(parsed_task);
   const _mbl = useContext(MobileViewContext);
   const [__, _setCurrentUser] = useRecoilState(currentUserAtom);
+  const [, setCommands] = useRecoilState(showCommandsAtom);
   const { navigate } = useHypertasksNavigate();
   const { updateTaskInCache } = UpdateKanban();
   const [confirm, setConfirm] = useState<boolean>(false);
@@ -174,6 +180,10 @@ const TaskTitle = () => {
           if (!_mbl) {
             if (e.keyCode === 74 && cmdControl) {
               e.preventDefault();
+              if (editWithAiEnabled) {
+                setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+                return;
+              }
               focusOn("description");
               document
                 .getElementById("popover-wrapper-" + "description")

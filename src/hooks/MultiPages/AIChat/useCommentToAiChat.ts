@@ -1,11 +1,14 @@
 import { useRef } from "react";
 import type { Editor } from "@tiptap/react";
 import { IComment } from "@/models/model";
-import { useRecoilState } from "@/lib/state";
+import { useRecoilState, useRecoilValue, useSetRecoilState } from "@/lib/state";
 import {
   showAIChatInterfaceAtom,
   aiChatAutoOpenSuppressedAtom,
   aiChatExplicitOpenAtAtom,
+  aiChatEditTaskIdAtom,
+  inViewObjectAtom,
+  isAiChatSidebarModeAtom,
 } from "@/store";
 import { useOptionalAiChatContext } from "@/lib/contexts/Multipages/AI_Agent/chatContext";
 import { wrapBlockQuote } from "@/utils/helperFunctions/TaskDetail";
@@ -17,12 +20,26 @@ export function useCommentToAiChat() {
     showAiChatInterface,
     isTyping,
     chatHistoryReady,
+    startNewSession,
+    restoreChat,
   } = useOptionalAiChatContext() ?? {};
-  const [, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
+  const [chatOpen, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
   const [, setAiChatAutoOpenSuppressed] = useRecoilState(
     aiChatAutoOpenSuppressedAtom
   );
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
+  const setEditTaskId = useSetRecoilState(aiChatEditTaskIdAtom);
+  const setSidebarMode = useSetRecoilState(isAiChatSidebarModeAtom);
+  const inViewObject = useRecoilValue(inViewObjectAtom);
+  const taskInViewRef = useRef(inViewObject?.taskId);
+  taskInViewRef.current = inViewObject?.taskId;
+  const editRequestRef = useRef(0);
+  const chatOpenRef = useRef(chatOpen);
+  chatOpenRef.current = chatOpen;
+  const startNewSessionRef = useRef(startNewSession);
+  startNewSessionRef.current = startNewSession;
+  const restoreChatRef = useRef(restoreChat);
+  restoreChatRef.current = restoreChat;
   const sendingRef = useRef(false);
   const isTypingRef = useRef(isTyping);
   const chatHistoryReadyRef = useRef(chatHistoryReady);
@@ -109,5 +126,21 @@ export function useCommentToAiChat() {
     }
   };
 
-  return { copyCommentToAiChat, summarizeComment, summarizeTicket };
+  const editTicketWithAi = async (taskId: number) => {
+    if (taskId <= 0) return;
+    const request = ++editRequestRef.current;
+    setEditTaskId(null);
+    setSidebarMode(true);
+    chatOpenRef.current = true;
+    openChat();
+    if (!(await waitForSession()) || !startNewSessionRef.current || !chatOpenRef.current || taskInViewRef.current !== taskId || request !== editRequestRef.current) return;
+    const session = await startNewSessionRef.current();
+    if (!session || !chatOpenRef.current || request !== editRequestRef.current || taskInViewRef.current !== taskId) return;
+    restoreChatRef.current?.();
+    editorRef.current?.commands.clearContent();
+    setEditTaskId(taskId);
+    setAiChatExplicitOpenAt(Date.now());
+  };
+
+  return { copyCommentToAiChat, summarizeComment, summarizeTicket, editTicketWithAi };
 }

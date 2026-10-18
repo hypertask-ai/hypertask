@@ -134,7 +134,7 @@ mocks["@/lib/contexts/Multipages/AI_Agent/AI_Agent_Chat_Context"] = context;
 mocks["@/utils/helperFunctions/TaskDetail"] = { wrapBlockQuote: (text) => `<blockquote>${text}</blockquote>` };
 mocks["@/store"] = { showAIChatInterfaceAtom: "open", aiChatAutoOpenSuppressedAtom: "suppressed", aiChatExplicitOpenAtAtom: "explicit" };
 const writes = [];
-mocks["@/lib/state"] = { useRecoilState: (atom) => [false, (value) => writes.push([atom, value])] };
+mocks["@/lib/state"] = { useRecoilValue: () => null, useSetRecoilState: (atom) => (value) => writes.push([atom, value]), useRecoilState: (atom) => [false, (value) => writes.push([atom, value])] };
 const { useCommentToAiChat } = load("src/hooks/MultiPages/AIChat/useCommentToAiChat.ts");
 mocks["@/lib/configs/taskDetail.config"] = { __esModule: true, default: { elementIds: { commentInput: "comment-input" } } };
 mocks["@/lib/constants/TaskDetail"] = {};

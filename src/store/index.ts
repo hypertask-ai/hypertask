@@ -347,6 +347,11 @@ export const aiChatAutoOpenSuppressedAtom = atom<boolean>({
     effects_UNSTABLE: [persistAtom],
 });
 
+export const aiChatEditTaskIdAtom = atom<number | null>({
+    key: "aiChatEditTaskId",
+    default: null,
+});
+
 export const aiChatExplicitOpenAtAtom = atom<number | null>({
     key: "aiChatExplicitOpenAt",
     default: null,

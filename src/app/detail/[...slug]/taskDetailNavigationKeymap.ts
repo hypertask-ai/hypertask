@@ -136,6 +136,10 @@ export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & 
       matches: () => e.keyCode === KeyCodes.J && cmdControl,
       run: () => {
       e.preventDefault();
+      if (context.editWithAiEnabled) {
+        setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+        return { stop: true };
+      }
       if (returnCurrentFocusedType() === "Others") {
         focusOn("description");
         document

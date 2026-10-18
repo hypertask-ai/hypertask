@@ -1,5 +1,6 @@
+import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -166,7 +167,15 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const setCommands = useSetRecoilState(showCommandsAtom);
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const { editTicketWithAi } = useCommentToAiChat();
   const toggleAiTaskWriter = () => {
+    if (editWithAiEnabled) {
+      editor?.commands.blur();
+      setShouldShowAITaskWriter(false);
+      void editTicketWithAi(currentTask.id);
+      return;
+    }
     if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag) {
       setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;

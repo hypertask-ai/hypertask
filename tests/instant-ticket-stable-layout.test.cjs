@@ -628,6 +628,7 @@ test("the real quote insertion effect fills the composer before centering it cle
     let html = "";
     const editor = { state: { selection: { $from: { parent: { textBetween: () => "" }, parentOffset: 0 } } }, commands: { insertContent: content => { html += content; events.push("insert"); } } };
     const useEvents = load("src/components/RTE/useTaskDetailEditorEvents.tsx", {
+      "@/hooks/MultiPages/AIChat/useCommentToAiChat": { useCommentToAiChat: () => ({}) },
       react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop },
       "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
       "@/lib/flags/keys": { ...common["@/lib/flags/keys"], HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose", HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task-window" },

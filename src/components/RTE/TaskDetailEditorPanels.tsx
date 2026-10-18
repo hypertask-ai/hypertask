@@ -1,6 +1,6 @@
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
-import { useSetRecoilState } from "@/lib/state";
-import { showCommandsAtom } from "@/store";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useRecoilValue, useSetRecoilState } from "@/lib/state";
+import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 
 import { useFlag } from "@/hooks/useFlag";
@@ -33,6 +33,8 @@ import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentatio
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
   const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -144,6 +146,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
             createPortal(
               <div
                 data-mobile-existing-content-editor
+                hidden={editWithAiEnabled && showAiChatInterface}
                 className="fixed inset-x-0 z-[1200] bg-modalBackground"
                 style={{
                   bottom: mobileEditViewport?.bottomInset ?? 0,
@@ -165,7 +168,8 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
           <button
             className="hidden"
             onClick={() => {
-              if (newTaskWindow) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+              if (editWithAiEnabled) toggleAiTaskWriter();
+              else if (newTaskWindow) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
               else setShouldShowAITaskWriter((prev) => !prev);
             }}
             id={divIds.popoverTriggerButtonId}
