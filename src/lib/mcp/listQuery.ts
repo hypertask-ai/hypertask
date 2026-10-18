@@ -72,6 +72,15 @@ export function normalizeTaskStatus(value?: string | null): TaskStatusValue | nu
   return null
 }
 
+export function parseTaskStatusParam<T extends TaskStatusValue>(
+  raw: string | null,
+  allowed: readonly T[],
+): T | 'Normal' | null {
+  if (!raw) return 'Normal'
+  const status = normalizeTaskStatus(raw)
+  return allowed.find((value) => value === status) ?? null
+}
+
 export function resolveListLimit(listQuery: ParsedListQuery, fallback: number, max = 100): number {
   if (listQuery.limit) return Math.min(listQuery.limit, max)
   if (listQuery.fields.length > 0) return Math.min(FIELDS_DEFAULT_LIMIT, max)
