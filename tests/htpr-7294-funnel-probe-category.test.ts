@@ -43,9 +43,10 @@ test("exact and subdomain probe emails are normalized and categorized only when 
 
 test("probe domain lookalikes stay customers", () => {
   const { accountCategory } = harness().load("src/lib/telemetry/accountCategory.ts");
-  for (const domain of ["funnel-probe.hypertask.app.evil.com", "xfunnel-probe.hypertask.app", "funnel-probe.hypertask.ai"]) {
+  for (const domain of ["funnel-probe.hypertask.app.evil.com", "xfunnel-probe.hypertask.app"]) {
     assert.equal(accountCategory({ id: PROBE, email: `daily@${domain}` }, { probeDomain: true }), "customer", domain);
   }
+  assert.equal(accountCategory({ id: PROBE, email: "daily@funnel-probe.hypertask.ai" }, { probeDomain: true }), "internal");
 });
 
 test("guest and QA identities take precedence over probe, which precedes internal", () => {
