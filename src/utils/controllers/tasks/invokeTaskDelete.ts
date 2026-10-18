@@ -200,15 +200,45 @@ const invokeTaskDelete = async (taskId: number, claim: HardDeleteClaim) => {
 const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
   console.log("------------ deleting task ==");
   try {
-    const task = await prisma.task.deleteMany({
-      where: {
-        id: taskId,
-        status: "Deleted",
-        hardDeleteProcessingAt: claim.claimedAt,
-      },
+    await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id FROM "Page"
+        WHERE "taskId" = ${taskId}
+          OR id IN (SELECT "pageId" FROM "PageTaskLink" WHERE "taskId" = ${taskId})
+        ORDER BY id
+        FOR UPDATE
+      `;
+      const pages = await tx.page.findMany({
+        where: { taskId },
+        select: {
+          id: true,
+          links: {
+            where: {
+              removedAt: null,
+              taskId: { notIn: claim.taskIds },
+              task: { status: { not: "Deleted" } },
+            },
+            orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+            take: 1,
+            select: { taskId: true },
+          },
+        },
+      });
+      for (const page of pages) {
+        await tx.page.update({
+          where: { id: page.id },
+          data: { taskId: page.links[0]?.taskId ?? null },
+        });
+      }
+      const task = await tx.task.deleteMany({
+        where: {
+          id: taskId,
+          status: "Deleted",
+          hardDeleteProcessingAt: claim.claimedAt,
+        },
+      });
+      if (task.count !== 1) throw new Error("Task hard-delete claim changed");
     });
-
-    if (task.count !== 1) return "error";
 
     deleteTaskInTurbopuffer(taskId);
 

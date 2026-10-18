@@ -47,7 +47,7 @@ function graph(name) {
     case "sessions": return [{ ...session, messages: [{ ...message, attachments: [row("Attachment", { id: 82, chatMessageId: 81 })], authorAgent: agent }] }];
     case "favorites": return [{ ...row("Favorites", { id: 90, projectId: 15, userSettingId: 70 }), project: { ...project, owner: user, members: [{ ...row("Member", { id: 91, projectId: 15, userId: 7, agentId: agent.id }), user, agent }] } }];
     case "user": return [{ ...user, UserSetting: setting }];
-    case "page": return [{ ...page, task, subPages: [childPage] }];
+    case "page": return [{ ...page, task, links: [{ ...row("PageTaskLink", { id: 62, pageId: 60, taskId: 50, removedAt: null }), task }], subPages: [childPage] }];
     case "project": return [{ ...project, tasks: [{ ...task, assignees: [{ ...row("Assignees", { id: 92, taskId: 50, userId: 7 }), user }] }], section: [row("Section", { id: 93, projectId: 15, deleted: false, visibility: true })], owner: user, ai_custom_instructions: [row("AI_Custom_Instructions", { id: 94, projectId: 15 })] }];
     default: throw new Error(`Unknown fixture: ${name}`);
   }
@@ -105,7 +105,7 @@ function fixtureAdapter(name, queryArgs, empty = false) {
         const model = columns[0][1];
         const names = columns.map(([, , key]) => key);
         let rows = byModel.get(model) ?? [];
-        if (name === "page" && model === "Page") rows = rows.filter((data) => /WHERE "public"\."Page"\."parentPageId" (?:IN|=)/.test(sql) ? data.id === 61 : data.id === 60);
+        if (name === "page" && model === "Page") rows = rows.filter((data) => /"public"\."Page"\."parentPageId" (?:IN|=)/.test(sql) ? data.id === 61 : data.id === 60);
         return { columnNames: names, columnTypes: names.map((key) => columnType(model, key)), rows: rows.map((data) => names.map((key) => data[key])) };
       },
     }),

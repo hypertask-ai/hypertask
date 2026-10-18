@@ -46,12 +46,12 @@ type SerializedPage = {
   title: string;
   contentHtml: string;
   version: number;
-  taskId: number;
+  taskId: number | null;
   projectId: number;
   task: {
     projectId: number;
     uniqueIndex: number;
-  };
+  } | null;
 };
 
 type PageEditorProps = {
@@ -140,7 +140,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         id: index + 1,
         createdAt: -1,
         fileType: "image/png",
-        taskId: page.taskId,
+        taskId: page.taskId ?? undefined,
         fileSource: image.src,
         fileName: "Image.png",
       })),
@@ -174,7 +174,10 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
     return () => window.removeEventListener("message", handleMessage);
   }, [galleryEnabled, openImageGallery]);
 
-  const taskHref = `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`;
+  const taskHref = page.task
+    ? `/detail/project-${page.task.projectId}/${page.task.uniqueIndex}`
+    : `/project?id=${page.projectId}`;
+  const backLabel = page.task ? "Back to task" : "Back to board";
 
   useEffect(() => {
     try {
@@ -447,7 +450,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 )}
               >
                 <ArrowLeft strokeWidth={1.75} className="h-4 w-4 shrink-0" />
-                <span className="truncate">Back to task</span>
+                <span className="truncate">{backLabel}</span>
               </button>
               <span className="shrink-0 pr-2 text-meta text-text-light-gray">{statusText}</span>
             </div>
@@ -462,7 +465,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
                 className="inline-flex items-center gap-1 border-0 bg-transparent p-0 transition-colors hover:text-white-black"
               >
                 <ChevronLeft size={14} strokeWidth={1.75} />
-                Back to task
+                {backLabel}
               </button>
               <div className="flex items-center gap-3">
                 <span>{statusText}</span>

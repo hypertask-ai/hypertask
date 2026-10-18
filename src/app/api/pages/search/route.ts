@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -60,6 +61,9 @@ export async function GET(request: NextRequest) {
 
     const matches = await searchPages({
       query,
+      userId,
+      standalonePagesEnabled: await standalonePagesEnabled(userId),
+      agentId: null,
       projectIds: projects.map((project) => project.id),
     })
     const pages = matches.map((page) => ({

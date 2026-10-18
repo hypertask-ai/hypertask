@@ -30,9 +30,9 @@ export async function getAccessibleAttachmentKey(
     }))] },
     select: {
       fileSource: true,
-      task: { select: { projectId: true } },
-      description: { select: { task: { select: { projectId: true } } } },
-      comment: { select: { task: { select: { projectId: true } } } },
+      task: { select: { id: true, projectId: true } },
+      description: { select: { task: { select: { id: true, projectId: true } } } },
+      comment: { select: { task: { select: { id: true, projectId: true } } } },
       chatMessage: { select: { session: { select: { userId: true } } } },
       AI_Custom_Instructions: { select: { projectId: true } },
     },
@@ -53,45 +53,60 @@ export async function getAccessibleAttachmentKey(
       where: { id: { in: projectIds }, ...projectAccess },
       select: { id: true },
     });
-    return project ? key : null;
+    if (project) return key;
   }
 
-  const chatAttachments = attachments.filter((attachment) => attachment.chatMessage);
-  if (chatAttachments.length) {
-    return chatAttachments.some((attachment) => attachment.chatMessage?.session.userId === userId)
-      ? key : null;
-  }
+  const attachmentTaskIds = attachments.flatMap((attachment) => [
+    attachment.task?.id,
+    attachment.description?.task?.id,
+    attachment.comment?.task?.id,
+  ]).filter((id): id is number => id != null);
+  const restrictedToLinkedPages = projectIds.length > 0;
+  if (restrictedToLinkedPages && attachmentTaskIds.length === 0) return null;
 
-  const chatKey = /^ai-chat\/attachments\/([^/]+)\/[^/]+$/.exec(key);
-  if (chatKey) {
-    const session = await prisma.chatSession.findFirst({
-      where: { id: chatKey[1], userId },
-      select: { id: true },
+  if (!restrictedToLinkedPages) {
+    const chatAttachments = attachments.filter((attachment) => attachment.chatMessage);
+    if (chatAttachments.length) {
+      return chatAttachments.some((attachment) => attachment.chatMessage?.session.userId === userId)
+        ? key : null;
+    }
+
+    const chatKey = /^ai-chat\/attachments\/([^/]+)\/[^/]+$/.exec(key);
+    if (chatKey) {
+      const session = await prisma.chatSession.findFirst({
+        where: { id: chatKey[1], userId },
+        select: { id: true },
+      });
+      if (session) return key;
+    }
+
+    const descriptions = await prisma.description.findMany({
+      where: {
+        task: { project: projectAccess },
+        OR: keyFragments.map((fragment) => ({ content: { contains: fragment } })),
+      },
+      select: { content: true },
     });
-    if (session) return key;
+    if (descriptions.some(({ content }) => referencesKey(content, key))) return key;
+
+    const comments = await prisma.comment.findMany({
+      where: {
+        task: { project: projectAccess },
+        OR: keyFragments.map((fragment) => ({ text: { contains: fragment } })),
+      },
+      select: { text: true },
+    });
+    if (comments.some(({ text }) => referencesKey(text, key))) return key;
   }
-
-  const descriptions = await prisma.description.findMany({
-    where: {
-      task: { project: projectAccess },
-      OR: keyFragments.map((fragment) => ({ content: { contains: fragment } })),
-    },
-    select: { content: true },
-  });
-  if (descriptions.some(({ content }) => referencesKey(content, key))) return key;
-
-  const comments = await prisma.comment.findMany({
-    where: {
-      task: { project: projectAccess },
-      OR: keyFragments.map((fragment) => ({ text: { contains: fragment } })),
-    },
-    select: { text: true },
-  });
-  if (comments.some(({ text }) => referencesKey(text, key))) return key;
 
   const pages = await prisma.page.findMany({
     where: {
-      task: { project: projectAccess },
+      project: projectAccess,
+      archived: false,
+      ...(restrictedToLinkedPages ? { AND: [{ OR: [
+        { taskId: { in: attachmentTaskIds } },
+        { links: { some: { taskId: { in: attachmentTaskIds } } } },
+      ] }] } : {}),
       OR: [
         ...keyFragments.map((fragment) => ({ contentHtml: { contains: fragment } })),
         { contentHtml: { contains: "data-html-block" } },

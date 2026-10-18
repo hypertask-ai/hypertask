@@ -5,7 +5,7 @@ import { enqueueAgentTaskCompletion } from "@/lib/telemetry/activationOccurrence
 import prisma from "@/lib/prisma";
 import { ITaskUpdateDescriptionActivity } from "@/models/ActivityModels.ts";
 import { IUser } from "@/models/model";
-import { Prisma, Status } from "@prisma/client";
+import { Prisma, Status, type Task } from "@prisma/client";
 import createActivity from "../activities/createActivity";
 import {
   createTaskMovedActivityInTransaction,
@@ -60,6 +60,11 @@ import {
 
 type UpdateTaskSingleOptions = {
   allowProjectChange?: boolean;
+  onProjectChangedInTx?: (
+    tx: Prisma.TransactionClient,
+    before: Task,
+    after: Task,
+  ) => Promise<void>;
   skipAutoAssign?: boolean;
   skipRecurrence?: boolean;
   trustedCaller?: boolean;
@@ -400,6 +405,9 @@ export async function updateTaskSingle(
           data: updateData,
           include: taskInclude,
         });
+        if (currentState.projectId !== updatedTask.projectId) {
+          await options.onProjectChangedInTx?.(tx, currentState, updatedTask);
+        }
         sectionIdChanged = currentState.sectionId !== updatedTask.sectionId;
         sectionChanged =
           sectionIdChanged || currentState.section !== updatedTask.section;

@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -68,7 +69,7 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const page = await getPage({ publicId, userId })
+    const page = await getPage({ publicId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId) })
     if (!page) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }
@@ -80,7 +81,10 @@ export async function GET(request: NextRequest, { params }: RouteContext) {
         title: page.title,
         contentHtml: page.contentHtml,
         version: page.version,
+        projectId: page.projectId,
         taskId: page.taskId,
+        task: page.task,
+        linkedTasks: page.linkedTasks,
         subPages: page.subPages,
         updatedAt: page.updatedAt,
       },
@@ -191,7 +195,7 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     }
 
     const { publicId } = await params
-    const existingPage = await getPage({ publicId, userId })
+    const existingPage = await getPage({ publicId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId) })
     if (!existingPage) {
       return NextResponse.json({ error: 'Page not found' }, { status: 404 })
     }

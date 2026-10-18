@@ -31,7 +31,7 @@ const row = find(editor, (node) => ts.isConditionalExpression(node) && node.cond
 const mobileRow = row.whenTrue.getText();
 const icon = (props) => React.createElement("svg", props);
 const renderRow = (isMobile, statusText = "Saved") => renderToStaticMarkup(evaluate(`(${row.getText()})`, {
-  isMobile, statusText, version: 7, isDeleting: false,
+  isMobile, statusText, backLabel: "Back to task", version: 7, isDeleting: false,
   returnToTask() {}, deletePage() {}, cn: (...c) => c.filter(Boolean).join(" "), MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center", ArrowLeft: icon, ChevronLeft: icon, Trash2: icon,
 }));
 
@@ -42,7 +42,7 @@ test("the Settings-style row renders only on mobile, using the original return f
   assert.match(mobileRow, /MOBILE_TARGET,/);
   assert.match(mobileRow, /min-w-0 flex-1 justify-start gap-2 rounded-sm px-2 text-left text-content font-medium text-text-light-gray transition hover:bg-hover-active hover:text-white-black/);
   assert.match(mobileRow, /<ArrowLeft strokeWidth=\{1\.75\} className="h-4 w-4 shrink-0" \/>/);
-  assert.match(mobileRow, /<span className="truncate">Back to task<\/span>/);
+  assert.match(mobileRow, /<span className="truncate">\{backLabel\}<\/span>/);
   assert.match(mobileRow, /onClick=\{\(\) => void returnToTask\(\)\}/);
   assert.match(mobileRow, /flex w-full items-center gap-2 px-2 pt-2/);
   assert.match(renderRow(false), /Version 7/);
@@ -61,7 +61,7 @@ test("mobile row has only save status on the right, never Version or Delete", ()
 });
 
 test("desktop utility row source is unchanged and still shows Version and Delete", () => {
-  const originalRow = row.whenFalse.expression.getText().replace(/\s+/g, " ");
+  const originalRow = row.whenFalse.expression.getText().replace("{backLabel}", "Back to task").replace(/\s+/g, " ");
   assert.equal(crypto.createHash("sha256").update(originalRow).digest("hex"), "1fb45da0e07789f68a8360772d7f9e2502aea3a9d040cf94f961d93b49e5ffe6");
   assert.match(renderRow(false), /Version 7.*Delete/);
 });

@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { deletePageFromTurbopuffer } from "@/utils/controllers/turbopuffer/turbopufferHelper";
 import { googleCalendarDisconnectData } from "@/lib/googleCalendar/connection";
 
 import { GUEST_UID_PREFIX } from "./guest";
@@ -63,6 +64,11 @@ export async function deleteGuestProjectCascade(
   await prisma.taskMute.deleteMany({ where: { taskId: { in: taskIds } } });
   await prisma.invite.deleteMany({ where: { projectId } });
 
+  const pages = await prisma.page.findMany({ where: { projectId }, select: { id: true } });
+  await prisma.page.deleteMany({ where: { projectId } });
+  await Promise.all(pages.map(({ id }) => deletePageFromTurbopuffer(id).catch((error) => {
+    console.error("Page index cleanup failed for guest board", error);
+  })));
   await prisma.task.deleteMany({ where: { projectId } });
   await prisma.label.deleteMany({ where: { projectId } });
 

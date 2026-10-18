@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client'
 
 import prisma from '@/lib/prisma'
-import { taskAccessWhere } from '@/utils/controllers/tasks/assertTaskAccess'
+import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
   deletePageFromTurbopuffer,
@@ -116,6 +116,7 @@ function queuePageDelete(pageId: number) {
 
 export async function createPage({
   taskId,
+  projectId,
   title,
   content,
   contentType,
@@ -123,7 +124,8 @@ export async function createPage({
   userId,
   agentId,
 }: {
-  taskId: number
+  taskId?: number
+  projectId?: number
   title?: string
   content: string
   contentType: PageContentType
@@ -134,19 +136,28 @@ export async function createPage({
   const rendered = renderPageContent({ content, contentType })
 
   const page = await prisma.$transaction(async (tx) => {
-    const task = await tx.task.findUnique({
-      where: { id: taskId },
+    if (taskId !== undefined) {
+      await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+    }
+    const task = taskId === undefined ? null : await tx.task.findFirst({
+      where: { id: taskId, project: { status: 'Normal', ...getProjectWhere(userId, agentId) } },
       select: { id: true, projectId: true },
     })
-    if (!task) throw new Error(`Task with ID ${taskId} not found`)
+    if (taskId !== undefined && !task) throw new Error(`Task with ID ${taskId} not found`)
+    const owningProjectId = task?.projectId ?? projectId
+    if (owningProjectId === undefined) throw new Error('Page requires a board')
 
     if (parentPageId != null) {
       const parentPage = await tx.page.findFirst({
-        where: { id: parentPageId, taskId },
+        where: {
+          id: parentPageId,
+          projectId: owningProjectId,
+          ...(taskId === undefined ? {} : { OR: [{ taskId }, { links: { some: { taskId } } }] }),
+        },
         select: { id: true },
       })
       if (!parentPage) {
-        throw new Error(`Parent page with ID ${parentPageId} not found in task ${taskId}`)
+        throw new Error(`Parent page with ID ${parentPageId} not found in board ${owningProjectId}`)
       }
     }
 
@@ -155,9 +166,12 @@ export async function createPage({
         ...(title === undefined ? {} : { title }),
         contentHtml: rendered.html,
         contentText: rendered.text,
-        taskId,
+        taskId: taskId ?? null,
+        ...(taskId === undefined ? {} : {
+          links: { create: { taskId, createdById: userId, agentId: agentId ?? null } },
+        }),
         parentPageId: parentPageId ?? null,
-        projectId: task.projectId,
+        projectId: owningProjectId,
         createdById: userId,
         agentId: agentId ?? null,
       },
@@ -172,41 +186,60 @@ type GetPageArgs =
   | { publicId: string; id?: never }
   | { id: number; publicId?: never }
 
-export async function getPage(args: GetPageArgs & { userId?: number }) {
+const pageTaskSelect = {
+  id: true,
+  ticketNumber: true,
+  title: true,
+  projectId: true,
+  uniqueIndex: true,
+} as const
+
+export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null; standalonePagesEnabled?: boolean }) {
   const where = 'id' in args
     ? { id: args.id }
     : { publicId: args.publicId }
+  const taskWhere: Prisma.TaskWhereInput = {
+    status: { not: 'Deleted' },
+    project: {
+      status: 'Normal',
+      ...(args.userId === undefined ? {} : getProjectWhere(args.userId, args.agentId)),
+    },
+  }
 
-  return prisma.page.findUnique({
+  const page = await prisma.page.findUnique({
     relationLoadStrategy: 'join',
     where: {
       ...where,
+      ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}),
       ...(args.userId === undefined ? {} : {
-        task: taskAccessWhere(args.userId, undefined, {
-          agentId: null,
-          projectStatus: 'Normal',
-        }),
+        project: { status: 'Normal', ...getProjectWhere(args.userId, args.agentId) },
       }),
     },
     include: {
-      task: {
-        select: {
-          id: true,
-          ticketNumber: true,
-          title: true,
-          projectId: true,
-          uniqueIndex: true,
-        },
+      task: { where: taskWhere, select: pageTaskSelect },
+      links: {
+        where: { removedAt: null, task: taskWhere },
+        select: { task: { select: pageTaskSelect } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
       subPages: {
-        select: {
-          id: true,
-          title: true,
-          publicId: true,
-        },
+        where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
+        select: { id: true, title: true, publicId: true, projectId: true },
       },
     },
   })
+  if (!page) return null
+  const { links, subPages, ...visiblePage } = page
+  const linkedTasks = args.standalonePagesEnabled === false
+    ? (page.task ? [page.task] : [])
+    : links.map(({ task }) => task)
+  return {
+    ...visiblePage,
+    taskId: page.task?.id ?? null,
+    linkedTasks,
+    subPages: subPages.filter((child) => child.projectId === page.projectId)
+      .map(({ projectId: _projectId, ...child }) => child),
+  }
 }
 
 export async function updatePage({
@@ -292,33 +325,76 @@ export async function updatePage({
 export async function listPages({
   taskId,
   projectId,
+  userId,
+  agentId,
+  standalonePagesEnabled = true,
+  archived = false,
+  query,
 }: {
   taskId?: number
   projectId?: number
+  userId?: number
+  agentId?: string | null
+  standalonePagesEnabled?: boolean
+  archived?: boolean
+  query?: string
 }) {
-  return prisma.page.findMany({
+  const taskWhere: Prisma.TaskWhereInput = {
+    status: { not: 'Deleted' },
+    project: {
+      status: 'Normal',
+      ...(userId === undefined ? {} : getProjectWhere(userId, agentId)),
+    },
+  }
+  const pages = await prisma.page.findMany({
     where: {
-      archived: false,
-      ...(taskId === undefined ? {} : { taskId }),
-      ...(projectId === undefined ? {} : { task: { projectId } }),
+      archived,
+      ...(standalonePagesEnabled
+        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId, removedAt: null } } }, { taskId, links: { none: {} } }] })
+        : { taskId: taskId ?? { not: null } }),
+      ...(projectId === undefined ? {} : { projectId }),
+      project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
+      ...(query?.trim() ? { AND: [{ OR: [
+        { title: { contains: query.trim(), mode: 'insensitive' } },
+        { contentText: { contains: query.trim(), mode: 'insensitive' } },
+      ] }] } : {}),
     },
     select: {
       id: true,
       publicId: true,
       title: true,
       parentPageId: true,
+      parentPage: { select: { projectId: true } },
+      projectId: true,
+      project: { select: { id: true, title: true } },
       updatedAt: true,
+      task: { where: taskWhere, select: pageTaskSelect },
+      links: {
+        where: { removedAt: null, task: taskWhere },
+        select: { task: { select: pageTaskSelect } },
+        orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      },
     },
     orderBy: { updatedAt: 'desc' },
+  })
+  return pages.map(({ links, task, parentPage, ...page }) => {
+    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : (task ? [task] : [])
+    return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
 }
 
 export async function searchPages({
   query,
   projectIds,
+  userId,
+  agentId,
+  standalonePagesEnabled = true,
 }: {
   query: string
   projectIds: number[]
+  userId?: number
+  agentId?: string | null
+  standalonePagesEnabled?: boolean
 }) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
@@ -326,7 +402,9 @@ export async function searchPages({
   const pages = await prisma.page.findMany({
     where: {
       archived: false,
-      task: { projectId: { in: projectIds } },
+      ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
+      projectId: { in: projectIds },
+      project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
       OR: [
         { title: { contains: normalizedQuery, mode: 'insensitive' } },
         { contentText: { contains: normalizedQuery, mode: 'insensitive' } },
@@ -337,14 +415,22 @@ export async function searchPages({
       publicId: true,
       title: true,
       contentText: true,
-      taskId: true,
-      task: { select: { projectId: true } },
+      projectId: true,
+      task: {
+        where: {
+          status: { not: 'Deleted' },
+          project: { status: 'Normal', ...(userId === undefined
+            ? { id: { in: projectIds } }
+            : getProjectWhere(userId, agentId)) },
+        },
+        select: { id: true },
+      },
       parentPageId: true,
       updatedAt: true,
     },
     orderBy: { updatedAt: 'desc' },
   })
-  return pages.map(({ task, ...page }) => ({ ...page, projectId: task.projectId }))
+  return pages.map(({ task, ...page }) => ({ ...page, taskId: task?.id ?? null }))
 }
 
 export async function listPageVersions({ pageId }: { pageId: number }) {
