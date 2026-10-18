@@ -7,6 +7,7 @@ const { createRoot } = require("react-dom/client");
 const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 const { chromium } = require("@playwright/test");
+const browserTest = { skip: !fs.existsSync(chromium.executablePath()) && "Playwright browser not installed" };
 
 const root = path.resolve(__dirname, "..");
 const origin = "https://app.hypertask.ai";
@@ -151,7 +152,7 @@ async function withBrowserCanvas(extra, run) {
   }
 }
 
-test("a real click on a canvas web link opens one new tab with no opener and leaves the app where it was", async () => {
+test("a real click on a canvas web link opens one new tab with no opener and leaves the app where it was", browserTest, async () => {
   await withBrowserCanvas("", async ({ page, context, frame }) => {
     const tab = context.waitForEvent("page");
     await frame.locator("#ticket").click();
@@ -169,7 +170,7 @@ test("a real click on a canvas web link opens one new tab with no opener and lea
   });
 });
 
-test("anchors scroll inside the canvas and javascript links open nothing", async () => {
+test("anchors scroll inside the canvas and javascript links open nothing", browserTest, async () => {
   await withBrowserCanvas("", async ({ page, frame }) => {
     await frame.locator("#anchor").click();
     await frame.locator("#script").click();
@@ -180,7 +181,7 @@ test("anchors scroll inside the canvas and javascript links open nothing", async
 });
 
 for (const [name, attack] of Object.entries(hostileCanvases)) {
-  test(`a canvas that ${name} cannot open other sites, even right after a real click`, async () => {
+  test(`a canvas that ${name} cannot open other sites, even right after a real click`, browserTest, async () => {
     await withBrowserCanvas(attack, async ({ page, frame }) => {
       const canvasDocument = () => page.frames().find((candidate) => candidate !== page.mainFrame());
       for (let waited = 0; attack.includes("data:text/html") && !canvasDocument()?.url().startsWith("data:") && waited < 5000; waited += 100) {
