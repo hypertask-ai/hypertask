@@ -78,6 +78,7 @@ function loadRoute() {
     "@/lib/mcp/listQuery": {
       hasPrWhere: () => null,
       normalizeTaskStatus: (status) => status,
+      parseTaskStatusParam: (status) => status || "Normal",
       parseAssigneeFilter: () => ({ ok: true, value: null }),
       parseNumericCursor: () => null,
       projectRows: (rows) => rows,
