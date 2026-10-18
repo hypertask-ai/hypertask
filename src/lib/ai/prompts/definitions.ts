@@ -385,13 +385,13 @@ If yes, send.`],
   },
   "task-writer-board-research-web-rules": {
     id: "task-writer-board-research-web-rules",
-    version: "1",
+    version: "2",
     parts: [`<h3>BOARD RESEARCH (outranks brevity, not source fidelity for marketing copy)</h3>
 - Before drafting, read RELATED_TICKET_CANDIDATES, STYLE_EXAMPLES, and BOARD_VOCABULARY in context.
 - Classify every candidate as one of: same work, builds on, blocked by, unrelated. Cite only candidates listed there. Never invent a ticket id, URL, title, or outcome.
 - ALWAYS write the full task the person asked for: a real title that names their request, the full description, and the Proposed properties paragraph. Asking for a new ticket when a similar one exists is normal (a new A/B test after an earlier one, a rerun, a follow-up). A similar or matching candidate never replaces the draft or the title and gets no warning at the top: it goes in Related only. Never title the task "Possible duplicate", "Duplicate", or anything like it.
 - Never write "Not provided." in this writer. Fill every section a board template requires from the brief and board context, as plain sentences.
-- Include an <h2>Related</h2> section. For each non-unrelated hit, one bullet: relationship, ticket link from the candidate record, and a one-line outcome from that ticket's text. Cap at 8. If every hit is unrelated, write one bullet: "No close matches on this board."
+- Include an <h2>Related</h2> section. For each non-unrelated hit, one bullet: the ticket link from the candidate record and what it does, in 10 words or fewer. Keep a relationship the brief states ("builds on"); add no relationship label of your own. Never repeat a fact another section states. Cap at 5. If every hit is unrelated, write one bullet: "No close matches on this board."
 - Mirror vocabulary from BOARD_VOCABULARY and the shape of STYLE_EXAMPLES when they exist. Do not copy their marketing lines into this ticket unless the brief already contains them.
 - Structure the body with only the <h2> sections the content needs, usually Problem, What changes, Done when and Related. Use board template headings instead when a template matches.
 - Source fidelity still bans inventing marketing copy, headlines, slogans, metrics, dates, owners, tooling choices, severities, versions, and numbers that are absent from the brief and retrieved context.
@@ -557,7 +557,7 @@ Check: reading only the headings, the bold words and the first line of each para
   },
   "task-authoring-web-style": {
     id: "task-authoring-web-style",
-    version: "1",
+    version: "2",
     parts: [`- Apply the following two skills, in order, as your entire writing style: write with web-writing first, then clean the result with unslop.
 
 === SKILL 1: web-writing ===
@@ -569,6 +569,9 @@ Check: reading only the headings, the bold words and the first line of each para
 
 <h3>EACH FACT ONCE</h3>
 - State every fact in exactly one place. Never restate a fact from one section in another section.
+- The opening sentence names the outcome in a few words. It does not list the changes the sections below list.
+- "Done when" holds only checks that no other section already states (devices, themes, what must keep working). Never turn a listed change into a check.
+- A ticket or link appears once in the whole ticket.
 - When two sections would say the same thing (Problem and Proposed change, Proposed change and Acceptance criteria), merge them into one section.
 - Typical sections are Problem, What changes, Done when and Related. Use only the sections the content needs.
 - Never start a line with "Proposed:".
