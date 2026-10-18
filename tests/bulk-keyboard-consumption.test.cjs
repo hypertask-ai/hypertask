@@ -49,7 +49,7 @@ function fixture({ selected = true, rowShortcutsEnabled = true, isApple = false 
     openBulkCommand: mode => { bulkCommands.push(mode); cards[2].focus(); },
     bulkArchiveUndoAll: false, isProcessing: false,
     setIsProcessing() {}, setSelectedIds() {}, setFailedIds() {},
-    toast: { success() {}, error() {} }, undoToastSettings: { single: false },
+    toast: { success() {}, error() {} },
     onArchiveTask: task => { archives.push(task.id); cards[2].focus(); }, onArchiveUndo() {},
   };
   Object.assign(env, load(bulkFile, ["runTaskOperation", "archiveSelected"], env));

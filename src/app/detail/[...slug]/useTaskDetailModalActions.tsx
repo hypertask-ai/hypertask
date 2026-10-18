@@ -7,7 +7,6 @@ import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
-import { undoToastSettings } from "@/components/undoToast";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
 export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
@@ -79,7 +78,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
       // @ts-expect-error Spreading a nullable task produces optional required ITask fields.
       setCurrentTask((old) => ({ ...old, status: taskDetailConfig.taskStatus.deleted }));
       await queryClient.refetchQueries({ queryKey: [taskDetailConfig.queryKeys.projectsAll] });
-      if (!deleteTaskUndo || !undoToastSettings.single) toast(taskDetailConfig.toastMessages.taskDeleted);
+      if (!deleteTaskUndo) toast(taskDetailConfig.toastMessages.taskDeleted);
       if (deleteTaskUndo) navigate("Replace", `/project?id=${currentTask.projectId}`);
       else onGoback();
     } catch (error: any) {

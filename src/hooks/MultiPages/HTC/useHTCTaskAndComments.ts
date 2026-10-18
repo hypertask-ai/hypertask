@@ -4,7 +4,6 @@ import { ICurrentInViewObject } from "@/store";
 import { usePathname } from "next/navigation";
 import UpdateKanban from "../useUpdateTaskInBoards";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 import axios from "axios";
 import { useQueryClient } from "@tanstack/react-query";
 import { IProject, ITask } from "@/models/model";
@@ -245,7 +244,7 @@ const useHTCTaskAndComments = ({
           inViewObject.taskId,
           "Archive"
         );
-        if (!undoToastSettings.single || !hasUndo) toast("Task archived!");
+        if (!hasUndo) toast("Task archived!");
         navigate("Refresh");
         boardCloseHandler();
       }

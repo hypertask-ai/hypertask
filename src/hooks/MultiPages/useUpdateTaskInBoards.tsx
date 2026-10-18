@@ -10,7 +10,6 @@ import generateRanking from '@/utils/generateRank'
 import globalConstants from "@/lib/constants";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 import { getFilteredSections } from "../../utils/helperFunctions/Views/FilterHelperFunctions";
 import { getAppliedSubtaskSections } from "@/utils/helperFunctions/Views/SubtaskHelperFunction";
 import { getActiveSubtaskSettingFromProject } from "@/utils/helperFunctions/Views/ViewsHelperFunctions";
@@ -451,7 +450,7 @@ const UpdateKanban = () => {
   
       mutationHandler(projectToUpdateIndex, updatedSections, allData, updatedTasksArray);
   
-      if (status === "Deleted" && (!undoToastSettings.single || hasSubtasks)) toast(`Task deleted`);
+      if (status === "Deleted" && hasSubtasks) toast(`Task deleted`);
     };
   
     const handleStatus = async () => {

@@ -5,7 +5,6 @@ import useGlobalFocusHandler, { type INotificationsFromTQ } from '../Inbox/useGl
 import { useRecoilState } from '@/lib/state';
 import { currentUserAtom, tasksPlayListAtom } from '@/store';
 import toast from 'react-hot-toast';
-import { undoToastSettings } from "@/components/undoToast";
 import { useQueryClient } from '@tanstack/react-query';
 import { useUndoContext } from '../General/useUndo';
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -162,7 +161,7 @@ const navigateToPreviousTask = useCallback((isUndoClicked:boolean, isUndo:boolea
     }
     const toastMessage = currentTask.status === "Archive" ? "Task was unmarked as done" : "Task was marked as done"
     const toastMessageNavigation = currentTask.status === "Archive" ? "Go to Home Page" : "Go to task archive G then E"
-    if (!undoToastSettings.single || !hasUndo) {
+    if (!hasUndo) {
       toast(toastMessage)
       !_mbl&&toast(toastMessageNavigation)
     }
