@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import toast from "react-hot-toast";
-import { undoToastSettings } from "@/components/undoToast";
 
 import { CommandMode } from "@/models/enums";
 import { IAgent, ILabel, ISection, ITask, IUser } from "@/models/model";
@@ -221,7 +220,7 @@ export const KanbanBulkSelectionProvider = ({
           toast.error(
             `${failures.length} of ${snapshot.length} tasks could not be updated`,
           );
-        } else if (!undoToastSettings.single || !hasUndo) {
+        } else if (!hasUndo) {
           toast.success(successText);
         }
       } finally {

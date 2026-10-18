@@ -155,15 +155,15 @@ jobs:
           elif ! git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production "refs/pull/$PR_NUMBER/head" >"$gate_tmp/fetch.txt" 2>"$error_file"; then
             result=2
           elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
-            echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
-            result=2
+            echo "Trusted production checkout drifted; a later event will re-evaluate with current policy."
+            result=3
           elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
             echo "The pull request commits are unavailable." >"$error_file"
             result=2
           elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
             result=0
           else
-            result=$?
+            result=$(( $? == 1 ? 1 : 2 ))
           fi
 
           fi
@@ -203,6 +203,9 @@ jobs:
           elif [ "$result" -eq 1 ]; then
             state=failure
             description=$(head -1 "$reason_file" | cut -c1-130)
+          elif [ "$result" -eq 3 ]; then
+            state=pending
+            description="feature-flag-gate is waiting for the run on the newer production commit"
           else
             state=error
             description="feature-flag-gate could not evaluate this pull request"
@@ -225,6 +228,9 @@ jobs:
           elif [ "$result" -eq 1 ]; then
             echo "::error::$(cat "$reason_file")"
             printf '## feature-flag-gate failed\n\n%s\n' "$(cat "$reason_file")" >>"$GITHUB_STEP_SUMMARY"
+          elif [ "$result" -eq 3 ]; then
+            echo "$description"
+            exit 0
           else
             echo "::error::feature-flag-gate could not evaluate this pull request."
           fi
@@ -374,15 +380,15 @@ jobs:
             elif ! git fetch --no-tags origin +refs/heads/production:refs/remotes/origin/production "refs/pull/$number/head" >"$gate_tmp/fetch-$number.txt" 2>"$error_file"; then
               result=2
             elif [ "$(git rev-parse HEAD)" != "$(git rev-parse origin/production)" ]; then
-              echo "Trusted production checkout drifted; a later event will re-evaluate with current policy." >"$error_file"
-              result=2
+              echo "Trusted production checkout drifted; a later event will re-evaluate with current policy."
+              result=3
             elif ! git cat-file -e "$base_sha^{commit}" || ! git cat-file -e "$head_sha^{commit}"; then
               echo "The pull request commits are unavailable." >"$error_file"
               result=2
             elif node .github/scripts/feature-flag-gate.mjs "$title" "$base_sha" "$head_sha" >"$reason_file" 2>"$error_file"; then
               result=0
             else
-              result=$?
+              result=$(( $? == 1 ? 1 : 2 ))
             fi
 
             current=$(gh api "repos/$REPO/pulls/$number") || {
@@ -422,6 +428,9 @@ jobs:
             elif [ "$result" -eq 1 ]; then
               state=failure
               description=$(head -1 "$reason_file" | cut -c1-130)
+            elif [ "$result" -eq 3 ]; then
+              state=pending
+              description="feature-flag-gate is waiting for the run on the newer production commit"
             else
               state=error
               description="feature-flag-gate could not evaluate this pull request"

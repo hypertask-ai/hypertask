@@ -128,7 +128,6 @@ function makeFlow(t, {
     "@/lib/contexts/mobileContext": {},
     "../MultiPages/Route/useHypertasksNavigate": { default: useNavigate },
     "next/navigation": nextNavigation,
-    "@/components/undoToast": { undoToastSettings: { single: false } },
     "@/hooks/useFlag": { useFlag, useFlagLoaded: () => true },
     "../Inbox/useGetNotifications": { inboxDataQueryKey: id => ["inbox", "data", id] },
   }).default;

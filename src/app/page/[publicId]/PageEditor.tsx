@@ -28,7 +28,6 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import { HTPR_6872_PAGE_IMAGE_GALLERY_FLAG } from "@/lib/flags/keys";
 import { isContentCarouselImage } from "@/utils/helperFunctions/isContentCarouselImage";
 import { pageRoute } from "@/lib/constants/APIRouteConstants";
-import { HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG } from "@/lib/flags/keys";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import {
   bindPageReturnEntry,
@@ -90,7 +89,6 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   const railOn = useRecoilValue(appShellRailAtom);
   const showCommands = useRecoilValue(showCommandsAtom);
   const isMobile = useContext(MobileViewContext);
-  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
   const setCurrentPageActions = useSetRecoilState(currentPageActionsAtom);
   const showRail = railOn && !isMobile;
   const versionRef = useRef(page.version);
@@ -409,11 +407,11 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
   }, [isDeleting, page.publicId, router, taskHref]);
 
   useEffect(() => {
-    if (!mobilePageBackRowEnabled || !isMobile) return;
+    if (!isMobile) return;
 
     setCurrentPageActions({ publicId: page.publicId, version, onDelete: deletePage });
     return () => setCurrentPageActions(null);
-  }, [deletePage, isMobile, mobilePageBackRowEnabled, page.publicId, setCurrentPageActions, version]);
+  }, [deletePage, isMobile, page.publicId, setCurrentPageActions, version]);
 
   const statusText =
     saveStatus === "saving"
@@ -441,7 +439,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
         <div
           className={`w-full ${isMobile ? "px-0" : "px-3"}`}
         >
-          {mobilePageBackRowEnabled && isMobile ? (
+          {isMobile ? (
             <div className="flex w-full items-center gap-2 px-2 pt-2" aria-live="polite">
               <button
                 type="button"
@@ -493,7 +491,7 @@ const PageEditor = ({ _page, _user }: PageEditorProps) => {
               onChange={handleTitleChange}
               placeholder="Untitled"
               style={{ border: 0, boxShadow: "none" }}
-              className={`w-full bg-transparent ${mobilePageBackRowEnabled && isMobile ? "px-4 py-0" : "p-0"} font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
+              className={`w-full bg-transparent ${isMobile ? "px-4 py-0" : "p-0"} font-semibold leading-tight text-white-black outline-none placeholder:text-text-light-gray focus:ring-0 ${
                 isMobile ? "text-[24px]" : "text-[32px]"
               }`}
             />

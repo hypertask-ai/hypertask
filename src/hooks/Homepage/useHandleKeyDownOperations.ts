@@ -6,7 +6,6 @@ import { useRecoilState, useRecoilValue, useSetRecoilState } from '@/lib/state'
 import { useStore } from 'jotai'
 import { useUndoContext } from '../General/useUndo'
 import toast from 'react-hot-toast'
-import { undoToastSettings } from "@/components/undoToast";
 import { throttle, returnSortedItems, returnIfModalOrInputActive, isAIChatElementFocused } from '@/utils/helperFunctions/helperFunctions'
 import globalConstants from '@/lib/constants'
 import UpdateKanban from '../MultiPages/useUpdateTaskInBoards'
@@ -51,7 +50,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
 
     const spaceship = useUniversalMovement({type: "Kanban", initialSections, filteredSections})
 
-    const {undoData, undoAction, undoLatest} = useUndoContext();
+    const {undoData, undoLatest} = useUndoContext();
 
     const [showCommands, setShowCommands] = useRecoilState(showCommandsAtom);
     const setShowSidebar = useSetRecoilState(showSidebarAtom);
@@ -188,9 +187,7 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
 
     if (e.keyCode === 90&&undoData.length>0){
-      const firstUndoData = undoData[undoData.length - 1];
-      if (undoToastSettings.single) void undoLatest();
-      else undoHandler(firstUndoData, firstUndoData.id);
+      void undoLatest();
 
   }
     if (e.shiftKey && e.keyCode===70) setShowCommands({show: true, mode: CommandMode.ShowFilterHTC})
@@ -284,14 +281,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     }
   }
 
-
-  const undoHandler = async (data: any, toastId: string) => {
-    await undoAction("UNDO_REMOVE", data)
-    toast.dismiss(toastId);
-    queryClient.refetchQueries({queryKey:["projectsAll"]})
-    if (!undoToastSettings.single) toast("Undo remove")
-    
-  }
 
   const CTRL_F_handler = (e:any)=>{
     const cmdControl = (isApple && e.metaKey) || (!isApple && e.ctrlKey);
