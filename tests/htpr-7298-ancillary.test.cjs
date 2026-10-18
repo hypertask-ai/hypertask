@@ -53,10 +53,10 @@ function pageService(fixture = page) {
       if (!matches({ ...fixture, project: boards[0] }, where)) return null;
       const visibleTask = fixture.task && matches({ status: "Normal", ...fixture.task, project: boards.find((board) => board.id === fixture.task.projectId) }, include.task.where)
         ? fixture.task : null;
-      const links = (fixture.links ?? (fixture.task ? [{ task: fixture.task, removedAt: null }] : []))
-        .filter((link) => link.removedAt == null && matches({ status: "Normal", ...link.task, project: boards.find((board) => board.id === link.task.projectId) }, include.links.where.task))
+      const allLinks = fixture.links ?? (fixture.task ? [{ task: fixture.task, removedAt: null }] : []);
+      const links = allLinks.filter((link) => link.removedAt == null && matches({ status: "Normal", ...link.task, project: boards.find((board) => board.id === link.task.projectId) }, include.links.where.task))
         .map(({ task }) => ({ task }));
-      return { ...fixture, task: visibleTask, links,
+      return { ...fixture, task: visibleTask, links, _count: { links: allLinks.length },
         subPages: [
           { id: 12, publicId: "same-board", title: "Visible child", projectId: 10 },
           { id: 13, publicId: "hidden-child", title: "HIDDEN-CHILD-TITLE", projectId: 20 },

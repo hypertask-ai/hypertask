@@ -78,7 +78,7 @@ function harness(options = {}) {
   const creationQueries = [];
   const userId = options.userId ?? 1;
   const taskRow = (task) => task && ({ ...task, project: state.projects.find((p) => p.id === task.projectId) });
-  const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ removedAt: null, ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
+  const pageRow = (page) => ({ ...page, _count: { links: state.links.filter((link) => link.pageId === page.id).length }, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ removedAt: null, ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
   const find = (rows, query) => rows.filter((row) => matches(row, query.where)).map((row) => project(row, query));
   const prisma = {
     project: {

@@ -17,8 +17,39 @@ for (const unlink of [false, true]) {
     assert.equal(status, 200);
     assert.equal(body.page.task?.id ?? null, unlink ? null : 11);
     assert.equal(body.page.taskId, null, 'serialized origin remains null too');
+    assert.equal(Object.hasOwn(body.page, '_count'), false);
+    assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 1);
     assert.deepEqual(body.page.linkedTasks.map((task) => task.id), unlink ? [] : [11]);
     assert.equal(h.state.pages[0].taskId, null);
+  });
+}
+
+for (const enabled of [false, true]) {
+  test(`flag ${enabled ? 'on' : 'off'}: legacy page without link rows follows visible origin A`, async () => {
+    const h = harness({ userId: 3, flag: enabled });
+    h.state.links = [];
+    const { body, status } = await h.request('[publicId]');
+    assert.equal(status, 200);
+    assert.equal(body.page.task.id, 10);
+    assert.equal(body.page.taskId, 10);
+    assert.deepEqual(body.page.linkedTasks.map((task) => task.id), [10]);
+    assert.equal(Object.hasOwn(body.page, '_count'), false);
+    assert.deepEqual(h.queries.at(-1).include._count, { select: { links: true } });
+    assert.equal(h.state.links.length, 0, 'reading a legacy page does not materialize a link');
+  });
+
+  test(`flag ${enabled ? 'on: origin A with only a soft-removed link returns Back to board' : 'off: origin A with only a soft-removed link still follows origin'}`, async () => {
+    const h = harness({ userId: 3, flag: enabled });
+    h.state.links = [h.state.links[0]];
+    h.state.links[0].removedAt = new Date();
+    const { body, status } = await h.request('[publicId]');
+    assert.equal(status, 200);
+    assert.equal(body.page.task?.id ?? null, enabled ? null : 10);
+    assert.equal(body.page.taskId, 10, 'removed links do not erase the creation origin');
+    assert.deepEqual(body.page.linkedTasks.map((task) => task.id), enabled ? [] : [10]);
+    assert.equal(Object.hasOwn(body.page, '_count'), false);
+    assert.equal(h.state.links.length, 1);
+    assert.ok(h.state.links[0].removedAt instanceof Date);
   });
 }
 

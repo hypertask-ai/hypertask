@@ -45,7 +45,7 @@ function harness(contentHtml, { authorized = true, accessible = true } = {}) {
   const reads = [];
   const tx = {
     page: {
-      findUnique: async (args) => { reads.push(args); return { ...page }; },
+      findUnique: async (args) => { reads.push(args); return { ...page, _count: { links: 0 } }; },
       updateMany: async ({ where, data }) => {
         assert.equal(where.version, page.version);
         page = { ...page, ...data, version: page.version + data.version.increment };

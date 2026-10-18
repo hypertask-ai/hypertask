@@ -96,6 +96,7 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
       const row = state.pages.find((row) => matches(row, where));
       if (!row) return null;
       return { ...structuredClone(row), task: state.tasks.find((t) => t.id === row.taskId) ?? null,
+        _count: { links: state.links.filter((edge) => edge.pageId === row.id).length },
         links: state.links.filter((edge) => edge.pageId === row.id).map((edge) => ({ task: state.tasks.find((t) => t.id === edge.taskId) })),
         subPages: structuredClone(state.pages.filter((child) => child.parentPageId === row.id && !child.archived)),
       };

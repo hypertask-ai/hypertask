@@ -281,6 +281,11 @@
         "publicId": "fixture-page"
       },
       "include": {
+        "_count": {
+          "select": {
+            "links": true
+          }
+        },
         "task": {
           "where": {
             "status": {

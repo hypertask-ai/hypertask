@@ -222,6 +222,7 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
         select: { task: { select: pageTaskSelect } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
+      _count: { select: { links: true } },
       subPages: {
         where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
         select: { id: true, title: true, publicId: true, projectId: true },
@@ -229,13 +230,14 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     },
   })
   if (!page) return null
-  const { links, subPages, ...visiblePage } = page
-  const linkedTasks = args.standalonePagesEnabled === false
+  const { links, subPages, _count, ...visiblePage } = page
+  const followsOrigin = args.standalonePagesEnabled === false || _count.links === 0
+  const linkedTasks = followsOrigin
     ? (page.task ? [page.task] : [])
     : links.map(({ task }) => task)
   return {
     ...visiblePage,
-    task: args.standalonePagesEnabled === false ? page.task : linkedTasks[0] ?? null,
+    task: linkedTasks[0] ?? null,
     taskId: page.task?.id ?? null,
     linkedTasks,
     subPages: subPages.filter((child) => child.projectId === page.projectId)
