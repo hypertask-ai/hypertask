@@ -56,7 +56,7 @@ function scrollHarness({ mobile = false, enabled = true, fromInbox = false, scro
   const mocks = {
     react: { useEffect: callback => effects.push(callback), useLayoutEffect: callback => layouts.push(callback), useCallback: callback => callback },
     "@/hooks/useFlag": { useFlag: key => key === flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG ? enabled : cachedLayout },
-    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable" },
+    "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: flag.HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG },
     "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": flag,
     "@/lib/taskDetail/initialTicketPosition": { initialTicketPosition },
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout, newCommentsLastReadAt: lastReadAt }) },
@@ -180,14 +180,16 @@ test("top positioning cancels an existing bottom scroll", () => {
 test("mark-on-leave updates object and legacy-array caches only with the flag on, including beacon leave", () => {
   const source = ts.createSourceFile("comments.ts", fs.readFileSync(path.join(root, "src/hooks/Task Detail/CommentAndDescriptionHooks/useCommentAndDescriptions.ts"), "utf8"), ts.ScriptTarget.Latest, true);
   let callback;
+  let readCacheGate;
   let normalize;
   const visit = node => {
+    if (ts.isIfStatement(node) && node.expression.getText(source) === "unreadTicketOpensTop") readCacheGate = node.getText(source);
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === "markTaskReadOnLeave") callback = node.initializer.arguments[0].getText(source);
     if (ts.isVariableDeclaration(node) && node.name.getText(source) === "normalizeCommentsQueryPayload") normalize = node.initializer.getText(source);
     ts.forEachChild(node, visit);
   };
   visit(source);
-  const js = ts.transpileModule(`const normalizeCommentsQueryPayload = ${normalize}; return ${callback};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
+  const js = ts.transpileModule(`const normalizeCommentsQueryPayload = ${normalize}; let readCacheQueryClient; ${readCacheGate} return ${callback};`, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText;
   for (const enabled of [false, true]) for (const beacon of [false, true]) for (const legacy of [false, true]) {
     const comments = [{ id: "77" }];
     const original = legacy ? comments : { comments, lastReadAt: null, agentRunActivities: [], extra: "preserved" };

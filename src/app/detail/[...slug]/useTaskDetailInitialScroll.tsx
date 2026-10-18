@@ -15,6 +15,14 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 
+  const position = unreadTicketOpensTop ? initialTicketPosition({
+    hasDeepLink: false,
+    scrollSetting,
+    fromInbox: !!searchParams?.get(taskDetailConfig.searchParams.inboxFlow),
+    lastReadAt: newCommentsLastReadAt,
+    firstUnreadCommentId: newCommentIds[0],
+  }) : null;
+
   useEffect(() => {
     setPriority_(priorityForTaskTQ);
     console.log("🚀 ~ TaskDetail ~ priorityForTaskTQ:", priorityForTaskTQ);
@@ -195,13 +203,6 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
       : scrollSetting === taskDetailConfig.scrollSettings.bottom;
     if (hasDeepLink) return;
     if (unreadTicketOpensTop) {
-      const position = initialTicketPosition({
-        hasDeepLink: !!hasDeepLink,
-        scrollSetting,
-        fromInbox,
-        lastReadAt: newCommentsLastReadAt,
-        firstUnreadCommentId: newCommentIds[0],
-      });
       if (position === "top") {
         bottomScrollCancelRef.current?.();
         bottomScrollCancelRef.current = null;
@@ -287,6 +288,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     newCommentIds,
     newCommentsSnapshotReady,
     newCommentsLastReadAt,
+    position,
     unreadTicketOpensTop,
     defaultCommentFocus,
     cachedLayout,

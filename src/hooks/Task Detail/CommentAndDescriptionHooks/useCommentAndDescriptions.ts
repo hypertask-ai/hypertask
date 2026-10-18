@@ -233,13 +233,18 @@ const useDescriptionAndCommentsStates = () => {
     preserveEditorContent,
   });
 
+  let readCacheQueryClient: typeof queryClient | undefined;
+  if (unreadTicketOpensTop) {
+    readCacheQueryClient = queryClient;
+  }
+
   const markTaskReadOnLeave = useCallback(
     (useBeacon = false) => {
       if (isShareView || !currentUser?.id || !currentTask?.id) return;
 
-      if (unreadTicketOpensTop) {
+      if (readCacheQueryClient) {
         const lastReadAt = new Date().toISOString();
-        queryClient.setQueryData(
+        readCacheQueryClient.setQueryData(
           [globalConstants.CommentsTQPrefixKey, currentTask.id],
           (payload: any) => payload === undefined ? undefined : {
             ...(Array.isArray(payload) ? {} : payload),
@@ -271,7 +276,7 @@ const useDescriptionAndCommentsStates = () => {
         console.log("🤔 ~ markTaskReadOnLeave ~ error:", error);
       });
     },
-    [currentTask?.id, currentUser?.id, isShareView, unreadTicketOpensTop, queryClient]
+    [currentTask?.id, currentUser?.id, isShareView, readCacheQueryClient]
   );
 
   useEffect(() => {
