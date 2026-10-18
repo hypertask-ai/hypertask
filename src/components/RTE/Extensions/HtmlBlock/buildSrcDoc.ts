@@ -29,7 +29,29 @@ document.addEventListener('click', function(event) {
 });
 </script>`;
 
-export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): string {
+const LINK_CLICK_SCRIPT = `<script>
+function handoffCanvasLink(event) {
+  if (event.defaultPrevented || (event.button !== 0 && event.button !== 1)) return;
+  var a = event.target instanceof Element ? event.target.closest('a[href]') : null;
+  if (!a) return;
+  var raw = a.getAttribute('href');
+  if (raw.startsWith('#')) {
+    event.preventDefault();
+    var fragment = raw.slice(1);
+    try { fragment = decodeURIComponent(fragment); } catch (e) {}
+    var target = document.getElementById(fragment) || document.getElementsByName(fragment)[0];
+    if (target) target.scrollIntoView();
+    return;
+  }
+  if (a.protocol !== 'http:' && a.protocol !== 'https:') return;
+  event.preventDefault();
+  parent.postMessage({__htHtmlBlockLink:1, href:a.href, newTab:event.button === 1 || event.ctrlKey || event.metaKey || event.shiftKey || a.target === '_blank'}, '*');
+}
+document.addEventListener('click', handoffCanvasLink);
+document.addEventListener('auxclick', handoffCanvasLink);
+</script>`;
+
+export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false, linkHandoffEnabled = false): string {
   let headExtra = "";
   let body = raw;
 
@@ -53,6 +75,7 @@ export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false): 
     body +
     RESIZE_SCRIPT +
     (imageGalleryEnabled ? IMAGE_CLICK_SCRIPT : "") +
+    (linkHandoffEnabled ? LINK_CLICK_SCRIPT : "") +
     "</body></html>"
   );
 }

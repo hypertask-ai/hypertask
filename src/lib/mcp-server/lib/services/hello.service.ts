@@ -13,8 +13,18 @@ export interface HelloResponse {
     id: number;
     name: string;
     title: string;
+    boardUrl: string;
     taskUrlTemplate: string;
   }>;
+  urlFormats: {
+    ticket: string;
+    comment: string;
+    board: string;
+    boardView: string;
+    inboxSplit: string;
+    page: string;
+    rules: string;
+  };
   boardsTotal: number;
   boardsTruncated: boolean;
   capabilities: Record<string, string>;
