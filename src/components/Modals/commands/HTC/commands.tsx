@@ -52,6 +52,7 @@ import { useFlag } from "@/hooks/useFlag";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
+  HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG,
   HTPR_6892_CMDK_VERSION_FLAG,
   HTPR_6929_COMPOSE_TASK_WRITER_FLAG,
   HTPR_6937_NEW_TASK_WINDOW_FLAG,
@@ -106,6 +107,7 @@ const Commands = (props: Props) => {
   if (kanbanSelectAllEnabled && contextOptions?.kanbanSelectAllEnabled && contextOptions.bulkSelectionCount) {
     selectedTasksFirst = true;
   }
+  const phoneTaskWriterSheetEnabled = useFlag(HTPR_6891_PHONE_TASK_WRITER_SHEET_FLAG);
   const composeTaskWriterEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const composeBoardChipFlag = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
@@ -751,7 +753,8 @@ const Commands = (props: Props) => {
         onClose={toggle}
         ariaLabel="Command center"
         aboveSlot={modeSwitch}
-        fullHeight={!isCompose}
+        fullHeight={!isCompose || phoneTaskWriterSheetEnabled}
+        contentClassName={isCompose && phoneTaskWriterSheetEnabled ? "flex flex-col overflow-hidden" : undefined}
         keyboardAware
         bottomSlot={isCompose ? undefined : searchInput}
       >
