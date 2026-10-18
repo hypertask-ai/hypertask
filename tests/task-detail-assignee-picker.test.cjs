@@ -135,7 +135,7 @@ async function withPicker(t, { enabled = true, initialAssignees = [], rejectSave
   }, "useTaskDetailCommentActions");
   const useNavigation = load("src/app/detail/[...slug]/useTaskDetailNavigationActions.tsx", {
     ...common, "@/hooks/useFlag": { useFlag: () => false }, "@/lib/flags/keys": { HTPR_6975_TYPED_WRITES_FLAG: "htpr-6975-typed-writes" }, "@/lib/api/typedClient": {},
-    "@/components/undoToast": { undoToastSettings: {} }, "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
+    "@/lib/constants/TaskDetail": { descriptionContainerId: "description" },
   }, "useTaskDetailNavigationActions");
   const useReactions = load("src/hooks/Task Detail/CommentAndDescriptionHooks/useDescriptionReactions.ts", {
     "@/lib/constants/constants": {}, "@/lib/constants/TaskDetail": {}, "@/store": {},

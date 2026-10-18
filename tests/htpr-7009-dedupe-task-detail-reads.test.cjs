@@ -83,7 +83,6 @@ function localTaskWrites(h) {
     "@/utils/generateRank": { default: noop },
     "next/navigation": { useRouter: () => ({}) },
     "react-hot-toast": { default: noop },
-    "@/components/undoToast": { undoToastSettings: {} },
     "../../utils/helperFunctions/Views/FilterHelperFunctions": {},
     "@/utils/helperFunctions/Views/SubtaskHelperFunction": {},
     "@/utils/helperFunctions/Views/ViewsHelperFunctions": {},

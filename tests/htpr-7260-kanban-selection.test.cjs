@@ -22,7 +22,6 @@ function fixture(enabled) {
     "@/hooks/useFlag": { useFlag: key => key === flag && enabled },
     "@/lib/state": { useSetRecoilState: () => () => {}, useRecoilValue: () => focusedTaskId },
     "@/store": {},
-    "@/components/undoToast": { undoToastSettings: {} },
     "@/utils/helperFunctions/helperFunctions": { returnIfModalOrInputActive: guard },
   });
   const { KanbanBulkSelectionProvider: Provider, useKanbanBulkSelection } =

@@ -11,8 +11,7 @@ import {
   useContext,
 } from "react";
 import { Toaster } from "react-hot-toast";
-import { SINGLE_UNDO_TOASTER_ID, SingleUndoToaster, undoToastSettings } from "@/components/undoToast";
-import { HTPR_6885_SINGLE_UNDO_TOAST_FLAG } from "@/lib/flags/keys";
+import { SINGLE_UNDO_TOASTER_ID, SingleUndoToaster } from "@/components/undoToast";
 import { useMobileToastAutoDismiss } from "@/components/undoToast/useMobileToastAutoDismiss";
 import { usePathname, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -307,11 +306,6 @@ export default function GlobalProvider({
   useMobileToastAutoDismiss(SINGLE_UNDO_TOASTER_ID);
   useTaskBoxOutlinesFlag();
   const composeTaskWriterEnabled = useFlag("htpr-6929-compose-task-writer");
-  const singleUndoToast = useFlag(HTPR_6885_SINGLE_UNDO_TOAST_FLAG);
-  useEffect(() => {
-    undoToastSettings.single = singleUndoToast;
-    return () => { undoToastSettings.single = false; };
-  }, [singleUndoToast]);
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
@@ -1209,7 +1203,7 @@ export default function GlobalProvider({
         }}
         position={mbl ? "top-right" : "bottom-left"}
       />
-      {singleUndoToast && <SingleUndoToaster mobile={mbl} appShellRailOn={appShellRailOn} />}
+      <SingleUndoToaster mobile={mbl} appShellRailOn={appShellRailOn} />
       <ShortcutArchiveNudge />
 
       {showGlobalCreateHTCTask.show && (
