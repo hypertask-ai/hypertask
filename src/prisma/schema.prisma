@@ -1453,6 +1453,13 @@ model PageTaskLink {
   @@index([taskId])
 }
 
+model Htpr7298PageProjectBackup {
+  id        Int @id
+  projectId Int
+
+  @@map("_htpr7298_page_project_backup")
+}
+
 model DocVersion {
   id          Int      @id @default(autoincrement())
   entityType  String
