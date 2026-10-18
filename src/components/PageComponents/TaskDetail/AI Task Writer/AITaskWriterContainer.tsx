@@ -35,6 +35,7 @@ import AITaskWriterHeadline from "./AITaskWriterHeadline";
 import AI_Options from "./AI_OPTIONS";
 import ResponseNavigator from "./ResponseNavigator";
 import AITaskWriterInputArea from "./AITaskWriterInputArea";
+import { useRevealWriterResponse } from "./useRevealWriterResponse";
 
 import useAutosizeTextArea from "@/hooks/General/useAutosizeTextarea";
 
@@ -145,6 +146,8 @@ const AITaskWriterContainer: React.FC<
   const isMobile = useContext(MobileViewContext);
   const isMobileCreateFlow = Boolean(isMobile && createTask && mobileCreateTask);
   const writerViewport = useMobileVisualViewport(isMobile);
+  const writerPanelRef = useRef<HTMLDivElement>(null);
+  useRevealWriterResponse(writerPanelRef, Boolean(currentDisplayResponse), Boolean(isMobile));
   const mobilePromptMaxHeight =
     isMobile && writerViewport
       ? Math.max(
@@ -1055,6 +1058,7 @@ const AITaskWriterContainer: React.FC<
     <>
       <div
         id={id}
+        ref={writerPanelRef}
         onClick={e => e.stopPropagation()}
         onKeyDown={e => {
           if (e.key === "Escape" && !isRecording && !showConfirmationModal) {
