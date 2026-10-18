@@ -11,7 +11,6 @@ const jiti = createJiti(__filename, {
   alias: { "@": path.join(root, "src") },
   interopDefault: true,
   jsx: true,
-  moduleCache: false,
 });
 
 async function withPhoneBrowser({ visibleWidth, layoutWidth }, run) {
@@ -50,15 +49,29 @@ async function withPhoneBrowser({ visibleWidth, layoutWidth }, run) {
   }
 }
 
-async function renderLayout(screen, { flagOn = true, initialIsMobile = false } = {}, afterRender) {
-  const { default: MobileViewProvider, MobileViewContext, SetMeasureLayoutWidthContext } =
-    jiti(path.join(root, "src/lib/contexts/mobileContext.tsx"));
-  const seen = [];
-  function FlagBridge() {
-    const setMeasureLayoutWidth = React.useContext(SetMeasureLayoutWidthContext);
-    React.useEffect(() => setMeasureLayoutWidth(flagOn), [setMeasureLayoutWidth]);
-    return null;
+const flagState = { loaded: true, on: true };
+const useFlagFile = path.join(root, "src/hooks/useFlag.tsx");
+function loadModules() {
+  const previous = require.cache[useFlagFile];
+  require.cache[useFlagFile] = {
+    id: useFlagFile, filename: useFlagFile, loaded: true,
+    exports: { useFlag: () => flagState.loaded && flagState.on, useFlagLoaded: () => flagState.loaded },
+  };
+  try {
+    return {
+      ...jiti(path.join(root, "src/lib/contexts/mobileContext.tsx")),
+      FlagBridge: jiti(path.join(root, "src/lib/contexts/MobileViewFlagBridge.tsx")).default,
+    };
+  } finally {
+    if (previous) require.cache[useFlagFile] = previous;
+    else delete require.cache[useFlagFile];
   }
+}
+
+async function renderLayout(screen, { flagOn = true, flagLoaded = true, initialIsMobile = false } = {}, afterRender) {
+  Object.assign(flagState, { on: flagOn, loaded: flagLoaded });
+  const { default: MobileViewProvider, MobileViewContext, FlagBridge } = loadModules();
+  const seen = [];
   function Layout() {
     const isPhone = React.useContext(MobileViewContext);
     seen.push(isPhone);
@@ -86,6 +99,13 @@ test("a phone page zoomed out to 780px still gets the phone layout, so no deskto
 test("with the bugfix flag off, the zoomed-out phone keeps the old desktop result", async () => {
   const { text } = await renderLayout({ visibleWidth: 780, layoutWidth: 390 }, { flagOn: false });
   assert.equal(text, "desktop");
+});
+
+test("while flags are still loading, a zoomed-out phone never flips to the desktop layout", async () => {
+  const { seen } = await renderLayout({ visibleWidth: 780, layoutWidth: 390 }, { flagLoaded: false });
+  const firstPhoneRender = seen.indexOf(true);
+  assert.notEqual(firstPhoneRender, -1);
+  assert.deepEqual(seen.slice(firstPhoneRender).filter((isPhone) => !isPhone), []);
 });
 
 test("still allowed: a 1440px desktop keeps the desktop layout", async () => {
