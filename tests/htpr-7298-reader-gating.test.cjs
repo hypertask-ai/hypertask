@@ -156,9 +156,38 @@ test('flag-off metadata never substitutes a visible secondary ticket for an inac
     const h = harness({ userId: 1, flag: enabled });
     const result = await h.request('[publicId]');
     assert.equal(result.status, 200);
-    assert.equal(result.body.page.task, null);
+    assert.equal(result.body.page.task?.id ?? null, enabled ? 11 : null);
     assert.equal(result.body.page.taskId, null);
     assert.deepEqual(result.body.page.linkedTasks.map((task) => task.id), enabled ? [11] : []);
     assert.doesNotMatch(JSON.stringify(result.body), /SECRET|987/);
   }
+});
+
+for (const boundary of ['REST', 'MCP', 'AI']) {
+  test(`${boundary} get: removed or hidden origin refused as navigation / active visible secondary link still works`, async () => {
+    for (const enabled of [false, true]) {
+      const h = fixture(enabled);
+      h.state.links[0].removedAt = new Date();
+      const response = await h.call(boundary, 'get');
+      assert.equal(response.status, 200);
+      assert.equal(response.body.page.task.id, enabled ? 11 : 10);
+      assert.equal(response.body.page.taskId, 10);
+      h.state.projects[1].members = [];
+      const filtered = await h.call(boundary, 'get');
+      assert.equal(filtered.status, 200);
+      assert.equal(filtered.body.page.task?.id ?? null, enabled ? 11 : null);
+      assert.equal(filtered.body.page.taskId, null);
+      assert.doesNotMatch(JSON.stringify(filtered.body), /SECRET|987/);
+    }
+  });
+}
+
+test('AI history: removed or inaccessible origin does not block page-board access / inaccessible page board remains refused', async () => {
+  const h = fixture(true);
+  h.state.links.forEach((link) => { link.removedAt = new Date(); });
+  h.state.projects[1].members = [];
+  assert.equal((await h.call('AI', 'versions')).status, 200);
+  h.state.projects[0].members = [];
+  assert.equal((await h.call('AI', 'versions')).status, 404);
+  assert.deepEqual(h.effects, ['listPageVersions']);
 });

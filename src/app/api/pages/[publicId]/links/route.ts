@@ -63,7 +63,7 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
           publicId,
           project: { status: 'Normal', ...taskWriteAccessWhere(userId, null) },
         },
-        select: { id: true, taskId: true, project: { select: { teamId: true } } },
+        select: { id: true, project: { select: { teamId: true } } },
       })
       if (!page) return { error: 'Page not found', status: 404 }
 
@@ -90,9 +90,6 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
           create: { pageId: page.id, taskId, createdById: userId },
           update: { removedAt: null },
         })
-        if (page.taskId === null) {
-          await tx.page.update({ where: { id: page.id }, data: { taskId } })
-        }
       }
       return null
     })

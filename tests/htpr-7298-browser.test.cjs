@@ -32,7 +32,14 @@ function project(row, query = {}) {
   const output = query.select ? {} : { ...row };
   for (const [key, selection] of Object.entries(query.select ?? query.include ?? {})) {
     if (selection === true) output[key] = row[key];
-    else if (Array.isArray(row[key])) output[key] = row[key].filter((item) => matches(item, selection.where)).map((item) => project(item, selection));
+    else if (Array.isArray(row[key])) {
+      const rows = row[key].filter((item) => matches(item, selection.where));
+      for (const order of [...(selection.orderBy ?? [])].reverse()) {
+        const [field, direction] = Object.entries(order)[0];
+        rows.sort((a, b) => (a[field] < b[field] ? -1 : a[field] > b[field] ? 1 : 0) * (direction === 'asc' ? 1 : -1));
+      }
+      output[key] = rows.map((item) => project(item, selection));
+    }
     else output[key] = project(row[key], selection);
   }
   return output;
@@ -180,12 +187,12 @@ for (const [name, userId, allowed] of [['non-member refused', 2, false], ['agent
     if (!allowed) assert.doesNotMatch(JSON.stringify(result), /Page title|SECRET/);
   });
 }
-for (const [name, userId, visible] of [['inaccessible ticket metadata null', 1, false], ['accessible ticket returned', 3, true]]) {
+for (const [name, userId, visible] of [['inaccessible origin metadata null and visible link selected', 1, false], ['accessible ticket returned', 3, true]]) {
   test(`REST get: ${name}`, async () => {
     const h = harness({ userId });
     const { body } = await h.request('[publicId]');
     assert.equal(body.page.taskId, visible ? 10 : null);
-    assert.equal(body.page.task?.id ?? null, visible ? 10 : null);
+    assert.equal(body.page.task?.id ?? null, visible ? 10 : 11);
     assert.equal(body.page.linkedTasks.length, visible ? 2 : 1);
     if (!visible) assert.doesNotMatch(JSON.stringify(body), /SECRET|987|hidden-child/);
     assert.deepEqual(body.page.subPages.map((p) => p.publicId), ['visible-child']);

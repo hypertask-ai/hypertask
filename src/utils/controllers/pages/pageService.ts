@@ -235,6 +235,7 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     : links.map(({ task }) => task)
   return {
     ...visiblePage,
+    task: args.standalonePagesEnabled === false ? page.task : linkedTasks[0] ?? null,
     taskId: page.task?.id ?? null,
     linkedTasks,
     subPages: subPages.filter((child) => child.projectId === page.projectId)
