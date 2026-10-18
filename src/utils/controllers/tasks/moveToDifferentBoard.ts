@@ -1,4 +1,5 @@
 import prisma from "@/lib/prisma";
+import { Prisma, type Task } from "@prisma/client";
 import getMemberAndOwner from "@/utils/controllers/getMemberAndOwnerForBoard";
 import generateRank from "@/utils/generateRank";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
@@ -15,6 +16,8 @@ import { IUser } from "@/models/model";
 import { toErrorMessage } from "@/lib/api/errorMessage";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
+
+import { upsertPageToTurbopuffer } from "../turbopuffer/turbopufferHelper";
 
 const TASK_IDENTITY_ALLOCATION_ATTEMPTS = 3;
 
@@ -75,6 +78,7 @@ async function moveTaskWithDestinationIdentity({
       getNextUniqueTaskIndex(projectId),
       getNewTaskRanking(sectionId, projectId),
     ]);
+    let movedPageIds: number[] = [];
     const result = await updateTaskSingle(
       {
         id: taskId,
@@ -92,10 +96,18 @@ async function moveTaskWithDestinationIdentity({
       agentId,
       {
         allowProjectChange: true,
+        onProjectChangedInTx: async (tx, before, after) => {
+          movedPageIds = await syncTaskPagesInTx(tx, before, after);
+        },
         skipAutoAssign: true,
         skipRecurrence: true,
       },
     );
+    if (result.status === 200) {
+      await Promise.all(movedPageIds.map((id) => upsertPageToTurbopuffer(id).catch((error) => {
+        console.error("Page indexing failed after task move", error);
+      })));
+    }
     if (
       result.status === 200 ||
       result.json?.code !== TASK_IDENTITY_CONFLICT_CODE ||
@@ -104,6 +116,64 @@ async function moveTaskWithDestinationIdentity({
       return result;
     }
   }
+}
+
+async function syncTaskPagesInTx(
+  tx: Prisma.TransactionClient,
+  before: Task,
+  after: Task,
+) {
+  const affected = await tx.page.findMany({
+    where: { OR: [{ taskId: after.id }, { links: { some: { taskId: after.id } } }] },
+    select: { id: true, parentPageId: true },
+  });
+  if (affected.length === 0) return [];
+
+  const pageIds = affected.map((page) => page.id);
+  const lockIds = [...new Set([
+    ...pageIds,
+    ...affected.flatMap((page) => page.parentPageId == null ? [] : [page.parentPageId]),
+  ])];
+  await tx.$queryRaw`
+    SELECT id FROM "Page"
+    WHERE id IN (${Prisma.join(lockIds)})
+      OR "parentPageId" IN (${Prisma.join(pageIds)})
+    ORDER BY id
+    FOR UPDATE
+  `;
+  const pages = await tx.page.findMany({
+    where: { id: { in: pageIds } },
+    include: { links: true },
+  });
+  for (const page of pages) {
+    if (page.taskId != null && !page.links.some((link) => link.taskId === page.taskId)) {
+      const link = await tx.pageTaskLink.upsert({
+        where: { pageId_taskId: { pageId: page.id, taskId: page.taskId } },
+        create: { pageId: page.id, taskId: page.taskId, createdAt: page.createdAt },
+        update: {},
+      });
+      page.links.push(link);
+    }
+  }
+  const movingIds = pages
+    .filter((page) => page.projectId === before.projectId &&
+      page.links.length === 1 && page.links[0].taskId === after.id)
+    .map((page) => page.id);
+  if (movingIds.length === 0) return [];
+
+  await tx.page.updateMany({
+    where: { id: { in: movingIds }, parentPageId: { notIn: movingIds } },
+    data: { parentPageId: null },
+  });
+  await tx.page.updateMany({
+    where: { parentPageId: { in: movingIds }, id: { notIn: movingIds } },
+    data: { parentPageId: null },
+  });
+  await tx.page.updateMany({
+    where: { id: { in: movingIds } },
+    data: { projectId: after.projectId },
+  });
+  return movingIds;
 }
 
 async function moveAllSubtasksRecursively(
@@ -169,7 +239,6 @@ async function updateTaskRelatedData(taskId: number, projectId: number, sectionI
   await Promise.all([
     prisma.estimate.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
     prisma.priority.updateMany({ where: { taskId }, data: { projectId, sectionId } }),
-    prisma.page.updateMany({ where: { taskId }, data: { projectId } }),
   ]);
 }
 
