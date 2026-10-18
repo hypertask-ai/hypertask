@@ -59,7 +59,6 @@ mocks["@/lib/navigation/pageReturn"] = {
 };
 const { buildHtmlBlockSrcDoc } = load("src/components/RTE/Extensions/HtmlBlock/buildSrcDoc.ts");
 mocks["./buildSrcDoc"] = { buildHtmlBlockSrcDoc };
-mocks["./canvasLink"] = load("src/components/RTE/Extensions/HtmlBlock/canvasLink.ts");
 const { HtmlCanvasFrame } = load("src/components/RTE/Extensions/HtmlBlock/HtmlCanvasFrame.tsx");
 mocks["next/dynamic"] = { default: (loader) => {
   if (!loader.toString().includes("AttachmentsCarousel")) return () => null;

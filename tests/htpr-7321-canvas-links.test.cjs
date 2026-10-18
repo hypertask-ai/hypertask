@@ -4,17 +4,15 @@ const path = require("node:path");
 const test = require("node:test");
 const React = require("react");
 const { createRoot } = require("react-dom/client");
-const { JSDOM } = require("jsdom");
+const { JSDOM, VirtualConsole } = require("jsdom");
 const ts = require("typescript");
 
 const root = path.resolve(__dirname, "..");
 const origin = "https://app.hypertask.ai";
 const flagKey = "htpr-7321-canvas-links";
 let enabled = true;
-const pushes = [];
-const router = { push: (value) => pushes.push(value) };
 const mocks = {
-  "next/navigation": { useRouter: () => router, usePathname: () => "/page/example" },
+  "next/navigation": { usePathname: () => "/page/example" },
   "@/hooks/useFlag": { useFlag: (key) => key === flagKey && enabled },
   "@/lib/flags/keys": require("./helpers/flag-files.cjs").load("src/lib/flags/keys.ts"),
 };
@@ -31,19 +29,17 @@ function load(relativePath) {
 }
 
 const { buildHtmlBlockSrcDoc } = load("src/components/RTE/Extensions/HtmlBlock/buildSrcDoc.ts");
-const { resolveCanvasLink } = load("src/components/RTE/Extensions/HtmlBlock/canvasLink.ts");
 mocks["./buildSrcDoc"] = { buildHtmlBlockSrcDoc };
-mocks["./canvasLink"] = { resolveCanvasLink };
 const { HtmlCanvasFrame } = load("src/components/RTE/Extensions/HtmlBlock/HtmlCanvasFrame.tsx");
 
 function withCanvas(html, options, run) {
   const dom = new JSDOM(buildHtmlBlockSrcDoc(html, options.gallery ?? false, options.enabled ?? true), {
-    runScripts: "dangerously", url: `${origin}/page/example`,
+    runScripts: "dangerously", url: `${origin}/page/example`, virtualConsole: new VirtualConsole(),
   });
   const messages = [];
-  dom.window.parent.postMessage = (data, targetOrigin) => messages.push({ data, targetOrigin });
-  const click = (selector, init = {}, type = "click") => {
-    const event = new dom.window.MouseEvent(type, { bubbles: true, cancelable: true, ...init });
+  dom.window.parent.postMessage = (data) => messages.push(data);
+  const click = (selector, init = {}) => {
+    const event = new dom.window.MouseEvent("click", { bubbles: true, cancelable: true, ...init });
     dom.window.document.querySelector(selector).dispatchEvent(event);
     return event;
   };
@@ -54,102 +50,70 @@ function withCanvas(html, options, run) {
   }
 }
 
-test("canvas HTTP links hand their absolute URL to the parent rather than navigating the iframe", () => {
-  withCanvas('<a href="/detail/project-15/7321?view=test#comment-42"><span>Ticket</span></a>', {}, ({ messages, click }) => {
-    assert.equal(click("span").defaultPrevented, true);
-    assert.equal(messages.length, 1);
-    assert.equal(messages[0].data.__htHtmlBlockLink, 1);
-    assert.equal(messages[0].data.href, `${origin}/detail/project-15/7321?view=test#comment-42`);
-    assert.equal(messages[0].data.newTab, false);
-    assert.equal(messages[0].targetOrigin, "*");
-  });
-});
-
-test("modified clicks, middle clicks and blank targets request a new tab", () => {
-  for (const init of [{ ctrlKey: true }, { metaKey: true }, { shiftKey: true }, { button: 1 }]) {
-    withCanvas('<a href="https://example.com/path">External</a>', {}, ({ messages, click }) => {
-      assert.equal(click("a", init, init.button === 1 ? "auxclick" : "click").defaultPrevented, true);
-      assert.equal(messages.length, 1);
-      assert.equal(messages[0].data.newTab, true);
-      assert.equal(messages[0].data.href, "https://example.com/path");
-    });
-  }
-  withCanvas('<a href="http://example.com" target="_blank">External</a>', {}, ({ messages, click }) => {
-    click("a");
-    assert.equal(messages[0].data.newTab, true);
+test("clicked web links open in a new tab without an opener instead of loading inside the canvas", () => {
+  withCanvas('<a href="/detail/project-15/7321#comment-42"><span>Ticket</span></a><a href="https://example.com/path">External</a>', {}, ({ dom, messages, click }) => {
+    assert.equal(click("span").defaultPrevented, false);
+    assert.equal(click('a[href^="https:"]').defaultPrevented, false);
+    for (const link of dom.window.document.querySelectorAll("a")) {
+      assert.equal(link.target, "_blank");
+      assert.equal(link.rel, "noopener noreferrer");
+    }
+    assert.equal(messages.length, 0);
   });
 });
 
 test("fragment links stay within the canvas and scroll by decoded id or name", () => {
-  withCanvas('<a href="#x%20y">Id</a><a href="#named">Name</a><a href="#missing">Missing</a><a href="#%ZZ">Malformed</a><div id="x y"></div><a name="named"></a>', {}, ({ dom, messages, click }) => {
+  withCanvas('<a href="#x%20y">Id</a><a href="#named">Name</a><a href="#missing">Missing</a><a href="#%ZZ">Malformed</a><div id="x y"></div><a name="named"></a>', {}, ({ dom, click }) => {
     const scrolled = [];
     dom.window.document.getElementById("x y").scrollIntoView = () => scrolled.push("id");
     dom.window.document.getElementsByName("named")[0].scrollIntoView = () => scrolled.push("name");
     for (const selector of ['a[href="#x%20y"]', 'a[href="#named"]', 'a[href="#missing"]', 'a[href="#%ZZ"]']) {
       assert.equal(click(selector).defaultPrevented, true);
+      assert.equal(dom.window.document.querySelector(selector).target, "");
     }
     assert.deepEqual(scrolled, ["id", "name"]);
-    assert.equal(messages.length, 0);
   });
 });
 
-test("non-HTTP protocols, prevented events, right clicks and non-links are not handed off", () => {
-  withCanvas('<a href="javascript:alert(1)">Script</a><a href="mailto:test@example.com">Mail</a><a href="https://example.com">Web</a><button>Button</button>', {}, ({ dom, messages, click }) => {
-    assert.equal(click('a[href^="javascript:"]').defaultPrevented, false);
-    assert.equal(click('a[href^="mailto:"]').defaultPrevented, false);
-    assert.equal(click('a[href^="https:"]', { button: 2 }, "auxclick").defaultPrevented, false);
+test("non-web links, links the canvas handles itself and non-links are left alone", () => {
+  withCanvas('<a href="javascript:void(0)">Script</a><a href="mailto:test@example.com">Mail</a><a id="own" href="https://example.com">Own</a><button>Button</button>', {}, ({ dom, click }) => {
+    click('a[href^="javascript:"]');
+    click('a[href^="mailto:"]');
     click("button");
-    dom.window.document.querySelector('a[href^="https:"]').addEventListener("click", (event) => event.preventDefault());
-    assert.equal(click('a[href^="https:"]').defaultPrevented, true);
-    assert.equal(messages.length, 0);
+    dom.window.document.getElementById("own").addEventListener("click", (event) => event.preventDefault());
+    click("#own");
+    for (const link of dom.window.document.querySelectorAll("a")) assert.equal(link.target, "");
   });
 });
 
-test("flag off leaves link clicks untouched and image gallery keeps priority for linked images", () => {
-  withCanvas('<a href="https://example.com">External</a>', { enabled: false }, ({ messages, click }) => {
-    assert.equal(click("a").defaultPrevented, false);
-    assert.equal(messages.length, 0);
+test("flag off leaves links as before and the image gallery keeps priority for linked images", () => {
+  withCanvas('<a href="https://example.com">External</a><a href="#x">Anchor</a>', { enabled: false }, ({ dom, click }) => {
+    assert.equal(click('a[href^="https:"]').defaultPrevented, false);
+    assert.equal(click('a[href="#x"]').defaultPrevented, false);
+    assert.equal(dom.window.document.querySelector("a").target, "");
   });
-  withCanvas('<a href="https://example.com"><img src="https://example.com/image.png"></a>', { gallery: true }, ({ messages, click }) => {
+  withCanvas('<a href="https://example.com"><img src="https://example.com/image.png"></a>', { gallery: true }, ({ dom, messages, click }) => {
     assert.equal(click("img").defaultPrevented, true);
     assert.equal(messages.length, 1);
-    assert.equal(messages[0].data.__htPageImage, 1);
+    assert.equal(messages[0].__htPageImage, 1);
+    assert.equal(dom.window.document.querySelector("a").target, "");
   });
 });
 
-test("URL resolution preserves internal paths and isolates external and look-alike origins", () => {
-  assert.deepEqual(resolveCanvasLink(`${origin}/detail/project-15/7321?x=1#comment-42`, origin), {
-    kind: "internal", path: "/detail/project-15/7321?x=1#comment-42", url: `${origin}/detail/project-15/7321?x=1#comment-42`,
-  });
-  assert.deepEqual(resolveCanvasLink(origin, origin), { kind: "internal", path: "/", url: `${origin}/` });
-  assert.deepEqual(resolveCanvasLink(`${origin}//evil.example/path`, origin), { kind: "external", url: `${origin}//evil.example/path` });
-  for (const url of ["https://example.com/path", "http://app.hypertask.ai/", "https://app.hypertask.ai.evil.com/", "https://app.hypertask.ai:8443/"]) {
-    assert.deepEqual(resolveCanvasLink(url, origin), { kind: "external", url });
-  }
-  for (const value of [undefined, null, 42, {}, "", "not a url", "/relative", "javascript:alert(1)", "mailto:test@example.com", "data:text/html,test", "ftp://example.com"]) {
-    assert.equal(resolveCanvasLink(value, origin), null);
-  }
-});
-
-async function withFrame(run) {
+async function renderFrame(flagOn) {
   const dom = new JSDOM('<div id="root"></div>', { url: `${origin}/page/example` });
   const names = ["window", "document", "Element", "HTMLIFrameElement", "DOMParser", "IS_REACT_ACT_ENVIRONMENT"];
   const previous = names.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
   for (const name of names) global[name] = name === "IS_REACT_ACT_ENVIRONMENT" ? true : dom.window[name];
-  pushes.length = 0;
-  enabled = true;
-  const opened = [];
-  dom.window.open = (...args) => opened.push(args);
-  const activation = { isActive: true };
-  Object.defineProperty(dom.window.navigator, "userActivation", { get: () => activation });
+  enabled = flagOn;
   const reactRoot = createRoot(document.getElementById("root"));
-  const render = async () => React.act(async () => reactRoot.render(React.createElement(HtmlCanvasFrame, { html: '<a href="https://example.com">Link</a>' })));
-  const message = async (data, source = document.querySelector("iframe").contentWindow) => React.act(async () => {
-    window.dispatchEvent(new dom.window.MessageEvent("message", { data, source }));
-  });
   try {
-    await render();
-    await run({ dom, opened, message, render, activation });
+    await React.act(async () => reactRoot.render(React.createElement(HtmlCanvasFrame, { html: '<a href="https://example.com">Link</a>' })));
+    const frame = document.querySelector("iframe");
+    await React.act(async () => {
+      window.dispatchEvent(new dom.window.MessageEvent("message", { data: { __htHtmlBlock: 1, h: 240.5 }, source: frame.contentWindow }));
+    });
+    return { sandbox: frame.getAttribute("sandbox"), srcDoc: frame.getAttribute("srcdoc"), height: frame.style.height };
   } finally {
     await React.act(async () => reactRoot.unmount());
     dom.window.close();
@@ -157,78 +121,23 @@ async function withFrame(run) {
       if (descriptor) Object.defineProperty(global, name, descriptor);
       else delete global[name];
     }
+    enabled = true;
   }
 }
 
-test("frame routes internal links and opens absolute external or new-tab links with noopener", async () => {
-  await withFrame(async ({ opened, message }) => {
-    assert.equal(document.querySelector("iframe").getAttribute("sandbox"), "allow-scripts");
-    await message({ __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321?x=1#comment-42`, newTab: false });
-    assert.deepEqual(pushes, ["/detail/project-15/7321?x=1#comment-42"]);
-    await message({ __htHtmlBlockLink: 1, href: "https://example.com/path", newTab: false });
-    await message({ __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321`, newTab: true });
-    assert.deepEqual(opened, [
-      ["https://example.com/path", "_blank", "noopener,noreferrer"],
-      [`${origin}/detail/project-15/7321`, "_blank", "noopener,noreferrer"],
-    ]);
-  });
+test("flag on lets canvas links open new tabs but never navigate the app or reach its origin", async () => {
+  const on = await renderFrame(true);
+  assert.deepEqual(on.sandbox.split(" ").sort(), ["allow-popups", "allow-popups-to-escape-sandbox", "allow-scripts"]);
+  assert.doesNotMatch(on.sandbox, /allow-top-navigation|allow-same-origin/);
+  assert.match(on.srcDoc, /a\.target = '_blank'/);
+  assert.equal(on.height, "241px");
 });
 
-test("foreign sources and invalid URLs are refused while the actual frame source is still allowed", async () => {
-  await withFrame(async ({ opened, message }) => {
-    const data = { __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321` };
-    await message(data, window);
-    for (const href of [null, 42, "javascript:alert(1)", "not a url"]) await message({ ...data, href });
-    await message({ ...data, __htHtmlBlockLink: true });
-    await message(null);
-    assert.deepEqual(pushes, []);
-    assert.deepEqual(opened, []);
-    await message(data);
-    assert.deepEqual(pushes, ["/detail/project-15/7321"]);
-    await message({ __htHtmlBlock: 1, h: 240.5 });
-    assert.equal(document.querySelector("iframe").style.height, "241px");
-  });
-});
-
-test("a canvas script posting a link without a real click cannot navigate the app", async () => {
-  await withFrame(async ({ opened, message, activation }) => {
-    const data = { __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321` };
-    activation.isActive = false;
-    await message(data);
-    await message({ ...data, href: "https://example.com", newTab: true });
-    assert.deepEqual(pushes, []);
-    assert.deepEqual(opened, []);
-    activation.isActive = true;
-    await message(data);
-    assert.deepEqual(pushes, ["/detail/project-15/7321"]);
-  });
-});
-
-test("a double-slash path on the app origin never reaches the router or another host", async () => {
-  await withFrame(async ({ opened, message }) => {
-    const href = `${origin}//evil.example/path`;
-    await message({ __htHtmlBlockLink: 1, href, newTab: false });
-    await message({ __htHtmlBlockLink: 1, href, newTab: true });
-    assert.deepEqual(pushes, []);
-    assert.deepEqual(opened, [[href, "_blank", "noopener,noreferrer"], [href, "_blank", "noopener,noreferrer"]]);
-  });
-});
-
-test("changing the flag disables and re-enables parent link handling without changing the sandbox", async () => {
-  await withFrame(async ({ opened, message, render }) => {
-    const data = { __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321` };
-    enabled = false;
-    await render();
-    await message(data);
-    await message({ ...data, href: "https://example.com" });
-    assert.deepEqual(pushes, []);
-    assert.deepEqual(opened, []);
-    assert.equal(document.querySelector("iframe").getAttribute("sandbox"), "allow-scripts");
-    enabled = true;
-    await render();
-    await message(data);
-    assert.deepEqual(pushes, ["/detail/project-15/7321"]);
-  });
+test("flag off keeps today's scripts-only sandbox", async () => {
+  const off = await renderFrame(false);
+  assert.equal(off.sandbox, "allow-scripts");
+  assert.doesNotMatch(off.srcDoc, /a\.target = '_blank'/);
+  assert.equal(off.height, "241px");
 });
 
 test("canvas link flag is a small-risk bugfix enabled for everyone", () => {
@@ -238,8 +147,4 @@ test("canvas link flag is a small-risk bugfix enabled for everyone", () => {
   assert.equal(definition.kind, "bugfix");
   assert.equal(definition.defaultMode, "EVERYONE");
   assert.equal(definition.shippedOn, "2026-10-18");
-  assert.deepEqual(definition.releaseRisk, {
-    risk: "small",
-    reason: "Links in HTML canvas pages open the ticket in the app or a new tab instead of inside the page frame.",
-  });
 });
