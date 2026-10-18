@@ -194,7 +194,7 @@ const pageTaskSelect = {
   uniqueIndex: true,
 } as const
 
-export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null }) {
+export async function getPage(args: GetPageArgs & { userId?: number; agentId?: string | null; standalonePagesEnabled?: boolean }) {
   const where = 'id' in args
     ? { id: args.id }
     : { publicId: args.publicId }
@@ -210,6 +210,7 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     relationLoadStrategy: 'join',
     where: {
       ...where,
+      ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}),
       ...(args.userId === undefined ? {} : {
         project: { status: 'Normal', ...getProjectWhere(args.userId, args.agentId) },
       }),
@@ -222,14 +223,14 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
       subPages: {
-        where: { archived: false },
+        where: { archived: false, ...(args.standalonePagesEnabled === false ? { taskId: { not: null } } : {}) },
         select: { id: true, title: true, publicId: true, projectId: true },
       },
     },
   })
   if (!page) return null
   const { links, subPages, ...visiblePage } = page
-  const linkedTasks = links.map(({ task }) => task)
+  const linkedTasks = args.standalonePagesEnabled === false ? [] : links.map(({ task }) => task)
   if (page.task && !linkedTasks.some(({ id }) => id === page.task?.id)) linkedTasks.push(page.task)
   return {
     ...visiblePage,
@@ -325,6 +326,7 @@ export async function listPages({
   projectId,
   userId,
   agentId,
+  standalonePagesEnabled = true,
   archived = false,
   query,
 }: {
@@ -332,6 +334,7 @@ export async function listPages({
   projectId?: number
   userId?: number
   agentId?: string | null
+  standalonePagesEnabled?: boolean
   archived?: boolean
   query?: string
 }) {
@@ -345,7 +348,9 @@ export async function listPages({
   const pages = await prisma.page.findMany({
     where: {
       archived,
-      ...(taskId === undefined ? {} : { OR: [{ links: { some: { taskId } } }, { taskId }] }),
+      ...(standalonePagesEnabled
+        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId } } }, { taskId }] })
+        : { taskId: taskId ?? { not: null } }),
       ...(projectId === undefined ? {} : { projectId }),
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
       ...(query?.trim() ? { AND: [{ OR: [
@@ -372,7 +377,7 @@ export async function listPages({
     orderBy: { updatedAt: 'desc' },
   })
   return pages.map(({ links, task, parentPage, ...page }) => {
-    const linkedTasks = links.map(({ task }) => task)
+    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : []
     if (task && !linkedTasks.some(({ id }) => id === task.id)) linkedTasks.push(task)
     return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
@@ -383,11 +388,13 @@ export async function searchPages({
   projectIds,
   userId,
   agentId,
+  standalonePagesEnabled = true,
 }: {
   query: string
   projectIds: number[]
   userId?: number
   agentId?: string | null
+  standalonePagesEnabled?: boolean
 }) {
   const normalizedQuery = query.trim()
   if (!normalizedQuery || projectIds.length === 0) return []
@@ -395,6 +402,7 @@ export async function searchPages({
   const pages = await prisma.page.findMany({
     where: {
       archived: false,
+      ...(standalonePagesEnabled ? {} : { taskId: { not: null } }),
       projectId: { in: projectIds },
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
       OR: [

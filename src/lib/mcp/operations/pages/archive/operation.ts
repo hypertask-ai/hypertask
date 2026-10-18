@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     const { identifier } = identifierResult
     identifierField = identifierResult.field
 
-    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, agentId: ctx.agentId })
+    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
     if (
       !existingPage ||
       !(await canAccessProject(existingPage.projectId, ctx))

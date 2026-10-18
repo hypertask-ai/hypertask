@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -53,6 +54,7 @@ export function createListPagesTool(context: ToolContext) {
           taskId: input.task_id,
           projectId: input.project_id,
           userId: user.id,
+          standalonePagesEnabled: await standalonePagesEnabled(user.id),
           agentId: null,
         });
         return sanitizeForJson({ success: true, pages });

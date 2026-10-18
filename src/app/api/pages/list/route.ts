@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { checkRestRateLimit } from '@/lib/api/rateLimit'
 import { cookies } from 'next/headers'
 import { NextRequest, NextResponse } from 'next/server'
@@ -68,6 +69,7 @@ export async function GET(request: NextRequest) {
       const pages = await listPages({
         ...(scope === 'board' ? { projectId: projectId! } : {}),
         userId,
+        standalonePagesEnabled: true,
         agentId: null,
         archived: archived === '1',
         query,
@@ -94,7 +96,7 @@ export async function GET(request: NextRequest) {
     })
     if (!task) return NextResponse.json({ error: 'Task not found' }, { status: 404 })
 
-    const pages = (await listPages({ taskId, userId, agentId: null })).map((page) => ({
+    const pages = (await listPages({ taskId, userId, standalonePagesEnabled: await standalonePagesEnabled(userId), agentId: null })).map((page) => ({
       publicId: page.publicId,
       id: page.id,
       title: page.title,

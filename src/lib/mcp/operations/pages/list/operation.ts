@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -145,7 +146,7 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, agentId: ctx.agentId })
+      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
       return NextResponse.json({ pages })
     }
 
@@ -168,7 +169,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const pages = await listPages({ projectId, userId: ctx.user.id, agentId: ctx.agentId })
+    const pages = await listPages({ projectId, userId: ctx.user.id, standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id), agentId: ctx.agentId })
     return NextResponse.json({ pages })
   } catch (error) {
     if (error instanceof TaskIdentifierAmbiguityError) {

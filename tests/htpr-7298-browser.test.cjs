@@ -396,3 +396,5 @@ test('standalone flag defaults Owner + QA and all new APIs gate on the same serv
   assert.match(runbook, /all old readers, writers, movers and task-delete workers/);
   assert.match(runbook, /Never revert to task-owned authorization/);
 });
+
+module.exports = { harness };

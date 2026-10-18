@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
       query,
       projectIds: projects.map((project) => project.id),
       userId: ctx.user.id,
+      standalonePagesEnabled: await standalonePagesEnabled(ctx.user.id),
       agentId: ctx.agentId,
     })
 

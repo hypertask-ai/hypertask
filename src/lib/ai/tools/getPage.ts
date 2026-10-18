@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import { getPage } from "@/utils/controllers/pages/pageService";
@@ -25,8 +26,8 @@ export function createGetPageTool(context: ToolContext) {
         sendStatus("hypertask_get_page");
         const page = await getPage(
           typeof input.id === "number"
-            ? { id: input.id, userId: user.id, agentId: null }
-            : { publicId: input.id, userId: user.id, agentId: null }
+            ? { id: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
+            : { publicId: input.id, userId: user.id, standalonePagesEnabled: await standalonePagesEnabled(user.id), agentId: null }
         );
         if (!page) {
           return { success: false, error: "Page not found" };

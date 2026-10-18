@@ -113,6 +113,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     '@/lib/mcp/auth': { validateMcpAuth: async () => ({ user: { id: userId }, agentId }), checkMcpRateLimit: async () => null },
     '@/lib/mcp/agents/scopes': scopes,
     '@/lib/mcp/fieldError': fieldError,
+    '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
     [servicePath]: service,
     [helperPath]: helpers,
     '@/app/api/mcp/pages/_lib/routeUtils': helpers,

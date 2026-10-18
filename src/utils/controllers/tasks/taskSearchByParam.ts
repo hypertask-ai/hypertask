@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
 import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import prisma from "@/lib/prisma";
@@ -20,7 +21,7 @@ const taskSearchByParam = async (
 ) => {
   try {
     const hyperAiId = parseInt(process.env.NEXT_PUBLIC_HYPERAI_ID || "332");
-    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled] = await Promise.all([
+    const [projectIds, owner_members, hyperAI, pageMentionsEnabled, haiku55Enabled, standaloneEnabled] = await Promise.all([
       fetchidlist(userid),
       prisma.project.findFirst({
         where: {
@@ -45,6 +46,7 @@ const taskSearchByParam = async (
       }),
       isFeatureEnabled(PAGE_MENTIONS_FLAG, userid).catch(() => false),
       haiku55ModelEnabled(userid),
+      standalonePagesEnabled(userid),
     ]);
 
     if (!projectIds.includes(projectId)) {
@@ -129,7 +131,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, ""),
+        fetchMentionPages(canMentionPages, projectId, "", standaloneEnabled),
       ]);
 
       const updatedtask = task?.map((item: any) => ({
@@ -230,7 +232,7 @@ const taskSearchByParam = async (
           },
         }),
         getBoardAgentMembers(projectId, userid),
-        fetchMentionPages(canMentionPages, projectId, param),
+        fetchMentionPages(canMentionPages, projectId, param, standaloneEnabled),
       ]);
 
       const updatedProjects = projects?.map((item: any) => ({
@@ -297,6 +299,7 @@ const fetchMentionPages = async (
   enabled: boolean,
   projectId: number,
   titleQuery: string,
+  standaloneEnabled: boolean,
 ): Promise<MentionPage[]> => {
   if (!enabled) return [];
   try {
@@ -304,6 +307,7 @@ const fetchMentionPages = async (
       take: 5,
       where: {
         archived: false,
+        ...(standaloneEnabled ? {} : { taskId: { not: null } }),
         projectId,
         project: { status: "Normal" },
         ...(titleQuery

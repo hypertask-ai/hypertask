@@ -101,6 +101,7 @@ for (const operation of ['get', 'versions', 'update', 'archive', 'restore']) {
         '@/lib/mcp/auth': { validateMcpAuth: async () => ({ user: { id: 7 }, agentId: null }), checkMcpRateLimit: async () => null },
         '@/lib/mcp/agents/scopes': { requireRole: async () => null },
         '@/lib/mcp/fieldError': fieldError,
+        '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
         '@/utils/controllers/pages/pageService': h.service,
         '@/lib/mcp/operations/pages/helpers': helpers(board),
         '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (s) => s },
@@ -126,6 +127,7 @@ for (const [file, factory, tool, actions] of [
         const h = serviceHarness();
         const loaded = loadModule(`src/lib/ai/tools/${file}.ts`, {
           ai: { tool: (definition) => definition }, zod: require('zod'),
+          '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
           '@/utils/controllers/pages/pageService': h.service,
           '@/lib/mcp/tasks/services': { validateProjectAccess: async (projectId) => ({ error: projectId === board ? null : { message: 'Page not found' } }) },
           '@/app/api/mcp/pages/_lib/routeUtils': helpers(board),
@@ -274,6 +276,7 @@ test('page mentions filter on the owning page board without ticket metadata', as
     '@/lib/aiModelOptions': { aiModelDefinitions: [], aiImageModelDefinitions: [] },
     '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
     '../search/document': { turbopufferFetchMentionTasks: async () => [] },
+    '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
     '@/lib/flags': { isFeatureEnabled: async () => true, PAGE_MENTIONS_FLAG: 'pages' },
     '@/utils/helperFunctions/mentionSearch': { matchesMentionName: () => true, selectMentionAgents: () => [] },
   });

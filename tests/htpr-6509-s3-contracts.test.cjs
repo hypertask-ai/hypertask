@@ -70,6 +70,7 @@ async function pageRun(before, operation, options = {}) {
   const [suffix, method] = { get: ["", "GET"], patch: ["", "PATCH"], versions: ["/versions", "GET"], restore: ["/restore", "POST"], archive: ["/archive", "POST"] }[operation];
   const route = load(`src/app/api/pages/[publicId]${suffix}/route.ts`, {
     "@/lib/prisma": { default: prisma },
+    "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
     "@/utils/controllers/pages/pageService": mutations,
     "next/headers": { cookies: async () => ({ get: () => options.unauthorized ? undefined : ({ value: "fixture-profile" }) }) },
     "@/utils/edgeHelpers": { isValidUser: () => ({ isValid: true, user: { id: 7 } }) },

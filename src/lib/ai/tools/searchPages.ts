@@ -1,3 +1,4 @@
+import { standalonePagesEnabled } from "@/utils/controllers/pages/standalonePagesEnabled";
 import { tool } from "ai";
 import { z } from "zod";
 import { searchPages } from "@/utils/controllers/pages/pageService";
@@ -22,6 +23,7 @@ export function createSearchPagesTool(context: ToolContext) {
           query: input.query,
           projectIds,
           userId: user.id,
+          standalonePagesEnabled: await standalonePagesEnabled(user.id),
           agentId: null,
         });
 
