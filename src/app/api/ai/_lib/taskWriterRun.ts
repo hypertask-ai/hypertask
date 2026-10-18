@@ -13,6 +13,7 @@ import {
   retrieveTaskWriterContext,
   selectTaskWriterModel,
   TASK_AUTHORING_STYLE,
+  TASK_AUTHORING_WEB_STYLE,
 } from "@/app/api/ai/_lib/editorAi";
 import {
   loadCurrentTaskContext,
@@ -31,13 +32,14 @@ import {
   formatRelatedTicketCandidates,
   formatStyleExamples,
   TASK_WRITER_BOARD_RESEARCH_RULES,
+  TASK_WRITER_BOARD_RESEARCH_WEB_RULES,
   TASK_WRITER_RELATED_CANDIDATE_LIMIT,
   TASK_WRITER_STYLE_EXAMPLE_LIMIT,
 } from "@/app/api/ai/_lib/taskWriterBoardResearch";
 import { resolveSkills } from "@/app/api/ai/_lib/skills";
 import { getProjectTeamProviderContext } from "@/app/api/ai/_lib/providerGate";
 import { isAiFeatureEnabled } from "@/lib/systemModelLadder";
-import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG } from "@/lib/flags";
+import { isFeatureEnabled, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG, HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, HTPR_7057_WRITER_HEADING_LANGUAGE_FLAG, HTPR_7123_WRITER_TICKET_TYPE_FLAG, HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG } from "@/lib/flags";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 import { doneColumnTitles } from "@/lib/doneColumns";
 import prisma from "@/lib/prisma";
@@ -284,6 +286,9 @@ export async function prepareTaskWriterRun(
     styleExamples,
     boardVocabulary,
   });
+  const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
+  const authoringStyle = webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
+  const boardResearchRules = webWriting ? TASK_WRITER_BOARD_RESEARCH_WEB_RULES : TASK_WRITER_BOARD_RESEARCH_RULES;
   const { instructions: baseInstructions, input } = createTaskWriterPromptParts({
     aiMode: body.aiMode,
     customInstructions: body.customInstructions,
@@ -295,10 +300,11 @@ export async function prepareTaskWriterRun(
     retrievedContext,
     uploadedDocumentContext,
     input: effectivePrompt,
+    authoringStyle,
   });
   const researchInstructions = boardResearchEnabled
       ? createTaskWriterSystemPromptTemplate(
-          `${TASK_AUTHORING_STYLE}\n\n${TASK_WRITER_BOARD_RESEARCH_RULES}`
+          `${authoringStyle}\n\n${boardResearchRules}`
         )
       : null;
   const validateDraft = await isFeatureEnabled(HTPR_7060_TASK_WRITER_EMPTY_AND_RESEARCH_FLAG, userId);
