@@ -178,7 +178,7 @@ import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHyd
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -255,7 +255,6 @@ import {
   shouldShowMobileCreateTaskButton,
   shouldEnableMobilePullDownCommand,
   isAgentChatPath,
-  isTicketPagePath,
 } from "../Global/mobileShellVisibility";
 import { BoardStartupContext } from "@/lib/contexts/boardStartupContext";
 import {
@@ -422,7 +421,6 @@ export default function GlobalProvider({
   const agentChatMobileFullscreenFlag = useFlag(
     HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG,
   );
-  const mobilePageHideDockFlag = useFlag(HTPR_6860_MOBILE_PAGE_HIDE_DOCK_FLAG);
   const shouldMountAgentChatRuntime =
     isAgentChatPage && mbl && agentChatMobileFullscreenFlag;
   const [chatRuntimeMounted, setChatRuntimeMounted] = useState(
@@ -547,7 +545,6 @@ export default function GlobalProvider({
     currentUserId: currentUser?.id,
     showAiChatInterface,
     aiChatAutoOpenSuppressed,
-    mobilePageHideDockFlag,
     commentComposerOpen,
     agentChatHidesMobileShell,
   });
@@ -1294,9 +1291,7 @@ export default function GlobalProvider({
             boardUsable={mobileBoardControlsReady}
           />}
           {!routeOwnsMobileChrome && showMobileBottomNav && mobileBoardControlsReady && (
-            mobilePageHideDockFlag && isTicketPagePath(pathname) ? null : (
-              <MobileTabBar currentUserId={currentUser.id} />
-            )
+            <MobileTabBar currentUserId={currentUser.id} />
           )}
           {mobileCreateTaskButtonVisible && <MobileCreateTaskButton />}
           {mobilePullCommandVisible && (

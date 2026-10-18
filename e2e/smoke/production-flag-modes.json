@@ -60,7 +60,6 @@
     "htpr-6752-instant-ticket-open": "EVERYONE",
     "htpr-6804-mcp-tools": "EVERYONE",
     "htpr-6817-slack-app": "OWNER_AND_QA",
-    "htpr-6860-mobile-page-hide-dock": "EVERYONE",
     "htpr-6865-search-layout": "EVERYONE",
     "htpr-6868-ticket-prefix": "OWNER_AND_QA",
     "htpr-6872-page-image-gallery": "OWNER_AND_QA",
