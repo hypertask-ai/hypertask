@@ -47,8 +47,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const page = await getPage(identifier)
-    if (!page || !(await canAccessProject(page.task.projectId, ctx))) {
+    const page = await getPage({ ...identifier, userId: ctx.user.id, agentId: ctx.agentId })
+    if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),
         { status: 404 }
@@ -71,13 +71,15 @@ export async function GET(request: NextRequest) {
         version: page.version,
         content,
         content_type: responseFormat,
-        task: {
+        taskId: page.taskId,
+        task: page.task ? {
           id: page.task.id,
           ticketNumber: page.task.ticketNumber,
           title: page.task.title,
           projectId: page.task.projectId,
           uniqueIndex: page.task.uniqueIndex,
-        },
+        } : null,
+        linkedTasks: page.linkedTasks,
         subPages: page.subPages,
         updatedAt: page.updatedAt,
       },

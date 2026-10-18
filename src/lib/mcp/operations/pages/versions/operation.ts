@@ -34,8 +34,8 @@ export async function GET(request: NextRequest) {
     }
     const { identifier, field: identifierField } = identifierResult
 
-    const page = await getPage(identifier)
-    if (!page || !(await canAccessProject(page.task.projectId, ctx))) {
+    const page = await getPage({ ...identifier, userId: ctx.user.id, agentId: ctx.agentId })
+    if (!page || !(await canAccessProject(page.projectId, ctx))) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),
         { status: 404 }

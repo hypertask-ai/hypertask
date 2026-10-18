@@ -36,13 +36,13 @@ export function createPageHistoryTool(context: ToolContext) {
           return { success: false, error: "Invalid page identifier" };
         }
 
-        const existingPage = await getPage(identifier);
+        const existingPage = await getPage({ ...identifier, userId: user.id, agentId: null });
         if (!existingPage) {
           return { success: false, error: "Page not found" };
         }
 
         const access = await validateProjectAccess(
-          existingPage.task.projectId,
+          existingPage.projectId,
           user.id
         );
         if (access.error) {

@@ -63,10 +63,10 @@ export async function POST(request: NextRequest) {
     const { identifier } = identifierResult
     identifierField = identifierResult.field
 
-    const existingPage = await getPage(identifier)
+    const existingPage = await getPage({ ...identifier, userId: ctx.user.id, agentId: ctx.agentId })
     if (
       !existingPage ||
-      !(await canAccessProject(existingPage.task.projectId, ctx))
+      !(await canAccessProject(existingPage.projectId, ctx))
     ) {
       return NextResponse.json(
         buildFieldError('not_found', identifierField, 'Page not found'),

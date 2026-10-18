@@ -21,6 +21,8 @@ export function createSearchPagesTool(context: ToolContext) {
         const matches = await searchPages({
           query: input.query,
           projectIds,
+          userId: user.id,
+          agentId: null,
         });
 
         return sanitizeForJson({

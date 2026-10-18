@@ -52,6 +52,8 @@ export function createListPagesTool(context: ToolContext) {
         const pages = await listPages({
           taskId: input.task_id,
           projectId: input.project_id,
+          userId: user.id,
+          agentId: null,
         });
         return sanitizeForJson({ success: true, pages });
       }),

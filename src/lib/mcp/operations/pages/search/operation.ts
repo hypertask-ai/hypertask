@@ -51,6 +51,8 @@ export async function GET(request: NextRequest) {
     const matches = await searchPages({
       query,
       projectIds: projects.map((project) => project.id),
+      userId: ctx.user.id,
+      agentId: ctx.agentId,
     })
 
     const pages = matches.map(({ contentText, ...page }) => ({

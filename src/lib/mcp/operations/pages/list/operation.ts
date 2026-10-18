@@ -145,7 +145,7 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const pages = await listPages({ taskId: task.id })
+      const pages = await listPages({ taskId: task.id, userId: ctx.user.id, agentId: ctx.agentId })
       return NextResponse.json({ pages })
     }
 
@@ -168,7 +168,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const pages = await listPages({ projectId })
+    const pages = await listPages({ projectId, userId: ctx.user.id, agentId: ctx.agentId })
     return NextResponse.json({ pages })
   } catch (error) {
     if (error instanceof TaskIdentifierAmbiguityError) {

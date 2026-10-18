@@ -30,15 +30,15 @@ export function createUpdatePageTool(context: ToolContext) {
         sendStatus("hypertask_update_page");
         const existingPage = await getPage(
           typeof input.id === "number"
-            ? { id: input.id }
-            : { publicId: input.id }
+            ? { id: input.id, userId: user.id, agentId: null }
+            : { publicId: input.id, userId: user.id, agentId: null }
         );
         if (!existingPage) {
           return { success: false, error: "Page not found" };
         }
 
         const access = await validateProjectAccess(
-          existingPage.task.projectId,
+          existingPage.projectId,
           user.id
         );
         if (access.error) {
