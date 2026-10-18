@@ -65,9 +65,11 @@ function harness(options = {}) {
   };
   const queries = [];
   let lock = false;
+  let inTx = false;
+  const creationCalls = [];
   const userId = options.userId ?? 1;
   const taskRow = (task) => task && ({ ...task, project: state.projects.find((p) => p.id === task.projectId) });
-  const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), subPages: state.pages.filter((p) => p.parentPageId === page.id) });
+  const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
   const find = (rows, query) => rows.filter((row) => matches(row, query.where)).map((row) => project(row, query));
   const prisma = {
     project: {
@@ -76,13 +78,19 @@ function harness(options = {}) {
     },
     task: {
       findFirst: async (query) => find(state.tasks.map(taskRow), query)[0] ?? null,
-      findUnique: async (query) => find(state.tasks.map(taskRow), query)[0] ?? null,
+      findUnique: async (query) => {
+        assert.ok(inTx, 'creation ticket read belongs to transaction');
+        creationCalls.push('task-read');
+        return find(state.tasks.map(taskRow), query)[0] ?? null;
+      },
     },
     page: {
       findUnique: async (query) => { queries.push(query); return find(state.pages.map(pageRow), query)[0] ?? null; },
       findFirst: async (query) => { queries.push(query); return find(state.pages.map(pageRow), query)[0] ?? null; },
       findMany: async (query) => { queries.push(query); return find(state.pages.map(pageRow), query); },
       create: async ({ data }) => {
+        assert.ok(inTx);
+        creationCalls.push('page-create');
         const { links, ...fields } = data;
         const page = { id: 100, publicId: 'created', title: 'Untitled', version: 1, ...fields };
         state.pages.push(page);
@@ -101,14 +109,33 @@ function harness(options = {}) {
       deleteMany: async ({ where }) => { assert.ok(lock); state.links = state.links.filter((l) => !matches(l, where)); },
       findFirst: async (query) => find(state.links.toSorted((a, b) => a.createdAt - b.createdAt || a.id - b.id), query)[0] ?? null,
     },
-    $queryRaw: async (strings) => { assert.match(strings.join(''), /FROM "Page".*FOR UPDATE/); lock = true; return [{ id: 20 }]; },
+    $queryRaw: async (strings, ...values) => {
+      assert.ok(inTx);
+      const sql = strings.join('?');
+      if (sql.includes('FROM "Task"')) {
+        assert.match(sql, /SELECT.*FROM "Task" WHERE id = \? FOR UPDATE/);
+        assert.deepEqual(values, [11]);
+        creationCalls.push('task-lock');
+        if (options.moveBeforeLock) state.tasks.find((t) => t.id === 11).projectId = 2;
+        return [{ id: 11 }];
+      }
+      assert.match(sql, /FROM "Page".*FOR UPDATE/);
+      lock = true;
+      return [{ id: 20 }];
+    },
     $transaction: async (callback) => {
       const original = structuredClone(state);
-      try { return await callback(prisma); }
+      assert.equal(inTx, false);
+      inTx = true;
+      try { return await callback(tx); }
       catch (error) { Object.assign(state, original); throw error; }
-      finally { lock = false; }
+      finally { lock = false; inTx = false; }
     },
   };
+  const tx = { ...prisma, task: { ...prisma.task }, page: { ...prisma.page } };
+  prisma.$queryRaw = async () => assert.fail('row locks must use the transaction client');
+  prisma.task.findUnique = async () => assert.fail('creation ticket reads must use the transaction client');
+  prisma.page.create = async () => assert.fail('page creation must use the transaction client');
   const service = load('src/utils/controllers/pages/pageService.ts', {
     '@/lib/prisma': { default: prisma },
     '@/utils/controllers/projects/getAllIncludes': access,
@@ -131,7 +158,7 @@ function harness(options = {}) {
     const response = await route[method]({ headers: new Headers(), nextUrl: new URL('https://fixture.invalid/?' + query), json: async () => body }, { params: Promise.resolve({ publicId: 'page' }) });
     return { status: response.status, body: await response.json() };
   }
-  return { state, service, request, queries, prisma };
+  return { state, service, request, queries, prisma, creationCalls };
 }
 
 for (const [name, userId, allowed] of [['non-member refused', 2, false], ['agent-attributed human refused', 5, false], ['owner allowed', 1, true], ['human member allowed', 3, true]]) {
@@ -237,6 +264,42 @@ test('ticket create writes link with page in same transaction regardless of flag
     assert.equal(h.state.pages.at(-1).projectId, 1);
   }
 });
+test('ticket creation locks before reading the ticket in its create transaction', async () => {
+  for (const moveBeforeLock of [false, true]) {
+    const h = harness({ moveBeforeLock });
+    await h.service.createPage({ taskId: 11, content: '', contentType: 'html', userId: 1 });
+    assert.deepEqual(h.creationCalls, ['task-lock', 'task-read', 'page-create']);
+    assert.equal(h.state.pages.at(-1).projectId, moveBeforeLock ? 2 : 1);
+    assert.equal(h.state.links.at(-1).taskId, 11);
+  }
+});
+
+for (const enabled of [false, true]) {
+  test(`ticket create flag ${enabled}: unrelated parent refused / legacy or linked same-ticket parent allowed`, async () => {
+    for (const [kind, parentId, allowed] of [['unrelated', 22, false], ['legacy', 26, true], ['linked', 20, true], ['foreign-board linked', 21, false]]) {
+      const h = harness({ flag: enabled });
+      // A link to this ticket does not override the same-board requirement.
+      if (parentId === 21) h.state.links.push({ id: 9, pageId: 21, taskId: 11 });
+      const before = plain(h.state);
+      const result = await h.request('create', 'POST', { task_id: 11, parent_page_id: parentId, content: '' });
+      assert.equal(result.status, allowed ? 200 : 404, kind);
+      if (allowed) assert.equal(h.state.pages.at(-1).parentPageId, parentId);
+      else assert.deepEqual(plain(h.state), before);
+    }
+  });
+}
+
+test('listPages foreign-board parent is null / same-board parent is retained', async () => {
+  const h = harness({ userId: 3 });
+  for (const parentProjectId of [1, 2]) {
+    h.state.pages[0].projectId = parentProjectId;
+    const rows = await h.service.listPages({ projectId: 2, userId: 3 });
+    const child = rows.find((row) => row.id === 21);
+    assert.equal(child.parentPageId, parentProjectId === 2 ? 20 : null);
+    assert.equal(Object.hasOwn(child, 'parentPage'), false, 'internal parent board lookup is not serialized');
+  }
+});
+
 for (const [name, enabled, expected] of [['flag off refused', false, 404], ['flag on allowed', true, 200]]) {
   test(`board list: ${name}`, async () => {
     const h = harness({ userId: 3, flag: enabled });

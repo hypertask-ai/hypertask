@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import PageEditor from "./PageEditor";
 import { requireServerCookieUser } from "@/lib/auth/serverUser";
+// eslint-disable-next-line @typescript-eslint/no-restricted-imports -- This server component gates taskless page access.
 import { isFeatureEnabled } from "@/lib/flags";
 import { HTPR_7298_STANDALONE_PAGES_FLAG } from "@/lib/flags/definitions/htpr-7298-standalone-pages";
 import prisma from "@/lib/prisma";

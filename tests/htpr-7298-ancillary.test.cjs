@@ -113,8 +113,8 @@ test("server screen preserves a visible task and redirects a missing page", asyn
     "next/navigation": { redirect: () => { throw new Error("redirect"); } },
     "./PageEditor": { default: () => null },
     "@/lib/flags": { isFeatureEnabled: async () => true },
-        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
-        "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
+    "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+    "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
     "@/lib/prisma": { default: { project: { findFirst: async () => ({ id: 10 }) } } },
     "@/utils/controllers/projects/getAllIncludes": access,
     "@/utils/controllers/pages/pageService": { getPage: async ({ userId }) => {

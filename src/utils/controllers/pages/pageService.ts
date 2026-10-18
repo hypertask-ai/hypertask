@@ -136,6 +136,9 @@ export async function createPage({
   const rendered = renderPageContent({ content, contentType })
 
   const page = await prisma.$transaction(async (tx) => {
+    if (taskId !== undefined) {
+      await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
+    }
     const task = taskId === undefined ? null : await tx.task.findUnique({
       where: { id: taskId },
       select: { id: true, projectId: true },
@@ -146,7 +149,11 @@ export async function createPage({
 
     if (parentPageId != null) {
       const parentPage = await tx.page.findFirst({
-        where: { id: parentPageId, projectId: owningProjectId },
+        where: {
+          id: parentPageId,
+          projectId: owningProjectId,
+          ...(taskId === undefined ? {} : { OR: [{ taskId }, { links: { some: { taskId } } }] }),
+        },
         select: { id: true },
       })
       if (!parentPage) {
@@ -351,6 +358,7 @@ export async function listPages({
       publicId: true,
       title: true,
       parentPageId: true,
+      parentPage: { select: { projectId: true } },
       projectId: true,
       project: { select: { id: true, title: true } },
       updatedAt: true,
@@ -363,10 +371,10 @@ export async function listPages({
     },
     orderBy: { updatedAt: 'desc' },
   })
-  return pages.map(({ links, task, ...page }) => {
+  return pages.map(({ links, task, parentPage, ...page }) => {
     const linkedTasks = links.map(({ task }) => task)
     if (task && !linkedTasks.some(({ id }) => id === task.id)) linkedTasks.push(task)
-    return { ...page, linkedTasks }
+    return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
 }
 
