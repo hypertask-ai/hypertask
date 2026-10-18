@@ -271,7 +271,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
   }, [ready, identity, activeSession, creating, initializationError, summaryQuery.isSuccess, summaryQuery.dataUpdatedAt]);
 
   const addMessageToSessionQuery = useCallback((sessionId: string, message: IChatMessage, queryOnly = false, updateLastMessage = false, projectId?: number) => {
-    if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return;
+    if (!ready || !queryClient.getQueryData<Transcript>(transcriptKey(sessionId))) return false;
     const key = transcriptKey(sessionId);
     queryClient.setQueryData<Transcript>(key, (old) => {
       if (!old) return old;
@@ -301,6 +301,7 @@ export function usePagedChatHistory(enabled: boolean, user: IUser, taskId: numbe
       if (error?.response?.status === 404) void evictSession(sessionId);
       console.error("Error persisting chat message:", error);
     });
+    return true;
   }, [identity, ready, queryClient]);
 
   const updateSessionTitle = useCallback(async (sessionId: string, title: string) => {

@@ -535,11 +535,12 @@ export const useSessionAndChatHistory = (
         taskId === composeIntro.taskId && currentSession?.taskId === composeIntro.taskId) {
       const id = `compose-task-${composeIntro.taskId}`;
       if (consumedComposeIntro.current !== id && !currentSession.messages.some((message) => message.id === id)) {
-        consumedComposeIntro.current = id;
-        (paged ? pagedHistory.addMessageToSessionQuery : addMessageToSessionQuery)(currentSession.id, {
+        const accepted = (paged ? pagedHistory.addMessageToSessionQuery : addMessageToSessionQuery)(currentSession.id, {
           id, sessionId: currentSession.id, role: "assistant", isDelivered: true,
           createdAt: new Date(), content: composeIntro.content,
         });
+        if (paged && !accepted) return;
+        consumedComposeIntro.current = id;
       }
       setComposeIntro(null);
     }
