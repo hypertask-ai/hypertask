@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { getMcpOperationContext } from '@/lib/mcp/operationContext'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -251,6 +252,7 @@ export async function POST(
     )
   } catch (error) {
     console.error('[MCP Create Board] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

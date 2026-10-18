@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { Prisma } from '@prisma/client'
@@ -382,6 +383,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(response)
   } catch (error) {
     console.error('Error getting comments:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -926,6 +928,7 @@ export async function POST(request: NextRequest) {
       )
     }
     console.error('Error adding comment:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

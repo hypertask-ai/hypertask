@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
@@ -184,6 +185,9 @@ export async function POST(request: NextRequest) {
       } else {
         void broadcastTaskChange(task.id);
       }
+    }
+    if (status === 500) {
+      reportMcpOperationCrash(request, e);
     }
     return NextResponse.json(
       {

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import prisma from '@/lib/prisma'
@@ -318,6 +319,7 @@ export async function GET(request: NextRequest) {
         })
     } catch (error) {
         console.error('[MCP] inbox/composition', error)
+        reportMcpOperationCrash(request, error)
         return NextResponse.json(
             { success: false, error: 'Failed to load inbox composition' },
             { status: 500 }

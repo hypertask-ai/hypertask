@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -77,6 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, project: updated })
   } catch (error) {
     console.error('[MCP Archive Board] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

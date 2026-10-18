@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -357,6 +358,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
     return NextResponse.json(response)
   } catch (error) {
     console.error('[MCP PATCH Comment] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -477,6 +479,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
     )
   } catch (error) {
     console.error('[MCP DELETE Comment] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

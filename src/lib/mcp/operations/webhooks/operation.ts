@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import crypto from 'crypto'
@@ -131,6 +132,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP Webhooks] GET error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
@@ -289,6 +291,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('[MCP Webhooks] POST error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 
@@ -370,6 +373,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted: id })
   } catch (error) {
     console.error('[MCP Webhooks] DELETE error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
 

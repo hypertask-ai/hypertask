@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -267,6 +268,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP] tasks/next', { error })
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -238,6 +239,7 @@ export async function GET(request: NextRequest) {
     } satisfies ListViewsResponse)
   } catch (error) {
     console.error('Error listing views:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
@@ -210,6 +211,7 @@ export async function POST(request: NextRequest) {
     )
   } catch (error) {
     console.error('[MCP Decision Request POST] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }
@@ -298,6 +300,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP Decision Request GET] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

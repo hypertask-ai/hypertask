@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { standalonePagesEnabled } from '@/utils/controllers/pages/standalonePagesEnabled'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ pages })
   } catch (error) {
     console.error('[MCP Search Pages] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 

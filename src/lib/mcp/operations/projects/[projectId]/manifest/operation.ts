@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -90,6 +91,7 @@ export async function GET(
     })
   } catch (error) {
     console.error('Error getting board manifest:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

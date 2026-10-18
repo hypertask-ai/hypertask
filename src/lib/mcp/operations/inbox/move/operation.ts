@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth } from '@/lib/mcp/auth'
@@ -114,6 +115,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP] inbox/move', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Internal server error' },
       { status: 500 }

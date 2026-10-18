@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -73,6 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(response)
   } catch (error) {
     console.error('Error unarchiving inbox notifications:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

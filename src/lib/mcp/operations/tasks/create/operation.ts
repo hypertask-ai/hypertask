@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 
 import type { McpAgentSummary } from '@/lib/mcp/agents';
@@ -284,6 +285,7 @@ export async function POST(request: NextRequest) {
         }
         console.error('[MCP Create Task] Error:', error);
 
+        reportMcpOperationCrash(request, error);
         return NextResponse.json(
             {
                 success: false,
