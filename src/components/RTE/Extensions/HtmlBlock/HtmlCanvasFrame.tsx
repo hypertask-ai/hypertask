@@ -38,12 +38,12 @@ export function HtmlCanvasFrame({
       const data = event.data as { __htHtmlBlock?: unknown; h?: unknown; __htHtmlBlockLink?: unknown; href?: unknown; newTab?: unknown };
       if (linkHandoffEnabled && data?.__htHtmlBlockLink === 1) {
         const link = resolveCanvasLink(data.href, window.location.origin);
-        if (!link) return;
+        const followsRealClick = window.navigator.userActivation?.isActive === true;
+        if (!link || !followsRealClick) return;
         if (link.kind === "internal" && data.newTab !== true) {
           router.push(link.path);
         } else {
-          const url = link.kind === "external" ? link.url : new URL(link.path, window.location.origin).href;
-          window.open(url, "_blank", "noopener,noreferrer");
+          window.open(link.url, "_blank", "noopener,noreferrer");
         }
         return;
       }

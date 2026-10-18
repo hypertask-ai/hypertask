@@ -119,9 +119,10 @@ test("flag off leaves link clicks untouched and image gallery keeps priority for
 
 test("URL resolution preserves internal paths and isolates external and look-alike origins", () => {
   assert.deepEqual(resolveCanvasLink(`${origin}/detail/project-15/7321?x=1#comment-42`, origin), {
-    kind: "internal", path: "/detail/project-15/7321?x=1#comment-42",
+    kind: "internal", path: "/detail/project-15/7321?x=1#comment-42", url: `${origin}/detail/project-15/7321?x=1#comment-42`,
   });
-  assert.deepEqual(resolveCanvasLink(origin, origin), { kind: "internal", path: "/" });
+  assert.deepEqual(resolveCanvasLink(origin, origin), { kind: "internal", path: "/", url: `${origin}/` });
+  assert.deepEqual(resolveCanvasLink(`${origin}//evil.example/path`, origin), { kind: "external", url: `${origin}//evil.example/path` });
   for (const url of ["https://example.com/path", "http://app.hypertask.ai/", "https://app.hypertask.ai.evil.com/", "https://app.hypertask.ai:8443/"]) {
     assert.deepEqual(resolveCanvasLink(url, origin), { kind: "external", url });
   }
@@ -139,6 +140,8 @@ async function withFrame(run) {
   enabled = true;
   const opened = [];
   dom.window.open = (...args) => opened.push(args);
+  const activation = { isActive: true };
+  Object.defineProperty(dom.window.navigator, "userActivation", { get: () => activation });
   const reactRoot = createRoot(document.getElementById("root"));
   const render = async () => React.act(async () => reactRoot.render(React.createElement(HtmlCanvasFrame, { html: '<a href="https://example.com">Link</a>' })));
   const message = async (data, source = document.querySelector("iframe").contentWindow) => React.act(async () => {
@@ -146,7 +149,7 @@ async function withFrame(run) {
   });
   try {
     await render();
-    await run({ dom, opened, message, render });
+    await run({ dom, opened, message, render, activation });
   } finally {
     await React.act(async () => reactRoot.unmount());
     dom.window.close();
@@ -184,6 +187,30 @@ test("foreign sources and invalid URLs are refused while the actual frame source
     assert.deepEqual(pushes, ["/detail/project-15/7321"]);
     await message({ __htHtmlBlock: 1, h: 240.5 });
     assert.equal(document.querySelector("iframe").style.height, "241px");
+  });
+});
+
+test("a canvas script posting a link without a real click cannot navigate the app", async () => {
+  await withFrame(async ({ opened, message, activation }) => {
+    const data = { __htHtmlBlockLink: 1, href: `${origin}/detail/project-15/7321` };
+    activation.isActive = false;
+    await message(data);
+    await message({ ...data, href: "https://example.com", newTab: true });
+    assert.deepEqual(pushes, []);
+    assert.deepEqual(opened, []);
+    activation.isActive = true;
+    await message(data);
+    assert.deepEqual(pushes, ["/detail/project-15/7321"]);
+  });
+});
+
+test("a double-slash path on the app origin never reaches the router or another host", async () => {
+  await withFrame(async ({ opened, message }) => {
+    const href = `${origin}//evil.example/path`;
+    await message({ __htHtmlBlockLink: 1, href, newTab: false });
+    await message({ __htHtmlBlockLink: 1, href, newTab: true });
+    assert.deepEqual(pushes, []);
+    assert.deepEqual(opened, [[href, "_blank", "noopener,noreferrer"], [href, "_blank", "noopener,noreferrer"]]);
   });
 });
 
