@@ -22,6 +22,7 @@ import prisma from '@/lib/prisma'
 import {
   hasPrWhere,
   normalizeTaskStatus,
+  parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
   parseUpdatedSince,
@@ -349,7 +350,9 @@ export async function GET(request: NextRequest) {
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
     const dueDateBefore = searchParams.get('due_date_before') || undefined
     const dueDateAfter = searchParams.get('due_date_after') || undefined
-    let status = (searchParams.get('status') as 'Normal' | 'Archive' | 'Deleted') || 'Normal'
+    const statusParam = parseTaskStatusParam(searchParams.get('status'), ['Normal', 'Archive', 'Deleted'])
+    if (!statusParam) return validationError('status must be open, Normal, Archive, or Deleted')
+    let status = statusParam
     let labelsParam = searchParams.getAll('labels')
     const createdBy = searchParams.get('created_by') ? parseInt(searchParams.get('created_by')!) : null
     let updatedSince = searchParams.get('updated_since') || undefined

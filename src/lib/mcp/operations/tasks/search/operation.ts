@@ -15,6 +15,7 @@ import { rankedSearchWhere } from '@/lib/search/rankedWhere'
 import {
   hasPrWhere,
   normalizeTaskStatus,
+  parseTaskStatusParam,
   parseAssigneeFilter,
   parseNumericCursor,
   parseUpdatedSince,
@@ -88,7 +89,14 @@ export async function GET(request: NextRequest) {
     const priorityParam = searchParams.get('priority')
     let section = searchParams.get('section') || undefined
     const hasDueDate = searchParams.get('has_due_date') ? searchParams.get('has_due_date') === 'true' : undefined
-    let status = (searchParams.get('status') as 'Normal' | 'Archive') || 'Normal'
+    const statusParam = parseTaskStatusParam(searchParams.get('status'), ['Normal', 'Archive'])
+    if (!statusParam) {
+      return NextResponse.json(
+        { success: false, error: 'Validation error', message: 'status must be open, Normal, or Archive' },
+        { status: 400 },
+      )
+    }
+    let status = statusParam
     let limit = Math.min(parseInt(searchParams.get('limit') || '10'), 50)
     if (listQuery?.filter.section) section = listQuery.filter.section
     if (listQuery?.filter.assignee !== undefined) assignedTo = String(listQuery.filter.assignee)
