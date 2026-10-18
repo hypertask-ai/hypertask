@@ -1,4 +1,5 @@
 
+import { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6962_KEEP_ASSIGNEE_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -143,6 +144,7 @@ const useDescriptionAndCommentsStates = () => {
     isShareView,
     setNewCommentIds,
     setNewCommentsSnapshotReady,
+    setNewCommentsLastReadAt,
   } = useTaskContext();
   const {
     showEmojiPickerDescription,
@@ -152,6 +154,7 @@ const useDescriptionAndCommentsStates = () => {
     emojiClickHandlerDescriptionr,
   } = useDescriptionReactions();
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
+  const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
   const keepAssignee = useFlag(HTPR_6962_KEEP_ASSIGNEE_FLAG);
   const _parsedTask = useMemo(() => JSON.parse(parsed_task), [parsed_task]);
   const [descriptionAttachments, setDescriptionAttachments] = useState<
@@ -235,6 +238,18 @@ const useDescriptionAndCommentsStates = () => {
     (useBeacon = false) => {
       if (isShareView || !currentUser?.id || !currentTask?.id) return;
 
+      if (unreadTicketOpensTop) {
+        const lastReadAt = new Date().toISOString();
+        queryClient.setQueryData(
+          [globalConstants.CommentsTQPrefixKey, currentTask.id],
+          (payload: any) => payload === undefined ? undefined : {
+            ...(Array.isArray(payload) ? {} : payload),
+            ...normalizeCommentsQueryPayload(payload),
+            lastReadAt,
+          }
+        );
+      }
+
       const body = JSON.stringify({ taskId: currentTask.id });
       if (
         useBeacon &&
@@ -257,7 +272,7 @@ const useDescriptionAndCommentsStates = () => {
         console.log("🤔 ~ markTaskReadOnLeave ~ error:", error);
       });
     },
-    [currentTask?.id, currentUser?.id, isShareView]
+    [currentTask?.id, currentUser?.id, isShareView, unreadTicketOpensTop, queryClient]
   );
 
   useEffect(() => {
@@ -400,6 +415,7 @@ const useDescriptionAndCommentsStates = () => {
         lastReadAt: lastReadAtFromQuery,
       };
       setSnapshotIds(initialNewCommentIds);
+      setNewCommentsLastReadAt(lastReadAtFromQuery);
       setNewCommentsSnapshotReady(true);
       return;
     }
@@ -433,6 +449,7 @@ const useDescriptionAndCommentsStates = () => {
     lastReadAtFromQuery,
     setNewCommentIds,
     setNewCommentsSnapshotReady,
+    setNewCommentsLastReadAt,
     setStacked,
   ]);
 

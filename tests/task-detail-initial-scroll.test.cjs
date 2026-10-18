@@ -170,7 +170,7 @@ test("task detail wires the guard to task lifecycle and every delayed mobile scr
   );
   assert.match(mountPositioning, /runInitialPositioning\(scrollToElement\)/);
   assert.match(mountPositioning, /runInitialPositioning\(\(\) =>\s*focusOn/);
-  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, instantTicketOpen, cachedLayout\]\);$/);
+  assert.match(mountPositioning, /\}, \[_parsedTask\.id, stableLayout, instantTicketOpen, cachedLayout, unreadTicketOpensTop\]\);$/);
   assert.match(mountPositioning, /useEffect\(\(\) => \{/);
   assert.ok(
     mountPositioning.indexOf("else if (stableLayout && instantTicketOpen && cachedLayout)") >
