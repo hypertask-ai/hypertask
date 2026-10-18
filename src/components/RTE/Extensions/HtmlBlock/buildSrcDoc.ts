@@ -1,3 +1,4 @@
+import { LINK_PORT_MESSAGE, LINK_READY_MESSAGE } from "./canvasLinks";
 
 const CSP = [
   "default-src 'none'",
@@ -30,23 +31,49 @@ document.addEventListener('click', function(event) {
 </script>`;
 
 const LINK_CLICK_SCRIPT = `<script>
-document.addEventListener('click', function(event) {
-  if (event.defaultPrevented) return;
-  var a = event.target instanceof Element ? event.target.closest('a[href]') : null;
-  if (!a) return;
-  var raw = a.getAttribute('href');
-  if (raw.startsWith('#')) {
-    event.preventDefault();
-    var fragment = raw.slice(1);
-    try { fragment = decodeURIComponent(fragment); } catch (e) {}
-    var target = document.getElementById(fragment) || document.getElementsByName(fragment)[0];
-    if (target) target.scrollIntoView();
-    return;
-  }
-  if (a.protocol !== 'http:' && a.protocol !== 'https:') return;
-  a.target = '_blank';
-  a.rel = 'noopener noreferrer';
-});
+(function() {
+  var apply = Reflect.apply;
+  var send = MessagePort.prototype.postMessage;
+  var closest = Element.prototype.closest;
+  var getAttribute = Element.prototype.getAttribute;
+  var preventDefault = Event.prototype.preventDefault;
+  var stopImmediatePropagation = Event.prototype.stopImmediatePropagation;
+  var getter = function(proto, name) { return Object.getOwnPropertyDescriptor(proto, name).get; };
+  var hrefOf = getter(HTMLAnchorElement.prototype, 'href');
+  var protocolOf = getter(HTMLAnchorElement.prototype, 'protocol');
+  var dataOf = getter(MessageEvent.prototype, 'data');
+  var portsOf = getter(MessageEvent.prototype, 'ports');
+  var sourceOf = getter(MessageEvent.prototype, 'source');
+  var parentWindow = window.parent;
+  var port = null;
+  window.addEventListener('message', function(event) {
+    if (port || apply(sourceOf, event, []) !== parentWindow) return;
+    var data = apply(dataOf, event, []);
+    var ports = apply(portsOf, event, []);
+    if (!data || data.${LINK_PORT_MESSAGE} !== 1 || !ports[0]) return;
+    apply(stopImmediatePropagation, event, []);
+    port = ports[0];
+  }, true);
+  parentWindow.postMessage({ ${LINK_READY_MESSAGE}: 1 }, '*');
+  window.addEventListener('click', function(event) {
+    if (!event.isTrusted || event.defaultPrevented || !(event.target instanceof Element)) return;
+    var a = apply(closest, event.target, ['a[href]']);
+    if (!a) return;
+    var raw = apply(getAttribute, a, ['href']) || '';
+    if (raw.charAt(0) === '#') {
+      apply(preventDefault, event, []);
+      var fragment = raw.slice(1);
+      try { fragment = decodeURIComponent(fragment); } catch (e) {}
+      var target = document.getElementById(fragment) || document.getElementsByName(fragment)[0];
+      if (target) target.scrollIntoView();
+      return;
+    }
+    var protocol = apply(protocolOf, a, []);
+    if (protocol !== 'http:' && protocol !== 'https:') return;
+    apply(preventDefault, event, []);
+    if (port) apply(send, port, [{ href: apply(hrefOf, a, []) }]);
+  });
+})();
 </script>`;
 
 export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false, linksOpenInNewTab = false): string {
@@ -68,12 +95,12 @@ export function buildHtmlBlockSrcDoc(raw: string, imageGalleryEnabled = false, l
     '<meta name="viewport" content="width=device-width,initial-scale=1">' +
     `<meta http-equiv="Content-Security-Policy" content="${CSP}">` +
     "<style>html,body{margin:0;padding:0}body{overflow-x:hidden;word-break:break-word}</style>" +
+    (linksOpenInNewTab ? LINK_CLICK_SCRIPT : "") +
     headExtra +
     "</head><body>" +
     body +
     RESIZE_SCRIPT +
     (imageGalleryEnabled ? IMAGE_CLICK_SCRIPT : "") +
-    (linksOpenInNewTab ? LINK_CLICK_SCRIPT : "") +
     "</body></html>"
   );
 }

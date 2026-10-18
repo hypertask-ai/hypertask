@@ -8,7 +8,7 @@ export default {
   defaultMode: "EVERYONE",
   shippedOn: "2026-10-18",
   description:
-    "Opens HTML canvas links in a new tab instead of inside the page frame.",
+    "Opens web links in HTML canvas pages in a new tab instead of inside the page frame.",
   releaseRisk: {
     risk: "small",
     reason: "Links in HTML canvas pages open in a new tab instead of inside the page frame.",
