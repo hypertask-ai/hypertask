@@ -144,11 +144,24 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
 
 const documentFor = (element) => new JSDOM(renderToString(element)).window.document;
 
+test("mobile bottom bar shows on boards and hides on ticket pages", () => {
+  const state = {
+    mbl: true, authenticatedUserId: 985, currentUserId: 985,
+    commentComposerOpen: false, agentChatHidesMobileShell: false,
+  };
+  for (const [pathname, shown] of [["/project/15", true], ["/calendar", true], ["/page/cmur49hls000005qktwd6geui", false]]) {
+    const { showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = reservations({ ...state, pathname });
+    assert.equal(showMobileTabBar, true, pathname);
+    assert.equal(showMobileBottomInset, shown, pathname);
+    assert.equal(showMobileBottomNav, shown, pathname);
+  }
+});
+
 test("mobile shell space exists before the authenticated profile finishes loading", () => {
   for (const pathname of ["/project", "/inbox", "/detail/project-7049/31", "/login", "/share/task/1"]) {
     const dependencies = {
       mbl: true, authenticatedUserId: 985, currentUserId: undefined, pathname,
-      mobilePageHideDockFlag: false, commentComposerOpen: false, agentChatHidesMobileShell: false,
+      commentComposerOpen: false, agentChatHidesMobileShell: false,
     };
     const render = () => {
       const { showMobileTabBar: topBar, showMobileBottomInset: dock } = reservations(dependencies);

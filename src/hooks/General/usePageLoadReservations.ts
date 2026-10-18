@@ -20,7 +20,6 @@ export function usePageLoadReservations({
   currentUserId,
   showAiChatInterface,
   aiChatAutoOpenSuppressed,
-  mobilePageHideDockFlag,
   commentComposerOpen,
   agentChatHidesMobileShell,
 }: {
@@ -30,7 +29,6 @@ export function usePageLoadReservations({
   currentUserId: number | undefined;
   showAiChatInterface: boolean;
   aiChatAutoOpenSuppressed: boolean;
-  mobilePageHideDockFlag: boolean;
   commentComposerOpen: boolean;
   agentChatHidesMobileShell: boolean;
 }) {
@@ -56,7 +54,7 @@ export function usePageLoadReservations({
     mbl &&
     (authenticatedUserId !== null || Boolean(currentUserId)) &&
     shouldShowMobileDock(pathname) &&
-    !(mobilePageHideDockFlag && isTicketPagePath(pathname)) &&
+    !isTicketPagePath(pathname) &&
     !commentComposerOpen &&
     !agentChatHidesMobileShell;
 
