@@ -139,8 +139,8 @@ export async function createPage({
     if (taskId !== undefined) {
       await tx.$queryRaw`SELECT id FROM "Task" WHERE id = ${taskId} FOR UPDATE`
     }
-    const task = taskId === undefined ? null : await tx.task.findUnique({
-      where: { id: taskId },
+    const task = taskId === undefined ? null : await tx.task.findFirst({
+      where: { id: taskId, project: { status: 'Normal', ...getProjectWhere(userId, agentId) } },
       select: { id: true, projectId: true },
     })
     if (taskId !== undefined && !task) throw new Error(`Task with ID ${taskId} not found`)

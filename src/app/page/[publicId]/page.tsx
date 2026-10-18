@@ -25,7 +25,11 @@ export default async function Page(props: {
     redirect("/");
   }
 
-  if (!page.task && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, currentUser.id))) {
+  const origin = await prisma.page.findUnique({
+    where: { id: page.id },
+    select: { taskId: true },
+  });
+  if (origin?.taskId == null && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, currentUser.id))) {
     redirect("/");
   }
 

@@ -51,7 +51,7 @@ function pageService(fixture = page) {
   return load("src/utils/controllers/pages/pageService.ts", {
     "@/lib/prisma": { default: { page: { findUnique: async ({ where, include }) => {
       if (!matches({ ...fixture, project: boards[0] }, where)) return null;
-      const visibleTask = fixture.task && matches({ ...fixture.task, status: "Normal", project: boards.find((board) => board.id === fixture.task.projectId) }, include.task.where)
+      const visibleTask = fixture.task && matches({ status: "Normal", ...fixture.task, project: boards.find((board) => board.id === fixture.task.projectId) }, include.task.where)
         ? fixture.task : null;
       return { ...fixture, task: visibleTask, links: visibleTask ? [{ task: visibleTask }] : [],
         subPages: [
@@ -76,9 +76,12 @@ for (const userId of [1, 2, 3]) {
         "next/navigation": { redirect: (href) => { throw new Error(`redirect:${href}`); } },
         "./PageEditor": { default: () => null },
         "@/lib/flags": { isFeatureEnabled: async () => true },
-        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+        "@/lib/flags/keys": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
         "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
-        "@/lib/prisma": { default: { project: { findFirst: async (query) => {
+        "@/lib/prisma": { default: { page: { findUnique: async (query) => {
+          assert.deepEqual(query, { where: { id: page.id }, select: { taskId: true } });
+          return { taskId: taskless ? null : task.id };
+        } }, project: { findFirst: async (query) => {
           boardQuery = query;
           return boards.find((board) => matches(board, query.where)) ?? null;
         } } } },
@@ -109,13 +112,18 @@ for (const userId of [1, 2, 3]) {
 
 test("server screen preserves a visible task and redirects a missing page", async () => {
   let missing = false;
+  let originReads = 0;
   const Screen = load("src/app/page/[publicId]/page.tsx", {
     "next/navigation": { redirect: () => { throw new Error("redirect"); } },
     "./PageEditor": { default: () => null },
     "@/lib/flags": { isFeatureEnabled: async () => true },
-    "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+    "@/lib/flags/keys": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
     "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
-    "@/lib/prisma": { default: { project: { findFirst: async () => ({ id: 10 }) } } },
+    "@/lib/prisma": { default: { page: { findUnique: async (query) => {
+      originReads++;
+      assert.deepEqual(query, { where: { id: page.id }, select: { taskId: true } });
+      return { taskId: task.id };
+    } }, project: { findFirst: async () => ({ id: 10 }) } } },
     "@/utils/controllers/projects/getAllIncludes": access,
     "@/utils/controllers/pages/pageService": { getPage: async ({ userId }) => {
       assert.equal(userId, 1);
@@ -126,35 +134,65 @@ test("server screen preserves a visible task and redirects a missing page", asyn
   assert.equal(JSON.parse(rendered.props._page).task.id, task.id);
   missing = true;
   await assert.rejects(Screen({ params: Promise.resolve({ publicId: page.publicId }) }), /redirect/);
+  assert.equal(originReads, 1, "missing pages redirect before the raw origin lookup");
 });
 
 for (const enabled of [false, true]) {
-  for (const visibleTask of [false, true]) {
-    test(`server screen flag ${enabled}: ${visibleTask ? "visible ticket renders" : enabled ? "no visible ticket renders" : "no visible ticket redirects"}`, async () => {
+  for (const [kind, fixture, visibleTask] of [
+    ["visible ticket", { ...page, task: { ...task, projectId: 10 } }, true],
+    ["soft-deleted ticket", { ...page, task: { ...task, projectId: 10, status: "Deleted" } }, false],
+    ["raw taskId null", { ...page, task: null, taskId: null }, false],
+  ]) {
+    const redirects = !enabled && fixture.taskId === null;
+    test(`server screen flag ${enabled}: ${kind} ${redirects ? "redirects" : "renders"}`, async () => {
       let boardReads = 0;
+      let originReads = 0;
+      let flagReads = 0;
       const Screen = load("src/app/page/[publicId]/page.tsx", {
         "next/navigation": { redirect: (href) => { throw new Error(`redirect:${href}`); } },
         "./PageEditor": { default: () => null },
         "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
         "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+          flagReads++;
           assert.equal(key, "htpr-7298-standalone-pages");
           assert.equal(userId, 1);
           return enabled;
         } },
-        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
-        "@/lib/prisma": { default: { project: { findFirst: async () => { boardReads++; return { id: 10 }; } } } },
+        "@/lib/flags/keys": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+        "@/lib/prisma": { default: {
+          page: { findUnique: async (query) => {
+            originReads++;
+            assert.deepEqual(query, { where: { id: page.id }, select: { taskId: true } });
+            return { taskId: fixture.taskId };
+          } },
+          project: { findFirst: async (query) => {
+            boardReads++;
+            return boards.find((board) => matches(board, query.where)) ?? null;
+          } },
+        } },
         "@/utils/controllers/projects/getAllIncludes": access,
-        "@/utils/controllers/pages/pageService": { getPage: async () => ({ ...page, task: visibleTask ? task : null, taskId: visibleTask ? task.id : null }) },
+        "@/utils/controllers/pages/pageService": { getPage: async (args) => {
+          assert.deepEqual(args, { publicId: page.publicId, userId: 1 });
+          const result = await pageService(fixture).getPage(args);
+          assert.equal(result.task?.id ?? null, visibleTask ? task.id : null);
+          assert.equal(result.taskId, visibleTask ? task.id : null);
+          return result;
+        } },
       }).default;
       const render = () => Screen({ params: Promise.resolve({ publicId: page.publicId }) });
-      if (!enabled && !visibleTask) {
+      if (redirects) {
         await assert.rejects(render, { message: "redirect:/" });
         assert.equal(boardReads, 0);
       } else {
         const rendered = await render();
-        assert.equal(JSON.parse(rendered.props._page).task?.id ?? null, visibleTask ? task.id : null);
+        const payload = JSON.parse(rendered.props._page);
+        assert.equal(payload.task?.id ?? null, visibleTask ? task.id : null);
+        assert.equal(payload.taskId, visibleTask ? task.id : null);
+        if (!visibleTask) assert.doesNotMatch(rendered.props._page, /HIDDEN-TICKET-TITLE|SECRET-987654|987654/);
         assert.equal(boardReads, 1);
       }
+      assert.equal(originReads, 1);
+      assert.equal(flagReads, fixture.taskId === null ? 1 : 0);
     });
   }
 }

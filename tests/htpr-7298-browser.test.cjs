@@ -67,6 +67,7 @@ function harness(options = {}) {
   let lock = false;
   let inTx = false;
   const creationCalls = [];
+  const creationQueries = [];
   const userId = options.userId ?? 1;
   const taskRow = (task) => task && ({ ...task, project: state.projects.find((p) => p.id === task.projectId) });
   const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
@@ -78,11 +79,7 @@ function harness(options = {}) {
     },
     task: {
       findFirst: async (query) => find(state.tasks.map(taskRow), query)[0] ?? null,
-      findUnique: async (query) => {
-        assert.ok(inTx, 'creation ticket read belongs to transaction');
-        creationCalls.push('task-read');
-        return find(state.tasks.map(taskRow), query)[0] ?? null;
-      },
+      findUnique: async () => assert.fail('creation ticket reads must revalidate access with findFirst'),
     },
     page: {
       findUnique: async (query) => { queries.push(query); return find(state.pages.map(pageRow), query)[0] ?? null; },
@@ -132,7 +129,14 @@ function harness(options = {}) {
       finally { lock = false; inTx = false; }
     },
   };
-  const tx = { ...prisma, task: { ...prisma.task }, page: { ...prisma.page } };
+  const tx = { ...prisma, task: { ...prisma.task, findFirst: async (query) => {
+    assert.ok(inTx, 'ticket read belongs to transaction');
+    if (lock) return prisma.task.findFirst(query);
+    assert.equal(creationCalls.at(-1), 'task-lock', 'creation ticket read holds the ticket lock');
+    creationCalls.push('task-read');
+    creationQueries.push(query);
+    return find(state.tasks.map(taskRow), query)[0] ?? null;
+  } }, page: { ...prisma.page } };
   prisma.$queryRaw = async () => assert.fail('row locks must use the transaction client');
   prisma.task.findUnique = async () => assert.fail('creation ticket reads must use the transaction client');
   prisma.page.create = async () => assert.fail('page creation must use the transaction client');
@@ -158,7 +162,7 @@ function harness(options = {}) {
     const response = await route[method]({ headers: new Headers(), nextUrl: new URL('https://fixture.invalid/?' + query), json: async () => body }, { params: Promise.resolve({ publicId: 'page' }) });
     return { status: response.status, body: await response.json() };
   }
-  return { state, service, request, queries, prisma, creationCalls };
+  return { state, service, request, queries, prisma, creationCalls, creationQueries };
 }
 
 for (const [name, userId, allowed] of [['non-member refused', 2, false], ['agent-attributed human refused', 5, false], ['owner allowed', 1, true], ['human member allowed', 3, true]]) {
@@ -264,15 +268,44 @@ test('ticket create writes link with page in same transaction regardless of flag
     assert.equal(h.state.pages.at(-1).projectId, 1);
   }
 });
-test('ticket creation locks before reading the ticket in its create transaction', async () => {
-  for (const moveBeforeLock of [false, true]) {
-    const h = harness({ moveBeforeLock });
-    await h.service.createPage({ taskId: 11, content: '', contentType: 'html', userId: 1 });
-    assert.deepEqual(h.creationCalls, ['task-lock', 'task-read', 'page-create']);
-    assert.equal(h.state.pages.at(-1).projectId, moveBeforeLock ? 2 : 1);
-    assert.equal(h.state.links.at(-1).taskId, 11);
-  }
-});
+for (const [name, userId, agentId, moveBeforeLock, allowed] of [
+  ['accessible original board still works', 1, undefined, false, true],
+  ['moved to an inaccessible board is refused', 1, undefined, true, false],
+  ['moved to an accessible board still works', 3, undefined, true, true],
+  ['moved to a board inaccessible to the agent is refused', 5, 'agent-only', true, false],
+  ['moved to a board accessible to the agent still works', 5, 'agent-only', true, true],
+]) {
+  test(`ticket creation locks before reading the ticket in its create transaction: ${name}`, async () => {
+    const h = harness({ userId, agentId, moveBeforeLock });
+    if (agentId) {
+      h.state.projects[0].members.find((member) => member.agentId === agentId).agent = { userId, revokedAt: null };
+      if (allowed) h.state.projects[1].members.push({ userId, agentId, agent: { userId, revokedAt: null } });
+    }
+    assert.ok(matches(h.state.projects[0], access.getProjectWhere(userId, agentId)), 'creator has access before the ticket moves');
+    const before = plain(h.state);
+    const create = () => h.service.createPage({ taskId: 11, projectId: 1, content: '', contentType: 'html', userId, agentId });
+    if (allowed) {
+      const created = await create();
+      assert.deepEqual(h.creationCalls, ['task-lock', 'task-read', 'page-create']);
+      assert.equal(created.projectId, moveBeforeLock ? 2 : 1);
+      assert.equal(h.state.pages.at(-1).projectId, moveBeforeLock ? 2 : 1);
+      assert.equal(h.state.pages.length, before.pages.length + 1);
+      assert.equal(h.state.links.length, before.links.length + 1);
+      assert.equal(h.state.links.at(-1).pageId, created.id);
+      assert.equal(h.state.links.at(-1).taskId, 11);
+      assert.equal(h.state.links.at(-1).createdById, userId);
+      assert.equal(h.state.links.at(-1).agentId, agentId ?? null);
+    } else {
+      await assert.rejects(create, { message: 'Task with ID 11 not found' });
+      assert.deepEqual(h.creationCalls, ['task-lock', 'task-read']);
+      assert.deepEqual(plain(h.state), before, 'refused creation creates no page or link');
+    }
+    assert.deepEqual(h.creationQueries, [{
+      where: { id: 11, project: { status: 'Normal', ...access.getProjectWhere(userId, agentId) } },
+      select: { id: true, projectId: true },
+    }], 'post-lock access filter uses the supplied user and agent');
+  });
+}
 
 for (const enabled of [false, true]) {
   test(`ticket create flag ${enabled}: unrelated parent refused / legacy or linked same-ticket parent allowed`, async () => {
