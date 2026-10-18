@@ -282,6 +282,14 @@
       },
       "include": {
         "task": {
+          "where": {
+            "status": {
+              "not": "Deleted"
+            },
+            "project": {
+              "status": "Normal"
+            }
+          },
           "select": {
             "id": true,
             "ticketNumber": true,
@@ -294,8 +302,44 @@
           "select": {
             "id": true,
             "title": true,
-            "publicId": true
+            "publicId": true,
+            "projectId": true
+          },
+          "where": {
+            "archived": false
           }
+        },
+        "links": {
+          "where": {
+            "removedAt": null,
+            "task": {
+              "status": {
+                "not": "Deleted"
+              },
+              "project": {
+                "status": "Normal"
+              }
+            }
+          },
+          "select": {
+            "task": {
+              "select": {
+                "id": true,
+                "ticketNumber": true,
+                "title": true,
+                "projectId": true,
+                "uniqueIndex": true
+              }
+            }
+          },
+          "orderBy": [
+            {
+              "createdAt": "asc"
+            },
+            {
+              "id": "asc"
+            }
+          ]
         }
       }
     },
@@ -327,9 +371,18 @@
           "title": null,
           "publicId": "fixture-child"
         }
+      ],
+      "linkedTasks": [
+        {
+          "id": 50,
+          "ticketNumber": null,
+          "title": null,
+          "projectId": 15,
+          "uniqueIndex": null
+        }
       ]
     },
-    "queryCount": 3
+    "queryCount": 5
   },
   "project": {
     "args": {
