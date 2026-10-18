@@ -75,6 +75,8 @@ for (const userId of [1, 2, 3]) {
       const Screen = load("src/app/page/[publicId]/page.tsx", {
         "next/navigation": { redirect: (href) => { throw new Error(`redirect:${href}`); } },
         "./PageEditor": { default: () => null },
+        "@/lib/flags": { isFeatureEnabled: async () => true },
+        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
         "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: userId }) },
         "@/lib/prisma": { default: { project: { findFirst: async (query) => {
           boardQuery = query;
@@ -110,7 +112,9 @@ test("server screen preserves a visible task and redirects a missing page", asyn
   const Screen = load("src/app/page/[publicId]/page.tsx", {
     "next/navigation": { redirect: () => { throw new Error("redirect"); } },
     "./PageEditor": { default: () => null },
-    "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
+    "@/lib/flags": { isFeatureEnabled: async () => true },
+        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+        "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
     "@/lib/prisma": { default: { project: { findFirst: async () => ({ id: 10 }) } } },
     "@/utils/controllers/projects/getAllIncludes": access,
     "@/utils/controllers/pages/pageService": { getPage: async ({ userId }) => {
@@ -123,6 +127,37 @@ test("server screen preserves a visible task and redirects a missing page", asyn
   missing = true;
   await assert.rejects(Screen({ params: Promise.resolve({ publicId: page.publicId }) }), /redirect/);
 });
+
+for (const enabled of [false, true]) {
+  for (const visibleTask of [false, true]) {
+    test(`server screen flag ${enabled}: ${visibleTask ? "visible ticket renders" : enabled ? "no visible ticket renders" : "no visible ticket redirects"}`, async () => {
+      let boardReads = 0;
+      const Screen = load("src/app/page/[publicId]/page.tsx", {
+        "next/navigation": { redirect: (href) => { throw new Error(`redirect:${href}`); } },
+        "./PageEditor": { default: () => null },
+        "@/lib/auth/serverUser": { requireServerCookieUser: async () => ({ id: 1 }) },
+        "@/lib/flags": { isFeatureEnabled: async (key, userId) => {
+          assert.equal(key, "htpr-7298-standalone-pages");
+          assert.equal(userId, 1);
+          return enabled;
+        } },
+        "@/lib/flags/definitions/htpr-7298-standalone-pages": { HTPR_7298_STANDALONE_PAGES_FLAG: "htpr-7298-standalone-pages" },
+        "@/lib/prisma": { default: { project: { findFirst: async () => { boardReads++; return { id: 10 }; } } } },
+        "@/utils/controllers/projects/getAllIncludes": access,
+        "@/utils/controllers/pages/pageService": { getPage: async () => ({ ...page, task: visibleTask ? task : null, taskId: visibleTask ? task.id : null }) },
+      }).default;
+      const render = () => Screen({ params: Promise.resolve({ publicId: page.publicId }) });
+      if (!enabled && !visibleTask) {
+        await assert.rejects(render, { message: "redirect:/" });
+        assert.equal(boardReads, 0);
+      } else {
+        const rendered = await render();
+        assert.equal(JSON.parse(rendered.props._page).task?.id ?? null, visibleTask ? task.id : null);
+        assert.equal(boardReads, 1);
+      }
+    });
+  }
+}
 
 const parser = require("node-html-parser");
 const canvas = load("src/utils/controllers/pages/htmlCanvas.ts", { "node-html-parser": parser });
