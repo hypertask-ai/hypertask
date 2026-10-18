@@ -58,7 +58,6 @@ import {
   HTPR_7053_COMPOSE_BOARD_CHIP_FLAG,
   HTPR_6868_TICKET_PREFIX_FLAG,
   HTPR_6662_AGENT_LOG_NAME_FLAG,
-  HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG,
   HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG,
   HTPR_6567_COMMAND_SCOPE_PICKER_FLAG,
   MY_TASKS_SCOPES_FLAG,
@@ -175,9 +174,8 @@ const Commands = (props: Props) => {
   const myTasksTimeGroupEnabled = useFlag(MY_TASKS_TIME_GROUP_FLAG);
   const myTasksFilterParityEnabled = useFlag(MY_TASKS_FILTER_PARITY_FLAG);
   const myTasksTableColumnsEnabled = useFlag(MY_TASKS_TABLE_COLUMNS_FLAG);
-  const mobilePageBackRowEnabled = useFlag(HTPR_6861_MOBILE_PAGE_BACK_ROW_FLAG);
   const currentPageActions = useRecoilValue(currentPageActionsAtom);
-  const pageActions = mobilePageBackRowEnabled && isMobile && currentPageActions &&
+  const pageActions = isMobile && currentPageActions &&
     pathname === `/page/${currentPageActions.publicId}`
     ? currentPageActions
     : null;
@@ -371,7 +369,7 @@ const Commands = (props: Props) => {
         : commandGroups;
 
     const mobileGroups = getMobileCommandGroups(rankedCommandGroups, isMobile);
-    const rankedGroups = mobilePageBackRowEnabled && pageActions
+    const rankedGroups = pageActions
       ? [{
           group: `This page (Version ${pageActions.version})`,
           commandLists: [{
@@ -601,7 +599,7 @@ const Commands = (props: Props) => {
         recordHTCCommandUsage(previousUsage, command)
       );
       (document.activeElement as HTMLElement).blur();
-      if (mobilePageBackRowEnabled && command.key === "deletePage") {
+      if (command.key === "deletePage") {
         if (!pageActions) return;
         resetShowCommands();
         void pageActions.onDelete();
@@ -809,13 +807,7 @@ const Commands = (props: Props) => {
                {...(composeEnabled ? { onBlur: undefined } : {})}
             />
           </div>
-          {mobilePageBackRowEnabled ? (
-            <div data-htpr-6861-page-actions="">
-              {commandGroups}
-            </div>
-          ) : (
-            commandGroups
-          )}
+          {commandGroups}
           <ModalHintBar />
           {cmdkVersionEnabled && (
             <div data-cmdk-version className="px-4 pb-2 text-micro text-text-light-gray">
