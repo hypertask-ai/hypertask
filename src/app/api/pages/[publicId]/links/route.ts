@@ -69,14 +69,6 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
 
       if (remove) {
         await tx.pageTaskLink.deleteMany({ where: { pageId: page.id, taskId } })
-        if (page.taskId === taskId) {
-          const next = await tx.pageTaskLink.findFirst({
-            where: { pageId: page.id },
-            orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-            select: { taskId: true },
-          })
-          await tx.page.update({ where: { id: page.id }, data: { taskId: next?.taskId ?? null } })
-        }
       } else {
         const task = await tx.task.findFirst({
           where: {

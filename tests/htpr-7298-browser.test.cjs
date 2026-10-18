@@ -19,6 +19,7 @@ function matches(row, where = {}) {
     const value = row[key];
     if (expected === null || typeof expected !== 'object') return value === expected;
     if ('some' in expected) return value.some((item) => matches(item, expected.some));
+    if ('none' in expected) return !value.some((item) => matches(item, expected.none));
     if ('not' in expected) return value !== expected.not;
     if ('in' in expected) return expected.in.includes(value);
     if ('contains' in expected) return String(value).toLowerCase().includes(expected.contains.toLowerCase());
@@ -47,9 +48,9 @@ function harness(options = {}) {
       { id: 5, title: 'Deleted board', status: 'Deleted', teamId: 'team', ownerId: 3, members: [] },
     ],
     tasks: [
-      { id: 10, projectId: 2, title: 'SECRET-TICKET', ticketNumber: 'SECRET-987', uniqueIndex: 987, status: 'Normal' },
-      { id: 11, projectId: 1, title: 'Visible ticket', ticketNumber: 'A-11', uniqueIndex: 11, status: 'Normal' },
-      { id: 12, projectId: 3, title: 'Foreign ticket', status: 'Normal' },
+      { id: 10, projectId: 2, title: 'SECRET-TICKET', ticketNumber: 'SECRET-987', uniqueIndex: 987, status: 'Normal', deletedAt: null },
+      { id: 11, projectId: 1, title: 'Visible ticket', ticketNumber: 'A-11', uniqueIndex: 11, status: 'Normal', deletedAt: null },
+      { id: 12, projectId: 3, title: 'Foreign ticket', status: 'Normal', deletedAt: null },
       { id: 13, projectId: 1, title: 'Deleted ticket', status: 'Deleted' },
     ],
     pages: [
@@ -223,15 +224,17 @@ for (const [name, options, taskId, expected] of [
     }
   });
 }
-for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 404], ['page-board writer allowed and promotes pointer', 1, 200]]) {
+for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 404], ['page-board writer allowed and preserves origin', 1, 200]]) {
   test(`unlink: ${name}`, async () => {
     const h = harness({ userId });
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, expected);
-    assert.equal(h.state.pages[0].taskId, expected === 200 ? 11 : 10);
+    assert.equal(h.state.pages[0].taskId, 10);
+    assert.equal(h.state.links.some((link) => link.pageId === 20 && link.taskId === 10), expected !== 200);
     if (expected === 200) {
       await h.request('[publicId]/links', 'DELETE', { task_id: 11 });
-      assert.equal(h.state.pages[0].taskId, null);
+      assert.equal(h.state.pages[0].taskId, 10);
+      assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 0);
     }
   });
 }

@@ -230,8 +230,9 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
   })
   if (!page) return null
   const { links, subPages, ...visiblePage } = page
-  const linkedTasks = args.standalonePagesEnabled === false ? [] : links.map(({ task }) => task)
-  if (page.task && !linkedTasks.some(({ id }) => id === page.task?.id)) linkedTasks.push(page.task)
+  const linkedTasks = args.standalonePagesEnabled === false
+    ? (page.task ? [page.task] : [])
+    : links.map(({ task }) => task)
   return {
     ...visiblePage,
     taskId: page.task?.id ?? null,
@@ -349,7 +350,7 @@ export async function listPages({
     where: {
       archived,
       ...(standalonePagesEnabled
-        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId } } }, { taskId }] })
+        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId } } }, { taskId, links: { none: {} } }] })
         : { taskId: taskId ?? { not: null } }),
       ...(projectId === undefined ? {} : { projectId }),
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
@@ -377,8 +378,7 @@ export async function listPages({
     orderBy: { updatedAt: 'desc' },
   })
   return pages.map(({ links, task, parentPage, ...page }) => {
-    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : []
-    if (task && !linkedTasks.some(({ id }) => id === task.id)) linkedTasks.push(task)
+    const linkedTasks = standalonePagesEnabled ? links.map(({ task }) => task) : (task ? [task] : [])
     return { ...page, parentPageId: parentPage?.projectId === page.projectId ? page.parentPageId : null, linkedTasks }
   })
 }

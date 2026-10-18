@@ -101,7 +101,7 @@ for (const userId of [1, 2, 3]) {
         assert.doesNotMatch(rendered.props._page, /HIDDEN-TICKET-TITLE|SECRET-987654|987654|HIDDEN-CHILD-TITLE|hidden-child/);
         assert.deepEqual(payload.subPages, [{ id: 12, publicId: "same-board", title: "Visible child" }]);
       }
-      assert.deepEqual(pageArgs, { publicId: page.publicId, userId });
+      assert.deepEqual(pageArgs, { publicId: page.publicId, userId, standalonePagesEnabled: true });
       if (userId !== 2) {
         assert.equal(boardQuery.where.id, 10);
         assert.equal(boardQuery.where.status, "Normal");
@@ -172,8 +172,12 @@ for (const enabled of [false, true]) {
         } },
         "@/utils/controllers/projects/getAllIncludes": access,
         "@/utils/controllers/pages/pageService": { getPage: async (args) => {
-          assert.deepEqual(args, { publicId: page.publicId, userId: 1 });
+          assert.deepEqual(args, { publicId: page.publicId, userId: 1, standalonePagesEnabled: enabled });
           const result = await pageService(fixture).getPage(args);
+          if (!enabled && fixture.taskId === null) {
+            assert.equal(result, null);
+            return result;
+          }
           assert.equal(result.task?.id ?? null, visibleTask ? task.id : null);
           assert.equal(result.taskId, visibleTask ? task.id : null);
           return result;
@@ -191,8 +195,8 @@ for (const enabled of [false, true]) {
         if (!visibleTask) assert.doesNotMatch(rendered.props._page, /HIDDEN-TICKET-TITLE|SECRET-987654|987654/);
         assert.equal(boardReads, 1);
       }
-      assert.equal(originReads, 1);
-      assert.equal(flagReads, fixture.taskId === null ? 1 : 0);
+      assert.equal(originReads, redirects ? 0 : 1);
+      assert.equal(flagReads, 1);
     });
   }
 }

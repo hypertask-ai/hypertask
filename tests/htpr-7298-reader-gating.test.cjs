@@ -129,6 +129,7 @@ for (const query of ['all', 'Page']) {
   test(`mentions ${query}: flag-off standalone excluded / legacy and flag-on standalone still work`, async () => {
     for (const enabled of [false, true]) {
       const h = fixture(enabled);
+      h.state.tasks[0].projectId = 1;
       h.state.pages.find((p) => p.id === 22).title = 'Page standalone';
       h.prisma.task.findMany = async () => [];
       h.prisma.user = { findFirst: async () => ({ id: 332, displayName: 'HyperAI' }) };

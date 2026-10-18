@@ -307,7 +307,10 @@ const fetchMentionPages = async (
       take: 5,
       where: {
         archived: false,
-        ...(standaloneEnabled ? {} : { taskId: { not: null } }),
+        ...(standaloneEnabled ? {} : {
+          taskId: { not: null },
+          task: { projectId, deletedAt: null },
+        }),
         projectId,
         project: { status: "Normal" },
         ...(titleQuery

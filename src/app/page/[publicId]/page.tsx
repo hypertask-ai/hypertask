@@ -19,7 +19,8 @@ export default async function Page(props: {
 }) {
   const { publicId } = await props.params;
   const currentUser = await requireServerCookieUser();
-  const page = await getPage({ publicId, userId: currentUser.id });
+  const standalonePagesEnabled = await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, currentUser.id);
+  const page = await getPage({ publicId, userId: currentUser.id, standalonePagesEnabled });
 
   if (!page) {
     redirect("/");
@@ -29,7 +30,7 @@ export default async function Page(props: {
     where: { id: page.id },
     select: { taskId: true },
   });
-  if (origin?.taskId == null && !(await isFeatureEnabled(HTPR_7298_STANDALONE_PAGES_FLAG, currentUser.id))) {
+  if (origin?.taskId == null && !standalonePagesEnabled) {
     redirect("/");
   }
 
