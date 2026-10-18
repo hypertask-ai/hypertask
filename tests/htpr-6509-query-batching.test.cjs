@@ -58,6 +58,7 @@ function projectRow(modelName, data, args) {
     .filter((field) => field.kind !== "object" && !field.isIgnored).map((field) => [field.name, true]));
   const selection = { ...selected, ...args.include };
   return Object.fromEntries(Object.entries(selection).filter(([, enabled]) => enabled).map(([key, select]) => {
+    if (key === "_count") return [key, Object.fromEntries(Object.keys(select.select).map((relation) => [relation, data[relation].length]))];
     const field = models.get(modelName).fields.find((candidate) => candidate.name === key);
     const value = data[key];
     if (field.kind !== "object" || value == null) return [key, value];
@@ -98,15 +99,16 @@ function fixtureAdapter(name, queryArgs, empty = false) {
         if (sql.includes("LATERAL")) {
           const projected = graph(name).map((data) => projectRow(modelName, data, queryArgs()));
           const names = Object.keys(projected[0]);
-          return { columnNames: names, columnTypes: names.map((key) => models.get(modelName).fields.find((field) => field.name === key).kind === "object" ? ColumnTypeEnum.Json : columnType(modelName, key)), rows: empty ? [] : projected.map((data) => names.map((key) => data[key])) };
+          return { columnNames: names, columnTypes: names.map((key) => key === "_count" || models.get(modelName).fields.find((field) => field.name === key).kind === "object" ? ColumnTypeEnum.Json : columnType(modelName, key)), rows: empty ? [] : projected.map((data) => names.map((key) => data[key])) };
         }
         const columns = [...sql.split(" FROM ")[0].matchAll(/"public"\."(\w+)"\."(\w+)"/g)];
         assert.ok(columns.length > 0, sql);
         const model = columns[0][1];
         const names = columns.map(([, , key]) => key);
+        if (sql.includes('AS "_aggr_count_links"')) names.push("_aggr_count_links");
         let rows = byModel.get(model) ?? [];
         if (name === "page" && model === "Page") rows = rows.filter((data) => /"public"\."Page"\."parentPageId" (?:IN|=)/.test(sql) ? data.id === 61 : data.id === 60);
-        return { columnNames: names, columnTypes: names.map((key) => columnType(model, key)), rows: rows.map((data) => names.map((key) => data[key])) };
+        return { columnNames: names, columnTypes: names.map((key) => key === "_aggr_count_links" ? ColumnTypeEnum.Int32 : columnType(model, key)), rows: rows.map((data) => names.map((key) => key === "_aggr_count_links" ? (byModel.get("PageTaskLink") ?? []).filter((link) => link.pageId === data.id).length : data[key])) };
       },
     }),
   };

@@ -40,7 +40,7 @@ function serviceHarness() {
       findUnique: async ({ where, include }) => {
         queries.push({ where, include });
         assert.ok(include?.task.select.projectId || !include, 'page lookup selects optional ticket metadata');
-        return { ...page, links: [] };
+        return { ...page, links: [], _count: { links: 0 } };
       },
       findMany: async (query) => {
         queries.push(query);

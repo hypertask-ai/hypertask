@@ -40,7 +40,7 @@ async function pageRun(before, operation, options = {}) {
         assert.equal(args.where.publicId, "fixture-page");
         assert.deepEqual(args.where.project, { status: "Normal", ...projectAccess });
         if (!allowed) return null;
-        return options.missing ? null : { ...page, projectId: 15, task: { id: 50, projectId: 15 }, links: [{ task: { id: 50, projectId: 15 } }], subPages: page.subPages.map((child) => ({ ...child, projectId: 15 })) };
+        return options.missing ? null : { ...page, _count: { links: 1 }, projectId: 15, task: { id: 50, projectId: 15 }, links: [{ task: { id: 50, projectId: 15 } }], subPages: page.subPages.map((child) => ({ ...child, projectId: 15 })) };
       },
       update: async (args) => { effects.push(["title", args]); return { publicId: page.publicId, id: page.id, version: page.version }; },
     },

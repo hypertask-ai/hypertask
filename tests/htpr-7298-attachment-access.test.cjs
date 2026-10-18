@@ -90,3 +90,15 @@ test('linked canvas image allowed / unlinked pasted canvas image refused', async
   h.pages[1].contentHtml = h.pages[0].contentHtml;
   assert.equal(await h.getAccessibleAttachmentKey(url, 3), null);
 });
+
+test('standalone image B after unlink still authorized / removing historical link or page access is refused', async () => {
+  const h = fixture();
+  h.pages[0].taskId = null;
+  h.pages[0].links = [{ taskId: 10, removedAt: new Date() }];
+  assert.equal(await h.getAccessibleAttachmentKey(url, 1), key);
+  assert.equal(await h.getAccessibleAttachmentKey(url, 3), null);
+  h.pages[0].links = [];
+  assert.equal(await h.getAccessibleAttachmentKey(url, 1), null);
+  h.pages[0].links = [{ taskId: 10, removedAt: null }];
+  assert.equal(await h.getAccessibleAttachmentKey(url, 1), key);
+});

@@ -53,7 +53,10 @@ function pageService(fixture = page) {
       if (!matches({ ...fixture, project: boards[0] }, where)) return null;
       const visibleTask = fixture.task && matches({ status: "Normal", ...fixture.task, project: boards.find((board) => board.id === fixture.task.projectId) }, include.task.where)
         ? fixture.task : null;
-      return { ...fixture, task: visibleTask, links: visibleTask ? [{ task: visibleTask }] : [],
+      const allLinks = fixture.links ?? (fixture.task ? [{ task: fixture.task, removedAt: null }] : []);
+      const links = allLinks.filter((link) => link.removedAt == null && matches({ status: "Normal", ...link.task, project: boards.find((board) => board.id === link.task.projectId) }, include.links.where.task))
+        .map(({ task }) => ({ task }));
+      return { ...fixture, task: visibleTask, links, _count: { links: allLinks.length },
         subPages: [
           { id: 12, publicId: "same-board", title: "Visible child", projectId: 10 },
           { id: 13, publicId: "hidden-child", title: "HIDDEN-CHILD-TITLE", projectId: 20 },
@@ -331,9 +334,15 @@ test("page index includes, rows, schema and namespace contain only page-owned me
 });
 
 for (const flagsEnabled of [false, true]) {
-  for (const visibleTask of [false, true]) {
+  for (const [scenario, origin, linkedTask] of [
+    ["standalone linked B", null, task],
+    ["standalone unlinked B", null, null],
+    ["origin A active", task, task],
+    ["origin A unlinked", task, null],
+    ["origin A unlinked and C active", task, { ...task, id: 123, projectId: 10, uniqueIndex: 123 }],
+  ]) {
     for (const mobile of [false, true]) {
-      test(`editor back and gallery are safe (flags ${flagsEnabled}, visible task ${visibleTask}, mobile ${mobile})`, async () => {
+      test(`editor back and gallery are safe (${scenario}, flags ${flagsEnabled}, mobile ${mobile})`, async () => {
         const dom = new JSDOM('<div id="root"></div>', { url: "https://app.hypertask.ai/page/page-fixture" });
         const globals = ["window", "document", "Element", "HTMLImageElement", "HTMLIFrameElement", "DOMParser", "IS_REACT_ACT_ENVIRONMENT"];
         const previous = globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)]);
@@ -364,20 +373,28 @@ for (const flagsEnabled of [false, true]) {
         }).default;
         const reactRoot = createRoot(document.getElementById("root"));
         try {
+          const serialized = await pageService({
+            ...page, task: origin, taskId: origin?.id ?? null,
+            links: [
+              ...(linkedTask ? [{ task: linkedTask, removedAt: null }] : []),
+              { task, removedAt: new Date() },
+            ],
+          }).getPage({ publicId: page.publicId, standalonePagesEnabled: true });
+          assert.equal(serialized.task?.id ?? null, linkedTask?.id ?? null);
           await React.act(async () => reactRoot.render(React.createElement(PageEditor, {
-            _page: JSON.stringify({ ...page, task: visibleTask ? task : null, taskId: visibleTask ? task.id : null }),
+            _page: JSON.stringify(serialized),
             _user: JSON.stringify({ id: 1 }),
           })));
           const back = [...document.querySelectorAll("button")].find((button) => button.textContent.includes("Back to"));
-          assert.equal(back.textContent.trim(), visibleTask ? "Back to task" : "Back to board");
+          assert.equal(back.textContent.trim(), linkedTask ? "Back to task" : "Back to board");
           await React.act(async () => document.querySelector("img").dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true })));
           if (flagsEnabled) {
             assert.equal(gallery.attachments.length, 1);
-            assert.equal(gallery.attachments[0].taskId, visibleTask ? task.id : undefined);
+            assert.equal(gallery.attachments[0].taskId, origin?.id ?? undefined);
             assert.equal(gallery.attachments[0].fileSource, fileSource);
           } else assert.equal(gallery, undefined);
           await React.act(async () => back.click());
-          assert.deepEqual(calls, [visibleTask ? "/detail/project-20/987654" : "/project?id=10"]);
+          assert.deepEqual(calls, [linkedTask ? `/detail/project-${linkedTask.projectId}/${linkedTask.uniqueIndex}` : "/project?id=10"]);
         } finally {
           await React.act(async () => reactRoot.unmount());
           dom.window.close();
