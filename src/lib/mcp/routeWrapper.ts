@@ -14,6 +14,7 @@ import { readJsonBody } from '@/lib/mcp/readJsonBody'
 import { getMcpOperationContext } from './operationContext'
 import { withAdoptedAgentMutationLease } from '@/lib/mcp/tasks/agentMutationLeaseAdoption'
 import { createMcpDbTiming, mcpDbTimings, mcpDbTimingHeader } from './dbTiming'
+import { reportUnexplainedMcpServerError } from './operationCrashReport'
 
 const instanceStarted = performance.now()
 const instanceId = randomBytes(4).toString('hex')
@@ -100,12 +101,17 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
   return async (request, ...args) => {
     const started = performance.now()
-    if (getMcpOperationContext(request)) return legacy(request, ...args)
+    if (getMcpOperationContext(request)) {
+      const result = await legacy(request, ...args)
+      if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
+      return result
+    }
     const execute = async (input: NextRequest) => {
       try {
         const result = await legacy(input, ...args)
         if (result instanceof Response) {
           try { queueRestFailure(request, result.status) } catch {}
+          reportUnexplainedMcpServerError(input, result.status)
         }
         return result
       } catch (error) {
