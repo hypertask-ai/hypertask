@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { LogType, Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
-import { HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, HTPR_7294_FUNNEL_PROBE_CATEGORY_FLAG, isFeatureEnabled } from "@/lib/flags";
 import { accountCategory, type AccountCategory } from "./accountCategory";
 import { postHogClient } from "./signupAnalytics";
 import { deliverAnalyticsOutbox, isAnalyticsOutboxEnabled } from "./analyticsOutbox";
@@ -28,7 +28,7 @@ function occurrenceTime(properties: Record<string, unknown>, occurredAt?: Date, 
 async function sharedAccountCategory(userId: number): Promise<AccountCategory | null> {
   if (!(await isFeatureEnabled(HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG, userId))) return null;
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, uid: true, email: true } });
-  return user ? accountCategory(user) : null;
+  return user ? accountCategory(user, { probeDomain: await isFeatureEnabled(HTPR_7294_FUNNEL_PROBE_CATEGORY_FLAG, userId) }) : null;
 }
 
 type OccurrenceProperties = Record<string, unknown> | ((tx: Prisma.TransactionClient) => Promise<Record<string, unknown>>);
