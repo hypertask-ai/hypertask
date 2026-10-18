@@ -39,6 +39,8 @@ const common = {
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: context },
   "@/lib/contexts/mobileContext": { MobileViewContext: mobile },
   "@/hooks/useFlag": { useFlag: () => cachedLayout },
+  "@/lib/taskDetail/initialTicketPosition": require("jiti").createJiti(__filename)(path.join(root, "src/lib/taskDetail/initialTicketPosition.ts")),
+  "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": { HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG: "unread-ticket-opens-top" },
   "@/lib/flags/keys": { HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant", HTPR_6899_STABLE_LAYOUT_FLAG: "stable", HTPR_6967_TYPED_TASK_READS_FLAG: "htpr-6967-typed-task-reads" },
   "@/utils/undoActions/helperFuncs": { cn: (...values) => values.filter(Boolean).join(" ") },
 };
@@ -458,9 +460,11 @@ test("only cached stable instant opens skip automatic late scrolls; ordinary ope
         const scrollTarget = { scrollHeight: 6000, scrollTo: value => movement.push(["bottom", value]), scrollBy: value => movement.push(["offset", value]) };
         const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
           react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
-          "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : stable },
+          "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
           "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
           "@/lib/flags/keys": common["@/lib/flags/keys"],
+          "@/lib/taskDetail/initialTicketPosition": common["@/lib/taskDetail/initialTicketPosition"],
+          "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],
           "@/lib/configs/taskDetail.config": { default: config },
           "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
         }, {
@@ -533,6 +537,8 @@ test("both flags preserve comment URL/hash links, reply focus and audio entry wi
         "@/hooks/useFlag": { useFlag: () => true },
         "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
         "@/lib/flags/keys": common["@/lib/flags/keys"],
+        "@/lib/taskDetail/initialTicketPosition": common["@/lib/taskDetail/initialTicketPosition"],
+        "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],
         "@/lib/configs/taskDetail.config": { default: config },
         "@/lib/constants/TaskDetail": { descriptionContainerId: "description-container" },
       }, {

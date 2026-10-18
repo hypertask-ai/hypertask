@@ -112,6 +112,8 @@ interface GlobalStates extends TaskContextProps {
   >;
   newCommentIds: number[];
   setNewCommentIds: React.Dispatch<React.SetStateAction<number[]>>;
+  newCommentsLastReadAt: string | Date | null;
+  setNewCommentsLastReadAt: React.Dispatch<React.SetStateAction<string | Date | null>>;
   newCommentsSnapshotReady: boolean;
   setNewCommentsSnapshotReady: React.Dispatch<React.SetStateAction<boolean>>;
   toggleSubtaskLinkingModal: () => void;
@@ -188,6 +190,7 @@ const TaskContext = createContext<GlobalStates | undefined>(undefined);
 const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const [loading, setLoading] = useState<boolean>(false);
   const [newCommentIds, setNewCommentIds] = useState<number[]>([]);
+  const [newCommentsLastReadAt, setNewCommentsLastReadAt] = useState<string | Date | null>(null);
   const [newCommentsSnapshotReady, setNewCommentsSnapshotReady] =
     useState<boolean>(false);
   const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
@@ -219,6 +222,8 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
     setLoading,
     newCommentIds,
     setNewCommentIds,
+    newCommentsLastReadAt,
+    setNewCommentsLastReadAt,
     newCommentsSnapshotReady,
     setNewCommentsSnapshotReady,
     forceOpenEdit,
