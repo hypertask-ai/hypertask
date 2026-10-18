@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from "next";
+import { reportLegacyRouteHit } from "@/lib/telemetry/legacyRouteHit";
 import { taskWriteHandler } from "@/lib/api/task-writes/route";
 
 const handler = taskWriteHandler({
@@ -6,6 +7,6 @@ const handler = taskWriteHandler({
 });
 
 export default function legacyRoute(req: NextApiRequest, res: NextApiResponse) {
-  console.warn("legacy route hit: /api/section/getByTaskId");
+  reportLegacyRouteHit("/api/section/getByTaskId", req);
   return handler(req, res);
 }
