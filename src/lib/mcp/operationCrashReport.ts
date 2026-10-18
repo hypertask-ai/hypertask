@@ -1,5 +1,4 @@
 import { waitUntil } from '@vercel/functions'
-import { reportError } from '@/lib/errors/reportError'
 import { prismaErrorDiagnostics } from '@/lib/errors/prismaErrorDiagnostics'
 
 const reportedRequests = new WeakSet<Request>()
@@ -50,7 +49,7 @@ export function buildMcpCrashReport(request: Request, error: unknown) {
 }
 
 function sendInBackground(report: ReturnType<typeof buildMcpCrashReport>) {
-  const delivery = reportError(report).catch(reportingError => {
+  const delivery = import('@/lib/errors/reportError').then(({ reportError }) => reportError(report)).catch(reportingError => {
     console.error('[MCP] crash report failed', reportingError)
   })
   try {
