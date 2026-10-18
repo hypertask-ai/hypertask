@@ -291,7 +291,6 @@ interface MentionPage {
   id: string;
   name: string;
   type: string;
-  ticketNumber: string;
 }
 
 const fetchMentionPages = async (
@@ -305,7 +304,8 @@ const fetchMentionPages = async (
       take: 5,
       where: {
         archived: false,
-        task: { projectId, deletedAt: null },
+        projectId,
+        project: { status: "Normal" },
         ...(titleQuery
           ? { title: { contains: titleQuery, mode: "insensitive" as const } }
           : {}),
@@ -314,14 +314,12 @@ const fetchMentionPages = async (
       select: {
         publicId: true,
         title: true,
-        task: { select: { ticketNumber: true } },
       },
     });
     return pages.map((page) => ({
       id: page.publicId,
       name: page.title,
       type: "page",
-      ticketNumber: page.task.ticketNumber ?? "",
     }));
   } catch (error) {
     console.error("🤔 ~ fetchMentionPages ~ error:", error);

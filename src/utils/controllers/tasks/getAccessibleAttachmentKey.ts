@@ -91,7 +91,7 @@ export async function getAccessibleAttachmentKey(
 
   const pages = await prisma.page.findMany({
     where: {
-      task: { project: projectAccess },
+      project: projectAccess,
       OR: [
         ...keyFragments.map((fragment) => ({ contentHtml: { contains: fragment } })),
         { contentHtml: { contains: "data-html-block" } },

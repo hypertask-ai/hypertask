@@ -100,7 +100,7 @@ async function withPage(options, run) {
   });
   try {
     await React.act(async () => reactRoot.render(React.createElement(PageEditor, {
-      _page: JSON.stringify({ publicId: "example", title: "Test", contentHtml: "", version: 1, taskId: 23, projectId: 15, task: { projectId: 15, uniqueIndex: 6872 } }),
+      _page: JSON.stringify({ publicId: "example", title: "Test", contentHtml: "", version: 1, taskId: options.taskless ? null : 23, projectId: 15, task: options.taskless ? null : { projectId: 15, uniqueIndex: 6872 } }),
       _user: JSON.stringify({ displayName: "QA" }),
     })));
     await run({ dom, click, message });
@@ -219,4 +219,14 @@ test("page wiring reuses ticket carousel, its navigation, download, Escape and b
   assert.match(gallery, /closeOnBackdropClick: true/);
   const flags = (fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source());
   assert.match(flags, /key: HTPR_6872_PAGE_IMAGE_GALLERY_FLAG,\s*shippedOn: "2026-10-03"/);
+});
+
+test("taskless canvas images use the shared gallery without a ticket identifier", async () => {
+  await withPage({ taskless: true }, async ({ message }) => {
+    await message({ __htPageImage: 1, images: ["https://files.hypertask.app/canvas-one.png"], index: 0 });
+    assert.equal(galleryProps.currentIndex, 1);
+    assert.ok(galleryProps.attachments.length > 0);
+    assert.ok(galleryProps.attachments.every((attachment) => attachment.taskId === undefined));
+    assert.doesNotMatch(JSON.stringify(galleryProps.attachments), /taskId/);
+  });
 });

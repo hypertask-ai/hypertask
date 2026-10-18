@@ -63,17 +63,9 @@ export const turbopufferCommentInclude = {
 } satisfies Prisma.CommentInclude;
 
 export const turbopufferPageInclude = {
-  task: {
+  project: {
     select: {
-      id: true,
-      projectId: true,
-      ticketNumber: true,
       title: true,
-      project: {
-        select: {
-          title: true,
-        },
-      },
     },
   },
 } satisfies Prisma.PageInclude;
@@ -127,11 +119,8 @@ export type TurbopufferPageRow = {
   id: string;
   title: string;
   contentText: string;
-  taskId: string;
   projectId: number;
   projectTitle: string;
-  taskTicketNumber: string;
-  taskTitle: string;
   updatedAt: string;
   searchText: string;
 };
@@ -186,11 +175,8 @@ export const commentNamespaceSchema = {
 export const pageNamespaceSchema = {
   title: { type: "string", full_text_search: true },
   contentText: { type: "string", full_text_search: true },
-  taskId: { type: "string", filterable: true },
   projectId: { type: "int", filterable: true },
   projectTitle: { type: "string" },
-  taskTicketNumber: { type: "string" },
-  taskTitle: { type: "string" },
   updatedAt: { type: "string" },
   searchText: { type: "string", full_text_search: true },
 };
@@ -358,11 +344,8 @@ export function buildTurbopufferPageRow(
     id: page.id.toString(),
     title,
     contentText,
-    taskId: page.taskId.toString(),
-    projectId: page.task.projectId,
-    projectTitle: stringify(page.task.project?.title),
-    taskTicketNumber: stringify(page.task.ticketNumber),
-    taskTitle: stringify(page.task.title),
+    projectId: page.projectId,
+    projectTitle: stringify(page.project?.title),
     updatedAt: toIsoString(page.updatedAt),
     searchText: buildSearchText(title, contentText),
   };
@@ -1076,11 +1059,8 @@ export async function ensureTurbopufferSchema() {
         id: "__schema__",
         title: "",
         contentText: "",
-        taskId: "-1",
         projectId: -1,
         projectTitle: "",
-        taskTicketNumber: "",
-        taskTitle: "",
         updatedAt: "",
         searchText: "",
       }

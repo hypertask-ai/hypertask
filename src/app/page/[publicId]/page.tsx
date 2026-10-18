@@ -16,19 +16,17 @@ export default async function Page(props: {
 }) {
   const { publicId } = await props.params;
   const currentUser = await requireServerCookieUser();
-  const page = await getPage({ publicId });
+  const page = await getPage({ publicId, userId: currentUser.id });
 
   if (!page) {
     redirect("/");
   }
 
-  const ok = await prisma.task.findFirst({
+  const ok = await prisma.project.findFirst({
     where: {
-      id: page.taskId,
-      project: {
-        status: "Normal",
-        ...getProjectWhere(currentUser.id, null),
-      },
+      id: page.projectId,
+      status: "Normal",
+      ...getProjectWhere(currentUser.id, null),
     },
     select: { id: true },
   });
