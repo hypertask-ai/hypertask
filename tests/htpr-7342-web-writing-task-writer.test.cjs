@@ -72,6 +72,8 @@ for (const aiMode of ["AiTaskWriter", "WriteWithAI"]) {
     assert.match(run.instructions, /Never start a line with "Proposed:"/);
     assert.match(run.instructions, /Questions to people, open questions and status updates belong in comments/);
     assert.match(run.instructions, /Long tickets stay long when the content needs it/);
+    assert.match(run.instructions, /Never turn a listed change into a check/);
+    assert.match(run.instructions, /A ticket or link appears once in the whole ticket/);
     assert.match(run.instructions, /Never invent metrics/);
   });
 
