@@ -162,18 +162,44 @@ async function syncTaskPagesInTx(
   if (movingIds.length === 0) return [];
 
   await tx.page.updateMany({
-    where: { id: { in: movingIds }, parentPageId: { notIn: movingIds } },
-    data: { parentPageId: null },
-  });
-  await tx.page.updateMany({
-    where: { parentPageId: { in: movingIds }, id: { notIn: movingIds } },
-    data: { parentPageId: null },
-  });
-  await tx.page.updateMany({
     where: { id: { in: movingIds } },
     data: { projectId: after.projectId },
   });
   return movingIds;
+}
+
+async function detachSplitPageHierarchy(taskIds: number[]) {
+  await prisma.$transaction(async (tx) => {
+    const affected = await tx.page.findMany({
+      where: { OR: [{ taskId: { in: taskIds } }, { links: { some: { taskId: { in: taskIds } } } }] },
+      select: { id: true, parentPageId: true },
+    });
+    if (affected.length === 0) return;
+    const pageIds = affected.map((page) => page.id);
+    const lockIds = [...new Set([
+      ...pageIds,
+      ...affected.flatMap((page) => page.parentPageId == null ? [] : [page.parentPageId]),
+    ])];
+    await tx.$queryRaw`
+      SELECT id FROM "Page"
+      WHERE id IN (${Prisma.join(lockIds)})
+        OR "parentPageId" IN (${Prisma.join(pageIds)})
+      ORDER BY id
+      FOR UPDATE
+    `;
+    const pages = await tx.page.findMany({
+      where: { OR: [{ id: { in: pageIds } }, { parentPageId: { in: pageIds } }] },
+      include: { parentPage: { select: { projectId: true } } },
+    });
+    const splitIds = pages.filter((page) => page.parentPage && page.parentPage.projectId !== page.projectId)
+      .map((page) => page.id);
+    if (splitIds.length > 0) {
+      await tx.page.updateMany({
+        where: { id: { in: splitIds } },
+        data: { parentPageId: null },
+      });
+    }
+  });
 }
 
 async function moveAllSubtasksRecursively(
@@ -501,6 +527,8 @@ export async function moveTaskToDifferentBoard(
       agentId
     );
   }
+
+  await detachSplitPageHierarchy(getAllTaskIdsRecursively(taskToMove));
 
   const isTeamSwitch = currentProject?.teamId !== newProject?.teamId;
   if (isTeamSwitch) {

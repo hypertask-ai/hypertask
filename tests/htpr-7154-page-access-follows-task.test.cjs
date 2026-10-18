@@ -176,7 +176,15 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
   const tx = {
     $queryRaw: async () => [],
     page: {
-      findMany: async ({ where }) => pages.filter((page) => where.OR ? page.taskId === where.OR[0].taskId : where.id.in.includes(page.id)).map((page) => ({ ...page })),
+      findMany: async ({ where, include }) => pages.filter((page) => {
+        if (!where.OR) return where.id.in.includes(page.id);
+        return where.OR.some((part) => {
+          if (part.taskId) return typeof part.taskId === 'number' ? page.taskId === part.taskId : part.taskId.in.includes(page.taskId);
+          if (part.links) return page.links.some((link) => typeof part.links.some.taskId === 'number' ? link.taskId === part.links.some.taskId : part.links.some.taskId.in.includes(link.taskId));
+          if (part.id) return part.id.in.includes(page.id);
+          return part.parentPageId.in.includes(page.parentPageId);
+        });
+      }).map((page) => ({ ...page, ...(include?.parentPage ? { parentPage: pages.find((parent) => parent.id === page.parentPageId) ?? null } : {}) })),
       updateMany: async ({ where, data }) => {
         for (const page of pages) {
           const idMatches = where.id?.in ? where.id.in.includes(page.id) : !where.id?.notIn?.includes(page.id);
@@ -188,6 +196,7 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
     },
   };
   const prisma = {
+    $transaction: async (callback) => callback(tx),
     task: { findUnique: async ({ where }) => structuredClone(tasks.find((t) => t.id === where.id)), findFirst: async () => null },
     project: { findUnique: async () => ({ teamId: 'team', uniqueIdentifier: 'B' }), findFirst: async () => ({ id: 2 }) },
     section: { findUnique: async () => ({ id: 3, projectId: 2, section_title: 'Todo' }) },

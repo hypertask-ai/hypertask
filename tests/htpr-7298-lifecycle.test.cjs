@@ -88,8 +88,17 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     },
   };
   const pageModel = {
+    findUnique: async ({ where }) => {
+      const row = state.pages.find((row) => matches(row, where));
+      if (!row) return null;
+      return { ...structuredClone(row), task: state.tasks.find((t) => t.id === row.taskId) ?? null,
+        links: state.links.filter((edge) => edge.pageId === row.id).map((edge) => ({ task: state.tasks.find((t) => t.id === edge.taskId) })),
+        subPages: structuredClone(state.pages.filter((child) => child.parentPageId === row.id && !child.archived)),
+      };
+    },
     findMany: async ({ where, include, select }) => state.pages.filter((row) => matches(row, where)).map((row) => {
       const copy = structuredClone(row);
+      if (include?.parentPage) copy.parentPage = structuredClone(state.pages.find((parent) => parent.id === row.parentPageId) ?? null);
       if (include?.links || select?.links) {
         const options = select?.links ?? {};
         copy.links = structuredClone(state.links.filter((edge) => edge.pageId === row.id && matches(edge, options.where))
@@ -216,9 +225,17 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
     "@/utils/controllers/projects/getAllIncludes": stubs["@/utils/controllers/projects/getAllIncludes"],
   });
+  const pageService = load("src/utils/controllers/pages/pageService.ts", {
+    "@/lib/prisma": stubs["@/lib/prisma"],
+    "@/utils/controllers/projects/getAllIncludes": {},
+    "@/utils/controllers/turbopuffer/turbopufferHelper": {},
+    "@/utils/helperFunctions/markdownToHtml": {},
+    "@/utils/helperFunctions/sanitizeRichHtml": {}, "./htmlCanvas": {},
+  });
   const deletion = load("src/utils/controllers/tasks/invokeTaskDelete.ts", stubs);
   return {
     state: () => state, calls, locked, tx,
+    getPage: (id) => pageService.getPage({ id }),
     update: (data, options = {}) => single.updateTaskSingle({ id: 20, ...data }, { id: 7 }, null, { skipAutoAssign: true, ...options }),
     move: () => mover.moveTaskToDifferentBoard({ taskId: 20, currentProjectId: 1, targetProjectId: 2, targetSectionId: 3, currentUser: { id: 7 } }),
     delete: () => deletion.permanentlyDeleteTask(20, 7),
@@ -276,6 +293,46 @@ test("root and nested subtasks use the transactional sync, including legacy link
   assert.equal(h.state().links.length, 3);
 });
 
+test("subtree move keeps root-ticket parent and subtask child hierarchy until both reach the destination", async () => {
+  let observedSubtaskMove = false;
+  const h = harness({
+    tasks: [task(20), task(21, { parentTaskId: 20 })],
+    pages: [page(10), page(11, 21, { parentPageId: 10 })],
+    links: [link(10, 20), link(11, 21)],
+    onPageLock: async (state) => {
+      if (state.tasks[1].projectId === 2) {
+        observedSubtaskMove = true;
+        assert.equal(state.pages[1].parentPageId, 10, 'no eager per-ticket detachment');
+      }
+    },
+  });
+  assert.equal((await h.move()).success, true);
+  assert.equal(observedSubtaskMove, true);
+  assert.deepEqual(h.state().pages.map((row) => [row.projectId, row.parentPageId]), [[2, null], [2, 10]]);
+  assert.deepEqual((await h.getPage(10)).subPages.map((child) => child.id), [11]);
+  assert.equal(h.calls.filter((call) => call === "commit").length, 3, 'root, subtask, then one hierarchy cleanup');
+});
+
+test("subtree move detaches split multi-linked parent / sole-linked child and hides the child before cleanup", async () => {
+  let observedBeforeCleanup = false;
+  const h = harness({
+    tasks: [task(20), task(21, { parentTaskId: 20 }), task(22)],
+    pages: [page(10), page(11, 21, { parentPageId: 10 }), page(12, 22), page(13, 22, { parentPageId: 12, projectId: 9 })],
+    links: [link(10, 20), link(10, 22), link(11, 21), link(12, 22), link(13, 22)],
+    onPageLock: async (state) => {
+      if (state.pages[1].projectId === 2 && state.pages[1].parentPageId === 10) {
+        observedBeforeCleanup = true;
+        assert.deepEqual((await h.getPage(10)).subPages, [], 'old-board reader never sees a child that moved');
+      }
+    },
+  });
+  assert.equal((await h.move()).success, true);
+  assert.equal(observedBeforeCleanup, true);
+  assert.deepEqual(h.state().pages.map((row) => [row.projectId, row.parentPageId]), [[1, null], [2, null], [1, null], [9, 12]]);
+  assert.deepEqual((await h.getPage(10)).subPages, []);
+  assert.equal(h.calls.filter((call) => call === "commit").length, 3);
+});
+
 for (const failingTaskId of [20, 21]) {
   test(`page-sync throw rolls back task ${failingTaskId} and its page`, async () => {
     const h = harness({ tasks: [task(20), task(21, { parentTaskId: 20 })], pages: [page(10), page(11, 21)], links: [], failPageWriteFor: failingTaskId });
@@ -289,13 +346,25 @@ for (const failingTaskId of [20, 21]) {
   });
 }
 
-test("late page-sync failure rolls back hierarchy detachment and board changes", async () => {
+test("page-sync write failure preserves hierarchy and rolls back board changes", async () => {
   const pages = [page(10), page(11, 21, { parentPageId: 10 })];
-  const h = harness({ pages, links: [link(10, 20), link(11, 21)], failPageWriteNumber: 3 });
+  const h = harness({ pages, links: [link(10, 20), link(11, 21)], failPageWriteNumber: 1 });
   assert.equal((await h.move()).success, false);
   assert.deepEqual(h.state().pages, pages);
   assert.equal(h.state().tasks[0].projectId, 1);
   assert.ok(h.calls.includes("rollback"));
+});
+
+test("post-move hierarchy cleanup failure is reported and preserves the split edge without leaking children", async () => {
+  const h = harness({
+    pages: [page(10), page(11, 21, { parentPageId: 10 })],
+    links: [link(10, 20), link(11, 21)], failPageWriteNumber: 2,
+  });
+  await assert.rejects(h.move(), /Injected page write failure/);
+  assert.equal(h.state().tasks[0].projectId, 2, 'the completed task/page move remains atomic');
+  assert.deepEqual(h.state().pages.map((row) => [row.projectId, row.parentPageId]), [[2, null], [1, 10]]);
+  assert.deepEqual((await h.getPage(10)).subPages, []);
+  assert.ok(h.calls.includes("rollback"), 'cleanup failure rolls back its own transaction');
 });
 
 test("move without pages still succeeds", async () => {
@@ -325,7 +394,7 @@ test("same-board updates do not invoke project-change callback", async () => {
 });
 
 test("move rechecks links after acquiring the page lock", async () => {
-  const h = harness({ onPageLock: async (state) => { state.links.push(link(10, 21)); } });
+  const h = harness({ onPageLock: async (state) => { if (!state.links.some((edge) => edge.pageId === 10 && edge.taskId === 21)) state.links.push(link(10, 21)); } });
   assert.equal((await h.move()).success, true);
   assert.equal(h.state().pages[0].projectId, 1);
   assert.equal(h.state().links.length, 2);
