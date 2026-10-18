@@ -113,6 +113,7 @@ test("flag off never hands out a link channel and keeps resizing", async () => {
 });
 
 const hostileCanvases = {
+  "fakes the handshake before the real one": '<script>var own=new MessageChannel();dispatchEvent(new MessageEvent("message",{source:parent,data:{__htHtmlBlockLinkPort:1},ports:[own.port2]}));addEventListener("message",function(e){if(e.ports&&e.ports[0])setInterval(function(){e.ports[0].postMessage({href:"https://evil.example/"})},50)},true)</script>',
   "re-asks for the channel": '<script>setInterval(function(){parent.postMessage({__htHtmlBlockLinkReady:1},"*")},50)</script>',
   "steals the channel through patched built-ins": '<script>var g=Object.getOwnPropertyDescriptor(MessageEvent.prototype,"ports").get;function spam(p){if(p&&p[0])setInterval(function(){p[0].postMessage({href:"https://evil.example/"})},50)}Object.defineProperty(MessageEvent.prototype,"ports",{get:function(){var p=g.call(this);spam(p);return p}});addEventListener("message",function(e){spam(g.call(e))},true)</script>',
   "navigates itself to its own document": '<script>location.href="data:text/html,<script>parent.postMessage({__htHtmlBlockLinkReady:1},\'*\');addEventListener(\'message\',function(e){if(e.ports[0])setInterval(function(){e.ports[0].postMessage({href:\'https://evil.example/\'})},50)});document.write(\'<button id=ticket>x</button>\')<\\/script>"</script>',

@@ -44,20 +44,23 @@ const LINK_CLICK_SCRIPT = `<script>
   var dataOf = getter(MessageEvent.prototype, 'data');
   var portsOf = getter(MessageEvent.prototype, 'ports');
   var sourceOf = getter(MessageEvent.prototype, 'source');
+  var targetOf = getter(Event.prototype, 'target');
+  var defaultPreventedOf = getter(Event.prototype, 'defaultPrevented');
   var parentWindow = window.parent;
   var port = null;
   window.addEventListener('message', function(event) {
-    if (port || apply(sourceOf, event, []) !== parentWindow) return;
+    if (!event.isTrusted || apply(sourceOf, event, []) !== parentWindow) return;
     var data = apply(dataOf, event, []);
-    var ports = apply(portsOf, event, []);
-    if (!data || data.${LINK_PORT_MESSAGE} !== 1 || !ports[0]) return;
+    if (!data || data.${LINK_PORT_MESSAGE} !== 1) return;
     apply(stopImmediatePropagation, event, []);
-    port = ports[0];
+    var ports = apply(portsOf, event, []);
+    if (!port && ports[0]) port = ports[0];
   }, true);
   parentWindow.postMessage({ ${LINK_READY_MESSAGE}: 1 }, '*');
   window.addEventListener('click', function(event) {
-    if (!event.isTrusted || event.defaultPrevented || !(event.target instanceof Element)) return;
-    var a = apply(closest, event.target, ['a[href]']);
+    if (!event.isTrusted || apply(defaultPreventedOf, event, [])) return;
+    var a = null;
+    try { a = apply(closest, apply(targetOf, event, []), ['a[href]']); } catch (e) { return; }
     if (!a) return;
     var raw = apply(getAttribute, a, ['href']) || '';
     if (raw.charAt(0) === '#') {
