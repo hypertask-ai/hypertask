@@ -1439,15 +1439,16 @@ model Page {
 }
 
 model PageTaskLink {
-  id          Int      @id @default(autoincrement())
+  id          Int       @id @default(autoincrement())
   pageId      Int
-  page        Page     @relation(fields: [pageId], references: [id], onDelete: Cascade)
+  page        Page      @relation(fields: [pageId], references: [id], onDelete: Cascade)
   taskId      Int
-  task        Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  task        Task      @relation(fields: [taskId], references: [id], onDelete: Cascade)
   createdById Int?
-  createdBy   User?    @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  createdBy   User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
   agentId     String?
-  createdAt   DateTime @default(now())
+  createdAt   DateTime  @default(now())
+  removedAt   DateTime?
 
   @@unique([pageId, taskId])
   @@index([taskId])

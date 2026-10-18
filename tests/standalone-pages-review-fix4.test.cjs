@@ -141,7 +141,7 @@ for (const source of ['task', 'description', 'comment']) {
 }
 
 for (const taskId of [10, 11, 999]) {
-  test(`review 3 unlink ${taskId}: origin promotion/task locks refused / page lock and idempotent link delete still work`, async () => {
+  test(`review 3 unlink ${taskId}: origin promotion/task locks refused / page lock and idempotent soft unlink still work`, async () => {
     const h = harness({ userId: 1 });
     const transaction = h.prisma.$transaction;
     const calls = [];
@@ -153,18 +153,22 @@ for (const taskId of [10, 11, 999]) {
         return tx.$queryRaw(strings, ...values);
       },
       page: { findFirst: async (args) => { calls.push('page-read'); return tx.page.findFirst(args); } },
-      pageTaskLink: { deleteMany: async (args) => {
-        calls.push('link-delete');
-        assert.deepEqual(args, { where: { pageId: 20, taskId } });
-        return tx.pageTaskLink.deleteMany(args);
+      pageTaskLink: { updateMany: async (args) => {
+        calls.push('link-remove');
+        assert.deepEqual(args.where, { pageId: 20, taskId, removedAt: null });
+        assert.ok(args.data.removedAt instanceof Date);
+        return tx.pageTaskLink.updateMany(args);
       } },
     }));
     for (let attempt = 0; attempt < 2; attempt++) {
       calls.length = 0;
       assert.equal((await h.request('[publicId]/links', 'DELETE', { task_id: taskId })).status, 200);
-      assert.deepEqual(calls, ['page-lock', 'page-read', 'link-delete']);
+      assert.deepEqual(calls, ['page-lock', 'page-read', 'link-remove']);
       assert.equal(h.state.pages[0].taskId, 10);
-      assert.equal(h.state.links.some((link) => link.pageId === 20 && link.taskId === taskId), false);
+      const row = h.state.links.find((link) => link.pageId === 20 && link.taskId === taskId);
+      if (taskId === 999) assert.equal(row, undefined);
+      else assert.ok(row.removedAt instanceof Date);
+      assert.equal(h.state.links.length, 2);
     }
   });
 }

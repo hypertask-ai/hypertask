@@ -68,7 +68,10 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
       if (!page) return { error: 'Page not found', status: 404 }
 
       if (remove) {
-        await tx.pageTaskLink.deleteMany({ where: { pageId: page.id, taskId } })
+        await tx.pageTaskLink.updateMany({
+          where: { pageId: page.id, taskId, removedAt: null },
+          data: { removedAt: new Date() },
+        })
       } else {
         const task = await tx.task.findFirst({
           where: {
@@ -85,7 +88,7 @@ async function changeLink(request: NextRequest, { params }: RouteContext, remove
         await tx.pageTaskLink.upsert({
           where: { pageId_taskId: { pageId: page.id, taskId } },
           create: { pageId: page.id, taskId, createdById: userId },
-          update: {},
+          update: { removedAt: null },
         })
         if (page.taskId === null) {
           await tx.page.update({ where: { id: page.id }, data: { taskId } })

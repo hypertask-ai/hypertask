@@ -171,8 +171,8 @@ test('moving a task synchronizes pages for its entire subtask tree inside each t
     { id: 21, projectId: 1, userId: 7, subTasks: [{ id: 22 }] },
     { id: 22, projectId: 1, userId: 7, subTasks: [] },
   ];
-  const pages = tasks.map(({ id }) => ({ id, taskId: id, projectId: 1, parentPageId: null, links: [{ taskId: id }] }));
-  pages.push({ id: 999, taskId: 999, projectId: 1, parentPageId: null, links: [{ taskId: 999 }] });
+  const pages = tasks.map(({ id }) => ({ id, taskId: id, projectId: 1, parentPageId: null, links: [{ taskId: id, removedAt: null }] }));
+  pages.push({ id: 999, taskId: 999, projectId: 1, parentPageId: null, links: [{ taskId: 999, removedAt: null }] });
   const synced = [];
   const noUpdate = { updateMany: async () => ({ count: 0 }), deleteMany: async () => ({ count: 0 }), findMany: async () => [] };
   const tx = {

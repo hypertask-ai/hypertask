@@ -9,6 +9,7 @@ CREATE TABLE IF NOT EXISTS "PageTaskLink" (
     "createdById" INTEGER,
     "agentId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "removedAt" TIMESTAMP(3),
     CONSTRAINT "PageTaskLink_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "PageTaskLink_pageId_fkey" FOREIGN KEY ("pageId") REFERENCES "Page"("id") ON DELETE CASCADE ON UPDATE CASCADE,
     CONSTRAINT "PageTaskLink_taskId_fkey" FOREIGN KEY ("taskId") REFERENCES "Task"("id") ON DELETE CASCADE ON UPDATE CASCADE,

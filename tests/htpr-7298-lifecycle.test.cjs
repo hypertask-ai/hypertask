@@ -32,7 +32,7 @@ function page(id, taskId = 20, extra = {}) {
   return { id, projectId: 1, taskId, parentPageId: null, archived: false, createdAt: new Date("2026-01-01"), ...extra };
 }
 function link(pageId, taskId, extra = {}) {
-  return { id: pageId * 100 + taskId, pageId, taskId, createdAt: new Date("2026-01-01"), ...extra };
+  return { id: pageId * 100 + taskId, pageId, taskId, removedAt: null, createdAt: new Date("2026-01-01"), ...extra };
 }
 
 function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)], failPageWriteFor, failTaskDelete = false, failPageWriteNumber, onPageLock } = {}) {
@@ -44,7 +44,11 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
   function matches(row, where = {}) {
     return Object.entries(where).every(([key, value]) => {
       if (key === "OR") return value.some((condition) => matches(row, condition));
-      if (key === "links") return state.links.some((edge) => edge.pageId === row.id && matches(edge, value.some));
+      if (key === "links") {
+        const edges = state.links.filter((edge) => edge.pageId === row.id);
+        return "none" in value ? !edges.some((edge) => matches(edge, value.none))
+          : edges.some((edge) => matches(edge, value.some));
+      }
       if (key === "task") return matches(state.tasks.find((item) => item.id === row.taskId), value);
       if (value && typeof value === "object" && !(value instanceof Date)) {
         if (value.in) return value.in.includes(row[key]);
@@ -129,11 +133,12 @@ function harness({ tasks = [task(20)], pages = [page(10)], links = [link(10, 20)
   };
   const tx = {
     task: taskModel, page: pageModel,
-    pageTaskLink: { upsert: async ({ where, create }) => {
+    pageTaskLink: { upsert: async ({ where, create, update }) => {
       assert.ok(inTx && locked.has(create.pageId));
       calls.push("materialize");
       let edge = state.links.find((edge) => matches(edge, where.pageId_taskId));
-      if (!edge) { edge = { id: 10000 + state.links.length, ...create }; state.links.push(edge); }
+      if (!edge) { edge = { id: 10000 + state.links.length, removedAt: null, ...create }; state.links.push(edge); }
+      else Object.assign(edge, update);
       return structuredClone(edge);
     } },
     project: { findUnique: async () => ({ uniqueIdentifier: "B" }) },
@@ -249,7 +254,7 @@ for (const [name, pages, links, expected] of [
   ["taskless origin sole link", [page(10, null)], [link(10, 20)], 2],
   ["archived sole link", [page(10, 20, { archived: true })], [link(10, 20)], 2],
   ["legacy insert without link", [page(10)], [], 2],
-  ["legacy original plus new link", [page(10, 21)], [link(10, 20)], 1],
+  ["existing secondary link without origin row", [page(10, 21)], [link(10, 20)], 2],
 ]) {
   test(`move: ${name}`, async () => {
     const h = harness({ pages, links });
@@ -510,3 +515,5 @@ test("guest cleanup refuses a non-guest before touching pages or tasks", async (
   assert.deepEqual(h.calls, []);
   assert.equal(h.pages().length, 3);
 });
+
+module.exports = { harness, task, page, link };

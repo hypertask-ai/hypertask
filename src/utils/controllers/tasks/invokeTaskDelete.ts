@@ -214,6 +214,7 @@ const deleteTASK = async (taskId: number, claim: HardDeleteClaim) => {
           id: true,
           links: {
             where: {
+              removedAt: null,
               taskId: { notIn: claim.taskIds },
               task: { status: { not: "Deleted" } },
             },

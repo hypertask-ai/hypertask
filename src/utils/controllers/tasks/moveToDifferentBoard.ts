@@ -124,7 +124,7 @@ async function syncTaskPagesInTx(
   after: Task,
 ) {
   const affected = await tx.page.findMany({
-    where: { OR: [{ taskId: after.id }, { links: { some: { taskId: after.id } } }] },
+    where: { OR: [{ taskId: after.id, links: { none: {} } }, { links: { some: { taskId: after.id, removedAt: null } } }] },
     select: { id: true, parentPageId: true },
   });
   if (affected.length === 0) return [];
@@ -146,7 +146,7 @@ async function syncTaskPagesInTx(
     include: { links: true },
   });
   for (const page of pages) {
-    if (page.taskId != null && !page.links.some((link) => link.taskId === page.taskId)) {
+    if (page.taskId != null && page.links.length === 0) {
       const link = await tx.pageTaskLink.upsert({
         where: { pageId_taskId: { pageId: page.id, taskId: page.taskId } },
         create: { pageId: page.id, taskId: page.taskId, createdAt: page.createdAt },
@@ -156,8 +156,11 @@ async function syncTaskPagesInTx(
     }
   }
   const movingIds = pages
-    .filter((page) => page.projectId === before.projectId &&
-      page.links.length === 1 && page.links[0].taskId === after.id)
+    .filter((page) => {
+      const activeLinks = page.links.filter((link) => link.removedAt === null);
+      return page.projectId === before.projectId &&
+        activeLinks.length === 1 && activeLinks[0].taskId === after.id;
+    })
     .map((page) => page.id);
   if (movingIds.length === 0) return [];
 
@@ -171,7 +174,7 @@ async function syncTaskPagesInTx(
 async function detachSplitPageHierarchy(taskIds: number[]) {
   await prisma.$transaction(async (tx) => {
     const affected = await tx.page.findMany({
-      where: { OR: [{ taskId: { in: taskIds } }, { links: { some: { taskId: { in: taskIds } } } }] },
+      where: { OR: [{ taskId: { in: taskIds }, links: { none: {} } }, { links: { some: { taskId: { in: taskIds }, removedAt: null } } }] },
       select: { id: true, parentPageId: true },
     });
     if (affected.length === 0) return;

@@ -218,7 +218,7 @@ export async function getPage(args: GetPageArgs & { userId?: number; agentId?: s
     include: {
       task: { where: taskWhere, select: pageTaskSelect },
       links: {
-        where: { task: taskWhere },
+        where: { removedAt: null, task: taskWhere },
         select: { task: { select: pageTaskSelect } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },
@@ -350,7 +350,7 @@ export async function listPages({
     where: {
       archived,
       ...(standalonePagesEnabled
-        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId } } }, { taskId, links: { none: {} } }] })
+        ? (taskId === undefined ? {} : { OR: [{ links: { some: { taskId, removedAt: null } } }, { taskId, links: { none: {} } }] })
         : { taskId: taskId ?? { not: null } }),
       ...(projectId === undefined ? {} : { projectId }),
       project: { status: 'Normal', ...(userId === undefined ? {} : getProjectWhere(userId, agentId)) },
@@ -370,7 +370,7 @@ export async function listPages({
       updatedAt: true,
       task: { where: taskWhere, select: pageTaskSelect },
       links: {
-        where: { task: taskWhere },
+        where: { removedAt: null, task: taskWhere },
         select: { task: { select: pageTaskSelect } },
         orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       },

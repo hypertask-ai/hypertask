@@ -62,7 +62,7 @@ function harness(options = {}) {
       { id: 25, publicId: 'deleted-board-page', projectId: 5, taskId: null, title: 'Deleted board page', archived: false },
       { id: 26, publicId: 'old-writer-page', projectId: 1, taskId: 11, title: 'Old writer', archived: false },
     ],
-    links: [{ id: 1, pageId: 20, taskId: 10, createdAt: new Date(0) }, { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1) }],
+    links: [{ id: 1, pageId: 20, taskId: 10, createdAt: new Date(0), removedAt: null }, { id: 2, pageId: 20, taskId: 11, createdAt: new Date(1), removedAt: null }],
   };
   const queries = [];
   let lock = false;
@@ -71,7 +71,7 @@ function harness(options = {}) {
   const creationQueries = [];
   const userId = options.userId ?? 1;
   const taskRow = (task) => task && ({ ...task, project: state.projects.find((p) => p.id === task.projectId) });
-  const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
+  const pageRow = (page) => ({ ...page, project: state.projects.find((p) => p.id === page.projectId), task: taskRow(state.tasks.find((t) => t.id === page.taskId)) ?? null, links: state.links.filter((l) => l.pageId === page.id).map((l) => ({ removedAt: null, ...l, task: taskRow(state.tasks.find((t) => t.id === l.taskId)) })), parentPage: state.pages.find((p) => p.id === page.parentPageId) ?? null, subPages: state.pages.filter((p) => p.parentPageId === page.id) });
   const find = (rows, query) => rows.filter((row) => matches(row, query.where)).map((row) => project(row, query));
   const prisma = {
     project: {
@@ -92,19 +92,25 @@ function harness(options = {}) {
         const { links, ...fields } = data;
         const page = { id: 100, publicId: 'created', title: 'Untitled', version: 1, ...fields };
         state.pages.push(page);
-        if (links) state.links.push({ id: 100, pageId: page.id, ...links.create });
+        if (links) state.links.push({ id: 100, pageId: page.id, removedAt: null, ...links.create });
         return page;
       },
       update: async ({ where, data }) => { assert.ok(lock); const row = state.pages.find((p) => p.id === where.id); Object.assign(row, data); return row; },
     },
     pageTaskLink: {
-      upsert: async ({ where, create }) => {
+      upsert: async ({ where, create, update }) => {
         assert.ok(lock, 'link mutation holds page lock');
         const old = state.links.find((l) => l.pageId === where.pageId_taskId.pageId && l.taskId === where.pageId_taskId.taskId);
-        if (!old) state.links.push({ id: 100, createdAt: new Date(), ...create });
+        if (!old) state.links.push({ id: 100, createdAt: new Date(), removedAt: null, ...create });
+        if (old) Object.assign(old, update);
         return old ?? create;
       },
-      deleteMany: async ({ where }) => { assert.ok(lock); state.links = state.links.filter((l) => !matches(l, where)); },
+      updateMany: async ({ where, data }) => {
+        assert.ok(lock);
+        const rows = state.links.filter((l) => matches(l, where));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
+      },
       findFirst: async (query) => find(state.links.toSorted((a, b) => a.createdAt - b.createdAt || a.id - b.id), query)[0] ?? null,
     },
     $queryRaw: async (strings, ...values) => {
@@ -230,11 +236,12 @@ for (const [name, userId, expected] of [['ticket-board-only writer refused', 2, 
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, expected);
     assert.equal(h.state.pages[0].taskId, 10);
-    assert.equal(h.state.links.some((link) => link.pageId === 20 && link.taskId === 10), expected !== 200);
+    assert.equal(h.state.links.some((link) => link.pageId === 20 && link.taskId === 10 && link.removedAt === null), expected !== 200);
     if (expected === 200) {
       await h.request('[publicId]/links', 'DELETE', { task_id: 11 });
       assert.equal(h.state.pages[0].taskId, 10);
-      assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 0);
+      assert.equal(h.state.links.filter((link) => link.pageId === 20).length, 2);
+      assert.ok(h.state.links.every((link) => link.removedAt instanceof Date));
     }
   });
 }
@@ -243,7 +250,8 @@ test('unlink flag off is refused without mutations / flag on is allowed', async 
     const h = harness({ flag: enabled });
     const result = await h.request('[publicId]/links', 'DELETE', { task_id: 10 });
     assert.equal(result.status, enabled ? 200 : 404);
-    assert.equal(h.state.links.length, enabled ? 1 : 2);
+    assert.equal(h.state.links.length, 2);
+    assert.equal(h.state.links.filter((link) => link.removedAt === null).length, enabled ? 1 : 2);
   }
 });
 for (const [name, options, expected] of [['flag off refused', { flag: false }, 404], ['flag on board owner allowed', {}, 200], ['board outsider refused', { userId: 2 }, 404], ['board member allowed', { userId: 3 }, 200]]) {
