@@ -14,6 +14,7 @@ export const TASK_WRITER_RETRIEVAL_QUERY_LIMIT = 4000;
 export const TASK_WRITER_STYLE_EXAMPLE_LIMIT = 3;
 
 export const TASK_WRITER_BOARD_RESEARCH_RULES = renderPrompt("task-writer-board-research-rules");
+export const TASK_WRITER_BOARD_RESEARCH_WEB_RULES = renderPrompt("task-writer-board-research-web-rules");
 
 function escapePlain(value: string) {
   return value

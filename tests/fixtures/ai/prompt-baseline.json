@@ -242,7 +242,7 @@
     "id": "editor-ai-prompts-context-14",
     "version": "1",
     "partsHash": "f20ffbf8db4d449b68ed66aed3a8dbf1a4a5db6dff22e48ede9eea9827f31efd",
-    "expressionsHash": "1df490e6672f3d95cf91448140ae86983fdf174b7c45f3eb2920ade2c93e2349"
+    "expressionsHash": "a9d92b2d3d7890fd21ce3c9afc5a10c98c7db906c18ffd1ae8849d0f9d65ae93"
   },
   {
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
@@ -312,6 +312,27 @@
     "id": "custom-instruction-document",
     "version": "1",
     "partsHash": "2da46bf540f49169e8406d99b90d3d977fa6dc057e4c643b424499889b2bdae5",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/writingSkills.ts",
+    "id": "web-writing-skill",
+    "version": "1",
+    "partsHash": "c3a004564cacb18a8c3ea5c5ccd82140d4eaf75ab510e501d50f66e36e3ea07a",
+    "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+  },
+  {
+    "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
+    "id": "task-authoring-web-style",
+    "version": "1",
+    "partsHash": "3f0ea80f9fd43d6ee1d03f1e5222d4aa5b9c25ac5199bdc9cc3c4c9d546585b8",
+    "expressionsHash": "90fbe0a92a665f066afc07b616bb2c6ff5825eb23b3d26160592e8d1613ffa16"
+  },
+  {
+    "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
+    "id": "task-writer-board-research-web-rules",
+    "version": "1",
+    "partsHash": "6b8b3dc13713892fbefae8dc082c1896a4a3dca498eab4113fe5c75d0183737e",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   }
 ]

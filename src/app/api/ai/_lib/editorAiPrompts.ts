@@ -1,5 +1,5 @@
 import { renderPrompt } from "@/lib/ai/prompts/registry";
-import { I_HAVE_ADHD_SKILL, STRUCTURED_WRITING_STYLE, UNSLOP_SKILL } from "@/app/api/ai/_lib/writingSkills";
+import { I_HAVE_ADHD_SKILL, STRUCTURED_WRITING_STYLE, UNSLOP_SKILL, WEB_WRITING_SKILL } from "@/app/api/ai/_lib/writingSkills";
 import { createTaskWriterSystemPromptTemplate, wrapTaskWriterContext } from "@/app/api/ai/_lib/taskWriterPrompt";
 import { createBoardTemplatesBlock, type BoardTemplateContext } from "@/app/api/ai/_lib/boardTemplateContext";
 
@@ -8,6 +8,8 @@ export const NVC_STYLE_RULE = renderPrompt("nvc-style-rule");
 export const HOUSE_OUTPUT_STYLE = renderPrompt("house-output-style", (NVC_STYLE_RULE));
 
 export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL));
+
+export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL));
 
 export function createPromptForTiptapForwardSlash(
   mode = "FixSpellingAndGrammar",
@@ -60,13 +62,13 @@ export function createPromptForTiptapForwardSlash(
   return renderPrompt("editor-ai-prompts-context-13");
 }
 
-export function createKanbanSystemPrompt(mode = "default") {
+export function createKanbanSystemPrompt(mode = "default", authoringStyle = TASK_AUTHORING_STYLE) {
   if (mode === "task_writer") {
-    return createTaskWriterSystemPromptTemplate(TASK_AUTHORING_STYLE);
+    return createTaskWriterSystemPromptTemplate(authoringStyle);
   }
 
   if (mode === "write_with_ai") {
-    return renderPrompt("editor-ai-prompts-context-14", (TASK_AUTHORING_STYLE));
+    return renderPrompt("editor-ai-prompts-context-14", (authoringStyle));
   }
 
   return renderPrompt("editor-ai-prompts-context-15");
@@ -110,6 +112,7 @@ export function createTaskWriterPromptParts(args: {
   retrievedContext: string;
   uploadedDocumentContext?: string;
   input: string;
+  authoringStyle?: string;
 }) {
   const promptMode =
     args.aiMode === "AiTaskWriter"
@@ -118,7 +121,7 @@ export function createTaskWriterPromptParts(args: {
         ? "write_with_ai"
         : "default";
 
-  const instructions = createKanbanSystemPrompt(promptMode);
+  const instructions = createKanbanSystemPrompt(promptMode, args.authoringStyle);
 
   const reminderParts: string[] = [];
   const customInstructions = args.customInstructions

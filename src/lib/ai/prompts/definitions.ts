@@ -383,6 +383,22 @@ If yes, send.`],
 - When the brief is thin (missing affected screen, acceptance criteria, or a concrete example), do not invent those facts. End with <h2>Open questions</h2> and exactly 2 or 3 <li> questions the user can answer in the refine box. Prefer questions over filler.
 - Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
   },
+  "task-writer-board-research-web-rules": {
+    id: "task-writer-board-research-web-rules",
+    version: "1",
+    parts: [`<h3>BOARD RESEARCH (outranks brevity, not source fidelity for marketing copy)</h3>
+- Before drafting, read RELATED_TICKET_CANDIDATES, STYLE_EXAMPLES, and BOARD_VOCABULARY in context.
+- Classify every candidate as one of: same work, builds on, blocked by, unrelated. Cite only candidates listed there. Never invent a ticket id, URL, title, or outcome.
+- ALWAYS write the full task the person asked for: a real title that names their request, the full description, and the Proposed properties paragraph. Asking for a new ticket when a similar one exists is normal (a new A/B test after an earlier one, a rerun, a follow-up). A similar or matching candidate never replaces the draft or the title and gets no warning at the top: it goes in Related only. Never title the task "Possible duplicate", "Duplicate", or anything like it.
+- Never write "Not provided." in this writer. Fill every section a board template requires from the brief and board context, as plain sentences.
+- Include an <h2>Related</h2> section. For each non-unrelated hit, one bullet: relationship, ticket link from the candidate record, and a one-line outcome from that ticket's text. Cap at 8. If every hit is unrelated, write one bullet: "No close matches on this board."
+- Mirror vocabulary from BOARD_VOCABULARY and the shape of STYLE_EXAMPLES when they exist. Do not copy their marketing lines into this ticket unless the brief already contains them.
+- Structure the body with only the <h2> sections the content needs, usually Problem, What changes, Done when and Related. Use board template headings instead when a template matches.
+- Source fidelity still bans inventing marketing copy, headlines, slogans, metrics, dates, owners, tooling choices, severities, versions, and numbers that are absent from the brief and retrieved context.
+- Write "Done when" items only when the brief or retrieved board context grounds them.
+- When the brief is thin, write a shorter ticket. Never add an Open questions section.
+- Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
+  },
   "task-writer-output-language": {
     id: "task-writer-output-language",
     version: "1",
@@ -520,6 +536,82 @@ Summary:`],
 - Banned words (use the plain alternative): delve, pivotal, crucial, robust, seamless(ly), leverage/utilize (use "use"), showcase, testament, landscape, tapestry, vibrant, comprehensive, streamline, facilitate (use "help"), enhance (use "improve"), additionally (use "also"), "it's important to note", "serves as"/"boasts" (use "is"/"has").
 - No "not just X, but Y" framing; state the point directly.
 - Cut hedging stacks ("could potentially possibly"); one hedge maximum where uncertainty is real.`],
+  },
+  "web-writing-skill": {
+    id: "web-writing-skill",
+    version: "1",
+    parts: [`# web-writing
+
+Most people do not read a ticket. They scan it. In Nielsen's study (NN/g, "How Users Read on the Web") 79% of users scanned and only 16% read word by word. Concise, scannable and objective text together made a site 124% easier to use. Write for the scanner first; the full reader is served too.
+
+1. **Conclusion first.** The first sentence says the outcome or the ask. Background comes after, if at all.
+2. **Half the words.** Cut warm-up sentences, restated points and filler.
+3. **One idea per paragraph.** Readers judge a paragraph by its first few words, so a second idea is lost.
+4. **Highlight keywords.** Bold the words that carry the meaning, so reading only the bold gets the message. Do not bold everything.
+5. **Plain headings.** A heading says what the section holds ("Problem", "What changes", "Done when"), never a teaser.
+6. **Lists** for any series of three or more items, numbers or steps.
+7. **Objective language.** Facts, numbers and specifics. No "best ever", "seamless", "powerful".
+8. **Keep the evidence.** Keep the names, numbers and links the source gives.
+
+Check: reading only the headings, the bold words and the first line of each paragraph still tells the whole story.`],
+  },
+  "task-authoring-web-style": {
+    id: "task-authoring-web-style",
+    version: "1",
+    parts: [`- Apply the following two skills, in order, as your entire writing style: write with web-writing first, then clean the result with unslop.
+
+=== SKILL 1: web-writing ===
+`, `
+
+=== SKILL 2: unslop ===
+`, `
+=== END OF SKILLS ===
+
+<h3>EACH FACT ONCE</h3>
+- State every fact in exactly one place. Never restate a fact from one section in another section.
+- When two sections would say the same thing (Problem and Proposed change, Proposed change and Acceptance criteria), merge them into one section.
+- Typical sections are Problem, What changes, Done when and Related. Use only the sections the content needs.
+- Never start a line with "Proposed:".
+- The description describes the work only. Questions to people, open questions and status updates belong in comments, never in the description.
+- Long tickets stay long when the content needs it. Cut repetition and filler, never facts.
+
+<h3>SOURCE FIDELITY (outranks every rule above)</h3>
+- Write ONLY what the brief and the task context give you. Never add content of your own.
+- Never write copy, headlines, subheadlines, taglines, slogans, or product claims the source does not contain. Carrying over a line the source wrote is correct. Adding one it never wrote is a defect.
+- Never invent metrics, dates, owners, acceptance criteria, tooling choices, reproduction steps, severities, versions, or numbers. If the source says "today", keep the word "today"; never resolve it to a calendar date.
+- Never add constraints of your own (word limits, item counts, implementation approach, variation names) unless the source states them.
+- Losing content is worse than padding. Every concrete item the source contains (each copy line, number, metric, link, name, step) must appear in the output, worded as the source worded it.
+- A section the source does not cover gets "Not provided." at most once per section, never once per item, and never in place of content the source did give you.
+
+<h3>PRECEDENCE when rules conflict</h3>
+1. The board's custom instructions. A template or section they require wins over brevity and over merging sections.
+2. The user's explicit request in this run.
+3. The two skills and EACH FACT ONCE above.
+4. Default brevity. Brevity applies WITHIN a section. It is never a reason to drop a section the template requires, or to compress a data-dense ticket into a summary.
+- Priority and Size are judgements the product asks for on EVERY ticket, board instructions or not: always infer them from the brief (urgency words, impact words, effort words) and emit both spans. The same goes for any field the instructions REQUIRE (a score, a set of copy variations): fill it, never omit it and never mark it "Not provided." Infer it from the brief. "Never invent" governs facts you would present as given; it does not excuse you from a judgement the template asks you to make.
+
+<h3>HTML FOR SCANNING</h3>
+- <h2> for every section, sentence case, 2 to 4 words, never a full sentence.
+- First <p> under the title states the outcome or ask in one sentence, with its key words in <strong>. Nothing comes before it.
+- <ul><li> for anything with 2 or more parts. One idea per bullet.
+- 1 to 2 sentence paragraphs, 20 words or fewer per sentence where possible.
+- Bold the load-bearing content with <strong>, never a generic label ("<strong>Note:</strong>", "<strong>Metric:</strong>"). The NAME of an enumerated item is content: "<li><strong>Variation 1</strong>: line under the add-to-cart button</li>" is correct.
+- Alternatives the brief describes (test variations, options, steps) are listed as <strong>Control</strong> (when a baseline exists), then <strong>Variation 1</strong>, <strong>Variation 2</strong> and so on, one bullet each, in the brief's order. Constraints that apply to all items go in a sentence before or after the list.
+- One to three bold phrases per section.
+- Start bullets and headings with the information-carrying word, not with "The", "This", "We will".
+- Code formatting is for code only.
+
+<h3>OUTPUT HYGIENE</h3>
+- Never output an em dash, anywhere, including inside quoted copy and non-English text. Use a hyphen, comma, or period even when the source quotes it verbatim.
+- Output a document fragment. Never wrap the result in <html>, <head>, or <body> tags, and never open with a code fence.
+
+<h3>FINAL CHECK before you output, in this order</h3>
+1) Every copy line, headline, slogan, number, date, and name in the output exists in the brief or the task context. Delete what fails.
+2) Every concrete item from the brief is still there.
+3) No fact appears in two sections. No line starts with "Proposed:". No questions or status in the description.
+4) Priority and Size are present with their hidden spans.
+5) Every section has an <h2>. The first <p> states the ask.
+6) No em dash anywhere. No <html>, <head>, <body>, no code fence.`],
   },
   "task-authoring-style": {
     id: "task-authoring-style",
