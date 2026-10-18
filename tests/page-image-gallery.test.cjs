@@ -57,6 +57,7 @@ mocks["@/lib/navigation/pageReturn"] = {
   bindPageReturnEntry: noop,
   returnFromPage: () => { returnCount += 1; },
 };
+mocks["./canvasLinks"] = load("src/components/RTE/Extensions/HtmlBlock/canvasLinks.ts");
 const { buildHtmlBlockSrcDoc } = load("src/components/RTE/Extensions/HtmlBlock/buildSrcDoc.ts");
 mocks["./buildSrcDoc"] = { buildHtmlBlockSrcDoc };
 const { HtmlCanvasFrame } = load("src/components/RTE/Extensions/HtmlBlock/HtmlCanvasFrame.tsx");

@@ -17,7 +17,7 @@ const RAW_TOOL_METADATA = {
   HELLO: {
     name: buildToolName('hello'),
     description:
-      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action.",
+      "Call this tool FIRST, immediately after connecting and before calling anything else. It returns a welcome map of the current user, their accessible boards, Hypertask capabilities, task-link templates, and board-specific house conventions so you can orient before taking action. It also returns urlFormats for canonical app links.",
   },
 
   AGENT_PRESENCE: {
