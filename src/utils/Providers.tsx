@@ -7,6 +7,7 @@ import { getInboxDocument, type InboxDocument } from "@/lib/firstScreen/inboxDoc
 import { adoptInboxDocument, excludeInboxDocumentRestore } from "@/lib/firstScreen/inboxAdoption";
 import type { BoardDisplay } from "@/lib/firstScreen/boardDisplay";
 import BoardDisplayMirror from "@/lib/firstScreen/BoardDisplayMirror";
+import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
   tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
@@ -184,6 +185,7 @@ export default function Provider({
                       ) : (
                         <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
                           <BoardDisplayMirror accountId={authenticatedUserId} />
+                          <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>
                             {children}
                           </GlobalProvider>
