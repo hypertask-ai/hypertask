@@ -135,7 +135,7 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     '@/utils/controllers/projects/getAllIncludes': {
       getProjectWhere: (viewerUserId, viewerAgentId) => ({ viewerUserId, viewerAgentId }),
     },
-    '@/utils/controllers/pages/htmlToMarkdown': { htmlToMarkdown: (html) => html.replace(/<[^>]+>/g, '') },
+    '@/utils/controllers/pages/htmlToMarkdown': load('src/utils/controllers/pages/htmlToMarkdown.ts', { turndown: require('turndown') }),
     '@/utils/controllers/pages/htmlCanvas': { decodeHtmlCanvas: () => null },
     ai: { tool: (definition) => definition },
     zod: require('zod'),
@@ -317,3 +317,47 @@ test('MCP and AI creation remain task-origin only', async () => {
   assert.equal(schema.safeParse({ project_id: 1, content: 'Standalone' }).success, false);
   assert.equal(schema.safeParse({ task_id: 202, content: 'Ticket page' }).success, true);
 });
+
+for (const boundary of ['MCP', 'AI']) {
+  test(`${boundary} creation refuses invalid parent IDs / forwards valid parent_page_id unchanged`, async () => {
+    const h = harness({ boundary });
+    if (boundary === 'MCP') {
+      assert.equal((await h.mcp('create', { task_id: 202, parent_page_id: 0, content: '' })).status, 400);
+      assert.equal(h.writes.length, 0);
+      assert.equal((await h.mcp('create', { task_id: 202, parent_page_id: 303, content: '' })).status, 200);
+    } else {
+      const schema = h.aiSchema('createPage', 'createCreatePageTool', 'hypertask_create_page');
+      assert.equal(schema.safeParse({ task_id: 202, parent_page_id: 0, content: '' }).success, false);
+      assert.equal(schema.safeParse({ task_id: 202, parent_page_id: 303, content: '' }).success, true);
+      assert.equal((await h.ai('createPage', 'createCreatePageTool', 'hypertask_create_page', { task_id: 202, parent_page_id: 303 })).success, true);
+    }
+    assert.equal(h.writes.length, 1);
+    assert.equal(h.writes[0].name, 'createPage');
+    assert.equal(h.writes[0].args.parentPageId, 303);
+    assert.equal(h.writes[0].args.taskId, 202);
+  });
+
+  test(`${boundary} content output is absent when denied / retains the produced HTML structure and Markdown when allowed`, async () => {
+    for (const boards of [[2], [1, 2]]) {
+      const h = harness({ boundary, boards });
+      const result = boundary === 'MCP'
+        ? (await h.mcp('get', undefined, 'id=10&format=html')).body
+        : await h.ai('getPage', 'createGetPageTool', 'hypertask_get_page', { format: 'html' });
+      if (!boards.includes(1)) {
+        assert.equal(result.page, undefined);
+      } else {
+        const document = require('node-html-parser').parse(result.page.content);
+        assert.equal(result.page.content_type, 'html');
+        assert.equal(document.childNodes.length, 1);
+        assert.equal(document.firstChild.tagName, 'P');
+        assert.equal(document.firstChild.textContent, 'Page content');
+        assert.equal(document.firstChild.childNodes.length, 1);
+        const markdown = boundary === 'MCP'
+          ? (await h.mcp('get')).body
+          : await h.ai('getPage', 'createGetPageTool', 'hypertask_get_page');
+        assert.equal(markdown.page.content_type, 'markdown');
+        assert.equal(markdown.page.content, 'Page content');
+      }
+    }
+  });
+}
