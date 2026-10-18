@@ -5,6 +5,7 @@ import { getMcpSessionAgentSummary } from '@/lib/mcp/agents'
 import notificationGetAll from '@/utils/controllers/notifications/getAll'
 import { getStructuredInboxForAgent } from '@/utils/controllers/notifications/getStructuredInboxForAgent'
 import prisma from '@/lib/prisma'
+import { HTPR_7326_SLIM_MCP_INBOX_FLAG, isFeatureEnabled } from '@/lib/flags'
 import { getProjectListingWhere } from '@/utils/controllers/projects/getAllIncludes'
 import { generalConfig } from '@/lib/configs/general.config'
 
@@ -87,9 +88,11 @@ export async function GET(request: NextRequest) {
             })
         }
 
+        const withCachedDescription = !await isFeatureEnabled(HTPR_7326_SLIM_MCP_INBOX_FLAG, user.id).catch(() => false)
+
         if (ctx.agentId) {
             const [userInboxResult, agentInbox] = await Promise.all([
-                notificationGetAll(user.id.toString()),
+                notificationGetAll(user.id.toString(), { withCachedDescription }),
                 getStructuredInboxForAgent({
                     userId: user.id,
                     agentId: ctx.agentId,
@@ -140,7 +143,7 @@ export async function GET(request: NextRequest) {
             })
         }
 
-        const { status, json } = await notificationGetAll(user.id.toString())
+        const { status, json } = await notificationGetAll(user.id.toString(), { withCachedDescription })
 
         if (status !== 200 || !json || !('structuredData' in json)) {
             console.error('[MCP] inbox/list', {

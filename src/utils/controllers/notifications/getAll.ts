@@ -138,8 +138,11 @@ const visibleInboxSql = (userId: number) => {
 export async function getInboxNotifications(
   userId: number,
   client: typeof prisma = prisma,
+  { withCachedDescription = true }: { withCachedDescription?: boolean } = {},
 ) {
-  const cachedDescriptionPromise = isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false);
+  const cachedDescriptionPromise = withCachedDescription
+    ? isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false)
+    : Promise.resolve(false);
   const selectedRows = await client.$queryRaw<{ id: number }[]>(Prisma.sql`
     SELECT selected.id
     FROM (
@@ -195,7 +198,10 @@ const getRecentInboxActorActivity = (userId: number) => {
   `);
 };
 
-const notificationGetAll = async (userId: string | string[]) => {
+const notificationGetAll = async (
+  userId: string | string[],
+  options: { withCachedDescription?: boolean } = {},
+) => {
   const parsedUserId = parseInt(userId as string);
   try {
     const inboxWhere = visibleUserInboxWhere(parsedUserId);
@@ -207,7 +213,7 @@ const notificationGetAll = async (userId: string | string[]) => {
       blockedTasks,
       userSetting,
     ] = await Promise.all([
-      getInboxNotifications(parsedUserId, prisma),
+      getInboxNotifications(parsedUserId, prisma, options),
       getRecentInboxActorActivity(parsedUserId),
       prisma.notification.findMany({
         where: { ...inboxWhere, directReply: true },
