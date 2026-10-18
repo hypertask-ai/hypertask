@@ -218,7 +218,9 @@ const baseline = {
       [
         "list",
         {
-          "taskId": 50
+          "taskId": 50,
+          "userId": 985,
+          "agentId": null
         }
       ]
     ]
@@ -268,6 +270,8 @@ const baseline = {
         "search",
         {
           "query": "hello",
+          "userId": 985,
+          "agentId": null,
           "projectIds": [
             15
           ]

@@ -60,6 +60,8 @@ export async function GET(request: NextRequest) {
 
     const matches = await searchPages({
       query,
+      userId,
+      agentId: null,
       projectIds: projects.map((project) => project.id),
     })
     const pages = matches.map((page) => ({
