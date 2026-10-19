@@ -97,9 +97,11 @@ export function buildTools(
   recordToolExecution: ToolExecutionRecorder,
   actingAgentId: string | null = null,
   recordToolStart?: ToolStartRecorder,
-  heartbeatTurn?: HeartbeatTurnMetadata
+  heartbeatTurn?: HeartbeatTurnMetadata,
+  chatTaskWriterEnabled = false,
+  abortSignal?: AbortSignal
 ): ToolSet {
-  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn);
+  const context = createToolContext(user, body, send, recordToolExecution, actingAgentId, recordToolStart, heartbeatTurn, chatTaskWriterEnabled, abortSignal);
   const tools: ToolSet = {
     hypertask_list_agents: createListAgentsTool(context).hypertask_list_agents,
     hypertask_agent_webhook: createAgentWebhookTool(context).hypertask_agent_webhook,

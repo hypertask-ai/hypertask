@@ -1,20 +1,16 @@
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { reportError } from "@/lib/errors/reportError";
-import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
 import { z } from "zod";
 
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
-import { errorMessage, filterOneImagePass } from "@/app/api/ai/_lib/editorAi";
+import { errorMessage } from "@/app/api/ai/_lib/editorAi";
 import {
   AiFeatureDisabledError,
   ProjectAccessError,
-  prepareTaskWriterRun,
   taskWriterRequestSchema,
 } from "@/app/api/ai/_lib/taskWriterRun";
-import { extractTaskWriterProperties, hasUsableTaskWriterDraft, TASK_WRITER_EMPTY_DRAFT_MESSAGE } from "@/app/api/ai/_lib/taskWriterProperties";
-import { taskTitleFromBrief } from "@/lib/ai/taskWriterDuplicateGuard";
+import { generateTaskWriterDraft } from "@/app/api/ai/_lib/taskWriterDraft";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -60,63 +56,24 @@ export async function POST(request: NextRequest) {
       taskDescription: input.task_description,
       customInstructions: input.custom_instructions,
     });
-    const {
-      selected,
-      instructions,
-      messages,
-      allowedImgSrcs,
-      skills,
-      usageTaskId,
-      validateDraft,
-    } = await prepareTaskWriterRun(body, userId, ctx.agentId);
-
-    configureAiModelUsage(selected.model, {
-      userId,
-      teamId: selected.teamId,
-      projectId: body.projectId,
-      taskId: usageTaskId,
-      agentId: ctx.agentId,
-      provider: selected.usageProvider,
-      feature: "task-writer",
-    });
-    const { text, usage } = await generateText({
-      model: selected.model,
-      instructions,
-      messages,
-      tools: selected.tools,
-      maxRetries: 2,
-      providerOptions: selected.providerOptions,
-      ...selected.settings,
-    });
-
-    const filtered = allowedImgSrcs
-      ? filterOneImagePass(text, allowedImgSrcs).emit
-      : text;
-    const properties =
-      input.mode === "task_writer"
-        ? extractTaskWriterProperties(filtered, {
-            fallbackTitle:
-              input.task_title.trim() || taskTitleFromBrief(input.prompt),
-          })
-        : { title: null, description: filtered };
-
-    if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
+    const draft = await generateTaskWriterDraft(body, userId, ctx.agentId);
+    if (!draft.success) {
       return NextResponse.json(
-        { success: false, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE },
+        { success: false, error: draft.error },
         { status: 500 }
       );
     }
 
     return NextResponse.json({
       success: true,
-      html: properties.description,
-      title: properties.title,
-      priority: "priority" in properties ? properties.priority : undefined,
-      estimate: "estimate" in properties ? properties.estimate : undefined,
+      html: draft.html,
+      title: draft.title,
+      priority: draft.priority,
+      estimate: draft.estimate,
       mode: input.mode,
-      model: selected.modelId,
-      provider: selected.usageProvider,
-      skills: skills.map((skill) => ({ slug: skill.slug, name: skill.name })),
+      model: draft.model,
+      provider: draft.provider,
+      skills: draft.skills,
     });
   } catch (error) {
     if (error instanceof ProjectAccessError) {
