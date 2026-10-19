@@ -7,6 +7,7 @@ const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 
 function loadModule(file, stubs) {
+  stubs = { '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...stubs };
   const filename = path.join(root, file);
   const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },

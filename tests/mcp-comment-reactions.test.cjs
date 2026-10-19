@@ -177,6 +177,7 @@ function loadCommentsRoute({
   }
   const routeModule = { exports: {} }
   const modules = {
+    '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
     'next/server': { NextResponse: { json: (body, init = {}) => ({ body, status: init.status ?? 200 }) } },
     '@prisma/client': { Prisma: { DbNull: Symbol('DbNull') } },
     '@/lib/mcp/auth': {

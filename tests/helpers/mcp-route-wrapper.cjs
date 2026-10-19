@@ -5,6 +5,7 @@ function loadRouteWrapper(mocks) {
   const keys = mocks['@/lib/flags/keys'] ?? {}
   const flag = 'htpr-6926-mcp-route-wrapper'
   return load('src/lib/mcp/routeWrapper.ts', {
+    './operationCrashReport': { reportUnexplainedMcpServerError: () => {} },
     ...mocks,
     '@/lib/flags/keys': { ...keys, HTPR_6926_MCP_ROUTE_WRAPPER_FLAG: flag },
     '@/lib/flags': {

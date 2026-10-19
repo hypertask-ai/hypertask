@@ -29,6 +29,7 @@ function loadRoute() {
     },
   };
   const stubs = {
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "next/server": {
       NextResponse: {

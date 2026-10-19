@@ -17,6 +17,7 @@ function loadPost({ flagOn, knownLabelIds }) {
   let createdLabels;
   const json = (body, init) => ({ body, status: init && init.status });
   const stubs = {
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/lib/mcp/routeWrapper": {
       wrapMcpRoute: (fn) => fn,
       validateMcpRouteAuth: async () => ({ user: { id: 1 } }),
