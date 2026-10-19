@@ -95,7 +95,7 @@ export default async function Page(
     fetchTaskDetail(params.slug[0], params.slug[1], userObj.id),
     fetchCommentsForSlug(slug, userObj.id),
     fetchUserPreferenceController(userObj.id),
-    isFeatureEnabled(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, userObj.id).catch(() => false),
+    isFeatureEnabled(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG, userObj.id),
   ]);
 
   task = taskResult;
