@@ -137,7 +137,34 @@ test("an operation that reports its own crash is not reported again by the wrapp
   assert.equal(h.reports[0].extra.route, "/api/mcp/tasks/:id/relations");
 });
 
-test("a failing reporter never changes the 500 the caller gets", async () => {
+test("with the route wrapper flag on, the proxied request still reports a crash exactly once", async () => {
+  const jwt = require("jsonwebtoken");
+  const previous = process.env.HTPR_6926_TEST_FLAG;
+  process.env.HTPR_6926_TEST_FLAG = "on";
+  try {
+    const h = harness();
+    let received;
+    const route = h.wrapper.wrapMcpRoute(async request => {
+      received = request;
+      h.crashReport.reportMcpOperationCrash(request, prismaTimeout());
+      return new Response(null, { status: 500 });
+    });
+    const request = mcpRequest("/api/mcp/comments");
+    request.headers.set("Authorization", `Bearer ${jwt.sign({ userId: 985 }, "test-secret")}`);
+
+    assert.equal((await route(request)).status, 500);
+    await h.settled();
+
+    assert.notEqual(received, request);
+    assert.equal(h.reports.length, 1);
+    assert.equal(h.reports[0].extra.errorName, "PrismaClientKnownRequestError");
+  } finally {
+    if (previous === undefined) delete process.env.HTPR_6926_TEST_FLAG;
+    else process.env.HTPR_6926_TEST_FLAG = previous;
+  }
+});
+
+test("a failing reporter only logs and never throws into the operation", async () => {
   const pending = [];
   const crashReport = load("src/lib/mcp/operationCrashReport.ts", {
     "@vercel/functions": { waitUntil: promise => pending.push(promise) },
