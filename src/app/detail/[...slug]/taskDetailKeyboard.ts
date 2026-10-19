@@ -9,7 +9,7 @@ export function dispatchTaskDetailCommand(action: TaskDetailCommand) {
   return action.run();
 }
 
-export function createTaskDetailKeyboard(context: TaskDetailContext) {
+export function createTaskDetailKeyboard(context: TaskDetailContext, editWithAiEnabled = false) {
   const { showAssignModal, showCreateLabelModal, currentTask, isRecording, isApple, linksModalToggle, carousalItems, setCarousalItems, defaultCommentFocus, showShortucts, showCommentDeleteModal, isSummaryExpanded, editMode, setShowShortcuts, resetShowCommands, setShowCommentDeleteModal, setShowCreateLabelModal, setIsSummaryExpand, titleEscapeHandler, idToDelete, tipTapClassName, activeModals, showMoveModal, showPriorityModal, showEmojiPickerAtComment, setShowDropdown, showCommands, controller } = context;
 
   const handleKeyUp = (event: KeyboardEvent) => {
@@ -110,7 +110,7 @@ export function createTaskDetailKeyboard(context: TaskDetailContext) {
     }
 
     if (showCommands.show || showEmojiPickerAtComment?.show) return;
-    const keyboardContext = { ...context, currentTask, handleKeyUp, handleKeyDown };
+    const keyboardContext = { ...context, currentTask, handleKeyUp, handleKeyDown, editWithAiEnabled };
     const keymap = [
       ...taskDetailEditingKeymap(keyboardContext, e, cmdControl),
       ...taskDetailNavigationKeymap(keyboardContext, e, cmdControl),

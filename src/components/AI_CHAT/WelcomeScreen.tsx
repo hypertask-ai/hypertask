@@ -4,13 +4,15 @@ import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useRecoilValue } from "@/lib/state"
 import type { IProject } from "@/models/model"
-import { currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
+import { aiChatEditTaskIdAtom, currentProjectAtom, inViewObjectAtom, taskDetailNonEssentialReadyAtom } from "@/store"
 import { isGuestCookieUser } from "@/lib/demo/isGuestClient"
 import { isGuestBoardBuild } from "@/lib/demo/guestBoardBuild"
 import { GuestBoardSpotlight } from "./GuestBoardSpotlight"
 import formatDateDifference from "@/utils/generateTime"
 import { Sparkles } from "lucide-react"
 import { taskSummaryActionFor } from "./taskSummaryAction"
+import { useFlag } from "@/hooks/useFlag"
+import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys"
 import { useHydrated } from "@/hooks/General/useHydrated"
 
 type TaskSessionSummary = {
@@ -26,6 +28,22 @@ const TICKET_QUERIES = (ref: string) => [
   `What are the next steps for ${ref}?`,
   `Draft a status update for ${ref}`,
   `Suggest sub-tasks for ${ref}`,
+];
+
+const EDIT_QUERIES = [
+  "Rewrite in plain words",
+  "Shorten the title",
+  "Add acceptance criteria",
+  "Split into sub-tasks",
+  "Turn the error log into steps to reproduce",
+];
+
+const EDIT_PROMPTS = (ref: string) => [
+  `Rewrite the description of ${ref} in plain words and update the ticket in place.`,
+  `Shorten the title of ${ref} and update the ticket in place.`,
+  `Add acceptance criteria to the description of ${ref} and update the ticket in place.`,
+  `Split ${ref} into sub-tasks, create them under this ticket, and update its description in place with the breakdown.`,
+  `Turn the error log in ${ref} into steps to reproduce and update the ticket description in place.`,
 ];
 
 const SUGGESTED_QUERIES_POOL = [
@@ -82,6 +100,10 @@ export const WelcomeScreen = () => {
   const currentProject = useRecoilValue(currentProjectAtom) as IProject | null;
   const sections = currentProject?.sections ?? null;
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
+  let isEditMode = false;
+  if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"
@@ -106,7 +128,7 @@ export const WelcomeScreen = () => {
     },
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
-    enabled: Boolean(taskId) && taskDetailDataReady,
+    enabled: Boolean(taskId) && taskDetailDataReady && !isEditMode,
   });
   const taskSessions = useQuery({
     queryKey: ["task-sessions", taskId],
@@ -219,7 +241,7 @@ export const WelcomeScreen = () => {
 
   if (taskId) {
     const generatedQuestions = taskQuestions.data?.questions?.filter(Boolean) ?? [];
-    const displayedQuestions = generatedQuestions.length
+    const displayedQuestions = isEditMode ? EDIT_QUERIES : generatedQuestions.length
       ? generatedQuestions
       : suggestions;
     const askAll = () => {
@@ -233,7 +255,8 @@ export const WelcomeScreen = () => {
     return (
       <div className="flex flex-grow text-white-black flex-col items-center justify-center h-full px-10 py-4">
         <div className="flex flex-col gap-2 w-full max-w-md">
-          {taskSummaryAction && (
+          {isEditMode && <p className="px-2 text-meta">How do you want to edit this task?</p>}
+          {!isEditMode && taskSummaryAction && (
             <button
               type="button"
               className="flex w-full items-center gap-2 rounded border-thin border-hypertasks-ai-purple/70 bg-hypertasks-ai-purple/10 p-2 text-left text-xs text-white-black hover:bg-hypertasks-ai-purple/20 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-hypertasks-ai-purple"
@@ -248,16 +271,16 @@ export const WelcomeScreen = () => {
               <span>{taskSummaryAction.label}</span>
             </button>
           )}
-          {displayedQuestions.map((suggestion) => (
+          {displayedQuestions.map((suggestion, index) => (
             <button
               key={suggestion}
               className="bg-kanban-active-cardbg hover:bg-hover-active rounded p-2 text-xs text-left w-full"
-              onClick={() => handleSendMessage(suggestion)}
+              onClick={() => handleSendMessage(isEditMode ? EDIT_PROMPTS(ticketRef!)[index] : suggestion)}
             >
               {suggestion}
             </button>
           ))}
-          {generatedQuestions.length > 0 && !taskQuestions.isLoading && (
+          {!isEditMode && generatedQuestions.length > 0 && !taskQuestions.isLoading && (
             <button
               className="self-start px-2 text-[11px] text-text-light-gray hover:text-white-black"
               onClick={askAll}
@@ -265,7 +288,7 @@ export const WelcomeScreen = () => {
               Ask all
             </button>
           )}
-          {taskSessions.data && taskSessions.data.length > 0 && (
+          {!isEditMode && taskSessions.data && taskSessions.data.length > 0 && (
             <div className="mt-3 flex flex-col gap-1">
               <p className="px-2 text-[11px] text-text-light-gray">
                 Previous threads

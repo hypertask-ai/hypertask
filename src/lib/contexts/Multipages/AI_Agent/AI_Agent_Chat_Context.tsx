@@ -108,7 +108,7 @@ export interface ChatContextType {
   retryStream: (message?: IChatMessage) => void
   audioTiptapCallback: (text: string, setContent?: boolean) => void;
   toggleRecording: (val: boolean) => void;
-  startNewSession: () => Promise<void>;
+  startNewSession: () => Promise<IChatSession | undefined>;
   selectSession: (sessionId: string) => void;
   toggleRenameChatModal: () => void;
   renameChat: (newTitle: string) => void;

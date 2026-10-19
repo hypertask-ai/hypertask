@@ -286,6 +286,9 @@ test("the task title passes its stable ref to autosizing on the first render", (
   const task = { id: 42, title: "Cached title" };
   let sizingRef;
   const Title = load("src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", {
+    "@/hooks/useFlag": { useFlag: () => false },
+    "@/lib/flags/keys": {},
+    "@/models/enums": { CommandMode: {} },
     react: React,
     "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ parsedTask: JSON.stringify(task), currentTask: task }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
@@ -373,8 +376,12 @@ function editorPanels(flag) {
     HTPR_6752_INSTANT_TICKET_OPEN_FLAG: "instant",
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
+    HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
+    useRecoilValue: () => false,
+    showAIChatInterfaceAtom: "chat-open",
+    useEffect: React.useEffect,
     showCommandsAtom: "commands",
     createPortal: noop,
     useContext: React.useContext,

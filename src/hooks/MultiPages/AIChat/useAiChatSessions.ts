@@ -43,6 +43,7 @@ export function useAiChatSessions(context: Context) {
       resolvedBoardSessionRef.current = { projectId, session: createdSession };
       previousProjectIdRef.current = projectId;
     }
+    return createdSession;
   }, [
     clearMessageQueue,
     createSession,

@@ -1,5 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -26,6 +27,8 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   const { setShouldShowAITaskWriter, shouldTriggerAiTaskWriter, mode, reply, editor, isMbl, isSelected, handleFocus, shouldShowFullAiTaskWriter, divIds, calculatePopoverPosition, updateDrafts, editorContent, setEditorContent, defaultContent, resetDraft, discardDraft, setResetDraft, id, setAiTriggerData, currentTask, suggestReplyAbortRef, shouldShowInlineDraftAiRef, setTrigger, setEmojiGifPicker, handleOutsideClickDescription, handleOutsideClickComment } = context;
 
 
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const { editTicketWithAi } = useCommentToAiChat();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -115,24 +118,29 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     }
   }, [resetDraft]);
 
-  useLayoutEffect(() => {
-    const handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
-      if (event.detail.targetId === id) {
-        if (newTaskWindow && !event.detail.prompt) {
-          setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
-          return;
-        }
-        setAiTriggerData({
-          autoTrigger: true,
-          initialPrompt: event.detail.prompt
-        });
-        setShouldShowAITaskWriter(true);
+  let handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
+    if (event.detail.targetId === id) {
+      if (newTaskWindow && !event.detail.prompt) {
+        setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+        return;
       }
+      setAiTriggerData({
+        autoTrigger: true,
+        initialPrompt: event.detail.prompt
+      });
+      setShouldShowAITaskWriter(true);
+    }
+  };
+  if (editWithAiEnabled) {
+    handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
+      if (event.detail.targetId === id) void editTicketWithAi(currentTask.id);
     };
+  }
 
+  useLayoutEffect(() => {
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
-  }, [id, newTaskWindow, setCommands]);
+  }, [id, newTaskWindow, setCommands, editWithAiEnabled, editTicketWithAi, currentTask?.id]);
 
   useEffect(() => {
     if (mode !== "create-comment") return;

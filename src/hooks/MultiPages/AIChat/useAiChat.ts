@@ -1,7 +1,7 @@
 
 export { type AiChatProcessedAttachment } from "./aiChatShared";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAiChatState } from "./useAiChatState";
 import { useAiChatSessions } from "./useAiChatSessions";
 import { createAiChatKeyboard } from "./aiChatKeyboard";
@@ -9,9 +9,14 @@ import { useAiChatAttachments } from "./useAiChatAttachments";
 import { createAiChatSend } from "./aiChatSend";
 import { useAiChatPresentation } from "./useAiChatPresentation";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6936_ASK_AI_FULLSCREEN_FLAG, HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG, HTPR_7099_CHAT_CONNECTION_LOST_FLAG, HTPR_6971_CHAT_HISTORY_PAGING_FLAG } from "@/lib/flags/keys";
+
+import { useRecoilState } from "@/lib/state";
+import { aiChatEditTaskIdAtom } from "@/store";
 
 export function useAiChat() {
+  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const [editTaskId, setEditTaskId] = useRecoilState(aiChatEditTaskIdAtom);
   const [sendSettledVersion, setSendSettledVersion] = useState(0);
   const askAiFullscreenEnabled = useFlag(HTPR_6936_ASK_AI_FULLSCREEN_FLAG);
   const reloadTaskAfterChat = useFlag(HTPR_7049_RELOAD_AFTER_IMAGE_CHAT_FLAG);
@@ -37,6 +42,15 @@ export function useAiChat() {
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
   } = useAiChatState();
+  useEffect(editWithAiEnabled ? () => {
+    if (editTaskId === null) return;
+    if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
+      setEditTaskId(null);
+    }
+  } : () => {
+    if (editTaskId !== null) setEditTaskId(null);
+  }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
+
   const sessionContext = {
     sessionIntentGenerationRef, sessionSetupRef, resolvedBoardSessionRef, clearMessageQueue, selectSessionInHistory,
     createSession, isFullScreenChat, setDockedChatScope, currentProject, previousProjectIdRef,
