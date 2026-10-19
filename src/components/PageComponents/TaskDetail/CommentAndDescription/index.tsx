@@ -76,10 +76,11 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     visibleFeedItems,
     allowPerks,
     descriptionStart,
-    liveRowsPending,
+    liveRowsPendingFor,
     showLiveRows,
   } = useTaskContext();
-  const descriptionFirst = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG) || descriptionStart === "server";
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
   const {
     taskInfoVirtualIndex,
@@ -92,10 +93,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
-  const liveRowsShown = descriptionFirst ? !liveRowsPending : hydrated;
+  const liveRowsShown = hydrated && !serverRowsShown;
   useEffect(() => {
-    if (liveRowsPending) showLiveRows();
-  }, [liveRowsPending, showLiveRows]);
+    if (serverRowsShown) showLiveRows();
+  }, [serverRowsShown, showLiveRows]);
   const descriptionAuthor: DescriptionAuthor = {
     name: currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? "",
     pfp: currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? "",
@@ -111,7 +112,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     ? [{ index: taskInfoVirtualIndex, key: "task-info", start: 0 }, descriptionRow]
     : [descriptionRow];
   const measuredItems = liveRowsShown ? virtualizer.getVirtualItems() : [];
-  const virtualItems = liveRowsPending
+  const virtualItems = serverRowsShown
     ? serverRenderedRows
     : liveRowsShown && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
       ? [descriptionRow, ...measuredItems]
@@ -120,7 +121,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     (!_mbl && index === descriptionVirtualIndex) || (cachedLayout && index <= descriptionBottomVirtualIndex);
   const rowPlacement = (index: number, start: number): React.CSSProperties => {
     if (rowStaysInFlow(index)) return { position: "relative" };
-    if (liveRowsPending) return { position: "relative", display: "flow-root" };
+    if (serverRowsShown) return { position: "relative", display: "flow-root" };
     return { position: "absolute", transform: `translateY(${start}px)` };
   };
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
@@ -177,7 +178,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionVirtualIndex) {
-            contentToRender = descriptionFirst && liveRowsPending ? (
+            contentToRender = serverRowsShown ? (
               <ServerRenderedDescription {...descriptionAuthor} />
             ) : (
               <Description

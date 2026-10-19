@@ -11,8 +11,9 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const { cachedLayout, newCommentsLastReadAt, liveRowsPending, descriptionStart } = useTaskContext();
-  const descriptionFirst = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG) || descriptionStart === "server";
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const { cachedLayout, newCommentsLastReadAt, liveRowsPendingFor, descriptionStart } = useTaskContext();
+  const waitsForLiveRows = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 
@@ -192,7 +193,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     )
       return;
 
-    if (descriptionFirst && liveRowsPending) return;
+    if (waitsForLiveRows) return;
 
     const hash = window.location.hash.substring(1);
     const hasDeepLink =
@@ -290,8 +291,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     initialScrollGuard,
     newCommentIds,
     newCommentsSnapshotReady,
-    descriptionFirst,
-    liveRowsPending,
+    waitsForLiveRows,
     newCommentsLastReadAt,
     position,
     unreadTicketOpensTop,

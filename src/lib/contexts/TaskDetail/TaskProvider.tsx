@@ -120,7 +120,7 @@ interface GlobalStates extends TaskContextProps {
   setNewCommentsLastReadAt: React.Dispatch<React.SetStateAction<string | Date | null>>;
   newCommentsSnapshotReady: boolean;
   setNewCommentsSnapshotReady: React.Dispatch<React.SetStateAction<boolean>>;
-  liveRowsPending: boolean;
+  liveRowsPendingFor: (descriptionFirst: boolean) => boolean;
   showLiveRows: () => void;
   toggleSubtaskLinkingModal: () => void;
   showSubtaskLinkingModal: boolean;
@@ -202,6 +202,7 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const hydrated = useHydrated();
   const [liveRowsPending, setLiveRowsPending] = useState(() => props.descriptionStart === "server" && !hydrated);
   const showLiveRows = useCallback(() => startTransition(() => setLiveRowsPending(false)), []);
+  const liveRowsPendingFor = useCallback((descriptionFirst: boolean) => descriptionFirst && liveRowsPending, [liveRowsPending]);
   const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
   const queryClient = useQueryClient();
   const { authenticatedUserId } = useAuth();
@@ -235,7 +236,7 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
     setNewCommentsLastReadAt,
     newCommentsSnapshotReady,
     setNewCommentsSnapshotReady,
-    liveRowsPending,
+    liveRowsPendingFor,
     showLiveRows,
     forceOpenEdit,
   };
