@@ -32,6 +32,7 @@ import {
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
+import { findParamWithNulByte, parseSortOrderParam } from '@/lib/mcp/listParams'
 
 export interface ParentTaskSummary {
   id: number
@@ -169,6 +170,9 @@ export async function GET(request: NextRequest) {
       user: { id: user.id, email: user.email },
       query,
     })
+
+    const paramWithNulByte = findParamWithNulByte(searchParams)
+    if (paramWithNulByte !== null) return validationError(`${paramWithNulByte} must not contain a NUL character`)
 
     const projectIdResult = parsePositiveIntegerParam(
       searchParams,
@@ -363,7 +367,9 @@ export async function GET(request: NextRequest) {
     let limit = Math.min(limitResult.value ?? 50, 100)
     const offset = offsetResult.value
     let sortBy = searchParams.get('sort_by') || 'updatedAt'
-    let sortOrder = searchParams.get('sort_order') || 'desc'
+    const sortOrderParam = parseSortOrderParam(searchParams.get('sort_order'), 'desc')
+    if (!sortOrderParam) return validationError('sort_order must be asc or desc')
+    let sortOrder = sortOrderParam
     let sectionId = sectionIdParam.value
     if (listQuery) {
       if (listQuery.query) search = listQuery.query
