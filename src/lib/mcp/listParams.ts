@@ -12,3 +12,19 @@ export function findParamWithNulByte(searchParams: URLSearchParams): string | nu
   }
   return null
 }
+
+const DATABASE_INT_MAX = 2_147_483_647
+
+type IdParamValue = number | readonly number[] | null | undefined
+
+export function findIdParamOutOfRange(params: Record<string, IdParamValue>): string | null {
+  for (const [name, value] of Object.entries(params)) {
+    const ids: readonly number[] = Array.isArray(value) ? value : typeof value === 'number' ? [value] : []
+    if (ids.some((id) => Math.abs(id) > DATABASE_INT_MAX)) return name
+  }
+  return null
+}
+
+export function idOutOfRangeMessage(name: string): string {
+  return `${name} is too large; ids go up to ${DATABASE_INT_MAX}`
+}
