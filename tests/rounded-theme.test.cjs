@@ -109,3 +109,19 @@ test("Rounded registry retains the feature default and exact small release risk"
   assert.equal(definition.defaultMode, undefined);
   assert.deepEqual(definition.releaseRisk, { risk: "small", reason: "Adds one theme choice; other themes unchanged" });
 });
+
+test("Material task boxes beat the task box outline layer and the listener restores the device scheme after a server refresh", () => {
+  const css = fs.readFileSync(path.join(root, "src/styles/tailwindThemes/rounded.css"), "utf8");
+  const layered = css.match(/@layer bootstrap \{\s*(\.rounded:where\(\.rounded-light, \.rounded-dark\)\[data-task-box-outlines\][^{]+)\{([^}]+)\}/);
+  assert.ok(layered, "the override must share the outline rule's bootstrap layer");
+  for (const target of [".description-container", "[data-task-comment-box]", "[data-task-properties-rail]", '#comment[data-testid="comment-composer"]']) {
+    assert.ok(layered[1].includes(target), target);
+  }
+  assert.match(layered[2], /border-radius: var\(--m3-li\) !important/);
+  assert.match(layered[2], /outline-style: none !important/);
+  assert.match(css, /--bg-taskDetail-container: var\(--m3-surface\)/);
+  const listener = fs.readFileSync(path.join(root, "src/lib/contexts/ThemeListener.tsx"), "utf8");
+  assert.match(listener, /new MutationObserver\(applyTheme\)/);
+  assert.match(listener, /attributeFilter: \["class", "data-theme"\]/);
+  assert.match(listener, /if \(alreadyApplied\) return;/);
+});

@@ -28,6 +28,16 @@ const ThemeListener = () => {
         match.matches ? "dark" : "light"
       );
 
+      const root = document.documentElement;
+      const wanted = resolvedThemeDomMetadata[resolved].classes;
+      const themeClasses = new Set(["system", ...Object.values(resolvedThemeDomMetadata).flatMap(({ classes }) => classes)]);
+      const present = [...root.classList].filter((name) => themeClasses.has(name));
+      const alreadyApplied =
+        root.getAttribute("data-theme") === resolved &&
+        present.length === wanted.length &&
+        wanted.every((name) => root.classList.contains(name));
+      if (alreadyApplied) return;
+
       document.documentElement.classList.remove(
         "system",
         ...new Set(Object.values(resolvedThemeDomMetadata).flatMap(({ classes }) => classes)),
@@ -45,8 +55,16 @@ const ThemeListener = () => {
 
     applyTheme();
     match.addEventListener("change", applyTheme);
+    const serverRenderedThemeObserver = new MutationObserver(applyTheme);
+    serverRenderedThemeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
 
-    return () => match.removeEventListener("change", applyTheme);
+    return () => {
+      match.removeEventListener("change", applyTheme);
+      serverRenderedThemeObserver.disconnect();
+    };
   }, [roundedEnabled, roundedLoaded]);
 
   return null;

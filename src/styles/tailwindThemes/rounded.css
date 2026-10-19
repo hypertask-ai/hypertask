@@ -74,7 +74,7 @@
     --bg-taskDetailPage: var(--m3-surface);
     --bg-containerBackground: var(--m3-surface);
     --bg-containerBackground-inverted: var(--m3-on-surface);
-    --bg-taskDetail-container: var(--m3-sc-low);
+    --bg-taskDetail-container: var(--m3-surface);
     --bg-cardBackground: var(--m3-sc-lowest);
     --bg-modalBackground: var(--m3-sc-high);
     --bg-hover-active: var(--m3-sc-high);
@@ -206,6 +206,13 @@
     background-color: var(--m3-description);
   }
 
+  @layer bootstrap {
+    .rounded:where(.rounded-light, .rounded-dark)[data-task-box-outlines] :is(.description-container, [data-task-comment-box], [data-task-properties-rail], #comment[data-testid="comment-composer"]) {
+      border-radius: var(--m3-li) !important;
+      outline-style: none !important;
+    }
+  }
+
   .rounded:where(.rounded-light, .rounded-dark) .ai-chat-sidebar {
     background-color: var(--m3-sc-low);
     border-radius: var(--m3-xl) 0 0 var(--m3-xl);
@@ -216,7 +223,7 @@
     color: var(--m3-on-surface-variant);
     outline: 1px solid var(--m3-outline-variant);
     outline-offset: -1px;
-    border-radius: var(--m3-s);
+    border-radius: var(--m3-s) !important;
   }
 
   .rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-panel] button.bg-kanban-active-cardbg:hover {
