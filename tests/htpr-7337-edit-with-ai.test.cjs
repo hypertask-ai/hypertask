@@ -51,11 +51,9 @@ function summaryButton(enabled, comments, flaggedIncomplete = false) {
   return { element: Button(), actions };
 }
 
-test("flag off retains AI Description and its comment/incomplete conditions; flag on does not require comments", () => {
-  for (const enabled of [false, true]) {
-    const hidden = summaryButton(enabled, [{}], true);
-    assert.equal(renderToStaticMarkup(hidden.element), "");
-  }
+test("flag off retains AI Description and its comment/incomplete conditions; flag on shows Edit with AI on every ticket", () => {
+  assert.equal(renderToStaticMarkup(summaryButton(false, [{}], true).element), "");
+  assert.match(renderToStaticMarkup(summaryButton(true, [{}], true).element), /Edit with AI/);
   assert.equal(renderToStaticMarkup(summaryButton(false, []).element), "");
   assert.match(renderToStaticMarkup(summaryButton(false, [{}]).element), /AI Description/);
   const edit = summaryButton(true, []);

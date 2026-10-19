@@ -16,7 +16,7 @@ const CreateSummaryButton = () => {
         }, 100); 
     }
 
-    if (currentTask?.description_?.flaggedIncomplete || (!editWithAiEnabled && comments.length < 1)) {
+    if (!editWithAiEnabled && (currentTask?.description_?.flaggedIncomplete || comments.length < 1)) {
         return <></>
     }
     return (
