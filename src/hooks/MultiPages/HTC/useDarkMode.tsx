@@ -6,13 +6,18 @@ import {
   nextThemeForDarkModeToggle,
   normalizeThemePreference,
   resolveThemePreference,
+  resolvedThemeDomMetadata,
   type ThemePreference,
 } from "@/lib/themePreferences";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
+
 const useDarkMode = () => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const router = useRouter();
   const cookies = parseCookies();
-  const cookieTheme = normalizeThemePreference(cookies.theme);
+  const cookieTheme = normalizeThemePreference(cookies.theme, roundedEnabled);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">("light");
 
@@ -23,7 +28,7 @@ const useDarkMode = () => {
     };
     const onSystemChange = () => {
       syncSystemTheme();
-      if (parseCookies().theme === "system") {
+      if (["system", "rounded"].includes(parseCookies().theme)) {
         router.refresh();
       }
     };
@@ -35,12 +40,12 @@ const useDarkMode = () => {
 
   const resolvedTheme = resolveThemePreference(cookieTheme, systemTheme);
   const effectiveTheme =
-    resolvedTheme === "amoled" || resolvedTheme === "graphite"
+    resolvedThemeDomMetadata[resolvedTheme].classes.includes("dark")
       ? "dark"
       : "light";
 
   const setTheme = (theme: ThemePreference) => {
-    nookies.set(null, "theme", theme, {
+    nookies.set(null, "theme", normalizeThemePreference(theme, roundedEnabled) ?? "system", {
       maxAge: 600 * 60 * 24 * 7,
       path: "/",
     });

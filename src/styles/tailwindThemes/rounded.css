@@ -1,0 +1,344 @@
+.rounded-light {
+  --m3-surface: #ffffff;
+  --m3-sc-lowest: #ffffff;
+  --m3-sc-low: #f8fafd;
+  --m3-sc: #f0f4f9;
+  --m3-sc-high: #e9eef6;
+  --m3-sc-highest: #dde3ea;
+  --m3-description: #e9eef6;
+  --m3-on-surface: #1f1f1f;
+  --m3-on-surface-variant: #444746;
+  --m3-outline-variant: #c4c7c5;
+  --m3-primary: #0b57d0;
+  --m3-on-primary: #ffffff;
+  --m3-secondary-container: #c2e7ff;
+  --m3-on-secondary-container: #001d35;
+  --m3-inverse-surface: #303030;
+  --m3-inverse-on-surface: #f2f2f2;
+  --m3-link: #0b57d0;
+  --m3-primary-hsl: 217 90% 43%;
+  --m3-on-surface-hsl: 0 0% 12%;
+  --m3-on-surface-variant-hsl: 160 2% 27%;
+  --m3-outline-variant-hsl: 150 2% 78%;
+  --m3-sc-high-hsl: 216 41% 94%;
+  --rgb-background: 255, 255, 255;
+  --rgb-input: 240, 244, 249;
+  --rgb-color: 31, 31, 31;
+}
+
+.rounded-dark {
+  --m3-surface: #131314;
+  --m3-sc-lowest: #0f0f0f;
+  --m3-sc-low: #1b1b1c;
+  --m3-sc: #1e1f20;
+  --m3-sc-high: #282a2c;
+  --m3-sc-highest: #333537;
+  --m3-description: #0e0e0f;
+  --m3-on-surface: #e3e3e3;
+  --m3-on-surface-variant: #c4c7c5;
+  --m3-outline-variant: #444746;
+  --m3-primary: #a8c7fa;
+  --m3-on-primary: #062e6f;
+  --m3-secondary-container: #004a77;
+  --m3-on-secondary-container: #c2e7ff;
+  --m3-inverse-surface: #e3e3e3;
+  --m3-inverse-on-surface: #1f1f1f;
+  --m3-link: #a8c7fa;
+  --m3-primary-hsl: 217 89% 82%;
+  --m3-on-surface-hsl: 0 0% 89%;
+  --m3-on-surface-variant-hsl: 150 2% 78%;
+  --m3-outline-variant-hsl: 160 2% 27%;
+  --m3-sc-high-hsl: 210 5% 16%;
+  --rgb-background: 19, 19, 20;
+  --rgb-input: 40, 42, 44;
+  --rgb-color: 227, 227, 227;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) {
+  --m3-xs: 4px;
+  --m3-s: 8px;
+  --m3-m: 12px;
+  --m3-l: 16px;
+  --m3-li: 20px;
+  --m3-xl: 28px;
+  --m3-full: 9999px;
+  --primary: var(--m3-primary-hsl);
+  --bg-pageBackground: var(--m3-surface);
+  --bg-taskDetailPage: var(--m3-surface);
+  --bg-containerBackground: var(--m3-surface);
+  --bg-containerBackground-inverted: var(--m3-on-surface);
+  --bg-taskDetail-container: var(--m3-sc-low);
+  --bg-cardBackground: var(--m3-sc-lowest);
+  --bg-modalBackground: var(--m3-sc-high);
+  --bg-hover-active: var(--m3-sc-high);
+  --bg-comment-description: var(--m3-sc-low);
+  --bg-newComment-container: var(--m3-sc-high);
+  --bg-ai-chat-tiptap: var(--m3-sc-high);
+  --bg-ai-chat: var(--m3-sc-low);
+  --bg-label-span: var(--m3-sc-high);
+  --bg-back-button: var(--m3-sc-high);
+  --bg-tooltip: var(--m3-inverse-surface);
+  --bg-task-tag: var(--m3-sc-high);
+  --bg-sidebar: var(--m3-surface);
+  --bg-self-comment: var(--m3-sc-low);
+  --bg-dropdown: var(--m3-sc-high);
+  --bg-mention: var(--m3-sc-high);
+  --bg-reactions: var(--m3-sc-high);
+  --bg-horizontal-scrollbar: var(--m3-sc-low);
+  --bg-mention-highlight: var(--m3-secondary-container);
+  --hover-cardBackground: var(--m3-sc-high);
+  --active-cardBackground: var(--m3-secondary-container);
+  --active-elementBg: var(--m3-secondary-container);
+  --active-modal-element: var(--m3-sc-highest);
+  --active-kanbanCardbg: var(--m3-secondary-container);
+  --active-mentionList: var(--m3-sc-highest);
+  --active-list-element: var(--m3-secondary-container);
+  --color-page-background: var(--m3-surface);
+  --color-white-black: var(--m3-on-surface);
+  --color-white-black-inverted: var(--m3-surface);
+  --color-text-light-gray: var(--m3-on-surface-variant);
+  --color-border: var(--m3-outline-variant-hsl);
+  --color-border-comment-description: transparent;
+  --bg-newcomment-well: var(--m3-sc-high);
+  --color-my-comment: var(--m3-on-surface);
+  --em-rgb-color: var(--m3-on-surface);
+  --color-text-labelComponent: var(--m3-on-surface-variant);
+  --shadcn-primary: var(--m3-primary-hsl);
+  --primary-foreground: 0 0% 100%;
+  --secondary: var(--m3-sc-high-hsl);
+  --secondary-foreground: var(--m3-on-surface-hsl);
+  --muted: var(--m3-sc-high-hsl);
+  --muted-foreground: var(--m3-on-surface-variant-hsl);
+  --accent: var(--m3-sc-high-hsl);
+  --accent-foreground: var(--m3-on-surface-hsl);
+  --destructive: 0 72.22% 50.59%;
+  --destructive-foreground: 0 0% 98%;
+  --border: var(--m3-outline-variant-hsl);
+  --border-self-comment: 0, 0, 0, 0;
+  --border-light-gray-thin: var(--m3-outline-variant);
+  --input: var(--m3-outline-variant-hsl);
+  --ring: var(--m3-primary-hsl);
+  --button-arrow-disabled: var(--m3-outline-variant);
+  --button-arrow: var(--m3-on-surface-variant);
+  --color-kanban-column-scrollbar: transparent;
+  --color-horizontal-scrollbar-track: var(--m3-sc-high);
+  --color-mention-highlight: var(--m3-link);
+  --color-rich-text-link: var(--m3-link);
+  --color-archived-state: #146c2e;
+  --color-pull-request-open: #146c2e;
+  --color-pull-request-checks-red: #b3261e;
+  --color-pull-request-green: #146c2e;
+  --color-pull-request-merged: #8250df;
+  --focus-ring: var(--m3-primary);
+  --border-active: var(--m3-primary);
+  scrollbar-color: var(--m3-sc-highest) transparent;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) *,
+.rounded:where(.rounded-light, .rounded-dark) *::before,
+.rounded:where(.rounded-light, .rounded-dark) *::after {
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) ::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) ::-webkit-scrollbar-thumb {
+  background-color: var(--m3-sc-highest);
+  background-clip: padding-box;
+  border: 3px solid transparent;
+  border-radius: var(--m3-full);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) ::-webkit-scrollbar-button,
+.rounded:where(.rounded-light, .rounded-dark) ::-webkit-scrollbar-corner {
+  display: none;
+  background: transparent;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .section-container {
+  border-radius: var(--m3-li);
+  background-color: var(--m3-sc);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .kanban-task-card {
+  border-radius: var(--m3-m);
+  background-color: var(--m3-sc-lowest);
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .kanban-task-card:hover {
+  background-color: var(--m3-sc-high);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .kanban-task-card.border-white-black {
+  background-color: var(--m3-secondary-container);
+  color: var(--m3-on-secondary-container);
+  outline-color: var(--m3-primary);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .description-container,
+.rounded:where(.rounded-light, .rounded-dark) .comment-container,
+.rounded:where(.rounded-light, .rounded-dark) .comment-separation-card,
+.rounded:where(.rounded-light, .rounded-dark) [data-task-comment-box],
+.rounded:where(.rounded-light, .rounded-dark) [data-task-properties-rail],
+.rounded:where(.rounded-light, .rounded-dark) #comment[data-testid="comment-composer"],
+.rounded:where(.rounded-light, .rounded-dark) .bg-self-comment {
+  border-radius: var(--m3-li) !important;
+  background-color: var(--m3-sc-low);
+  outline-style: none;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .description-container {
+  background-color: var(--m3-description);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .ai-chat-sidebar {
+  background-color: var(--m3-sc-low);
+  border-radius: var(--m3-xl) 0 0 var(--m3-xl);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-panel] button.bg-kanban-active-cardbg {
+  background-color: transparent;
+  color: var(--m3-on-surface-variant);
+  outline: 1px solid var(--m3-outline-variant);
+  outline-offset: -1px;
+  border-radius: var(--m3-s);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-panel] button.bg-kanban-active-cardbg:hover {
+  background-color: var(--m3-sc-high);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .quick-tips-bar {
+  background-color: var(--m3-sc);
+  color: var(--m3-on-surface-variant);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .task-nav-controls {
+  background-color: var(--m3-sc-high);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) #view-tabs-bar button,
+.rounded:where(.rounded-light, .rounded-dark) .pills-row button {
+  border-radius: var(--m3-s);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .comment-container .comment-body,
+.rounded:where(.rounded-light, .rounded-dark) .comment-container .comment-body .bg-comment-description {
+  background-color: transparent;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .modal-content,
+.rounded:where(.rounded-light, .rounded-dark) [role="dialog"] {
+  border-radius: var(--m3-xl);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [role="menu"],
+.rounded:where(.rounded-light, .rounded-dark) [role="listbox"],
+.rounded:where(.rounded-light, .rounded-dark) .bg-dropdown,
+.rounded:where(.rounded-light, .rounded-dark) .bg-modalBackground {
+  border-radius: var(--m3-l);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [role="menuitem"],
+.rounded:where(.rounded-light, .rounded-dark) [role="option"],
+.rounded:where(.rounded-light, .rounded-dark) .app-shell-rail button,
+.rounded:where(.rounded-light, .rounded-dark) .app-shell-rail a,
+.rounded:where(.rounded-light, .rounded-dark) .left-sidebar-flyout button,
+.rounded:where(.rounded-light, .rounded-dark) .left-sidebar-flyout a {
+  border-radius: var(--m3-full);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .app-shell-rail {
+  background-color: var(--m3-surface);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .app-shell-rail [aria-current="page"],
+.rounded:where(.rounded-light, .rounded-dark) .left-sidebar-flyout [aria-current="page"] {
+  background-color: var(--m3-secondary-container);
+  color: var(--m3-on-secondary-container);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) button,
+.rounded:where(.rounded-light, .rounded-dark) .board-header-icon,
+.rounded:where(.rounded-light, .rounded-dark) .task-option-icon,
+.rounded:where(.rounded-light, .rounded-dark) .share-task-button {
+  border-radius: var(--m3-full);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .share-task-button {
+  background-color: var(--m3-primary);
+  color: var(--m3-on-primary);
+  padding-inline: 12px;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) .bg-task-tag,
+.rounded:where(.rounded-light, .rounded-dark) .bg-label-span {
+  border-radius: var(--m3-s);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [role="tooltip"],
+.rounded:where(.rounded-light, .rounded-dark) .bg-tooltip {
+  border-radius: var(--m3-s);
+  background-color: var(--m3-inverse-surface);
+  color: var(--m3-inverse-on-surface);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) kbd {
+  border-radius: var(--m3-s);
+  background-color: var(--m3-sc-highest);
+  color: var(--m3-on-surface);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [role="tooltip"] kbd,
+.rounded:where(.rounded-light, .rounded-dark) .bg-tooltip kbd {
+  background-color: color-mix(in srgb, var(--m3-inverse-on-surface) 18%, transparent);
+  color: var(--m3-inverse-on-surface);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) input,
+.rounded:where(.rounded-light, .rounded-dark) textarea {
+  border-radius: var(--m3-full);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) #comment,
+.rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-composer],
+.rounded:where(.rounded-light, .rounded-dark) .bg-ai-chat-tiptap,
+.rounded:where(.rounded-light, .rounded-dark) .bg-newComment-container {
+  border-radius: var(--m3-xl) !important;
+  background-color: var(--m3-sc-high);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-composer] {
+  padding: 8px 12px !important;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) #comment div,
+.rounded:where(.rounded-light, .rounded-dark) [data-ai-chat-composer] div {
+  background-color: transparent;
+}
+
+.rounded:where(.rounded-light, .rounded-dark) #comment button[aria-label="Send comment"],
+.rounded:where(.rounded-light, .rounded-dark) #comment [data-comment-send] {
+  background-color: var(--m3-primary);
+  color: var(--m3-on-primary);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) #comment button[aria-label="Send comment"] svg,
+.rounded:where(.rounded-light, .rounded-dark) #comment [data-comment-send] * {
+  color: var(--m3-on-primary);
+}
+
+.rounded:where(.rounded-light, .rounded-dark) :focus-visible {
+  outline-color: var(--m3-primary);
+}

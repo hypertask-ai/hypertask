@@ -90,6 +90,7 @@ export function createCommandDispatcher(context: Context) {
       case CommandMode.ToggleWhiteTheme:
       case CommandMode.ToggleFilterValueMatch:
       case CommandMode.ToggleAmoledTheme:
+      case CommandMode.ToggleRoundedTheme:
       case CommandMode.ToggleDiaTheme:
       case CommandMode.ToggleDarkTheme:
       case CommandMode.InviteMember:
@@ -336,6 +337,11 @@ function dispatchCommandGroup1(context: Context, mode?: CommandMode, action?: st
         return;
       case CommandMode.ToggleAmoledTheme:
         switchToTheme("amoled");
+        boardCloseHandler();
+        break;
+
+      case CommandMode.ToggleRoundedTheme:
+        switchToTheme("rounded");
         boardCloseHandler();
         break;
 

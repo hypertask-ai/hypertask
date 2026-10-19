@@ -1300,7 +1300,8 @@ const help: CommandGroup = {
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
   agentLogNameEnabled = false,
-  kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled
+  kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
+  roundedEnabled = false,
 ): CommandGroup[] => {
   const navigate = getNavigateCommands(commandOptions);
   const time = getTimeCommands(commandOptions);
@@ -1322,7 +1323,11 @@ export const getAllCommands = (
     teamAndBilling,
     snippets,
     ai,
-    appearance,
+    roundedEnabled ? { ...appearance, commandLists: [
+      ...appearance.commandLists.slice(0, 5),
+      { key: "roundedTheme", name: "Material (follows device)", commandMode: CommandMode.ToggleRoundedTheme, keywords: "rounded round system light dark theme appearance" },
+      ...appearance.commandLists.slice(5),
+    ] } : appearance,
     settings,
     help,
   ].filter((group) => group.commandLists.length > 0);

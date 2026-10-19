@@ -1,5 +1,7 @@
 "use client";
 
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
 import { Check } from "lucide-react";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
 import { themeOptions } from "@/lib/themePreferences";
@@ -8,12 +10,13 @@ import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 
 const AppearanceThemePicker = () => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const { currentTheme, switchToTheme } = useDarkMode();
   const activeTheme = currentTheme ?? "system";
 
   return (
     <div className="flex flex-col gap-1">
-      {themeOptions.map((option) => {
+      {themeOptions.filter(({ value }) => value !== "rounded" || roundedEnabled).map((option) => {
         const isActive = activeTheme === option.value;
         return (
           <button

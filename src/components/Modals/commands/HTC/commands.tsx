@@ -49,6 +49,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,
@@ -144,14 +145,11 @@ const Commands = (props: Props) => {
   const cmdkVersionEnabled = useFlag(HTPR_6892_CMDK_VERSION_FLAG);
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
-  const getAgentLogCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, true),
-    []
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const getCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, roundedEnabled),
+    [agentLogNameEnabled, roundedEnabled]
   );
-  let getCommands = getAllCommands;
-  if (agentLogNameEnabled) {
-    getCommands = getAgentLogCommands;
-  }
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []
@@ -248,7 +246,8 @@ const Commands = (props: Props) => {
         stalenessViewEnabled: getActiveStalenessFromProject(currentProject),
         autoArchiveEnabled: currentProject?.autoArchiveAfterDays != null,
       },
-    }, false, kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled).map((group) => ({
+      kanbanSelectAllEnabled: kanbanSelectAllEnabled && !!contextOptions?.kanbanSelectAllEnabled,
+    }).map((group) => ({
       ...group,
       commandLists: group.commandLists
         .filter(
