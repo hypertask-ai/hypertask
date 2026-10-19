@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   normalizeThemePreference,
   resolvedThemeDomMetadata,

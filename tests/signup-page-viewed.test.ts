@@ -75,7 +75,7 @@ function harness() {
     "@/lib/fonts/inter": { inter: {}, INTER_LATIN_FONT_HREF: "inter.woff2" },
     "@/lib/fonts/newsreader": { newsreader: {}, NEWSREADER_LATIN_FONT_HREFS: [] },
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: {} },
-    "@/lib/themePreferences": { normalizeThemePreference: () => "porcelain", resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain" },
+    "@/lib/themePreferences": { normalizeThemePreference: () => "porcelain", resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#fff" } } },
     "@/lib/themeBootScript": { buildThemeBootScript: () => "" },
     "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/components/analytics/StoreUTM": { default: "UTMCookieHandler" },

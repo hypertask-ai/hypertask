@@ -49,7 +49,7 @@ import { useGetAllProjectsMinimal } from "@/hooks/MultiPages/useGetAllProjectsMi
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { MobileBottomSheet } from "@/components/Modals/Sheets";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   GOOGLE_CALENDAR_FLAG,
   HTPR_7260_KANBAN_SELECT_ALL_FLAG,

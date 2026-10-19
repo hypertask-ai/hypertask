@@ -22,7 +22,7 @@ import {
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";

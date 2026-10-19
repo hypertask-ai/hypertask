@@ -11,7 +11,7 @@ import {
 } from "@/lib/themePreferences";
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/definitions/htpr-7328-rounded-theme";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 
 const useDarkMode = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
