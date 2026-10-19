@@ -136,8 +136,8 @@ function schedulePostCreateWork({
       ({ default: scheduleTaskSummaryGeneration }) =>
         scheduleTaskSummaryGeneration({ taskId: task.id, agentId: agentId ?? null }),
     ),
-    import("@/lib/ai/labelClassifier").then(({ classifyTaskAiLabels }) =>
-      classifyTaskAiLabels(task.id, task.projectId),
+    import("@/lib/ai/labelClassifier").then(({ classifyNewTaskAiLabels }) =>
+      classifyNewTaskAiLabels(task.id, task.projectId),
     ),
     autoAssignWork.then(async () => {
       const { broadcastBoardChange } = await import("@/lib/realtime/server");
