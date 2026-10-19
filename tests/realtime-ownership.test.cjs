@@ -92,6 +92,10 @@ function loadPusherAuth({
     "@/lib/mcp/auth/verifyJwt": {
       validateJwtToken: async () => bearerContext,
     },
+    "@/lib/flags": {
+      HTPR_7381_REALTIME_TOKEN_AUTH_FLAG: "htpr-7381-realtime-token-auth",
+      isFeatureEnabled: async () => true,
+    },
     "@/lib/mcp/tasks/services": {
       validateProjectAccess: async (projectId, userId, token) => {
         calls.projectAccess.push([projectId, userId, token]);

@@ -5,6 +5,7 @@ import { featureFlagsChannel } from "@/lib/realtime/shared";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { extractBearerToken } from "@/lib/mcp/auth/session";
 import { validateJwtToken } from "@/lib/mcp/auth/verifyJwt";
+import { HTPR_7381_REALTIME_TOKEN_AUTH_FLAG, isFeatureEnabled } from "@/lib/flags";
 import prisma from "@/lib/prisma";
 
 async function userMayAccess(
@@ -65,7 +66,11 @@ export default async function handler(
         typeof req.headers.authorization === "string" ? req.headers.authorization : null
       );
       const ctx = token ? await validateJwtToken(token) : null;
-      if (!ctx || ctx.management) {
+      if (
+        !ctx ||
+        ctx.management ||
+        !(await isFeatureEnabled(HTPR_7381_REALTIME_TOKEN_AUTH_FLAG, ctx.user.id))
+      ) {
         return res.status(403).json({ error: "Not authenticated" });
       }
       userId = ctx.user.id;

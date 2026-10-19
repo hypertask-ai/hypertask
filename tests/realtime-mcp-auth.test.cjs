@@ -15,7 +15,7 @@ const user = {
   displayName: "Realtime user",
   mcpTokensRevokedAt: null,
 };
-const state = { session: null, revoked: new Set(), authorize: [], projectAccess: [] };
+const state = { session: null, revoked: new Set(), authorize: [], projectAccess: [], tokenAuthFlagOn: true };
 
 function stubModule(relativePath, exports) {
   const filename = path.join(root, relativePath);
@@ -36,7 +36,11 @@ stubModule("src/lib/prisma.ts", {
   },
 });
 stubModule("src/utils/controllers/logs/createLog.ts", { default: async () => null });
-stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+const REALTIME_TOKEN_AUTH_FLAG = "htpr-7381-realtime-token-auth";
+stubModule("src/lib/flags.ts", {
+  HTPR_7381_REALTIME_TOKEN_AUTH_FLAG: REALTIME_TOKEN_AUTH_FLAG,
+  isFeatureEnabled: async (key) => key === REALTIME_TOKEN_AUTH_FLAG && state.tokenAuthFlagOn,
+});
 stubModule("src/lib/telemetry/analyticsIntents.ts", {});
 stubModule("src/lib/telemetry/activationOccurrences.ts", {});
 stubModule("src/lib/auth/getSessionUser.ts", {
@@ -95,6 +99,7 @@ async function invoke(channel, authorization) {
 
 test.beforeEach((t) => {
   state.session = null;
+  state.tokenAuthFlagOn = true;
   state.revoked.clear();
   state.authorize.length = 0;
   state.projectAccess.length = 0;
@@ -168,6 +173,18 @@ test("account-wide token revocation refuses old tokens but still allows newer on
   assert.deepEqual(state.authorize, []);
 
   const allowed = await invoke("private-project-15", `Bearer ${tokenFor({ iat: now })}`);
+  assert.equal(allowed.status, 200);
+});
+
+test("with the flag off, bearer tokens are refused while session users keep access", async () => {
+  state.tokenAuthFlagOn = false;
+  const refused = await invoke("private-project-15", `Bearer ${tokenFor()}`);
+  assert.equal(refused.status, 403);
+  assert.deepEqual(refused.body, { error: "Not authenticated" });
+  assert.deepEqual(state.authorize, []);
+
+  state.session = { userId: user.id };
+  const allowed = await invoke("private-project-15");
   assert.equal(allowed.status, 200);
 });
 
