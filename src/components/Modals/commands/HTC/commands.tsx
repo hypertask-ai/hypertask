@@ -146,10 +146,16 @@ const Commands = (props: Props) => {
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
-  const getCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, roundedEnabled),
-    [agentLogNameEnabled, roundedEnabled]
+  const getRoundedCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, true),
+    [agentLogNameEnabled]
   );
+  const getLegacyCommands = useCallback(
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),
+    [agentLogNameEnabled]
+  );
+  let getCommands = getLegacyCommands;
+  if (roundedEnabled) getCommands = getRoundedCommands;
   const excludeTicketPrefixCommand = useCallback(
     (command: ICommandList) => command.key !== "settingsBoardTicketPrefix",
     []

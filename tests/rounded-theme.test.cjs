@@ -82,10 +82,10 @@ test("both theme pickers and the live listener use the ticket flag; server rende
   }
   const appearance = fs.readFileSync(path.join(root, "src/components/Modals/Settings/AppearanceSection.tsx"), "utf8");
   assert.match(appearance, /useFlag\(HTPR_7328_ROUNDED_THEME_FLAG\)/);
-  assert.match(appearance, /value !== "rounded" \|\| roundedEnabled/);
+  assert.match(appearance, /roundedEnabled\s*\? themeOptions\s*: themeOptions\.filter\(\(\{ value \}\) => value !== "rounded"\)/);
   const layout = fs.readFileSync(path.join(root, "src/app/layout.tsx"), "utf8");
   assert.match(layout, /isFeatureEnabled\(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession\?\.id \?\? -1\)/);
-  assert.match(layout, /normalizeThemePreference\(theme.value, roundedEnabled\)/);
+  assert.match(layout, /roundedEnabled\s*\? normalizeThemePreference\(theme.value, true\)\s*: normalizeThemePreference\(theme.value\)/);
   assert.match(layout, /systemDarkTheme,\s*roundedEnabled,/);
   const listener = fs.readFileSync(path.join(root, "src/lib/contexts/ThemeListener.tsx"), "utf8");
   assert.match(listener, /normalizeThemePreference\(stored, roundedEnabled\)/);
@@ -124,4 +124,83 @@ test("Material task boxes beat the task box outline layer and the listener resto
   assert.match(listener, /new MutationObserver\(applyTheme\)/);
   assert.match(listener, /attributeFilter: \["class", "data-theme"\]/);
   assert.match(listener, /if \(alreadyApplied\) return;/);
+});
+
+test("component flag branches preserve theme choices, cookie reads and writes, and command results", () => {
+  const ts = require("typescript");
+  const load = (file, mocks) => {
+    const exports = {};
+    const code = ts.transpileModule(fs.readFileSync(path.join(root, file), "utf8"), {
+      compilerOptions: { module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX, target: ts.ScriptTarget.ES2020 },
+    }).outputText;
+    new Function("require", "exports", code)((id) => {
+      if (Object.hasOwn(mocks, id)) return { __esModule: true, ...mocks[id] };
+      if (id === "react/jsx-runtime") return require(id);
+      throw new Error(`Unexpected import: ${id}`);
+    }, exports);
+    return exports.default;
+  };
+  for (const enabled of [false, true]) {
+    const appearance = load("src/components/Modals/Settings/AppearanceSection.tsx", {
+      "@/hooks/useFlag": { useFlag: () => enabled },
+      "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
+      "lucide-react": { Check: () => null },
+      "@/hooks/MultiPages/HTC/useDarkMode": { default: () => ({ currentTheme: "system" }) },
+      "@/lib/themePreferences": { themeOptions },
+      "@/utils/undoActions/helperFuncs": { cn: () => "" },
+      "./SettingsCard": { default: "section" },
+      "./SettingsSectionShell": { default: "section" },
+    });
+    const picker = appearance().props.children.props.children;
+    assert.deepEqual(picker.props.options, themeOptions.filter(({ value }) => value !== "rounded" || enabled));
+    const source = fs.readFileSync(path.join(root, "src/components/Modals/commands/HTC/commands.tsx"), "utf8");
+    const parsed = ts.createSourceFile("commands.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const names = new Set(["getCommands", "getRoundedCommands", "getLegacyCommands"]);
+    const statements = [];
+    const visit = (node) => {
+      if ((ts.isVariableStatement(node) && node.declarationList.declarations.some(item => names.has(item.name.getText(parsed)))) ||
+          (ts.isIfStatement(node) && node.expression.getText(parsed) === "roundedEnabled")) statements.push(node.getText(parsed));
+      ts.forEachChild(node, visit);
+    };
+    visit(parsed);
+    assert.equal(statements.length, 4);
+    const code = ts.transpileModule(statements.join("\n"), { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    for (const agentLogNameEnabled of [false, true]) {
+      const getCommands = new Function("useCallback", "getAllCommands", "roundedEnabled", "agentLogNameEnabled", `${code}; return getCommands;`)((callback) => callback, getAllCommands, enabled, agentLogNameEnabled);
+      for (const options of [undefined, { context: "Others" }, { context: "Task", kanbanSelectAllEnabled: true }]) {
+        assert.deepEqual(getCommands(options), getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, enabled));
+      }
+    }
+    const dispatcherSource = fs.readFileSync(path.join(root, "src/components/commands.tsx"), "utf8");
+    const dispatcher = ts.createSourceFile("commands.tsx", dispatcherSource, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let themeWriter;
+    const findThemeWriter = (node) => {
+      if (ts.isIfStatement(node) && node.expression.getText(dispatcher) === "!roundedEnabled") themeWriter = node.getText(dispatcher);
+      ts.forEachChild(node, findThemeWriter);
+    };
+    findThemeWriter(dispatcher);
+    assert.ok(themeWriter);
+    const themeWriterCode = ts.transpileModule(`let switchCommandTheme = switchToTheme; ${themeWriter}; const write = switchCommandTheme;`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
+    const write = new Function("roundedEnabled", "switchToTheme", `${themeWriterCode}; return write;`)(enabled, theme => normalizeThemePreference(theme, enabled));
+    for (const option of themeOptions) assert.equal(write(option.value), normalizeThemePreference(option.value, enabled));
+    for (const theme of [undefined, "unknown", "light", "dark", ...themeOptions.map(option => option.value)]) {
+      let written;
+      let refreshes = 0;
+      const useDarkMode = load("src/hooks/MultiPages/HTC/useDarkMode.tsx", {
+        "next/navigation": { useRouter: () => ({ refresh: () => { refreshes++; } }) },
+        "nookies": { parseCookies: () => ({ theme }), default: { set: (...args) => { written = args; } } },
+        "react": { useEffect: () => {}, useState: value => [value, () => {}] },
+        "@/hooks/useFlag": { useFlag: () => enabled },
+        "@/lib/flags/keys": { HTPR_7328_ROUNDED_THEME_FLAG: "htpr-7328-rounded-theme" },
+        "@/lib/themePreferences": jiti("../src/lib/themePreferences.ts"),
+      });
+      const hook = useDarkMode();
+      assert.equal(hook.currentTheme, normalizeThemePreference(theme, enabled));
+      for (const option of themeOptions) {
+        hook.switchToTheme(option.value);
+        assert.deepEqual(written, [null, "theme", normalizeThemePreference(option.value, enabled) ?? "system", { maxAge: 600 * 60 * 24 * 7, path: "/" }]);
+      }
+      assert.equal(refreshes, themeOptions.length);
+    }
+  }
 });

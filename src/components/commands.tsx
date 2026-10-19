@@ -14,7 +14,7 @@ import { createCommandModalCallbacks } from "./commandModalCallbacks";
 import { createCommandDispatcher } from "./commandDispatcher";
 import { useEffect } from "react";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7328_ROUNDED_THEME_FLAG, HTPR_7260_KANBAN_SELECT_ALL_FLAG, HTPR_6868_TICKET_PREFIX_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 
 
 
@@ -61,6 +61,7 @@ import "./Modals/commands/HTC/AllCommands";
 
 
 const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHTCProps) => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const kanbanSelectAllEnabled = useFlag(HTPR_7260_KANBAN_SELECT_ALL_FLAG);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
@@ -131,13 +132,18 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
     ...(ticketPrefixEnabled ? { ticketPrefixEnabled: true } : {}),
     createSectionWriter,
   });
+  let switchCommandTheme = switchToTheme;
+  if (!roundedEnabled) {
+    switchCommandTheme = (theme) => switchToTheme(theme === "rounded" ? "system" : theme);
+  }
   const {
   handleAction,
   } = createCommandDispatcher({
     newTaskWindow,
     copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
-    switchToTheme, followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
+    switchToTheme: switchCommandTheme,
+    followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
     archiveHandler, acceptTaskHandler, removeNotificationHandler, setShowQuickTips, openAnnouncements,
     setShowTaskHistory, setToggleAllCommentsSignal, saveEmptySectionsAPI, hideActiveColumn, toggleShowArchivedOnBoard,
     callbackHandler, paletteContextOptions, setArchiveBoardScope, toggleBoardLayout, onMyTasks,

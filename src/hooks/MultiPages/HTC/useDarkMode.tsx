@@ -17,7 +17,9 @@ const useDarkMode = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const router = useRouter();
   const cookies = parseCookies();
-  const cookieTheme = normalizeThemePreference(cookies.theme, roundedEnabled);
+  const cookieTheme = roundedEnabled
+    ? normalizeThemePreference(cookies.theme, true)
+    : normalizeThemePreference(cookies.theme);
 
   const [systemTheme, setSystemTheme] = useState<"light" | "dark">("light");
 

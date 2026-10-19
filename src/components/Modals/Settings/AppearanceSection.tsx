@@ -9,14 +9,13 @@ import { cn } from "@/utils/undoActions/helperFuncs";
 import SettingsCard from "./SettingsCard";
 import SettingsSectionShell from "./SettingsSectionShell";
 
-const AppearanceThemePicker = () => {
-  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+const AppearanceThemePicker = ({ options }: { options: readonly (typeof themeOptions)[number][] }) => {
   const { currentTheme, switchToTheme } = useDarkMode();
   const activeTheme = currentTheme ?? "system";
 
   return (
     <div className="flex flex-col gap-1">
-      {themeOptions.filter(({ value }) => value !== "rounded" || roundedEnabled).map((option) => {
+      {options.map((option) => {
         const isActive = activeTheme === option.value;
         return (
           <button
@@ -37,12 +36,19 @@ const AppearanceThemePicker = () => {
   );
 };
 
-const AppearanceSection = () => (
-  <SettingsSectionShell title="Appearance">
-    <SettingsCard title="Appearance">
-      <AppearanceThemePicker />
-    </SettingsCard>
-  </SettingsSectionShell>
-);
+const AppearanceSection = () => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const options = roundedEnabled
+    ? themeOptions
+    : themeOptions.filter(({ value }) => value !== "rounded");
+
+  return (
+    <SettingsSectionShell title="Appearance">
+      <SettingsCard title="Appearance">
+        <AppearanceThemePicker options={options} />
+      </SettingsCard>
+    </SettingsSectionShell>
+  );
+};
 
 export default AppearanceSection;

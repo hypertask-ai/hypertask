@@ -1,4 +1,5 @@
 import "@/styles/globals.scss";
+import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
@@ -80,7 +81,10 @@ export default async function RootLayout(
     name: authConfig.cookies.theme,
   };
   const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
-  const themeValue = normalizeThemePreference(theme.value, roundedEnabled) ?? "system";
+  const savedTheme = roundedEnabled
+    ? normalizeThemePreference(theme.value, true)
+    : normalizeThemePreference(theme.value);
+  const themeValue = savedTheme ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
   const initialThemeColor = resolveInitialThemeColor(themeValue);
