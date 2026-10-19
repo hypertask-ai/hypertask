@@ -29,7 +29,7 @@ A pre-PR gate for any ticket whose change is visible on screen. Run it before `o
    **Closed or idle surfaces count.** When the ticket asks for a control on a closed, collapsed, or idle bar, screenshot that closed state. A shot of the opened or focused state does not prove the ticket.
 6. **Attach the screenshot to the ticket:**
    ```
-   vcc comment add <ticket> --attach <out.png> --text "<p><strong>Pre-PR phone check at 390x844, local dev server.</strong> verify-qa checks production after the deploy.</p>"
+   vcc comment add <ticket> --kind qa --attach <out.png> --text "<p><strong>Pre-PR phone check at 390x844, local dev server.</strong> verify-qa checks production after the deploy.</p>"
    ```
    Attach the file; never embed it as a markdown image, which crashes the ticket UI.
 7. **Never print the auth-state file's contents, any cookie, or any token** into a comment, a log, or the terminal. Reference the path only.
