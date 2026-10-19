@@ -91,6 +91,7 @@ function loadRoute() {
     "@/lib/mcp/priorityFilter": {
       parsePriorityFilter: () => [],
     },
+    "@/lib/mcp/listParams": require("./task-route-loader.cjs").load("src/lib/mcp/listParams.ts", {}),
   };
   const routeModule = { exports: {} };
 
@@ -131,4 +132,29 @@ test("archived task lists sort missing update timestamps after recent tasks", as
     { updatedAt: { sort: "desc", nulls: "last" } },
     { id: "asc" },
   ]);
+});
+
+test("HTPR-7344: uppercase sort_order lists like lowercase instead of answering 500", async () => {
+  const route = loadRoute();
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ project_id: "15", sort_order: "DESC" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(route.taskQueries[0].orderBy, [
+    { updatedAt: { sort: "desc", nulls: "last" } },
+    { id: "asc" },
+  ]);
+});
+
+test("HTPR-7344: unknown sort_order and NUL bytes answer 400 before any task query", async () => {
+  for (const params of [{ sort_order: "ascending" }, { search: "a\0b" }, { section: "\0" }]) {
+    const route = loadRoute();
+    const response = await route.GET({
+      nextUrl: { searchParams: new URLSearchParams({ project_id: "15", ...params }) },
+    });
+
+    assert.equal(response.status, 400, JSON.stringify(params));
+    assert.equal(route.taskQueries.length, 0);
+  }
 });

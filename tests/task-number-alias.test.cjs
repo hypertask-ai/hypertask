@@ -128,6 +128,7 @@ function fixture({ tasks = [currentTask], visibleProjects = [20], agentId = null
     "@/lib/mcp/listQuery": {},
     "@/lib/mcp/readListQuery": {},
     "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   const page = load("src/app/detail/[...slug]/page.tsx", {
     ...base,

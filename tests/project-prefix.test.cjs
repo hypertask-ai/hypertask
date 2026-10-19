@@ -277,6 +277,7 @@ function lookups({ enabled = true, visible = true, live = false, liveAccess = tr
     "@/lib/mcp/agents": {}, "@/lib/agents/visibility": {},
     "@/lib/mcp/tasks/mappers": { taskMcpGetInclude: () => ({}), mapTaskToMcpGetResponse: task => ({ id: task.id, ticketNumber: task.ticketNumber }) },
     "@/lib/mcp/tasks/resolveTask": resolver, "@/lib/mcp/pagination/cursor": {}, "@/lib/flags": {}, "@/lib/mcp/listQuery": {}, "@/lib/mcp/readListQuery": {}, "@/lib/mcp/priorityFilter": {},
+    "@/lib/mcp/listParams": load("src/lib/mcp/listParams.ts", {}),
   });
   return { resolver, detail, prisma, tasks, moveAliases, flagCalls, taskQueries, aliasQueries: () => aliasQueries, get: query => route.GET({ nextUrl: { searchParams: new URLSearchParams(query) } }) };
 }
