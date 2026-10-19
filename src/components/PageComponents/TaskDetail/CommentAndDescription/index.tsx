@@ -79,7 +79,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     liveRowsPending,
     showLiveRows,
   } = useTaskContext();
-  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const descriptionFirst = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG) || descriptionStart === "server";
 
   const {
     taskInfoVirtualIndex,
@@ -92,7 +92,6 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
-  const descriptionFirst = descriptionFirstFlag || descriptionStart === "server";
   const liveRowsShown = descriptionFirst ? !liveRowsPending : hydrated;
   useEffect(() => {
     if (liveRowsPending) showLiveRows();
@@ -178,15 +177,15 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionVirtualIndex) {
-            contentToRender = liveRowsShown ? (
+            contentToRender = descriptionFirst && liveRowsPending ? (
+              <ServerRenderedDescription {...descriptionAuthor} />
+            ) : (
               <Description
                 {...descriptionAuthor}
                 isUploadingDescription={uploadingDescription}
                 hasDraft={hasDraft}
                 draftsFromTQ={draftsFromTQ}
               />
-            ) : (
-              <ServerRenderedDescription {...descriptionAuthor} />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
             contentToRender = <div id="bottom-description" className="h-0" />;
