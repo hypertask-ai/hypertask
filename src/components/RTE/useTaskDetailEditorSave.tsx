@@ -19,7 +19,7 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorContext } from "./TaskDetailEditorContext";
 export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContext) {
-  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
+  const { cancelMobileExistingEditRef, setToggleHighlight, handleSave, saveInFlightRef, mobileEditSavingRef, mode, uploadingDescription, editor, newCommentAttachments, mobileExistingEditOpen, mobileEditSnapshotRef, hasDraft, hasDraftInit, setSaveInFlight, setMobileEditSaving, setShouldShowAITaskWriter, setChatHandoffOpen, setAiTriggerData, cancelDebounceRef, attachments, carouselAttachments, commentId, id, inboxFlow, currentTask, setTrigger, clearDescriptionDraftCache, setNewCommentAttachments, draftsFromTQ, queryClient, draftQueryKey, invalidateUserDrafts, allowEdit, isRecording, currentUser, isInboxFlow, inInbox, advanceOnSend, divIds, editMode, shouldShowAiTaskWriter, setEditMode, isMbl, isReadEditMode, mobileEditSessionActiveRef, toggleRecording, setEditState, defaultCommentFocus } = getContext();
 
 
   const toggleHighlightHandler = (state: boolean) => {
@@ -173,6 +173,7 @@ export function useTaskDetailEditorSave(getContext: () => TaskDetailEditorContex
     if (editWithAiEnabled) {
       editor?.commands.blur();
       setShouldShowAITaskWriter(false);
+      if (mobileExistingEditOpen) setChatHandoffOpen(true);
       void editTicketWithAi(currentTask.id);
       return;
     }

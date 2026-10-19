@@ -1,12 +1,12 @@
 import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
-import { aiChatEditTaskIdAtom, showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
+import { showAIChatInterfaceAtom, showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
 
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { createPortal } from "react-dom";
-import { useContext, useEffect, useState } from "react";
+import { useContext, useEffect } from "react";
 import { StaticDescriptionPlaceholderContext } from "../PageComponents/TaskDetail/CommentAndDescription/DescriptionContainer/StaticDescriptionPlaceholder";
 import TiptapProvider from "@/lib/contexts/TaskDetail/TiptapProvider";
 import TiptapBubbleMenu from "./Components/TiptapBubbleMenu";
@@ -31,18 +31,13 @@ type AIGeneratedAttachment = {
 };
 import type { TaskDetailEditorPresentation } from "./taskDetailEditorPresentation";
 export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
-  const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
+  const { divIds, handleReadOnlyContentClick, isMbl, id, newCommentAttachments, creatorname, trigger, allowEdit, isRecording, saveInFlight, mode, uploadingDescription, toggleHighlightHandler, createdAt, editor, stack, user, isSelected, handleCallback, sendComment, handleFocus, getAttachments, handleKeydown, handleCommentEscape, inInbox, currentTask, handleTaskOptions, handleFileDrop, filesDropped, resetDropFiles, discardDraft, toggleAiTaskWriter, shouldShowInlineDraftAi, setShouldShowAITaskWriter, setAiTriggerData, inViewObject, hasCommentDraft, audioTiptapCallback, toggleRecording, allowPerks, toggleHighlight, shouldShowAiTaskWriter, shouldShowFullAiTaskWriter, getBackgroundContent, handleEscape, handleAISave, handleTitleAndDescriptionReturn, getDefaultMode, taskWriterOpening, editMode, mobileExistingEditOpen, mobileEditViewport, mobileEditHeight, mobileEditSaving, cancelMobileExistingEdit, chatHandoffOpen, setChatHandoffOpen, showSetLinkModal, setShowSetLinkModal, setLinkHandlerCallback, emojiGifPicker, setEmojiGifPicker } = context;
 
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const showAiChatInterface = useRecoilValue(showAIChatInterfaceAtom);
-  const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
-  const [handedOffToChat, setHandedOffToChat] = useState(false);
   useEffect(() => {
-    if (editWithAiEnabled && mobileExistingEditOpen && editTaskId != null && editTaskId === currentTask?.id) setHandedOffToChat(true);
-  }, [editWithAiEnabled, mobileExistingEditOpen, editTaskId, currentTask?.id]);
-  useEffect(() => {
-    if (!showAiChatInterface || !mobileExistingEditOpen) setHandedOffToChat(false);
-  }, [showAiChatInterface, mobileExistingEditOpen]);
+    if (!editWithAiEnabled || !showAiChatInterface || !mobileExistingEditOpen) setChatHandoffOpen(false);
+  }, [editWithAiEnabled, showAiChatInterface, mobileExistingEditOpen, setChatHandoffOpen]);
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   let newTaskWindow = false;
@@ -154,7 +149,7 @@ export function TaskDetailEditorPanels(context: TaskDetailEditorPresentation) {
             createPortal(
               <div
                 data-mobile-existing-content-editor
-                hidden={handedOffToChat && showAiChatInterface}
+                hidden={editWithAiEnabled && chatHandoffOpen && showAiChatInterface}
                 className="fixed inset-x-0 z-[1200] bg-modalBackground"
                 style={{
                   bottom: mobileEditViewport?.bottomInset ?? 0,

@@ -381,8 +381,6 @@ function editorPanels(flag) {
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
     showAIChatInterfaceAtom: "chat-open",
-    aiChatEditTaskIdAtom: "edit-task",
-    useState: React.useState,
     useEffect: React.useEffect,
     showCommandsAtom: "commands",
     createPortal: noop,

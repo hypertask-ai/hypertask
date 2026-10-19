@@ -185,7 +185,9 @@ test("AI triggers gate the legacy writer, preserve the mounted mobile draft, and
   const events = read("src/components/RTE/useTaskDetailEditorEvents.tsx");
   assert.match(events, /event.detail.targetId === id[\s\S]*?if \(editWithAiEnabled\)[\s\S]*?editTicketWithAi\(currentTask.id\)/);
   const panels = read("src/components/RTE/TaskDetailEditorPanels.tsx");
-  assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{handedOffToChat && showAiChatInterface\}/);
+  assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{editWithAiEnabled && chatHandoffOpen && showAiChatInterface\}/);
+  assert.match(panels, /if \(!editWithAiEnabled \|\| !showAiChatInterface \|\| !mobileExistingEditOpen\) setChatHandoffOpen\(false\)/);
+  assert.match(save, /if \(mobileExistingEditOpen\) setChatHandoffOpen\(true\)/);
   assert.match(panels, /if \(editWithAiEnabled\) toggleAiTaskWriter\(\)/);
   for (const file of ["src/components/RTE/useTaskDetailEditorKeyboard.tsx", "src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", "src/app/detail/[...slug]/taskDetailNavigationKeymap.ts", "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"]) {
     assert.match(read(file), /editWithAiEnabled[\s\S]*?paletteTab: "compose"/);
