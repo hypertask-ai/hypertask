@@ -20,6 +20,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const MAX_BODY_BYTES = 32 * 1024;
+const GITHUB_DISPATCH_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 function requiredEnv(name: string) {
   const value = process.env[name]?.trim();
@@ -98,23 +99,34 @@ async function dispatchWorkflow(
   ref: string,
   githubToken: string,
 ) {
-  const response = await fetch(workflowUrl, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${githubToken}`,
-      "Content-Type": "application/json",
-      "User-Agent": "hypertask-posthog-error-alert",
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-    body: JSON.stringify({
-      ref,
-      inputs: { posthog_payload: JSON.stringify(payload) },
-    }),
-    cache: "no-store",
-  });
-  if (response.status !== 204) {
-    throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+  for (let attempt = 0; attempt <= GITHUB_DISPATCH_RETRY_DELAYS_MS.length; attempt++) {
+    let response: Response | undefined;
+    try {
+      response = await fetch(workflowUrl, {
+        method: "POST",
+        headers: {
+          Accept: "application/vnd.github+json",
+          Authorization: `Bearer ${githubToken}`,
+          "Content-Type": "application/json",
+          "User-Agent": "hypertask-posthog-error-alert",
+          "X-GitHub-Api-Version": "2022-11-28",
+        },
+        body: JSON.stringify({
+          ref,
+          inputs: { posthog_payload: JSON.stringify(payload) },
+        }),
+        cache: "no-store",
+      });
+    } catch (error) {
+      if (attempt === GITHUB_DISPATCH_RETRY_DELAYS_MS.length) throw error;
+    }
+    if (response) {
+      if (response.status === 204) return;
+      if (response.status < 500 || attempt === GITHUB_DISPATCH_RETRY_DELAYS_MS.length) {
+        throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, GITHUB_DISPATCH_RETRY_DELAYS_MS[attempt]));
   }
 }
 
