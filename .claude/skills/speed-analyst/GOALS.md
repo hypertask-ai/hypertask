@@ -38,7 +38,7 @@ Research rounds compare these against our code and score them in [PLAYBOOK.md](P
 - **Local data first.** Linear keeps the workspace in IndexedDB and memory and syncs changes in the background, so a click reads local data and draws without waiting for the network.
 - **App shell cached on the device.** A service worker serves the app code from disk, so a new tab does not download it again.
 - **Prefetch what comes next.** Load the ticket while the pointer is on the card, before the click.
-- **Less work on the main thread.** Fewer and shorter long tasks; the board run above spends over 1 s in long tasks.
+- **Less work on the main thread.** Fewer and shorter long tasks; the desktop board run above spends a median 936 ms of long tasks per load.
 
 ## Rules for the speed runner
 
