@@ -86,10 +86,23 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
+  const descriptionRow = { index: descriptionVirtualIndex, key: "description", start: 0 };
+  const serverRenderedRows = taskInfoVirtualIndex >= 0
+    ? [{ index: taskInfoVirtualIndex, key: "task-info", start: 0 }, descriptionRow]
+    : [descriptionRow];
   const measuredItems = hydrated ? virtualizer.getVirtualItems() : [];
-  const virtualItems = hydrated && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
-    ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
-    : measuredItems;
+  const virtualItems = !hydrated
+    ? serverRenderedRows
+    : !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
+      ? [descriptionRow, ...measuredItems]
+      : measuredItems;
+  const rowStaysInFlow = (index: number) =>
+    (!_mbl && index === descriptionVirtualIndex) || (cachedLayout && index <= descriptionBottomVirtualIndex);
+  const rowPlacement = (index: number, start: number): React.CSSProperties => {
+    if (rowStaysInFlow(index)) return { position: "relative" };
+    if (!hydrated) return { position: "relative", display: "flow-root" };
+    return { position: "absolute", transform: `translateY(${start}px)` };
+  };
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
 
 
@@ -214,11 +227,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               data-index={vItem.index}
               ref={virtualizer.measureElement}
               style={{
-                position: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? "relative" : "absolute",
+                ...rowPlacement(currentItemIndex, vItem.start),
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? undefined : `translateY(${vItem.start}px)`,
                 zIndex: 2000 - vItem.index,
               }}
             >

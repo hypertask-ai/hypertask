@@ -58,7 +58,7 @@ const mocks = {
 };
 const Thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", mocks).default;
 
-function setup(t, mobile, flag) {
+function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false } = {}) {
   instantTicketOpen = flag;
   const previous = new Map(["window", "document", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
   delete global.window;
@@ -67,9 +67,11 @@ function setup(t, mobile, flag) {
   let items = [];
   const state = {
     currentTask: { id: 42, projectId: 2144 },
-    secondaryPanelsReady: false,
+    secondaryPanelsReady: panelsReady,
     virtualizer: { getTotalSize: () => 200, getVirtualItems: () => items, measureElement: () => {} },
-    virtualizeIndexes: { taskInfoVirtualIndex: -1, descriptionVirtualIndex: 0, descriptionBottomVirtualIndex: 1, numberOfComments: 0, numberOfUploadingComments: 0 },
+    virtualizeIndexes: taskInfoRow
+      ? { taskInfoVirtualIndex: 0, descriptionVirtualIndex: 1, descriptionBottomVirtualIndex: 2, numberOfComments: 0, numberOfUploadingComments: 0 }
+      : { taskInfoVirtualIndex: -1, descriptionVirtualIndex: 0, descriptionBottomVirtualIndex: 1, numberOfComments: 0, numberOfUploadingComments: 0 },
   };
   const render = (observer = null) => React.createElement(MobileViewContext.Provider, { value: mobile },
     React.createElement(TaskContext.Provider, { value: state }, React.createElement(Thread, {}), observer));
@@ -95,11 +97,12 @@ function setup(t, mobile, flag) {
 for (const mobile of [false, true]) {
   for (const flag of [false, true]) {
     const variant = `${mobile ? "phone" : "desktop"}, instant-open ${flag ? "on" : "off"}`;
-    test(`late streamed thread hydrates with empty server rows even after its provider has populated the viewport (${variant})`, async (t) => {
+    test(`late streamed thread hydrates its server-rendered description even after its provider has populated the viewport (${variant})`, async (t) => {
       const fixture = setup(t, mobile, flag);
       const serverHtml = renderToString(fixture.render());
       fixture.container.innerHTML = serverHtml;
-      assert.equal(fixture.container.querySelectorAll("[data-index]").length, 0);
+      assert.deepEqual([...fixture.container.querySelectorAll("[data-index]")].map((row) => row.textContent), ["Cached ticket body"],
+        "the description must be in the server HTML, not wait for every lazy chunk to hydrate");
       const serverSection = fixture.container.firstChild;
       // TasksProvider is outside page.tsx's Suspense: it may commit before this child hydrates.
       fixture.populateRows();
@@ -133,3 +136,33 @@ for (const mobile of [false, true]) {
     });
   }
 }
+
+test("phone server HTML stacks task info above the description in flow, where the virtualizer later places them", async (t) => {
+  const fixture = setup(t, true, true, { taskInfoRow: true });
+  const serverHtml = renderToString(fixture.render());
+  fixture.container.innerHTML = serverHtml;
+  const rows = [...fixture.container.querySelectorAll("[data-index]")];
+  assert.deepEqual(rows.map((row) => row.getAttribute("data-index")), ["1"],
+    "task info only renders once secondary panels are ready, so the description is the only server row here");
+});
+
+test("phone server HTML puts ready task info above the description, both in flow like their absolute rows", async (t) => {
+  const fixture = setup(t, true, true, { taskInfoRow: true, panelsReady: true });
+  fixture.container.innerHTML = renderToString(fixture.render());
+  const rows = [...fixture.container.querySelectorAll("[data-index]")];
+  assert.deepEqual(rows.map((row) => row.getAttribute("data-index")), ["0", "1"]);
+  for (const row of rows) {
+    assert.equal(row.style.position, "relative");
+    assert.equal(row.style.display, "flow-root", "a block formatting context keeps margins inside the row, as the absolute row does");
+    assert.equal(row.style.transform, "");
+  }
+});
+
+test("desktop server description row keeps the in-flow style it has after hydration", async (t) => {
+  const fixture = setup(t, false, true);
+  const serverHtml = renderToString(fixture.render());
+  fixture.container.innerHTML = serverHtml;
+  const [row] = fixture.container.querySelectorAll("[data-index]");
+  assert.equal(row.style.position, "relative");
+  assert.equal(row.style.display, "", "desktop keeps its existing block display so its margins do not change");
+});
