@@ -137,7 +137,6 @@ export function useCommentToAiChat() {
     const session = await startNewSessionRef.current();
     if (!session || !chatOpenRef.current || request !== editRequestRef.current || taskInViewRef.current !== taskId) return;
     restoreChatRef.current?.();
-    editorRef.current?.commands.clearContent();
     setEditTaskId(taskId);
     setAiChatExplicitOpenAt(Date.now());
   };

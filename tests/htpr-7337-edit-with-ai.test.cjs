@@ -148,7 +148,7 @@ test("opening edit mode opens the existing sidebar and starts a fresh session be
   finish({ id: "fresh", messages: [] });
   await opening;
   assert.ok(calls.some(([name, value]) => name === "edit" && value === 123));
-  assert.ok(calls.some(([name]) => name === "clear-chat-composer"));
+  assert.ok(!calls.some(([name]) => name === "clear-chat-composer"), "unsent chat text survives the handoff");
 });
 
 function editModeCleanup({ enabled = true, open = true, taskId = 123, messages = [] }) {
@@ -185,7 +185,7 @@ test("AI triggers gate the legacy writer, preserve the mounted mobile draft, and
   const events = read("src/components/RTE/useTaskDetailEditorEvents.tsx");
   assert.match(events, /event.detail.targetId === id[\s\S]*?if \(editWithAiEnabled\)[\s\S]*?editTicketWithAi\(currentTask.id\)/);
   const panels = read("src/components/RTE/TaskDetailEditorPanels.tsx");
-  assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{editWithAiEnabled && showAiChatInterface\}/);
+  assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{handedOffToChat && showAiChatInterface\}/);
   assert.match(panels, /if \(editWithAiEnabled\) toggleAiTaskWriter\(\)/);
   for (const file of ["src/components/RTE/useTaskDetailEditorKeyboard.tsx", "src/components/PageComponents/TaskDetail/TopRow/TaskTitle.tsx", "src/app/detail/[...slug]/taskDetailNavigationKeymap.ts", "src/hooks/Task Detail/useTaskDetailGlobalStates.ts"]) {
     assert.match(read(file), /editWithAiEnabled[\s\S]*?paletteTab: "compose"/);
