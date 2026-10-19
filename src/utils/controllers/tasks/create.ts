@@ -5,7 +5,7 @@ import prisma from "@/lib/prisma";
 import { isFeatureEnabled } from "@/lib/flags";
 import { waitUntil } from "@vercel/functions";
 import { HTPR_7131_INDEX_NEW_TICKETS_FLAG } from "@/lib/flags/definitions/htpr-7131-index-new-tickets";
-import { scheduleClassifyTaskAiLabels } from "@/lib/ai/labelClassifier";
+import { scheduleClassifyNewTaskAiLabels } from "@/lib/ai/labelClassifier";
 import { getNextUniqueTaskIndex } from "./getNextUniqueTaskIndex";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { autoAssignForSection } from "@/utils/controllers/assignees/autoAssignForSection";
@@ -211,7 +211,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 const { upsertTaskToTurbopuffer } = await import("@/utils/controllers/turbopuffer/turbopufferHelper");
                 await upsertTaskToTurbopuffer(task.id);
             })().catch((error) => console.error("[task-create] search indexing failed", { taskId: task.id, error })));
-            scheduleClassifyTaskAiLabels(task.id, projectId)
+            scheduleClassifyNewTaskAiLabels(task.id, projectId)
 
             const autoAssigned = await autoAssignForSection({
                 taskId: task.id,

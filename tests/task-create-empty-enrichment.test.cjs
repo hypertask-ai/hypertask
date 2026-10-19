@@ -228,7 +228,7 @@ function loadCreateRoute() {
       default: async () => undefined,
     },
     "@/lib/ai/labelClassifier": {
-      classifyTaskAiLabels: async () => undefined,
+      classifyNewTaskAiLabels: async () => undefined,
     },
     "@/lib/realtime/server": {
       broadcastBoardChange: async () => undefined,

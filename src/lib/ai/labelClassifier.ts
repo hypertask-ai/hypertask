@@ -368,22 +368,42 @@ async function classifyTaskWithDefinitions({
   });
 }
 
+export async function classifyNewTaskAiLabels(taskId: number, projectId: number) {
+  const labelsPickedByCreator = await prisma.taskLabel.findMany({
+    where: { taskId },
+    select: { labelId: true },
+  });
+  await classifyTaskAiLabels(
+    taskId,
+    projectId,
+    new Set(labelsPickedByCreator.map(({ labelId }) => labelId)),
+  );
+}
+
 export function scheduleClassifyTaskAiLabels(taskId: number, projectId: number) {
   waitUntil(classifyTaskAiLabels(taskId, projectId).catch(console.error));
+}
+
+export function scheduleClassifyNewTaskAiLabels(taskId: number, projectId: number) {
+  waitUntil(classifyNewTaskAiLabels(taskId, projectId).catch(console.error));
 }
 
 export function scheduleBackfillAiLabel(labelId: string, userId?: number) {
   waitUntil(backfillAiLabel(labelId, userId).catch(console.error));
 }
 
-export async function classifyTaskAiLabels(taskId: number, projectId: number) {
+export async function classifyTaskAiLabels(
+  taskId: number,
+  projectId: number,
+  labelIdsLeftToCreator: ReadonlySet<string> = new Set(),
+) {
   const labels = await prisma.label.findMany({
     where: { projectId, ai_prompt: { not: null } },
     select: { id: true, ai_prompt: true },
   });
   const definitions = labels
     .map(({ id, ai_prompt }) => ({ labelId: id, prompt: ai_prompt?.trim() ?? "" }))
-    .filter(({ prompt }) => prompt.length > 0);
+    .filter(({ labelId, prompt }) => prompt.length > 0 && !labelIdsLeftToCreator.has(labelId));
   if (definitions.length === 0) return;
 
   const task = await prisma.task.findFirst({
