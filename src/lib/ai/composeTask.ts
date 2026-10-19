@@ -4,7 +4,7 @@ import axios from "axios";
 import { taskWriterRoute } from "@/lib/constants/APIRouteConstants";
 import { buildTaskWriterRequestScope } from "./taskWriterBoardContext";
 import { deriveCurrentBoardBilling } from "@/lib/deriveCurrentBoardBilling";
-import { extractTitleAndDescription } from "@/utils/aiWriterUtils";
+import { extractTaskProperties, extractTitleAndDescription } from "@/utils/aiWriterUtils";
 import { escapeHtml } from "@/utils/htmlEscape";
 import { extractTaskWriterMedia, extractTaskWriterPromptMedia, createTaskWriterMediaTokenFactory, restoreTaskWriterMedia, stripTaskWriterMediaTokens } from "./taskWriterMedia";
 import { startCreateTaskUpload, bindCreateTaskUploads, createTaskUploadById, retryCreateTaskUpload } from "@/lib/createTaskAttachmentUploads";
@@ -51,13 +51,21 @@ function stripWriterMarkers(html: string): string {
   return doc.body.innerHTML;
 }
 
+type WriterProperties = Partial<Pick<ReturnType<typeof extractTaskProperties>, "priority" | "estimate">>;
+
+function writerProperties({ priority, estimate }: WriterProperties): { writerPriority?: WriterProperties["priority"]; writerEstimate?: WriterProperties["estimate"] } {
+  return { ...(priority?.priority_index ? { writerPriority: priority } : {}), ...(estimate?.estimate_index ? { writerEstimate: estimate } : {}) };
+}
+
 export type ComposeTaskStage = "Reading past tickets" | "Understanding the context" | "Writing the ticket" | "Saving the ticket";
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
+  applyWriterProperties = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   unfurlImageUrls?: boolean;
+  applyWriterProperties?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
@@ -89,7 +97,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: { title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType }[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType } & ReturnType<typeof writerProperties>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -153,7 +161,10 @@ export async function createComposedTask({
           throw new Error("Task writer returned an incomplete ticket");
         }
         const typed = typedWriter ? readTaskWriterTicketType(draft.description) : null;
-        return { title: draft.title, description: typed ? stripWriterMarkers(typed.html) : draft.description,
+        const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
+        const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
+        return { title: draft.title, description: body,
+          ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
@@ -165,7 +176,8 @@ export async function createComposedTask({
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}) }];
+      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
+        ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
     drafts = drafts.map((draft) => {
       let body = restoreTaskWriterMedia(draft.description, media.media);
@@ -203,6 +215,11 @@ export async function createComposedTask({
   const tasks: ITask[] = [];
   const failedTitles: string[] = [];
   for (const [index, draft] of drafts.entries()) {
+    const fillsExistingTask = Boolean(existingTaskId && index === 0);
+    const writerFields = fillsExistingTask ? {} : {
+      ...(taskFields.priority == null && draft.writerPriority ? { priority: draft.writerPriority } : {}),
+      ...(taskFields.estimate == null && draft.writerEstimate ? { estimate: draft.writerEstimate } : {}),
+    };
     let placement = defaults?.data;
     const typedSection = !existingTaskId && isBugsColumn(defaults?.data, project.section ?? project.sections)
       ? ticketTypeSection(draft.ticketType, project.section ?? project.sections) : null;
@@ -219,8 +236,8 @@ export async function createComposedTask({
         userId, projectId: project.id, projectIdentifier: project.uniqueIdentifier ?? "TASK",
         title: draft.title, ...{ description: draft.description },
         sectionId: placement?.sectionId, section_title: placement?.section,
-        ranking: placement?.ranking, ...taskFields, requestKind: "compose-task",
-        ...(existingTaskId && index === 0 ? { existingTaskId } : {}),
+        ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
+        ...(fillsExistingTask ? { existingTaskId } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
@@ -228,7 +245,7 @@ export async function createComposedTask({
       tasks.push(task);
       bindCreateTaskUploads(task.id, files);
     } catch (error) {
-      if (drafts.length === 1 || (existingTaskId && index === 0)) throw error;
+      if (drafts.length === 1 || fillsExistingTask) throw error;
       failedTitles.push(draft.title);
     }
   }
