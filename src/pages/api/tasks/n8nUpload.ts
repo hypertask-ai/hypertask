@@ -132,12 +132,6 @@ export default async function handler(
     if (req.headers["x-upload-purpose"] !== undefined && !taskLinkRequested) {
       throw new UploadRequestError("Invalid upload purpose", 400);
     }
-    if (taskLinkRequested) {
-      const { isFeatureEnabled } = await import("@/lib/flags");
-      if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.id))) {
-        throw new UploadRequestError("Background task uploads are disabled", 403);
-      }
-    }
     const contentType = req.headers["content-type"];
     if (typeof contentType !== "string") {
       throw new UploadRequestError("Invalid content type", 400);
