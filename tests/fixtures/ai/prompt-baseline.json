@@ -128,8 +128,8 @@
   {
     "file": "src/app/api/ai/_lib/taskWriterPrompt.ts",
     "id": "task-writer-prompt-context-2",
-    "version": "1",
-    "partsHash": "bd1938208c115dbefd387be36593c03230449bbe6e45d81cde4b053982cb90ab",
+    "version": "2",
+    "partsHash": "dd3f8978363bc303f6485bd8aff9612ec3c0cc71d1e356da04ce7bf165a75d45",
     "expressionsHash": "21f4e1ce3358e7b9b8f6059f034788fe43aa8bfad8cdcf844689cd4260bc9eea"
   },
   {

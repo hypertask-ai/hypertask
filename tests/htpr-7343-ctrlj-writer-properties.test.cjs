@@ -122,3 +122,16 @@ test('flag off: split save payload is unchanged', async () => {
     }
   });
 });
+
+test('the server task-writer prompt states the same priority and size numbers the app saves', () => {
+  const jiti = createJiti(__filename, { alias: { '@': path.join(root, 'src') }, interopDefault: true, fsCache: false });
+  const { PROMPTS } = jiti(path.join(root, 'src/lib/ai/prompts/registry.ts'));
+  const { PriorityConstants, EstimateConstants } = jiti(path.join(root, 'src/lib/constants/constants.ts'));
+  const prompt = PROMPTS['task-writer-prompt-context-2'].parts.join('');
+  for (const { priority_index, Priority_Value } of PriorityConstants.filter((entry) => entry.priority_index > 0)) {
+    assert.ok(prompt.includes(`${priority_index}=${Priority_Value}`), `prompt must say ${priority_index}=${Priority_Value}`);
+  }
+  for (const { estimate_index, estimate_value } of EstimateConstants.filter((entry) => entry.estimate_index > 0)) {
+    assert.ok(prompt.includes(`${estimate_index}=${estimate_value}`), `prompt must say ${estimate_index}=${estimate_value}`);
+  }
+});
