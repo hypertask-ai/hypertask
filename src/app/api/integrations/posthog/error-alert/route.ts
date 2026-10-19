@@ -92,10 +92,21 @@ function dispatchConfiguration() {
   };
 }
 
-async function dispatchWorkflow(
+const GITHUB_DISPATCH_RETRY_DELAYS_MS = [250, 1000];
+
+class GitHubDispatchError extends Error {
+  constructor(readonly status: number) {
+    super(`GitHub workflow dispatch returned HTTP ${status}`);
+  }
+}
+
+function isTransientDispatchFailure(error: unknown) {
+  return !(error instanceof GitHubDispatchError) || error.status >= 500;
+}
+
+async function postWorkflowDispatch(
   workflowUrl: string,
-  payload: Record<string, unknown>,
-  ref: string,
+  body: string,
   githubToken: string,
 ) {
   const response = await fetch(workflowUrl, {
@@ -107,14 +118,33 @@ async function dispatchWorkflow(
       "User-Agent": "hypertask-posthog-error-alert",
       "X-GitHub-Api-Version": "2022-11-28",
     },
-    body: JSON.stringify({
-      ref,
-      inputs: { posthog_payload: JSON.stringify(payload) },
-    }),
+    body,
     cache: "no-store",
   });
   if (response.status !== 204) {
-    throw new Error(`GitHub workflow dispatch returned HTTP ${response.status}`);
+    throw new GitHubDispatchError(response.status);
+  }
+}
+
+async function dispatchWorkflow(
+  workflowUrl: string,
+  payload: Record<string, unknown>,
+  ref: string,
+  githubToken: string,
+) {
+  const body = JSON.stringify({
+    ref,
+    inputs: { posthog_payload: JSON.stringify(payload) },
+  });
+  for (const retryDelayMs of [...GITHUB_DISPATCH_RETRY_DELAYS_MS, undefined]) {
+    try {
+      return await postWorkflowDispatch(workflowUrl, body, githubToken);
+    } catch (error) {
+      if (retryDelayMs === undefined || !isTransientDispatchFailure(error)) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
   }
 }
 

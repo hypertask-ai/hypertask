@@ -63,9 +63,12 @@ async function dispatch(overrides = {}, status = 204) {
       if (value === undefined) delete process.env[key];
       else process.env[key] = value;
     }
+    const responses = [status].flat();
     global.fetch = async (url, options) => {
       calls.push({ url, body: JSON.parse(options.body) });
-      return { status };
+      const response = responses[Math.min(calls.length, responses.length) - 1];
+      if (response instanceof Error) throw response;
+      return { status: response };
     };
     const body = "{}";
     const timestamp = new Date();
@@ -111,7 +114,44 @@ test("invalid workflow refs are rejected before GitHub dispatch", async () => {
   assert.equal(calls.length, 0);
 });
 
-test("failed GitHub dispatch releases the claim for retry", async () => {
+async function withErrorLog(run) {
+  const errors = [];
+  const originalError = console.error;
+  console.error = (...args) => errors.push(args.map(String).join(" "));
+  try {
+    return { result: await run(), errors };
+  } finally {
+    console.error = originalError;
+  }
+}
+
+test("failed GitHub dispatch releases the claim for retry without retrying a client error", async () => {
   assert.equal((await dispatch({}, 422)).status, 503);
+  assert.equal(calls.length, 1);
   assert.deepEqual(claims, ["release"]);
+});
+
+test("a brief GitHub 502 is retried and the alert dispatches without an error log", async () => {
+  const { result, errors } = await withErrorLog(() => dispatch({}, [502, 204]));
+  assert.equal(result.status, 204);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1].body, calls[0].body);
+  assert.deepEqual(claims, ["commit"]);
+  assert.deepEqual(errors, []);
+});
+
+test("a network failure reaching GitHub is retried", async () => {
+  const { result, errors } = await withErrorLog(() => dispatch({}, [new TypeError("fetch failed"), 204]));
+  assert.equal(result.status, 204);
+  assert.equal(calls.length, 2);
+  assert.deepEqual(errors, []);
+});
+
+test("GitHub failing on every attempt still logs the failure and releases the claim", async () => {
+  const { result, errors } = await withErrorLog(() => dispatch({}, [502, 503, 504, 204]));
+  assert.equal(result.status, 503);
+  assert.equal(calls.length, 3);
+  assert.deepEqual(claims, ["release"]);
+  assert.equal(errors.length, 1);
+  assert.match(errors[0], /dispatch failed .*HTTP 504/);
 });
