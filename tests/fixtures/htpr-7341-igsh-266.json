@@ -1,0 +1,36 @@
+{
+  "ticket": "IGSH-266",
+  "url": "https://app.hypertask.ai/detail/project-2060/266",
+  "comments": [
+    {
+      "source": "agent log (moved from a comment by Mini Boss CEO, 2026-10-19 09:02)",
+      "agentName": "Mini Boss CEO",
+      "text": "Claimed by CEO RUNNER 4 (2026-10-18 17:21)."
+    },
+    {
+      "source": "agent log (moved from a comment by Mini Boss CEO, 2026-10-19 09:02)",
+      "agentName": "Mini Boss CEO",
+      "text": "Deeper: field: Claude desktop, Codex desktop and t3.chat show an approval card with the request and Allow once / Always allow / Deny; a pro sends the exact option the agent offers (not a guessed key), shows the buttons only for the live menu at the bottom of the screen (never for a numbered list inside an answer), hides them once the agent moves on so a double click cannot answer twice, and routes the key the same way Stop does (console or tmux) | raw source: the live Claude Code and Codex permission menus as the app already reads them from the console (chat_capture), the IGSH-265 Stop key path, the installed laptop build | method: a pure menu parser with Zig tests on real Claude and Codex menu text (2 and 3 options, look-alike lists), buttons drawn in Chat View, Ctrl+K and F1 entries, a Wine end-to-end test where a stub agent prints a real menu and waits for one key | outside proof: the released exe under Wine delivers the key 2 to the stub agent when Always allow is clicked, the installed laptop1 version carries the change, screenshot | proof gate: IGSH-266.deeper-key-reaches-shell"
+    },
+    {
+      "source": "agent log (moved from a comment by Mini Boss CEO, 2026-10-19 09:02)",
+      "agentName": "Mini Boss CEO",
+      "text": "Moved back to Todo by doing-check 2026-10-18 17:44: CEO RUNNER 4 was on another ticket."
+    },
+    {
+      "source": "agent log (moved from a comment by Mini Boss CEO, 2026-10-19 09:02)",
+      "agentName": "Mini Boss CEO",
+      "text": "Claimed again by CEO RUNNER 4 (2026-10-18 21:03); earlier work pushed to GitHub and rebased on the latest app code."
+    },
+    {
+      "source": "agent log (moved from a comment by Mini Boss CEO, 2026-10-19 09:02)",
+      "agentName": "Mini Boss CEO",
+      "text": "For agents: PR https://github.com/valentinyeo/zigshell/pull/116 (all checks green), release https://github.com/valentinyeo/zigshell/pull/121, chat-bench PASS, installed on laptop1 (backup v0.28.747), laptop2 offline. runner-check done IGSH-266: done ok. Filed IGSH-408 (a test uses the wrong Zig on the server)."
+    },
+    {
+      "source": "comment 292098",
+      "agentName": "Mini Boss CEO",
+      "text": "<p><strong>Permission prompts in Chat View are now buttons on your PC, installed as v0.28.750.</strong></p>\n\n<p><strong>Next:</strong> click <strong>Relaunch</strong> on the v0.28.750 card at the bottom left of the sidebar when it suits you.</p>\n\n<ul>\n<li><p>When Claude or Codex asks permission, three buttons appear above the message box: <strong>Allow</strong>, <strong>Always allow</strong>, and <strong>Deny</strong>.</p></li>\n<li><p>The buttons use the agent&#x27;s own wording.</p></li>\n<li><p>One click answers. The buttons then hide, so a double click cannot answer twice.</p></li>\n<li><p>Keyboard shortcuts: Alt+Y allows, Alt+O always allows, Alt+D denies.</p></li>\n<li><p>The shortcuts also appear in Ctrl+K and the F1 list.</p></li>\n<li><p>Proof: a test runs the real app, opens a real permission menu, and clicks the button. The agent receives that answer exactly once. Screenshot attached.</p></li>\n</ul>"
+    }
+  ]
+}

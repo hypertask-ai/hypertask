@@ -48,7 +48,7 @@ function read(id = '42', query = '') {
 }
 function row(n) {
   return {
-    runId: `run-${n}`, type: 'THOUGHT', text: `Progress ${n}`,
+    id: `activity-${n}`, runId: `run-${n}`, type: 'THOUGHT', text: `Progress ${n}`,
     createdAt: new Date('2026-10-01T10:00:00Z'),
     run: { agentId: `agent-${n}`, agent: { displayName: `Agent ${n}` } },
   }
@@ -75,12 +75,12 @@ test('agent read uses task permission helper, not caller run ownership; returns 
   assert.deepEqual(calls[1], {
     where: { run: { taskId: 42 } }, orderBy: [{ createdAt: 'desc' }, { id: 'desc' }], take: 20,
     select: {
-      runId: true, type: true, text: true, createdAt: true,
+      id: true, runId: true, type: true, text: true, createdAt: true,
       run: { select: { agentId: true, agent: { select: { displayName: true } } } },
     },
   })
   assert.deepEqual((await response.json()).activities, [1, 2].map((n) => ({
-    agentId: `agent-${n}`, agentName: `Agent ${n}`, runId: `run-${n}`,
+    id: `activity-${n}`, agentId: `agent-${n}`, agentName: `Agent ${n}`, runId: `run-${n}`,
     type: 'thought', text: `Progress ${n}`, createdAt: '2026-10-01T10:00:00.000Z',
   })))
 })

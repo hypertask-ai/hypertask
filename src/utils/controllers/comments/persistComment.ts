@@ -168,6 +168,7 @@ export async function persistComment(
     const comment = await tx.comment.create({
       data: {
         text,
+        kind: params.kind,
         creatorId,
         taskId,
         agentId,

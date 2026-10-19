@@ -142,6 +142,7 @@ function loadRoute(comments) {
   };
   const loaded = new Module(routePath);
   loaded.filename = routePath;
+  stubs['./agentChatterRouting'] = require('./task-route-loader.cjs').load('src/lib/mcp/operations/comments/agentChatterRouting.ts', {})
   loaded.require = (request) => request === "@/lib/mcp/routeWrapper"
       ? require("./helpers/mcp-route-wrapper.cjs").loadRouteWrapper(stubs)
       : stubs[request] ?? require(request);

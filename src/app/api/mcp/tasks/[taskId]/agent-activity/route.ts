@@ -50,6 +50,7 @@ export async function GET(
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: Math.min(limit, 100),
       select: {
+        id: true,
         runId: true,
         type: true,
         text: true,
@@ -60,6 +61,7 @@ export async function GET(
     return noStore({
       success: true,
       activities: rows.map((row) => ({
+        id: row.id,
         agentId: row.run.agentId,
         agentName: row.run.agent.displayName,
         runId: row.runId,

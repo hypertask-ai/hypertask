@@ -10,6 +10,9 @@ import { inlineAttachmentsSchema } from './attachment.validation';
 
 const config = getConfig();
 
+const commentKindSchema = z.enum(['question', 'qa', 'done']).optional()
+  .describe('question for a decision by a person, qa for a QA verdict, done for the closing summary; leave out for progress notes, which go to the agent log');
+
 const commentContentTypeSchema = z
   .enum(['html', 'markdown'])
   .optional()
@@ -52,6 +55,7 @@ export function getAddCommentInputSchema() {
       .optional()
       .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
     attachments: inlineAttachmentsSchema,
+    kind: commentKindSchema,
     reply_to_comment_id: replyToCommentIdSchema,
     reply_to_invocation_id: replyToInvocationIdSchema,
   }).strict();
@@ -158,6 +162,7 @@ export function getAddCommentBaseSchema() {
         .optional()
         .describe('Required when text contains @mentions. Resolve each @DisplayName via list_project_members, then include { user_id, display_name } for each. Use longest match first (e.g. prefer "John Doe" over "John" when both exist).'),
       attachments: inlineAttachmentsSchema,
+      kind: commentKindSchema,
       reply_to_comment_id: replyToCommentIdSchema,
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
@@ -265,6 +270,7 @@ export function getAddCommentCrudBaseSchema() {
         .optional()
         .describe('Required when text contains @mentions. Resolve via list_project_members, then include { user_id, display_name } for each.'),
       attachments: inlineAttachmentsSchema,
+      kind: commentKindSchema,
       reply_to_comment_id: replyToCommentIdSchema,
       reply_to_invocation_id: replyToInvocationIdSchema,
     })
@@ -273,7 +279,11 @@ export function getAddCommentCrudBaseSchema() {
 
 export function getAddCommentCrudInputSchema() {
   return getAddCommentCrudBaseSchema().superRefine((data, ctx) => {
-      const { action, task_id, ticket_number, project_id, unique_index, comment_id, text, content_type, attachments, reply_to_comment_id, reply_to_invocation_id } = data;
+      const { kind, action, task_id, ticket_number, project_id, unique_index, comment_id, text, content_type, attachments, reply_to_comment_id, reply_to_invocation_id } = data;
+
+      if (action !== 'add' && kind !== undefined) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'kind is only supported when action is add', path: ['kind'] });
+      }
 
       if (action === 'delete' && content_type !== undefined) {
         ctx.addIssue({
