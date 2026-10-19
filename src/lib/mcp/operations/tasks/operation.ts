@@ -33,7 +33,7 @@ import {
 } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 import { parsePriorityFilter } from '@/lib/mcp/priorityFilter'
-import { findParamWithNulByte, parseSortOrderParam } from '@/lib/mcp/listParams'
+import { findIdParamOutOfRange, findParamWithNulByte, idOutOfRangeMessage, parseSortOrderParam } from '@/lib/mcp/listParams'
 
 export interface ParentTaskSummary {
   id: number
@@ -210,6 +210,8 @@ export async function GET(request: NextRequest) {
     const uniqueIndexParam = searchParams.get('unique_index')
     const uniqueIndex = uniqueIndexParam ? (isNaN(parseInt(uniqueIndexParam)) ? null : parseInt(uniqueIndexParam)) : null
     const projectIdForLookup = projectIdResult.value
+    const lookupIdOutOfRange = findIdParamOutOfRange({ cursor: cursorId, task_id: taskIds, unique_index: uniqueIndex })
+    if (lookupIdOutOfRange) return validationError(idOutOfRangeMessage(lookupIdOutOfRange))
 
     const methodCount = [!!taskIds, !!ticketNumbers, !!uniqueIndex].filter(Boolean).length
     if (methodCount === 0) {
@@ -426,6 +428,9 @@ export async function GET(request: NextRequest) {
       return validationError(`${invalidDateParam} must be a valid date or datetime, e.g. 2026-10-14 or 2026-10-14T03:00:00Z`)
     }
 
+    const filterIdOutOfRange = findIdParamOutOfRange({ section_id: sectionId, created_by: createdBy })
+    if (filterIdOutOfRange) return validationError(idOutOfRangeMessage(filterIdOutOfRange))
+
     const TASK_SORT_FIELDS = ['createdAt', 'updatedAt', 'dueDate', 'priority', 'title', 'id'] as const
     if (listQuery?.sortBy && !TASK_SORT_FIELDS.includes(listQuery.sortBy as (typeof TASK_SORT_FIELDS)[number])) {
       return validationError(`sort must be one of ${TASK_SORT_FIELDS.join(', ')}`)
@@ -487,6 +492,7 @@ export async function GET(request: NextRequest) {
         where.assignees = { none: {} }
       } else {
         const userIds = assignedTo.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
+        if (findIdParamOutOfRange({ assigned_to: userIds })) return validationError(idOutOfRangeMessage('assigned_to'))
         if (userIds.length > 0) {
           where.assignees = { some: { userId: { in: userIds } } }
         }

@@ -159,3 +159,32 @@ test("HTPR-7344: unknown sort_order and NUL bytes answer 400 before any task que
     assert.equal(route.taskQueries.length, 0);
   }
 });
+
+test("HTPR-7344: ids too large for the database answer 400 before any task query", async () => {
+  for (const params of [
+    { task_id: "99999999999" },
+    { unique_index: "99999999999" },
+    { section_id: "99999999999" },
+    { created_by: "99999999999" },
+    { assigned_to: "6,99999999999" },
+  ]) {
+    const route = loadRoute();
+    const response = await route.GET({
+      nextUrl: { searchParams: new URLSearchParams({ project_id: "15", ...params }) },
+    });
+
+    assert.equal(response.status, 400, JSON.stringify(params));
+    assert.match(response.body.message, /too large/, JSON.stringify(params));
+    assert.equal(route.taskQueries.length, 0);
+  }
+});
+
+test("HTPR-7344: ids at the database maximum still list", async () => {
+  const route = loadRoute();
+  const response = await route.GET({
+    nextUrl: { searchParams: new URLSearchParams({ project_id: "15", created_by: "2147483647", assigned_to: "6" }) },
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(route.taskQueries[0].where.userId, 2147483647);
+});
