@@ -7,6 +7,7 @@ import {
   MAX_PERSISTED_CLIENT_BYTES,
   serializePersistedClientWithinBudget,
 } from "@/utils/queryPersistence";
+import { requestValue, waitForTransaction } from "@/lib/indexedDb/transactionPromises";
 
 const DATABASE_NAME = "hypertask-query-cache";
 const DATABASE_VERSION = 1;
@@ -362,19 +363,6 @@ const openDatabase = (startedGeneration: number): Promise<IDBDatabase> => {
     };
   });
 };
-
-const waitForTransaction = (transaction: IDBTransaction): Promise<void> =>
-  new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error);
-    transaction.onerror = () => reject(transaction.error);
-  });
-
-const requestValue = <T>(request: IDBRequest<T>): Promise<T> =>
-  new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 
 const indexedDbStorage: QueryCacheStorage = {
   read: async (accountId) => {
