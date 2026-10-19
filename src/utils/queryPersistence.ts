@@ -25,7 +25,8 @@ export const shouldDehydratePersistedQuery = (
 ) => {
   if (
     !defaultShouldDehydrateQuery(query) ||
-    NEVER_PERSIST_QUERY_KEYS.includes(query.queryKey[0] as string)
+    NEVER_PERSIST_QUERY_KEYS.includes(query.queryKey[0] as string) ||
+    query.queryKey.includes("hydrating")
   ) {
     return false;
   }

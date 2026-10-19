@@ -331,6 +331,7 @@ test("an unset priority stays null while its background query loads, keeping the
   const metaHook = load("src/lib/useTaskDetailMetaField.ts", {
     "@tanstack/react-query": { useQuery: (options) => ({ data: options.initialData }), useQueryClient: () => ({}) },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: null }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true, useFlagLoaded: () => true },
     "@/lib/flags/keys": {},
     "@/lib/taskDetailReads": {},
