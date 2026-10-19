@@ -3,7 +3,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
-import React, { Suspense, startTransition, useEffect, useMemo, useState } from "react";
+import React, { Suspense, useEffect, useMemo } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import dynamic from "next/dynamic";
@@ -75,6 +75,9 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     agentRunActivities,
     visibleFeedItems,
     allowPerks,
+    descriptionFirst,
+    liveRowsPending,
+    showLiveRows,
   } = useTaskContext();
 
   const {
@@ -88,10 +91,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
-  const [liveRowsShown, setLiveRowsShown] = useState(hydrated);
+  const liveRowsShown = descriptionFirst ? !liveRowsPending : hydrated;
   useEffect(() => {
-    if (!liveRowsShown) startTransition(() => setLiveRowsShown(true));
-  }, [liveRowsShown]);
+    if (liveRowsPending) showLiveRows();
+  }, [liveRowsPending, showLiveRows]);
   const descriptionAuthor: DescriptionAuthor = {
     name: currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? "",
     pfp: currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? "",
@@ -107,16 +110,16 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     ? [{ index: taskInfoVirtualIndex, key: "task-info", start: 0 }, descriptionRow]
     : [descriptionRow];
   const measuredItems = liveRowsShown ? virtualizer.getVirtualItems() : [];
-  const virtualItems = !liveRowsShown
+  const virtualItems = liveRowsPending
     ? serverRenderedRows
-    : !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
+    : liveRowsShown && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
       ? [descriptionRow, ...measuredItems]
       : measuredItems;
   const rowStaysInFlow = (index: number) =>
     (!_mbl && index === descriptionVirtualIndex) || (cachedLayout && index <= descriptionBottomVirtualIndex);
   const rowPlacement = (index: number, start: number): React.CSSProperties => {
     if (rowStaysInFlow(index)) return { position: "relative" };
-    if (!liveRowsShown) return { position: "relative", display: "flow-root" };
+    if (liveRowsPending) return { position: "relative", display: "flow-root" };
     return { position: "absolute", transform: `translateY(${start}px)` };
   };
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
