@@ -67,6 +67,7 @@ function loadPusherAuth({
   tasks = { 42: { projectId: 15 } },
   realtimeConfigured = true,
   sessionError = null,
+  bearerContext = null,
 } = {}) {
   const calls = {
     authorize: [],
@@ -84,6 +85,12 @@ function loadPusherAuth({
   const handler = loadTypeScript("src/pages/api/pusher/auth.ts", {
     "@/utils/edgeHelpers": {
       isValidUser: () => ({ user, isValid: Boolean(user) }),
+    },
+    "@/lib/mcp/auth/session": {
+      extractBearerToken: (header) => header?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null,
+    },
+    "@/lib/mcp/auth/verifyJwt": {
+      validateJwtToken: async () => bearerContext,
     },
     "@/lib/mcp/tasks/services": {
       validateProjectAccess: async (projectId, userId, token) => {
@@ -149,7 +156,23 @@ test("a user can subscribe to only their own notification channel", async () => 
   }
 });
 
-test("feature flag events require a signed session", async () => {
+test("bearer data contexts are allowed but management contexts are refused", async () => {
+  for (const management of [undefined, { keyId: "management", permissions: { data: ["read"] } }]) {
+    const { handler, calls } = loadPusherAuth({
+      user: null,
+      bearerContext: { user: { id: 6 }, agentId: null, management },
+    });
+    const req = request("private-project-15");
+    req.headers = { authorization: "Bearer credential" };
+    const result = await invoke(handler, req);
+
+    assert.equal(result.status, management ? 403 : 200);
+    assert.deepEqual(calls.projectAccess, management ? [] : [[15, 6, null]]);
+    assert.deepEqual(calls.authorize, management ? [] : [["123.456", "private-project-15"]]);
+  }
+});
+
+test("feature flag events require authentication", async () => {
   const signed = loadPusherAuth();
   const signedResult = await invoke(signed.handler, request("private-feature-flags"));
   assert.equal(signedResult.status, 200);
