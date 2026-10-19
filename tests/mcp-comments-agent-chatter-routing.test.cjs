@@ -49,7 +49,7 @@ function setup(options = {}) {
     '@/lib/mcp/tasks/services': { validateProjectMemberIds: async () => ({ invalidIds: [] }) },
     '@/lib/realtime/server': { broadcastTaskComment: async (...args) => calls.broadcasts.push(args) },
     '@/utils/helperFunctions/sanitizeRichHtml': { sanitizeRichHtml: (text) => text },
-    '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
+    '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: options.textMentions ?? [] }) },
     '@/lib/mcp/normalizeBlockHtml': { normalizeBlockHtml: (text) => text },
     '@/utils/helperFunctions/markdownToHtml': { formatRichTextInput: (text) => options.formattedText ?? text },
     '@/lib/mcp/tasks/validators': { CONTENT_TYPE_ALLOWED_VALUES: ['html', 'markdown'] },
@@ -146,6 +146,18 @@ for (const field of ['reply_to_comment_id', 'reply_to_invocation_id']) {
   })
 }
 
+test('agent Question that @mentions a person in the text stays a comment without a kind', async () => {
+  const { post, calls } = setup({ textMentions: ['6'] })
+  assertComment(await post({ text: '<p>Question: Switch htpr-7290-durable-signup-identify to Owner + QA?</p>' }), calls)
+  assert.equal(calls.runs.length, 0)
+})
+
+test('agent post with a mentions list stays a comment without a kind', async () => {
+  const { post, calls } = setup()
+  assertComment(await post({ mentions: [{ user_id: 6, display_name: 'Valentin Yeo' }] }), calls)
+  assert.equal(calls.runs.length, 0)
+})
+
 test('flag off still allows untyped agent comments exactly as before', async () => {
   const { post, calls } = setup({ flag: false })
   assertComment(await post(), calls)
@@ -231,6 +243,7 @@ test('pure routing accepts only declared kinds and preserves both direct reply f
   assert.throws(() => routing.parseCommentKind('chatter'), /question, qa, done/)
   assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent' }), 'log')
   assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', replyToInvocationId: 1 }), 'comments')
+  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', mentionsPerson: true }), 'comments')
 })
 
 test('kind is stored on the real comment persistence create payload', async () => {

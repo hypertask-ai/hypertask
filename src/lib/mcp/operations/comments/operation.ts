@@ -829,6 +829,7 @@ export async function POST(request: NextRequest) {
       kind,
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
+      mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
     })
 

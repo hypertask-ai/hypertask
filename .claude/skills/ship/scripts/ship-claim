@@ -3,7 +3,7 @@
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
 #   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error.
-# Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower id string.
+# Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id, then log ids.
 # Ownership is the session resume id in the comment text, not the agent name. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
 # before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
@@ -27,7 +27,7 @@ decide() {
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
-    def at: [(.createdAt // ""), ((.id // "") | tostring)];
+    def at: [(.createdAt // ""), ((.id // 0) | (tonumber? // .) | if type == "number" then [0, .] else [1, tostring] end)];
     def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
     def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
     def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
