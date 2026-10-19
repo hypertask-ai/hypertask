@@ -187,7 +187,7 @@ for (const options of [{ noRun: true }, { runtime: false }, { activities: false 
 }
 
 test('dry run reports routing without run, activity or comment writes', async () => {
-  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'comments'], [{}, { kind: 'question' }, 'comments']]) {
+  for (const [options, body, routedTo] of [[{}, {}, 'log'], [{ flag: false }, {}, 'comments'], [{}, { kind: 'question' }, 'comments'], [{ runtime: false }, {}, 'comments'], [{ activities: false }, {}, 'comments']]) {
     const { post, calls } = setup(options)
     const response = await post({ ...body, dry_run: true })
     assert.equal(response.status, 200)
@@ -195,6 +195,19 @@ test('dry run reports routing without run, activity or comment writes', async ()
     assert.equal(calls.comments.length + calls.activities.length + calls.runs.length, 0)
     assert.equal(calls.idempotency.length, 0)
   }
+})
+
+test('agent progress post with images stays a comment so the images are kept', async () => {
+  const { post, calls } = setup()
+  assertComment(await post({ images: ['https://example.com/shot.png'] }), calls)
+  assert.equal(calls.runs.length, 0)
+})
+
+test('logged text keeps link destinations', async () => {
+  const { post, calls } = setup()
+  const response = await post({ text: '<p>PR <a href="https://example.com/pull/1650">#1650</a> opened, see <a href="https://example.com/x">https://example.com/x</a></p>' })
+  assert.equal(response.body.routedTo, 'log')
+  assert.equal(calls.activities[0][2].text, 'PR #1650 (https://example.com/pull/1650) opened, see https://example.com/x')
 })
 
 test('idempotent retry writes the thought once and passes the client key through', async () => {
@@ -244,6 +257,7 @@ test('pure routing accepts only declared kinds and preserves both direct reply f
   assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent' }), 'log')
   assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', replyToInvocationId: 1 }), 'comments')
   assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', mentionsPerson: true }), 'comments')
+  assert.equal(routing.routeComment({ flagEnabled: true, agentId: 'agent', hasImages: true }), 'comments')
 })
 
 test('kind is stored on the real comment persistence create payload', async () => {

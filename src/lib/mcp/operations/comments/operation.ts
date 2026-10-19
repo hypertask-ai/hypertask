@@ -144,6 +144,32 @@ export type AddCommentResponse = {
   }
 }
 
+type AgentLogPrincipal = { userId: number; agentId: string; displayName: string; source: 'agent' }
+
+async function prepareAgentLogEntry(principal: AgentLogPrincipal, html: string) {
+  const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor } = await import('@/lib/agentRuns/service')
+  if (!(await runtimeAgentRunsEnabledFor(principal)) || !(await agentRunActivitiesEnabledFor(principal))) return null
+  const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH } = await import('@/lib/agentRuns/model')
+  const text = (await htmlToLogText(html)).slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
+  return text ? { principal, text } : null
+}
+
+async function htmlToLogText(html: string) {
+  const { parse } = await import('node-html-parser')
+  const root = parse(html)
+  for (const anchor of root.querySelectorAll('a')) {
+    const href = anchor.getAttribute('href')?.trim()
+    const label = anchor.text.trim()
+    if (!href || href === label) continue
+    anchor.set_content(escapeHtmlText(label ? `${label} (${href})` : href))
+  }
+  return root.structuredText.trim()
+}
+
+function escapeHtmlText(value: string) {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+
 const commentInclude = (userId: number, projectId: number) => ({
   creator: {
     select: {
@@ -824,14 +850,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const routedTo = routeComment({
+    const agentLogPrincipal = ctx.agentId
+      ? {
+          userId: user.id,
+          agentId: ctx.agentId,
+          displayName: userObj.displayName?.trim() || 'Hypertask agent',
+          source: 'agent' as const,
+        }
+      : null
+    const agentLogEntry = routeComment({
       agentId: ctx.agentId,
       kind,
       replyToCommentId: reply_to_comment_id,
       replyToInvocationId: reply_to_invocation_id,
       mentionsPerson: textMentionIds.length > 0 || (mentions?.length ?? 0) > 0,
+      hasImages: (images?.length ?? 0) > 0 || /<img\b/i.test(sanitizedText),
       flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
-    })
+    }) === 'log' && agentLogPrincipal
+      ? await prepareAgentLogEntry(agentLogPrincipal, sanitizedText)
+      : null
+    const routedTo = agentLogEntry ? 'log' as const : 'comments' as const
 
     if (dryRun) {
       return NextResponse.json(
@@ -863,33 +901,20 @@ export async function POST(request: NextRequest) {
       clientIdempotencyKey,
       idempotencyBody,
       async (): Promise<AddCommentResponse> => {
-        if (routedTo === 'log' && ctx.agentId) {
-          const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor, createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
-          const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH, parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
-          const { parse } = await import('node-html-parser')
-          const principal = {
-            userId: user.id,
-            agentId: ctx.agentId,
-            displayName: userObj.displayName?.trim() || 'Hypertask agent',
-            source: 'agent' as const,
-          }
-          if (await runtimeAgentRunsEnabledFor(principal) && await agentRunActivitiesEnabledFor(principal)) {
-            const plainText = parse(sanitizedText).structuredText.trim()
-            const activityText = plainText.slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
-            if (activityText) {
-              const run = await createRuntimeAgentRun(principal, { taskId: task.id, title: null, source: 'runtime' })
-              if (run) {
-                const result = await createAgentRunActivity(principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: activityText }), clientIdempotencyKey)
-                if (result) {
-                  const { id, runId, type, text, createdAt } = result.activity
-                  return {
-                    success: true,
-                    routedTo: 'log' as const,
-                    url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
-                    activity: { id, runId, type, text, createdAt },
-                  }
-                }
-              }
+        if (agentLogEntry) {
+          const { createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
+          const { parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
+          const run = await createRuntimeAgentRun(agentLogEntry.principal, { taskId: task.id, title: null, source: 'runtime' })
+          const result = run
+            ? await createAgentRunActivity(agentLogEntry.principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: agentLogEntry.text }), clientIdempotencyKey)
+            : null
+          if (result) {
+            const { id, runId, type, text, createdAt } = result.activity
+            return {
+              success: true,
+              routedTo: 'log' as const,
+              url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
+              activity: { id, runId, type, text, createdAt },
             }
           }
         }

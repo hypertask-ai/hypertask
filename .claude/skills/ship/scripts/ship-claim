@@ -33,7 +33,7 @@ decide() {
     def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
     ($idle | split("\n") | map(select(. != ""))) as $idle
     | ($asg | split("\n") | map(select(. != ""))) as $asg
-    | [(.comments[], (.activities[]? | select(txt | contains("Claimed.")) | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
+    | [(.comments[], (.activities[]? | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
     | [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
     | ([$c[] | select(txt | contains($rid)) | secs] | min // 0) as $mine

@@ -127,6 +127,8 @@ jq --arg text "$(claim other-sess)" '.activities += [{id:"aaaa-uuid",createdAt:"
 FAKE_AGENT_LOG=$D/earlier.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier other log claim -> step back" "$?" 3
 jq '.activities |= map(.createdAt = "2026-10-11T10:00:09.000Z")' "$D/earlier.json" > "$D/tie.json"
 FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie uses id string -> step back" "$?" 3
+jq '.activities += [{id:"cccc-uuid",createdAt:"2026-10-11T10:00:05.000Z",agentId:"a1",agentName:"RUNNER 7",text:"Handed over: RUNNER 7 released this ticket."}]' "$D/earlier.json" > "$D/released.json"
+FAKE_AGENT_LOG=$D/released.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier log claim released in the log -> proceed" "$?" 0
 if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 
 # Hand-over replay through the full flow (task read via the stub).
