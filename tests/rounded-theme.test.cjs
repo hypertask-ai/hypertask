@@ -191,13 +191,10 @@ test("component flag branches preserve theme choices, cookie reads and writes, a
       ts.forEachChild(node, findThemeWriter);
     };
     findThemeWriter(dispatcher);
-    if (themeWriter) {
+    assert.ok(themeWriter);
     const themeWriterCode = ts.transpileModule(`let switchCommandTheme = switchToTheme; ${themeWriter}; const write = switchCommandTheme;`, { compilerOptions: { target: ts.ScriptTarget.ES2020 } }).outputText;
     const write = new Function("roundedEnabled", "switchToTheme", `${themeWriterCode}; return write;`)(enabled, theme => normalizeThemePreference(theme, enabled));
     for (const option of themeOptions) assert.equal(write(option.value), normalizeThemePreference(option.value, enabled));
-    } else {
-      assert.match(dispatcherSource, /createCommandDispatcher\(\{[\s\S]*?\bswitchToTheme,/);
-    }
     for (const theme of [undefined, "unknown", "light", "dark", ...themeOptions.map(option => option.value)]) for (const dark of [false, true]) {
       let written;
       let refreshes = 0;
