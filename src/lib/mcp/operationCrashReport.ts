@@ -3,6 +3,13 @@ import { prismaErrorDiagnostics } from '@/lib/errors/prismaErrorDiagnostics'
 
 const reportedRequests = new WeakSet<Request>()
 
+class McpServerErrorWithoutCause extends Error {
+  constructor(status: number) {
+    super(`MCP route answered ${status} without reporting its cause`)
+    this.name = 'McpServerErrorWithoutCause'
+  }
+}
+
 const OPAQUE_SEGMENT = /^(?:\d+|[0-9a-f]{8}-[0-9a-f-]{27,35}|[A-Za-z0-9_-]{20,}|[A-Z][A-Z0-9]*-\d+)$/i
 
 export function mcpRouteTemplate(request: Request): string {
@@ -71,11 +78,4 @@ export function reportMcpOperationCrash(request: Request, error: unknown): void 
 export function reportUnexplainedMcpServerError(request: Request, status: number): void {
   if (status !== 500 || reportedRequests.has(request)) return
   reportMcpOperationCrash(request, new McpServerErrorWithoutCause(status))
-}
-
-export class McpServerErrorWithoutCause extends Error {
-  constructor(status: number) {
-    super(`MCP route answered ${status} without reporting its cause`)
-    this.name = 'McpServerErrorWithoutCause'
-  }
 }
