@@ -10,6 +10,6 @@ export default {
   related: ["htpr-7091-static-description-first", "htpr-6752-instant-ticket-open"],
   releaseRisk: {
     "risk": "small",
-    "reason": "The description looks the same; it arrives with the page instead of after the app code loads."
+    "reason": "The description text and layout arrive with the page; its edit controls, reactions and time follow when the app code loads, as before, about a second later than today."
   },
 } as const satisfies FeatureFlagDefinition;

@@ -85,6 +85,38 @@ Source inventory, read 2026-10-10: `gh pr list --repo hypertask-ai/hypertask --s
 
 **Next probe.** Remaining cold phone time is main-thread JS (compile and eval 6.8 s). Candidates not needed for first content: Prisma browser runtime via enum imports 29 KiB gz, framer-motion 53, markdown libs 51, react-day-picker 21. Try one at a time, ABAB, corrected phone profile.
 
+### 2026-10-19: daily read Can't verify; cold ticket description from the server HTML (HTPR-7367)
+
+**Daily read.** Can't verify. Four runs on 2026-10-19 failed: one "Production changed during run", three on phone page navigation or My Tasks with "Path unavailable" at host load 12 to 19. The harness swallows the step error (https://app.hypertask.ai/detail/project-4060/499). A scratch copy that logs the error passed phone at load 14, N=2: board 12.5 s, ticket-cold 17.2 s, in line with the 2026-10-18 baseline (10.1 s, 13.7 s). The failure is intermittent under load, not a broken page.
+
+**Ticket.** https://app.hypertask.ai/detail/project-15/7367, PR https://github.com/hypertask-ai/hypertask/pull/1657, flag `htpr-7367-server-description-first`. Phone ticket-cold is the biggest milestone 1 gap (13.7 s against 4 s).
+
+**Idea.** Render task info and the description into the server HTML as in-flow rows, then hand over to the virtualized live rows after hydration in a transition.
+
+**Method.** Local premerge build, live-like flags (`seed-browser-smoke.mjs --live-like-control`), then switch only the one flag row between OFF and EVERYONE per sample. Same phone profile as the daily harness (iPhone UA, DPR 3, 390x844, 150 ms, 1.6 Mbps, 4x CPU), fresh context, cold. Script and raw rows: `~/.local/state/vcc-evidence/HTPR-7367/abab-7367.mjs`, `abab-final-1723.jsonl`, `abab-desktop.jsonl`.
+
+**Results (ABAB, host load 18 to 58, absolute numbers inflated; relative verdict only).**
+
+| Cohort | OFF median | ON median | Note |
+|---|---|---|---|
+| Phone, description text visible, set 1 (N=5+5) | 18252 ms | 2309 ms | |
+| Phone, description text visible, set 2 (N=5+5) | 20201 ms | 3692 ms | load up to 58 |
+| Phone, full description with controls | 18252 / 20201 ms | 21445 / 21350 ms | later in 7 of 10 pairs |
+| Desktop, description text visible (N=3+3) | 5085 ms | 1328 ms | no throttling |
+| Desktop, full description with controls | 5085 ms | 5547 ms | |
+
+Description top never moved after first paint (one value in every frame, phone 502 px, desktop 105 px); title height stayed 37 px; settled description text identical (hash, with the relative age masked). Result: **win for first content, small cost for controls**. The edit controls, reaction and time arrive about 1 s later than today, likely because the live description now commits inside a transition after hydration. Next probe: check whether the lazy editor chunk finishing gates that transition; if so, a nested Suspense with the static frame as fallback should remove the delay.
+
+**What found real problems.**
+- The CI layout lock with all flags on (`e2e/smoke/layout-lock.spec.ts`, Mobile): the comment box settled at 770 px under the server rows, then jumped to 1852 px. `useThreadSettled` saw a still box for 300 ms and called the thread settled. A still box under placeholder rows is not a settled thread: the steadiness wait and its 5 s cap now start only once live rows are in.
+- A per-frame probe of every element above the rows: the title grew 32 to 37 px at hydration (one-row textarea before the autosize hook), moving the visible description 5 px. Fixed by `field-sizing: content` with a 37 px floor on the flag path.
+- Comparing settled screenshots, not just first-visible time: an early ON sample looked identical by timing but lacked time, reaction and Add sub-tasks; they only appear after the live swap.
+
+**Tooling lessons.**
+- `scripts/premerge-local.sh up` seeds once; a second full seed fails on `User_pkey`. Use `--live-like-control` (keeps fixtures) and switch one flag row with `withFlagModeInvalidation`.
+- CI runs the layout lock with `--all-flags-on`; a live-like local run hid the composer jump (6 of 6 passed, then 1 of 4 failed with all flags on).
+- `feature-flag-gate` does not see `isFeatureEnabled(...).catch(...)`, and a derived boolean (`const x = flag || other`) used in a ternary does not count; put the flag identifier in the ternary condition itself.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -103,6 +135,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7091 | Same, live, API-written descriptions | 14.1 s → 11.8 s | about 2,300 ms | live check, different cohort from local |
 | https://app.hypertask.ai/detail/project-15/7110 | Cold phone, app-saved descriptions, PR 1341, live N=5, load 8 to 10 | 14.2 s → 11.7 s | about 2,500 ms | flag `htpr-7110-app-saved-static-description` |
 | https://app.hypertask.ai/detail/project-15/7116 | Phone ticket blanking after open, PR 1360 | 5 of 30 cold, 2 of 20 warm blank → fix pending live proof | n/a (correctness, not ms) | flag `htpr-7116-ticket-stays-open` |
+| https://app.hypertask.ai/detail/project-15/7367 | Cold phone ticket, description visible, PR 1657, local ABAB N=10, load 18 to 58 | 18.3 / 20.2 s → 2.3 / 3.7 s; controls 18.3 / 20.2 s → 21.4 s | unproven live; local about 16,000 ms to text, about -1,000 ms to controls | flag `htpr-7367-server-description-first`; live 5 cold run after deploy decides |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
@@ -118,6 +151,7 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Lazy-load `node-html-parser` on the list/mention branch | HTPR-7091: tried 2026-10-11, JS -88 KB but only about -200 ms, inside noise. Rejected, do not repeat | none |
 | Drop non-first-content bytes: Prisma enum-import runtime (29 KiB gz), framer-motion (53), markdown libs (51), react-day-picker (21) | Cold phone main thread is compile and eval 6.8 s | One at a time, corrected phone profile, 5 cold samples before and after, ABAB; mount any new lazy chunk in a transition (HTPR-7116) |
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
+| Live description sooner after a server description (HTPR-7367) | Controls arrive about 1 s later with the server description | Time the editor chunk against the live swap; if it gates the transition, nest a Suspense with the static frame as fallback; ABAB phone N=5 |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
 
 ## Weekly research seed and experiment queue
