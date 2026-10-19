@@ -75,7 +75,7 @@ const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescript
   "./UploadingComment/UploadingCommentContainer": { default: marker("upload-comment") },
   "./CommentContainer/NewCommentComponent": { default: marker("composer") },
   "./DescriptionContainer/DescriptonBody": { default: marker("body") },
-  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionBody: marker("static-body") },
+  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionFrame: marker("static-body") },
   "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (html) => html },
   "../TaskInfoColumn/TaskInfo": { default: info, TaskInfoLateDetails: lateInfo },
   "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },

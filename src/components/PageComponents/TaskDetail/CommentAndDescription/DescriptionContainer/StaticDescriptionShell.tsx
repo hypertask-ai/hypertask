@@ -103,11 +103,20 @@ export default function StaticDescriptionShell({
     }
   };
 
+  return <StaticDescriptionFrame html={html} isMbl={isMbl} {...intent} onClickCapture={onClickCapture} />;
+}
+
+export function StaticDescriptionFrame({
+  html,
+  isMbl,
+  ...wrapperProps
+}: { html: string; isMbl: boolean } & Partial<DescriptionIntentProps> & {
+  onClickCapture?: (event: MouseEvent<HTMLDivElement>) => void;
+}) {
   return (
     <div
       id="main-wrapper-description"
-      {...intent}
-      onClickCapture={onClickCapture}
+      {...wrapperProps}
       className={cn(
         "col-start-1 col-end-3 relative text-white-black",
         isMbl ? taskDetailSpacing.mobile.descriptionContainer : "",

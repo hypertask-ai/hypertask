@@ -41,7 +41,7 @@ const mocks = {
   "./DescriptionContainer": { default: childrenOnly },
   "./DescriptionContainer/TopRow/DescriptionTopRow": { default: noop },
   "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => ({ comments: [], stacked: {}, description: "Cached ticket body" }) },
-  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionBody: ({ html }) => React.createElement("article", null, html) },
+  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionFrame: ({ html }) => React.createElement("article", null, html) },
   "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (html) => html },
   "./UploadingDescription/UploadingDescriptionContainer": { default: noop },
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(TaskContext) },

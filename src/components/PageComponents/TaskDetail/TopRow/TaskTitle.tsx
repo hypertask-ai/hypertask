@@ -204,6 +204,8 @@ const TaskTitle = () => {
           fontSize: !_mbl ? 24 : 16,
           width: "100%",
           outline: "none",
+          fieldSizing: "content",
+          minHeight: 37,
         }}
       />
       {currentTask?.id && currentTask.id > 0 && currentTask.project?.timeTrackingEnabled ? (

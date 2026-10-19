@@ -25,7 +25,7 @@ import UploadingCommentsContainer from "./UploadingComment/UploadingCommentConta
 import { SettledComposerSlot } from "./SettledComposerSlot";
 import NewCommentComponent from "./CommentContainer/NewCommentComponent";
 import DescriptonBody from "./DescriptionContainer/DescriptonBody";
-import { StaticDescriptionBody } from "./DescriptionContainer/StaticDescriptionShell";
+import { StaticDescriptionFrame } from "./DescriptionContainer/StaticDescriptionShell";
 import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import TaskInfo, { ITaskInfoContainer, TaskInfoLateDetails } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
@@ -284,7 +284,7 @@ const ServerRenderedDescription = (author: DescriptionAuthor) => {
   return (
     <DescriptionContainer>
       <DescriptionTopRow {...author} />
-      <StaticDescriptionBody html={html} isMbl={!!isMbl} />
+      <StaticDescriptionFrame html={html} isMbl={!!isMbl} />
     </DescriptionContainer>
   );
 };
