@@ -10,6 +10,7 @@ import {
   FEATURE_FLAG_TICKET_PROJECT_ID,
   RETIRED_FEATURE_FLAG_KEYS,
 } from "@/lib/flags";
+import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";
 import { FEATURE_FLAG_REMOVAL_DAYS, PENDING_REMOVAL_TASK_ID } from "@/lib/flags/removal";
 import { createTaskCore } from "@/utils/controllers/tasks/createTaskCore";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
@@ -81,7 +82,7 @@ async function sweep() {
   const cutoff = new Date(Date.now() - FEATURE_FLAG_REMOVAL_DAYS * 24 * 60 * 60 * 1000);
   const due = await prisma.featureFlag.findMany({
     where: {
-      key: { in: FEATURE_FLAG_KEYS, notIn: [...RETIRED_FEATURE_FLAG_KEYS] },
+      key: { in: FEATURE_FLAG_KEYS, notIn: [...RETIRED_FEATURE_FLAG_KEYS, ...FEATURE_FLAG_DEFINITIONS.filter((flag) => flag.kind === "internal").map((flag) => flag.key)] },
       mode: "EVERYONE",
       keep: false,
       removalTaskId: null,
@@ -117,7 +118,7 @@ async function sweep() {
   const filed: string[] = [];
   const failed: string[] = [];
   for (const flag of due) {
-    if (!flag.releasedAt) continue;
+    if (!flag.releasedAt || FEATURE_FLAG_DEFINITIONS.some((definition) => definition.key === flag.key && definition.kind === "internal")) continue;
     const claimed = await prisma.featureFlag.updateMany({
       where: {
         key: { equals: flag.key, in: FEATURE_FLAG_KEYS },

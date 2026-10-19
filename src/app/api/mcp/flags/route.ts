@@ -14,6 +14,9 @@ import {
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { HTPR_7389_FLAG_RELEASE_POLICY_FLAG } from "@/lib/flags/definitions/htpr-7389-flag-release-policy";
+import { RELEASE_WATCH, isReleaseWatchSpike } from "@/lib/flags/releaseWatch.mjs";
+import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
@@ -90,7 +93,7 @@ export async function PATCH(request: NextRequest) {
     }
     const text = await request.text();
     if (text.length > 1024) return noStore({ error: "Request is too large" }, 413);
-    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown } | null;
+    const body = JSON.parse(text) as { key?: unknown; mode?: unknown; reason?: unknown; watch?: { before?: unknown; after?: unknown; windowMinutes?: unknown } } | null;
     if (!body || Array.isArray(body) || typeof body.key !== "string"
       || typeof body.mode !== "string" || !FEATURE_FLAG_MODES.includes(body.mode as FeatureFlagMode)) {
       return noStore({ error: "Invalid feature flag" }, 400);
@@ -98,7 +101,16 @@ export async function PATCH(request: NextRequest) {
     const link = typeof body.reason === "string" && body.reason.length <= 500
       ? /^https:\/\/app\.hypertask\.ai\/detail\/project-([1-9]\d{0,8})\/([1-9]\d{0,8})#comment-([1-9]\d{0,8})$/.exec(body.reason)
       : null;
-    if (!link) {
+    const ticket = /^htpr-([1-9]\d*)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(body.key);
+    const watch = body.watch;
+    const watchRequested = body.mode === "OFF" && ticket
+      && body.reason === `https://app.hypertask.ai/detail/project-15/${ticket[1]}`
+      && watch && Number.isSafeInteger(watch.windowMinutes)
+      && Number(watch.windowMinutes) >= RELEASE_WATCH.minimumMinutes
+      && Number(watch.windowMinutes) <= RELEASE_WATCH.maximumMinutes
+      && isReleaseWatchSpike(watch.before, watch.after)
+      && await isFeatureEnabled(HTPR_7389_FLAG_RELEASE_POLICY_FLAG, ctx.user.id);
+    if (!link && !watchRequested) {
       return noStore({ error: "Reason must link to the approved ticket comment (#comment-<id>)" }, 400);
     }
     const agent = await prisma.agent.findUniqueOrThrow({
@@ -106,13 +118,26 @@ export async function PATCH(request: NextRequest) {
       select: { displayName: true },
     });
     const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
-    const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
+    let watched = false;
+    const actor = {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
       agentName: agent.displayName,
       reason: body.reason as string,
-      source: "api",
-    }, async (tx) => {
+      source: "api" as const,
+    };
+    const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, actor, async (tx) => {
+      if (watchRequested) {
+        const stored = await tx.featureFlag.findUnique({ where: { key: body.key as string }, select: { mode: true, releasedAt: true } });
+        const age = stored?.releasedAt ? Date.now() - stored.releasedAt.getTime() : null;
+        if ((!stored && defaultFeatureFlagMode(body.key as string) === "EVERYONE")
+          || (stored?.mode === "EVERYONE" && age !== null && age >= 0 && age <= RELEASE_WATCH.maximumMinutes * 60_000)) {
+          watched = true;
+          actor.reason = `release watch: errors ${watch!.before} -> ${watch!.after} in ${watch!.windowMinutes} min; ${body.reason}`;
+          return;
+        }
+      }
+      if (!link) throw new FeatureFlagApprovalError("Release watch is not eligible; Valentin's thumbs-up is required");
       const commentId = Number(link[3]);
       await tx.$queryRaw`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
       await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
@@ -137,6 +162,21 @@ export async function PATCH(request: NextRequest) {
         );
       }
     });
+    if (watched && ticket) {
+      const task = await prisma.task.findFirstOrThrow({
+        where: { projectId: 15, uniqueIndex: Number(ticket[1]), status: { not: "Deleted" } },
+        select: { id: true, userId: true },
+      });
+      const currentUser = await prisma.user.findUniqueOrThrow({
+        where: { id: ctx.user.id }, select: { id: true, email: true, displayName: true, photoURL: true },
+      });
+      await createCommentService({
+        text: `<p><strong>Switched ${body.key} Off: production errors jumped after it went live.</strong></p>`
+          + `<p>Errors: ${watch!.before} before / ${watch!.after} after, each over ${watch!.windowMinutes} minutes.</p>`
+          + `<p>Next: fix the cause, then ask Valentin to switch it back on. <span data-type="mention" class="mention" data-id="Valentin Yeo" data-label="name-6">Valentin Yeo</span></p>`,
+        creatorId: ctx.user.id, agentId: ctx.agentId as string, taskId: task.id, ownerId: task.userId, currentUser,
+      });
+    }
     const previousMode = flag.lastChange
       ? flag.lastChange.oldMode ?? defaultFeatureFlagMode(body.key)
       : flag.mode;

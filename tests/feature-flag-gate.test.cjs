@@ -1991,3 +1991,18 @@ export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture",
   const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
   assert.equal(result.pass, true, result.reason);
 });
+
+test("legacy registry accepts internal kinds but refuses Everyone defaults", async (t) => {
+  const { dir, git } = makeRepo(t);
+  const base = commit(git, "base");
+  const source = flagsSource().replace('description: "fixture"', 'description: "fixture", kind: "internal"');
+  writeFile(dir, "src/lib/flags.ts", source);
+  writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+  const valid = commit(git, "internal kind");
+  assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, valid, dir)).pass, true);
+  writeFile(dir, "src/lib/flags.ts", source.replace('kind: "internal"', 'kind: "internal", defaultMode: "EVERYONE"'));
+  const invalid = commit(git, "internal default invalid");
+  const result = await evaluate("HTPR-1 [BUGFIX] widget", base, invalid, dir);
+  assert.equal(result.pass, false);
+  assert.match(result.reason, /internal flag may not default to Everyone/);
+});

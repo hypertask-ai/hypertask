@@ -13,6 +13,7 @@ function stub(filename, exports) {
 }
 let owner = true;
 let discoveryEnabled = false;
+let releasePolicyEnabled = false;
 let urlFiltersEnabled = false;
 let reads = 0;
 let rows = [];
@@ -24,6 +25,7 @@ stub(path.join(root, "src/hooks/useFlag.tsx"), {
   ADMIN_FEATURE_FLAGS_QUERY_KEY: QUERY_KEY,
   FEATURE_FLAGS_QUERY_PREFIX: ["feature-flags"],
   useFlag: (key) => {
+    if (key === "htpr-7389-flag-release-policy") return releasePolicyEnabled;
     if (key === "htpr-7069-flags-dropdown-filters") return false;
     if (key === "htpr-7058-flags-page-url-filters") return urlFiltersEnabled;
     assert.equal(key, "htpr-6964-flags-page-type-search");
@@ -45,6 +47,7 @@ const fixture = (key, extra = {}) => ({
 const detail = (key) => Detail({ params: Promise.resolve({ key }) });
 
 test.beforeEach(() => {
+  releasePolicyEnabled = false;
   owner = true; reads = 0; discoveryEnabled = false; urlFiltersEnabled = false;
   rows = [fixture("htpr-6752-instant-ticket-open"), fixture("yper4-123-board-check")];
 });
@@ -397,4 +400,25 @@ test("flag Off leaves URL, legacy waiting count, sort and cards unchanged", asyn
     assert.equal(sort.textContent, "Oldest first");
     assert.equal(window.location.href, before);
   }, "?tab=unreleased&type=bug&risk=none&sort=oldest&q=missing");
+});
+
+test("release policy hides internal flags from overview, audience/type filters, counts and related links but keeps direct detail", async () => {
+  const internal = fixture("htpr-6536-qa-login", { kind: "internal" });
+  rows.push(internal);
+  releasePolicyEnabled = true; discoveryEnabled = true; urlFiltersEnabled = true;
+  await withAdmin({}, { flags: rows }, async ({ document }) => {
+    assert.equal(document.querySelector(`a[href="/admin/flags/${internal.key}"]`), null);
+    assert.doesNotMatch(document.body.textContent, /htpr-6536|Internal/);
+    assert.match(document.body.textContent, /2 unreleased flags/);
+    assert.match(document.querySelector('[aria-label="Filter by audience"]').textContent, /All 2/);
+  });
+  await withAdmin({ flagKey: internal.key }, { flags: rows }, async ({ document }) => {
+    assert.equal(document.querySelector("code").textContent, internal.key);
+    assert.match(document.body.textContent, /Internal/);
+  });
+  releasePolicyEnabled = false;
+  await withAdmin({}, { flags: rows }, async ({ document }) => {
+    assert.match(document.body.textContent, /htpr-6536/);
+    assert.match(document.body.textContent, /3 unreleased flags/);
+  });
 });

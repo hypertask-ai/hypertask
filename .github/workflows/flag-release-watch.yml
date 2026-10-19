@@ -1,0 +1,29 @@
+name: Flag Release Watch
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flag-release-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    if: github.ref == 'refs/heads/production'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: production
+          fetch-depth: 0
+      - name: Compare production errors after flag releases
+        env:
+          HYPERTASK_MCP_TOKEN: ${{ secrets.HYPERTASK_MCP_TOKEN }}
+          POSTHOG_FULL_API_KEY: ${{ secrets.POSTHOG_FULL_API_KEY }}
+        run: node .github/scripts/flag-release-watch.mjs

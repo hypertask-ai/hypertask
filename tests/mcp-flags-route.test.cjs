@@ -23,6 +23,10 @@ let approvalComment;
 let approvalQueries;
 let lockQueries;
 let batchFlagOn;
+let policyFlagOn;
+let storedFlag;
+let defaultMode;
+let comments;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
@@ -41,8 +45,9 @@ stubModule("src/lib/flags.ts", {
   FEATURE_FLAG_MODES: ["OWNER_ONLY", "OWNER_AND_QA", "EVERYONE", "OFF"],
   FeatureFlagInputError,
   FeatureFlagApprovalError,
-  defaultFeatureFlagMode: () => "OWNER_AND_QA",
+  defaultFeatureFlagMode: () => defaultMode,
   isFeatureEnabled: async (flagKey, userId) => {
+    if (flagKey === "htpr-7389-flag-release-policy") return policyFlagOn;
     assert.equal(flagKey, "htpr-7364-batch-flag-approval");
     assert.equal(userId, 6);
     return batchFlagOn;
@@ -62,6 +67,7 @@ stubModule("src/lib/flags.ts", {
   },
 });
 const tx = {
+  featureFlag: { findUnique: async () => storedFlag },
   $queryRaw: async (strings, commentId) => {
     const sql = strings.join("?");
     const commentLock = lockQueries.length % 2 === 0;
@@ -105,6 +111,8 @@ const tx = {
 };
 stubModule("src/lib/prisma.ts", {
   default: {
+    task: { findFirstOrThrow: async (query) => { assert.deepEqual(query.where, { projectId: 15, uniqueIndex: 6136, status: { not: "Deleted" } }); return { id: 42, userId: 6 }; } },
+    user: { findUniqueOrThrow: async () => ({ id: 6, displayName: "Valentin", email: "owner@test" }) },
     agent: {
       findUniqueOrThrow: async (query) => {
         assert.deepEqual(query, { where: { id: "runner-3" }, select: { displayName: true } });
@@ -120,6 +128,7 @@ stubModule("src/lib/realtime/server.ts", {
     if (broadcastFails) throw new Error("broadcast unavailable");
   },
 });
+stubModule("src/utils/controllers/comments/createCommentService.ts", { createCommentService: async (input) => { comments.push(input); return { id: 1 }; } });
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src") } });
 const { GET, PATCH } = jiti(path.join(root, "src/app/api/mcp/flags/route.ts"));
 function request(method = "GET", body, query = "", contentType = "application/json") {
@@ -135,6 +144,7 @@ async function result(response) {
 }
 test.beforeEach(() => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
+  policyFlagOn = true; storedFlag = { mode: "EVERYONE", releasedAt: new Date(Date.now() - 20 * 60_000) }; defaultMode = "OWNER_AND_QA"; comments = [];
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
   approvalQueries = []; lockQueries = []; batchFlagOn = false;
@@ -400,3 +410,67 @@ for (const [name, setup, body] of [
     assert.equal(writes.length, 0);
   });
 }
+
+const watchBody = () => ({ key, mode: "OFF", reason: "https://app.hypertask.ai/detail/project-15/6136", watch: { before: 4, after: 11, windowMinutes: 30 } });
+
+test("release watch switches a recently released flag Off under the setter lock and comments as the caller", async () => {
+  previousMode = "EVERYONE";
+  const response = await result(await PATCH(request("PATCH", watchBody())));
+  assert.equal(response.status, 200);
+  assert.equal(response.body.previousMode, "EVERYONE");
+  assert.equal(approvalQueries.length, 0);
+  assert.match(writes[0][2].reason, /^release watch: errors 4 -> 11 in 30 min; https:\/\/app.hypertask.ai\/detail\/project-15\/6136$/);
+  assert.equal(comments.length, 1);
+  assert.deepEqual({ ...comments[0], text: undefined }, { text: undefined, creatorId: 6, agentId: "runner-3", taskId: 42, ownerId: 6, currentUser: { id: 6, displayName: "Valentin", email: "owner@test" } });
+  assert.match(comments[0].text, /<strong>Switched htpr-6136-figma-connect Off: production errors jumped after it went live\.<\/strong>/);
+  assert.match(comments[0].text, /4 before \/ 11 after, each over 30 minutes/);
+  assert.match(comments[0].text, /Next: fix the cause, then ask Valentin to switch it back on\./);
+  assert.match(comments[0].text, /data-id="Valentin Yeo" data-label="name-6"/);
+});
+
+test("release watch accepts an unstored Everyone default only", async () => {
+  storedFlag = null; defaultMode = "EVERYONE"; previousMode = null;
+  assert.equal((await result(await PATCH(request("PATCH", watchBody())))).status, 200);
+  assert.equal(comments.length, 1);
+});
+
+for (const [name, change] of [
+  ["under ten errors", body => { body.watch.after = 9; }],
+  ["exactly double", body => { body.watch.before = 6; body.watch.after = 12; }],
+  ["less than double", body => { body.watch.before = 8; }],
+  ["two-hour release", () => { storedFlag.releasedAt = new Date(Date.now() - 120 * 60_000); }],
+  ["future release", () => { storedFlag.releasedAt = new Date(Date.now() + 60_000); }],
+  ["stored Off", () => { storedFlag.mode = "OFF"; }],
+  ["stored missing release time", () => { storedFlag.releasedAt = null; defaultMode = "EVERYONE"; }],
+  ["unstored protected default", () => { storedFlag = null; }],
+  ["target Everyone", body => { body.mode = "EVERYONE"; }],
+  ["policy Off", () => { policyFlagOn = false; }],
+  ["management key", () => { ctx.management = { keyId: "htmk_test" }; }],
+  ["non-owner agent", () => { ctx.user.id = 7; }],
+  ["missing watch", body => { delete body.watch; }],
+  ["wrong ticket", body => { body.reason = "https://app.hypertask.ai/detail/project-15/123"; }],
+  ["short window", body => { body.watch.windowMinutes = 29; }],
+  ["long window", body => { body.watch.windowMinutes = 71; }],
+  ["fractional window", body => { body.watch.windowMinutes = 30.5; }],
+  ["negative before", body => { body.watch.before = -1; }],
+  ["fractional count", body => { body.watch.after = 11.5; }],
+  ["string count", body => { body.watch.before = "4"; }],
+]) test(`release watch still refuses ${name}`, async () => {
+  const body = watchBody(); change(body);
+  assert.ok((await result(await PATCH(request("PATCH", body)))).status >= 400);
+  assert.equal(writes.length, 0);
+  assert.equal(comments.length, 0);
+});
+
+test("missing watch still requires the original thumbs-up even for a recent release", async () => {
+  approvalComment.reactions = [];
+  assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 403);
+  assert.equal(writes.length, 0);
+  assert.equal(comments.length, 0);
+});
+
+test("release watch includes the minimum spike and maximum window boundaries", async () => {
+  const body = watchBody(); body.watch = { before: 4, after: 10, windowMinutes: 70 };
+  assert.equal((await result(await PATCH(request("PATCH", body)))).status, 200);
+  assert.equal(comments.length, 1);
+});

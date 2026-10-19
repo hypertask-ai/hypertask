@@ -1190,7 +1190,7 @@ test("every registered flag has a valid kind and only registered explicit relate
   const rows = await flags.listFeatureFlagModes();
   assert.equal(rows.length, flags.FEATURE_FLAG_KEYS.length);
   for (const entry of rows) {
-    assert.ok(["bugfix", "feature", "improvement"].includes(entry.kind), entry.key);
+    assert.ok(["bugfix", "feature", "improvement", "internal"].includes(entry.kind), entry.key);
     for (const key of entry.related ?? []) {
       assert.ok(flags.FEATURE_FLAG_KEYS.includes(key), `${entry.key} relates to ${key}`);
       assert.notEqual(entry.key, key);
@@ -1471,6 +1471,37 @@ test("listing skips audit queries unless lastChange is explicitly requested", as
     assert.equal(changeQueries.length, 0);
     assert.equal(listed.some((row) => Object.hasOwn(row, "lastChange")), false);
   }
+});
+
+test("declared defaults preserve production kind fallbacks, including internal flags, and explicit defaults win", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "risk-aware-flags-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const cases = [];
+  for (const kind of [undefined, "feature", "improvement", "bugfix", "internal"]) {
+    for (const highRisk of [undefined, "money", "access", "data-deletion", "customer-email"]) {
+      for (const defaultMode of [undefined, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
+        if (kind === "internal" && defaultMode === "EVERYONE") continue;
+        cases.push({
+          key: `htpr-7389-fixture-${cases.length}`, kind, defaultMode,
+          shippedOn: "2026-10-20", description: "Fixture",
+          releaseRisk: { risk: "new", reason: "Fixture", highRisk },
+        });
+      }
+    }
+  }
+  cases.push({ key: "htpr-7389-no-risk", kind: "feature", shippedOn: "2026-10-20", description: "Fixture" });
+  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(cases)};`);
+  const fixture = path.join(dir, "flags.ts");
+  fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
+    .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
+  const fixtureFlags = jiti(fixture);
+  for (const definition of cases) {
+    const expected = definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA");
+    assert.equal(fixtureFlags.defaultFeatureFlagMode(definition.key), expected, JSON.stringify(definition));
+  }
+  assert.equal(fixtureFlags.defaultFeatureFlagMode("legacy-unknown"), "OWNER_AND_QA");
 });
 
 test("stored modes override registry defaults for declared and legacy keys in every reader", async () => {

@@ -11,5 +11,5 @@ export default {
     "risk": "new",
     "reason": "The agents dashboard adds a table comparing command-line and MCP client evaluations."
   },
-  kind: "feature",
+  kind: "internal",
 } as const satisfies FeatureFlagDefinition;
