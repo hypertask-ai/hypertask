@@ -91,7 +91,7 @@ test('filter palettes and title highlighting use scoped semantic tokens for ever
   const config = jiti(path.join(root, 'tailwind.config.ts')).default
   const { backgroundColor, borderColor } = config.theme.extend
   const { resolvedThemeDomMetadata } = jiti(path.join(root, 'src/lib/themePreferences.ts'))
-  const themes = ['light', 'dark', ...Object.keys(resolvedThemeDomMetadata)]
+  const themes = [...new Set(['light', 'dark', ...Object.keys(resolvedThemeDomMetadata).map((theme) => theme.replace(/-(light|dark)$/, ''))])]
   assert.equal(new Set(Object.values(SEARCH_FILTER_COLOURS)).size, 6)
   assert.equal(searchFilterType('from'), searchFilterType('assignee'))
   assert.equal(searchFilterType('in'), searchFilterType('board'))

@@ -6,6 +6,9 @@
   --m3-sc-high: #e9eef6;
   --m3-sc-highest: #dde3ea;
   --m3-description: #e9eef6;
+  --color-white-black: #1f1f1f;
+  --active-modal-element: #dde3ea;
+  --bg-mention-highlight: #c2e7ff;
   --m3-on-surface: #1f1f1f;
   --m3-on-surface-variant: #444746;
   --m3-outline-variant: #c4c7c5;
@@ -34,6 +37,9 @@
   --m3-sc-high: #282a2c;
   --m3-sc-highest: #333537;
   --m3-description: #0e0e0f;
+  --color-white-black: #e3e3e3;
+  --active-modal-element: #333537;
+  --bg-mention-highlight: #004a77;
   --m3-on-surface: #e3e3e3;
   --m3-on-surface-variant: #c4c7c5;
   --m3-outline-variant: #444746;
@@ -85,16 +91,13 @@
   --bg-mention: var(--m3-sc-high);
   --bg-reactions: var(--m3-sc-high);
   --bg-horizontal-scrollbar: var(--m3-sc-low);
-  --bg-mention-highlight: var(--m3-secondary-container);
   --hover-cardBackground: var(--m3-sc-high);
   --active-cardBackground: var(--m3-secondary-container);
   --active-elementBg: var(--m3-secondary-container);
-  --active-modal-element: var(--m3-sc-highest);
   --active-kanbanCardbg: var(--m3-secondary-container);
   --active-mentionList: var(--m3-sc-highest);
   --active-list-element: var(--m3-secondary-container);
   --color-page-background: var(--m3-surface);
-  --color-white-black: var(--m3-on-surface);
   --color-white-black-inverted: var(--m3-surface);
   --color-text-light-gray: var(--m3-on-surface-variant);
   --color-border: var(--m3-outline-variant-hsl);
