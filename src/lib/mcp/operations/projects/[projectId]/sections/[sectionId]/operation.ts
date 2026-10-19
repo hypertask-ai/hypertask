@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -201,6 +202,7 @@ export async function PATCH(
     )
   } catch (error) {
     console.error('Error updating section:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -283,6 +285,7 @@ export async function DELETE(
     )
   } catch (error) {
     console.error('Error deleting section:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

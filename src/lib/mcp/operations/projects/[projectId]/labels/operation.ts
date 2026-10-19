@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -65,6 +66,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
       nextCursor: projected?.value.nextCursor ?? null,
     })
   } catch (error) {
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,
@@ -193,6 +195,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     )
   } catch (error) {
     console.error('[MCP Create Label] Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..')
 const dbTiming = require('./task-route-loader.cjs').load('src/lib/mcp/dbTiming.ts', {})
 
 function load(file, stubs, extra = '', env = {}, clock = performance) {
-  stubs = { './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
+  stubs = { './operationCrashReport': { reportUnexplainedMcpServerError: () => {} }, './dbTiming': dbTiming, '@/lib/aiFeedback/automatic': { queueRestFailure: () => {} }, ...stubs }
   const source = fs.readFileSync(path.join(root, file), 'utf8')
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true } }).outputText
   const mod = { exports: {} }
@@ -378,6 +378,7 @@ test('all adopted REST methods preserve legacy wire results and scaffold order w
             Object.assign(mocks, {
               'next/server': { NextRequest, NextResponse },
               '@/lib/mcp/auth': auth,
+              '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} },
               '@/lib/flags': { isFeatureEnabled: async () => false },
               '@/lib/flags/keys': {},
               '@/lib/mcp/agents/scopes': { requireRole: async () => null },

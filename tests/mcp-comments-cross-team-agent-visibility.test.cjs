@@ -30,6 +30,7 @@ function loadRoute(comments) {
     },
   };
   const stubs = {
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, status: init.status ?? 200 }),

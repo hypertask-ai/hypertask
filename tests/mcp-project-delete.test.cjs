@@ -19,6 +19,7 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     },
   }).outputText;
   const stubs = {
+    "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "next/server": {
       NextResponse: {
         json: (body, init = {}) => ({ body, status: init.status ?? 200 }),

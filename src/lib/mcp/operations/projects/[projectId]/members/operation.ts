@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, readMcpRouteJsonBody as readJsonBody } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -86,6 +87,7 @@ export async function GET(request: NextRequest, props: { params: Promise<{ proje
     );
   } catch (err) {
     console.error("[MCP List Project Members] Error:", err);
+    reportMcpOperationCrash(request, err);
     return NextResponse.json(
       {
         success: false,
@@ -291,6 +293,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ proj
     );
   } catch (err) {
     console.error("[MCP Add Project Member] Error:", err);
+    reportMcpOperationCrash(request, err);
     return NextResponse.json(
       {
         success: false,

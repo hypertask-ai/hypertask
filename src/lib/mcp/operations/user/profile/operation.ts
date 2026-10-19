@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { createUnauthorizedResponse } from '@/lib/mcp/auth'
@@ -133,6 +134,7 @@ export async function PATCH(request: NextRequest) {
       error,
       message: error instanceof Error ? error.message : String(error),
     })
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       {
         success: false,

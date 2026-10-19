@@ -1,4 +1,5 @@
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -788,6 +789,7 @@ export async function GET(request: NextRequest) {
     if (error instanceof TaskIdentifierAmbiguityError) {
       return NextResponse.json({ success: false, error: error.message }, { status: 400 })
     }
+    reportMcpOperationCrash(request, error)
     console.error('[MCP] tasks', {
       user: userObj,
       error,

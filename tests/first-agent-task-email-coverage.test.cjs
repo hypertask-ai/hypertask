@@ -8,6 +8,7 @@ const root = path.resolve(__dirname, "..");
 const serviceFile = "src/utils/controllers/section/sectionService.ts";
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 function load(file, stubs) {
+  stubs = { "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} }, ...stubs };
   const mod = { exports: {} };
   const source = read(file);
   const js = ts.transpileModule(source, {

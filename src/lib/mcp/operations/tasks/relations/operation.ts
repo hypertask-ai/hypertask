@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { Prisma } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
@@ -191,6 +192,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, relation })
   } catch (error) {
     console.error('[MCP Task Relations] POST Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to create task relation' },
       { status: 500 }
@@ -293,6 +295,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     console.error('[MCP Task Relations] GET Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to list task relations' },
       { status: 500 }
@@ -410,6 +413,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({ success: true, deleted: result.count })
   } catch (error) {
     console.error('[MCP Task Relations] DELETE Error:', error)
+    reportMcpOperationCrash(request, error)
     return NextResponse.json(
       { success: false, error: 'Failed to delete task relation' },
       { status: 500 }

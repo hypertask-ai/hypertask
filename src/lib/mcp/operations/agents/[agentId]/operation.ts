@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { handleDeleteAgentRequest } from '@/lib/mcp/agents/delete'
@@ -72,6 +73,7 @@ export async function POST(
       return noStore({ success: false, error: error.message }, 400)
     }
     console.error('[agent-run] runtime open failed', error)
+    reportMcpOperationCrash(request, error)
     return noStore({ success: false, error: 'Failed to open agent run' }, 500)
   }
 

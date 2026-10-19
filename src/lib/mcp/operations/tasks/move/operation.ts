@@ -1,3 +1,4 @@
+import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
 
@@ -304,6 +305,7 @@ export async function POST(request: NextRequest) {
     );
   } catch (err) {
     console.error("[MCP Move Task] Error:", err);
+    reportMcpOperationCrash(request, err);
     return NextResponse.json(
       {
         success: false,
