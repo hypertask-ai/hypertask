@@ -1,6 +1,6 @@
 # Server invite and subscription analytics
 
-HTPR-7268 cutover (2026-10-16): flag `htpr-7268-invite-seat-analytics` (https://app.hypertask.ai/admin/flags#flag-htpr-7268-invite-seat-analytics). For a user with the flag on, `invite_sent` replaces `teammate_invited`, `member_joined` replaces `invite_accepted`, and the three Stripe events are sent; with the flag off, the old two invite events continue unchanged and no Stripe event is sent. The cutover date per user is when the flag reaches them; historical events are unchanged. Contract: `ht-marketing/seo/tracking/tracking-plan-2026-10-16.html`, commit `14b6866`.
+HTPR-7268 cutover (2026-10-16): flag `htpr-7268-invite-seat-analytics` (https://app.hypertask.ai/admin/flags/htpr-7268-invite-seat-analytics). For a user with the flag on, `invite_sent` replaces `teammate_invited`, `member_joined` replaces `invite_accepted`, and the three Stripe events are sent; with the flag off, the old two invite events continue unchanged and no Stripe event is sent. The cutover date per user is when the flag reaches them; historical events are unchanged. Contract: `ht-marketing/seo/tracking/tracking-plan-2026-10-16.html`, commit `14b6866`.
 
 All five events use `distinctId=String(user_id)` and include `user_id`, `workspace_id` (team ID), `board_id` (project ID or null), `source=server`, `event_id` (event name plus business ID), `occurred_at` (ISO), and `environment` (`VERCEL_ENV`, then `NODE_ENV`, then `unknown`). IDs are strings. The contract also requires `utm_source`, `utm_medium`, `utm_campaign`, `initial_referrer`, `is_seeded`, `account_category`, and `attribution_status`. There is no cheap existing attribution/category/seed classifier at these boundaries: those values are null, with `attribution_status=unknown`, rather than inferred. Names, emails, tokens, credentials and free text are never included.
 
@@ -35,7 +35,7 @@ The production Stripe endpoint must deliver `invoice.paid` for subscription star
 
 # Payment, login page, agent connection and delivery record (HTPR-7272)
 
-Flag `htpr-7272-payment-login-agent-events` (https://app.hypertask.ai/admin/flags#flag-htpr-7272-payment-login-agent-events), default Owner + QA. Server events also need `isActivationEligible`. With the flag off for a user, nothing below changes for them: `agent_connected` keeps its per-credential key and captures stay inline.
+Flag `htpr-7272-payment-login-agent-events` (https://app.hypertask.ai/admin/flags/htpr-7272-payment-login-agent-events), default Owner + QA. Server events also need `isActivationEligible`. With the flag off for a user, nothing below changes for them: `agent_connected` keeps its per-credential key and captures stay inline.
 
 | Event | Trigger and business ID | Additional properties |
 | --- | --- | --- |
@@ -59,7 +59,7 @@ Saved tasks, boards, and columns record an ids-only analytics intent inside the 
 
 # Versioned activation metric (HTPR-7293)
 
-Flag `htpr-7293-activation-metric-v1` (https://app.hypertask.ai/admin/flags#flag-htpr-7293-activation-metric-v1), default Owner + QA, selects `definition_version=board_3_tasks_7d_v1` for `activation_completed` when `htpr-7284-activation-completed` is also enabled. With the new flag off, the existing unversioned live-task rule is unchanged. Guests remain excluded.
+Flag `htpr-7293-activation-metric-v1` (https://app.hypertask.ai/admin/flags/htpr-7293-activation-metric-v1), default Owner + QA, selects `definition_version=board_3_tasks_7d_v1` for `activation_completed` when `htpr-7284-activation-completed` is also enabled. With the new flag off, the existing unversioned live-task rule is unchanged. Guests remain excluded.
 
 A user activates when one board they own (`Project.ownerId = User.id`, `Project.seeded = false`) was created in `[User.joinedAt, User.joinedAt + 7 days)` and three distinct task IDs on that same board have `Task.createdAt` in that window. Signup and the window start are inclusive; the end is exclusive. Tasks across boards never combine, and another owner's board never qualifies. Human- and agent-created tasks both count, with no creator filter.
 
