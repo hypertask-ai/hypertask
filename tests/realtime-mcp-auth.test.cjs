@@ -176,6 +176,13 @@ test("account-wide token revocation refuses old tokens but still allows newer on
   assert.equal(allowed.status, 200);
 });
 
+test("a header of only whitespace after Bearer is refused quickly", async () => {
+  const started = performance.now();
+  const result = await invoke(`private-user-${user.id}`, `bearer\t${"\t\t".repeat(50000)}`);
+  assert.equal(result.status, 403);
+  assert.ok(performance.now() - started < 1000, "whitespace-only bearer header took too long");
+});
+
 test("with the flag off, bearer tokens are refused while session users keep access", async () => {
   state.tokenAuthFlagOn = false;
   const refused = await invoke("private-project-15", `Bearer ${tokenFor()}`);

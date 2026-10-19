@@ -17,7 +17,7 @@ export const isManagementKeyToken = (token: string) =>
   token.startsWith(MANAGEMENT_KEY_PREFIX) ||
   token.startsWith(TEAM_MANAGEMENT_KEY_PREFIX)
 export function extractBearerToken(authHeader: string | null): string | null {
-  return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
+  return authHeader?.match(/^Bearer\s+(\S.*)$/i)?.[1] ?? null
 }
 
 export async function validateMcpAuth(
