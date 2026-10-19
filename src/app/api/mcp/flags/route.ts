@@ -8,11 +8,13 @@ import {
   FeatureFlagInputError,
   FeatureFlagApprovalError,
   defaultFeatureFlagMode,
+  isFeatureEnabled,
   isFeatureFlagOwnerUserId,
   listFeatureFlagModes,
   setFeatureFlagMode,
   type FeatureFlagMode,
 } from "@/lib/flags";
+import { HTPR_7364_BATCH_FLAG_APPROVAL_FLAG } from "@/lib/flags/definitions/htpr-7364-batch-flag-approval";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
@@ -24,6 +26,22 @@ const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OFF: "Off",
 };
 const SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question: Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?$/;
+const BATCH_SWITCH_REQUEST = /^(?:@?Valentin Yeo )?Question:((?:\s*Switch [a-z0-9]+(?:-[a-z0-9]+)* to (?:Only me|Owner \+ QA|Everyone|Off)\?)+)$/;
+const BATCH_SWITCH_ITEM = /Switch ([a-z0-9]+(?:-[a-z0-9]+)*) to (Only me|Owner \+ QA|Everyone|Off)\?/g;
+
+function approvedSwitches(words: string, batchAllowed: boolean): Map<string, string> | null {
+  const text = words.replace(/\s+/g, " ").trim();
+  const single = SWITCH_REQUEST.exec(text);
+  if (single) return new Map([[single[1], single[2]]]);
+  const batch = batchAllowed ? BATCH_SWITCH_REQUEST.exec(text) : null;
+  if (!batch) return null;
+  const switches = new Map<string, string>();
+  for (const [, key, mode] of batch[1].matchAll(BATCH_SWITCH_ITEM)) {
+    if (switches.has(key)) return null;
+    switches.set(key, mode);
+  }
+  return switches;
+}
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -87,6 +105,7 @@ export async function PATCH(request: NextRequest) {
       where: { id: ctx.agentId as string },
       select: { displayName: true },
     });
+    const batchAllowed = await isFeatureEnabled(HTPR_7364_BATCH_FLAG_APPROVAL_FLAG, ctx.user.id);
     const flag = await setFeatureFlagMode(body.key, body.mode as FeatureFlagMode, {
       userId: ctx.user.id,
       agentId: ctx.agentId as string,
@@ -111,9 +130,8 @@ export async function PATCH(request: NextRequest) {
         select: { commentText: true, text: true },
       });
       const words = parse(comment?.text || comment?.commentText || "").text;
-      const ask = SWITCH_REQUEST.exec(words.replace(/\s+/g, " ").trim());
-      if (!comment || !ask || ask[1] !== body.key
-        || ask[2] !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
+      const switches = comment ? approvedSwitches(words, batchAllowed) : null;
+      if (!switches || switches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
         throw new FeatureFlagApprovalError(
           "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
         );
