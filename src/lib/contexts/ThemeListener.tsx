@@ -14,6 +14,7 @@ const ThemeListener = () => {
   const roundedLoaded = useFlagLoaded(HTPR_7328_ROUNDED_THEME_FLAG);
   useEffect(() => {
     const match = window.matchMedia("(prefers-color-scheme: dark)");
+    const desktop = window.matchMedia("(min-width: 768px)");
     const applyTheme = () => {
       const stored =
         document.cookie
@@ -24,7 +25,7 @@ const ThemeListener = () => {
       if (stored === "rounded" && !roundedLoaded) return;
       const theme = normalizeThemePreference(stored, roundedEnabled);
       const resolved = resolveThemePreference(
-        theme,
+        theme === "rounded" && !desktop.matches ? "system" : theme,
         match.matches ? "dark" : "light"
       );
 
@@ -55,6 +56,7 @@ const ThemeListener = () => {
 
     applyTheme();
     match.addEventListener("change", applyTheme);
+    desktop.addEventListener("change", applyTheme);
     const serverRenderedThemeObserver = new MutationObserver(applyTheme);
     serverRenderedThemeObserver.observe(document.documentElement, {
       attributes: true,
@@ -63,6 +65,7 @@ const ThemeListener = () => {
 
     return () => {
       match.removeEventListener("change", applyTheme);
+      desktop.removeEventListener("change", applyTheme);
       serverRenderedThemeObserver.disconnect();
     };
   }, [roundedEnabled, roundedLoaded]);

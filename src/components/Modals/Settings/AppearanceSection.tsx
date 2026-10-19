@@ -1,6 +1,7 @@
 "use client";
 
 import { useFlag } from "@/hooks/useFlag";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { Check } from "lucide-react";
 import useDarkMode from "@/hooks/MultiPages/HTC/useDarkMode";
@@ -38,7 +39,8 @@ const AppearanceThemePicker = ({ options }: { options: readonly (typeof themeOpt
 
 const AppearanceSection = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
-  const options = roundedEnabled
+  const isMobile = useMobileView();
+  const options = roundedEnabled && !isMobile
     ? themeOptions
     : themeOptions.filter(({ value }) => value !== "rounded");
 

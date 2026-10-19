@@ -147,8 +147,8 @@ const Commands = (props: Props) => {
   const agentLogNameEnabled = useFlag(HTPR_6662_AGENT_LOG_NAME_FLAG);
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
   const getRoundedCommands = useCallback(
-    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, true),
-    [agentLogNameEnabled]
+    (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled, !isMobile),
+    [agentLogNameEnabled, isMobile]
   );
   const getLegacyCommands = useCallback(
     (options?: IAllCommands) => getAllCommands(options, agentLogNameEnabled, options?.kanbanSelectAllEnabled),

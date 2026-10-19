@@ -11,10 +11,12 @@ import {
 } from "@/lib/themePreferences";
 
 import { useFlag } from "@/hooks/useFlag";
+import { useMobileView } from "@/lib/contexts/mobileContext";
 import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 
 const useDarkMode = () => {
   const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const isMobile = useMobileView();
   const router = useRouter();
   const cookies = parseCookies();
   const cookieTheme = roundedEnabled
@@ -40,7 +42,10 @@ const useDarkMode = () => {
     return () => match.removeEventListener("change", onSystemChange);
   }, [router]);
 
-  const resolvedTheme = resolveThemePreference(cookieTheme, systemTheme);
+  const resolvedTheme = resolveThemePreference(
+    cookieTheme === "rounded" && isMobile ? "system" : cookieTheme,
+    systemTheme,
+  );
   const effectiveTheme =
     resolvedThemeDomMetadata[resolvedTheme].classes.includes("dark")
       ? "dark"
