@@ -52,12 +52,6 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
     };
     const keyHandlers: Record<string, () => void> = {
       'Escape': handleEscape,
-      'j': () => {
-        if (!cmdControl) return;
-        e.preventDefault();
-        if (editWithAiEnabled) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
-        else toggleAiTaskWriter();
-      },
     };
 
     if (cmdControl) {
@@ -157,6 +151,11 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
         ?.click();
     }
 
+    if (e.key === "j" && cmdControl) {
+      e.preventDefault();
+      if (editWithAiEnabled) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      else toggleAiTaskWriter();
+    }
     keyHandlers[e.key]?.();
   };
 

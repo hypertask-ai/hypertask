@@ -6,7 +6,7 @@ import { clearArchiveShortcutNudge } from "@/lib/notifications/archiveShortcutNu
 import { CommandMode } from "@/models/enums";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import type { TaskDetailKeyboardContext, TaskDetailCommand } from "./TaskDetailKeyboardContext";
-export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & { currentTask: NonNullable<TaskDetailKeyboardContext["currentTask"]> }, e: KeyboardEvent, cmdControl: boolean): TaskDetailCommand[] {
+export function taskDetailNavigationKeymap(context: TaskDetailKeyboardContext & { currentTask: NonNullable<TaskDetailKeyboardContext["currentTask"]>; editWithAiEnabled: boolean }, e: KeyboardEvent, cmdControl: boolean): TaskDetailCommand[] {
   const { lastGPress, navigate, updateActiveItemAndItemInView, currentTask, toggleEstimateModal, undoData, undoHandler, setArchiveNudge, currentUser, markAsDone, goToProjectShortcut, _parsedTask, toggleLabelModal, aHandler, setShowCommands, toggleDeleteModal, searchParams, navigateToNextTask, returnCurrentFocusedType, focusOn, setEditMode, copyTaskURL, copyTaskFormattedURL, copySharedTaskURL, sharedLink, copySharedTaskFormattedURL, copyTitleAndTicketNumber, copyTicketNumber, navigateToPreviousTask, handleStarTask, PostFollower, UnFollowCallback, taskTimer } = context;
   return [
 

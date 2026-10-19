@@ -144,7 +144,8 @@ export function useTaskDetailEditorState({
     autoTrigger: false,
     initialPrompt: ''
   });
-  let shouldShowAiTaskWriter = writerOpen && !editWithAiEnabled;
+  let shouldShowAiTaskWriter = writerOpen;
+  if (editWithAiEnabled) shouldShowAiTaskWriter = false;
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);

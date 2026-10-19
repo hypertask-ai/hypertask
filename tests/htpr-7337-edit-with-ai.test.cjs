@@ -179,11 +179,12 @@ test("edit mode clears after typed or chip messages, close, task navigation, or 
 
 test("AI triggers gate the legacy writer, preserve the mounted mobile draft, and keep Ctrl+J for new tickets", () => {
   const state = read("src/components/RTE/useTaskDetailEditorState.tsx");
-  assert.match(state, /writerOpen && !editWithAiEnabled/);
+  assert.match(state, /let shouldShowAiTaskWriter = writerOpen;/);
+  assert.match(state, /if \(editWithAiEnabled\) shouldShowAiTaskWriter = false;/);
   const save = read("src/components/RTE/useTaskDetailEditorSave.tsx");
   assert.match(save, /if \(editWithAiEnabled\) \{[\s\S]*?editTicketWithAi\(currentTask.id\);[\s\S]*?return;/);
   const events = read("src/components/RTE/useTaskDetailEditorEvents.tsx");
-  assert.match(events, /event.detail.targetId === id[\s\S]*?if \(editWithAiEnabled\)[\s\S]*?editTicketWithAi\(currentTask.id\)/);
+  assert.match(events, /if \(editWithAiEnabled\)[\s\S]*?event.detail.targetId === id[\s\S]*?editTicketWithAi\(currentTask.id\)/);
   const panels = read("src/components/RTE/TaskDetailEditorPanels.tsx");
   assert.match(panels, /data-mobile-existing-content-editor\s+hidden=\{editWithAiEnabled && chatHandoffOpen && showAiChatInterface\}/);
   assert.match(panels, /if \(!editWithAiEnabled \|\| !showAiChatInterface \|\| !mobileExistingEditOpen\) setChatHandoffOpen\(false\)/);

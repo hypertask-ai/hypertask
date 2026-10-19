@@ -118,25 +118,26 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
     }
   }, [resetDraft]);
 
-  useLayoutEffect(() => {
-    const handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
-      if (event.detail.targetId === id) {
-        if (editWithAiEnabled) {
-          void editTicketWithAi(currentTask.id);
-          return;
-        }
-        if (newTaskWindow && !event.detail.prompt) {
-          setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
-          return;
-        }
-        setAiTriggerData({
-          autoTrigger: true,
-          initialPrompt: event.detail.prompt
-        });
-        setShouldShowAITaskWriter(true);
+  let handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
+    if (event.detail.targetId === id) {
+      if (newTaskWindow && !event.detail.prompt) {
+        setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+        return;
       }
+      setAiTriggerData({
+        autoTrigger: true,
+        initialPrompt: event.detail.prompt
+      });
+      setShouldShowAITaskWriter(true);
+    }
+  };
+  if (editWithAiEnabled) {
+    handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
+      if (event.detail.targetId === id) void editTicketWithAi(currentTask.id);
     };
+  }
 
+  useLayoutEffect(() => {
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
   }, [id, newTaskWindow, setCommands, editWithAiEnabled, editTicketWithAi, currentTask?.id]);

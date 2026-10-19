@@ -1,5 +1,3 @@
-import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
 import { activeItemAtom, idToDeleteCommentAtom, showCommandsAtom, showShortcutsAtom, inViewObjectAtom, showMentionListAtom, showAIChatInterfaceAtom, openAiChatByDefaultAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, aiChatPinnedAtom, showCreateTaskModalAtom, appShellRailAtom, tasksPlayListAtom } from "@/store";
 
 import { useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -79,7 +77,6 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const [activeItem, _setActiveItem] = useRecoilState(activeItemAtom);
   const [inViewObject, setInViewObject] = useRecoilState(inViewObjectAtom);
   const [showAiChatInterface, setShowAiChatInterface] = useRecoilState(showAIChatInterfaceAtom);
-  const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const hydrated = useHydrated();
   const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
@@ -123,7 +120,7 @@ export function useTaskDetailModals(state: useTaskDetailStateValue) {
   const controller: { [key: number]: { pressed: boolean } } = {
     ...globalConstants.multipleKeys,
   };
-  return { editWithAiEnabled, showEmojiPickerAtComment, setShowEmojiPickerAtCount, priority_, setPriority_, estimate_, setEstimate_, activeModals, tipTapClassName, showMoveTaskToBoard, setShowMoveTaskToBoard, showMoveModal, setShowMoveModal, showDropdown, setShowDropdown, showAssignModal, setShowAssignModal, showLinksModal, setShowLinksModal, showPriorityModal, setShowPriorityModal, showEstimateModal, setShowEstimateModal, showCreateLabelModal, setShowCreateLabelModal, showDueDateModal, setShowDueDateModal, isApple, resetShowCommands, toggleCreateTaskGlobally, showShortucts, setShowShortcuts, showCommands, setShowCommands, setTasksPlayList, commandContextOptions, idToDelete, setIdToDelete, activeItem, _setActiveItem, inViewObject, setInViewObject, showAiChatInterface, setShowAiChatInterface, openAiChatByDefault, aiChatAutoOpenSuppressed, aiChatPinned, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, showMentionList, setShowMentionList, showCreateTaskModal, callBackHandlerSubtaskLinking, callBackHandlerRemoveSubtask, goToProjectShortcut, updateCommentsActivityQuery, startNewSession, aiChatEditor, copyCommentToAiChat, summarizeComment, summarizeTicket, _mbl, initialScrollViewportRef, appShellRailOn, controller };
+  return { showEmojiPickerAtComment, setShowEmojiPickerAtCount, priority_, setPriority_, estimate_, setEstimate_, activeModals, tipTapClassName, showMoveTaskToBoard, setShowMoveTaskToBoard, showMoveModal, setShowMoveModal, showDropdown, setShowDropdown, showAssignModal, setShowAssignModal, showLinksModal, setShowLinksModal, showPriorityModal, setShowPriorityModal, showEstimateModal, setShowEstimateModal, showCreateLabelModal, setShowCreateLabelModal, showDueDateModal, setShowDueDateModal, isApple, resetShowCommands, toggleCreateTaskGlobally, showShortucts, setShowShortcuts, showCommands, setShowCommands, setTasksPlayList, commandContextOptions, idToDelete, setIdToDelete, activeItem, _setActiveItem, inViewObject, setInViewObject, showAiChatInterface, setShowAiChatInterface, openAiChatByDefault, aiChatAutoOpenSuppressed, aiChatPinned, setAiChatAutoOpenSuppressed, setAiChatExplicitOpenAt, showMentionList, setShowMentionList, showCreateTaskModal, callBackHandlerSubtaskLinking, callBackHandlerRemoveSubtask, goToProjectShortcut, updateCommentsActivityQuery, startNewSession, aiChatEditor, copyCommentToAiChat, summarizeComment, summarizeTicket, _mbl, initialScrollViewportRef, appShellRailOn, controller };
 }
 
 export type useTaskDetailModalsValue = ReturnType<typeof useTaskDetailModals>;

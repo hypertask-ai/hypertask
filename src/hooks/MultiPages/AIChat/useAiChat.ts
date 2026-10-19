@@ -42,11 +42,13 @@ export function useAiChat() {
   deleteSessionInHistory, sessionsRef, chatHistoryReadyRef, sessionSetupRef, resolvedBoardSessionRef,
   sessionIntentGenerationRef, sessionContextKey, clearMessageQueue,
   } = useAiChatState();
-  useEffect(() => {
+  useEffect(editWithAiEnabled ? () => {
     if (editTaskId === null) return;
-    if (!editWithAiEnabled || !showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
+    if (!showAiChatInterface || taskId !== editTaskId || currentSession?.messages?.some((message) => message.role === "human")) {
       setEditTaskId(null);
     }
+  } : () => {
+    if (editTaskId !== null) setEditTaskId(null);
   }, [editWithAiEnabled, editTaskId, showAiChatInterface, taskId, currentSession?.messages, setEditTaskId]);
 
   const sessionContext = {

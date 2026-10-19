@@ -102,7 +102,8 @@ export const WelcomeScreen = () => {
   const taskId = isDetailPage ? inViewObject?.taskId : undefined;
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const editTaskId = useRecoilValue(aiChatEditTaskIdAtom);
-  const isEditMode = editWithAiEnabled && Boolean(taskId) && editTaskId === taskId;
+  let isEditMode = false;
+  if (editWithAiEnabled) isEditMode = Boolean(taskId) && editTaskId === taskId;
   const taskSummaryAction = taskSummaryActionFor(taskId);
   const ticketRef = taskId
     ? inViewObject.taskTicketNumber || "this ticket"
