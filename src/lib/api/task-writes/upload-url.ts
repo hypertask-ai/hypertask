@@ -171,12 +171,6 @@ const route = taskWriteRoute({
       if (body?.purpose !== undefined && !taskLinkRequested) {
         throw new UploadUrlRequestError("Invalid upload purpose", 400);
       }
-      if (taskLinkRequested) {
-        const { isFeatureEnabled } = await import("@/lib/flags");
-        if (!(await isFeatureEnabled("htpr-5993-optimistic-task-uploads", session.userId))) {
-          throw new UploadUrlRequestError("Background task uploads are disabled", 403);
-        }
-      }
       const files = parseRequestedFiles(body);
 
       const keys: string[] = [];

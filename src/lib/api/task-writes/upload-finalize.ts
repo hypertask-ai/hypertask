@@ -57,20 +57,6 @@ const route = taskWriteRoute({
   allowNullBody: true,
   operation: async (body, session) => {
     if (body?.action === "link-task-attachment") {
-      let enabled: boolean;
-      try {
-        const { isFeatureEnabled } = await import("@/lib/flags");
-        enabled = await isFeatureEnabled(
-          "htpr-5993-optimistic-task-uploads",
-          session.userId,
-        );
-      } catch (error) {
-        console.error("[uploadFinalize] Could not evaluate upload feature flag", error);
-        return NextResponse.json({ error: "Could not link attachment" }, { status: 500 });
-      }
-      if (!enabled) {
-        return NextResponse.json({ error: "Background task uploads are disabled" }, { status: 403 });
-      }
       const taskId = Number(body?.taskId);
       const receipt = verifyTaskAttachmentLinkReceipt(body?.receipt);
       if (!Number.isSafeInteger(taskId) || taskId <= 0 || !receipt) {

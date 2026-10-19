@@ -83,9 +83,6 @@ const attachmentButtonId = "create-task-modal-attachmentUpload";
 const TiptapCreateTaskModal = () => {
   const isMbl = useContext(MobileViewContext);
   const isApple = useDeviceContext();
-  const backgroundTaskUploadsEnabled = useFlag(
-    "htpr-5993-optimistic-task-uploads",
-  );
   const descriptionFirstEnabled = useFlag(
     HTPR_6556_MOBILE_DESCRIPTION_FIRST_FLAG,
   );
@@ -418,11 +415,9 @@ const TiptapCreateTaskModal = () => {
 
   useEffect(
     () => () => {
-      if (backgroundTaskUploadsEnabled) {
-        discardUnboundCreateTaskUploads(createTaskAttachmentsRef.current);
-      }
+      discardUnboundCreateTaskUploads(createTaskAttachmentsRef.current);
     },
-    [backgroundTaskUploadsEnabled],
+    [],
   );
 
   const resetComposerAfterCreate = () => {
@@ -503,9 +498,7 @@ const TiptapCreateTaskModal = () => {
       ...formValuesOverride,
       attachments: attachmentsAtSave,
     };
-    const backgroundUploadCount = backgroundTaskUploadsEnabled
-      ? createTaskUploadCount(attachmentsAtSave ?? [])
-      : 0;
+    const backgroundUploadCount = createTaskUploadCount(attachmentsAtSave ?? []);
     if (backgroundUploadCount) {
       reserveCreateTaskUploads(attachmentsAtSave ?? []);
     }
@@ -1125,7 +1118,7 @@ const TiptapCreateTaskModal = () => {
               dictationCoordinator={dictationCoordinator}
               toggleAiTaskWriter={toggleAiTaskWriter}
               isAiTaskWriterOpen={shouldShowAiTaskWriter}
-              backgroundTaskUploads={backgroundTaskUploadsEnabled}
+              backgroundTaskUploads
             />
           </FileDragOverlay>
         </div>
