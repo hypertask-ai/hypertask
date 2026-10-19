@@ -52,6 +52,7 @@ function harness(t, enabled = true) {
     },
     "@/hooks/useFlag": { useFlag: () => enabled, useFlagReady: () => ready },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: userId }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/utils/api/Task Detail": { fetchCommentsHelper, getAllFollowers: async id => (await axios.get(`/api/tasks/detailMeta?taskId=${id}`)).data.followers, getDraftsHelper: async () => ({}) },
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => 1, getEstimateForTask: async () => 1, getAllTaskLabels: async () => [], getSectionsForMoveTask: async () => [] } },
   };
@@ -522,6 +523,7 @@ test("resolved flag-off metadata options and fetch results match origin/producti
     "@tanstack/react-query": { useQuery: options => options, useQueryClient: () => ({}) },
     "@/hooks/useFlag": { useFlag: () => false, useFlagReady: () => true },
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId: 985 }) },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/utils/api/global": { __esModule: true, default: { getPriorityForTask: async () => "priority", getEstimateForTask: async () => "estimate", getAllTaskLabels: async () => ["label"] } },
     "@/utils/api/Task Detail": { getAllFollowers: async () => ["follower"] },
   };
