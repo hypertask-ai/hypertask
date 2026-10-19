@@ -28,7 +28,7 @@ function loadLayout(board, inbox = null) {
     "@/lib/fonts/ibmPlexSans": { ibmPlexSans: font, IBM_PLEX_SANS_LATIN_FONT_HREF: plex },
     "@/lib/flags/keys": { HTPR_7016_PHONE_BOARD_COLD_START_FLAG: flag, HTPR_7278_MEMORY_ONLY_TRACKING_FLAG: "htpr-7278-memory-only-tracking" },
     "@/lib/flags": { isFeatureEnabled: async () => false },
-    "@/lib/themePreferences": { normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain" },
+    "@/lib/themePreferences": { normalizeThemePreference: x => x, resolveInitialThemeColor: () => "#fff", resolveThemePreference: () => "porcelain", resolvedThemeDomMetadata: { porcelain: { classes: ["light", "porcelain"], themeColor: "#ffffff" } } },
     "@/lib/themeBootScript": { buildThemeBootScript: () => "" },
     "@/lib/appShellBootstrap/client": { buildEarlyAppShellBootstrapScript: () => "" },
     "@/utils/Providers": { default: ({ children }) => children },

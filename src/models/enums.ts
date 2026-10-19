@@ -211,6 +211,7 @@ export enum CommandMode {
   SelectAllOnBoard,
   SelectAllInColumn,
   ClearTaskSelection,
+  ToggleRoundedTheme,
 }
 
 export enum ELogType {

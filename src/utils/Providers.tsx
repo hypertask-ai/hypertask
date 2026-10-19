@@ -160,7 +160,6 @@ export default function Provider({
 
   return (
     <FirstScreenSurfaceProvider snapshot={snapshot}>
-      <ThemeListener />
       <PersistQueryClientProvider
         key={`query-account-${authenticatedUserId ?? "guest"}`}
         client={queryBoundary.client}
@@ -181,9 +180,10 @@ export default function Provider({
                   <AuthProvider authenticatedUserId={authenticatedUserId}>
                     <TourProvider>
                       {publicShare ? (
-                        <PublicShell>{children}</PublicShell>
+                        <PublicShell><ThemeListener />{children}</PublicShell>
                       ) : (
                         <FeatureFlagProvider userId={authenticatedUserId} initialFlags={snapshot?.flags}>
+                          <ThemeListener />
                           <BoardDisplayMirror accountId={authenticatedUserId} />
                           <MobileViewFlagBridge />
                           <GlobalProvider authenticatedUserId={authenticatedUserId}>

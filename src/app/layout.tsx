@@ -1,4 +1,5 @@
 import "@/styles/globals.scss";
+import "@/styles/tailwindThemes/rounded.css";
 import "../../tokens.css";
 import { cookies } from "next/headers";
 import Provider from "@/utils/Providers";
@@ -18,9 +19,11 @@ import { ibmPlexSans, IBM_PLEX_SANS_LATIN_FONT_HREF } from "@/lib/fonts/ibmPlexS
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/session";
 import {
   normalizeThemePreference,
+  resolvedThemeDomMetadata,
   resolveInitialThemeColor,
   resolveThemePreference,
 } from "@/lib/themePreferences";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import { buildThemeBootScript } from "@/lib/themeBootScript";
 import { buildEarlyAppShellBootstrapScript } from "@/lib/appShellBootstrap/client";
 import { getServerBoardDocument } from "@/lib/firstScreen/serverBoardDocument";
@@ -77,27 +80,25 @@ export default async function RootLayout(
     value: authConfig.cookies.defaultTheme,
     name: authConfig.cookies.theme,
   };
-  const themeValue = normalizeThemePreference(theme.value) ?? "system";
+  const roundedEnabled = await isFeatureEnabled(HTPR_7328_ROUNDED_THEME_FLAG, analyticsSession?.id ?? -1);
+  const savedTheme = roundedEnabled
+    ? normalizeThemePreference(theme.value, true)
+    : normalizeThemePreference(theme.value);
+  const themeValue = savedTheme ?? "system";
   const systemLightTheme = resolveThemePreference("system", "light");
   const systemDarkTheme = resolveThemePreference("system", "dark");
   const initialThemeColor = resolveInitialThemeColor(themeValue);
-  const themeClassName =
-    themeValue === "amoled"
-      ? "dark amoled"
-      : themeValue === "dia"
-        ? "light dia"
-        : themeValue === "graphite"
-          ? "dark graphite"
-          : themeValue === "porcelain"
-            ? "light porcelain"
-            : themeValue;
+  const initialResolvedTheme = resolveThemePreference(themeValue, "dark");
+  const themeClassName = themeValue === "system"
+    ? "system"
+    : resolvedThemeDomMetadata[initialResolvedTheme].classes.join(" ");
 
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${themeClassName} ${inter.variable} ${newsreader.variable} ${ibmPlexSans.variable} ${inter.className}`}
-      data-theme={themeValue}
+      data-theme={themeValue === "rounded" ? initialResolvedTheme : themeValue}
     >
       <head>
         {!deferUnusedBoardFonts && [INTER_LATIN_FONT_HREF, ...NEWSREADER_LATIN_FONT_HREFS].map(href => (
@@ -123,6 +124,7 @@ export default async function RootLayout(
               authConfig.cookies.theme,
               systemLightTheme,
               systemDarkTheme,
+              roundedEnabled,
             ),
           }}
         />

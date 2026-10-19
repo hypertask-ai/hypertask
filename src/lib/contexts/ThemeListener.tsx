@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect } from "react";
+import { useFlag, useFlagLoaded } from "@/hooks/useFlag";
+import { HTPR_7328_ROUNDED_THEME_FLAG } from "@/lib/flags/keys";
 import {
   normalizeThemePreference,
   resolvedThemeDomMetadata,
@@ -8,8 +10,11 @@ import {
 } from "@/lib/themePreferences";
 
 const ThemeListener = () => {
+  const roundedEnabled = useFlag(HTPR_7328_ROUNDED_THEME_FLAG);
+  const roundedLoaded = useFlagLoaded(HTPR_7328_ROUNDED_THEME_FLAG);
   useEffect(() => {
     const match = window.matchMedia("(prefers-color-scheme: dark)");
+    const desktop = window.matchMedia("(min-width: 768px)");
     const applyTheme = () => {
       const stored =
         document.cookie
@@ -17,36 +22,29 @@ const ThemeListener = () => {
           .find((row) => row.startsWith("theme="))
           ?.split("=")[1] || "system";
 
-      const theme = normalizeThemePreference(stored);
+      if (stored === "rounded" && !roundedLoaded) return;
+      const theme = normalizeThemePreference(stored, roundedEnabled);
       const resolved = resolveThemePreference(
-        theme,
+        theme === "rounded" && !desktop.matches ? "system" : theme,
         match.matches ? "dark" : "light"
       );
 
+      const root = document.documentElement;
+      const wanted = resolvedThemeDomMetadata[resolved].classes;
+      const themeClasses = new Set(["system", ...Object.values(resolvedThemeDomMetadata).flatMap(({ classes }) => classes)]);
+      const present = [...root.classList].filter((name) => themeClasses.has(name));
+      const alreadyApplied =
+        root.getAttribute("data-theme") === resolved &&
+        present.length === wanted.length &&
+        wanted.every((name) => root.classList.contains(name));
+      if (alreadyApplied) return;
+
       document.documentElement.classList.remove(
-        "light",
-        "dark",
-        "amoled",
-        "dia",
-        "graphite",
-        "porcelain"
+        "system",
+        ...new Set(Object.values(resolvedThemeDomMetadata).flatMap(({ classes }) => classes)),
       );
-      if (resolved === "amoled") {
-        document.documentElement.classList.add("dark", "amoled");
-        document.documentElement.setAttribute("data-theme", "amoled");
-      } else if (resolved === "dia") {
-        document.documentElement.classList.add("light", "dia");
-        document.documentElement.setAttribute("data-theme", "dia");
-      } else if (resolved === "graphite") {
-        document.documentElement.classList.add("dark", "graphite");
-        document.documentElement.setAttribute("data-theme", "graphite");
-      } else if (resolved === "porcelain") {
-        document.documentElement.classList.add("light", "porcelain");
-        document.documentElement.setAttribute("data-theme", "porcelain");
-      } else {
-        document.documentElement.classList.add(resolved);
-        document.documentElement.setAttribute("data-theme", resolved);
-      }
+      document.documentElement.classList.add(...resolvedThemeDomMetadata[resolved].classes);
+      document.documentElement.setAttribute("data-theme", resolved);
 
       document
         .querySelector<HTMLMetaElement>('meta[name="theme-color"]')
@@ -58,9 +56,19 @@ const ThemeListener = () => {
 
     applyTheme();
     match.addEventListener("change", applyTheme);
+    desktop.addEventListener("change", applyTheme);
+    const serverRenderedThemeObserver = new MutationObserver(applyTheme);
+    serverRenderedThemeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class", "data-theme"],
+    });
 
-    return () => match.removeEventListener("change", applyTheme);
-  }, []);
+    return () => {
+      match.removeEventListener("change", applyTheme);
+      desktop.removeEventListener("change", applyTheme);
+      serverRenderedThemeObserver.disconnect();
+    };
+  }, [roundedEnabled, roundedLoaded]);
 
   return null;
 };
