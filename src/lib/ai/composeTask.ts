@@ -51,9 +51,7 @@ function stripWriterMarkers(html: string): string {
   return doc.body.innerHTML;
 }
 
-type WriterProperties = Partial<Pick<ReturnType<typeof extractTaskProperties>, "priority" | "estimate">>;
-
-function writerProperties({ priority, estimate }: WriterProperties): { writerPriority?: WriterProperties["priority"]; writerEstimate?: WriterProperties["estimate"] } {
+function writerProperties({ priority, estimate }: Pick<ReturnType<typeof extractTaskProperties>, "priority" | "estimate">) {
   return { ...(priority?.priority_index ? { writerPriority: priority } : {}), ...(estimate?.estimate_index ? { writerEstimate: estimate } : {}) };
 }
 
@@ -97,7 +95,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: ({ title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType } & ReturnType<typeof writerProperties>)[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
