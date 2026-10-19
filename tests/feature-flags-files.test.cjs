@@ -46,7 +46,6 @@ test("generator fails loudly for missing folders, missing definitions, malformed
     valid.replace('key: FIRST_FLAG', 'key: "htpr-2-other"'),
     valid.replace('key: FIRST_FLAG', 'key: FIRST_FLAG, key: FIRST_FLAG'),
     valid.replace('key: FIRST_FLAG', 'key: FIRST_FLAG, ...extra'),
-    valid.replace('key: FIRST_FLAG', 'key: FIRST_FLAG, defaultMode: "EVERYONE"'),
     valid.replace('key: FIRST_FLAG', 'key: FIRST_FLAG, releaseRisk: { risk: "small", reason: "" }'),
     valid + '\nconsole.log("side effect");',
     'import fs from "node:fs";\n' + valid,
@@ -86,4 +85,34 @@ test("two independent flag PRs merge without registry conflicts and regenerate b
   assert.match(generated, /export \{ TWO_FLAG \}/);
   assert.equal(git("status", "--porcelain"), "");
   assert.equal(git("ls-files", `${folder}/index.generated.ts`), "");
+});
+
+test("release-risk metadata accepts plain risks and the four literal high-risk categories", async () => {
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const filename = `${folder}/htpr-7389-risk.ts`;
+  const source = (risk, extra = "") => `export const RISK_FLAG = "htpr-7389-risk";
+export default { key: RISK_FLAG, shippedOn: "2026-10-20", description: "Fixture", releaseRisk: ${risk} ${extra} } as const;`;
+  const plain = '{ risk: "small", reason: "Changes an existing screen." }';
+  assert.deepEqual(parseFlagFile(source(plain), filename).definition.releaseRisk,
+    { risk: "small", reason: "Changes an existing screen." });
+  for (const highRisk of ["money", "access", "data-deletion", "customer-email"]) {
+    const risk = `{ risk: "new", reason: "Sensitive change.", highRisk: "${highRisk}" }`;
+    assert.equal(parseFlagFile(source(risk), filename).definition.releaseRisk.highRisk, highRisk);
+    assert.equal(parseFlagFile(source(risk, ', defaultMode: "OFF"'), filename).definition.defaultMode, "OFF");
+    assert.throws(() => parseFlagFile(source(risk, ', defaultMode: "EVERYONE"'), filename),
+      /releaseRisk.highRisk may not default to Everyone/);
+  }
+  for (const highRisk of ['"banana"', '""', 'null', 'undefined', '42', 'category', '`access`']) {
+    assert.throws(() => parseFlagFile(source(`{ risk: "new", reason: "Fixture", highRisk: ${highRisk} }`), filename),
+      /highRisk must be money, access, data-deletion or customer-email/);
+  }
+  for (const kind of ["feature", "improvement", "bugfix"]) {
+    assert.equal(parseFlagFile(source(plain, `, kind: "${kind}", defaultMode: "EVERYONE"`), filename).definition.defaultMode, "EVERYONE");
+  }
+  for (const risk of [
+    '{ risk: "new", reason: "Fixture", highRisk: "access", extra: true }',
+    '{ risk: "new", reason: "Fixture", highRisk: "access", highRisk: "money" }',
+    '{ risk: "new", reason: "Fixture", extra: "access" }',
+    '{ risk: "new", reason: "Fixture", ...extra }',
+  ]) assert.throws(() => parseFlagFile(source(risk), filename), /releaseRisk/);
 });

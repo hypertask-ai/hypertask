@@ -47,7 +47,7 @@ test('MCP clientInfo produces a validated bounded slug', () => {
 })
 
 
-test('ticket flag defaults to Owner + QA as a feature, supports Off and permits anonymous filing only in Everyone', async () => {
+test('ticket flag defaults to Everyone as a feature, supports Off and permits anonymous filing only in Everyone', async () => {
   const { load } = require('./task-route-loader.cjs')
   const { default: definition, HTPR_7195_AI_FEEDBACK_FLAG: key } = jiti('../src/lib/flags/definitions/htpr-7195-ai-feedback.ts')
   assert.equal(key, 'htpr-7195-ai-feedback')
@@ -60,11 +60,11 @@ test('ticket flag defaults to Owner + QA as a feature, supports Off and permits 
     user: { findUnique: async ({ where }) => ({ email: where.id === 6 ? 'valentin.yeo@gmail.com' : where.id === 985 ? 'valentin@hypertask.ai' : 'member@example.test' }) },
   }
   const flags = load('src/lib/flags.ts', { '@/lib/prisma': { default: {} } })
-  assert.equal(flags.defaultFeatureFlagMode(key), 'OWNER_AND_QA')
+  assert.equal(flags.defaultFeatureFlagMode(key), 'EVERYONE')
   assert.equal(await flags.isFeatureEnabled(key, 6, db), true)
   assert.equal(await flags.isFeatureEnabled(key, 985, db), true)
-  assert.equal(await flags.isFeatureEnabled(key, 42, db), false)
-  assert.deepEqual(await flags.featureFlagCandidateUserIds(key, db), [6, 985])
+  assert.equal(await flags.isFeatureEnabled(key, 42, db), true)
+  assert.equal(await flags.featureFlagCandidateUserIds(key, db), null)
   mode = 'OFF'
   assert.equal(await flags.isFeatureEnabled(key, 985, db), false)
   assert.deepEqual(await flags.featureFlagCandidateUserIds(key, db), [])

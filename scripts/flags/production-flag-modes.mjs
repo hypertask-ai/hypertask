@@ -30,7 +30,7 @@ export function definitionDefaults(root) {
   const rows = parseFlagFiles(paths, (name) => readFileSync(path.join(root, name), "utf8"));
   return Object.fromEntries(rows.map(({ definition }) => [
     definition.key,
-    definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA"),
+    definition.defaultMode ?? (definition.releaseRisk?.highRisk ? "OWNER_AND_QA" : "EVERYONE"),
   ]));
 }
 

@@ -133,3 +133,29 @@ test("local premerge warns loudly when the copy differs from live and reads the 
   assert.match(text, /readPlainQaFlags\(QA_ACCOUNT_STATE\)/);
   assert.match(text, /WARNING: e2e\/smoke\/production-flag-modes\.json differs from the live flag modes/);
 });
+
+test("definition defaults use explicit modes first, then high risk, then Everyone for every kind", async (t) => {
+  const fs = require("node:fs");
+  const os = require("node:os");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "production-risk-defaults-"));
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const folder = path.join(dir, "src/lib/flags/definitions");
+  fs.mkdirSync(folder, { recursive: true });
+  const expected = {};
+  for (const kind of [undefined, "feature", "improvement", "bugfix"]) {
+    for (const highRisk of [undefined, "money", "access", "data-deletion", "customer-email"]) {
+      for (const mode of [undefined, "OFF", "OWNER_ONLY", "OWNER_AND_QA", ...(highRisk ? [] : ["EVERYONE"])]) {
+        const key = `htpr-7389-fixture-${Object.keys(expected).length}`;
+        expected[key] = mode ?? (highRisk ? "OWNER_AND_QA" : "EVERYONE");
+        fs.writeFileSync(path.join(folder, `${key}.ts`), `export const FLAG_${Object.keys(expected).length} = "${key}";
+export default { key: FLAG_${Object.keys(expected).length}, shippedOn: "2026-10-20", description: "Fixture", ${kind ? `kind: "${kind}",` : ""} ${mode ? `defaultMode: "${mode}",` : ""} releaseRisk: ${JSON.stringify({ risk: "new", reason: "Fixture", highRisk })} } as const;`);
+      }
+    }
+  }
+  const { definitionDefaults, addMissingDefaults, snapshotProblems } = await load();
+  assert.deepEqual(definitionDefaults(dir), expected);
+  const snapshot = fresh();
+  assert.deepEqual(addMissingDefaults(snapshot, { ...defaults, "htpr-4-new": "EVERYONE" }).modes,
+    { ...snapshot.modes, "htpr-4-new": "EVERYONE" });
+  assert.deepEqual(snapshotProblems(snapshot, Object.fromEntries(Object.keys(defaults).map(key => [key, "EVERYONE"])), now), []);
+});

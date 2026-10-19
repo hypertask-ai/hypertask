@@ -1546,7 +1546,7 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
     return { pass: true, ownerReview: null, reason: "No changed file matches the UI-change path filter." };
   }
 
-  // Title exemptions never permit widening a feature default to Everyone.
+  // Title exemptions never bypass registry default validation.
   if (changedFiles.some((path) => ["src/lib/flags.ts", "src/lib/flags/definitions.ts"].includes(path) || path.startsWith("src/lib/flags/definitions/"))) {
     try {
       parseDefinitions(headSha);

@@ -14,12 +14,12 @@ const jiti = createJiti(__filename, { interopDefault: true, alias: { '@': path.j
 const flags = jiti(path.join(root, 'src/lib/flags.ts'));
 const definition = jiti(path.join(root, 'src/lib/flags/definitions/htpr-7053-compose-board-chip.ts')).default;
 
-test('compose board chip is a per-file feature defaulting to Owner + QA, with release risk and OFF support', async () => {
+test('compose board chip is a per-file feature defaulting to Everyone, with release risk and OFF support', async () => {
   assert.equal(flags.HTPR_7053_COMPOSE_BOARD_CHIP_FLAG, 'htpr-7053-compose-board-chip');
   assert.equal(definition.key, flags.HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   assert.equal(definition.kind, 'feature');
   assert.equal(definition.defaultMode, undefined);
-  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(definition.key, id))), [true, true, false]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(definition.key, id))), [true, true, true]);
   assert.equal(definition.releaseRisk.risk, 'new');
   assert.ok(definition.releaseRisk.reason.length > 0);
   mode = 'OFF';

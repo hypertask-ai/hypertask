@@ -234,7 +234,6 @@ export function parseFlagFile(source, path) {
   }
   if (definition.kind && !["feature", "bugfix", "improvement"].includes(definition.kind)) fail("kind must be feature, bugfix or improvement");
   if (definition.defaultMode && !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(definition.defaultMode)) fail("invalid defaultMode");
-  if (definition.defaultMode === "EVERYONE" && definition.kind !== "bugfix") fail("only bugfix flags may default to Everyone");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(definition.shippedOn) || !Number.isFinite(Date.parse(definition.shippedOn)) ||
       new Date(definition.shippedOn).toISOString().slice(0, 10) !== definition.shippedOn) fail("shippedOn must be a calendar date");
   if (!definition.description.trim()) fail("description must not be empty");
@@ -245,13 +244,20 @@ export function parseFlagFile(source, path) {
   }
   if (fields.has("releaseRisk")) {
     const risk = fields.get("releaseRisk");
-    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length !== 2 || risk.properties.some((entry) =>
+    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 3 || risk.properties.some((entry) =>
       !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk needs literal risk and reason fields");
     const values = new Map(risk.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
+    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk fields");
     const level = values.get("risk"), reason = values.get("reason");
     if (!level || !typescript.isStringLiteral(level) || !["none", "small", "new"].includes(level.text) ||
         !reason || !typescript.isStringLiteral(reason) || !reason.text.trim() || /[\r\n\u2014]/.test(reason.text)) fail("releaseRisk needs risk none, small or new and a nonempty one-line reason");
     definition.releaseRisk = { risk: level.text, reason: reason.text };
+    if (values.has("highRisk")) {
+      const highRisk = values.get("highRisk");
+      if (!typescript.isStringLiteral(highRisk) || !["money", "access", "data-deletion", "customer-email"].includes(highRisk.text)) fail("releaseRisk.highRisk must be money, access, data-deletion or customer-email");
+      definition.releaseRisk.highRisk = highRisk.text;
+    }
+    if (definition.releaseRisk.highRisk && definition.defaultMode === "EVERYONE") fail("a flag with releaseRisk.highRisk may not default to Everyone");
   }
   return { identifier: declaration.name.text, definition, path };
 }
@@ -552,7 +558,7 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
 
     // Copying a literal string cannot expose a mutable alias to its const binding.
     // Keep assignment detection, including destructuring, but allow normal reads.
-    if ((name === "DEFAULT_FEATURE_FLAG_MODE" || name === "DEFAULT_BUGFIX_FLAG_MODE") &&
+    if (name === "DEFAULT_FEATURE_FLAG_MODE" &&
         typescript.isStringLiteral(unwrapExpr(declaration.initializer))) {
       if (isBindingWrite(target)) mark(target);
       return;
@@ -755,10 +761,8 @@ export function parseDefinitions(ref) {
     throw new Error("FEATURE_FLAG_DEFINITIONS must be an array literal");
   }
 
-  const kinds = [];
   const shippedOn = [];
   const keys = perFlagRows ? perFlagRows.map(({ definition }) => {
-    kinds.push(definition.kind ?? "feature");
     shippedOn.push(definition.shippedOn);
     return definition.key;
   }) : definitions.elements.map((element) => {
@@ -796,7 +800,6 @@ export function parseDefinitions(ref) {
         !["feature", "bugfix", "improvement"].includes(kind.text))) {
       throw new Error("feature flag kind must be feature, bugfix or improvement");
     }
-    kinds.push(kind?.text ?? "feature");
 
     const shippedOnProperties = element.properties.filter((property) =>
       property.name &&
@@ -829,18 +832,7 @@ export function parseDefinitions(ref) {
   if (!mode || !typescript.isStringLiteral(mode)) {
     throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
   }
-  if (mode.text !== "OWNER_AND_QA") throw new Error("Feature flags must default to Owner + QA.");
-  const bugfixModeBinding = declarations.get("DEFAULT_BUGFIX_FLAG_MODE");
-  if (bugfixModeBinding || kinds.includes("bugfix")) {
-    if (!bugfixModeBinding?.isConst) throw new Error("DEFAULT_BUGFIX_FLAG_MODE must be declared const");
-    for (const sourceFile of sourceFiles) {
-      assertPolicyBindingImmutable(sourceFile, "DEFAULT_BUGFIX_FLAG_MODE", bugfixModeBinding.declaration);
-    }
-    const bugfixMode = unwrapExpr(bugfixModeBinding.declaration.initializer);
-    if (!bugfixMode || !typescript.isStringLiteral(bugfixMode) || bugfixMode.text !== "EVERYONE") {
-      throw new Error("Bugfix flags must default to Everyone.");
-    }
-  }
+  if (mode.text !== "OWNER_AND_QA") throw new Error("Legacy flags must default to Owner + QA.");
   return { keys, shippedOn: new Map(keys.map((key, index) => [key, shippedOn[index]])) };
 }
 
