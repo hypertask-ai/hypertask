@@ -39,9 +39,14 @@ import { usePathname } from "next/navigation";
 import { getTaskDraftContent } from "@/components/RTE/draftSync";
 import { AudioButton } from "@/components/RTE/Components/AudioButton";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6555_IDLE_COMMENT_MIC_FLAG } from "@/lib/flags/keys";
+import { HTPR_6555_IDLE_COMMENT_MIC_FLAG, HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG } from "@/lib/flags/keys";
 
 const MOBILE_DOCK_FALLBACK_HEIGHT = 64;
+
+export function inboxActionsRowClassName(currentId: string | undefined, dropSelectedBoxClass: boolean): string {
+  const rowClassName = "mb-[8px] flex items-center justify-evenly gap-[8px] text-text-light-gray";
+  return dropSelectedBoxClass ? rowClassName : `${rowClassName} ${currentId}`;
+}
 
 
 const NewCommentComponent = (
@@ -625,6 +630,7 @@ const NewCommentComponent = (
   
   const TaskOptions = ({show}:{show:boolean}) => {
     const {currentId, currentTask} = useTaskContext()
+    const dropSelectedBoxClass = useFlag(HTPR_7379_INBOX_ACTIONS_NO_OUTLINE_FLAG)
     const inInbox = !!(
       currentTask?._count?.notifications && currentTask._count.notifications > 0
     )
@@ -632,9 +638,9 @@ const NewCommentComponent = (
     if (!inInbox || !show) return null;
 
     return (
-      
-      <div 
-      className={`mb-[8px] flex items-center justify-evenly gap-[8px] text-text-light-gray ${currentId}`}>
+
+      <div
+      className={inboxActionsRowClassName(currentId, dropSelectedBoxClass)}>
         { 
         inInbox ?
           <>
