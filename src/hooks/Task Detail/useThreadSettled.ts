@@ -33,7 +33,7 @@ function commentStillLoading(): boolean {
   return false;
 }
 
-export function useThreadSettled(applies: boolean) {
+export function useThreadSettled(applies: boolean, rowsFinal = true) {
   const flagLoaded = useFlagReady(HTPR_7074_TICKET_PAGE_CLS_FLAG);
   const flagOn = useFlag(HTPR_7074_TICKET_PAGE_CLS_FLAG);
   const hydrated = useHydrated();
@@ -41,12 +41,12 @@ export function useThreadSettled(applies: boolean) {
   const [slot, setSlot] = useState<HTMLElement | null>(null);
   const slotRef = useCallback((element: HTMLElement | null) => setSlot(element), []);
   const waiting = applies && !settled && (!flagLoaded || flagOn);
-  const ready = flagLoaded && hydrated;
+  const ready = flagLoaded && hydrated && rowsFinal;
   useEffect(() => {
-    if (!waiting || !slot) return;
+    if (!waiting || !slot || !rowsFinal) return;
     const timer = setTimeout(() => setSettled(true), MAX_HOLD_MS);
     return () => clearTimeout(timer);
-  }, [waiting, slot]);
+  }, [waiting, slot, rowsFinal]);
   useEffect(() => {
     if (!waiting || !slot || !ready) return;
     let frame = 0;

@@ -4,7 +4,7 @@ import { TaskRelations, ICycle } from "@/models/model";
 import { showAIChatInterfaceAtom, isAiChatSidebarModeAtom } from "@/store";
 import DescriptionAndCommentsProvider from "@/lib/contexts/TaskDetail/DescriptionProvider";
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { SettledComposerSlot } from "@/components/PageComponents/TaskDetail/CommentAndDescription/SettledComposerSlot";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
@@ -76,8 +76,10 @@ export function TaskDetailPanels(context: TaskDetailContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayoutFlag = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
-  const { secondaryPanelsReady, cachedLayout } = useTaskContext();
-  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded);
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const { secondaryPanelsReady, cachedLayout, descriptionStart, liveRowsPendingFor } = useTaskContext();
+  const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && Boolean(_mbl) && !embedded, !serverRowsShown);
   if (!currentTask) return <></>;
 
   const updateWaitingOn = (fields: {

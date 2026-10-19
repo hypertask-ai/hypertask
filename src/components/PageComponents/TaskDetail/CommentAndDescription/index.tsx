@@ -124,7 +124,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     if (serverRowsShown) return { position: "relative", display: "flow-root" };
     return { position: "absolute", transform: `translateY(${start}px)` };
   };
-  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl, !serverRowsShown);
 
 
   const content = (

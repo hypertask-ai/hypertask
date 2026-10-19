@@ -48,6 +48,7 @@ test("real task detail reads the provider snapshot without duplicate props and r
     "@/hooks/General/useAuth": { useAuth: () => ({ authenticatedUserId }) },
     "@/hooks/useFlag": { useFlag: () => subtaskLink },
     "@/lib/flags/keys": { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG: "htpr-7009-dedupe-task-detail-reads" },
+    "@/hooks/General/useHydrated": { useHydrated: () => true },
     "@/lib/taskDetailReads": require("jiti")(__filename, { alias: { "@": path.join(__dirname, "..", "src") }, interopDefault: true })(path.join(__dirname, "..", "src/lib/taskDetailReads.ts")),
     "@/hooks/Task Detail/useTaskDetailGlobalStates": {
       default: (task, comments) => {
