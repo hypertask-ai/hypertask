@@ -75,7 +75,6 @@ const useSections = ({
   const isApple = useDeviceContext()
   const isMbl = useContext(MobileViewContext);
   const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
-  const quickEntryCardsEnabled = useFlag("htpr-6175-quick-entry-cards");
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
@@ -101,7 +100,7 @@ const useSections = ({
     const editFocus =
       defaultEditFocus ??
       (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
-    if (quickEntryCardsEnabled && useQuickEntry && !editFocus) {
+    if (useQuickEntry && !editFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
@@ -109,7 +108,7 @@ const useSections = ({
     toggleCreateTaskGlobally(sectionPayload, editFocus)
   };
 
-  useEffect(nQuickAddEnabled && quickEntryCardsEnabled ? () => {
+  useEffect(nQuickAddEnabled ? () => {
     const sectionElement = sectionRef.current;
     const openQuickEntry = () => {
       setPosition("bottom");
@@ -117,7 +116,7 @@ const useSections = ({
     };
     sectionElement?.addEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
     return () => sectionElement?.removeEventListener("OPEN_QUICK_ENTRY", openQuickEntry);
-  } : () => {}, [nQuickAddEnabled, quickEntryCardsEnabled]);
+  } : () => {}, [nQuickAddEnabled]);
 
   const invokeCreateItem = async (taskTitle: string, createAnother: boolean): Promise<boolean> => {
     const itemToCreate = {
@@ -151,7 +150,6 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -163,7 +161,6 @@ const useSections = ({
     isApple,
     index,
     navigate,
-    quickEntryCardsEnabled,
     sectionId,
     title,
     _currentProject,
@@ -177,7 +174,6 @@ const useSections = ({
       isApple,
       index,
       navigate,
-      quickEntryCardsEnabled,
       sectionId,
       title,
       _currentProject,
@@ -283,7 +279,6 @@ const useSections = ({
       });
     }
     else if (
-      quickEntryCardsEnabled &&
       e.keyCode === KeyCodes.C &&
       e.altKey && !(e.ctrlKey || e.metaKey) &&
       document?.activeElement?.tagName !== "INPUT" &&
@@ -372,7 +367,7 @@ const useSections = ({
     handleLegacyKeyDown(e);
   }, [handleLegacyKeyDown]);
   let handleKeyDown = handleLegacyKeyDown;
-  if (shiftCQuickAddEnabled && nQuickAddEnabled && quickEntryCardsEnabled) {
+  if (shiftCQuickAddEnabled && nQuickAddEnabled) {
     handleKeyDown = handleShiftCKeyDown;
   }
   const handleKeyDownRef = useRef(handleKeyDown);

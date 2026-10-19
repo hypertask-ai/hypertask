@@ -213,7 +213,7 @@ const TableView = ({
     selectedIndex,
   });
   const {
-  quickEntryEnabled, quickCreateTask,
+  quickCreateTask,
   } = useTableKeyboard({
     _currentProject, rows, selectedIndex, sections, toggleCreateTaskGlobally,
     setShowCommands, isApple, handleBoardChange, _sections, lastGAt,
@@ -267,7 +267,6 @@ const TableView = ({
             selectedIndex,
             sections,
             toggleCreateTaskGlobally,
-            quickEntryEnabled,
             quickCreateTask,
           })}
         />

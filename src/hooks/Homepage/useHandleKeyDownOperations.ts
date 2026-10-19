@@ -29,7 +29,7 @@ import { buildBuiltinViewContext, isBuiltinViewId } from '@/lib/constants/builti
 import { useToggleShowArchivedOnBoard } from './useShowArchivedOnBoard'
 import useKanbanViews from '@/hooks/Homepage/Views/useKanbanViews'
 import { useFlag } from '@/hooks/useFlag'
-import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG, HTPR_6175_QUICK_ENTRY_CARDS_FLAG } from '@/lib/flags/keys'
+import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from '@/lib/flags/keys'
 import { shouldIgnoreTaskShortcutTarget } from '@/lib/keyboard/taskShortcuts'
 
 interface IHandleKeyDownOperations {
@@ -72,7 +72,6 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
     const sorting_mode_current = getActiveSortingModeFromProject(_currentProject)
     const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
     const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
-    const quickEntryCardsEnabled = useFlag(HTPR_6175_QUICK_ENTRY_CARDS_FLAG);
     const getActiveItem = () => store.get(activeItemAtom);
     const getActiveSection = () => store.get(activeSectionAtom);
 
@@ -122,9 +121,9 @@ const useHandleKeyDownOperations= (props:IHandleKeyDownOperations) => {
       document.addEventListener("keydown", handleNQuickAdd);
       return () => document.removeEventListener("keydown", handleNQuickAdd);
     };
-    useEffect(nQuickAddEnabled && quickEntryCardsEnabled
+    useEffect(nQuickAddEnabled
       ? (shiftCQuickAddEnabled ? () => registerQuickAdd(true) : () => registerQuickAdd(false))
-      : () => {}, [nQuickAddEnabled, shiftCQuickAddEnabled, quickEntryCardsEnabled, showCommands.show, filteredSections, store]);
+      : () => {}, [nQuickAddEnabled, shiftCQuickAddEnabled, showCommands.show, filteredSections, store]);
 
     const handleKeyDown = (e: any) => {
     let cmdControl = isApple&&e.metaKey || !isApple&&e.ctrlKey;
