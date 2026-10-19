@@ -136,6 +136,7 @@ export const auth = betterAuth({
   }),
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.BETTER_AUTH_URL ?? 'https://app.hypertask.ai',
+  onAPIError: { errorURL: '/login' },
   trustedOrigins:
     process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_URL
       ? [
