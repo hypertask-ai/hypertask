@@ -22,6 +22,10 @@ function getRedisUrl() {
   return redisUrl;
 }
 
+function logReconnectingConnectionError(error: NodeJS.ErrnoException) {
+  console.warn("[redis] connection error, reconnecting:", error.code ?? "", error.message);
+}
+
 const globalForRedis = globalThis as unknown as {
   redis?: RedisClient;
   redisPromise?: Promise<RedisClient>;
@@ -38,6 +42,7 @@ export async function getRedis(): Promise<RedisClient> {
 
       const { default: Redis } = await import("ioredis");
       const client = new Redis(getRedisUrl(), { protocol: 2 });
+      client.on("error", logReconnectingConnectionError);
       globalForRedis.redis = client;
       return client;
     })();
