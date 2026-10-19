@@ -13,9 +13,10 @@ import MobileTaskDueDate from "./MobileTaskDueDate";
 interface TaskDetailTitleContainerProps {
   containerRef?: React.RefObject<HTMLDivElement | null>;
   toggleDueDate: () => void;
+  clearDesktopNavigation?: boolean;
 }
 
-const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTitleContainerProps) => {
+const TaskDetailTitleContainer = ({ containerRef, toggleDueDate, clearDesktopNavigation = false }: TaskDetailTitleContainerProps) => {
   const { currentTask, parsedTask, cachedLayout } = useTaskContext();
   const _mbl = useContext(MobileViewContext);
   const [isScrolled, setIsScrolled] = useState(false);
@@ -48,6 +49,7 @@ const TaskDetailTitleContainer = ({ containerRef, toggleDueDate }: TaskDetailTit
       <BaseTitleContainer
         dataAttribute="task-detail"
         containerRef={containerRef}
+        clearDesktopNavigation={clearDesktopNavigation}
         showScrollShadow={isScrolled}
         hasSummary={(_mbl && cachedLayout) || hasSummary}
         titleRowContent={

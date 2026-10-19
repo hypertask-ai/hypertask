@@ -14,6 +14,7 @@ interface BaseTitleContainerProps {
   children?: ReactNode;
   zIndex?: number;
   useHorizontalPadding?: boolean;
+  clearDesktopNavigation?: boolean;
 }
 
 const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
@@ -27,12 +28,13 @@ const BaseTitleContainer: React.FC<BaseTitleContainerProps> = ({
   children,
   zIndex = 50,
   useHorizontalPadding = true,
+  clearDesktopNavigation = false,
 }) => {
   const _mbl = useContext(MobileViewContext);
 
   const baseContainerClasses = cn(
     "flex flex-col sm:sticky text-white-black top-0 bg-inherit w-[100%] ",
-    useHorizontalPadding && "task-detail-horizontal-title-container",
+    useHorizontalPadding && (clearDesktopNavigation ? "@xs:pl-[5.125rem] @xs:pr-[18px] @sm:pr-16" : "task-detail-horizontal-title-container"),
     _mbl
       ?
         cn(
