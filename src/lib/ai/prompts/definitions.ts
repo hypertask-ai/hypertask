@@ -424,7 +424,7 @@ If yes, send.`],
   },
   "task-writer-prompt-context-2": {
     id: "task-writer-prompt-context-2",
-    version: "1",
+    version: "2",
     parts: [`<SYSTEM_INSTRUCTION>
             <INSTRUCTIONS>
             - Format all responses **exclusively in HTML**.
@@ -442,8 +442,8 @@ If yes, send.`],
             <h3>STRUCTURED OUTPUT ELEMENTS</h3>
             When generating task content, include these elements with specific IDs for structured data extraction:
             - \`<h1 id="ai-generated-task-title">\` - Task title (always include)
-            - \`<span id="ai-generated-task-priority">\` - Priority integer 0-4 when inferable
-            - \`<span id="ai-generated-task-estimate">\` - Size/estimate integer 0-7 when inferable
+            - \`<span id="ai-generated-task-priority">\` - Priority integer when inferable: 1=Urgent, 2=High, 3=Medium, 4=Low (lower number = more urgent; 0=None)
+            - \`<span id="ai-generated-task-estimate">\` - Size integer when inferable: 2=XS, 3=S, 4=M, 5=L, 6=XL (0=None)
             - \`<span id="ai-generated-task-tags">\` - Comma-separated label IDs when inferable
             - \`<span id="ai-generated-task-status">\` - Section ID integer when inferable
             - Put every inferred property into ONE combined \`<p>Proposed properties: ...</p>\` paragraph that is the LAST element of the entire output, e.g. \`<p>Proposed properties: Priority <strong>High</strong>, Size <strong>S</strong>, Status <strong>In Progress</strong>, Tags <strong>frontend, bug</strong><span id="ai-generated-task-priority" style="display:none">2</span><span id="ai-generated-task-estimate" style="display:none">3</span><span id="ai-generated-task-status" style="display:none">102</span><span id="ai-generated-task-tags" style="display:none">uuid-1,uuid-2</span></p>\`. Hide each span with style="display:none" inside that paragraph. Only include a property actually inferred. Never print a property line anywhere else in the body.
