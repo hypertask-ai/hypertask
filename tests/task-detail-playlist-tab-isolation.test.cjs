@@ -96,16 +96,16 @@ test("one tab's playlist writes never leak into another tab's storage", () => {
   assert.doesNotMatch(JSON.stringify(tabB.raw), /A1/);
 });
 
-test("a reload in the same tab restores the playlist on the first read", () => {
+test("a reload in the same tab restores the playlist once task detail mounts it", () => {
   const tabA = createTabStorage();
 
   withTab({ sessionStorage: tabA }, (tab) => tab.write(PLAYLIST_A));
 
-  // Reloading the same tab re-creates the atom. The very first read must already see
-  // the stored playlist: task-detail navigation reads it during the initial render,
-  // and an empty first read would break next/back after a reload.
+  // HTPR-7377: the first read must match the server (no playlist) so the reloaded
+  // page hydrates; the stored playlist arrives when task detail mounts the atom.
   withTab({ sessionStorage: tabA }, (afterReload) => {
-    assert.deepEqual(afterReload.read(), PLAYLIST_A);
+    assert.equal(afterReload.read(), null);
+    assert.deepEqual(afterReload.readAfterMount(), PLAYLIST_A);
   });
 });
 

@@ -533,7 +533,6 @@ export const tasksPlayListAtom = atomWithStorage<ITasksPlaylist[] | null>(
     "tasksPlayListAtom",
     null,
     tasksPlaylistStorage,
-    { getOnInit: true },
 );
 
 export const InboxTaskIndexAtom = atom<number>({
