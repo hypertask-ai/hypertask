@@ -22,7 +22,7 @@ You are one of Valentin's own sessions (Claude Code or Codex). He runs one sessi
 1. If he gave a ticket, onboard it with the `/ticket` skill steps: put the full title and URL in a ticket comment; only HT Product Lead replies with the URL and opens it when mentioning it in chat. Then print `/rename HTPR-NNNN | Title`.
 2. Read the ticket and every comment (`hypertask tasks get HTPR-NNNN`). Two exceptions where you stop and ask Valentin in one line: a ticket assigned to Abdul, and a ticket another VCC session claimed in the last 24 hours.
 3. Claim it as yours: add your agent (`vcc task assign <TICKET> --self`) next to any human assignee, never removing one (agents are human companions, Valentin, 2026-10-02), post `<p><strong>Claimed.</strong> Valentins Claude Code session working it now.</p><p>Next: ... Session: <name>. Requested by Valentin in a Claude session, <date>, <session link>.</p>` and move it to In Progress, all via `vcc`. If an earlier PR or branch exists for it, read it first and build on it or close it with a one-line reason.
-4. Post the resume line to the ticket's agent log once: `vcc comment add HTPR-NNNN --text "<p>Resume this Claude session: claude --resume $CLAUDE_CODE_SESSION_ID</p>"`.
+4. Post the resume line to the ticket's agent log once: `vcc activity add HTPR-NNNN "Resume this Claude session: claude --resume $CLAUDE_CODE_SESSION_ID"`.
 5. Write your own unlazy ledger before real work: `~/.local/state/unlazy/sessions/<first 8 chars of $CLAUDE_CODE_SESSION_ID>/GATES.md` (never the shared `~/.local/state/unlazy/GATES.md`; two sessions collided there on 2026-10-01). One runnable gate per outcome he asked for. Nothing is reported done until its gate passes.
 
 ## In Codex
@@ -52,7 +52,7 @@ The session that built a change also QAs it on the live site. Valentin never QAs
    - Evidence lives in `~/.local/state/vcc-evidence/HTPR-NNNN/` (screenshots, video, API output) and survives cleanup.
    - Drive the real user path from the matching file in `.claude/skills/verify-qa/reference/feature-map/` (how to reach it, how to drive it, what proves it). If the ticket's area has no file, add one in the same shape in your PR (pattern from https://github.com/cursor/plugins/blob/main/pstack/skills/create-verification-skill/SKILL.md).
    - Check the flag-off path too: an account without the flag sees today's behaviour.
-5. **Report on the ticket via `vcc`:** one comment with what you checked, the evidence attached (`--attach`), the merged PR link and deploy time, and what Valentin can try himself (URL plus 3 to 5 steps). Then move the ticket: PASS to Done, or if anything failed, fix it in a new PR and repeat from step 1. Switching a flag to Everyone stays Valentin's decision.
+5. **Report on the ticket via `vcc`:** one `--kind done` comment with what you checked, the evidence attached (`--attach`), the merged PR link and deploy time, and what Valentin can try himself (URL plus 3 to 5 steps). Then move the ticket: PASS to Done, or if anything failed, fix it in a new PR and repeat from step 1. Switching a flag to Everyone stays Valentin's decision.
 6. **Report on the ticket:** verdict first, the URL to try, and any honest gap you could not verify. Only HT Product Lead mentions and opens pages in chat.
 
 ## Stay in your lane
