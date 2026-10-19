@@ -1,6 +1,8 @@
 import { DraggableProvided, DraggableStateSnapshot } from "@hello-pangea/dnd";
 import React from "react";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7350_CARD_TITLE_WRAP_FLAG } from "@/lib/flags/keys";
 
 import { IAgent, IProject, ITask, IUser } from "@/models/model";
 import { TBoardSubtaskSetting } from "@/models/Views/model";
@@ -254,12 +256,15 @@ const TaskStalenessLine = ({
   );
 };
 
-const TaskTitle = ({ title }: { title: string }) => (
-  <div className="flex flex-1 text-white-black">
-    <p className="break-all whitespace-pre-line text-left text-dense">
-      {title}
-    </p>
-  </div>
-);
+export const TaskTitle = ({ title }: { title: string }) => {
+  const wrapBetweenWords = useFlag(HTPR_7350_CARD_TITLE_WRAP_FLAG);
+  return (
+    <div className="flex flex-1 text-white-black">
+      <p className={`${wrapBetweenWords ? "wrap-anywhere" : "break-all"} whitespace-pre-line text-left text-dense`}>
+        {title}
+      </p>
+    </div>
+  );
+};
 
 export default KanbanTaskCard;
