@@ -16,6 +16,7 @@ const noop = () => {};
 const marker = (name) => () => React.createElement("div", { "data-part": name }, name);
 const task = { id: 42, projectId: 15, title: "Instant title", subTasks: [], description_: { content: "Cached body" } };
 const context = () => ({
+  liveRowsPendingFor: () => false, showLiveRows: noop,
   cachedLayout, secondaryPanelsReady, currentTask: late ? { ...task, Task_Summary: [{ content: "Late summary" }] } : task,
   hasDraft: false, allowPerks: true, uploadingComments: [], draftsFromTQ: [], visibleFeedItems: Array.from({ length: commentCount }, (_, commentIndex) => ({ kind: "comment", commentIndex })),
   virtualizeIndexes: { taskInfoVirtualIndex: 0, descriptionVirtualIndex: 1, descriptionBottomVirtualIndex: 2, commentsStartVirtualIndex: 3, numberOfComments: commentCount, uploadingCommentsStartVirtualIndex: 3 + commentCount, numberOfUploadingComments: 0 },
@@ -75,6 +76,8 @@ const thread = load("src/components/PageComponents/TaskDetail/CommentAndDescript
   "./UploadingComment/UploadingCommentContainer": { default: marker("upload-comment") },
   "./CommentContainer/NewCommentComponent": { default: marker("composer") },
   "./DescriptionContainer/DescriptonBody": { default: marker("body") },
+  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionFrame: marker("static-body") },
+  "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (html) => html },
   "../TaskInfoColumn/TaskInfo": { default: info, TaskInfoLateDetails: lateInfo },
   "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },
   "./BaseCommentAndDescriptionContainer": { default: ({ children }) => React.createElement("main", null, children) },
@@ -461,7 +464,7 @@ test("only cached stable instant opens skip automatic late scrolls; ordinary ope
         const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
           react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
           "@/hooks/useFlag": { useFlag: key => key === "instant" ? instant : key === "stable" && stable },
-          "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
+          "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached, liveRowsPendingFor: () => false }) },
           "@/lib/flags/keys": common["@/lib/flags/keys"],
           "@/lib/taskDetail/initialTicketPosition": common["@/lib/taskDetail/initialTicketPosition"],
           "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],
@@ -535,7 +538,7 @@ test("both flags preserve comment URL/hash links, reply focus and audio entry wi
       const useScroll = load("src/app/detail/[...slug]/useTaskDetailInitialScroll.tsx", {
         react: { useEffect: callback => effects.push(callback), useLayoutEffect: noop, useCallback: callback => callback },
         "@/hooks/useFlag": { useFlag: () => true },
-        "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached }) },
+        "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => ({ cachedLayout: cached, liveRowsPendingFor: () => false }) },
         "@/lib/flags/keys": common["@/lib/flags/keys"],
         "@/lib/taskDetail/initialTicketPosition": common["@/lib/taskDetail/initialTicketPosition"],
         "@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top": common["@/lib/flags/definitions/htpr-7315-unread-ticket-opens-top"],

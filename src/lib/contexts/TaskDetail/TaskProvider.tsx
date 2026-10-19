@@ -5,6 +5,8 @@ import React, {
   ReactNode,
   useState,
   useMemo,
+  useCallback,
+  startTransition,
   type RefObject,
 } from "react";
 import {
@@ -30,12 +32,14 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/General/useAuth";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG } from "@/lib/flags/keys";
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { adoptTaskDetailServerSeed, type TaskDetailServerSeed } from "@/lib/taskDetailReads";
 
 interface TaskContextProps {
   children?: ReactNode;
   parsedTask: string;
   serverTaskSeed?: TaskDetailServerSeed;
+  descriptionStart?: "server" | "live";
   allowPerks: boolean;
   _comments: string;
   _initialStacked: StackedType;
@@ -116,6 +120,8 @@ interface GlobalStates extends TaskContextProps {
   setNewCommentsLastReadAt: React.Dispatch<React.SetStateAction<string | Date | null>>;
   newCommentsSnapshotReady: boolean;
   setNewCommentsSnapshotReady: React.Dispatch<React.SetStateAction<boolean>>;
+  liveRowsPendingFor: (descriptionFirst: boolean) => boolean;
+  showLiveRows: () => void;
   toggleSubtaskLinkingModal: () => void;
   showSubtaskLinkingModal: boolean;
   showCommentDeleteModal: boolean;
@@ -193,6 +199,10 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
   const [newCommentsLastReadAt, setNewCommentsLastReadAt] = useState<string | Date | null>(null);
   const [newCommentsSnapshotReady, setNewCommentsSnapshotReady] =
     useState<boolean>(false);
+  const hydrated = useHydrated();
+  const [liveRowsPending, setLiveRowsPending] = useState(() => props.descriptionStart === "server" && !hydrated);
+  const showLiveRows = useCallback(() => startTransition(() => setLiveRowsPending(false)), []);
+  const liveRowsPendingFor = useCallback((descriptionFirst: boolean) => descriptionFirst && liveRowsPending, [liveRowsPending]);
   const initialTask = useMemo(() => JSON.parse(props.parsedTask), [props.parsedTask]);
   const queryClient = useQueryClient();
   const { authenticatedUserId } = useAuth();
@@ -226,6 +236,8 @@ const TasksProvider: React.FC<TaskContextProps> = ({ children, ...props }) => {
     setNewCommentsLastReadAt,
     newCommentsSnapshotReady,
     setNewCommentsSnapshotReady,
+    liveRowsPendingFor,
+    showLiveRows,
     forceOpenEdit,
   };
 

@@ -1,9 +1,9 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
-import React, { Suspense } from "react";
+import React, { Suspense, useEffect, useMemo } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import dynamic from "next/dynamic";
@@ -25,6 +25,8 @@ import UploadingCommentsContainer from "./UploadingComment/UploadingCommentConta
 import { SettledComposerSlot } from "./SettledComposerSlot";
 import NewCommentComponent from "./CommentContainer/NewCommentComponent";
 import DescriptonBody from "./DescriptionContainer/DescriptonBody";
+import { StaticDescriptionFrame } from "./DescriptionContainer/StaticDescriptionShell";
+import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import TaskInfo, { ITaskInfoContainer, TaskInfoLateDetails } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
@@ -73,7 +75,12 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     agentRunActivities,
     visibleFeedItems,
     allowPerks,
+    descriptionStart,
+    liveRowsPendingFor,
+    showLiveRows,
   } = useTaskContext();
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const serverRowsShown = liveRowsPendingFor(descriptionFirstFlag || descriptionStart === "server");
 
   const {
     taskInfoVirtualIndex,
@@ -86,11 +93,38 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
-  const measuredItems = hydrated ? virtualizer.getVirtualItems() : [];
-  const virtualItems = hydrated && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
-    ? [{ index: descriptionVirtualIndex, key: "description", start: 0 }, ...measuredItems]
-    : measuredItems;
-  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
+  const liveRowsShown = hydrated && !serverRowsShown;
+  useEffect(() => {
+    if (serverRowsShown) showLiveRows();
+  }, [serverRowsShown, showLiveRows]);
+  const descriptionAuthor: DescriptionAuthor = {
+    name: currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? "",
+    pfp: currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? "",
+    projectId: currentTask?.projectId,
+    subject: currentTask?.agent
+      ? { kind: "agent", id: currentTask.agent.id }
+      : currentTask?.user
+        ? { kind: "user", id: currentTask.user.id }
+        : null,
+  };
+  const descriptionRow = { index: descriptionVirtualIndex, key: "description", start: 0 };
+  const serverRenderedRows = taskInfoVirtualIndex >= 0
+    ? [{ index: taskInfoVirtualIndex, key: "task-info", start: 0 }, descriptionRow]
+    : [descriptionRow];
+  const measuredItems = liveRowsShown ? virtualizer.getVirtualItems() : [];
+  const virtualItems = serverRowsShown
+    ? serverRenderedRows
+    : liveRowsShown && !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
+      ? [descriptionRow, ...measuredItems]
+      : measuredItems;
+  const rowStaysInFlow = (index: number) =>
+    (!_mbl && index === descriptionVirtualIndex) || (cachedLayout && index <= descriptionBottomVirtualIndex);
+  const rowPlacement = (index: number, start: number): React.CSSProperties => {
+    if (rowStaysInFlow(index)) return { position: "relative" };
+    if (serverRowsShown) return { position: "relative", display: "flow-root" };
+    return { position: "absolute", transform: `translateY(${start}px)` };
+  };
+  const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl, !serverRowsShown);
 
 
   const content = (
@@ -144,16 +178,11 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionVirtualIndex) {
-            contentToRender = (
+            contentToRender = serverRowsShown ? (
+              <ServerRenderedDescription {...descriptionAuthor} />
+            ) : (
               <Description
-                name={currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? ""}
-                pfp={currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? ""}
-                projectId={currentTask?.projectId}
-                subject={currentTask?.agent
-                  ? { kind: "agent", id: currentTask.agent.id }
-                  : currentTask?.user
-                    ? { kind: "user", id: currentTask.user.id }
-                    : null}
+                {...descriptionAuthor}
                 isUploadingDescription={uploadingDescription}
                 hasDraft={hasDraft}
                 draftsFromTQ={draftsFromTQ}
@@ -214,11 +243,10 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               data-index={vItem.index}
               ref={virtualizer.measureElement}
               style={{
-                position: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? "relative" : "absolute",
+                ...rowPlacement(currentItemIndex, vItem.start),
                 top: 0,
                 left: 0,
                 width: "100%",
-                transform: (!_mbl && currentItemIndex === descriptionVirtualIndex) || (cachedLayout && currentItemIndex <= descriptionBottomVirtualIndex) ? undefined : `translateY(${vItem.start}px)`,
                 zIndex: 2000 - vItem.index,
               }}
             >
@@ -245,6 +273,25 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     </BaseCommentAndDescriptionContainer>
   );
   return cachedLayout ? <TaskPagesProvider>{content}</TaskPagesProvider> : content;
+};
+
+type DescriptionAuthor = {
+  name: string;
+  pfp: string;
+  projectId?: number;
+  subject: import("@/models/personHovercard").PersonHovercardSubject | null;
+};
+
+const ServerRenderedDescription = (author: DescriptionAuthor) => {
+  const isMbl = useContext(MobileViewContext);
+  const { description } = useDescriptionAndCommentsContext();
+  const html = useMemo(() => (description ? linkifyHtml(description) : ""), [description]);
+  return (
+    <DescriptionContainer>
+      <DescriptionTopRow {...author} />
+      <StaticDescriptionFrame html={html} isMbl={!!isMbl} />
+    </DescriptionContainer>
+  );
 };
 
 const Description = ({

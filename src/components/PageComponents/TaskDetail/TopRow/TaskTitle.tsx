@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -33,11 +33,20 @@ const TaskTitle = () => {
     focusOn,
     currentTask,
     setCurrentTask,
+    descriptionStart,
   } = useTaskContext();
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const _parsedTask = JSON.parse(parsed_task);
   const _mbl = useContext(MobileViewContext);
+  const titleStyle: React.CSSProperties = {
+    resize: "none",
+    background: "transparent",
+    fontSize: !_mbl ? 24 : 16,
+    width: "100%",
+    outline: "none",
+  };
   const [__, _setCurrentUser] = useRecoilState(currentUserAtom);
   const [, setCommands] = useRecoilState(showCommandsAtom);
   const { navigate } = useHypertasksNavigate();
@@ -198,13 +207,7 @@ const TaskTitle = () => {
             return shouldConfirmAction();
         }}
         className="font-bold"
-        style={{
-          resize: "none",
-          background: "transparent",
-          fontSize: !_mbl ? 24 : 16,
-          width: "100%",
-          outline: "none",
-        }}
+        style={descriptionFirstFlag || descriptionStart === "server" ? { ...titleStyle, fieldSizing: "content", minHeight: 37 } : titleStyle}
       />
       {currentTask?.id && currentTask.id > 0 && currentTask.project?.timeTrackingEnabled ? (
         <RunningTimerIndicator taskId={currentTask.id} />
