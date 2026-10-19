@@ -757,12 +757,19 @@ try:
     def everyone_unless_high_risk(sha):
         result = git('show', f'{sha}:src/lib/flags/releaseRisk.ts')
         return not result.returncode and 'highRisk' in result.stdout.decode()
+    def declares_high_risk(block):
+        # Strings are consumed whole, so "highRisk:" inside a reason never counts as the property.
+        tokens = re.finditer(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|\bhighRisk\b', block)
+        for token in tokens:
+            if token[0] in ('highRisk', '"highRisk"', "'highRisk'") and re.match(r'\s*:', block[token.end():]):
+                return True
+        return False
     def registry_default(block, fallback, new_rule):
         explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
         if explicit:
             return explicit[1]
         if new_rule:
-            return 'OWNER_AND_QA' if re.search(r'[\'"]?\bhighRisk\b[\'"]?\s*:', block) else 'EVERYONE'
+            return 'OWNER_AND_QA' if declares_high_risk(block) else 'EVERYONE'
         return 'EVERYONE' if re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block) else fallback
     base_new_rule = everyone_unless_high_risk(base)
     defaults = {}
