@@ -13,8 +13,8 @@ is not done.
 
 ## Flags
 
-New behaviour ships behind a flag named after the ticket, default Owner + QA.
-Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and new-behaviour flags still default Owner + QA; developers never switch a feature flag to Everyone. A `[BUGFIX]` title is only a hint.
+New behaviour ships behind a flag named after the ticket, default Everyone unless `releaseRisk.highRisk` is set (HTPR-7389).
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and improvement flags also default to Everyone unless `releaseRisk.highRisk` names money, access, data deletion or customer emails (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint.
 
 Check the mode before judging a flagged feature. `OWNER_AND_QA` is the
 expected feature/improvement mode. Bugfix flags default to `EVERYONE`. `OWNER_ONLY` and an unapproved feature `EVERYONE` are failures.

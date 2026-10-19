@@ -6,6 +6,6 @@ Do not edit shared keys, definitions or risk maps to add a flag. `scripts/genera
 
 Existing keys.ts, definitions.ts, releaseRisk.ts and flags.ts imports remain supported. Agent run constants are re-exported from their flag files by agentRuns/model.ts. Non-flag reply guidance stays in keys.ts.
 
-New features and improvements default to Owner + QA. Bugfix flags use `kind: "bugfix"` and default to Everyone unless an explicit defaultMode overrides it. Infra tickets do not add a flag.
+New flags default to Everyone unless an explicit defaultMode overrides it. A flag whose `releaseRisk.highRisk` is `money`, `access`, `data-deletion` or `customer-email` defaults to Owner + QA and may not default to Everyone (HTPR-7389). Infra tickets do not add a flag.
 
 Trusted CI and ship-check read the per-flag files without executing them and accept legacy inline registries in flags.ts or definitions.ts for old base refs. A stale premerge click is accepted only for a fetchable earlier commit associated with the same PR when its own patch differs solely in registry files. Changes to production are excluded using each commit's merge-base. Live modes, account, board, passing click and recording are still required; any other PR change needs a new click. premerge-evidence.py continues to invoke the same ship-check publisher.

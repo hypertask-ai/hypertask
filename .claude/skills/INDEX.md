@@ -39,6 +39,6 @@ Read the "when to load" column, open that SKILL.md, and follow it, including its
 ## The flag rule
 
 A real bug fix restores behaviour that used to work or was clearly intended.
-Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and new-behaviour flags still default Owner + QA; developers never switch a feature flag to Everyone. A `[BUGFIX]` title is only a hint to the mechanical gate: the
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and improvement flags also default to Everyone unless `releaseRisk.highRisk` names money, access, data deletion or customer emails (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint to the mechanical gate: the
 reviewer decides from the diff whether this is truly a fix. New visible
 behaviour dressed as a fix still needs a flag. (Matches `fix-bug/SKILL.md`.)
