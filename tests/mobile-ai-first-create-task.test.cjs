@@ -258,12 +258,10 @@ test("board create entry points follow the AI-first flag", async () => {
     ]),
   );
   let aiFirstTaskWriterEnabled = false;
-  let quickEntryEnabled = false;
   const moduleMocks = new Map([
     [path.join(root, "src/hooks/useFlag.tsx"), {
       useFlag: (key) => {
         if (key === "htpr-6141-ai-first-task-writer") return aiFirstTaskWriterEnabled;
-        if (key === "htpr-6175-quick-entry-cards") return quickEntryEnabled;
         return false;
       },
     }],
@@ -407,6 +405,8 @@ test("board create entry points follow the AI-first flag", async () => {
 
     await renderHarness(true);
     await clickColumnPlus();
+    assert.equal(container.firstElementChild.dataset.quickEntryOpen, "true");
+    assert.equal(container.firstElementChild.dataset.quickEntryPosition, "top");
     await dispatchShortcut({ key: "c", code: "KeyC", keyCode: 67 });
     await dispatchShortcut({ key: "j", code: "KeyJ", keyCode: 74, ctrlKey: true });
 
@@ -421,16 +421,13 @@ test("board create entry points follow the AI-first flag", async () => {
 
     assert.deepEqual(createCalls, [
       { payload: sectionPayload, defaultEditFocus: undefined },
-      { payload: sectionPayload, defaultEditFocus: undefined },
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
       { payload: sectionPayload, defaultEditFocus: MOBILE_AI_TASK_WRITER_FOCUS },
-      { payload: sectionPayload, defaultEditFocus: undefined },
       { payload: sectionPayload, defaultEditFocus: undefined },
     ]);
 
     aiFirstTaskWriterEnabled = false;
-    quickEntryEnabled = true;
     await renderHarness(false);
     const modalCallsBeforeQuickEntry = createCalls.length;
 

@@ -29,7 +29,6 @@ export function useTableKeyboard(context: Context) {
   } = context;
 
 
-  const quickEntryEnabled = useFlag("htpr-6175-quick-entry-cards");
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { createItem } = useAddDeleteTaskInBoards();
@@ -188,11 +187,11 @@ export function useTableKeyboard(context: Context) {
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
   };
-  useEffect(nQuickAddEnabled && quickEntryEnabled
+  useEffect(nQuickAddEnabled
     ? (shiftCQuickAddEnabled ? () => registerQuickAdd(true) : () => registerQuickAdd(false))
-    : () => {}, [_currentProject, nQuickAddEnabled, shiftCQuickAddEnabled, quickEntryEnabled, showCommands.show, assignTask]);
+    : () => {}, [_currentProject, nQuickAddEnabled, shiftCQuickAddEnabled, showCommands.show, assignTask]);
 
   return {
-  quickEntryEnabled, quickCreateTask,
+  quickCreateTask,
   };
 }

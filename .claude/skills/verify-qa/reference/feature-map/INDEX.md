@@ -20,6 +20,7 @@ each ticket only needs the one or two areas it touches.
 | Boards and views | [boards-and-views.md](boards-and-views.md) | `open-board`, `switch-boards` (write); `view-board-list`, `view-kanban-board` (load-only, `prod.spec.ts`) |
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
+| Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |

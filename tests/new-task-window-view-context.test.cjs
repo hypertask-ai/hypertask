@@ -422,7 +422,7 @@ test("C and Ctrl+J route through the same global modal with only edit focus diff
   const sections = ts.createSourceFile("sections.ts", read("src/hooks/Homepage/useSections.ts"), ts.ScriptTarget.Latest, true);
   const createTaskAt = initializer(sections, "createTaskAt").getText(sections);
   const calls = [];
-  const open = evaluate(createTaskAt, { isMbl: false, aiFirstTaskWriterEnabled: false, quickEntryCardsEnabled: true, toggleCreateTaskGlobally: (...args) => calls.push(args) });
+  const open = evaluate(createTaskAt, { isMbl: false, aiFirstTaskWriterEnabled: false, toggleCreateTaskGlobally: (...args) => calls.push(args) });
   const context = { e: { preventDefault() {} }, sectionId: 7, title: "Bugs", createTaskAt: open, setKeypressed: callback => callback({}) };
   let shortcuts = 0;
   function visit(node) {

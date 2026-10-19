@@ -7,5 +7,4 @@ export default {
   shippedOn: "2026-10-03",
   description: "Lets the board and table quick-entry box grow to eight lines, then scroll, with Create task and close buttons.",
   kind: "improvement",
-  related: ["htpr-6175-quick-entry-cards"],
 } as const satisfies FeatureFlagDefinition;

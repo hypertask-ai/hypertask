@@ -103,9 +103,8 @@ test(`create task`, { tag: [idTag('create-task'), '@mobile'] }, async ({ page })
   await page.goto(withRealtime(board.boardPath), { waitUntil: 'load' })
   await page.locator('.kanban-column-title').first().waitFor({ state: 'visible' })
 
-  // The "+" column control opens either the full create-task modal or an
-  // inline quick-entry textarea, depending on the htpr-6175-quick-entry-cards
-  // flag (src/hooks/Homepage/useSections.ts), handle both. Either way,
+  // The "+" column control uses inline quick entry unless mobile AI-first
+  // creation opens the full create-task modal. Handle both paths and
   // wait for the actual create response instead of scraping a card's href,
   // so cleanup always has the real database id (not a ticket number, and
   // never silently skipped by a `.catch(() => null)`).
