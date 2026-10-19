@@ -279,6 +279,10 @@
   border-radius: var(--m3-full);
 }
 
+.rounded:where(.rounded-light, .rounded-dark) .react-modal-sheet-backdrop {
+  border-radius: 0;
+}
+
 .rounded:where(.rounded-light, .rounded-dark) .share-task-button {
   background-color: var(--m3-primary);
   color: var(--m3-on-primary);
