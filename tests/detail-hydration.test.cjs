@@ -28,6 +28,7 @@ const TaskContext = React.createContext(null);
 const noop = () => null;
 const childrenOnly = ({ children }) => children;
 let instantTicketOpen;
+let pendingLiveBody = null;
 const mocks = {
   "@/hooks/useFlag": { useFlag: () => instantTicketOpen },
   "@/hooks/General/useHydrated": hydrated,
@@ -39,7 +40,9 @@ const mocks = {
   "next/dynamic": { default: () => noop },
   "./DescriptionContainer": { default: childrenOnly },
   "./DescriptionContainer/TopRow/DescriptionTopRow": { default: noop },
-  "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => ({ comments: [], stacked: {} }) },
+  "@/lib/contexts/TaskDetail/DescriptionProvider": { useDescriptionAndCommentsContext: () => ({ comments: [], stacked: {}, description: "Cached ticket body" }) },
+  "./DescriptionContainer/StaticDescriptionShell": { StaticDescriptionBody: ({ html }) => React.createElement("article", null, html) },
+  "@/utils/helperFunctions/linkifyHtml": { linkifyHtml: (html) => html },
   "./UploadingDescription/UploadingDescriptionContainer": { default: noop },
   "@/lib/contexts/TaskDetail/TaskProvider": { useTaskContext: () => React.useContext(TaskContext) },
   "./DescriptionContainer/DescriptionSubTasks/DescriptionSubTasks": { default: noop },
@@ -49,7 +52,10 @@ const mocks = {
   "./CommentContainer/CommentsContainer": { default: noop },
   "./UploadingComment/UploadingCommentContainer": { default: noop },
   "./CommentContainer/NewCommentComponent": { default: noop },
-  "./DescriptionContainer/DescriptonBody": { default: () => React.createElement("article", null, "Cached ticket body") },
+  "./DescriptionContainer/DescriptonBody": { default: () => {
+    if (pendingLiveBody && !pendingLiveBody.loaded) throw pendingLiveBody.promise;
+    return React.createElement("article", null, "Cached ticket body");
+  } },
   "../TaskInfoColumn/TaskInfo": { default: noop },
   "@/lib/configs/taskDetail.config": { taskDetailSpacing: { mobile: { descriptionContainer: "" } } },
   "./BaseCommentAndDescriptionContainer": { default: ({ children }) => React.createElement("section", null, children) },
@@ -166,3 +172,33 @@ test("desktop server description row keeps the in-flow style it has after hydrat
   assert.equal(row.style.position, "relative");
   assert.equal(row.style.display, "", "desktop keeps its existing block display so its margins do not change");
 });
+
+for (const mobile of [false, true]) {
+  test(`server description stays on screen while the live description code loads after hydration (${mobile ? "phone" : "desktop"})`, async (t) => {
+    const fixture = setup(t, mobile, true);
+    let release;
+    pendingLiveBody = { loaded: false, promise: new Promise((resolve) => { release = resolve; }) };
+    t.after(() => { pendingLiveBody = null; });
+    const page = () => React.createElement(React.Suspense, { fallback: "Loading..." }, fixture.render());
+    fixture.container.innerHTML = renderToString(page());
+    const serverRow = fixture.container.querySelector("[data-index]");
+    fixture.populateRows();
+    fixture.installBrowser();
+    const seen = [];
+    const observer = new fixture.container.ownerDocument.defaultView.MutationObserver(() => seen.push(fixture.container.textContent));
+    observer.observe(fixture.container, { childList: true, subtree: true, characterData: true });
+    t.after(() => observer.disconnect());
+    await React.act(async () => {
+      fixture.setRoot(hydrateRoot(fixture.container, page()));
+    });
+    assert.equal(fixture.container.querySelector("[data-index]"), serverRow, "the server row stays while live code is missing");
+    assert.match(fixture.container.textContent, /Cached ticket body/);
+    await React.act(async () => {
+      pendingLiveBody.loaded = true;
+      release();
+      await pendingLiveBody.promise;
+    });
+    assert.equal(seen.some((text) => text.includes("Loading...")), false, `page fallback appeared: ${seen.join(" | ")}`);
+    assert.match(fixture.container.textContent, /Cached ticket body/);
+  });
+}

@@ -3,7 +3,7 @@ import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
 import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
-import React, { Suspense } from "react";
+import React, { Suspense, startTransition, useEffect, useMemo, useState } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useContext } from "react";
 import dynamic from "next/dynamic";
@@ -25,6 +25,8 @@ import UploadingCommentsContainer from "./UploadingComment/UploadingCommentConta
 import { SettledComposerSlot } from "./SettledComposerSlot";
 import NewCommentComponent from "./CommentContainer/NewCommentComponent";
 import DescriptonBody from "./DescriptionContainer/DescriptonBody";
+import { StaticDescriptionBody } from "./DescriptionContainer/StaticDescriptionShell";
+import { linkifyHtml } from "@/utils/helperFunctions/linkifyHtml";
 import TaskInfo, { ITaskInfoContainer, TaskInfoLateDetails } from "../TaskInfoColumn/TaskInfo";
 import { taskDetailSpacing } from "@/lib/configs/taskDetail.config";
 import BaseCommentAndDescriptionContainer from "./BaseCommentAndDescriptionContainer";
@@ -86,12 +88,26 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
+  const [liveRowsShown, setLiveRowsShown] = useState(hydrated);
+  useEffect(() => {
+    if (!liveRowsShown) startTransition(() => setLiveRowsShown(true));
+  }, [liveRowsShown]);
+  const descriptionAuthor: DescriptionAuthor = {
+    name: currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? "",
+    pfp: currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? "",
+    projectId: currentTask?.projectId,
+    subject: currentTask?.agent
+      ? { kind: "agent", id: currentTask.agent.id }
+      : currentTask?.user
+        ? { kind: "user", id: currentTask.user.id }
+        : null,
+  };
   const descriptionRow = { index: descriptionVirtualIndex, key: "description", start: 0 };
   const serverRenderedRows = taskInfoVirtualIndex >= 0
     ? [{ index: taskInfoVirtualIndex, key: "task-info", start: 0 }, descriptionRow]
     : [descriptionRow];
-  const measuredItems = hydrated ? virtualizer.getVirtualItems() : [];
-  const virtualItems = !hydrated
+  const measuredItems = liveRowsShown ? virtualizer.getVirtualItems() : [];
+  const virtualItems = !liveRowsShown
     ? serverRenderedRows
     : !_mbl && !measuredItems.some((item) => item.index === descriptionVirtualIndex)
       ? [descriptionRow, ...measuredItems]
@@ -100,7 +116,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     (!_mbl && index === descriptionVirtualIndex) || (cachedLayout && index <= descriptionBottomVirtualIndex);
   const rowPlacement = (index: number, start: number): React.CSSProperties => {
     if (rowStaysInFlow(index)) return { position: "relative" };
-    if (!hydrated) return { position: "relative", display: "flow-root" };
+    if (!liveRowsShown) return { position: "relative", display: "flow-root" };
     return { position: "absolute", transform: `translateY(${start}px)` };
   };
   const { settled: threadSettled, slotRef: composerSlotRef } = useThreadSettled(!cachedLayout && !_mbl);
@@ -157,20 +173,15 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
               />
             );
           } else if (currentItemIndex === descriptionVirtualIndex) {
-            contentToRender = (
+            contentToRender = liveRowsShown ? (
               <Description
-                name={currentTask?.agent?.displayName ?? currentTask?.user?.displayName ?? ""}
-                pfp={currentTask?.agent?.photoURL ?? currentTask?.user?.photoURL ?? ""}
-                projectId={currentTask?.projectId}
-                subject={currentTask?.agent
-                  ? { kind: "agent", id: currentTask.agent.id }
-                  : currentTask?.user
-                    ? { kind: "user", id: currentTask.user.id }
-                    : null}
+                {...descriptionAuthor}
                 isUploadingDescription={uploadingDescription}
                 hasDraft={hasDraft}
                 draftsFromTQ={draftsFromTQ}
               />
+            ) : (
+              <ServerRenderedDescription {...descriptionAuthor} />
             );
           } else if (currentItemIndex === descriptionBottomVirtualIndex) {
             contentToRender = <div id="bottom-description" className="h-0" />;
@@ -257,6 +268,25 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     </BaseCommentAndDescriptionContainer>
   );
   return cachedLayout ? <TaskPagesProvider>{content}</TaskPagesProvider> : content;
+};
+
+type DescriptionAuthor = {
+  name: string;
+  pfp: string;
+  projectId?: number;
+  subject: import("@/models/personHovercard").PersonHovercardSubject | null;
+};
+
+const ServerRenderedDescription = (author: DescriptionAuthor) => {
+  const isMbl = useContext(MobileViewContext);
+  const { description } = useDescriptionAndCommentsContext();
+  const html = useMemo(() => (description ? linkifyHtml(description) : ""), [description]);
+  return (
+    <DescriptionContainer>
+      <DescriptionTopRow {...author} />
+      <StaticDescriptionBody html={html} isMbl={!!isMbl} />
+    </DescriptionContainer>
+  );
 };
 
 const Description = ({
