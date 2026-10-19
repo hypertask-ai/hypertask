@@ -22,6 +22,7 @@ let previousMode;
 let approvalComment;
 let approvalQueries;
 let lockQueries;
+let batchFlagOn;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
 const key = "htpr-6136-figma-connect";
@@ -41,6 +42,11 @@ stubModule("src/lib/flags.ts", {
   FeatureFlagInputError,
   FeatureFlagApprovalError,
   defaultFeatureFlagMode: () => "OWNER_AND_QA",
+  isFeatureEnabled: async (flagKey, userId) => {
+    assert.equal(flagKey, "htpr-7364-batch-flag-approval");
+    assert.equal(userId, 6);
+    return batchFlagOn;
+  },
   isFeatureFlagOwnerUserId: async (userId) => { calls.push("owner"); return owner && userId === 6; },
   listFeatureFlagModes: async (options) => { calls.push("list"); assert.deepEqual(options, { includeTicketTitles: true, includeLastChange: true }); return rows; },
   setFeatureFlagMode: async (...args) => {
@@ -131,7 +137,7 @@ test.beforeEach(() => {
   ctx = { user: { id: 6, email: "valentin.yeo@gmail.com" }, agentId: "runner-3" };
   owner = true; limited = null; writes = []; calls = []; broadcasts = 0;
   broadcastFails = false; writeError = null; previousMode = "OWNER_AND_QA";
-  approvalQueries = []; lockQueries = [];
+  approvalQueries = []; lockQueries = []; batchFlagOn = false;
   approvalComment = {
     id: 123, task: { projectId: 4060, uniqueIndex: 215, status: "Normal" },
     commentText: `Question: Switch ${key} to Off?`, text: null, editedAt: null,
@@ -349,3 +355,48 @@ test("PATCH locks the comment and task, then reactions before reading approval a
   ]);
   assert.deepEqual(calls.slice(-4), ["comment-lock", "reaction-lock", "approval", "write"]);
 });
+
+const batchHtml = `<p>@Valentin Yeo Question: Switch other-flag to Everyone?</p><p>Switch ${key} to Owner + QA?</p><p>Switch third-flag to Off?</p>`;
+
+for (const flagOn of [false, true]) {
+  test(`PATCH still allows the one-comment thumbs up with the batch flag ${flagOn ? "on" : "off"}`, async () => {
+    batchFlagOn = flagOn;
+    assert.equal((await result(await PATCH(request("PATCH", { key, mode: "OFF", reason })))).status, 200);
+    assert.equal(writes.length, 1);
+  });
+}
+
+test("PATCH still allows a batch thumbs up for each listed flag when the batch flag is on", async () => {
+  batchFlagOn = true;
+  approvalComment.commentText = "";
+  approvalComment.text = batchHtml;
+  const response = await result(await PATCH(request("PATCH", { key, mode: "OWNER_AND_QA", reason })));
+  assert.equal(response.status, 200);
+  assert.deepEqual(writes, [[key, "OWNER_AND_QA", { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason, source: "api" }]]);
+});
+
+for (const [name, setup, body] of [
+  ["a batch comment while the batch flag is off", () => { batchFlagOn = false; }, { key, mode: "OWNER_AND_QA", reason }],
+  ["a mode the batch comment does not list for that flag", () => {}, { key, mode: "EVERYONE", reason }],
+  ["a flag the batch comment does not list", () => {}, { key: "htpr-1-unlisted", mode: "OFF", reason }],
+  ["a batch comment naming the flag twice", () => {
+    approvalComment.text = `<p>Question: Switch ${key} to Owner + QA?</p><p>Switch ${key} to Everyone?</p>`;
+  }, { key, mode: "EVERYONE", reason }],
+  ["a batch comment with any other text", () => {
+    approvalComment.text = `${batchHtml}<p>and also make it faster</p>`;
+  }, { key, mode: "OWNER_AND_QA", reason }],
+  ["an edited batch comment", () => { approvalComment.editedAt = new Date(); }, { key, mode: "OWNER_AND_QA", reason }],
+  ["a batch comment without Valentin's own thumbs up", () => {
+    approvalComment.reactions[0].agentId = "runner-3";
+  }, { key, mode: "OWNER_AND_QA", reason }],
+]) {
+  test(`PATCH refuses ${name}`, async () => {
+    batchFlagOn = true;
+    approvalComment.commentText = "";
+    approvalComment.text = batchHtml;
+    setup();
+    const response = await result(await PATCH(request("PATCH", body)));
+    assert.equal(response.status, 403);
+    assert.equal(writes.length, 0);
+  });
+}
