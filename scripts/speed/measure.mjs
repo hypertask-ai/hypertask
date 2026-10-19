@@ -181,78 +181,105 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
   return { requests, stop() { for (const [event, handler] of Object.entries(handlers)) cdp.off(event, handler); } };
 }
 
-async function measure(shared, browser, profile, index, run) {
-  const mobile = profile === 'phone';
-  for (const phase of ['board', 'other']) {
-    const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
-    const page = await context.newPage();
-    page.setDefaultTimeout(60000);
-    const cdp = await context.newCDPSession(page);
-    const blocked = [];
-    const net = collectNetwork(cdp, shared.permitted, shared.safePath, blocked);
-    await cdp.send('Network.enable');
-    await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
-    await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
-    if (mobile) {
-      await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1600000 / 8, uploadThroughput: 750000 / 8, connectionType: 'cellular4g' });
-      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    }
-    await page.addInitScript(browserObserver);
+export class HostNetworkChanged extends Error {
+  constructor() { super('Host network changed'); }
+}
 
-    let surface = phase;
-    const navigate = route => shared.action(page, () => page.goto(BASE + route, { waitUntil: 'domcontentloaded' }), run.actions, 'document', route);
-    const sample = async (measuredSurface, operation, document = true) => {
-      surface = measuredSurface;
-      net.requests.clear();
-      blocked.length = 0;
-      await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
-      await operation();
-      const contentAt = await ready(page, surface);
-      const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
-      // Same two-second observation tail as speed-check; not part of content-visible timing.
-      await page.waitForTimeout(2000);
-      const metrics = await page.evaluate(({ origin, contentAt }) => {
-        const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
-        return { contentMs: contentAt - origin, innerWidth, documentWidth: document.documentElement.scrollWidth, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
-      }, { origin, contentAt });
-      const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
-      delete metrics.actionEpoch;
-      const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked] };
-      run.samples.push(row);
-      if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
-      if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
-      console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
-    };
+export function hostNetworkChanged(requests) {
+  const failed = requests.filter(requestFailed);
+  return failed.length > 0 && failed.every(request => request.errorCode === 'net::ERR_NETWORK_CHANGED');
+}
+
+export async function measurePhases(measurePhase, run, profile, index) {
+  for (const phase of ['board', 'other']) {
+    const kept = run.samples.length;
     try {
-      if (phase === 'board') {
-        await sample('board', () => navigate(BOARD));
-        continue;
-      }
-      // Direct ticket is cold in a fresh context; the board primes only the warm click below.
-      await sample('ticket-cold', () => navigate(TASK));
-      await navigate(BOARD);
-      await ready(page, 'board');
-      await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
-      await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
-      await sample('my-tasks', () => navigate('/my-tasks'));
-      await page.evaluate(() => document.activeElement?.blur());
-      await sample('page-navigation', () => shared.action(page, async () => {
-        await page.keyboard.press('g'); await page.keyboard.press('b');
-        await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
-        await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
-      }, run.actions, 'client', BOARD), false);
-      // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
-      await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
-      await page.locator('.section-container').first().focus();
-      // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
-      await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
-      await page.keyboard.press('Escape');
-    } catch {
-      const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
-      run.failure = { profile, surface, dom, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
-      throw new Error('Path unavailable');
-    } finally { net.stop(); await context.close(); }
+      await measurePhase(phase);
+    } catch (error) {
+      if (!(error instanceof HostNetworkChanged)) throw error;
+      run.samples.length = kept;
+      delete run.failure;
+      (run.networkRetries ||= []).push({ profile, phase, index });
+      console.log(`Retrying ${profile}:${phase} ${index} once in a fresh context: the host network changed mid-sample`);
+      await measurePhase(phase);
+    }
   }
+}
+
+function measure(shared, browser, profile, index, run) {
+  return measurePhases(phase => measurePhase(shared, browser, profile, index, run, phase), run, profile, index);
+}
+
+async function measurePhase(shared, browser, profile, index, run, phase) {
+  const mobile = profile === 'phone';
+  const context = await shared.setup(mobile ? withPhoneProfile(browser) : browser, mobile);
+  const page = await context.newPage();
+  page.setDefaultTimeout(60000);
+  const cdp = await context.newCDPSession(page);
+  const blocked = [];
+  const net = collectNetwork(cdp, shared.permitted, shared.safePath, blocked);
+  await cdp.send('Network.enable');
+  await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
+  await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*', requestStage: 'Request' }] });
+  if (mobile) {
+    await cdp.send('Network.emulateNetworkConditions', { offline: false, latency: 150, downloadThroughput: 1600000 / 8, uploadThroughput: 750000 / 8, connectionType: 'cellular4g' });
+    await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
+  }
+  await page.addInitScript(browserObserver);
+
+  let surface = phase;
+  const navigate = route => shared.action(page, () => page.goto(BASE + route, { waitUntil: 'domcontentloaded' }), run.actions, 'document', route);
+  const sample = async (measuredSurface, operation, document = true) => {
+    surface = measuredSurface;
+    net.requests.clear();
+    blocked.length = 0;
+    await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
+    await operation();
+    const contentAt = await ready(page, surface);
+    const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
+    // Same two-second observation tail as speed-check; not part of content-visible timing.
+    await page.waitForTimeout(2000);
+    const metrics = await page.evaluate(({ origin, contentAt }) => {
+      const longTasks = window.__analyst.longTasks.filter(task => task.startMs >= origin && task.startMs <= contentAt + 2000);
+      return { contentMs: contentAt - origin, innerWidth, documentWidth: document.documentElement.scrollWidth, longTasks, longTaskMs: longTasks.reduce((sum, task) => sum + task.durationMs, 0), actionEpoch: performance.timeOrigin + origin };
+    }, { origin, contentAt });
+    const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
+    delete metrics.actionEpoch;
+    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked] };
+    run.samples.push(row);
+    if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
+    if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
+    console.log(`Measured ${profile}:${surface} ${index}: ${Math.round(row.contentMs)}ms`);
+  };
+  try {
+    if (phase === 'board') {
+      await sample('board', () => navigate(BOARD));
+      return;
+    }
+    // Direct ticket is cold in a fresh context; the board primes only the warm click below.
+    await sample('ticket-cold', () => navigate(TASK));
+    await navigate(BOARD);
+    await ready(page, 'board');
+    await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
+    await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
+    await sample('my-tasks', () => navigate('/my-tasks'));
+    await page.evaluate(() => document.activeElement?.blur());
+    await sample('page-navigation', () => shared.action(page, async () => {
+      await page.keyboard.press('g'); await page.keyboard.press('b');
+      await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
+      await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
+    }, run.actions, 'client', BOARD), false);
+    // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
+    await page.locator('.section-container').first().click({ position: { x: 2, y: 2 } });
+    await page.locator('.section-container').first().focus();
+    // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
+    await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
+    await page.keyboard.press('Escape');
+  } catch {
+    const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
+    run.failure = { profile, surface, dom, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
+    throw hostNetworkChanged(run.failure.requests) ? new HostNetworkChanged() : new Error('Path unavailable');
+  } finally { net.stop(); await context.close(); }
 }
 
 async function main() {
@@ -301,7 +328,7 @@ async function main() {
     verifyRun(run);
   } catch (error) {
     run.status = 'failed';
-    const reasons = ['Incomplete live run', 'Missing live path', 'Invalid live metric', 'Incorrect metric totals', 'Invalid live summary', 'Production changed during run', 'Production identity unavailable', 'QA doctor failed', 'Path unavailable'];
+    const reasons = ['Incomplete live run', 'Missing live path', 'Invalid live metric', 'Incorrect metric totals', 'Invalid live summary', 'Production changed during run', 'Production identity unavailable', 'QA doctor failed', 'Path unavailable', 'Host network changed'];
     const reason = reasons.includes(error.message) ? error.message : 'Tool, auth or selector unavailable';
     run.failure = { ...run.failure, reason };
     console.error(`Cannot verify: ${reason}`);
