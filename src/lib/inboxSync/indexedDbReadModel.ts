@@ -12,6 +12,7 @@ import {
   isInboxReadModelRevision,
   type InboxReadModelRevision,
 } from "./revision";
+import { requestValue, waitForTransaction } from "@/lib/indexedDb/transactionPromises";
 
 const DATABASE_NAME = "hypertask-inbox-read-model";
 const DATABASE_VERSION = 1;
@@ -108,19 +109,6 @@ const openDatabase = (): Promise<IDBDatabase | null> => {
     };
   });
 };
-
-const waitForTransaction = (transaction: IDBTransaction): Promise<void> =>
-  new Promise((resolve, reject) => {
-    transaction.oncomplete = () => resolve();
-    transaction.onabort = () => reject(transaction.error);
-    transaction.onerror = () => reject(transaction.error);
-  });
-
-const requestValue = <T>(request: IDBRequest<T>): Promise<T> =>
-  new Promise((resolve, reject) => {
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
 
 const readInboxReadModelOnce = async (
   accountId: number,
