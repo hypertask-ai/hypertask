@@ -64,7 +64,19 @@ const mocks = {
 };
 const Thread = load("src/components/PageComponents/TaskDetail/CommentAndDescription/index.tsx", mocks).default;
 
-function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false } = {}) {
+function TaskState({ state, descriptionStart, children }) {
+  const isHydrated = hydrated.useHydrated();
+  const [pending, setPending] = React.useState(() => descriptionStart === "server" && !isHydrated);
+  const value = {
+    ...state,
+    descriptionStart,
+    liveRowsPendingFor: (descriptionFirst) => descriptionFirst && pending,
+    showLiveRows: () => React.startTransition(() => setPending(false)),
+  };
+  return React.createElement(TaskContext.Provider, { value }, children);
+}
+
+function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false, descriptionStart = "server" } = {}) {
   instantTicketOpen = flag;
   const previous = new Map(["window", "document", "IS_REACT_ACT_ENVIRONMENT"].map((key) => [key, Object.getOwnPropertyDescriptor(global, key)]));
   delete global.window;
@@ -80,7 +92,7 @@ function setup(t, mobile, flag, { taskInfoRow = false, panelsReady = false } = {
       : { taskInfoVirtualIndex: -1, descriptionVirtualIndex: 0, descriptionBottomVirtualIndex: 1, numberOfComments: 0, numberOfUploadingComments: 0 },
   };
   const render = (observer = null) => React.createElement(MobileViewContext.Provider, { value: mobile },
-    React.createElement(TaskContext.Provider, { value: state }, React.createElement(Thread, {}), observer));
+    React.createElement(TaskState, { state, descriptionStart }, React.createElement(Thread, {}), observer));
   const dom = new JSDOM("<div id='root'></div>", { url: "https://app.hypertask.ai/detail/project-2144/5" });
   const container = dom.window.document.getElementById("root");
   let reactRoot;
@@ -202,3 +214,17 @@ for (const mobile of [false, true]) {
     assert.match(fixture.container.textContent, /Cached ticket body/);
   });
 }
+
+test("with the ticket flag off on the server and in the browser, the server HTML keeps no rows and hydration fills them as before", async (t) => {
+  const fixture = setup(t, true, false, { descriptionStart: "live" });
+  fixture.container.innerHTML = renderToString(fixture.render());
+  assert.equal(fixture.container.querySelectorAll("[data-index]").length, 0);
+  fixture.populateRows();
+  fixture.installBrowser();
+  const errors = [];
+  await React.act(async () => {
+    fixture.setRoot(hydrateRoot(fixture.container, fixture.render(), { onRecoverableError: (error) => errors.push(error.message) }));
+  });
+  assert.deepEqual(errors, []);
+  assert.equal(fixture.container.querySelectorAll("[data-index]").length, 2);
+});
