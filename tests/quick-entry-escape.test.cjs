@@ -42,7 +42,7 @@ for (const growEnabled of [false, true]) test(`quick-entry Escape cancels only t
     "@/lib/constants/keyboard-handler": { KeyCodes: {} },
     "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
     "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(false) },
-    "@/hooks/useFlag": { useFlag: (key) => key === "htpr-6175-quick-entry-cards" || (growEnabled && key === "htpr-6873-quick-entry-grow") },
+    "@/hooks/useFlag": { useFlag: (key) => growEnabled && key === "htpr-6873-quick-entry-grow" },
     "@/lib/flags/keys": { HTPR_6873_QUICK_ENTRY_GROW_FLAG: "htpr-6873-quick-entry-grow" },
     "@/lib/configs/general.config": { MOBILE_TARGET: "min-h-[44px] min-w-[44px] shrink-0 flex items-center justify-center" },
     "react-hot-toast": { default: () => {} },

@@ -220,7 +220,7 @@ test("the rendered table create control follows live selection and project scope
       quickCalls.push(args);
       return quickResult;
     };
-    const quickProps = { quickEntryEnabled: true, quickCreateTask };
+    const quickProps = { quickCreateTask };
     const type = async (input, value) => {
       await act(async () => {
         Object.getOwnPropertyDescriptor(

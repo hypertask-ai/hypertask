@@ -7,11 +7,10 @@ const { JSDOM } = require("jsdom");
 const ts = require("typescript");
 
 const nFlag = "htpr-6902-n-quick-add";
-const quickFlag = "htpr-6175-quick-entry-cards";
 const shiftCFlag = "htpr-6914-shift-c-quick-add";
 const sectionPath = path.resolve(__dirname, "../src/hooks/Homepage/useSections.ts");
 
-for (const toggledFlag of [nFlag, quickFlag, shiftCFlag]) {
+for (const toggledFlag of [nFlag, shiftCFlag]) {
   test(`active column shortcuts survive ${toggledFlag} toggles without changing the active column`, async () => {
     const dom = new JSDOM("<!doctype html><div id='root'></div>");
     const names = ["window", "document", "navigator", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
@@ -21,7 +20,7 @@ for (const toggledFlag of [nFlag, quickFlag, shiftCFlag]) {
     });
     const { createRoot } = require("react-dom/client");
     const root = createRoot(document.getElementById("root"));
-    const flags = { [nFlag]: true, [quickFlag]: true, [shiftCFlag]: true, [toggledFlag]: false };
+    const flags = { [nFlag]: true, [shiftCFlag]: true, [toggledFlag]: false };
     const calls = [];
     const mocks = {
       react: React,
