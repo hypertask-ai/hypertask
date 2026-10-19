@@ -1782,6 +1782,7 @@ model Follower {
 }
 
 model Comment {
+  kind          String?
   id            Int            @id @default(autoincrement())
   text          String
   summary       String?

@@ -35,6 +35,13 @@ export interface CommentResponse {
   message?: string;
 }
 
+export interface LoggedCommentResponse {
+  success: boolean;
+  routedTo: 'log';
+  url: string;
+  activity: { id: string; runId: string; type: string; text: string; createdAt: string };
+}
+
 export interface CommentDetail {
   id: number;
   text: string;
@@ -87,7 +94,7 @@ export class CommentService {
   async addComment(
     params: unknown,
     invocation?: McpInvocationIdentity
-  ): Promise<CommentResponse> {
+  ): Promise<CommentResponse | LoggedCommentResponse> {
     const correlationId = generateCorrelationId();
 
     try {
@@ -108,7 +115,7 @@ export class CommentService {
         invocation,
         validatedInput
       );
-      const response = await this.apiClient.makeRequest<CommentResponse>(
+      const response = await this.apiClient.makeRequest<CommentResponse | LoggedCommentResponse>(
         '/mcp/comments',
         {
           method: 'POST',
@@ -137,10 +144,10 @@ export class CommentService {
               : {
                   unique_index: commentInput.unique_index,
                 }),
-            comment_id: response.comment.id,
+            ...('comment' in response ? { comment_id: response.comment.id } : {}),
             files: attachments,
           },
-          `Comment ${response.comment.id} creation`
+          'comment' in response ? `Comment ${response.comment.id} creation` : `Agent activity ${response.activity.id} creation`
         );
         return { ...response, ...attachmentOutcome };
       }

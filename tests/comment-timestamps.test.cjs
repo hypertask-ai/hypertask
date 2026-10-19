@@ -20,6 +20,7 @@ function load(relativePath, modules = {}) {
   }).outputText
   const loadedModule = { exports: {} }
   new Function('module', 'exports', 'require', 'Date', javascript)(loadedModule, loadedModule.exports, (name) => {
+    if (name === './agentChatterRouting') return load('src/lib/mcp/operations/comments/agentChatterRouting.ts')
     if (Object.hasOwn(modules, name)) return modules[name]
     throw new Error(`Unexpected import: ${name}`)
   }, FixedDate)

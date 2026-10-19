@@ -45,7 +45,8 @@ import {
 import { loadVisibleReactionAgents } from '@/lib/mcp/comments/visibleReactionAgents'
 import { overlayDurableAgentDisplayName } from '@/lib/agents/publicAgent'
 import { isFeatureEnabled } from '@/lib/flags'
-import { HTPR_6516_AGENT_ATTRIBUTION_FLAG } from '@/lib/flags/keys'
+import { COMMENT_KINDS, parseCommentKind, routeComment, type CommentKind } from './agentChatterRouting'
+import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG } from '@/lib/flags/keys'
 import { parseNumericCursor, parseUpdatedSince, projectRows } from '@/lib/mcp/listQuery'
 import { readListQuery } from '@/lib/mcp/readListQuery'
 
@@ -92,6 +93,7 @@ export interface McpMentionInput {
 
 export interface AddCommentRequest {
   dry_run?: boolean
+  kind?: CommentKind
   task_id?: number
   ticket_number?: string
   unique_index?: number
@@ -104,12 +106,14 @@ export interface AddCommentRequest {
   reply_to_invocation_id?: number
 }
 
-export interface AddCommentResponse {
+export type AddCommentResponse = {
   success: boolean
+  routedTo: 'comments'
   url: string
   idempotent_replayed?: true
   agent?: McpAgentSummary
   comment: {
+    kind: string | null
     id: number
     text: string
     createdAt: string
@@ -125,6 +129,18 @@ export interface AddCommentResponse {
       fileSize: string
       fileSource?: string
     }>
+  }
+} | {
+  success: boolean
+  routedTo: 'log'
+  url: string
+  idempotent_replayed?: true
+  activity: {
+    id: string
+    runId: string
+    type: string
+    text: string
+    createdAt: string
   }
 }
 
@@ -421,6 +437,15 @@ export async function POST(request: NextRequest) {
       )
     }
     const dryRun = dry_run ?? false
+    let kind: CommentKind | undefined
+    try {
+      kind = parseCommentKind(body.kind)
+    } catch (error) {
+      return NextResponse.json(
+        buildFieldError('invalid_field', 'kind', error instanceof Error ? error.message : 'Invalid kind', COMMENT_KINDS),
+        { status: 400 }
+      )
+    }
     const { dry_run: _dryRun, ...idempotencyBody } = body
 
     if (
@@ -799,6 +824,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const routedTo = routeComment({
+      agentId: ctx.agentId,
+      kind,
+      replyToCommentId: reply_to_comment_id,
+      replyToInvocationId: reply_to_invocation_id,
+      flagEnabled: await isFeatureEnabled(HTPR_7341_AGENT_CHATTER_TO_LOG_FLAG, user.id),
+    })
+
     if (dryRun) {
       return NextResponse.json(
         {
@@ -806,6 +839,8 @@ export async function POST(request: NextRequest) {
           dry_run: true,
           valid: true,
           would: {
+            routedTo,
+            ...(kind === undefined ? {} : { kind }),
             task_id: task.id,
             text: sanitizedText,
             content_type: 'html',
@@ -827,7 +862,39 @@ export async function POST(request: NextRequest) {
       clientIdempotencyKey,
       idempotencyBody,
       async (): Promise<AddCommentResponse> => {
+        if (routedTo === 'log' && ctx.agentId) {
+          const { runtimeAgentRunsEnabledFor, agentRunActivitiesEnabledFor, createRuntimeAgentRun, createAgentRunActivity } = await import('@/lib/agentRuns/service')
+          const { AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH, parseAgentRunActivityInput } = await import('@/lib/agentRuns/model')
+          const { parse } = await import('node-html-parser')
+          const principal = {
+            userId: user.id,
+            agentId: ctx.agentId,
+            displayName: userObj.displayName?.trim() || 'Hypertask agent',
+            source: 'agent' as const,
+          }
+          if (await runtimeAgentRunsEnabledFor(principal) && await agentRunActivitiesEnabledFor(principal)) {
+            const plainText = parse(sanitizedText).structuredText.trim()
+            const activityText = plainText.slice(0, AGENT_RUN_ACTIVITY_TEXT_MAX_LENGTH).replace(/[\uD800-\uDBFF]$/, '')
+            if (activityText) {
+              const run = await createRuntimeAgentRun(principal, { taskId: task.id, title: null, source: 'runtime' })
+              if (run) {
+                const result = await createAgentRunActivity(principal, run.id, parseAgentRunActivityInput({ type: 'thought', text: activityText }), clientIdempotencyKey)
+                if (result) {
+                  const { id, runId, type, text, createdAt } = result.activity
+                  return {
+                    success: true,
+                    routedTo: 'log' as const,
+                    url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
+                    activity: { id, runId, type, text, createdAt },
+                  }
+                }
+              }
+            }
+          }
+        }
+
         const comment = await createCommentService({
+          kind,
           text: sanitizedText,
           creatorId: user.id,
           taskId: task.id,
@@ -882,9 +949,11 @@ export async function POST(request: NextRequest) {
 
         return {
           success: true,
+          routedTo: 'comments' as const,
           url: buildMcpTaskUrl(taskWithOwner.projectId, taskWithOwner.uniqueIndex),
           ...(sessionAgent ? { agent: sessionAgent } : {}),
           comment: {
+            kind: comment.kind ?? null,
             id: comment.id,
             text: comment.text || sanitizedText,
             createdAt: (comment.createdAt instanceof Date ? comment.createdAt : new Date()).toISOString(),

@@ -3,7 +3,7 @@
 #   ship-claim <TICKET> ["<resume command>"]            claim, re-read the comments, step back if another runner claimed first
 #   ship-claim decide <RESUME_ID> <comments.json> [idle-ids-file]   pure decision from a saved comments read (tests use this)
 # Exit codes: 0 we hold the claim, 3 STEP BACK (another runner claimed first: do not start work), 2 error.
-# Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower comment id.
+# Winner: the earliest "Claimed." comment by createdAt; equal times go to the lower id string.
 # Ownership is the session resume id in the comment text, not the agent name. Assignment is never
 # consulted (a claimer may have posted but not assigned yet). A competing claim older than 6 h
 # before ours is ignored only when its agent has no ticket activity in the last 6 h (`vcc activity
@@ -27,13 +27,13 @@ decide() {
     def txt: ((.text // .commentText // "") | gsub("<[^>]*>"; " "));
     def key: (.agent.id // .agent_id // .agent.displayName // .agent_display_name // "");
     def name: (.agent.displayName // .agent_display_name // key | tostring);
-    def at: [(.createdAt // ""), ((.id // 0) | tonumber? // 0)];
+    def at: [(.createdAt // ""), ((.id // "") | tostring)];
     def secs: (.createdAt | sub("\\.[0-9]+"; "") | fromdateiso8601);
     def sess: (txt | capture("resume[[:space:]]+(?<s>[^[:space:]]+)").s? // "");
     def handover: (txt | sub("^[[:space:]]+"; "") | test("^(Handing over|Handed over|Stepping back|Released|Unclaimed)"; "i"));
     ($idle | split("\n") | map(select(. != ""))) as $idle
     | ($asg | split("\n") | map(select(. != ""))) as $asg
-    | [.comments[] | select(key != "")] as $c
+    | [(.comments[], (.activities[]? | select(txt | contains("Claimed.")) | {id, createdAt, text, agent: {id: .agentId, displayName: .agentName}})) | select(key != "")] as $c
     | [$c[] | select(txt | test("Stepping back"))] as $back
     | [$c[] | select(handover)] as $gone
     | ([$c[] | select(txt | contains($rid)) | secs] | min // 0) as $mine
@@ -65,7 +65,7 @@ fi
 
 T=${1:-}
 [[ $T =~ ^(HTPR|HYFA|YPER4)-[0-9]+$ ]] || { echo "usage: ship-claim <HTPR|HYFA|YPER4-NNNN> [\"<resume command>\"]" >&2; exit 2; }
-VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}
+VCC=${SHIP_CLAIM_VCC:-vcc}; HT=${SHIP_CLAIM_HYPERTASK:-hypertask}; HT_API=${SHIP_CLAIM_HT:-ht}
 SID=${CLAUDE_CODE_SESSION_ID:-}
 RESUME=${2:-${SHIP_CLAIM_RESUME:-}}
 [ -n "$RESUME" ] || { [ -n "$SID" ] && RESUME="claude --resume $SID"; }
@@ -79,10 +79,16 @@ RID=${RESUME##* }
 "$VCC" task assign "$T" --self >/dev/null || { echo "ship-claim: assign failed" >&2; exit 2; }
 "$VCC" task move "$T" --section "In Progress" >/dev/null || { echo "ship-claim: move failed" >&2; exit 2; }
 
-W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG"' EXIT
+W=$(mktemp); IDLE=$(mktemp); ASG=$(mktemp); LOG=$(mktemp); MERGED=$(mktemp); trap 'rm -f "$W" "$IDLE" "$ASG" "$LOG" "$MERGED"' EXIT
 "$HT" comment list "$T" --sort createdAt:desc --limit 100 --json > "$W" \
   && jq -e '.comments | type == "array"' "$W" >/dev/null \
   || { echo "ship-claim: cannot re-read comments on $T; do not start work until the claim is confirmed" >&2; exit 2; }
+
+"$HT_API" GET "/mcp/tasks/$T/agent-activity?limit=100" > "$LOG" \
+  && jq -e '.success == true and (.activities | type == "array")' "$LOG" >/dev/null \
+  && jq -s '.[0] + {activities: .[1].activities}' "$W" "$LOG" > "$MERGED" \
+  && mv "$MERGED" "$W" \
+  || { echo "ship-claim: cannot re-read agent log on $T; do not start work until the claim is confirmed" >&2; exit 2; }
 
 # Agents now assigned (one read). A failed read leaves the file empty, which skips rule (a).
 "$HT" tasks get "$T" --json 2>/dev/null | jq -r '.tasks[0] | [.agent.id?, (.assignees[]?.agent.id?)] | .[] | select(. != null)' > "$ASG" 2>/dev/null || : > "$ASG"

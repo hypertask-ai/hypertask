@@ -102,7 +102,13 @@ cat > "$D/hypertask" <<'EOF'
 if [ "$1 $2" = "tasks get" ]; then [ -n "${FAKE_TASK:-}" ] && cat "$FAKE_TASK"; exit; fi
 cat "$FAKE_COMMENTS"
 EOF
-chmod +x "$D/vcc" "$D/hypertask"
+cat > "$D/ht" <<'EOF'
+#!/usr/bin/env bash
+[ "$1 $2" = 'GET /mcp/tasks/YPER4-999/agent-activity?limit=100' ] || [ "$1 $2" = 'GET /mcp/tasks/YPER4-243/agent-activity?limit=100' ] || exit 1
+if [ -n "${FAKE_AGENT_LOG:-}" ]; then cat "$FAKE_AGENT_LOG"; else echo '{"success":true,"activities":[]}'; fi
+EOF
+chmod +x "$D/vcc" "$D/hypertask" "$D/ht"
+export SHIP_CLAIM_HT=$D/ht
 export FAKE_LOG=$D/log FAKE_COMMENTS=$D/c.json SHIP_CLAIM_VCC=$D/vcc SHIP_CLAIM_HYPERTASK=$D/hypertask SHIP_CLAIM_RESUME="claude --resume $ME"
 
 mk "$(c 10 2026-10-11T10:00:00.000Z a1 'RUNNER 7' "$(claim other-sess)")" "$(c 11 2026-10-11T10:00:09.000Z a2 'RUNNER 3' "$(claim $ME)")"
@@ -113,6 +119,15 @@ grep -q '^task unassign YPER4-999 --self' "$D/log" && ok "flow unassigns self" |
 grep -q 'Stepping back: RUNNER 7 claimed this first' "$D/log" && ok "flow posts step-back note" || bad "no note"
 grep -q '^comment add YPER4-999 .*Claimed\.' "$D/log" && grep -q '^task assign YPER4-999 --self' "$D/log" && grep -q '^task move YPER4-999 --section In Progress' "$D/log" \
   && ok "flow claims first (comment, assign, move)" || bad "claim writes missing"
+
+mk
+jq -n --arg text "$(claim "$ME")" '{success:true,activities:[{id:"bbbb-uuid",createdAt:"2026-10-11T10:00:09.000Z",agentId:"a2",agentName:"RUNNER 3",text:$text}]}' > "$D/activities.json"
+FAKE_AGENT_LOG=$D/activities.json ./ship-claim YPER4-999 >/dev/null; eq "flow: our claim only in log -> proceed" "$?" 0
+jq --arg text "$(claim other-sess)" '.activities += [{id:"aaaa-uuid",createdAt:"2026-10-11T10:00:00.000Z",agentId:"a1",agentName:"RUNNER 7",text:$text}]' "$D/activities.json" > "$D/earlier.json"
+FAKE_AGENT_LOG=$D/earlier.json ./ship-claim YPER4-999 >/dev/null; eq "flow: earlier other log claim -> step back" "$?" 3
+jq '.activities |= map(.createdAt = "2026-10-11T10:00:09.000Z")' "$D/earlier.json" > "$D/tie.json"
+FAKE_AGENT_LOG=$D/tie.json ./ship-claim YPER4-999 >/dev/null; eq "flow: UUID tie uses id string -> step back" "$?" 3
+if [ "$fails" = 0 ]; then echo "ship-claim log-claim ok"; fi
 
 # Hand-over replay through the full flow (task read via the stub).
 cp fixtures/ship-claim-y243-comments.json "$D/c.json"

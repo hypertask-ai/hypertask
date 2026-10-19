@@ -3,6 +3,7 @@ import type { AgentRunActivityPersistenceInput, AgentRunSelectionPersistenceInpu
 
 export interface CreateCommentParams {
   text: string;
+  kind?: "question" | "qa" | "done";
   creatorId: number;
   taskId: number;
   ownerId: number;
