@@ -175,6 +175,51 @@ test('CDP guard handles pause-before-request race, separates blocked writes and 
   assert.equal(cdp.listenerCount('Network.loadingFinished'), 0);
 });
 
+test('only a host network change, not an app failure, counts as a network blip', async () => {
+  const { hostNetworkChanged } = await analyst;
+  const blip = { failed: true, canceled: false, blocked: false, status: null, errorCode: 'net::ERR_NETWORK_CHANGED' };
+  const failedOn20261019 = [
+    { path: '/api/auth/bridge-session', failed: true, canceled: false, blocked: true, status: null, errorCode: null },
+    { path: '/api/users/preferences', ...blip },
+    { path: '/api/my-tasks', ...blip },
+    { path: '/api/flags', failed: false, blocked: false, status: 200 },
+  ];
+  assert.equal(hostNetworkChanged(failedOn20261019), true);
+  assert.equal(hostNetworkChanged([...failedOn20261019, { path: '/api/my-tasks', failed: false, blocked: false, status: 500 }]), false);
+  assert.equal(hostNetworkChanged([{ ...blip, errorCode: 'net::ERR_CONNECTION_RESET' }]), false);
+  assert.equal(hostNetworkChanged([{ ...blip, canceled: true }]), false);
+  assert.equal(hostNetworkChanged([]), false);
+});
+
+test('a host network change remeasures that phase once from scratch; a second change or an app failure still fails', async () => {
+  const { measurePhases, HostNetworkChanged } = await analyst;
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const run = { samples: [] };
+    const calls = [];
+    await measurePhases(async phase => {
+      calls.push(phase);
+      if (phase === 'board') return run.samples.push({ path: 'board' });
+      run.samples.push({ path: 'ticket-cold' }, { path: 'my-tasks', blip: calls.length === 2 });
+      if (calls.length === 2) { run.failure = { surface: 'my-tasks' }; throw new HostNetworkChanged(); }
+    }, run, 'phone', 1);
+    assert.deepEqual(calls, ['board', 'other', 'other']);
+    assert.deepEqual(run.samples.map(sample => sample.path), ['board', 'ticket-cold', 'my-tasks']);
+    assert.equal(run.samples.some(sample => sample.blip), false);
+    assert.equal(run.failure, undefined);
+    assert.deepEqual(run.networkRetries, [{ profile: 'phone', phase: 'other', index: 1 }]);
+
+    let attempts = 0;
+    await assert.rejects(measurePhases(async () => { attempts++; throw new HostNetworkChanged(); }, { samples: [] }, 'desktop', 2), /Host network changed/);
+    assert.equal(attempts, 2);
+
+    attempts = 0;
+    await assert.rejects(measurePhases(async () => { attempts++; throw new Error('Path unavailable'); }, { samples: [] }, 'desktop', 3), /Path unavailable/);
+    assert.equal(attempts, 1);
+  } finally { console.log = log; }
+});
+
 test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty shells or a different ticket', async () => {
   const { ready } = await analyst;
   const { JSDOM } = await import('jsdom');
