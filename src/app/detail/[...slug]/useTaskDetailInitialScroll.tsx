@@ -6,12 +6,14 @@ import { descriptionContainerId } from "@/lib/constants/TaskDetail";
 import type { TaskDetailKeyboardContext } from "./TaskDetailKeyboardContext";
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
   const unreadTicketOpensTop = useFlag(HTPR_7315_UNREAD_TICKET_OPENS_TOP_FLAG);
-  const { cachedLayout, newCommentsLastReadAt, liveRowsPending } = useTaskContext();
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
+  const { cachedLayout, newCommentsLastReadAt, liveRowsPending, descriptionStart } = useTaskContext();
+  const waitsForLiveRows = (descriptionFirstFlag || descriptionStart === "server") && liveRowsPending;
   const { bottomScrollCancelRef, hasBottomScrolledRef, newCommentsSnapshotReady, newCommentIds, comments, visibleCommentIndices, virtualizer, virtualizeIndexes, setPriority_, priorityForTaskTQ, setEstimate_, estimateForTaskTQ, showCreateTaskModal, _parsedTask, initialScrollGenerationRef, scrollElementRef, initialScrollGuard, hasScrolledToUnreadRef, initialScrollViewportRef, _mbl, searchParams, scrollVirtualize, focusOn, scrollSetting, defaultCommentFocus } = context;
 
 
@@ -187,7 +189,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     if (
       hasScrolledToUnreadRef.current ||
       !newCommentsSnapshotReady ||
-      liveRowsPending ||
+      waitsForLiveRows ||
       !initialScrollGuard.allows(generation)
     )
       return;
@@ -288,7 +290,7 @@ export function useTaskDetailInitialScroll(context: TaskDetailKeyboardContext) {
     initialScrollGuard,
     newCommentIds,
     newCommentsSnapshotReady,
-    liveRowsPending,
+    waitsForLiveRows,
     newCommentsLastReadAt,
     position,
     unreadTicketOpensTop,

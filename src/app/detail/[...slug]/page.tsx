@@ -91,7 +91,7 @@ export default async function Page(
   const slug = detailSlug;
 
   const commentsUpdatedAt = currentDate.getTime();
-  const [taskResult, commentsJson, userPreferences, serverDescriptionFirst] = await Promise.all([
+  const [taskResult, commentsJson, userPreferences, descriptionFirst] = await Promise.all([
     fetchTaskDetail(params.slug[0], params.slug[1], userObj.id),
     fetchCommentsForSlug(slug, userObj.id),
     fetchUserPreferenceController(userObj.id),
@@ -152,7 +152,7 @@ export default async function Page(
         parsedTask={JSON.stringify(task)}
         serverTaskSeed={{ userId: userObj.id, taskId: task.id, projectId: slug.projectId, uniqueIndex: slug.uniqueIndex, updatedAt: currentDate.getTime() }}
         scrollSetting={scrollSetting}
-        serverDescriptionFirst={serverDescriptionFirst}
+        descriptionStart={descriptionFirst ? "server" : "live"}
       >
         <Suspense fallback={<>Loading...</>}>
           <FollowersProvider>

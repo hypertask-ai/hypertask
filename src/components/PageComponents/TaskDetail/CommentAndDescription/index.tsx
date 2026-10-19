@@ -1,7 +1,7 @@
 "use client";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG } from "@/lib/flags/keys";
+import { HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG } from "@/lib/flags/keys";
 import { useThreadSettled } from "@/hooks/Task Detail/useThreadSettled";
 import React, { Suspense, useEffect, useMemo } from "react";
 import { MobileViewContext } from "@/lib/contexts/mobileContext";
@@ -75,10 +75,11 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
     agentRunActivities,
     visibleFeedItems,
     allowPerks,
-    descriptionFirst,
+    descriptionStart,
     liveRowsPending,
     showLiveRows,
   } = useTaskContext();
+  const descriptionFirstFlag = useFlag(HTPR_7367_SERVER_DESCRIPTION_FIRST_FLAG);
 
   const {
     taskInfoVirtualIndex,
@@ -91,6 +92,7 @@ const CommentAndDescriptionContainer = (props: ITaskInfoContainer) => {
   } = virtualizeIndexes;
 
   const hydrated = useHydrated();
+  const descriptionFirst = descriptionFirstFlag || descriptionStart === "server";
   const liveRowsShown = descriptionFirst ? !liveRowsPending : hydrated;
   useEffect(() => {
     if (liveRowsPending) showLiveRows();
