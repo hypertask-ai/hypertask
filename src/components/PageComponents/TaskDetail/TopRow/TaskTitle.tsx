@@ -1,5 +1,5 @@
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
+import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG } from "@/lib/flags/keys";
 import { useTaskContext } from "@/lib/contexts/TaskDetail/TaskProvider";
 import { useEffect, useRef, useState } from "react";
 import { updateTask } from "@/utils/api/Task Detail";
@@ -35,6 +35,7 @@ const TaskTitle = () => {
     setCurrentTask,
   } = useTaskContext();
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const titleClearOfNavFlag = useFlag(HTPR_7349_TITLE_CLEAR_OF_NAV_FLAG);
   const _parsedTask = JSON.parse(parsed_task);
   const _mbl = useContext(MobileViewContext);
   const [__, _setCurrentUser] = useRecoilState(currentUserAtom);
@@ -63,7 +64,7 @@ const TaskTitle = () => {
     textAreaRef,
     value,
     undefined,
-    `${showAiChatInterface}:${aiChatSidebarWidthPx}`
+    `${showAiChatInterface}:${aiChatSidebarWidthPx}:${titleClearOfNavFlag}`
   );
 
   const handleTitleSave = (cmdCtrlEnterPressed?: boolean) => {
