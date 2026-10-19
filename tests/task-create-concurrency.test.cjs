@@ -116,7 +116,7 @@ function harness() {
     "@/lib/flags/definitions/htpr-7131-index-new-tickets": load("src/lib/flags/definitions/htpr-7131-index-new-tickets.ts", {}),
     "../description/common-description-create": { __esModule: true, default: async () => undefined },
     "@/lib/prisma": { __esModule: true, default: prisma },
-    "@/lib/ai/labelClassifier": { scheduleClassifyTaskAiLabels: () => undefined },
+    "@/lib/ai/labelClassifier": { scheduleClassifyNewTaskAiLabels: () => undefined },
     "./getNextUniqueTaskIndex": indexModule,
     "@/utils/controllers/projects/getAllIncludes": { taskWriteAccessWhere: () => ({}) },
     "@/utils/controllers/assignees/autoAssignForSection": { autoAssignForSection: async () => "ready" },
