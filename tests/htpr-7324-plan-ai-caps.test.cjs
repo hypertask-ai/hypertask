@@ -19,6 +19,9 @@ let plan = "Pro";
 let seats = 3;
 let teamOverride = {};
 let flagCalls = [];
+let prismaCalls = { team: 0, user: 0 };
+let highWaterWrites = 0;
+let projectReads = 0;
 let daySpend = 0;
 let monthSpend = 0;
 let demoSpend = 0;
@@ -39,7 +42,9 @@ stub("src/lib/flags.ts", { isFeatureEnabled: async (key, userId) => {
   return flag;
 } });
 stub("src/lib/prisma.ts", { default: {
+  project: { findFirst: async () => { projectReads++; return { teamId: "project-team" }; } },
   team: { findUnique: async ({ select }) => {
+    prismaCalls.team++;
     if (ownerFailure) throw new Error("owner lookup unavailable");
     return {
       id: "team", googleAccount: { userId: 7324 }, members: [{ userId: 7324 }, { userId: 9 }, { userId: 9 }, { userId: 10 }],
@@ -50,7 +55,7 @@ stub("src/lib/prisma.ts", { default: {
       ...teamOverride,
     };
   } },
-  user: { findUnique: async () => ({ uid: ownerUid }) },
+  user: { findUnique: async () => { prismaCalls.user++; return { uid: ownerUid }; } },
   teamByokApiKey: { findUnique: async ({ where }) => {
     const provider = where.teamId_provider.provider;
     keyReads.push(provider);
@@ -104,6 +109,7 @@ function fakeRedis() {
       const keys = all.slice(0, count);
       const args = all.slice(count);
       if (script.includes('local previous =')) {
+        highWaterWrites++;
         const high = Math.max(get(keys[0]), Number(args[0]));
         values.set(keys[0], String(high)); return high;
       }
@@ -169,6 +175,7 @@ function mockFetch() {
 }
 
 test.beforeEach(() => {
+  prismaCalls = { team: 0, user: 0 }; highWaterWrites = 0; projectReads = 0;
   redis = fakeRedis(); flag = true; ownerFailure = false; ownerUid = "owner"; plan = "Pro"; seats = 3;
   teamOverride = {}; flagCalls = []; reports = []; daySpend = 0; monthSpend = 0; demoSpend = 0;
   keyRows = {}; keyReads = []; providerCalls = []; managed.clear();
@@ -206,10 +213,35 @@ test("owner flag is read each call; accepted cached owner, not caller, controls 
 });
 
 test("saved matching entitling item controls seats and month high-water never decreases", async () => {
-  assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 15);
-  seats = 1; assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 15);
-  seats = 5; assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 25);
-  assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:seat-team:seats-high`), "5");
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 15);
+    seats = 1;
+    now += 5 * 60 * 1000;
+    assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 15);
+    assert.equal(highWaterWrites, 1, "seat decreases do not write the high-water");
+    seats = 5;
+    assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 15, "seat snapshot lasts five minutes");
+    now += 5 * 60 * 1000;
+    assert.equal((await policy.resolveTeamAllowancePolicy("seat-team", "managed")).monthlyUsd, 25);
+    assert.equal(highWaterWrites, 2, "only a newly observed increase writes the high-water");
+    assert.equal(await redis.get(`ai-allowance:${constants.aiAllowancePeriod().key}:seat-team:seats-high`), "5");
+  } finally { Date.now = realNow; }
+});
+
+test("cached high-water refreshes increases seen by another process without rewriting Redis", async () => {
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    assert.equal((await policy.resolveTeamAllowancePolicy("cross-process-seats", "managed")).monthlyUsd, 15);
+    redis.values.set(`ai-allowance:${constants.aiAllowancePeriod().key}:cross-process-seats:seats-high`, "7");
+    now += 5 * 60 * 1000;
+    assert.equal((await policy.resolveTeamAllowancePolicy("cross-process-seats", "managed")).monthlyUsd, 35);
+    assert.equal(highWaterWrites, 1);
+  } finally { Date.now = realNow; }
 });
 
 test("seat high-water resets at the next UTC month", async () => {
@@ -390,7 +422,7 @@ function moduleWithStubs(file, stubs) {
   require("node:vm").runInNewContext(code, {
     module: loaded, exports: loaded.exports,
     require: (id) => id in stubs ? stubs[id] : id.startsWith("@/") || id.startsWith("./") ? {} : require(id),
-    Error, Response, Request, URL, URLSearchParams, AbortController, console, Date, setTimeout, clearTimeout,
+    Error, Response, Request, URL, URLSearchParams, AbortController, console, Date, setTimeout, clearTimeout, process,
     fetch: (...args) => global.fetch(...args),
   }, { filename });
   return loaded.exports;
@@ -611,3 +643,152 @@ test("real Redis sliding windows: boundary burst, exact rolling expiry, concurre
     assert.equal(await redis.zcard(`demo:${scope}`), limit);
   }
 });
+
+
+test("plan hot path caches owner identity and seats; warm call has no team/user queries or high-water writes", async () => {
+  const policies = [];
+  const middleware = allowance.createSharedAllowanceMiddleware({
+    allowanceUsd: 40, gatewayApiKey: "vck_test", modelSlug: "openai/test",
+    resolvePolicy: async (teamId) => {
+      const snapshot = await policy.resolveTeamAllowancePolicy(teamId, "managed");
+      policies.push(snapshot); return snapshot;
+    },
+  });
+  const generate = () => middleware.wrapGenerate({
+    params: { prompt: [], maxOutputTokens: 1, providerOptions: { gateway: { tags: ["team:hot-path-team"] } } },
+    doGenerate: async () => ({ usage: { inputTokens: { total: 0 }, outputTokens: { total: 0 } } }),
+  });
+  await generate();
+  assert.equal(policies[0].monthlyUsd, 15);
+  assert.ok(prismaCalls.team > 0 && prismaCalls.user > 0);
+  const writes = highWaterWrites;
+  prismaCalls = { team: 0, user: 0 };
+  await generate();
+  assert.deepEqual(policies[1], policies[0]);
+  assert.deepEqual(prismaCalls, { team: 0, user: 0 });
+  assert.equal(highWaterWrites, writes);
+  assert.deepEqual(flagCalls, [7324, 7324], "flag is still read per call");
+});
+
+test("owner uid stays cached with its id for five minutes, then refreshes", async () => {
+  const realNow = Date.now;
+  let now = realNow();
+  Date.now = () => now;
+  try {
+    assert.deepEqual(await policy.resolveTeamAllowancePolicy("identity-ttl", "shared"), free);
+    ownerUid = "guest_changed";
+    prismaCalls = { team: 0, user: 0 };
+    now += 5 * 60 * 1000 - 1;
+    assert.deepEqual(await policy.resolveTeamAllowancePolicy("identity-ttl", "shared"), free);
+    assert.deepEqual(prismaCalls, { team: 0, user: 0 });
+    now++;
+    assert.deepEqual(await policy.resolveTeamAllowancePolicy("identity-ttl", "shared"), { ...free, demoGlobal: true });
+    assert.deepEqual(prismaCalls, { team: 1, user: 1 });
+  } finally { Date.now = realNow; }
+});
+
+test("fallback resolves project/team only once and flag-off behavior stays permissive", async () => {
+  plan = "BYOK"; flag = false;
+  assert.equal(await byok.resolveAiFallbackCredential({ projectId: 7324, userId: 7324 }, async () => "vck_shared_test", new Error("customer failed")), "vck_shared_test");
+  assert.equal(projectReads, 1);
+});
+
+for (const sweeper of ["refusal", "other-team", "demo-only", "legacy"]) {
+  test(`real Redis expired reservation sweeps all original scopes via ${sweeper}; late settlement is a no-op`, async (t) => {
+    redis = await realRedis(t); if (!redis) return;
+    const guest = { ...free, demoGlobal: true };
+    const original = await reserve({ policy: guest });
+    for (const scope of original.scopes) await redis.zadd(scope.reservationsKey, Date.now() - 1, original.id);
+    if (sweeper === "refusal") {
+      await redis.set(original.scopes[0].committedKey, "900000");
+      await assert.rejects(reserve({ policy: guest, amountUsd: 0.01 }), refusal("month"));
+    } else if (sweeper === "legacy") {
+      await allowance.createSharedAllowanceMiddleware({ gatewayApiKey: "vck_test", allowanceUsd: 1, modelSlug: "openai/test" }).wrapGenerate({
+        params: { prompt: [], maxOutputTokens: 1, providerOptions: { gateway: { tags: ["team:team"] } } },
+        doGenerate: async () => ({ usage: { inputTokens: { total: 0 }, outputTokens: { total: 0 } } }),
+      });
+    } else {
+      await reserve({ teamId: sweeper === "other-team" ? "another-team" : undefined, policy: guest, amountUsd: 0.01 });
+    }
+    for (const scope of original.scopes) assert.equal(await redis.zscore(scope.reservationsKey, original.id), null);
+    const expected = sweeper === "refusal" ? ["1000000", "100000", "100000"] : ["100000", "100000", "100000"];
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), expected);
+    await allowance.settlePlanAllowance(original, 0.02);
+    assert.deepEqual(await Promise.all(original.scopes.map((scope) => redis.get(scope.committedKey))), expected);
+    if (sweeper === "refusal") {
+      for (const key of await redis.keys("*:reservations")) assert.equal(await redis.zcard(key), 0);
+    }
+  });
+}
+
+for (const entry of ["editor", "chat"]) {
+  for (const missing of ["custom", "openrouter"]) {
+    for (const credential of ["sk_customer_default", "vck_shared_test", undefined]) {
+      test(`${entry} missing ${missing} allows only customer-funded default (${credential ? credential.startsWith("sk_") ? "customer" : "platform" : "missing"})`, async () => {
+        plan = "BYOK";
+        const options = load(path.join(root, "src/lib/aiModelOptions.ts"));
+        const fallback = options.getAiModelOptionById("gpt-6-luna");
+        const lookup = { trustedTeamId: `fallback-${entry}-${missing}` };
+        const selectedCredentials = [];
+        const getKey = async (option) => (option.source ?? option) === "openai" ? credential : undefined;
+        const providers = {
+          isCustomEndpointConfig: (value) => !!value && typeof value === "object",
+          isVercelAiGatewayKey: (value) => typeof value === "string" && value.startsWith("vck_"),
+          resolveAiModel: (_provider, _model, key) => { selectedCredentials.push(key); return {}; },
+          aiUsageProviderForCredential: () => "test", providerOptionsForAiModel: () => ({}),
+          configureAiModelUsage() {}, inheritAiModelUsage() {},
+        };
+        const stubs = {
+          "@/app/api/ai/_lib/byokKeys": {
+            resolveAiFallbackCredential: byok.resolveAiFallbackCredential,
+            getByokOrTeamGatewayApiKeyForModelOption: getKey,
+            getByokOrTeamGatewayApiKeyForProvider: getKey,
+          },
+          "@/app/api/ai/_lib/modelProvider": providers,
+          "@/app/api/ai/_lib/planGate": { storePlanIdForProject: async () => "BYOK", haiku55ModelEnabled: async () => false, assertModelAllowedForPlan: async () => {} },
+          "@/lib/aiModelOptions": { ...options, getDefaultAiModelOptionForPlan: () => fallback },
+          "@/app/api/ai/_lib/providerGate": { filterModelOptionForTeam: (option) => option },
+          "@/lib/aiProviders": { resolveTeamProviderEnabled: () => true },
+          "@/lib/aiModelPreferences": { getAiModelPreferenceIds: () => ({}) },
+          "@/lib/systemModelLadder": { isAiFeatureEnabled: () => true, resolveUserFacingModelOption: () => fallback },
+          "@/app/api/ai/chat/stream/modelFallback": { previousModelForFailedStream: () => null },
+          ai: { wrapLanguageModel: ({ model }) => model },
+        };
+        let result;
+        if (entry === "editor") {
+          const editor = moduleWithStubs("src/app/api/ai/_lib/editorAi.ts", stubs);
+          const call = editor.selectTaskWriterModel({ sourceSelected: missing, modelSelected: missing, modelOptionId: missing === "custom" ? "custom" : undefined, teamContext: { teamId: lookup.trustedTeamId, settings: {} } });
+          if (credential === "sk_customer_default") result = await call;
+          else await assert.rejects(call, new RegExp(`${missing === "custom" ? "custom AI" : "OpenRouter"} key is unavailable`));
+        } else {
+          const models = moduleWithStubs("src/lib/ai/chatStream/models.ts", {
+            ...stubs, "@/lib/ai/tools/constants": { OPENAI_MODELS: new Set([fallback.model]), DEFAULT_MODEL: fallback.model },
+            "@/lib/ai/chatStream/prompt": { CLAUDE_TEMPERATURE_UNSUPPORTED_PREFIXES: [] },
+          });
+          const chat = moduleWithStubs("src/lib/ai/chatStream/turnModel.ts", {
+            ...stubs,
+            "@/lib/ai/chatStream/models": models,
+            "@/lib/prisma": { __esModule: true, default: { userSetting: { findUnique: async () => null } } },
+            "@/lib/ai/htpr7038ModelReset": { ensureHtpr7038ModelReset: async () => {} },
+            "@/lib/ai/tools/helpers": { loadActingAgent: async () => null },
+            "@/lib/nativeAgent/modelPin": { resolveAgentModelPin: ({ requestedModelOptionId }) => requestedModelOptionId },
+            "@/app/api/ai/_lib/chatTeamContext": {
+              resolveChatTeamContext: async () => ({ teamId: lookup.trustedTeamId }),
+              buildChatProviderContext: () => ({ keyLookupContext: lookup }),
+            },
+            "@/lib/ai/chatStream/errors": { reportHandledChatError: async () => {}, errorMessage: (error) => error.message, createSseErrorResponse: (message) => Response.json({ error: message }, { status: 400 }) },
+          });
+          result = await chat.loadTurnModel({ provider: missing, model: missing, modelOptionId: missing === "custom" ? "custom" : undefined, aiFeature: "aiChat" }, { id: 7324 });
+          if (credential !== "sk_customer_default") {
+            assert.equal(result.status, 400);
+            assert.match((await result.json()).error, new RegExp(`${missing === "custom" ? "custom AI" : "OpenRouter"} key is unavailable`));
+          }
+        }
+        if (credential === "sk_customer_default") {
+          assert.equal((result.selected ?? result).provider, "openai");
+          assert.deepEqual(selectedCredentials, [credential]);
+        } else assert.deepEqual(selectedCredentials, []);
+      });
+    }
+  }
+}

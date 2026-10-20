@@ -469,17 +469,27 @@ if ARGV[3] == "1" then redis.call("SET", KEYS[5], "1", "EX", ARGV[2]) end
 return fromPending + fromVisible
 `;
 
+const EXPIRE_RESERVATION_SCRIPT = `
+local function expireReservation(member, committedKey, reservationsKey, ttlSeconds)
+  local encoded = string.match(member, "^[^|]+|(.+)|%d+$")
+  local originalScopes = encoded and cjson.decode(encoded) or {{committedKey, reservationsKey, ttlSeconds}}
+  local amount = tonumber(string.match(member, "|(%d+)$") or "0")
+  for _, original in ipairs(originalScopes) do
+    if redis.call("ZREM", original[2], member) == 1 then
+      redis.call("INCRBY", original[1], amount)
+      redis.call("EXPIRE", original[1], original[3])
+    end
+  end
+end
+`;
+
 const RESERVE_SCRIPT = `
-local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
+${EXPIRE_RESERVATION_SCRIPT}
 local expired = redis.call("ZRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
 for _, member in ipairs(expired) do
-  local amount = string.match(member, "|(%d+)$")
-  if amount then committed = committed + tonumber(amount) end
+  expireReservation(member, KEYS[1], KEYS[2], ARGV[6])
 end
-if #expired > 0 then
-  redis.call("ZREMRANGEBYSCORE", KEYS[2], "-inf", ARGV[1])
-  redis.call("SET", KEYS[1], committed)
-end
+local committed = tonumber(redis.call("GET", KEYS[1]) or "0")
 local active = redis.call("ZRANGE", KEYS[2], 0, -1)
 local reserved = 0
 for _, member in ipairs(active) do
@@ -926,22 +936,18 @@ export type PlanAllowanceReservation = {
 };
 
 const RESERVE_SCOPES_SCRIPT = `
+${EXPIRE_RESERVATION_SCRIPT}
 local scopes = cjson.decode(ARGV[1])
 local now = tonumber(ARGV[2])
 local amount = tonumber(ARGV[3])
 for index, scope in ipairs(scopes) do
   local total = 0
   for _, pair in ipairs(scope.pairs) do
-    local committed = tonumber(redis.call("GET", KEYS[pair[1]]) or "0")
     local expired = redis.call("ZRANGEBYSCORE", KEYS[pair[2]], "-inf", now)
     for _, member in ipairs(expired) do
-      committed = committed + tonumber(string.match(member, "|(%d+)$") or "0")
+      expireReservation(member, KEYS[pair[1]], KEYS[pair[2]], scope.ttlSeconds)
     end
-    if #expired > 0 then
-      redis.call("ZREMRANGEBYSCORE", KEYS[pair[2]], "-inf", now)
-      redis.call("SET", KEYS[pair[1]], committed, "EX", scope.ttlSeconds)
-    end
-    total = total + committed
+    total = total + tonumber(redis.call("GET", KEYS[pair[1]]) or "0")
     for _, member in ipairs(redis.call("ZRANGE", KEYS[pair[2]], 0, -1)) do
       total = total + tonumber(string.match(member, "|(%d+)$") or "0")
     end
@@ -1046,7 +1052,8 @@ export async function reservePlanAllowance(args: {
     pending: scope.pendingKey ? keyIndex(scope.pendingKey) : undefined,
   }));
   const amount = usdToMicroUsd(args.amountUsd);
-  const id = `${randomUUID()}|${amount}`;
+  const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
+  const id = `${randomUUID()}|${JSON.stringify(originalScopes.map((scope) => [scope.committedKey, scope.reservationsKey, scope.ttlSeconds]))}|${amount}`;
   const redis = await getRedis();
   const accepted = Number(await redis.eval(RESERVE_SCOPES_SCRIPT, keys.length, ...keys,
     JSON.stringify(encoded), String(Date.now()), String(amount), String(Date.now() + RESERVATION_TTL_MS), id));
@@ -1055,7 +1062,7 @@ export async function reservePlanAllowance(args: {
     if (!refused) throw new Error("Invalid AI allowance reservation response");
     throw new SharedAiAllowanceExceededError(month.key, refused.reason);
   }
-  return { id, scopes: scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds })) };
+  return { id, scopes: originalScopes };
 }
 
 export async function settlePlanAllowance(reservation: PlanAllowanceReservation, actualUsd: number): Promise<void> {

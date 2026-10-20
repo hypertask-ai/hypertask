@@ -193,7 +193,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       selection.provider === "custom" &&
       !isCustomEndpointConfig(byokApiKey)
     ) {
-      await resolveAiFallbackCredential(keyLookupContext, async () => undefined, new Error("This team's custom AI key is unavailable."));
       selection = defaultModelSelection(
         teamProviderSettings,
         body.aiFeature,
@@ -202,7 +201,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
         requestDefaultModelOption,
       haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        keyLookupContext, () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+      );
     }
 
     if (selection.provider === "openrouter") {
@@ -216,7 +217,6 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
         );
       } else if (!byokApiKey) {
-        await resolveAiFallbackCredential(keyLookupContext, async () => undefined, new Error("This team's OpenRouter key is unavailable."));
         selection = defaultModelSelection(
           teamProviderSettings,
           body.aiFeature,
@@ -225,7 +225,9 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
           requestDefaultModelOption,
       haiku55Enabled,
         );
-        byokApiKey = await getSelectionApiKey(selection);
+        byokApiKey = await resolveAiFallbackCredential(
+          keyLookupContext, () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+        );
       }
     }
 

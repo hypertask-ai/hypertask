@@ -201,7 +201,14 @@ export async function POST(request: NextRequest) {
         return sseErrorResponse("Too many demo messages from your network. Try again in a few minutes.");
       }
     }
-  } catch {
+  } catch (error) {
+    await reportError({
+      message: error instanceof Error ? error.message : "AI request failed",
+      stack: error instanceof Error ? error.stack : undefined,
+      url: "/api/demo/chat/stream",
+      source: "handled",
+      extra: { stage: "allowance" },
+    });
     return sseErrorResponse("Demo chat is unavailable. Please try again later.", 503);
   }
   if (!capsEnabled && guest?.teamId) {

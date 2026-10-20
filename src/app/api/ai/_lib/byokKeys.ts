@@ -208,7 +208,7 @@ export async function resolveAiFallbackCredential(
   let strict = true;
   try {
     const teamId = await resolveLookupTeamId(lookup);
-    strict = await resolveLookupPlan(lookup) === "BYOK" &&
+    strict = (teamId ? await storePlanIdForProject(null, teamId) : undefined) === "BYOK" &&
       (!teamId || await teamPlanAllowanceEnabled(teamId));
     const credential = await loadCredential();
     if (strict && (!credential || (typeof credential === "string" &&

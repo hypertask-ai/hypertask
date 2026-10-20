@@ -15,24 +15,28 @@ import {
 } from "@/lib/aiAllowancePolicy";
 
 type FundingSource = "shared" | "managed" | "customer";
-const owners = new Map<string, { userId: number; expiresAt: number }>();
+const POLICY_CACHE_TTL_MS = 5 * 60 * 1000;
+const owners = new Map<string, { userId: number; uid?: string; expiresAt: number }>();
+const seatSnapshots = new Map<string, { seats: number; month: string; expiresAt: number }>();
+const seatHighWaters = new Map<string, { month: string; observedSeats: number; highWater: number; expiresAt: number }>();
 
-async function teamOwnerUserId(teamId: string) {
+async function teamOwner(teamId: string): Promise<{ userId: number; uid?: string; expiresAt: number }> {
   const cached = owners.get(teamId);
-  if (cached && cached.expiresAt > Date.now()) return cached.userId;
+  if (cached && cached.expiresAt > Date.now()) return cached;
   const team = await prisma.team.findUnique({
     where: { id: teamId },
     select: { googleAccount: { select: { userId: true } } },
   });
   if (!team?.googleAccount?.userId) throw new Error("AI allowance team owner is unavailable");
   const userId = team.googleAccount.userId;
-  owners.set(teamId, { userId, expiresAt: Date.now() + 5 * 60 * 1000 });
-  return userId;
+  const owner = { userId, expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
+  owners.set(teamId, owner);
+  return owner;
 }
 
 async function planMode(teamId: string): Promise<"legacy" | "plan" | "strict"> {
   try {
-    return await isFeatureEnabled(HTPR_7324_PLAN_AI_CAPS_FLAG, await teamOwnerUserId(teamId))
+    return await isFeatureEnabled(HTPR_7324_PLAN_AI_CAPS_FLAG, (await teamOwner(teamId)).userId)
       ? "plan" : "legacy";
   } catch {
     return "strict";
@@ -46,9 +50,17 @@ export async function teamPlanAllowanceEnabled(teamId: string): Promise<boolean>
 const SEATS_HIGH_WATER_SCRIPT = `
 local previous = tonumber(redis.call("GET", KEYS[1]) or "0")
 local seats = math.max(previous, tonumber(ARGV[1]))
-redis.call("SET", KEYS[1], seats, "EX", ARGV[2])
+if seats > previous then redis.call("SET", KEYS[1], seats, "EX", ARGV[2]) end
 return seats
 `;
+
+async function cachedPaidSeats(teamId: string, month: string): Promise<number> {
+  const cached = seatSnapshots.get(teamId);
+  if (cached && cached.month === month && cached.expiresAt > Date.now()) return cached.seats;
+  const seats = await paidSeats(teamId);
+  seatSnapshots.set(teamId, { seats, month, expiresAt: Date.now() + POLICY_CACHE_TTL_MS });
+  return seats;
+}
 
 async function paidSeats(teamId: string): Promise<number> {
   const team = await prisma.team.findUnique({
@@ -102,18 +114,32 @@ export async function resolveTeamAllowancePolicy(
   let monthlyUsd = FREE_TEAM_AI_ALLOWANCE_USD;
   let demoGlobal = true;
   try {
-    const owner = await prisma.user.findUnique({
-      where: { id: await teamOwnerUserId(teamId) }, select: { uid: true },
-    });
-    if (!owner) throw new Error("AI allowance owner identity is unavailable");
+    const owner = await teamOwner(teamId);
+    if (owner.uid === undefined) {
+      const user = await prisma.user.findUnique({ where: { id: owner.userId }, select: { uid: true } });
+      if (!user) throw new Error("AI allowance owner identity is unavailable");
+      owner.uid = user.uid;
+    }
     demoGlobal = owner.uid.startsWith("guest_");
     if (fundingSource === "managed" && !demoGlobal) {
-      const seats = await paidSeats(teamId);
       const month = aiAllowancePeriod();
-      const redis = await getRedis();
-      const highWater = Number(await redis.eval(SEATS_HIGH_WATER_SCRIPT, 1,
-        `ai-allowance:${month.key}:${teamId}:seats-high`, String(seats), String(month.ttlSeconds)));
-      if (!Number.isSafeInteger(highWater) || highWater < seats) throw new Error("Invalid AI allowance seat high-water");
+      const seats = await cachedPaidSeats(teamId, month.key);
+      let cached = seatHighWaters.get(teamId);
+      if (!cached || cached.month !== month.key || seats > cached.observedSeats) {
+        const redis = await getRedis();
+        const highWater = Number(await redis.eval(SEATS_HIGH_WATER_SCRIPT, 1,
+          `ai-allowance:${month.key}:${teamId}:seats-high`, String(seats), String(month.ttlSeconds)));
+        if (!Number.isSafeInteger(highWater) || highWater < seats) throw new Error("Invalid AI allowance seat high-water");
+        cached = { month: month.key, observedSeats: seats, highWater, expiresAt: Date.now() + POLICY_CACHE_TTL_MS };
+        seatHighWaters.set(teamId, cached);
+      } else if (cached.expiresAt <= Date.now()) {
+        const redis = await getRedis();
+        const highWater = Number(await redis.get(`ai-allowance:${month.key}:${teamId}:seats-high`));
+        if (!Number.isSafeInteger(highWater) || highWater < seats) throw new Error("Invalid AI allowance seat high-water");
+        cached.highWater = Math.max(cached.highWater, highWater);
+        cached.expiresAt = Date.now() + POLICY_CACHE_TTL_MS;
+      }
+      const highWater = cached.highWater;
       monthlyUsd = PLAN_PAID_SEAT_AI_ALLOWANCE_USD * highWater;
     }
   } catch (error) {

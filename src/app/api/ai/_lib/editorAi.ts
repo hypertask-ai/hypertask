@@ -730,7 +730,6 @@ export async function selectTaskWriterModel(args: {
   let byokApiKey = await getSelectionApiKey(selection);
 
   if (selection.provider === "custom" && !isCustomEndpointConfig(byokApiKey)) {
-    await resolveAiFallbackCredential(keyLookup, async () => undefined, new Error("This team's custom AI key is unavailable."));
     selection = defaultModelSelection(
       teamContext.settings,
       args.aiFeature ?? "taskWriter",
@@ -739,7 +738,9 @@ export async function selectTaskWriterModel(args: {
       requestDefaultModelOption,
       haiku55Enabled,
     );
-    byokApiKey = await getSelectionApiKey(selection);
+    byokApiKey = await resolveAiFallbackCredential(
+      keyLookup, () => getSelectionApiKey(selection), new Error("This team's custom AI key is unavailable."),
+    );
   }
 
   if (selection.provider === "openrouter") {
@@ -753,7 +754,6 @@ export async function selectTaskWriterModel(args: {
         haiku55Enabled,
       );
     } else if (!byokApiKey) {
-      await resolveAiFallbackCredential(keyLookup, async () => undefined, new Error("This team's OpenRouter key is unavailable."));
       selection = defaultModelSelection(
         teamContext.settings,
         args.aiFeature ?? "taskWriter",
@@ -762,7 +762,9 @@ export async function selectTaskWriterModel(args: {
         requestDefaultModelOption,
         haiku55Enabled,
       );
-      byokApiKey = await getSelectionApiKey(selection);
+      byokApiKey = await resolveAiFallbackCredential(
+        keyLookup, () => getSelectionApiKey(selection), new Error("This team's OpenRouter key is unavailable."),
+      );
     }
   }
 

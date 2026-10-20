@@ -13,6 +13,7 @@ const stub = (file, exports) => {
 let redis, flag, guest, flagCalls, modelCalls, logs, provisionCalls, gatewayKeys;
 let monthSpend, daySpend, demoSpend, redisFailure, aggregateCalls, reports;
 let identity, generationFailure;
+let errorReports = [];
 const originalFetch = global.fetch;
 const originalDemoKey = process.env.DEMO_AI_GATEWAY_API_KEY;
 const board = {
@@ -72,7 +73,7 @@ stub("src/lib/redis.ts", { getRedis: async () => {
   if (redisFailure) throw new Error("Redis unavailable");
   return redis;
 } });
-stub("src/lib/errors/reportError.ts", { reportError: async () => {} });
+stub("src/lib/errors/reportError.ts", { reportError: async (payload) => errorReports.push(payload) });
 stub("src/app/api/ai/_lib/aiUsage.ts", { logAiUsage: async (data) => logs.push(data) });
 stub("src/app/api/ai/_lib/planGate.ts", { backgroundClaudeModelEnabled: async () => false });
 stub("src/lib/demo/guestGuard.ts", { resolveGuestSession: async () => {
@@ -259,10 +260,14 @@ for (const scope of ["month", "day", "demo"]) {
   });
 }
 test("chat Redis outage refuses before model construction", async () => {
+  errorReports = [];
   redisFailure = true;
   const response = await chat(request());
   assert.equal(response.status, 503);
   assert.match(await response.text(), /unavailable/);
+  assert.equal(errorReports.length, 1);
+  assert.equal(errorReports[0].source, "handled");
+  assert.equal(errorReports[0].extra.stage, "allowance");
   assert.equal(modelCalls.length, 0);
   assert.equal(gatewayKeys.length, 0);
 });
