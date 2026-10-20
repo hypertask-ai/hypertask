@@ -21,6 +21,7 @@ const OPAQUE_PATH_SEGMENT =
   /^(?:[A-Za-z0-9_.=-]{24,}|[0-9a-f]{8}-[0-9a-f-]{27,35})$/i;
 
 const ALLOWED_EXTRA_KEYS = new Set([
+  "axiosCode",
   "digest",
   "errorMessage",
   "errorName",
@@ -35,6 +36,9 @@ const ALLOWED_EXTRA_KEYS = new Set([
   "prismaBatchRequestIndex",
   "prismaClientVersion",
   "prismaCode",
+  "requestMethod",
+  "requestPath",
+  "responseStatus",
   "route",
   "router",
   "stage",
@@ -104,6 +108,12 @@ export function safeErrorUrl(value?: string) {
   }
 }
 
+function safeExtraValue(key: string, value: Extra[string]) {
+  if (typeof value !== "string") return value;
+  if (key === "requestPath") return sanitizePathname(value).slice(0, 1000);
+  return redactErrorText(value, 1000);
+}
+
 export function safeErrorExtra(extra?: Extra) {
   if (!extra) return {};
   return Object.fromEntries(
@@ -112,7 +122,7 @@ export function safeErrorExtra(extra?: Extra) {
       .slice(0, 12)
       .map(([key, value]) => [
         `ht_${key}`,
-        typeof value === "string" ? redactErrorText(value, 1000) : value,
+        safeExtraValue(key, value),
       ]),
   );
 }

@@ -47,6 +47,11 @@ export function reportClientError(payload: ClientErrorPayload) {
     /\bHypertaskApp\b/.test(navigator.userAgent)
   ) return
   if (payload.message === 'Network Error') return
+  if (
+    payload.source === 'unhandledrejection' &&
+    payload.message === 'Request aborted' &&
+    payload.extra?.axiosCode === 'ECONNABORTED'
+  ) return
   if (/\bRequest failed with status code 401\b/.test(payload.message || '')) return
   if (navigator.webdriver === true || /HeadlessChrome/i.test(navigator.userAgent)) return
   if (
