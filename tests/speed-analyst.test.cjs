@@ -297,3 +297,40 @@ test('phone profile is a real phone: mobile user agent and device scale factor 3
   assert.notEqual(PHONE_PROFILE_KEY, 'phone-4g-4x-390x844');
   assert.match(source, /profiles: \['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY\]/);
 });
+
+test('opened-before waits until the cold ticket code finishes downloading, and gives up at the cap', async () => {
+  const { settleScripts, pendingScripts } = await analyst;
+  const chunk = { type: 'Script', blocked: false };
+  const requests = new Map([['a', { ...chunk }], ['b', { ...chunk }], ['flags', { type: 'Fetch', blocked: false }], ['blocked', { ...chunk, blocked: true }]]);
+  assert.equal(pendingScripts(requests.values()), 2);
+  let clock = 0;
+  const result = await settleScripts(requests, async ms => {
+    clock += ms;
+    if (clock === 1000) requests.get('a').durationMs = 900;
+    if (clock === 2000) requests.get('b').durationMs = 1900;
+  }, { quietMs: 500, capMs: 10000, pollMs: 250 });
+  assert.deepEqual(result, { settleMs: 2250, pendingScripts: 0 });
+
+  const stuck = new Map([['c', { ...chunk }]]);
+  assert.deepEqual(await settleScripts(stuck, async () => {}, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
+
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
+});
+
+test('a failed path records the step and a safe one-line error, never full URLs or other query values', async () => {
+  const { failureDetail, safeSearch, printSummary } = await analyst;
+  assert.equal(failureDetail(new Error('locator.scrollIntoViewIfNeeded: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator')), 'locator.scrollIntoViewIfNeeded: Timeout 60000ms exceeded.');
+  assert.equal(failureDetail(new Error('page.goto: net::ERR_ABORTED at https://app.hypertask.ai/project?id=6859&token=x')), 'page.goto: net::ERR_ABORTED at <url>');
+  assert.equal(failureDetail(undefined), 'unknown');
+  assert.deepEqual(safeSearch('https://app.hypertask.ai/project?id=6859&view=default&code=secret'), { id: '6859', view: 'default' });
+  assert.deepEqual(safeSearch('https://app.hypertask.ai/project'), {});
+
+  const lines = [];
+  const original = console.log;
+  console.log = line => lines.push(line);
+  try {
+    printSummary({ started: '2026-10-20T04:30:00Z', status: 'failed', failure: { reason: 'Path unavailable', profile: 'phone', surface: 'page-navigation', index: 4, error: 'Timeout 60000ms exceeded.' } }, []);
+  } finally { console.log = original; }
+  assert.match(lines[0], /Path unavailable at phone:page-navigation 4 \(Timeout 60000ms exceeded\.\)/);
+});

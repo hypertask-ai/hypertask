@@ -28,6 +28,7 @@ Source inventory, read 2026-10-10: `gh pr list --repo hypertask-ai/hypertask --s
 - https://app.hypertask.ai/detail/project-15/6072: DOM ancestor marking found a second remount after a key was removed ([#264](https://github.com/hypertask-ai/hypertask/pull/264)); p75 574ms desktop/422ms mobile were repro figures, not saved ms. Stricter readiness gating in [#267](https://github.com/hypertask-ai/hypertask/pull/267) crashed real boards and was reverted in [#291](https://github.com/hypertask-ai/hypertask/pull/291). Test switched-to layout, permissions, focus, modal close and preserved tree identity together.
 - https://app.hypertask.ai/detail/project-15/6047: [#384](https://github.com/hypertask-ai/hypertask/pull/384) found the readiness rAF path dropped across tab freeze/resume; about half hard-load desktop rows had timeouts. Prior p75 excluded those rows and understated the tail. Count timeout/error rates alongside completed samples; a faster failure is not a gain.
 - Shared `speed-check/measure.md` records immediate post-deploy 3x3 runs falsely reporting regressions on three of five changes. Wait at least ten minutes, retain five cold/five warm samples, use matched conditions and alternate where safe. High load, browser-version changes and different fixture/data invalidate causal conclusions.
+- https://app.hypertask.ai/detail/project-4060/513: HTPR-7367 made the cold ticket visible before its code loaded, so the harness left mid-download and ticket-warm jumped from about 3 s to 11 s with no app regression. A win on one path can silently redefine the next path's cohort; check cache hits in the waterfall.
 
 ## Dated entries
 
@@ -116,6 +117,20 @@ Description top never moved after first paint (one value in every frame, phone 5
 - `scripts/premerge-local.sh up` seeds once; a second full seed fails on `User_pkey`. Use `--live-like-control` (keeps fixtures) and switch one flag row with `withFlagModeInvalidation`.
 - CI runs the layout lock with `--all-flags-on`; a live-like local run hid the composer jump (6 of 6 passed, then 1 of 4 failed with all flags on).
 - `feature-flag-gate` does not see `isFeatureEnabled(...).catch(...)`, and a derived boolean (`const x = flag || other`) used in a ternary does not count; put the flag identifier in the ternary condition itself.
+
+### 2026-10-20: daily read Can't verify; ticket-warm cohort broken by a cold-open win (YPER4-513)
+
+**Daily read.** Can't verify: no complete run since 2026-10-18. Five failures on 2026-10-19 (one deploy during the run, four "Path unavailable", three of them phone page navigation at load 12 to 26). The harness threw away the step error, so the cause is unknown; a phone-only scratch copy passed page navigation 2 of 2 at load 15.
+
+**What found the real problem.** The 2026-10-19 22:52 run read phone ticket-warm at 11.0 s against a 2.9 to 4.0 s week. Its waterfall showed every ticket chunk downloaded with real bytes (30 to 68 KB each, about 3 s apiece at 1.6 Mbps) where earlier warm samples had 0-byte cache hits. The matching cold samples ended with 52 to 53 of 63 scripts still pending: since HTPR-7367 the cold ticket is visible from server HTML at about 2.5 s, before its own route code arrives. The 2 s tail ended, the board navigation cancelled the downloads, and "opened before" silently became "first open".
+
+**False lead.** "The ticket chunks pending in cold are the ones warm downloads": 0 of 24 overlapped by name. The cold page had not even started the lazy ticket chunks; it was still on its route chunks.
+
+**Experiment (phone, scratch copy, N=3, load 13 to 14).** Cold, then an untimed 25 s wait, then board and tap: warm 1632, 2206, 1614 ms. Without the wait: 11726, 11338, 11483 ms. Fresh context, board settled 2 s, then tap (never opened a ticket): 10018, 10344, 10031 ms. The first tap from a phone board is a real 10 s user cost, filed as https://app.hypertask.ai/detail/project-15/7395.
+
+**Fix.** `settleScripts` waits (untimed, 30 s cap) after the cold sample until no script download is pending for 1.5 s, and records `settleMs` and `pendingScripts` on the cold row. A failed path now keeps the step, a one-line error with URLs removed, the `id`/`view` query and whether the fixture link and QA board were on the page (also closes https://app.hypertask.ai/detail/project-4060/499). Ticket-warm before 2026-10-20 is not comparable; noted in the README.
+
+**Measurement trap.** A speed win upstream can change what a downstream cohort measures. When a path suddenly moves several times its range, compare its waterfall's cache hits with the previous week before blaming the app.
 
 ## Milliseconds saved scoreboard
 

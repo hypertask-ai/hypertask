@@ -86,7 +86,7 @@ export function verifyRun(run) {
 }
 
 export function printSummary(run, history) {
-  if (run.status !== 'complete') return console.log(`${run.started} ${run.status}: ${run.failure?.reason || 'Incomplete live run'}. Partial samples are not verified speed evidence.`);
+  if (run.status !== 'complete') return console.log(`${run.started} ${run.status}: ${run.failure?.reason || 'Incomplete live run'}${run.failure?.error ? ` at ${run.failure.profile}:${run.failure.surface} ${run.failure.index} (${run.failure.error})` : ''}. Partial samples are not verified speed evidence.`);
   console.log(`${run.started} production ${run.productionCommit}; QA 2343; ${run.conditions.samples} samples/path/profile; ${run.status}`);
   console.log(`Host load ${run.hostLoad.map(n => n.toFixed(1)).join('/')}, ${run.cpus} CPUs. Phone: 390x844, 4x CPU, 150ms RTT, 1.6Mbps. Desktop: 1440x900, unthrottled.`);
   const comparisons = compare(run, history);
@@ -181,6 +181,34 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
   return { requests, stop() { for (const [event, handler] of Object.entries(handlers)) cdp.off(event, handler); } };
 }
 
+export const SCRIPT_SETTLE = { quietMs: 1500, capMs: 30000, pollMs: 250 };
+
+export function pendingScripts(requests) {
+  return [...requests].filter(row => row.type === 'Script' && !row.blocked && row.durationMs === undefined).length;
+}
+
+// A server-rendered page can be visible while its code still downloads; leaving then cancels the download.
+export async function settleScripts(requests, wait, { quietMs, capMs, pollMs } = SCRIPT_SETTLE) {
+  let waited = 0;
+  let quiet = 0;
+  while (waited < capMs && quiet < quietMs) {
+    await wait(pollMs);
+    waited += pollMs;
+    quiet = pendingScripts(requests.values()) === 0 ? quiet + pollMs : 0;
+  }
+  return { settleMs: waited, pendingScripts: pendingScripts(requests.values()) };
+}
+
+export function failureDetail(error) {
+  const line = String(error?.message || error || 'unknown').split('\n')[0];
+  return line.replace(/https?:\/\/\S+/g, '<url>').slice(0, 160);
+}
+
+export function safeSearch(url) {
+  const search = new URL(url).searchParams;
+  return Object.fromEntries(['id', 'view'].filter(key => search.has(key)).map(key => [key, search.get(key).slice(0, 40)]));
+}
+
 export class HostNetworkChanged extends Error {
   constructor() { super('Host network changed'); }
 }
@@ -258,6 +286,8 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     }
     // Direct ticket is cold in a fresh context; the board primes only the warm click below.
     await sample('ticket-cold', () => navigate(TASK));
+    // Outside timing: "opened before" means the ticket code already arrived, as it has for a user who stayed on it.
+    Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms)));
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
@@ -275,9 +305,14 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     // The iPhone user agent selects Apple's Cmd modifier for the same writer shortcut.
     await sample('ctrl-j', () => shared.action(page, () => page.keyboard.press(mobile ? 'Meta+j' : 'Control+j'), run.actions, 'client', BOARD), false);
     await page.keyboard.press('Escape');
-  } catch {
-    const dom = await page.evaluate(() => ({ searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })) })).catch(() => null);
-    run.failure = { profile, surface, dom, route: new URL(page.url()).pathname, requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
+  } catch (error) {
+    const dom = await page.evaluate(task => ({
+      searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })),
+      fixtureLink: !!document.querySelector(`a[href="${task}"]`),
+      qaBoard: document.body.textContent.includes('QA Sandbox'),
+    }), TASK).catch(() => null);
+    run.failure = { profile, surface, index, error: failureDetail(error), dom, route: new URL(page.url()).pathname, search: safeSearch(page.url()), requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
+    console.error(`Failed ${profile}:${surface} ${index}: ${run.failure.error}`);
     throw hostNetworkChanged(run.failure.requests) ? new HostNetworkChanged() : new Error('Path unavailable');
   } finally { net.stop(); await context.close(); }
 }

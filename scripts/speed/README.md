@@ -21,7 +21,7 @@ Default: five samples of each of seven paths on each profile, run serially. Sear
 |---|---|
 | Board | Fresh context hard navigation to QA Sandbox, actual fixture card visible and board identity present |
 | Ticket cold | Separate fresh context hard navigation, exact title, description container and primary actions present |
-| Ticket warm | Same context, return to board, actual card click, same ticket completion; board setup excluded |
+| Ticket warm | Same context: after the cold sample, wait (untimed, 30 s cap) until its script downloads finish, then return to board, actual card click, same ticket completion; board setup and the wait excluded. The cold sample records `settleMs` and `pendingScripts` |
 | Search | Hard navigation to the existing search URL with the exact fixture title, to the visible matching result; includes real search fetching |
 | My Tasks | Hard navigation, SSR-seeded title and actual table header visible; server loading fallback cannot pass; empty list allowed |
 | Ctrl+J | Keydown on the selected QA board column to the visible existing AI Task Writer field; no text entered or submitted; Escape closes it |
@@ -32,6 +32,8 @@ Two animation frames confirm completion. The same two-second observation tail as
 All app writes and unknown API reads are blocked by the shared CDP policy. Reviewed extensions only: app-shell bootstrap POST, My Tasks GET, keyword search document POST, search values GET. Blocked analytics, read receipts, AI prompts, share creation and activity are listed separately, never counted as successful requests. These timings describe the read-only harness, not unguarded customer traffic.
 
 ## History and interpretation
+
+**Ticket-warm before 2026-10-20 is not comparable.** Since HTPR-7367 (2026-10-19) a cold ticket is visible from server HTML while most of its code is still downloading. The old harness left 2 s after content, cancelling those downloads, so the warm click downloaded the ticket code again: phone about 11 s instead of about 2 s. Runs from 2026-10-19 on 2edd39cbc or later measured a first open, not an opened-before ticket. A failed path now records `index`, a one-line `error` with URLs removed, the `id`/`view` query values, and whether the fixture link and QA board were on the page.
 
 **Phone numbers before 2026-10-11 are not comparable.** Until then the shared context had only viewport, isMobile and hasTouch, which laid the ticket page out desktop-like (innerWidth 780, document width 834 on the live ticket page; board was fine at 390). Ticket-cold, ticket-warm, search and later phone paths on ticket or search pages may carry that wider layout. Treat the first run with the real phone profile as a new phone baseline; the 15% regression flag against older phone days is not meaningful for those paths.
 
