@@ -757,20 +757,28 @@ try:
     def everyone_unless_high_risk(sha):
         result = git('show', f'{sha}:src/lib/flags/releaseRisk.ts')
         return not result.returncode and 'highRisk' in result.stdout.decode()
-    def declares_high_risk(block):
-        # Strings are consumed whole, so "highRisk:" inside a reason never counts as the property.
-        tokens = re.finditer(r'"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|\bhighRisk\b', block)
-        for token in tokens:
-            if token[0] in ('highRisk', '"highRisk"', "'highRisk'") and re.match(r'\s*:', block[token.end():]):
-                return True
-        return False
+    def definition_properties(block):
+        # Comments and strings are consumed whole, so "highRisk:" inside a reason or a comment never counts as a property.
+        pattern = r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|[A-Za-z_$][\w$]*|:'
+        tokens = [token[0] for token in re.finditer(pattern, block) if not token[0].startswith(('//', '/*'))]
+        properties = {}
+        for index in range(len(tokens) - 1):
+            name, colon = tokens[index], tokens[index + 1]
+            if colon != ':' or name == ':':
+                continue
+            name = name[1:-1] if name[0] in '"\'`' else name
+            value = tokens[index + 2] if index + 2 < len(tokens) else ''
+            properties.setdefault(name, value[1:-1] if value[:1] in ('"', "'", '`') else None)
+        return properties
     def registry_default(block, fallback, new_rule):
-        explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
-        if explicit:
-            return explicit[1]
+        properties = definition_properties(block)
+        if properties.get('defaultMode'):
+            return properties['defaultMode']
+        if properties.get('kind') == 'internal':
+            return 'OWNER_AND_QA'
         if new_rule:
-            return 'OWNER_AND_QA' if declares_high_risk(block) else 'EVERYONE'
-        return 'EVERYONE' if re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block) else fallback
+            return 'OWNER_AND_QA' if 'highRisk' in properties else 'EVERYONE'
+        return 'EVERYONE' if properties.get('kind') == 'bugfix' else fallback
     base_new_rule = everyone_unless_high_risk(base)
     defaults = {}
     for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):

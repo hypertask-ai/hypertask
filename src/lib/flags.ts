@@ -238,7 +238,7 @@ const DEFAULT_BUGFIX_FLAG_MODE: FeatureFlagMode = "EVERYONE";
 
 export function defaultFeatureFlagMode(key: string): FeatureFlagMode {
   const definition: FeatureFlagDefinition | undefined = FEATURE_FLAG_DEFINITIONS.find(({ key: declaredKey }) => declaredKey === key);
-  return definition?.defaultMode ?? (definition && !definition.releaseRisk?.highRisk
+  return definition?.defaultMode ?? (definition && definition.kind !== "internal" && !definition.releaseRisk?.highRisk
     ? DEFAULT_BUGFIX_FLAG_MODE
     : DEFAULT_FEATURE_FLAG_MODE);
 }

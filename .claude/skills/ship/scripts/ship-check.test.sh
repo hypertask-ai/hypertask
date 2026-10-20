@@ -934,7 +934,11 @@ printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { k
 F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "No highRisk: category applies" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
 F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\n/* highRisk: access */\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", // kind: "internal"\n shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 2 'expected Flags: htpr-8-newfeature=EVERYONE' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
 printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "feature", shippedOn: "2026-10-20", description: "Fixture", releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" } } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
+F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
+printf 'export const NEW_FEATURE_FLAG = "htpr-8-newfeature";\nexport default { key: NEW_FEATURE_FLAG, kind: "internal", shippedOn: "2026-10-20", description: "Fixture" } as const;\n' > "$E/flag-source/flags-head/htpr-8-newfeature.ts"
 F 0 '' FLAG_FILE=src/lib/flags/definitions/htpr-8-newfeature.ts FLAG_STATUS=added
 rm "$E/flag-source/flags-head/htpr-8-newfeature.ts" "$E/flag-source/risk-head"
 # YPER4-251: a registry of several per-flag files is listed and read through local git, with 0 contents API calls.
