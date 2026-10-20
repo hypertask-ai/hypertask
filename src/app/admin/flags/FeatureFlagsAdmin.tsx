@@ -187,10 +187,9 @@ export default function FeatureFlagsAdmin({
     onSettled: () => queryClient.invalidateQueries({ queryKey: ADMIN_FEATURE_FLAGS_QUERY_KEY }),
   });
 
-  const allRows = useMemo(
-    () => (flags.data?.flags ?? []).filter((flag) => flagKey || !releasePolicyEnabled || flag.kind !== "internal"),
-    [flags.data?.flags, flagKey, releasePolicyEnabled],
-  );
+  const allRows = releasePolicyEnabled && !flagKey
+    ? (flags.data?.flags ?? []).filter((flag) => flag.kind !== "internal")
+    : flags.data?.flags ?? [];
 
   const counts = useMemo(
     () => countFeatureFlagsByAudience(allRows, urlFiltersEnabled),
