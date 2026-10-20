@@ -715,3 +715,126 @@ test('an agent-edited refusal still blocks an earlier yes or thumbs up until a f
   assert.equal((await decision({ comments: [wireframe({ reactions: [{ userId: 6, emoji: '👍' }] }), agentEditedNo] })).state, 'failure');
   assert.equal((await decision({ comments: [wireframe(), yes(), agentEditedNo, yes({ id: 4, createdAt: '2026-10-10T12:04:00Z' })] })).state, 'success');
 });
+
+const removedKey = 'htpr-6873-quick-entry-grow';
+const removalTitle = 'HTPR-7357 [REFACTOR] Remove released flag';
+const removedDefinition = { filename: `src/lib/flags/definitions/${removedKey}.ts`, status: 'removed' };
+const removalFile = {
+  filename: 'src/components/Common/newTask.tsx', status: 'modified',
+  patch: readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1696.patch'), 'utf8'),
+};
+const removalStatus = (overrides = {}) => ({
+  context: 'premerge-evidence', state: 'success', creator: { login: 'hypertask-runners[bot]' },
+  description: `click record ok | removed-everyone: ${removedKey}`, ...overrides,
+});
+async function removalVerdict({ files = [removedDefinition, removalFile], statuses = [removalStatus()], prTitle = removalTitle, github: customize } = {}) {
+  const { run } = await gate;
+  const fixture = apiFixture({ prs: [pr(1696, { title: prTitle })], files, statuses });
+  const results = [];
+  const code = await run(['--pr', '1696'], {
+    env, github: customize ? customize(fixture.github) : fixture.github,
+    fetchImpl: commentsFetch, log: (line) => results.push(JSON.parse(line)),
+  });
+  assert.equal(code, results[0].state === 'success' ? 0 : 1);
+  return { ...results[0], calls: fixture.calls };
+}
+
+test('removed-everyone: trusted status permits the actual PR 1696 flag-removal patch', async () => {
+  assert.equal((await gate).PREMERGE_CREATOR, 'hypertask-runners[bot]');
+  const result = await removalVerdict();
+  assert.equal(result.state, 'success');
+  assert.equal(result.description, 'Flag removal of an Everyone flag; no new UI');
+  assert.ok(result.calls.some((call) => call.endpoint === `repos/fixture/repo/commits/${pr(1696).head.sha}/statuses?per_page=100&page=1`));
+  assert.equal((await decision({ title: removalTitle, files: [removedDefinition, removalFile], removedEveryone: [removedKey] })).state, 'success');
+});
+
+test('still blocked: removed-everyone without a removed flag definition', async () => {
+  for (const files of [[removalFile], [{ ...removedDefinition, status: 'modified' }, removalFile]]) {
+    assert.equal((await removalVerdict({ files })).state, 'failure');
+  }
+});
+
+test('still blocked: removed-everyone lacks the deleted key or contains an unremoved key', async () => {
+  for (const description of ['click record ok', 'click record ok | removed-everyone: htpr-1-other', `click record ok | removed-everyone: ${removedKey},htpr-1-other`]) {
+    assert.equal((await removalVerdict({ statuses: [removalStatus({ description })] })).state, 'failure');
+  }
+});
+
+test('still blocked: removed-everyone comes from an untrusted creator or a failed status', async () => {
+  for (const overrides of [{ creator: { login: 'github-actions[bot]' } }, { creator: null }, { state: 'failure' }, { state: 'pending' }]) {
+    assert.equal((await removalVerdict({ statuses: [removalStatus(overrides)] })).state, 'failure');
+  }
+});
+
+test('still blocked: newest premerge-evidence supersedes older trusted removed-everyone', async () => {
+  for (const latest of [removalStatus({ state: 'failure' }), removalStatus({ description: 'click record ok' }), removalStatus({ creator: { login: 'github-actions[bot]' } })]) {
+    assert.equal((await removalVerdict({ statuses: [latest, removalStatus()] })).state, 'failure');
+  }
+  assert.equal((await removalVerdict({ statuses: [{ context: 'other', state: 'failure' }, removalStatus(), removalStatus({ state: 'failure' })] })).state, 'success');
+});
+
+test('still blocked: removed-everyone plus an extra visible file not touching the flag', async () => {
+  for (const patch of ['-const old = 1;\n+const old = 1;', '-<input />']) {
+    assert.equal((await removalVerdict({ files: [removedDefinition, removalFile, { ...modified, patch }] })).state, 'failure');
+  }
+});
+
+test("still blocked: removed-everyone plus a new component needs Valentin's yes by name", async () => {
+  const result = await removalVerdict({ files: [removedDefinition, removalFile, { ...added, patch: removalFile.patch }] });
+  assert.equal(result.state, 'failure');
+  assert.ok(result.details.some((detail) => /ExamplePanel.*yes by name/.test(detail)));
+});
+
+test('still blocked: removed-everyone with a missing patch or non-modified visible file', async () => {
+  for (const file of [{ ...removalFile, patch: undefined }, { ...removalFile, patch: null }, { ...removalFile, status: 'renamed' }, { ...removalFile, status: 'removed' }]) {
+    assert.equal((await removalVerdict({ files: [removedDefinition, file] })).state, 'failure');
+  }
+});
+
+test('still blocked: removed-everyone adding UI, classes, text or unrelated logic', async () => {
+  for (const line of ['<NewWidget />', '<textarea className="brand-new" />', 'const unexpected = true;', 'return <div>New text</div>;', 'if (!other) return']) {
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch: `${removalFile.patch}\n+${line}` }] })).state, 'failure', line);
+  }
+});
+
+test('removed-everyone: a file dropping a prop read from the flag, or the flag replaced by true, is allowed', async () => {
+  const source = { ...modified, filename: 'src/components/x/Board.tsx', patch: `-const growEnabled = useFlag("${removedKey}");\n-<Foo growEnabled={growEnabled} />\n+<Foo />` };
+  const child = { ...modified, patch: '-const rows = growEnabled ? 8 : 1;\n+const rows = 8;\n-<Box open={growEnabled} />\n+<Box open={true} />' };
+  assert.equal((await removalVerdict({ files: [removedDefinition, source, child] })).state, 'success');
+});
+
+test('still blocked: removed-everyone with true replacing an unrelated value or names read only in tests', async () => {
+  const source = { ...modified, filename: 'src/components/x/Board.tsx', patch: `-const growEnabled = useFlag("${removedKey}");` };
+  const unrelated = { ...modified, patch: '-<Box open={other} />\n+<Box open={true} />' };
+  assert.equal((await removalVerdict({ files: [removedDefinition, source, unrelated] })).state, 'failure');
+  const testOnly = { filename: 'tests/grow.test.cjs', status: 'modified', patch: `-assert.ok(useFlag("${removedKey}"), panelOpen);` };
+  const panel = { ...modified, patch: '-<Panel open={panelOpen} />' };
+  assert.equal((await removalVerdict({ files: [removedDefinition, source, testOnly, panel] })).state, 'failure');
+});
+
+test('removed-everyone: deletion-only and re-indented existing lines are allowed', async () => {
+  for (const patch of [
+    `-const enabled = useFlag("${removedKey}");\n-<input />`,
+    `-const enabled = useFlag("${removedKey}");\n-    <textarea className="old" />\n+  <textarea className="old" />`,
+  ]) {
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
+  }
+});
+
+test('still blocked: removed-everyone does not exempt FEATURE or IMPROVE titles', async () => {
+  for (const type of ['FEATURE', 'IMPROVE']) {
+    assert.equal((await removalVerdict({ prTitle: `HTPR-7357 [${type}] Remove flag` })).state, 'failure');
+  }
+});
+
+test('removed-everyone: BUGFIX and YPER4 exemptions and named-element rules remain unchanged', async () => {
+  for (const prTitle of ['HTPR-1 [BUGFIX] Restore', 'YPER4-522 [INFRA] Update']) {
+    const result = await removalVerdict({ prTitle, statuses: [] });
+    assert.equal(result.state, 'success');
+    assert.equal(result.description, 'Wireframe exempt; new elements approved');
+    assert.ok(!result.calls.some((call) => /\/statuses\?/.test(call.endpoint)));
+    const addedResult = await removalVerdict({ prTitle, files: [added] });
+    assert.equal(addedResult.state, 'failure');
+    assert.match(addedResult.description, /yes by name/);
+  }
+});

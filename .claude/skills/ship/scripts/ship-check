@@ -856,6 +856,8 @@ try:
     video = (folder / fields['Recording']).resolve()
     if not video.is_relative_to(folder.resolve()) or not video.is_file() or not video.stat().st_size:
         raise ValueError(message + ' (recording must be non-empty and inside the ticket evidence folder)')
+    if deleted_definitions and all(modes.get(key) == 'EVERYONE' for key in deleted_definitions):
+        print('removed-everyone: ' + ','.join(sorted(deleted_definitions)))
     print('premerge ok')
 except Exception as error:
     print('FAIL: ' + (str(error) if isinstance(error, ValueError) else 'cannot verify released-flag premerge evidence; retry before merging'))
@@ -865,7 +867,7 @@ PY
 
 check_premerge_status() (
   [ "$REPO" = hypertask-ai/hypertask ] || return 0
-  local sha current out lock state=failure description rc=1
+  local sha current out lock removed state=failure description rc=1
   local state_dir=${PREMERGE_STATUS_STATE:-$HOME/.local/state/premerge-evidence}
   mkdir -p "$state_dir" && exec {lock}>"$state_dir/publish.lock" \
     && flock -x -w 600 "$lock" || fail "cannot lock premerge publisher; no success posted"
@@ -891,6 +893,12 @@ check_premerge_status() (
     state=failure; description='cannot confirm unchanged PR head; retry'; rc=1
   fi
   description=${description:-cannot verify premerge evidence; retry}
+  if [ "$state" = success ]; then
+    removed=$(grep '^removed-everyone: ' <<<"$out") || removed=''
+    if [ -n "$removed" ] && [ $(( ${#description} + 3 + ${#removed} )) -le 140 ]; then
+      description+=" | $removed"
+    fi
+  fi
   gh api "repos/$REPO/statuses/$sha" --method POST -f context=premerge-evidence \
     -f "state=$state" -f "description=${description:0:140}" >/dev/null 2>&1 \
     || fail "cannot post premerge-evidence for PR $1; retry before merging"

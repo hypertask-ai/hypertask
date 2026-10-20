@@ -3,6 +3,7 @@ import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const CONTEXT = 'ux-signoff';
+export const PREMERGE_CREATOR = 'hypertask-runners[bot]';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
 const READ_BUDGET = 120;
 const HEARTBEAT_MS = 60 * 60 * 1000;
@@ -61,7 +62,42 @@ function elementNames(comment) {
     .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
 }
 
-export function evaluate({ title, author, files, comments = [] }) {
+function tokens(line) {
+  return new Set(line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s\w$]/g) ?? []);
+}
+
+const NOT_FLAG_NAMES = new Set(['const', 'let', 'var', 'import', 'from', 'export', 'default', 'useFlag', 'isFeatureEnabled', 'await', 'return', 'true', 'false', 'null', 'undefined']);
+
+function patchLines(patch, sign) {
+  return (patch ?? '').split('\n').filter((line) => line.startsWith(sign) && !line.startsWith(sign.repeat(3)))
+    .map((line) => tokens(line.slice(1)));
+}
+
+function flagReferences(files, keys) {
+  const direct = new Set(keys.flatMap((key) => [key, `"${key}"`, `'${key}'`, `${key.toUpperCase().replaceAll('-', '_')}_FLAG`]));
+  const references = new Set(direct);
+  for (const { filename, patch } of files) {
+    if (!filename.startsWith('src/') || /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
+    for (const line of patchLines(patch, '-')) {
+      if (![...line].some((token) => direct.has(token))) continue;
+      for (const token of line) if (/^[A-Za-z_$][\w$]{2,}$/.test(token) && !NOT_FLAG_NAMES.has(token)) references.add(token);
+    }
+  }
+  return references;
+}
+
+function removalOnly(ui, files, keys) {
+  const references = flagReferences(files, keys);
+  const mentionsFlag = (line) => [...line].some((token) => references.has(token));
+  return ui.every(({ status, patch }) => {
+    if (status !== 'modified' || typeof patch !== 'string') return false;
+    const removed = patchLines(patch, '-');
+    return removed.some(mentionsFlag) && patchLines(patch, '+').every((line) => removed.some((source) =>
+      [...line].every((token) => source.has(token) || ((token === 'true' || token === 'false') && mentionsFlag(source)))));
+  });
+}
+
+export function evaluate({ title, author, files, comments = [], removedEveryone = [] }) {
   const success = (description) => ({ state: 'success', description, details: [] });
   const ui = visibleFiles(files);
   if (ui.length === 0) return success('No visible UI change');
@@ -95,15 +131,20 @@ export function evaluate({ title, author, files, comments = [] }) {
       return name === 'index' ? basename(dirname(filename)) : name;
     }))];
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  const flagRemoval = ticket.type === 'REFACTOR' && removedEveryone.length > 0 &&
+    removedEveryone.every((key) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && files.some((file) =>
+      file.filename === `src/lib/flags/definitions/${key}.ts` && file.status === 'removed')) &&
+    removalOnly(ui, files, removedEveryone);
   const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
   const details = [];
-  if (!exempt && (!wireframe || !approved)) {
+  if (!exempt && !flagRemoval && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
   }
   if (missingNames.length) {
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
   if (details.length) return { state: 'failure', description: details[0].slice(0, 140), details };
+  if (flagRemoval && !exempt) return success('Flag removal of an Everyone flag; no new UI');
   return success(exempt ? 'Wireframe exempt; new elements approved' : 'Wireframe and new elements have UX signoff');
 }
 
@@ -214,6 +255,15 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, bud
   const preliminary = evaluate(input);
   const ticket = ticketFromTitle(pr.title);
   if (preliminary.state === 'success' || !ticket) return preliminary;
+  const deletesDefinition = files.some((file) => file.status === 'removed' && file.filename.startsWith('src/lib/flags/definitions/'));
+  const statuses = ticket.type === 'REFACTOR' && deletesDefinition
+    ? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`) : [];
+  const status = statuses.find((item) => item.context === 'premerge-evidence');
+  const keys = status?.state === 'success' && status.creator?.login === PREMERGE_CREATOR &&
+    / \| removed-everyone: ([a-z0-9]+(?:-[a-z0-9]+)*(?:,[a-z0-9]+(?:-[a-z0-9]+)*)*)$/.exec(status.description ?? '');
+  input.removedEveryone = keys ? keys[1].split(',') : [];
+  const removal = evaluate(input);
+  if (removal.state === 'success') return removal;
   if (!commentCache.has(ticket.key)) {
     commentCache.set(ticket.key, readComments(ticket.key, { env, fetchImpl, budget }));
   }

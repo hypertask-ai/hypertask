@@ -723,8 +723,8 @@ if '/files?' in url:
     if file['status'] == 'renamed':
         file['previous_filename'] = 'src/old-card.tsx'
     files = [file]
-    if os.environ.get('FLAG_REMOVED_DEFINITION'):
-        files.append({'filename': os.environ['FLAG_REMOVED_DEFINITION'], 'status': 'removed'})
+    for path in filter(None, os.environ.get('FLAG_REMOVED_DEFINITION', '').split(',')):
+        files.append({'filename': path, 'status': 'removed'})
     print(json.dumps(files))
     if os.environ.get('FLAG_PAGE2'):
         print(json.dumps([{'filename': 'AGENTS.md', 'status': 'modified'}]))
@@ -807,6 +807,7 @@ MOCK
 chmod +x "$E/flag-bin/gh" "$E/flag-bin/hypertask" "$E/flag-bin/fakegit"
 export SHIP_GIT="$E/flag-bin/fakegit" SHIP_GIT_CACHE="$E/git-cache" GH_PAUSE_FILE="$E/no-pause"
 printf '{"cookies":[{"name":"session","value":"plain","domain":"app.hypertask.ai"}]}' > "$E/plain-state.json"
+export SHIP_CHECK_PLAIN_QA_STATE="$E/plain-state.json"
 printf 'export const RELEASED_FLAG = "htpr-1-released";\n' > "$E/flag-source/keys"
 printf 'const FEATURE_FLAG_DEFINITIONS = [{ key: RELEASED_FLAG } ] as const;\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n' > "$E/flag-source/registry"
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"
@@ -1063,7 +1064,7 @@ S() {
   : > "$E/status-log"
   out=$(env PATH="$E/flag-bin:$PATH" PYTHONPATH="$E/flag-http" FLAG_SOURCE="$E/flag-source" FLAG_LOG="$E/status-log" FLAG_ASSERT_LOCK=1 FLAG_ASSERT_FRESH=1 AGENT_TOKEN=fixture HYPERTASKS_JWT_TOKEN= "$@" ./ship-check premerge-status 999 2>&1); got=$?
   if [ "$got" = "$want" ] && python3 - "$E/status-log" "$state" "$description" <<'PY'
-import json, sys
+import json, os, sys
 calls = [json.loads(line) for line in open(sys.argv[1])]
 posts = [c for c in calls if c[0] == 'api' and '/statuses/' in c[1]]
 if sys.argv[2] == 'none':
@@ -1076,6 +1077,10 @@ else:
     assert 'context=premerge-evidence' in call and 'state=' + sys.argv[2] in call, call
     description = next(c.removeprefix('description=') for c in call if c.startswith('description='))
     assert len(description) <= 140 and sys.argv[3] in description, call
+    if 'removed-everyone' in sys.argv[3]:
+        assert description == sys.argv[3], call
+    if sys.argv[2] != 'success' or os.environ.get('EXPECT_NO_REMOVED_EVERYONE'):
+        assert 'removed-everyone' not in description, call
 PY
   then ok "status: $state $description"; else bad "status: $state got $got $out"; fi
 }
@@ -1110,7 +1115,7 @@ F 2 'cannot post premerge-evidence' FLAG_POST_ERROR=1
 printf 'const released = useFlag(RELEASED_FLAG);\n' > "$E/flag-source/base"; cp "$E/flag-source/base" "$E/flag-source/head"
 S 1 failure 'htpr-1-released: record'
 cp "$E/record" "$premerge"
-S 0 success 'click record ok'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' # No definition deleted: no removed-everyone.
 API_BUDGET 6 'premerge-status with a released flag: no contents API call, at most 6 API calls'
 # YPER4-281: deleting a definition exempts only that absent key from Flags, not the click.
 printf 'export * from "./definitions/index.generated";\n' > "$E/flag-source/keys"
@@ -1124,9 +1129,38 @@ printf 'const removed = useFlag("htpr-1-released");\nconst other = useFlag("htpr
 printf 'const other = useFlag("htpr-2-other");\n' > "$E/flag-source/head"
 removal=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=2 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"EVERYONE"}]}')
 sed 's/htpr-1-released=EVERYONE/htpr-2-other=EVERYONE/' "$E/record" > "$premerge"
-S 0 success 'click record ok' "${removal[@]}"
+S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}"
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"OFF"},{"key":"htpr-2-other","mode":"EVERYONE"}]}'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":false,"htpr-2-other":true}}'
+S 0 success 'click record ok | removed-everyone: htpr-1-released' "${removal[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":true}}'
+S 1 failure 'unchanged PR head' "${removal[@]}" FLAG_HEAD_RACE=1
 P 0 premerge 999 "${removal[@]}"
 F 0 '' "${removal[@]}"
+# removed-everyone requires every deleted key, sorted, not merely one released key.
+for d in base head; do
+  printf 'export const UNTOUCHED_FLAG = "htpr-4-untouched";\nexport default { key: UNTOUCHED_FLAG, kind: "bugfix" } as const;\n' > "$E/flag-source/flags-$d/htpr-4-untouched.ts"
+done
+mv "$E/flag-source/flags-head/htpr-2-other.ts" "$E/other-definition"
+multiple=(FLAG_REMOVED_DEFINITION=src/lib/flags/definitions/htpr-2-other.ts,src/lib/flags/definitions/htpr-1-released.ts FLAG_COUNT=3)
+S 0 success 'click record ok | removed-everyone: htpr-1-released,htpr-2-other' "${removal[@]}" "${multiple[@]}"
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" 'FLAG_HTTP={"flags":[{"key":"htpr-1-released","mode":"EVERYONE"},{"key":"htpr-2-other","mode":"OFF"}]}'
+EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' "${removal[@]}" "${multiple[@]}" AGENT_TOKEN= 'FLAG_PUBLIC={"flags":{"htpr-1-released":true,"htpr-2-other":false}}'
+S 1 failure 'live state unknown' "${multiple[@]}"
+mv "$E/other-definition" "$E/flag-source/flags-head/htpr-2-other.ts"
+rm "$E/flag-source/flags-"{base,head}/htpr-4-untouched.ts
+# removed-everyone is omitted, never truncated, when the entire description exceeds 140.
+for length in 140 141; do
+  prefix='click record ok | removed-everyone: '
+  key="htpr-3-$(printf '%*s' "$((length - ${#prefix} - 7))" '' | tr ' ' x)"
+  path="src/lib/flags/definitions/$key.ts"
+  printf 'export const LONG_FLAG = "%s";\nexport default { key: LONG_FLAG, kind: "bugfix" } as const;\n' "$key" > "$E/flag-source/flags-base/$key.ts"
+  if [ "$length" = 140 ]; then
+    S 0 success "$prefix$key" FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+  else
+    EXPECT_NO_REMOVED_EVERYONE=1 S 0 success 'click record ok' FLAG_FILE="$path" FLAG_STATUS=removed "FLAG_HTTP={\"flags\":[{\"key\":\"$key\",\"mode\":\"EVERYONE\"}]}"
+  fi
+  rm "$E/flag-source/flags-base/$key.ts"
+done
 sed -i 's/htpr-2-other=EVERYONE/htpr-2-other=OFF/' "$premerge"
 S 1 failure 'expected Flags: htpr-2-other=EVERYONE' "${removal[@]}"
 cp "$E/record" "$premerge"
