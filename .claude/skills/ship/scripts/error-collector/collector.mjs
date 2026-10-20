@@ -41,10 +41,12 @@ export function redact(text) {
     .replace(/\b[A-Za-z0-9_+\/-]{32,}={0,2}\b/g, '[redacted]');
 }
 
-const FINGERPRINT_RULES = 2;
+const FINGERPRINT_RULES = 3;
 const isoTime = /\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:[.,]\d+)?(?:Z|[+-]\d{2}:?\d{2})?/;
 const rejectedUrl = /(\bInvalid [A-Za-z ]{1,40}: )https?:\/\/\S+/g;
-const changedByCurrentRules = message => (isoTime.test(message) || new RegExp(rejectedUrl.source).test(message)) && !/\[redacted(?:-[a-z]+)?\]/.test(normalize(message));
+const transientScope = /\brun-(?:u\d+|r[0-9a-f]{32})\.scope\b/g;
+const powerShellSession = /\(\d+(?:\.\d+)*:[A-Z]:\d+\)(?= \[NamedPipeIPC_ServerListenerError:NamedPipe\.Exception\.Error\])/g;
+const changedByCurrentRules = message => (isoTime.test(message) || new RegExp(rejectedUrl.source).test(message) || new RegExp(transientScope.source).test(message) || new RegExp(powerShellSession.source).test(message)) && !/\[redacted(?:-[a-z]+)?\]/.test(normalize(message));
 
 export function normalize(text, route = false) {
   const id = route ? ':id' : '<id>';
@@ -52,6 +54,8 @@ export function normalize(text, route = false) {
     .replace(new RegExp(`^\\s*${isoTime.source}\\s+`), '')
     .replace(new RegExp(`\\b${isoTime.source}`, 'g'), '<time>')
     .replace(rejectedUrl, '$1<url>')
+    .replace(transientScope, 'run-<id>.scope')
+    .replace(powerShellSession, '<session>')
     .replace(/https?:\/\/[^\s<>"']+/gi, url => url.replace(/\?[^#]*/, '').replace(/#.*$/, ''))
     .replace(/\?[^\s]*/g, '')
     .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, id)
