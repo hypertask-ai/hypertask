@@ -953,13 +953,13 @@ test('still blocked: narrowing without a flag reference drops a JSX prop, lowerc
   }
 });
 
-test('removed-everyone: Off-branch continuation in a later hunk is deleted, never re-added', async () => {
+test('removed-everyone: Off-branch continuation in a later hunk is deleted, never re-added, and an Off region open at a hunk gap is blocked', async () => {
   for (const [condition, opening, continuation, state] of [
     ['enabled', '-return enabled ? (\n+return (', '- ) : (\n-  <Old />', 'success'],
     ['enabled', '-return enabled ? (\n+return (', '-  <New />\n+  <New />\n- ) : (\n-  <Old />', 'success'],
-    ['!enabled', '-return !enabled ? (\n+return (', '-  <Old />\n- ) : (\n-  <New />\n+  <New />', 'success'],
+    ['!enabled', '-return !enabled ? (\n+return (', '-  <Old />\n- ) : (\n-  <New />\n+  <New />', 'failure'],
     ['enabled', '-return enabled ? (\n+return (', '- ) : (\n-  <Old />\n+  <Old />', 'failure'],
-    ['!enabled', '-return !enabled && (', '-  <Old />', 'success'],
+    ['!enabled', '-return !enabled && (', '-  <Old />', 'failure'],
     ['!enabled', '-return !enabled && (', '-  <Old />\n+  <Old />', 'failure'],
   ]) {
     const patch = `@@ -1,3 +1 @@\n-const enabled = useFlag("${removedKey}");\n${opening}\n@@ -20,3 +18 @@\n${continuation}\n );`;
@@ -979,20 +979,24 @@ for (const [name, change, state] of [
   ['removed-everyone: adversary keeps the On ternary branch', '-return enabled ? <New /> : <Old />\n+return <New />', 'success'],
   ['still blocked: adversary keeps the negated Off ternary branch', '-return !enabled ? <Old /> : <New />\n+return <Old />', 'failure'],
   ['removed-everyone: adversary keeps the negated On ternary branch', '-return !enabled ? <Old /> : <New />\n+return <New />', 'success'],
-  ['still blocked: unrelated deletions in a second hunk', '-x = enabled;\n@@ -40,3 +38,1 @@\n-<Banner />\n-<Footer />', 'failure'],
-  ['still blocked: unrelated JSX prop deletion in another hunk', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box open wide />\n+<Box open />', 'failure'],
+  ['still blocked: unrelated deletions in a second hunk', '-const x = enabled;\n@@ -40,3 +38,1 @@\n-<Banner />\n-<Footer />', 'failure'],
+  ['still blocked: unrelated JSX prop deletion in another hunk', '-const x = enabled;\n@@ -40,1 +38,1 @@\n-<Box open wide />\n+<Box open />', 'failure'],
   ['still blocked: adversary introduces a new tag', '-return enabled ? <New /> : <Old />\n+return <Brand />', 'failure'],
   ['still blocked: Off logical block is kept', '-{!enabled && (\n-  <Old />\n-)}\n+<Old />', 'failure'],
-  ['still blocked: unrelated deletion shares the flag hunk', '-x = enabled;\n-<Banner />', 'failure'],
+  ['still blocked: unrelated deletion shares the flag hunk', '-const x = enabled;\n-<Banner />', 'failure'],
   ['still blocked: false replaces an un-negated flag', '-<Box open={enabled} />\n+<Box open={false} />', 'failure'],
   ['removed-everyone: true replaces an un-negated flag', '-<Box open={enabled} />\n+<Box open={true} />', 'success'],
   ['removed-everyone: false replaces a negated flag', '-<Box closed={!enabled} />\n+<Box closed={false} />', 'success'],
-  ['still blocked: bitwise narrowing outside generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const width = First | Second;\n+const width = First;', 'failure'],
-  ['still blocked: adversary narrows generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const f = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const f = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {', 'failure'],
-  ['still blocked: comparison operands that look like generics', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const visible = First < Second | Third > (Fourth);\n+const visible = First < Second > (Fourth);', 'failure'],
-  ['still blocked: swapped prop values', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box left={first} right={second} />\n+<Box left={second} right={first} />', 'failure'],
+  ['still blocked: bitwise narrowing outside generic arguments', '-const x = enabled;\n@@ -40,1 +38,1 @@\n-const width = First | Second;\n+const width = First;', 'failure'],
+  ['still blocked: adversary narrows generic arguments', '-const x = enabled;\n@@ -40,1 +38,1 @@\n-const f = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const f = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {', 'failure'],
+  ['still blocked: comparison operands that look like generics', '-const x = enabled;\n@@ -40,1 +38,1 @@\n-const visible = First < Second | Third > (Fourth);\n+const visible = First < Second > (Fourth);', 'failure'],
+  ['still blocked: swapped prop values', '-const x = enabled;\n@@ -40,1 +38,1 @@\n-<Box left={first} right={second} />\n+<Box left={second} right={first} />', 'failure'],
   ['still blocked: On-branch UI deleted inside a flag && block', '-return enabled && (\n+return (\n   <div>\n-    <Banner />\n   </div>\n-)\n+)', 'failure'],
   ['removed-everyone: On && block unwrapped and kept', '-{enabled && (\n-  <New />\n-)}\n+<New />', 'success'],
+  ['still blocked: an unrelated negation dropped next to the flag', '-<Box disabled={!enabled} hidden={!busy} />\n+<Box disabled={false} hidden={busy} />', 'failure'],
+  ['still blocked: a negated alias is not a flag reference', '-const disabled = !useFlag(HTPR_6873_QUICK_ENTRY_GROW_FLAG);\n-return disabled ? <Old /> : <New />;\n+return <Old />;', 'failure'],
+  ['still blocked: a live flag return deleted', '-if (enabled) return null;', 'failure'],
+  ['still blocked: an Off region left open across a hunk gap', '-return !enabled && (\n-  <Old />\n@@ -80,3 +78,1 @@\n-<Banner />', 'failure'],
   ['still blocked: a flag line that drops an unrelated handler', '-<button disabled={!enabled} onClick={save}>Save</button>\n+<button disabled={false}>Save</button>', 'failure'],
   ['removed-everyone: a flag line that keeps its handler', '-<button disabled={!enabled} onClick={save}>Save</button>\n+<button disabled={false} onClick={save}>Save</button>', 'success'],
   ['still blocked: flag-related live UI deleted without replacement', '-<button disabled={!enabled}>Delete</button>', 'failure'],

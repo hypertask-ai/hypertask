@@ -83,7 +83,7 @@ function flagReferences(files, keys) {
     if (!filename.startsWith('src/') || filename.startsWith('src/lib/flags/definitions/') ||
       /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
     for (const line of patchLines(patch, '-')) {
-      if (line.has('import') || ![...line].some((token) => direct.has(token))) continue;
+      if (line.has('import') || line.has('!') || ![...line].some((token) => direct.has(token))) continue;
       for (const token of line) if (/^[A-Za-z_$][\w$]{2,}$/.test(token) && !NOT_FLAG_NAMES.has(token)) references.add(token);
     }
   }
@@ -108,6 +108,7 @@ function removalOnly(ui, files, keys) {
     let depth = 0;
     let classified = true;
     for (const raw of patch.split('\n')) {
+      if (raw.startsWith('@@') && regions.some((region) => region.off)) return false;
       if (!/^[ +\-]/.test(raw) || /^(?:---|\+\+\+)/.test(raw)) continue;
       const sign = raw[0];
       const text = raw.slice(1);
@@ -171,22 +172,23 @@ function removalOnly(ui, files, keys) {
     const sourcedBy = (item, line) => {
       const dropped = [];
       let at = 0;
-      for (const token of line) {
+      for (const [index, token] of line.entries()) {
         while (at < item.source.length) {
           const value = item.source[at];
           const negated = item.source[at - 1] === '!';
-          if (value === token || (token === 'true' && references.has(value) && !negated)) break;
+          const flagNegation = value === '!' && references.has(item.source[at + 1]) && line[index + 1] !== item.source[at + 1];
+          if ((value === token && !flagNegation) || (token === 'true' && references.has(value) && !negated)) break;
           if (token === 'false' && value === '!' && references.has(item.source[at + 1])) {
             at++;
             break;
           }
-          dropped.push(value);
+          dropped.push(value === '!' && !references.has(item.source[at + 1]) ? 'unrelated !' : value);
           at++;
         }
         if (at === item.source.length) return false;
         at++;
       }
-      dropped.push(...item.source.slice(at));
+      dropped.push(...item.source.slice(at).map((value, index) => value === '!' && !references.has(item.source[at + index + 1]) ? 'unrelated !' : value));
       return !dropped.length || (item.related && dropped.every((token) => references.has(token) || FLAG_SYNTAX.has(token)));
     };
     const candidates = removed.map((item) => item.off ? [] :
@@ -205,7 +207,8 @@ function removalOnly(ui, files, keys) {
     };
     for (let source = 0; source < removed.length; source++) {
       const item = removed[source];
-      const flagOnly = item.related && !/<\/?[A-Za-z]/.test(item.text);
+      const flagOnly = item.related && !/<\/?[A-Za-z]/.test(item.text) && (/^\s*(?:const|let|var)\s/.test(item.text) ||
+        tokens(item.text).every((token) => references.has(token) || FLAG_SYNTAX.has(token) || token === '(' || token === ')'));
       if (!flagOnly && !item.import && !item.deletable && !match(source)) return false;
     }
     for (let source = 0; source < removed.length; source++) {
