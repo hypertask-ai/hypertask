@@ -239,6 +239,23 @@ https://app.hypertask.ai/detail/project-15/7501, PR https://github.com/hypertask
 **Lessons.** A local build cannot show a round-trip saving; measure network-bound changes live. Test hand-offs with the competing data both late and already present on mount.
 
 **Next probe.** Live after deploy: daily harness N=5 both profiles at load under 12 against this morning's run. If phone gains but stays above 2 s, the remaining limiter is hydration (first API call at about 2.0 s): look at seeding flags on the search page, which would also let the server result render before flags load. Weekly research round is overdue (none since the 2026-10-10 seed); next dispatch without a free ticket should run it.
+### 2026-10-20: desktop board from the server with the AI chat column reserved (HTPR-7406)
+
+https://app.hypertask.ai/detail/project-15/7406, flag `htpr-7406-desktop-server-board`.
+
+**Daily read.** Can't verify: the 12:23 UTC run failed when production changed mid-run (bc37fcea0 to 121a17874). Its desktop board-returning samples still agree with the morning: 2550, 2392, 2087, 2233, 2626 ms, median 2392, server board 0 of 5, load 12 to 14. Desktop board 2.1 to 2.4 s is the biggest milestone 1 gap after the phone first-visit board, and the only one with a ready fix.
+
+**Cause.** `parseBoardDisplay` refused a desktop display with AI chat open by default or pinned, so `BoardDisplayMirror` deleted the preference cookie on every desktop visit and the server never sent the board. The ticket page already reserves the chat column before the chat loads (`usePageLoadReservations`); the board page did not, so a server board would have rendered full width and then jumped.
+
+**Change.** The cookie carries the chat width and sidebar mode; the server accepts desktop open chat for `/project` only (the inbox still refuses it); the chat column is reserved from the first render by a one-way latch that clears when the chat opens or the page leaves `/project` (chat `close()` does not set the suppressed flag, so a permanent reservation could leave an empty column).
+
+**Result (local premerge, desktop, 6 interleaved pairs, load 8 to 11, every run kept).** First card 912 ms OFF (798 to 1482) to 255 ms ON (204 to 391). Layout shift 0.209 OFF to 0 ON: today the board itself shifts when the chat opens; the reserved column removes that. Board column x and width identical in every frame. Settled screenshots identical except the AI chat's rotating suggested questions (they differ between two OFF loads too). Cost: the chat composer shows about 0.45 s later (1364 to 1854 ms), because it waits for hydration, which is heavier with the board already on screen. Click-through 10 of 10, phone still served. Evidence: `~/.local/state/vcc-evidence/HTPR-7406/abab-summary.txt`.
+
+**False lead.** Preloading the chat code while the column is reserved, as the ticket page does: the chat opens from a child effect after hydration, before a parent preload effect runs, so it cannot move the wait. Not shipped.
+
+**Lesson.** A fast server path refused for one setting can silently exclude the default population. Check the default values of every setting a first-screen parser rejects.
+
+**Next probe.** Live after deploy: desktop board-returning should read `boardPreference: true`, `serverBoard: true`. Then the chat-after-hydration cost: profile what hydration does on a server board before the chat effect runs.
 
 ## Milliseconds saved scoreboard
 
@@ -262,6 +279,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7395 | Phone first tap after fresh board, live ABAB N=5, load 14 to 30 | 10057 ms (OFF) → 9814 ms (ON) | 0, within noise | reverted in PR 1677; board +10.6% with flag on |
 | https://app.hypertask.ai/detail/project-15/7501 | Search hard load, local PR build on/off N=5, load 12 to 20 | desktop 401 → 364 ms, phone 1177 → 1307 ms | unproven, local cannot show round trips | flag `htpr-7501-search-server-start`; live before 2924 ms phone, 1192 ms desktop (daily N=5); live after pending |
 | https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
+| https://app.hypertask.ai/detail/project-15/7406 | Desktop board-returning, first card, local premerge ABAB N=6, load 8 to 11 | 912 ms (OFF) → 255 ms (ON); chat composer 1364 → 1854 ms | about 650 ms local to the board, about -490 ms to the chat | flag `htpr-7406-desktop-server-board`; live 5-sample run after deploy decides |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 

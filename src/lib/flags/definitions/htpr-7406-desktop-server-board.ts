@@ -11,6 +11,6 @@ export default {
   related: ["htpr-6934-server-first-screen"],
   releaseRisk: {
     risk: "small",
-    reason: "Reserves the existing chat column while the board loads; the finished board and chat stay the same.",
+    reason: "Reserves the existing chat column while the board loads; the finished board and chat stay the same. The chat box fills its column about half a second later than today.",
   },
 } as const satisfies FeatureFlagDefinition;
