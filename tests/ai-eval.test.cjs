@@ -43,6 +43,33 @@ test('mocked LLM calls validate every top-ten schema for both surfaces', () => {
   assert.throws(() => validateCall({ id: 'bad', name: 'unknown', arguments: {} }, catalogs.chat), /Unknown tool/);
 });
 
+test('chat create-task eval preserves the exact flag-off schema and validation', () => {
+  const { z } = require('zod');
+  const load = require('jiti')(__filename, { fsCache: false });
+  const { createTaskItemSchema } = load(path.join(__dirname, '../src/lib/ai/tools/schemas.ts'));
+  const expected = createTaskItemSchema.partial().extend({
+    tasks: z.array(createTaskItemSchema).max(50).optional().describe('Tasks to create in one call. Prefer this over repeated tool calls.'),
+    confirmed: z.boolean().optional().describe('Set true ONLY after the user has explicitly approved creating 4 or more tasks in their own message. Never set it to confirm your own proposal.'),
+  });
+  const tools = chatTools();
+  const { schema, description } = tools.hypertask_create_task;
+  assert.deepEqual(z.toJSONSchema(schema), z.toJSONSchema(expected));
+  assert.equal(description, 'Create one or many tasks, up to 50 per call. For multiple tasks, pass tasks with each task\'s project_id and fields in one call instead of looping. Returns created tasks and per-task failures.');
+  const valid = { project_id: 15, title: 'Fixture', description: 'Body', priority: 'High' };
+  const validate = (input) => validateCall({ id: 'create', name: 'hypertask_create_task', arguments: input }, tools);
+  validate(valid);
+  validate({ tasks: [valid], confirmed: true });
+  for (const invalid of [
+    { ...valid, brief: 'Writer-only input' },
+    { ...valid, title: '' },
+    { ...valid, project_id: -1 },
+    { ...valid, priority: 'Critical' },
+    { tasks: [{ project_id: 15, brief: 'Missing legacy title' }] },
+    { tasks: [{ ...valid, title: '' }] },
+    { tasks: Array.from({ length: 51 }, () => valid) },
+  ]) assert.throws(() => validate(invalid));
+});
+
 test('missing fixtures, nonterminating models and invalid thresholds fail closed', async () => {
   await assert.rejects(evaluate({ golden, fixtures: {} }), /Missing recorded turn/);
   const stale = structuredClone(require('./fixtures/ai/recorded-contract.json'));
