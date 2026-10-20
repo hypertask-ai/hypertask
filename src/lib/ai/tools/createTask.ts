@@ -217,10 +217,8 @@ export function createCreateTaskTool(context: ToolContext) {
             });
 
             if (customFields?.length) {
-              const { upsertCustomFieldValue } = await import("@/utils/controllers/customFields");
-              for (const { fieldId, value } of customFields) {
-                await upsertCustomFieldValue(fieldId, task.id, value);
-              }
+              const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+              await saveWriterCustomFieldValues(task.id, customFields);
             }
 
             return sanitizeForJson({

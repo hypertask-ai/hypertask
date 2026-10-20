@@ -163,7 +163,7 @@ function harness(options = {}) {
     "@/lib/ai/tools/execution": execution,
     "@/lib/ai/tools/helpers": { sanitizeForJson: plain, mapTaskToDetail: (task) => task },
     "@/lib/ai/chatStream/errors": errors,
-    "@/utils/controllers/customFields": { upsertCustomFieldValue: async (...args) => fieldSaves.push(plain(args)) },
+    "@/utils/controllers/customFields": { saveWriterCustomFieldValues: async (taskId, values) => { for (const { fieldId, value } of values) fieldSaves.push(plain([fieldId, taskId, value])); } },
     "@/lib/flags": { isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag && options.format !== false; } },
     "@/lib/flags/keys": keys,
     "@/app/api/ai/_lib/taskWriterDraft": draft,
@@ -208,7 +208,7 @@ function harness(options = {}) {
     "@/lib/ai/composeTaskTarget": {},
     "@/lib/flags": { ...keys, isFeatureEnabled: async (key, userId) => { checks.push([key, userId]); return key === flag ? options.format !== false : key === keys.HTPR_6929_COMPOSE_TASK_WRITER_FLAG; } },
     "@/lib/prisma": { default: { ...prisma, user: { findUnique: async () => ({ id: 985 }) } }, __esModule: true },
-    "@/utils/controllers/customFields": { getCustomFieldsForProject: async (projectId) => { fieldLoads.push({ projectId }); return options.noFields ? [] : fields; }, upsertCustomFieldValue: async (...args) => fieldSaves.push(plain(args)) },
+    "@/utils/controllers/customFields": { getCustomFieldsForProject: async (projectId) => { fieldLoads.push({ projectId }); return options.noFields ? [] : fields; }, saveWriterCustomFieldValues: async (taskId, values) => { for (const { fieldId, value } of values) fieldSaves.push(plain([fieldId, taskId, value])); } },
     "@/utils/controllers/tasks/getNextUniqueTaskIndex": { getNextUniqueTaskIndex: async () => 1 },
     "@/utils/generateRank": {},
     "@/lib/mcp/webhooks/taskEvents": { createTaskWithBoardWebhookOutbox: async (_db, _actor, create) => {

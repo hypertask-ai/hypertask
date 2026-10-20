@@ -143,9 +143,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
-      for (const { fieldId, value } of customFields) {
-        const { upsertCustomFieldValue } = await import("@/utils/controllers/customFields");
-        await upsertCustomFieldValue(fieldId, taskId, value);
+      if (customFields.length) {
+        const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+        await saveWriterCustomFieldValues(taskId, customFields);
       }
       if (writerDueDate) {
         const { cancelDueDateJob, scheduleDueDateJob } = await import("@/pages/api/queues/duedateQueue");
@@ -468,9 +468,9 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!newTask) {
       return NextResponse.json({ message: "Failed to create task" }, { status: 400, headers: responseHeaders });
     }
-    for (const { fieldId, value } of customFields) {
-      const { upsertCustomFieldValue } = await import("@/utils/controllers/customFields");
-      await upsertCustomFieldValue(fieldId, newTask.id, value);
+    if (customFields.length) {
+      const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+      await saveWriterCustomFieldValues(newTask.id, customFields);
     }
     const taskCreatedAt = performance.now();
     const description_ = newTask.description_;
