@@ -49,6 +49,14 @@ export class ProjectAccessError extends Error {
   }
 }
 
+export async function loadCustomInstructionText(projectId: number) {
+  const instruction = await prisma.aI_Custom_Instructions.findFirst({
+    where: { projectId },
+    select: { customInstruction: true },
+  });
+  return instruction?.customInstruction ?? "";
+}
+
 export async function assertProjectAccess(userId: number, projectId: number) {
   const project = await prisma.project.findFirst({
     where: {

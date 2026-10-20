@@ -1,3 +1,4 @@
+import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
@@ -110,6 +111,13 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
+    let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
+    if (body.requestKind === "compose-task" && Array.isArray(body.customFields) && body.customFields.length &&
+        await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId)) {
+      const { validateTaskWriterCustomFields } = await import("@/lib/ai/taskWriterCustomFields");
+      const { getCustomFieldsForProject } = await import("@/utils/controllers/customFields");
+      customFields = validateTaskWriterCustomFields(await getCustomFieldsForProject(projectId), body.customFields);
+    }
     const dueDateEnabled = body.requestKind === "compose-task" && body.writerDueDate != null &&
       await isFeatureEnabled(HTPR_7054_CTRLJ_DUE_DATE_FLAG, userId);
     const writerDueDate = dueDateEnabled ? taskWriterDueDateForSave(body.writerDueDate, body.writerTimeZone) : undefined;
@@ -135,6 +143,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
         expectedStatus: target.status,
       });
       if (result.status !== 200) return NextResponse.json(result.json, { status: result.status, headers: responseHeaders });
+      if (customFields.length) {
+        const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+        await saveWriterCustomFieldValues(taskId, customFields);
+      }
       if (writerDueDate) {
         const { cancelDueDateJob, scheduleDueDateJob } = await import("@/pages/api/queues/duedateQueue");
         await cancelDueDateJob(taskId, projectId);
@@ -455,6 +467,10 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     }
     if (!newTask) {
       return NextResponse.json({ message: "Failed to create task" }, { status: 400, headers: responseHeaders });
+    }
+    if (customFields.length) {
+      const { saveWriterCustomFieldValues } = await import("@/utils/controllers/customFields");
+      await saveWriterCustomFieldValues(newTask.id, customFields);
     }
     const taskCreatedAt = performance.now();
     const description_ = newTask.description_;

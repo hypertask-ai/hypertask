@@ -399,6 +399,19 @@ If yes, send.`],
 - When the brief is thin, write a shorter ticket. Never add an Open questions section.
 - Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
   },
+  "task-writer-board-format-rule": {
+    id: "task-writer-board-format-rule",
+    version: "1",
+    parts: [`- When the board's example tickets share a recurring section skeleton or title pattern (for example a score line in the title and a scoring section), keep that skeleton and title pattern in the same order, with each section short. Brevity shortens sections; it never drops a recurring one. Board instructions take precedence over examples. This board format also overrides default section merging, heading wording and title punctuation rules. Fill the board's custom fields when its examples or instructions show them, using only definitions from BOARD_VOCABULARY and keeping values consistent with the title and body.
+`],
+  },
+  "task-writer-custom-fields-output": {
+    id: "task-writer-custom-fields-output",
+    version: "1",
+    parts: [`<h3>CUSTOM FIELDS OUTPUT</h3>
+- For the board custom fields shown in BOARD_VOCABULARY, return only supported values grounded in the brief or judgements requested by board instructions or examples. Use the exact field id. Number values must be finite numbers; Select values must match an option id or label. Never create field definitions.
+- Add one hidden span at the end of the HTML: <span id="ai-generated-task-custom-fields" style="display:none">[{"fieldId":"board-field-id","value":19}]</span>. Its text is a JSON array, with HTML-sensitive characters escaped as entities. Use an empty array if no value is supported. For structured tasks, instead return this array as each task's optional customFields property, not as a span.`],
+  },
   "task-writer-output-language": {
     id: "task-writer-output-language",
     version: "1",
@@ -588,7 +601,7 @@ Check: reading only the headings, the bold words and the first line of each para
 
 <h3>PRECEDENCE when rules conflict</h3>
 1. The board's custom instructions. A template or section they require wins over brevity and over merging sections.
-2. The user's explicit request in this run.
+`, `2. The user's explicit request in this run.
 3. The two skills and EACH FACT ONCE above.
 4. Default brevity. Brevity applies WITHIN a section. It is never a reason to drop a section the template requires, or to compress a data-dense ticket into a summary.
 - Priority and Size are judgements the product asks for on EVERY ticket, board instructions or not: always infer them from the brief (urgency words, impact words, effort words) and emit both spans. The same goes for any field the instructions REQUIRE (a score, a set of copy variations): fill it, never omit it and never mark it "Not provided." Infer it from the brief. "Never invent" governs facts you would present as given; it does not excuse you from a judgement the template asks you to make.
@@ -639,7 +652,7 @@ Check: reading only the headings, the bold words and the first line of each para
 
 <h3>PRECEDENCE when rules conflict</h3>
 1. The board's custom instructions. A template or section they require wins over brevity.
-2. The user's explicit request in this run.
+`, `2. The user's explicit request in this run.
 3. The two skills above.
 4. Default brevity. Brevity applies WITHIN a section. It is never a reason to drop a section the template requires, or to compress a data-dense ticket into a summary.
 - Priority and Size are judgements the product asks for on EVERY ticket, board instructions or not: always infer them from the brief (urgency words, impact words, effort words) and emit both spans. The same goes for any field the instructions REQUIRE (a score, a set of copy variations): fill it, never omit it and never mark it "Not provided." Infer it from the brief and keep the inference visible. "Never invent" governs facts you would present as given; it does not excuse you from a judgement the template asks you to make.

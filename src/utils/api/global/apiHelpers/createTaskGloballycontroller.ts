@@ -1,3 +1,4 @@
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import globalConstants from "@/lib/constants";
 import {
   IEstimateConstants,
@@ -22,6 +23,7 @@ interface IProps {
   existingTaskId?: number;
   writerDueDate?: string;
   writerTimeZone?: string;
+  customFields?: TaskWriterCustomFieldValue[];
   ranking?: string;
   sectionId: number;
   section_title: string;
