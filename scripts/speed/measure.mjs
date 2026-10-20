@@ -43,7 +43,8 @@ export function summarize(samples) {
 }
 
 // A path whose measurement changed gets a new version; only same-version history is its baseline.
-export const PATH_VERSIONS = { 'ticket-warm': 2, 'page-navigation': 2, 'ctrl-j': 2 };
+export const PATH_VERSIONS = { 'ticket-warm': 2, search: 2, 'page-navigation': 2, 'ctrl-j': 2 };
+export const SEARCH_IDLE_PAUSE_MS = 3000;
 
 // Saved by the app after a board visit; with it the server sends a ready-made board (HTPR-6934). The QA login filter drops it.
 export const BOARD_PREFERENCE_COOKIE = 'ht_board_display_v1';
@@ -368,7 +369,11 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
+    // Outside timing: a fast opened-before ticket still loads its deferred parts after the tail, which holds the next hard navigation back (YPER4-525).
+    const previousPage = await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout));
+    await page.waitForTimeout(SEARCH_IDLE_PAUSE_MS);
     await sample('search', () => navigate(`/search?searchTerm=${encodeURIComponent(TITLE)}`));
+    Object.assign(run.samples.at(-1), { previousPageSettleMs: previousPage.settleMs, previousPagePendingScripts: previousPage.pendingScripts });
     await sample('my-tasks', () => navigate('/my-tasks'));
     await page.evaluate(() => document.activeElement?.blur());
     await sample('page-navigation', () => shared.action(page, async () => {
