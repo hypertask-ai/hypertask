@@ -88,8 +88,11 @@ function optionsPortableTools() {
 }
 
 async function keylessHandshakeFeedbackIsQuiet(): Promise<boolean> {
-  const candidateUserIds = await featureFlagCandidateUserIds(HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG).catch(() => [])
-  return candidateUserIds === null
+  try {
+    return await featureFlagCandidateUserIds(HTPR_7390_MCP_HANDSHAKE_FEEDBACK_FLAG) === null
+  } catch {
+    return false
+  }
 }
 
 export async function mcpHandler(request: Request): Promise<Response> {
