@@ -399,16 +399,22 @@ test("field validation: finite numbers, select option id/label, trimmed capped t
   assert.deepEqual(plain(validateTaskWriterCustomFields(definitions, [{ fieldId: "select", value: "Ready" }])), [{ fieldId: "select", value: "Ready" }]);
 });
 
-test("vocabulary includes select options, stays within its existing cap, and omits an empty field block", () => {
+test("vocabulary includes select options, budgets fields at whole records without displacing board metadata, and omits an empty field block", () => {
   const { formatBoardVocabulary } = load(path.join(root, "src/app/api/ai/_lib/taskWriterBoardResearch.ts"));
   const own = formatBoardVocabulary({ projectTitle: "Own", customFields: [{ id: "select", name: "Stage", type: "Select", options: [{ id: "option", label: "Ready" }] }] });
   assert.match(own, /select/);
   assert.match(own, /Stage/);
   assert.match(own, /option/);
   assert.match(own, /Ready/);
-  assert.doesNotMatch(formatBoardVocabulary({ projectTitle: "Own", customFields: [] }), /CUSTOM_FIELDS/);
-  const capped = formatBoardVocabulary({ projectTitle: "Own", projectDescription: "x".repeat(9000), customFields: Array.from({ length: 50 }, (_, id) => ({ id: String(id), name: "n".repeat(64), type: "Text" })) });
-  assert.ok(capped.length <= 4040);
+  assert.doesNotMatch(formatBoardVocabulary({ projectTitle: "Own", customFields: [] }), /customFields/);
+  const board = { projectTitle: "Own", projectDescription: "x".repeat(9000), sectionTitles: ["Inbox", "Done"], labelNames: ["Mobile"] };
+  const capped = formatBoardVocabulary({ ...board, customFields: Array.from({ length: 50 }, (_, id) => ({ id: String(id), name: "n".repeat(64), type: "Text" })) });
+  assert.equal(capped.replace(/\ncustomFields:.*/, ""), formatBoardVocabulary(board));
+  assert.match(capped, /labels:Mobile/);
+  const fields = JSON.parse(capped.match(/customFields:(.*)/)[1]);
+  assert.ok(fields.length > 0 && fields.length < 50);
+  assert.ok(fields.every((field) => field.name.length === 64));
+  assert.ok(capped.length <= 4000 + 3000 + 60);
 });
 
 
