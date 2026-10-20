@@ -8,8 +8,10 @@ import { HTPR_7002_INBOX_E_FIRST_PRESS_FLAG, HTPR_7009_DEDUPE_TASK_DETAIL_READS_
 import { refreshTaskDetailReadAfterWrite } from "@/lib/taskDetailReads";
 import UpdateKanban from "@/hooks/MultiPages/useUpdateTaskInBoards";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
+import { HTPR_7473_DELETE_CANCEL_CLOSES_FLAG } from "@/lib/flags/definitions/htpr-7473-delete-cancel-closes";
 export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
+  const deleteCancelCloses = useFlag(HTPR_7473_DELETE_CANCEL_CLOSES_FLAG);
   const { deleteTodo } = UpdateKanban();
   const inboxEFirstPress = useFlag(HTPR_7002_INBOX_E_FIRST_PRESS_FLAG);
   const dedupe = useFlag(HTPR_7009_DEDUPE_TASK_DETAIL_READS_FLAG);
@@ -63,6 +65,7 @@ export function useTaskDetailModalActions(getContext: () => TaskDetailContext) {
 
   const deleteTask = async (state: boolean) => {
     const { toggleDeleteModal } = getContext();
+    if (deleteCancelCloses && !state) return toggleDeleteModal();
     if (!currentTask || !state) return;
     try {
       const response = await globalAPIHandlers.deleteTaskAPI(currentTask.id);

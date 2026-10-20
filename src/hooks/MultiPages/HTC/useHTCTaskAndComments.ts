@@ -20,6 +20,7 @@ import { useRemoveParentTask } from "../Tasks";
 import { useProjectQuery } from "@/hooks/General/useProjectQuery";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7185_DELETE_TASK_UNDO_FLAG } from "@/lib/flags/definitions/htpr-7185-delete-task-undo";
+import { HTPR_7473_DELETE_CANCEL_CLOSES_FLAG } from "@/lib/flags/definitions/htpr-7473-delete-cancel-closes";
 
 interface IProps {
   callbackHandler?: (payload: any, mode: string) => void | Promise<void>;
@@ -45,6 +46,7 @@ const useHTCTaskAndComments = ({
   toggleCreateTaskGlobally,
 }: IProps) => {
   const deleteTaskUndo = useFlag(HTPR_7185_DELETE_TASK_UNDO_FLAG);
+  const deleteCancelCloses = useFlag(HTPR_7473_DELETE_CANCEL_CLOSES_FLAG);
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const {
@@ -305,6 +307,7 @@ const useHTCTaskAndComments = ({
   };
 
   const confirmDelete = async (response: boolean) => {
+    if (deleteCancelCloses && !response) return boardCloseHandler();
     if (
       response &&
       inViewObject.taskId &&
