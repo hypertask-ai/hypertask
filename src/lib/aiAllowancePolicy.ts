@@ -37,3 +37,16 @@ export function parseAllowanceTeamStamp(
   const match = content?.match(/<!--ht-allowance-team:([A-Za-z0-9_-]+)-->/);
   return match?.[1] ?? null;
 }
+
+export const PLAN_PAID_SEAT_AI_ALLOWANCE_USD = 5;
+export const FREE_TEAM_DAILY_AI_ALLOWANCE_USD = 0.25;
+export const DEMO_GLOBAL_AI_ALLOWANCE_USD = 15;
+export const DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE =
+  "This team has used today's included AI allowance. Try again tomorrow, upgrade or add your own AI key.";
+
+export type TeamAllowancePolicy = {
+  mode: "legacy" | "plan";
+  monthlyUsd: number;
+  dailyUsd: number | null;
+  demoGlobal: boolean;
+};
