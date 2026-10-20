@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
@@ -248,6 +249,7 @@ export async function retrieveBoardKnowledge(
     })),
   ].slice(0, input.limit);
 
+  documents.forEach(document => recordAgentBoardScopeMiss(document.projectId, "read"));
   return {
     success: true,
     documents,

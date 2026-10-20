@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import prisma from "@/lib/prisma";
@@ -31,7 +32,7 @@ const handler: NextApiHandler = async (req, res) => {
     const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
     if (!actingAgent.ok) return res.status(actingAgent.status).json({ message: actingAgent.message });
     const agentId = actingAgent.agentId;
-    if (!(await userCanAccessTask(session.userId, taskId, agentId))) {
+    if ((!agentId || agentScopeEnforced()) && !(await userCanAccessTask(session.userId, taskId, agentId))) {
       return res.status(403).json({ message: "Forbidden" });
     }
 
@@ -51,6 +52,7 @@ const handler: NextApiHandler = async (req, res) => {
     });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
+    recordAgentBoardScopeMiss(task.projectId, "write");
 
     if (priority_index === 0) {
       await prisma.priority.deleteMany({ where: { taskId: task.id } });
@@ -123,4 +125,4 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

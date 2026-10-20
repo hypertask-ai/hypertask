@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
@@ -19,6 +20,7 @@ async function userCanAccessProject(userId: number, projectId: number, agentId: 
     where: { id: projectId, ...taskWriteAccessWhere(userId, agentId) },
     select: { id: true },
   });
+  if (project) recordAgentBoardScopeMiss(project.id, "write");
   return !!project;
 }
 

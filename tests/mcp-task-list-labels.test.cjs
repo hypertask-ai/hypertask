@@ -23,6 +23,7 @@ function loadMappers() {
   }).outputText;
 
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/tasks/sameBoardRelations": require("./task-route-loader.cjs").load("src/lib/tasks/sameBoardRelations.ts", {}),
     "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "@/lib/mcp/agents": {

@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
@@ -71,6 +72,7 @@ async function scopeRelatedRows(ctx: McpAuthContext, rows: TurbopufferTaskRow[])
 }
 
 function mapRelatedTask(row: TurbopufferTaskRow): RelatedTask {
+  recordAgentBoardScopeMiss(row.projectId, "read");
   return {
     ticketNumber: row.ticketNumber,
     title: row.title,

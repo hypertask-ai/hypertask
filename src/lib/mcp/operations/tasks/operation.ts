@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse } from '@/lib/mcp/routeWrapper'
@@ -627,7 +628,7 @@ export async function GET(request: NextRequest) {
           }
         },
         parentTask: {
-          ...(ctx.agentId ? { where: { project: getProjectWhere(user.id, ctx.agentId) } } : {}),
+          ...(ctx.agentId && agentScopeEnforced() ? { where: { project: getProjectWhere(user.id, ctx.agentId) } } : {}),
           select: {
             id: true,
             ticketNumber: true,
@@ -689,7 +690,7 @@ export async function GET(request: NextRequest) {
         },
         subTasks: {
           where: {
-            ...(ctx.agentId ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
+            ...(ctx.agentId && agentScopeEnforced() ? { project: getProjectWhere(user.id, ctx.agentId) } : {}),
             status: {
               not: "Deleted",
             },
@@ -717,6 +718,7 @@ export async function GET(request: NextRequest) {
     const uniqueSections = new Set(tasks.map(t => t.section).filter(Boolean))
 
     const taskList: TaskListItem[] = tasks.map(task => {
+      recordAgentBoardScopeMiss(task.projectId, "read");
       task = stripForeignTaskRelations(task)
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const assignees = task.assignees
@@ -732,7 +734,7 @@ export async function GET(request: NextRequest) {
         sectionId: task.sectionId || undefined,
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: ctx.agentId && !task.parentTask ? undefined : task.parentTaskId || undefined,
+        parent_id: ctx.agentId && agentScopeEnforced() && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
           ? {
               id: task.parentTask.id,

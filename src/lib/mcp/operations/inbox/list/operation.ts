@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -134,6 +135,7 @@ export async function GET(request: NextRequest) {
                 )
             }
 
+            for (const notification of [...json.notifications, ...agentInbox.notifications]) recordAgentBoardScopeMiss(notification.projectId, "read");
             return NextResponse.json({
                 success: true,
                 user_structured_data: json.structuredData,

@@ -1,3 +1,4 @@
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
@@ -11,39 +12,107 @@ export type GetAllIncludesOptions = {
   includeCachedDescription?: boolean;
 };
 
-const projectAccessBranches = (
+const humanProjectAccessBranches = (
   userId: number,
   agentId?: string | null,
-): Prisma.ProjectWhereInput[] =>
-  agentId
-    ? [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }]
-    : [
-        { ownerId: userId },
-        { members: { some: { userId, agentId: null } } },
-      ];
+): Prisma.ProjectWhereInput[] => {
+  if (!agentId) {
+    return [
+      { ownerId: userId },
+      { members: { some: { userId, agentId: null } } },
+    ];
+  }
+
+  if (agentScopeEnforced()) {
+    return [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }];
+  }
+  const activeAgent = { id: agentId, userId, revokedAt: null };
+  return [
+    {
+      owner: {
+        id: userId,
+        agents: { some: activeAgent },
+      },
+    },
+    {
+      members: {
+        some: {
+          userId,
+          agentId: null,
+          user: { agents: { some: activeAgent } },
+        },
+      },
+    },
+  ];
+};
 
 export const projectContentAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
+): Prisma.ProjectWhereInput => ({
+  OR: [
+    ...humanProjectAccessBranches(userId, agentId),
+    ...(agentId && !agentScopeEnforced()
+      ? [
+          {
+            members: {
+              some: { agentId, agent: { userId, revokedAt: null } },
+            },
+          },
+        ]
+      : []),
+  ],
+});
 
 export const taskWriteAccessWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => ({ OR: projectAccessBranches(userId, agentId) });
+): Prisma.ProjectWhereInput => ({
+  OR: [
+    ...humanProjectAccessBranches(userId, agentId),
+    ...(agentId && !agentScopeEnforced()
+      ? [
+          {
+            members: {
+              some: { agentId, agent: { userId, revokedAt: null } },
+            },
+          },
+        ]
+      : []),
+  ],
+});
 
 export const getProjectWhere = (
   userId: number,
   agentId?: string | null
 ): Prisma.ProjectWhereInput => ({
   teamId: { not: null },
-  OR: projectAccessBranches(userId, agentId),
+  OR: [
+    ...humanProjectAccessBranches(userId, agentId),
+    ...(agentId && !agentScopeEnforced()
+      ? [
+          {
+            members: {
+              some: { agentId, agent: { userId, revokedAt: null } },
+            },
+          },
+        ]
+      : []),
+  ],
 });
 
 export const getProjectListingWhere = (
   userId: number,
   agentId?: string | null
-): Prisma.ProjectWhereInput => getProjectWhere(userId, agentId);
+): Prisma.ProjectWhereInput =>
+  agentId
+    ? agentScopeEnforced() ? getProjectWhere(userId, agentId) : {
+        teamId: { not: null },
+        members: {
+          some: { agentId, agent: { userId, revokedAt: null } },
+        },
+      }
+    : getProjectWhere(userId);
 
 export const getTaskWhere = (): Prisma.TaskWhereInput => ({
   status: "Normal",
@@ -295,13 +364,22 @@ export const savedViewBoardAccessWhere = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput => {
+  if (agentId && agentScopeEnforced()) return { OR: [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }] };
+  const activeAgent = { id: agentId!, userId, revokedAt: null };
   return {
-    OR: agentId
-      ? [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }]
-      : [
-          { ownerId: userId },
-          { members: { some: { userId, agentId: null, status: "Accepted" } } },
-        ],
+    OR: [
+      agentId
+        ? { owner: { id: userId, agents: { some: activeAgent } } }
+        : { ownerId: userId },
+      { members: { some: {
+        userId, agentId: null, status: "Accepted",
+        ...(agentId ? { user: { agents: { some: activeAgent } } } : {}),
+      } } },
+      ...(agentId ? [{ members: { some: {
+        agentId, status: "Accepted" as const,
+        agent: { userId, revokedAt: null },
+      } } }] : []),
+    ],
   };
 };
 

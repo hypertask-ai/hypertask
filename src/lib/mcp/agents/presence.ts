@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma'
 import { projectContentAccessWhere } from '@/utils/controllers/projects/getAllIncludes'
 
@@ -47,7 +48,7 @@ export async function getTeamAgentPresence(
   }
 
   const projects = await prisma.project.findMany({
-    where: { teamId, status: 'Normal', ...(caller?.agentId ? projectContentAccessWhere(caller.userId, caller.agentId) : {}) },
+    where: { teamId, status: 'Normal', ...(caller?.agentId && agentScopeEnforced() ? projectContentAccessWhere(caller.userId, caller.agentId) : {}) },
     select: { id: true },
   })
   const projectIds = projects.map((project) => project.id)
@@ -55,7 +56,7 @@ export async function getTeamAgentPresence(
   const sessions = await prisma.taskSession.findMany({
     where: {
       agentId: { not: null },
-      task: { projectId: { in: projectIds }, ...(caller?.agentId ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
+      task: { projectId: { in: projectIds }, ...(caller?.agentId && agentScopeEnforced() ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
     },
     orderBy: { lastSeenAt: 'desc' },
     take: 1000,
@@ -89,7 +90,7 @@ export async function getTeamAgentPresence(
     where: {
       agentId: { not: null },
       expiresAt: { gt: nowDate },
-      task: { projectId: { in: projectIds }, ...(caller?.agentId ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
+      task: { projectId: { in: projectIds }, ...(caller?.agentId && agentScopeEnforced() ? { project: projectContentAccessWhere(caller.userId, caller.agentId) } : {}) },
     },
     orderBy: { heartbeatAt: 'desc' },
     take: 1000,
@@ -121,6 +122,7 @@ export async function getTeamAgentPresence(
   return [...latestByAgent.entries()]
     .map(([agentId, session]) => {
       const currentTask = currentTaskByAgent.get(agentId)?.task
+      if (currentTask) recordAgentBoardScopeMiss(currentTask.projectId, "read");
 
       return {
         agent: {

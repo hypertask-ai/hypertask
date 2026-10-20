@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 
 import prisma from "@/lib/prisma";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
@@ -53,6 +54,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
             }
         });
         if (!task) return res.status(404).json({ message: "Task not found" });
+        recordAgentBoardScopeMiss(task.projectId, "write");
         let commentExists: { creatorId: number | null; agentId: string | null } | null = null;
         if (commentId) {
             commentExists = await prisma.comment.findFirst({
@@ -191,4 +193,4 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
     }
 }
 
-export default handler
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

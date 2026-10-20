@@ -48,7 +48,8 @@ function fixture() {
   const projects = [15, 4060, 2128].map(id => ({ id, ownerId: user.id, owner: user, createdAt: new Date(), section: [], labels: [], _count: { members: 1, tasks: 1 }, teamId: 'team', status: 'Normal', title: `Board ${id}`, name: `Board ${id}`, members: id === 2128 ? [] : [{ userId: user.id, agentId: agent.id, status: 'Accepted', agent }] }));
   const tasks = projects.map(project => ({ id: project.id * 10, projectId: project.id, project, userId: user.id, user, status: 'Normal', title: `Task ${project.id}`, description: 'scope fixture', description_: { content: 'scope fixture' }, section: 'Todo', sectionId: project.id, uniqueIndex: 1, ticketNumber: `HTPR-${project.id}`, parentTaskId: null, parentTask: null, subTasks: [], Reminders: [], assignees: [], followers: [], taskLabels: [], attachments: [], pullRequests: [], customFieldValues: [], savedContent: [], agent: null, priority: null, estimate: null, _count: { comments: 0 }, createdAt: new Date(), updatedAt: new Date(), sectionChangedAt: new Date() }));
   const notifications = tasks.map(task => ({ id: task.id, userId: user.id, agentId: null, taskId: task.id, projectId: task.projectId, task, project: task.project, status: 'Normal', type: 'Mentioned', seen: false, archivedAt: null, fromUserId: 7, fromAgentId: null, createdAt: new Date(), fromUser: { displayName: 'Sender' }, fromAgent: null }));
-  const state = { user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id } };
+  user.agents = [agent];
+  const state = { enforce: true, events: [], grantReads: 0, flagReads: 0, user, agent, projects, tasks, notifications, writes: [], ctx: { user, agentId: agent.id } };
   function model(rows, name) {
     return {
       findMany: async (args = {}) => rows.filter(row => matches(row, args.where)).slice(0, args.take ?? rows.length).map(row => hydrate(row, args)),
@@ -78,17 +79,43 @@ function fixture() {
     userSetting: { findUnique: async () => null },
     $transaction: async run => run(prisma),
   };
-  const mocks = {
+  prisma.member = { findMany: async args => {
+    state.grantReads++;
+    return projects.flatMap(project => project.members.map(member => ({ ...member, projectId: project.id }))).filter(row => matches(row, args.where)).map(row => hydrate(row, args));
+  } };
+  const scope = load('src/lib/auth/agentScope.ts', {
     '@/lib/prisma': { default: prisma },
-    '@/utils/controllers/projects/getAllIncludes': access,
+    '@/lib/flags': { isFeatureEnabled: async () => { state.flagReads++; if (state.flagError) throw state.flagError; return state.enforce; } },
+    '@/lib/telemetry/signupAnalytics': { recordServerCapture: capture => state.events.push(capture) },
+  });
+  const scopedAccess = load('src/utils/controllers/projects/getAllIncludes.ts', { '@/lib/auth/agentScope': scope });
+  const mocks = {
+    '@/lib/auth/agentScope': scope,
+    '@/lib/prisma': { default: prisma },
+    '@/utils/controllers/projects/getAllIncludes': scopedAccess,
     '@/lib/flags': { isFeatureEnabled: async () => false },
     '@/lib/realtime/server': { broadcastBoardChange: async () => {}, broadcastTaskChange: async () => {}, broadcastInboxChange: async () => {}, broadcastTaskComment: async () => {} },
-    '@/lib/mcp/routeWrapper': { wrapMcpRoute: handler => handler, validateMcpRouteAuth: async () => state.ctx, checkMcpRouteRateLimit: async () => null },
+    '@/lib/mcp/routeWrapper': { wrapMcpRoute: handler => (req, ...args) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return handler(req, ...args); }), validateMcpRouteAuth: async () => state.ctx, checkMcpRouteRateLimit: async () => null },
     '@/lib/mcp/auth': { createUnauthorizedResponse: () => Response.json({}, { status: 401 }), checkMcpRateLimit: async () => null, validateMcpAuth: async () => state.ctx },
     '@/lib/auth/sessionUserRecord': { loadSessionUserRecord: async () => user },
     '@/utils/controllers/projects/findPrefixAliasTasks': { findPrefixAliasTasks: async () => [] },
     '@/utils/controllers/logs/createLog': { default: async () => {} },
   };
-  return { ...state, state, prisma, mocks, load: (file, extra = {}) => load(file, { ...mocks, ...extra }) };
+  return { ...state, state, prisma, mocks, scope, access: scopedAccess, run: (req, run) => scope.withAgentScopeRequest(req, async () => { await scope.prepareAgentScope(state.ctx.user.id, state.ctx.agentId); return run(); }), load: (file, extra = {}) => load(file, { ...mocks, ...extra }) };
 }
 module.exports = { access, fixture, matches, hydrate, load };
+
+module.exports.configureActor = (f, kind) => {
+  if (kind === 'human') f.state.ctx.agentId = null;
+  if (kind === 'zero' || kind === 'pending') f.projects.forEach(project => { project.members = []; });
+  if (kind === 'pending') f.projects[0].members = [{ agentId: f.agent.id, status: 'Pending', agent: f.agent }];
+  if (kind === 'revoked') f.agent.revokedAt = new Date();
+  if (kind === 'other-owner') f.agent.userId = 7;
+};
+
+module.exports.enforcedScope = {
+  agentScopeEnforced: () => true,
+  recordAgentBoardScopeMiss: () => {},
+  prepareAgentScope: async () => {},
+  withAgentScopeRequest: (_request, run) => run(),
+};

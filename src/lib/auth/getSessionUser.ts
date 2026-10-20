@@ -1,3 +1,4 @@
+import { prepareAgentScope } from "@/lib/auth/agentScope";
 import { parseCookies } from 'better-auth/cookies'
 
 import { SESSION_COOKIE, verifySession } from '@/lib/auth/session'
@@ -8,6 +9,12 @@ export type SessionUser =
   | { userId: number; agentId?: string; source: 'legacy'; needsBridge: true }
 
 export async function getSessionUser(headers: Headers): Promise<SessionUser | null> {
+  const session = await readSessionUser(headers);
+  if (session) await prepareAgentScope(session.userId, session.agentId);
+  return session;
+}
+
+async function readSessionUser(headers: Headers): Promise<SessionUser | null> {
   const cookieHeader = headers.get('cookie')
   const token = cookieHeader
     ? parseCookies(cookieHeader).get(SESSION_COOKIE)

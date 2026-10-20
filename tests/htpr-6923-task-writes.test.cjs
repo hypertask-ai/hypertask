@@ -26,6 +26,7 @@ function fixture(kind, scenario) {
   const actor = { id: 985, displayName: "QA", photoURL: "qa.png", email: "qa@example.invalid" };
   const task = { id: 42, projectId: 15, title: "Changed", nested: { retained: true } };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": { getSessionUser: async () => {
       if (scenario.authThrows) throw new Error("Auth lookup unavailable");
       return session;

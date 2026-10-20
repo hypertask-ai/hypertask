@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import type { NextApiHandler, NextApiRequest } from "next";
 import { NextResponse } from "next/server";
 import type { z } from "zod";
@@ -8,6 +9,7 @@ export type TaskWriteRequest = Pick<Request, "headers" | "json"> & {
   rawHeaders?: NextApiRequest["headers"];
   query?: NextApiRequest["query"];
   url?: string;
+  method?: string;
 };
 export type TaskWriteResponse = Pick<NextResponse, "status" | "headers" | "text" | "json">;
 export type TaskWriteRoute = (
@@ -23,7 +25,8 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
   prepare?: (session: SessionUser) => Promise<Actor>;
   operation: (body: Body, actor: Actor, request: TaskWriteRequest) => Promise<TaskWriteResponse | undefined>;
 }): TaskWriteRoute {
-  return async (request, authenticatedSession) => {
+  return (request, authenticatedSession) => withAgentScopeRequest(request, async () => {
+    if (authenticatedSession) await prepareAgentScope(authenticatedSession.userId, authenticatedSession.agentId);
     let session = authenticatedSession;
     let actor!: Actor;
     if (!options.validateBeforeAuth) {
@@ -66,7 +69,7 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
       }
     }
     return options.operation(body, actor, request);
-  };
+  });
 }
 
 type TaskWriteRouteLoader = () => Promise<TaskWriteRoute>;
@@ -84,7 +87,7 @@ export function taskWriteHandler(
     const headers = new Headers(req.headers as Record<string, string>);
     const session = (await getSessionUser(headers).catch(() => null)) ?? undefined;
     const route = await loadRoute();
-    const response = await route({ headers, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
+    const response = await route({ headers, url: req.url, method: req.method, rawHeaders: req.headers, cookies: req.cookies, query: req.query, json: async () => req.body }, session);
     if (!response) return;
     response.headers.forEach((value, name) => {
       if (name !== "content-type") res.setHeader(name, value);

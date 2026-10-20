@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -57,6 +58,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'Board not found' }, { status: 404 })
     }
 
+    if (ctx.agentId) recordAgentBoardScopeMiss(projectId, "write");
     if (status === 'Deleted') {
       if (!(await isFeatureEnabled(HTPR_6470_PROJECT_DELETE_FLAG, ctx.user.id))) {
         return NextResponse.json({ success: false, error: 'Not found' }, { status: 404 })

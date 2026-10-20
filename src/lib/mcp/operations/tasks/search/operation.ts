@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -444,6 +445,7 @@ export async function GET(request: NextRequest) {
         : null
 
     const taskList: TaskSearchItem[] = orderedTasks.map(task => {
+      recordAgentBoardScopeMiss(task.projectId, "read");
       const agent = mapVisibleMcpAgent(task.agent, user.id, task.projectId)
       const comment = commentById?.get(task.id)
       const item: TaskSearchItem = {

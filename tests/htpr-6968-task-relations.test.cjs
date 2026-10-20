@@ -69,6 +69,7 @@ function fixture(name, scenario) {
   const recovery = { TaskHardDeleteInProgressError: DeleteError, updateTaskAndSubtasks: record("restore", task, scenario.writeThrows) };
   const dueQueue = { cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows && "Queue unavailable"), scheduleDueDateJob: record("schedule-due", undefined, scenario.scheduleThrows && "Queue unavailable") };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "date-fns": require("date-fns"),
     "@/lib/auth/getSessionUser": { getSessionUser: async () => { authCalls++; if (scenario.authThrows) throw failure("Auth unavailable"); return session; } },
     "@/lib/auth/sessionUserRecord": { loadSessionUserRecord: record("actor", actor, scenario.actorThrows && "Actor unavailable") },

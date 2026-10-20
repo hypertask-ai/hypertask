@@ -457,3 +457,87 @@ test('global create bridge destination binds actor and denies unassigned boards 
     }
   }
 });
+
+const { configureActor } = require('./helpers/agent-board-scope.cjs');
+for (const mode of ['WATCH', 'ENFORCE']) {
+  for (const kind of ['granted', 'zero', 'pending', 'revoked', 'other-owner', 'human']) {
+    for (const action of ['read', 'write', 'comment', 'search', 'list']) {
+      test(`route grid ${mode} ${kind} ${action} boards 15/2128`, async () => {
+        const f = fixture();
+        f.state.enforce = mode === 'ENFORCE';
+        configureActor(f, kind);
+        f.mocks['@/lib/mcp/agents'] = agentDisplay;
+        let invoke;
+        if (action === 'read' || action === 'list') {
+          const route = f.load('src/lib/mcp/operations/tasks/operation.ts').GET;
+          invoke = board => route(request(`/api/mcp/tasks?${action === 'read' ? `task_id=${board * 10}` : `project_id=${board}`}`));
+        } else if (action === 'search') {
+          const route = f.load('src/lib/mcp/operations/tasks/search/operation.ts', {
+            '@/utils/controllers/search/document': { turbopufferSearchTaskIds: async () => f.tasks.map(task => task.id) },
+            '@/lib/search/serverOperators': { parseSearchWithChipNames: async text => ({ text, filters: {} }) },
+            '@/lib/search/rankedWhere': {},
+          }).GET;
+          invoke = board => route(request(`/api/mcp/tasks/search?q=scope&board_id=${board}`));
+        } else if (action === 'write') {
+          f.prisma.priority = { deleteMany: async () => { f.writes.push('priority'); } };
+          const handler = f.load('src/pages/api/priority/setPriority.ts', {
+            '@/lib/auth/getSessionUser': { getSessionUser: async () => { await f.scope.prepareAgentScope(f.user.id, f.state.ctx.agentId); return { userId: f.user.id, agentId: f.state.ctx.agentId }; } },
+            '@/utils/controllers/activities/CreatePriorityActivity': { default: async () => {} },
+          }).default;
+          invoke = async board => {
+            const res = response();
+            await handler({ url: '/api/priority/setPriority', method: 'POST', headers: {}, body: { taskId: board * 10, priority_index: 0, Priority_Value: 'None', agentId: f.state.ctx.agentId } }, res);
+            return { status: res.statusCode };
+          };
+        } else {
+          f.prisma.comment = { findUnique: async () => null };
+          const route = f.load('src/lib/mcp/operations/comments/operation.ts', {
+            '@/lib/mcp/routeWrapper': { ...f.mocks['@/lib/mcp/routeWrapper'], readMcpRouteJsonBody: async req => ({ ok: true, body: await req.json() }) },
+            '@/lib/mcp/idempotency/idempotencyStore': { normalizeIdempotencyKey: () => null, withIdempotency: async (_op, _user, _key, _body, run) => run() },
+            '@/utils/controllers/comments/createCommentService': { createCommentService: async () => { f.writes.push('comment'); return { id: 1, text: 'Never in telemetry', createdAt: new Date() }; } },
+            '@/utils/controllers/comments/processMentions': { resolveTextMentions: async text => text },
+            '@/utils/helperFunctions/multiPages': { extractTipTapContent: () => ({ mentions: [] }) },
+            '@/utils/controllers/urls/extractUrlsFromContent': { persistUrlsForComment: async () => {} },
+            '@/lib/mcp/tasks/services': { validateProjectMemberIds: async () => ({ invalidIds: [] }) },
+            '@/lib/mcp/comments/visibleReactionAgents': { loadVisibleReactionAgents: async () => new Map() },
+          }).POST;
+          invoke = board => route(request('/api/mcp/comments', { task_id: board * 10, text: 'Never in telemetry' }));
+        }
+        for (const board of [15, 2128]) {
+          f.writes.length = 0;
+          const result = await invoke(board);
+          const valid = !['revoked', 'other-owner'].includes(kind);
+          const allowed = kind === 'human' || valid && (mode === 'WATCH' || kind === 'granted' && board === 15);
+          if (!allowed && ['search', 'list'].includes(action) && result.status === 200) assert.deepEqual((await result.json()).tasks, []);
+          else assert.ok(allowed ? [200, 201].includes(result.status) : [403, 404].includes(result.status), `${board}: got ${result.status}, allowed=${allowed}`);
+          if (['write', 'comment'].includes(action)) assert.equal(f.writes.length, allowed ? 1 : 0);
+          const event = f.state.events.find(event => event.properties.projectId === board);
+          const miss = mode === 'WATCH' && valid && kind !== 'human' && (board === 2128 || kind !== 'granted');
+          assert.equal(Boolean(event), miss, `miss for ${board}`);
+          if (event) assert.deepEqual(event, { distinctId: '6', event: 'agent_board_scope_miss', properties: { agentId: f.agent.id, ownerUserId: f.user.id, projectId: board, route: action === 'write' ? '/api/priority/setPriority' : action === 'comment' ? '/api/mcp/comments' : `/api/mcp/tasks${action === 'search' ? '/search' : ''}`, action: ['write', 'comment'].includes(action) ? 'write' : 'read', zeroBoard: kind === 'zero' || kind === 'pending' } });
+        }
+        assert.equal(f.state.grantReads, mode === 'WATCH' && kind !== 'human' ? 2 : 0);
+      });
+    }
+  }
+}
+
+test('WATCH priority and estimate preserve production writes on owned teamless boards', async () => {
+  for (const mode of ['WATCH', 'ENFORCE']) {
+    for (const field of ['priority', 'estimate']) {
+      const f = fixture();
+      f.state.enforce = mode === 'ENFORCE';
+      f.projects.forEach(project => { project.teamId = null; });
+      f.prisma[field] = { deleteMany: async () => { f.writes.push(field); } };
+      const handler = f.load(`src/pages/api/${field}/${field === 'priority' ? 'setPriority' : 'setEstimate'}.ts`, {
+        '@/lib/auth/getSessionUser': { getSessionUser: async () => { await f.scope.prepareAgentScope(f.user.id, f.agent.id); return { userId: f.user.id, agentId: f.agent.id }; } },
+        '@/utils/controllers/activities/CreatePriorityActivity': { default: async () => {} },
+        '@/utils/controllers/activities/createEstimateActivity': { default: async () => {} },
+      }).default;
+      const res = response();
+      await handler({ url: `/api/${field}`, method: 'POST', headers: {}, body: { taskId: 21280, agentId: f.agent.id, priority_index: 0, Priority_Value: 'None', estimate_index: 0, estimate_value: 'None' } }, res);
+      assert.equal(res.statusCode, mode === 'WATCH' ? 200 : 403);
+      assert.equal(f.state.events.length, mode === 'WATCH' ? 1 : 0);
+    }
+  }
+});

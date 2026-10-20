@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import crypto from "crypto";
 import {
   AgentRunActivityType,
@@ -111,10 +112,10 @@ function accessibleRunWhere(principal: AgentRunPrincipal, id: string) {
     ...(principal.agentId
       ? {
           agentId: principal.agentId,
-          OR: [
+          ...(agentScopeEnforced() ? { OR: [
             { taskId: null },
             { task: { project: projectContentAccessWhere(principal.userId, principal.agentId) } },
-          ],
+          ] } : {}),
         }
       : { agent: { userId: principal.userId } }),
   };
@@ -624,12 +625,14 @@ export async function listAgentRunActivities(
   const run = await prisma.agentRun.findFirst({
     where: accessibleRunWhere(principal, id),
     select: {
+      task: { select: { projectId: true } },
       activities: {
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: AGENT_RUN_ACTIVITY_LIST_LIMIT,
       },
     },
   });
+  if (run?.task) recordAgentBoardScopeMiss(run.task.projectId, "read");
   return run?.activities.reverse().map(serializeAgentRunActivity) ?? null;
 }
 
@@ -676,6 +679,7 @@ export async function createAgentRunActivity(
   if (!principal.agentId) return null;
   const run = await findActivityRun(principal, id);
   if (!run) return null;
+  if (run.task) recordAgentBoardScopeMiss(run.task.projectId, "write");
   const exactChatReply = input.type === "RESPONSE" && Boolean(run.chatSession);
   if (exactChatReply && !input.replyToMessageId) throw new AgentRunActivityInputError("replyToMessageId is required for chat responses");
 

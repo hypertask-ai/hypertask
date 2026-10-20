@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
 import { elapsedSeconds, resumedStartedAt } from "@/lib/timeDuration";
@@ -285,7 +286,7 @@ export async function listRunning(userId: number, agentId?: string | null) {
       task: {
         status: { not: "Deleted" },
         project: {
-          ...getProjectWhere(userId, agentId),
+          ...getProjectWhere(userId, agentId && agentScopeEnforced() ? agentId : null),
           status: { in: ["Normal", "Archive"] },
         },
       },
@@ -305,6 +306,7 @@ export async function listRunning(userId: number, agentId?: string | null) {
     },
   });
 
+  entries.forEach(entry => recordAgentBoardScopeMiss(entry.task.projectId, "read"));
   return entries.map(({ task, ...entry }) => ({
     ...entry,
     task: {
@@ -407,7 +409,7 @@ export async function listReport(
             ? { projectId: options.boardId }
             : {}),
         project: {
-          ...getProjectWhere(userId, options.agentId),
+          ...getProjectWhere(userId, options.agentId && agentScopeEnforced() ? options.agentId : null),
           status: { in: ["Normal", "Archive"] },
           ...(options.teamId ? { teamId: options.teamId } : {}),
         },
@@ -438,6 +440,7 @@ export async function listReport(
     return runningDifference || b.startedAt.getTime() - a.startedAt.getTime();
   });
 
+  entries.forEach(entry => recordAgentBoardScopeMiss(entry.task.projectId, "read"));
   const manageableProjectIds = adminSet;
 
   return entries.map(({ task, user, ...entry }) => ({

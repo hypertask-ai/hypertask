@@ -19,6 +19,7 @@ function loadRoute({ authenticated = true, enabled = true, result } = {}) {
     },
   }).outputText;
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/mcp/operationCrashReport": { reportMcpOperationCrash: () => {} },
     "@/utils/controllers/projects/getAllIncludes": require("./helpers/agent-board-scope.cjs").access,
     "next/server": {

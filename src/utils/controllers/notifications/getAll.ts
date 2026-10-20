@@ -1,3 +1,4 @@
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { notificationBoardAccessWhere } from "@/utils/controllers/notifications/boardAccess";
 import { NotificationType, Prisma } from "@prisma/client";
 import prisma from "@/lib/prisma";
@@ -145,7 +146,7 @@ export async function getInboxNotifications(
   const cachedDescriptionPromise = withCachedDescription
     ? isFeatureEnabled(HTPR_6752_INSTANT_TICKET_OPEN_FLAG, userId).catch(() => false)
     : Promise.resolve(false);
-  if (agentId) {
+  if (agentId && agentScopeEnforced()) {
     return client.notification.findMany({
       where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
       include: notificationInboxInclude(userId, await cachedDescriptionPromise),
@@ -188,7 +189,7 @@ export async function getInboxNotifications(
 }
 
 const getRecentInboxActorActivity = (userId: number, agentId?: string | null) => {
-  if (agentId) {
+  if (agentId && agentScopeEnforced()) {
     return prisma.notification.findMany({
       where: { AND: [visibleUserInboxWhere(userId), notificationBoardAccessWhere(userId, agentId)] },
       select: { taskId: true, type: true, fromAgentId: true, fromUserId: true, createdAt: true },

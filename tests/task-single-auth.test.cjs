@@ -27,6 +27,7 @@ function loadHandler(session = null, { taskBroadcastGate } = {}) {
   const updated = [];
   const broadcasts = [];
   const stubs = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@/lib/auth/getSessionUser": {
       getSessionUser: async () => session,
     },

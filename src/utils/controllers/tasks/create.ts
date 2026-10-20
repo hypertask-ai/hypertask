@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next"
 import { PrismaClient } from "@prisma/client"
 import upsertTaskDescription from "../description/common-description-create";
@@ -82,6 +83,7 @@ const create = async ({title, description, section, userId, ranking, projectId,s
                 json:{ message: "Project not found or access denied" }
             })
 
+            recordAgentBoardScopeMiss(allowedProject.id, "write");
             const sectionExists = await prisma.section.findFirst({
                 where:{
                     id:sectionId

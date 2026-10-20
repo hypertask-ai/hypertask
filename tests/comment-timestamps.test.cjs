@@ -13,7 +13,7 @@ class FixedDate extends Date {
 const json = (body, init = {}) => ({ body: JSON.parse(JSON.stringify(body)), status: init.status ?? 200 })
 
 function load(relativePath, modules = {}) {
-  modules = { '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...modules }
+  modules = { '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, '@/lib/mcp/operationCrashReport': { reportMcpOperationCrash: () => {} }, ...modules }
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8')
   const javascript = ts.transpileModule(source, {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },

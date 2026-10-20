@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
@@ -55,7 +56,7 @@ export async function findTaskByIdentifier(
   const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
 
   if (task_id) {
-    return await prisma.task.findFirst({
+    const task = await prisma.task.findFirst({
       where: {
         id: task_id,
         ...(project_id ? { projectId: project_id } : {}),
@@ -64,6 +65,8 @@ export async function findTaskByIdentifier(
       },
       select: { id: true, projectId: true },
     });
+    if (task) recordAgentBoardScopeMiss(task.projectId);
+    return task;
   }
 
   if (!ticket_number && (unique_index == null || project_id == null)) return null;
@@ -80,7 +83,10 @@ export async function findTaskByIdentifier(
   if (!project_id && matches.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
-  if (matches.length) return matches[0];
+  if (matches.length) {
+    recordAgentBoardScopeMiss(matches[0].projectId);
+    return matches[0];
+  }
 
   const liveTask = await prisma.task.findFirst({
     where: { ...identityWhere, status: { not: 'Deleted' } },
@@ -117,6 +123,7 @@ export async function findTaskByIdentifier(
   if (!project_id && tasks.length > 1) {
     throw new TaskIdentifierAmbiguityError(ticket_number!);
   }
+  if (tasks[0]) recordAgentBoardScopeMiss(tasks[0].projectId);
   return tasks[0] ?? null;
 }
 
@@ -203,8 +210,9 @@ export async function findTaskByStringIdentifier(
     (match) => match.uniqueIndex === numericIdentifier
   );
 
-  if (uniqueIndexMatches.length === 1) return uniqueIndexMatches[0];
-  return matches.find((match) => match.id === numericIdentifier) ?? null;
+  const resolved = uniqueIndexMatches.length === 1 ? uniqueIndexMatches[0] : matches.find((match) => match.id === numericIdentifier);
+  if (resolved) recordAgentBoardScopeMiss(resolved.projectId);
+  return resolved ?? null;
 }
 
 export function validateTaskIdentifier(params: {

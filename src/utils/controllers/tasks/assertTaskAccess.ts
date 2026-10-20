@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma, Status } from "@prisma/client";
 import prisma from "@/lib/prisma";
 import { getProjectWhere, taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
@@ -33,8 +34,9 @@ export async function userCanAccessTask(
   if (!Number.isInteger(taskId) || taskId <= 0) return false;
   const task = await prisma.task.findFirst({
     where: taskAccessWhere(userId, taskId, { agentId }),
-    select: { id: true },
+    select: { id: true, projectId: true },
   });
+  if (task) recordAgentBoardScopeMiss(task.projectId);
   return Boolean(task);
 }
 

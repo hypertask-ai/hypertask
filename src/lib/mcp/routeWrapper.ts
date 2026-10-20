@@ -1,3 +1,4 @@
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
@@ -99,7 +100,7 @@ function scopeFor(request: NextRequest): RouteScope | undefined {
 export function wrapMcpRoute<Args extends unknown[], Result>(
   legacy: (request: NextRequest, ...args: Args) => Promise<Result>,
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
-  return async (request, ...args) => {
+  return (request, ...args) => withAgentScopeRequest(request, async () => {
     const started = performance.now()
     if (getMcpOperationContext(request)) {
       const result = await legacy(request, ...args)
@@ -139,7 +140,7 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
     } catch {
     }
     return result
-  }
+  })
 }
 
 export function validateMcpRouteAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}) {

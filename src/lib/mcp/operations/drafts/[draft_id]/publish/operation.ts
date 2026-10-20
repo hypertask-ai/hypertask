@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
     }
 
     const project = draft.task.project
-    const hasAccess = ctx.agentId
+    const hasAccess = ctx.agentId && agentScopeEnforced()
       ? await userCanAccessTask(user.id, draft.taskId, ctx.agentId)
       : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
@@ -85,6 +86,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(draft.task.projectId, "write");
 
     if (draft.userId !== user.id) {
       return NextResponse.json(

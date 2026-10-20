@@ -155,3 +155,133 @@ test('historical inbox rows check both their notification board and current task
   assert.equal(matches(movedTask, notificationBoardAccessWhere(f.user.id, f.agent.id)), false);
   assert.equal(matches(movedTask, notificationBoardAccessWhere(f.user.id)), true);
 });
+
+const { configureActor } = require('./helpers/agent-board-scope.cjs');
+for (const mode of ['WATCH', 'ENFORCE']) {
+  for (const kind of ['granted', 'zero', 'pending', 'revoked', 'other-owner', 'human']) {
+    for (const action of ['read', 'write', 'comment', 'search', 'list']) {
+      for (const board of [15, 2128]) {
+        test(`predicate grid ${mode} ${kind} ${action} board ${board}`, async () => {
+          const f = fixture();
+          f.state.enforce = mode === 'ENFORCE';
+          configureActor(f, kind);
+          const helper = action === 'write' || action === 'comment' ? 'taskWriteAccessWhere' : 'getProjectWhere';
+          await f.run({ url: `/api/mcp/tasks/${action}?content=never-log`, method: ['write', 'comment'].includes(action) ? 'POST' : 'GET' }, async () => {
+            const project = f.projects.find(row => row.id === board);
+            const allowed = matches(project, f.access[helper](f.user.id, f.state.ctx.agentId));
+            const valid = !['revoked', 'other-owner'].includes(kind);
+            const expected = kind === 'human' || valid && (mode === 'WATCH' || kind === 'granted' && board === 15);
+            assert.equal(allowed, expected);
+            if (allowed && kind !== 'human') f.scope.recordAgentBoardScopeMiss(board);
+            assert.equal(f.state.grantReads, mode === 'WATCH' && kind !== 'human' ? 1 : 0);
+            assert.equal(f.state.events.length, mode === 'WATCH' && valid && kind !== 'human' && (board === 2128 || kind !== 'granted') ? 1 : 0);
+          });
+        });
+      }
+    }
+  }
+}
+
+test('WATCH predicates exactly preserve production owner, human-member, agent-member, discovery and saved-view branches', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  await f.run({ url: '/api/mcp/tasks' }, async () => {
+    const activeAgent = { id: f.agent.id, userId: f.user.id, revokedAt: null };
+    const branches = [
+      { owner: { id: f.user.id, agents: { some: activeAgent } } },
+      { members: { some: { userId: f.user.id, agentId: null, user: { agents: { some: activeAgent } } } } },
+      { members: { some: { agentId: f.agent.id, agent: { userId: f.user.id, revokedAt: null } } } },
+    ];
+    for (const helper of ['projectContentAccessWhere', 'taskWriteAccessWhere']) assert.deepEqual(f.access[helper](f.user.id, f.agent.id), { OR: branches });
+    assert.deepEqual(f.access.getProjectWhere(f.user.id, f.agent.id), { teamId: { not: null }, OR: branches });
+    assert.deepEqual(f.access.getProjectListingWhere(f.user.id, f.agent.id), { teamId: { not: null }, members: branches[2].members });
+    const saved = f.access.savedViewBoardAccessWhere(f.user.id, f.agent.id);
+    assert.deepEqual(saved.OR[0], branches[0]);
+    assert.equal(saved.OR[1].members.some.status, 'Accepted');
+    assert.equal(saved.OR[2].members.some.status, 'Accepted');
+    f.projects.forEach(project => { project.members = []; });
+    assert.equal(matches(f.projects[2], saved), true);
+    assert.equal(matches(f.projects[2], f.access.getProjectListingWhere(f.user.id, f.agent.id)), false);
+  });
+});
+
+test('WATCH mode and Accepted grants are request-cached; miss capture is ids-only, hourly, and action-specific', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  const req = { url: '/api/mcp/tasks/search?token=never-log', method: 'GET' };
+  const originalNow = Date.now;
+  let now = originalNow();
+  Date.now = () => now;
+  try {
+    await f.run(req, async () => {
+      await Promise.all([f.scope.prepareAgentScope(f.user.id, f.agent.id), f.scope.agentScopeMode(f.user.id), f.scope.agentScopeMode(f.user.id)]);
+      for (let i = 0; i < 100; i++) f.scope.recordAgentBoardScopeMiss(2128);
+      f.scope.recordAgentBoardScopeMiss(15);
+      f.scope.recordAgentBoardScopeMiss(2128, 'write');
+      assert.equal(f.state.flagReads, 1);
+      assert.equal(f.state.grantReads, 1);
+    });
+    await f.run(req, async () => f.scope.recordAgentBoardScopeMiss(2128));
+    assert.equal(f.state.events.length, 2);
+    now += 60 * 60 * 1000;
+    await f.run(req, async () => f.scope.recordAgentBoardScopeMiss(2128));
+    assert.equal(f.state.events.length, 3);
+    assert.deepEqual(f.state.events[0], { distinctId: '6', event: 'agent_board_scope_miss', properties: { agentId: f.agent.id, ownerUserId: 6, projectId: 2128, route: '/api/mcp/tasks/search', action: 'read', zeroBoard: false } });
+    assert.equal(f.state.events[1].properties.action, 'write');
+  } finally { Date.now = originalNow; }
+});
+
+test('only flag-read failure falls back to WATCH with a safe log; grant errors propagate', async () => {
+  const f = fixture();
+  f.state.flagError = new Error('private flag failure');
+  const warnings = [];
+  const warn = console.warn;
+  console.warn = (...args) => warnings.push(args);
+  try {
+    await f.run({ url: '/api/mcp/tasks' }, async () => assert.equal(f.scope.agentScopeEnforced(), false));
+  } finally { console.warn = warn; }
+  assert.deepEqual(warnings, [['[agent-board-scope] flag read failed; using WATCH']]);
+  f.state.flagError = null;
+  f.state.enforce = false;
+  f.prisma.member.findMany = async () => { throw new Error('grants unavailable'); };
+  await assert.rejects(f.run({ url: '/api/mcp/tasks' }, async () => {}), /grants unavailable/);
+});
+
+test('scope flag is registered as default OFF for everyone', () => {
+  const flags = require('./helpers/flag-files.cjs').load(require('node:path').resolve(__dirname, '../src/lib/flags/definitions.ts'));
+  assert.equal(flags.FEATURE_FLAG_DEFINITIONS.find(row => row.key === 'htpr-7146-agent-scope-enforce').defaultMode, 'OFF');
+});
+
+test('WATCH leaves production notification visibility, hierarchy includes and team-wide presence intact', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  f.projects[2].ownerId = 7;
+  f.projects[2].owner = { id: 7, agents: [] };
+  const { notificationBoardAccessWhere } = f.load('src/utils/controllers/notifications/boardAccess.ts');
+  const { taskMcpGetInclude } = f.load('src/lib/mcp/tasks/mappers.ts', { '@/lib/mcp/agents': { mcpVisibleAgentSelect: () => ({}), mapVisibleMcpAgent: () => null } });
+  f.prisma.taskSession = { findMany: async args => f.tasks.map(task => ({ task, agentId: `other-${task.projectId}`, agent: { id: `other-${task.projectId}` }, lastSeenAt: new Date() })).filter(row => matches(row, args.where)) };
+  f.prisma.taskLease = { findMany: async () => [] };
+  const { getTeamAgentPresence } = f.load('src/lib/mcp/agents/presence.ts');
+  await f.run({ url: '/api/mcp/agents/presence' }, async () => {
+    assert.deepEqual(notificationBoardAccessWhere(f.user.id, f.agent.id), {});
+    const include = taskMcpGetInclude(f.user.id, f.agent.id);
+    assert.equal(include.parentTask.where, undefined);
+    assert.equal(include.subTasks.where, undefined);
+    assert.equal((await getTeamAgentPresence('team', { userId: f.user.id, agentId: f.agent.id })).length, 3);
+  });
+});
+
+test('concurrent requests have independent mode/grant snapshots and nested wrappers reuse the request', async () => {
+  const f = fixture();
+  f.state.enforce = false;
+  await Promise.all([15, 2128].map(board => f.run({ url: `/api/mcp/projects/${board}` }, async () => {
+    await f.run({ url: '/nested' }, async () => {
+      assert.equal(await f.scope.agentScopeMode(f.user.id), 'WATCH');
+      f.scope.recordAgentBoardScopeMiss(board);
+    });
+  })));
+  assert.equal(f.state.flagReads, 2);
+  assert.equal(f.state.grantReads, 2);
+  assert.equal(f.state.events.length, 1);
+  assert.equal(f.state.events[0].properties.route, '/api/mcp/projects/2128');
+});
