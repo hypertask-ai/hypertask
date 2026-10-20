@@ -1,3 +1,5 @@
+import { resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
+import { teamAllowanceSnapshot } from "@/app/api/ai/_lib/sharedAllowance";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -344,8 +346,8 @@ export async function GET(request: Request) {
 
   const now = new Date();
   const { endDate, startDate } = gatewayBillingPeriodRange(now);
-  const plan = await storePlanIdForProject(null, teamId);
-  const allowanceUsd = teamAiAllowanceUsd(plan);
+  const policy = await resolveTeamAllowancePolicy(teamId, funding.source);
+  const allowanceUsd = policy.mode === "plan" ? policy.monthlyUsd : teamAiAllowanceUsd(await storePlanIdForProject(null, teamId));
   const baseReportParams = {
     end_date: endDate,
     start_date: startDate,
@@ -402,8 +404,9 @@ export async function GET(request: Request) {
       aggregateGatewaySystemSpend(tagPayload),
       totalPlatformUsd,
     );
-    const usedUsd = Math.max(totalPlatformUsd - systemUsedUsd, 0);
-    const pct = Math.round((usedUsd / allowanceUsd) * 100);
+    const snapshot = policy.mode === "plan" ? await teamAllowanceSnapshot(teamId, allowanceUsd, policy) : undefined;
+    const usedUsd = policy.mode === "plan" ? snapshot?.usedUsd ?? null : Math.max(totalPlatformUsd - systemUsedUsd, 0);
+    const pct = usedUsd === null ? 0 : Math.round((usedUsd / allowanceUsd) * 100);
     const daysElapsed = now.getUTCDate();
     const daysInMonth = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0),
@@ -414,7 +417,7 @@ export async function GET(request: Request) {
       .toISOString()
       .slice(0, 10);
     const projectedPct =
-      usedUsd > 0
+      usedUsd !== null && usedUsd > 0
         ? Math.round(
             (((usedUsd / daysElapsed) * daysInMonth) / allowanceUsd) * 100,
           )
@@ -430,7 +433,7 @@ export async function GET(request: Request) {
       configured: true,
       fundingSource: funding.source,
       period: { endDate, startDate },
-      allowance: customerFunded
+      allowance: customerFunded || usedUsd === null
         ? null
         : {
             budgetUsd: allowanceUsd,

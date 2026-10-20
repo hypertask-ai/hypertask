@@ -413,6 +413,7 @@ export const gatewayGet = async (
 export const computePersonalTeamSharePct = async ({
   allowanceUsd = TEAM_AI_BUDGET_USD,
   gatewayKey,
+  includeSystemUsage = false,
   memberIds,
   members,
   teamId,
@@ -420,6 +421,7 @@ export const computePersonalTeamSharePct = async ({
 }: {
   allowanceUsd?: number;
   gatewayKey: string | null;
+  includeSystemUsage?: boolean;
   memberIds: number[];
   members?: Array<{ displayName: string; userId: number }>;
   teamId: string;
@@ -482,7 +484,7 @@ export const computePersonalTeamSharePct = async ({
       const tagPayload = await tagOnlyResponse.json();
       const systemSpend = aggregateGatewaySystemSpendParts(tagPayload);
       return responseForSpend(
-        reconcileLegacySystemUserSpend(
+        includeSystemUsage ? aggregateGatewayByUserTag(tagPayload) : reconcileLegacySystemUserSpend(
           aggregateGatewayByUserTag(tagPayload),
           systemSpend.legacyUserTaggedSpend,
         ),
@@ -514,12 +516,12 @@ export const computePersonalTeamSharePct = async ({
     ]);
     const systemSpend = aggregateGatewaySystemSpendParts(tagPayload);
     const teamSpendUsd = Math.max(
-      aggregateGatewayTeamUsage(teamPayload).totalCost - systemSpend.systemSpend,
+      aggregateGatewayTeamUsage(teamPayload).totalCost - (includeSystemUsage ? 0 : systemSpend.systemSpend),
       0,
     );
 
     return responseForSpend(
-      reconcileLegacySystemUserSpend(
+      includeSystemUsage ? aggregateGatewayByUserTag(tagPayload) : reconcileLegacySystemUserSpend(
         aggregateGatewayByUserTag(tagPayload),
         systemSpend.legacyUserTaggedSpend,
       ),

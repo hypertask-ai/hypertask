@@ -1,3 +1,4 @@
+import { resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -77,8 +78,10 @@ export async function GET() {
         );
       }
 
+      const policy = await resolveTeamAllowancePolicy(team.id, funding?.source ?? "shared");
       const usage = await computePersonalTeamSharePct({
-        allowanceUsd: teamAiAllowanceUsd(
+        includeSystemUsage: policy.mode === "plan",
+        allowanceUsd: policy.mode === "plan" ? policy.monthlyUsd : teamAiAllowanceUsd(
           await storePlanIdForProject(null, team.id),
         ),
         gatewayKey:

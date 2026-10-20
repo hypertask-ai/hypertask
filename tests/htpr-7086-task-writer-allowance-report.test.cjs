@@ -6,7 +6,7 @@ const ts = require("typescript");
 const root = path.resolve(__dirname, "..");
 const load = require("jiti")(__filename, { alias: { "@": path.join(root, "src") }, fsCache: false });
 const properties = load(path.join(root, "src/app/api/ai/_lib/taskWriterProperties.ts"));
-const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
+const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE, DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE } = load(path.join(root, "src/lib/aiAllowancePolicy.ts"));
 const realErrorFlag = "htpr-7077-task-writer-real-error";
 const skipFlag = "htpr-7086-skip-allowance-report";
 
@@ -25,8 +25,8 @@ function moduleWithStubs(file, stubs) {
   return loadedModule.exports;
 }
 
-function allowanceError() {
-  const error = new Error(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE);
+function allowanceError(message = SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) {
+  const error = new Error(message);
   error.name = "SharedAiAllowanceExceededError";
   return error;
 }
@@ -45,6 +45,9 @@ async function post({ skipEnabled = true, error } = {}) {
       isFeatureEnabled: async (flag) => flag === realErrorFlag || skipEnabled,
     },
     "@/lib/aiAllowancePolicy": { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE },
+    "@/app/api/ai/_lib/sharedAllowance": {
+      sharedAiAllowanceErrorMessage: (error) => error?.name === "SharedAiAllowanceExceededError" ? error.message : null,
+    },
     "@/app/api/ai/_lib/editorAi": {
       errorMessage: (caught) => caught.message,
       sseFrame: (event, data) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
@@ -75,6 +78,12 @@ async function main() {
   const limitFlagOff = await post({ error: allowanceError(), skipEnabled: false });
   assert.ok(limitFlagOff.content.includes(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE));
   assert.equal(limitFlagOff.reports.length, 1);
+
+  const dayLimit = await post({ error: allowanceError(DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE) });
+  assert.ok(dayLimit.content.includes(DAILY_AI_ALLOWANCE_EXCEEDED_MESSAGE));
+  assert.equal(dayLimit.reports.length, 0);
+  const untyped = await post({ error: new Error(SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE) });
+  assert.equal(untyped.reports.length, 1);
 
   const providerError = new Error("Provider is overloaded, try again in a minute");
   const other = await post({ error: providerError });

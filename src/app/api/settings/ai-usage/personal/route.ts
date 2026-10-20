@@ -1,3 +1,4 @@
+import { resolveTeamAllowancePolicy } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { NextResponse } from "next/server";
 import { getTeamGatewayFunding } from "@/app/api/ai/_lib/byokKeys";
 import { getServerCookieUser } from "@/lib/auth/serverUser";
@@ -63,8 +64,10 @@ export async function GET(request: Request) {
       })
     : [];
   const funding = await getTeamGatewayFunding({ trustedTeamId: teamId });
+  const policy = await resolveTeamAllowancePolicy(teamId, funding?.source ?? "shared");
   const usage = await computePersonalTeamSharePct({
-    allowanceUsd: teamAiAllowanceUsd(
+    includeSystemUsage: policy.mode === "plan",
+    allowanceUsd: policy.mode === "plan" ? policy.monthlyUsd : teamAiAllowanceUsd(
       await storePlanIdForProject(null, teamId),
     ),
     gatewayKey: funding?.source === "customer" ? null : (funding?.apiKey ?? null),
