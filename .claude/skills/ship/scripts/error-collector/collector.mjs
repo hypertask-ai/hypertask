@@ -199,6 +199,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     return command(name, args, { ...env, ...extraEnv }, input);
   };
   state.coverage ??= {};
+  state.stale ??= {};
   const cap = Number(env.ERROR_COLLECTOR_HOURLY_CAP ?? 5);
   if (!Number.isSafeInteger(cap) || cap < 0) throw new Error('invalid hourly cap');
   const noiseLimit = Number(env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT ?? 50);
@@ -211,12 +212,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
   };
   const absorb = (fp, group, observed = true) => {
-    let known = state.fingerprints[fp];
-    if (known?.stale) {
-      if (group.lastSeen <= known.lastSeen) return;
-      delete state.fingerprints[fp];
-      known = undefined;
-    }
+    const known = state.fingerprints[fp];
     if (known) {
       const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
       known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
@@ -247,6 +243,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     try {
       const groups = new Map();
       const warnings = new Map();
+      const revived = new Map();
       const previous = Date.parse(state.sources[source.name]);
       const since = iso(Math.max(now - DAY, Math.min(now, Number.isFinite(previous) ? previous : now - DAY)));
       const until = iso(now);
@@ -267,26 +264,31 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (event.ticket === false) continue;
         const rule = noiseRule(event);
         const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
-        const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? boards.get(fp);
+        const board = state.fingerprints[fp]?.board ?? state.pending[fp]?.board ?? state.stale[fp]?.board ?? boards.get(fp);
         if (board == null) boards.set(fp, event.board);
         else event.board = board;
       }
       for (const event of events) {
         const counts = stats(day(event.ts), event.service);
         const rule = noiseRule(event);
+        if (rule) counts.noise += event.count;
+        else counts.errors += event.count;
+        if (rule?.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
+        if (event.ticket === false) continue;
+        const fp = rule?.alert ? noiseFingerprint(event.service, rule.id) : fingerprint(event.service, event.message, event.route);
+        const stale = state.stale[fp] ?? revived.get(fp);
+        if (stale) {
+          if (event.ts <= stale.lastSeen) continue;
+          revived.set(fp, stale);
+          delete state.stale[fp];
+        }
         if (rule) {
-          counts.noise += event.count;
-          if (rule.id === 'forced-test') diagnostic(`skipped forced test error from ${event.service} (${event.count})`);
-          if (rule.alert && event.ticket !== false) {
-            const fp = noiseFingerprint(event.service, rule.id);
+          if (rule.alert) {
             if (!warnings.has(fp)) warnings.set(fp, { rule, events: [] });
             warnings.get(fp).events.push({ board: event.board, service: event.service, ts: event.ts, count: event.count, message: redact(event.message).slice(0, 4000), route: redact(event.route), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000) });
           }
           continue;
         }
-        counts.errors += event.count;
-        if (event.ticket === false) continue;
-        const fp = fingerprint(event.service, event.message, event.route);
         if (!groups.has(fp)) groups.set(fp, { rules: FINGERPRINT_RULES, board: event.board, service: event.service,normalized: redact(normalize(event.message)), message: redact(event.message).slice(0, 4000), stack: redact(event.stack).split('\n').slice(0, 40).join('\n').slice(0, 12000), routes: [], count: 0, firstSeen: event.ts, lastSeen: event.ts });
         merge(groups.get(fp), event);
       }
@@ -325,7 +327,10 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
       }
       state.coverage[source.name] = coverage;
       if (dryRun) console.log(`DRY-RUN source ${JSON.stringify({ name: source.name, since, until, events: events.length, count: events.reduce((sum, event) => sum + event.count, 0) })}`);
-      for (const [fp, group] of groups) absorb(fp, group);
+      for (const [fp, group] of groups) {
+        if (revived.get(fp)?.aliases) group.aliases = revived.get(fp).aliases;
+        absorb(fp, group);
+      }
       state.sources[source.name] = until;
       if (!Array.isArray(fetched)) (state.sourceCursors ??= {})[source.name] = cursor;
       await checkpoint();
@@ -341,6 +346,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   state.created = state.created.filter(time => Date.parse(time) > now - HOUR);
   for (const date of Object.keys(state.days)) if (date < day(now - 13 * DAY)) delete state.days[date];
   for (const date of Object.keys(state.summaries)) if (date < day(now - 13 * DAY)) delete state.summaries[date];
+  for (const [fp, record] of Object.entries(state.stale)) if (day(record.lastSeen) < day(now - 13 * DAY)) delete state.stale[fp];
   for (const [fp, group] of Object.entries(state.pending)) {
     if (group.noiseRule || group.rules === FINGERPRINT_RULES) continue;
     group.rules = FINGERPRINT_RULES;
@@ -357,29 +363,27 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   for (const [fp, group] of Object.entries(state.pending)) {
     if (signal.aborted) break;
     try {
-      if (now - Date.parse(group.lastSeen) > staleWindow) {
-        const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));
-        state.fingerprints[fp] = { stale: true, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, ...(target ? { ticket: target.ticket, lastActivityAt: target.lastActivityAt } : {}) };
-        if (target) {
-          const activity = state.activities[target.ticket] ??= { count: 0, since: group.firstSeen, at: target.lastActivityAt };
-          activity.count += group.count;
-          activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
-          const stale = activity.stale ??= { count: 0, firstSeen: group.firstSeen, lastSeen: group.lastSeen };
-          stale.count += group.count;
-          stale.firstSeen = stale.firstSeen < group.firstSeen ? stale.firstSeen : group.firstSeen;
-          stale.lastSeen = stale.lastSeen > group.lastSeen ? stale.lastSeen : group.lastSeen;
-        } else {
-          const counts = stats(day(group.firstSeen), group.service);
-          counts.stale = (counts.stale ?? 0) + 1;
-        }
-        if (dryRun) console.log(`DRY-RUN stale ${JSON.stringify({ fingerprint: fp, lastSeen: group.lastSeen, outcome: target ? 'stale sighting' : 'stale, not filed', ticket: target?.ticket })}`);
-        delete state.pending[fp];
-        await checkpoint();
-        continue;
-      }
       let found = search(fp, group.board, env);
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
       if (!found) {
+        if (now - Date.parse(group.lastSeen) > staleWindow) {
+          const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));
+          state.stale[fp] = { board: group.board, service: group.service, firstSeen: group.firstSeen, lastSeen: group.lastSeen, count: group.count, routes: group.routes, aliases: group.aliases ?? [] };
+          if (target) {
+            const activity = state.activities[target.ticket] ??= { count: 0, since: group.firstSeen, at: target.lastActivityAt };
+            const stale = activity.stale ??= { count: 0, firstSeen: group.firstSeen, lastSeen: group.lastSeen };
+            stale.count += group.count;
+            stale.firstSeen = stale.firstSeen < group.firstSeen ? stale.firstSeen : group.firstSeen;
+            stale.lastSeen = stale.lastSeen > group.lastSeen ? stale.lastSeen : group.lastSeen;
+          } else {
+            const counts = stats(day(now), group.service);
+            counts.stale = (counts.stale ?? 0) + 1;
+          }
+          if (dryRun) console.log(`DRY-RUN stale ${JSON.stringify({ fingerprint: fp, lastSeen: group.lastSeen, outcome: target ? 'stale sighting' : 'stale, not filed', ticket: target?.ticket })}`);
+          delete state.pending[fp];
+          await checkpoint();
+          continue;
+        }
         if (state.created.length >= cap) { held++; continue; }
         const column = group.board === 15 ? 'Bugs' : (section ??= intake(env));
         const text = description(group, fp);
@@ -412,7 +416,7 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     if (signal.aborted) break;
     const records = Object.values(state.fingerprints).filter(record => record.ticket === ticket);
     const lastActivity = Math.max(0, Date.parse(activity.at) || 0, ...records.map(record => Date.parse(record.lastActivityAt) || 0));
-    if (!activity.count || records.some(record => record.deleted) || now - lastActivity < 6 * HOUR) continue;
+    if ((!activity.count && !activity.stale?.count) || records.some(record => record.deleted) || now - lastActivity < 6 * HOUR) continue;
     const total = records.reduce((sum, record) => sum + record.total, 0);
     const lastSeen = records.map(record => record.lastSeen).sort().at(-1);
     try {
