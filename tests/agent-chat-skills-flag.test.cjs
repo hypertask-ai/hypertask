@@ -17,7 +17,7 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
     globals.map((name) => [name, Object.getOwnPropertyDescriptor(global, name)])
   );
   const previousReact = global.React;
-  let flagChecks = 0;
+  const flagChecks = new Set();
   let reactRoot;
   let dom;
   let fetches = 0;
@@ -32,7 +32,7 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
     global.React = React;
     stubModule("src/hooks/useFlag.tsx", {
       useFlag: (key) => {
-        flagChecks += 1;
+        flagChecks.add(key);
         assert.ok(["htpr-6925-typed-api-client", "htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai"].includes(key), "Skill availability is not flag-gated");
         return false;
       },
@@ -100,8 +100,8 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
       assert.match(html, /@hyperai \/slug in a comment/);
     }
 
-    assert.ok(flagChecks > 0, "Settings renders exercise the typed transport flag while keeping skill UI visible");
-    flagChecks = 0;
+    assert.deepEqual([...flagChecks], ["htpr-6925-typed-api-client"], "Only settings transport is flagged");
+    flagChecks.clear();
 
     dom = new JSDOM('<div id="root"></div>', {
       url: "https://app.hypertask.ai/agent-chat",
@@ -129,7 +129,7 @@ test("Agent Chat skill UI stays available with typed transport and comment skill
     });
     assert.match(container.textContent, /Unslop/);
     assert.equal(fetches, 1);
-    assert.ok(flagChecks > 0, "Execution flags are read without hiding slash skills");
+    assert.deepEqual([...flagChecks].sort(), ["htpr-7393-comment-inline-ai", "htpr-7480-comment-skill-run"], "Only comment execution flags are read without hiding slash skills");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom?.window.close();

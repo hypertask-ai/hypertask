@@ -126,6 +126,7 @@ export function useTaskDetailEditorState({
 
   const { editor } = useTiptap({
     mode,
+    editorId: id,
     defaultContent,
     createNewComment,
     mentionProjectId: currentTask?.projectId,

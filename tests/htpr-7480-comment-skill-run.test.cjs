@@ -18,13 +18,18 @@ async function pick({ mode = "create-comment", enabled = true, inline = true, ba
   const range = { from: 8, to: 12 };
   let content = "Before /dee after";
   const target = document.createElement("div");
-  target.id = targetId;
   if (mode === "read-edit-comments") target.className = "comment-edit-container";
+  else target.id = targetId;
+  const SlashCommands = loader({
+    "./items": { default: () => [] },
+    "./RenderCommands": { default: () => ({}) },
+  })("src/components/RTE/Extensions/SlashCommands/SlashCommands.tsx").default;
+  const slashCommands = SlashCommands(mode, targetId).config.addStorage();
   const dom = document.createElement("div");
   target.append(dom);
   document.body.append(target);
   const editor = {
-    storage: { slashCommands: { mode } }, view: { dom },
+    storage: { slashCommands }, view: { dom },
     state: { doc: { textBetween: () => " " } },
     chain() {
       return {
@@ -52,7 +57,7 @@ async function pick({ mode = "create-comment", enabled = true, inline = true, ba
     "@/hooks/MultiPages/useClickOutside": { default: () => {} },
     "./Components/EmojiGifPicker": { OPEN_EMOJI_GIF_PICKER_EVENT: "emoji" },
     "../PageComponents/TaskDetail/TopRow/CreateSummaryButton": { AI_TASK_WRITER_EVENT: "ai-task-writer-trigger" },
-    "../../../PageComponents/TaskDetail/TopRow/CreateSummaryButton": {
+    "@/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton": {
       AI_TASK_WRITER_EVENT: "ai-task-writer-trigger",
     },
   });
@@ -73,6 +78,11 @@ async function pick({ mode = "create-comment", enabled = true, inline = true, ba
   };
   try {
     await React.act(async () => { view.render(React.createElement(React.Fragment, null, React.createElement(Events), React.createElement(CommandsList, props))); });
+    if (!base) {
+      const enabledSkills = mode === "create-comment" || mode === "ai-chat" || (mode === "read-edit-comments" && enabled && inline);
+      const expected = enabledSkills ? skills.filter(skill => ["SKILL", `/${skill.slug}`, skill.slug, skill.name].some(value => value.toLowerCase().includes(query.toLowerCase()))).map(skill => `/${skill.slug}`) : [];
+      assert.deepEqual([...view.container.querySelectorAll("li h3:last-child")].map(item => item.textContent), expected, "Menu contains exactly the fetched skill items");
+    }
     const item = view.container.querySelector("li");
     if (item) React.act(() => keyboard
       ? ref.current.onKeyDown({ event: { key: "Enter" } })
@@ -105,16 +115,32 @@ test("flag-off, inline-writer-off and AI-chat skill picks keep inserting text", 
 
 test("non-skill commands and untargeted editors keep their original command behavior", async () => {
   assert.deepEqual(await pick({ base: true }), { content: "bold", events: [], visible: true });
-  assert.deepEqual(await pick({ targetId: "unrelated" }), { content: "Before /deeper  after", events: [], visible: true });
+  assert.deepEqual(await pick({ targetId: "" }), { content: "Before /deeper  after", events: [], visible: true });
 });
 
-test("builtin readability skill runs even when the server skill list is empty", async () => {
-  assert.deepEqual(await pick({ query: "i", skills: [] }), {
-    content: "Before  after", events: [{ targetId: "comment-input", prompt: "/i " }], visible: true,
+test("edited-comment skill picks target the editor id even when the comment wrapper has no id", async () => {
+  assert.deepEqual(await pick({ mode: "read-edit-comments", targetId: "comment-7480", skills: [{ ...skill, slug: "qa-7480-check" }] }), {
+    content: "Before  after", events: [{ targetId: "comment-7480", prompt: "/qa-7480-check " }], visible: true,
   });
-  const result = await loader()("src/app/api/ai/_lib/skills.ts").resolveSkills("/i ", { userId: 985, projectId: 7049 });
-  assert.deepEqual(result.skills.map(item => item.slug), ["i"]);
-  assert.match(result.systemPromptAddition, /built-in formatting template/);
+});
+
+test("comment slash menu lists only fetched skills and adds nothing to an empty list", async () => {
+  for (const mode of ["create-comment", "read-edit-comments"]) {
+    assert.deepEqual(await pick({ mode, skills: [] }), {
+      content: "Before /dee after", events: [], visible: false,
+    });
+    assert.deepEqual(await pick({ mode, query: "Improve Readability" }), {
+      content: "Before /dee after", events: [], visible: false,
+    });
+  }
+});
+
+test("task detail passes its event target id through Tiptap into slash command storage", () => {
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const read = file => fs.readFileSync(path.join(__dirname, "..", file), "utf8");
+  assert.match(read("src/components/RTE/useTaskDetailEditorState.tsx"), /useTiptap\(\{\s*mode,\s*editorId: id,/);
+  assert.match(read("src/components/RTE/Tiptap.ts"), /SlashCommands\(mode, editorId\)/);
 });
 
 test("skill prompts reach AITaskWriter rather than the draft editor that drops initialPrompt", () => {

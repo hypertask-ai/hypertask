@@ -2,7 +2,7 @@
 import { currentProjectAtom } from "@/store";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
-import { AI_TASK_WRITER_EVENT } from "../../../PageComponents/TaskDetail/TopRow/CreateSummaryButton";
+import { AI_TASK_WRITER_EVENT } from "@/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
@@ -53,14 +53,12 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
       }
       let cancelled = false;
       fetchSlashSkills(currentProject?.id).then((skills) => {
-        if (!cancelled) setSkillItems(buildSkillSlashItems(runCommentSkill && !skills.some(skill => skill.slug === "i")
-          ? [...skills, { slug: "i", name: "Improve Readability", description: "Make the response concise, scannable, and easy to understand.", isProject: false }]
-          : skills));
+        if (!cancelled) setSkillItems(buildSkillSlashItems(skills));
       });
       return () => {
         cancelled = true;
       };
-    }, [skillsEnabled, currentProject?.id, runCommentSkill]);
+    }, [skillsEnabled, currentProject?.id]);
   
     const [filteredItems, setFilteredItems] = useState(props.items)
     const selectItem = (index: number) => {
@@ -74,7 +72,7 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
       };
 
       if (runCommentSkill && command.type === "SKILL") {
-        const targetId = props.editor.view.dom.closest("#comment-input, .comment-edit-container")?.id;
+        const targetId = (props.editor.storage as any)?.slashCommands?.editorId as string | undefined;
         if (targetId) {
           props.editor.chain().focus().deleteRange(props.range).run();
           window.dispatchEvent(new window.CustomEvent(AI_TASK_WRITER_EVENT, {

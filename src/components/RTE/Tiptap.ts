@@ -77,6 +77,7 @@ const DisableEnter = Extension.create({
 interface IProps {
   defaultContent?: string;
   mode: any;
+  editorId?: string;
   createNewComment?: boolean;
   trackFocus?: boolean;
   mentionProjectId?: number | null;
@@ -84,6 +85,7 @@ interface IProps {
 }
 const useTiptap = ({
   mode,
+  editorId,
   defaultContent = "",
   createNewComment = false,
   trackFocus = true,
@@ -169,7 +171,7 @@ const useTiptap = ({
       }),
       Underline,
 
-      SlashCommands(mode),
+      SlashCommands(mode, editorId),
       Snippets,
       Link.extend({ inclusive: false }).configure({
         openOnClick: true,
