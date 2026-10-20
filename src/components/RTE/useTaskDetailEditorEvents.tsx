@@ -1,6 +1,6 @@
 import { useFlag } from "@/hooks/useFlag";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -28,6 +28,8 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
 
 
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
   const { editTicketWithAi } = useCommentToAiChat();
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
@@ -131,7 +133,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
       setShouldShowAITaskWriter(true);
     }
   };
-  if (editWithAiEnabled) {
+  if (sidebarEditWithAi) {
     handleAITrigger = (event: CustomEvent<AITaskWriterEventDetail>) => {
       if (event.detail.targetId === id) void editTicketWithAi(currentTask.id);
     };
@@ -140,7 +142,7 @@ export function useTaskDetailEditorEvents(context: TaskDetailEditorPresentation)
   useLayoutEffect(() => {
     window.addEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
     return () => window.removeEventListener(AI_TASK_WRITER_EVENT, handleAITrigger as EventListener);
-  }, [id, newTaskWindow, setCommands, editWithAiEnabled, editTicketWithAi, currentTask?.id]);
+  }, [id, newTaskWindow, setCommands, sidebarEditWithAi, editTicketWithAi, currentTask?.id]);
 
   useEffect(() => {
     if (mode !== "create-comment") return;

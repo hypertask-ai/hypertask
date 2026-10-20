@@ -391,6 +391,7 @@ function editorPanels(flag) {
     HTPR_7091_STATIC_DESCRIPTION_FIRST_FLAG: "static-first",
     HTPR_6929_COMPOSE_TASK_WRITER_FLAG: "compose",
     HTPR_7337_EDIT_WITH_AI_FLAG: "edit-with-ai",
+    HTPR_7393_COMMENT_INLINE_AI_FLAG: "comment-inline-ai",
     HTPR_6937_NEW_TASK_WINDOW_FLAG: "new-task",
     useSetRecoilState: () => noop,
     useRecoilValue: () => false,
