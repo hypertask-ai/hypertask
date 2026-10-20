@@ -223,7 +223,7 @@ test('a host network change remeasures that phase once from scratch; a second ch
 test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty shells or a different ticket', async () => {
   const { ready } = await analyst;
   const { JSDOM } = await import('jsdom');
-  const check = async (surface, html) => {
+  const check = async (surface, html, board) => {
     const dom = new JSDOM(html, { runScripts: 'outside-only' });
     let clock = 0;
     dom.window.performance.now = () => ++clock * 1000;
@@ -231,13 +231,18 @@ test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty sh
     dom.window.getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' });
     dom.window.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 20, top: 0, bottom: 20 });
     const page = { evaluate: (fn, args) => dom.window.eval(`(${fn.toString()})(${JSON.stringify(args)})`) };
-    try { return await ready(page, surface); } finally { dom.window.close(); }
+    try { return await ready(page, surface, board); } finally { dom.window.close(); }
   };
   assert.ok(await check('search', '<ul id="tasks-list"><li>QASA-43 <span>QA 6667 Enter verification</span></li></ul>') > 0);
   await assert.rejects(check('search', '<ul id="tasks-list"><li>QASA-50 <span>QA 6667 Enter verification</span></li></ul>'));
   await assert.rejects(check('search', '<ul id="tasks-list"><li>Ask AI</li></ul>'));
   assert.ok(await check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"><div class="table-view-header">Title</div></div>') > 0);
   await assert.rejects(check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"></div>'));
+  // 2026-10-20: g then b opened board 8778, or 6859 under another session's saved view without task 43.
+  assert.ok(await check('page-navigation', '<a href="/detail/project-8778/2">Card</a>', '8778') > 0);
+  assert.ok(await check('page-navigation', '<a href="/detail/project-6859/51">Card</a>', '6859') > 0);
+  await assert.rejects(check('page-navigation', '<a href="/detail/project-6859/43">Card</a>', '8778'));
+  await assert.rejects(check('page-navigation', '<p>Loading board</p>', '6859'));
 });
 
 test('early-failure summary prints the saved reason without requiring browser conditions', async () => {

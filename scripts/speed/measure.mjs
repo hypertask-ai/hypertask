@@ -107,10 +107,13 @@ export function browserObserver() {
   for (const event of ['click', 'keydown']) document.addEventListener(event, () => { window.__analyst.start = performance.now(); }, { capture: true });
 }
 
-export async function ready(page, surface) {
+// g then b opens the shared QA account's previous board and its saved view, which other QA sessions change.
+export const boardCardPrefix = boardId => `/detail/project-${boardId}/`;
+
+export async function ready(page, surface, landedBoard) {
   // view=default bypasses saved filters; scrolling keeps newer QA cards from hiding task 43 below the viewport.
-  if (surface === 'board' || surface === 'page-navigation') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
-  return page.evaluate(async ({ surface, task, title }) => {
+  if (surface === 'board') await page.locator(`a[href="${TASK}"]`).first().scrollIntoViewIfNeeded();
+  return page.evaluate(async ({ surface, task, title, cardPrefix }) => {
     const visible = element => {
       if (!element) return false;
       const box = element.getBoundingClientRect();
@@ -122,7 +125,8 @@ export async function ready(page, surface) {
       return true;
     };
     const test = () => {
-      if (surface === 'board' || surface === 'page-navigation') {
+      if (surface === 'page-navigation') return [...document.querySelectorAll(`a[href^="${cardPrefix}"]`)].some(visible);
+      if (surface === 'board') {
         const card = document.querySelector(`a[href="${task}"]`);
         // Late board reflows can push the already-scrolled card below the viewport again.
         if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
@@ -142,7 +146,7 @@ export async function ready(page, surface) {
       if (test()) return performance.now();
     }
     throw new Error('Readiness unavailable');
-  }, { surface, task: TASK, title: TITLE });
+  }, { surface, task: TASK, title: TITLE, cardPrefix: boardCardPrefix(landedBoard) });
 }
 
 export function collectNetwork(cdp, permitted, safePath, blocked) {
@@ -279,6 +283,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
   await page.addInitScript(browserObserver);
 
   let surface = phase;
+  let landed = {};
   const navigate = route => shared.action(page, () => page.goto(BASE + route, { waitUntil: 'domcontentloaded' }), run.actions, 'document', route);
   const sample = async (measuredSurface, operation, document = true) => {
     surface = measuredSurface;
@@ -286,7 +291,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     blocked.length = 0;
     await page.evaluate(() => { if (window.__analyst) window.__analyst.start = performance.now(); });
     await operation();
-    const contentAt = await ready(page, surface);
+    const contentAt = await ready(page, surface, landed.id);
     const origin = document ? 0 : await page.evaluate(() => window.__analyst.start);
     // Same two-second observation tail as speed-check; not part of content-visible timing.
     await page.waitForTimeout(2000);
@@ -296,7 +301,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     }, { origin, contentAt });
     const requests = [...net.requests.values()].filter(row => row.wall >= metrics.actionEpoch).map(({ wall, start, ...row }) => ({ ...row, startMs: wall - metrics.actionEpoch }));
     delete metrics.actionEpoch;
-    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked] };
+    const row = { profile, path: surface, index, ...metrics, requestCount: requests.filter(request => !request.blocked).length, bytes: requests.filter(request => !request.blocked).reduce((sum, request) => sum + request.bytes, 0), requests, blocked: [...blocked], ...(surface === 'page-navigation' ? { landed } : {}) };
     run.samples.push(row);
     if (mobile && row.innerWidth !== 390) throw new Error(`Phone layout is ${row.innerWidth} wide, expected 390`);
     if (row.requests.some(requestFailed)) throw new Error('Measured request failed');
@@ -320,6 +325,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     await sample('page-navigation', () => shared.action(page, async () => {
       await page.keyboard.press('g'); await page.keyboard.press('b');
       await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
+      landed = safeSearch(page.url());
       await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
     }, run.actions, 'client', BOARD), false);
     // Plain QA uses the existing board Ctrl+J writer, not the Owner + QA palette on My Tasks.
