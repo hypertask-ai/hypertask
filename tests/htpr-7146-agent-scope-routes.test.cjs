@@ -541,3 +541,46 @@ test('WATCH priority and estimate preserve production writes on owned teamless b
     }
   }
 });
+
+test('priority and estimate retain human and WATCH body-agent content access, including teamless boards and 404s', async () => {
+  for (const mode of ['WATCH', 'ENFORCE']) {
+    for (const field of ['priority', 'estimate']) {
+      for (const bodyAgent of [false, true]) {
+        const f = fixture();
+        f.state.enforce = mode === 'ENFORCE';
+        f.projects[2].teamId = null;
+        f.prisma[field] = { deleteMany: async () => { f.writes.push(field); } };
+        const queries = [];
+        const findFirst = f.prisma.task.findFirst;
+        f.prisma.task.findFirst = async args => { queries.push(args); return findFirst(args); };
+        const handler = f.load(`src/pages/api/${field}/${field === 'priority' ? 'setPriority' : 'setEstimate'}.ts`, {
+          '@/lib/auth/getSessionUser': { getSessionUser: async () => ({ userId: 6 }) },
+          '@/utils/controllers/activities/CreatePriorityActivity': { default: async () => {} },
+          '@/utils/controllers/activities/createEstimateActivity': { default: async () => {} },
+        }).default;
+        const invoke = async () => {
+          const res = response();
+          await handler({ url: `/api/${field}`, method: 'POST', headers: {}, body: {
+            taskId: 21280, ...(bodyAgent ? { agentId: f.agent.id } : {}),
+            priority_index: 0, Priority_Value: 'None', estimate_index: 0, estimate_value: 'None',
+          } }, res);
+          return res;
+        };
+        const allowed = !bodyAgent || mode === 'WATCH';
+        assert.equal((await invoke()).statusCode, allowed ? 200 : 403);
+        assert.deepEqual(f.writes, allowed ? [field] : []);
+        assert.equal(queries.length, allowed ? 1 : 0);
+        assert.equal(f.state.events.length, bodyAgent && mode === 'WATCH' ? 1 : 0);
+        if (allowed) {
+          assert.deepEqual(Object.keys(queries[0]).sort(), ['include', 'where']);
+          f.projects[2].ownerId = 7;
+          f.projects[2].owner = { id: 7, agents: [] };
+          f.writes.length = 0;
+          assert.equal((await invoke()).statusCode, 404);
+          assert.deepEqual(f.writes, []);
+          assert.equal(queries.length, 2);
+        }
+      }
+    }
+  }
+});

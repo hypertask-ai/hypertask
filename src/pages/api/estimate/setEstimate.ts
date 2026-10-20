@@ -1,4 +1,4 @@
-import { withAgentScopeRequest, agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { withAgentScopeRequest, prepareAgentScope, agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import prisma from "@/lib/prisma";
@@ -31,11 +31,14 @@ const handler: NextApiHandler = async (req, res) => {
     if (session.agentId && requestedAgentId !== session.agentId) {
       return res.status(403).json({ message: "Agent id must match authenticated session" });
     }
-    const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
-    if (!actingAgent.ok) return res.status(actingAgent.status).json({ message: actingAgent.message });
-    const agentId = actingAgent.agentId;
-    if ((!agentId || agentScopeEnforced()) && !(await userCanAccessTask(session.userId, taskId, agentId))) {
-      return res.status(403).json({ message: "Forbidden" });
+    const agentId = typeof requestedAgentId === "string" ? requestedAgentId : null;
+    await prepareAgentScope(session.userId, agentId);
+    if (agentId && agentScopeEnforced()) {
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) return res.status(actingAgent.status).json({ message: actingAgent.message });
+      if (!(await userCanAccessTask(session.userId, taskId, agentId))) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
     }
 
     const agent = agentId
