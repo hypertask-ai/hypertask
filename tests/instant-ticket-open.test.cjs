@@ -62,6 +62,7 @@ export function Shell({ pathname, children, ChatRuntime }) {
   const isTaskDetailPage = pathname.startsWith('/detail');
   const shouldMountAgentChatRuntime = false;
   const authenticatedUserId = 2343;
+  const secondaryStartupEnabled = true;
   const chatRuntimeMounted = false;
   const showAiChatInterface = false;
   const sidebarWidthPx = 0;
