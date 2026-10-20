@@ -108,6 +108,12 @@ export function safeErrorUrl(value?: string) {
   }
 }
 
+function safeExtraValue(key: string, value: Extra[string]) {
+  if (typeof value !== "string") return value;
+  if (key === "requestPath") return sanitizePathname(value).slice(0, 1000);
+  return redactErrorText(value, 1000);
+}
+
 export function safeErrorExtra(extra?: Extra) {
   if (!extra) return {};
   return Object.fromEntries(
@@ -116,11 +122,7 @@ export function safeErrorExtra(extra?: Extra) {
       .slice(0, 12)
       .map(([key, value]) => [
         `ht_${key}`,
-        typeof value !== "string"
-          ? value
-          : key === "requestPath"
-            ? sanitizePathname(value).slice(0, 1000)
-            : redactErrorText(value, 1000),
+        safeExtraValue(key, value),
       ]),
   );
 }
