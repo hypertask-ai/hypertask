@@ -3,7 +3,6 @@ import { basename, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const CONTEXT = 'ux-signoff';
-export const PREMERGE_CREATOR = 'hypertask-runners[bot]';
 const READ_ERROR = 'Could not read the ticket; retried every 10 minutes';
 const READ_BUDGET = 120;
 const HEARTBEAT_MS = 60 * 60 * 1000;
@@ -62,163 +61,7 @@ function elementNames(comment) {
     .flatMap((match) => match[1].split(',').map(normalize)).filter((name) => name && name !== 'none');
 }
 
-function tokens(line) {
-  return line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s\w$]/g) ?? [];
-}
-
-const NOT_FLAG_NAMES = new Set(['const', 'let', 'var', 'import', 'from', 'export', 'default', 'useFlag', 'isFeatureEnabled', 'await', 'return', 'true', 'false', 'null', 'undefined']);
-
-const FLAG_SYNTAX = new Set(['!', '&', '|', '?', ':', ',', '{', '}']);
-
-function patchLines(patch, sign) {
-  return (patch ?? '').split('\n').filter((line) => line.startsWith(sign) && !line.startsWith(sign.repeat(3)))
-    .map((line) => new Set(tokens(line.slice(1))));
-}
-
-function flagReferences(files, keys) {
-  const direct = new Set(keys.flatMap((key) => [key, `"${key}"`, `'${key}'`, `${key.toUpperCase().replaceAll('-', '_')}_FLAG`]));
-  const references = new Set(direct);
-  for (const { filename, patch } of files) {
-    // Registry properties such as `key` are metadata, not runtime flag aliases.
-    if (!filename.startsWith('src/') || filename.startsWith('src/lib/flags/definitions/') ||
-      /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
-    for (const line of patchLines(patch, '-')) {
-      if (line.has('import') || line.has('!') || ![...line].some((token) => direct.has(token))) continue;
-      for (const token of line) if (/^[A-Za-z_$][\w$]{2,}$/.test(token) && !NOT_FLAG_NAMES.has(token)) references.add(token);
-    }
-  }
-  return references;
-}
-
-function removalOnly(ui, files, keys) {
-  const references = flagReferences(files, keys);
-  const mentionsFlag = (line) => line.some((token) => references.has(token));
-  const flagImport = (text) => {
-    const match = /^\s*import\s+(?:\{([^{}]+)\}|([A-Za-z_$][\w$]*))\s+from\s+["'][^"']+["'];?\s*$/.exec(text);
-    const names = (match?.[1] ?? match?.[2])?.split(',').map((name) => name.trim()).filter(Boolean);
-    return names?.length && names.every((name) => ['useFlag', 'isFeatureEnabled'].includes(name) || references.has(name));
-  };
-  return ui.every(({ status, patch }) => {
-    if (status !== 'modified' || typeof patch !== 'string') return false;
-    if (!patchLines(patch, '-').some((line) => mentionsFlag([...line]))) return false;
-    // Only old-side lines advance branch state; keep it across hunks of this file.
-    const regions = [];
-    const removed = [];
-    const added = [];
-    let depth = 0;
-    let classified = true;
-    for (const raw of patch.split('\n')) {
-      if (raw.startsWith('@@') && regions.some((region) => region.off)) return false;
-      if (!/^[ +\-]/.test(raw) || /^(?:---|\+\+\+)/.test(raw)) continue;
-      const sign = raw[0];
-      const text = raw.slice(1);
-      const line = tokens(text);
-      if (sign === '+') {
-        added.push(text);
-        continue;
-      }
-      const tracked = regions.length > 0;
-      let off = regions.some((region) => region.off);
-      let source = line;
-      const region = regions.at(-1);
-      if (region?.ternary && /^\s*\)\s*:\s*\(/.test(text) && depth === region.depth + 1) {
-        if (region.other) classified = false;
-        region.other = true;
-        region.off = !region.negated;
-        off = regions.some((item) => item.off);
-      }
-      if (mentionsFlag(line)) {
-        const flag = line.findIndex((token) => references.has(token));
-        const start = flag > 0 && line[flag - 1] === '!' ? flag - 1 : flag;
-        const negated = start !== flag;
-        const prefix = line.slice(0, start);
-        const tail = line.slice(flag + 1);
-        const simplePrefix = /^(?:return|(?:const|let|var) [\w$]+ =|\{)?$/.test(prefix.join(' '));
-        if (simplePrefix && (tail[0] === '?' || (tail[0] === '&' && tail[1] === '&'))) {
-          const offset = tail[0] === '?' ? 1 : 2;
-          if (tail[offset] === '(' && tail.length === offset + 1) {
-            if (tail[0] === '&') off ||= negated;
-            regions.push({ depth, off: negated, negated, ternary: tail[0] === '?' });
-          } else if (tail[0] === '?' && tail.filter((token) => token === '?').length === 1 && tail.filter((token) => token === ':').length === 1) {
-            const colon = tail.indexOf(':');
-            const first = tail.slice(1, colon);
-            const second = tail.slice(colon + 1);
-            if (second.at(-1) === ';') second.pop();
-            source = [...prefix, ...(negated ? second : first), ...(line.at(-1) === ';' ? [';'] : [])];
-          } else if (tail[0] === '&' && !tail.slice(offset).some((token) => ['?', '&', '|'].includes(token))) {
-            off ||= negated;
-            source = [...prefix, ...tail.slice(offset)];
-          } else classified = false;
-        } else {
-          const guard = /^\s*if\s*\(\s*(!?)\s*([A-Za-z_$][\w$]*)\s*(\|\|[^()]*)?\)\s*return\b(.*)$/.exec(text);
-          if (guard && references.has(guard[2]) && (!guard[3] || guard[1])) {
-            if (guard[1] && !guard[3]) off = true;
-            if (!guard[1] && !guard[3]) source = tokens(`return${guard[4]}`);
-            if (guard[3] && tokens(guard[4]).some((token) => token !== ';')) classified = false;
-          } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
-        }
-      }
-      const brackets = line.length > 0 && line.every((token) => /^[(){}[\];,:]$/.test(token));
-      for (const token of line) {
-        if (token === '(') depth++;
-        if (token === ')') depth--;
-      }
-      const open = regions.length;
-      if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
-      if (brackets && regions.length < open) off = regions.some((item) => item.off);
-      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), deletable: off || (tracked && brackets), import: flagImport(text) });
-    }
-    if (!classified && added.length) return false;
-    const sourcedBy = (item, line) => {
-      const dropped = [];
-      let at = 0;
-      for (const [index, token] of line.entries()) {
-        while (at < item.source.length) {
-          const value = item.source[at];
-          const negated = item.source[at - 1] === '!';
-          const flagNegation = value === '!' && references.has(item.source[at + 1]) && line[index + 1] !== item.source[at + 1];
-          if ((value === token && !flagNegation) || (token === 'true' && references.has(value) && !negated)) break;
-          if (token === 'false' && value === '!' && references.has(item.source[at + 1])) {
-            at++;
-            break;
-          }
-          dropped.push(value === '!' && !references.has(item.source[at + 1]) ? 'unrelated !' : value);
-          at++;
-        }
-        if (at === item.source.length) return false;
-        at++;
-      }
-      dropped.push(...item.source.slice(at).map((value, index) => value === '!' && !references.has(item.source[at + index + 1]) ? 'unrelated !' : value));
-      return !dropped.length || (item.related && dropped.every((token) => references.has(token) || FLAG_SYNTAX.has(token)));
-    };
-    const candidates = removed.map((item) => item.off ? [] :
-      added.flatMap((text, index) => sourcedBy(item, tokens(text)) ? [index] : []));
-    const owners = new Map();
-    const match = (source, seen = new Set()) => {
-      for (const target of candidates[source]) {
-        if (seen.has(target)) continue;
-        seen.add(target);
-        if (!owners.has(target) || match(owners.get(target), seen)) {
-          owners.set(target, source);
-          return true;
-        }
-      }
-      return false;
-    };
-    for (let source = 0; source < removed.length; source++) {
-      const item = removed[source];
-      const flagOnly = item.related && !/<\/?[A-Za-z]/.test(item.text) && (/^\s*(?:const|let|var)\s/.test(item.text) ||
-        tokens(item.text).every((token) => references.has(token) || FLAG_SYNTAX.has(token) || token === '(' || token === ')'));
-      if (!flagOnly && !item.import && !item.deletable && !match(source)) return false;
-    }
-    for (let source = 0; source < removed.length; source++) {
-      if (![...owners.values()].includes(source)) match(source);
-    }
-    return owners.size === added.length;
-  });
-}
-
-export function evaluate({ title, author, files, comments = [], removedEveryone = [] }) {
+export function evaluate({ title, author, files, comments = [] }) {
   const success = (description) => ({ state: 'success', description, details: [] });
   const ui = visibleFiles(files);
   if (ui.length === 0) return success('No visible UI change');
@@ -252,20 +95,15 @@ export function evaluate({ title, author, files, comments = [], removedEveryone 
       return name === 'index' ? basename(dirname(filename)) : name;
     }))];
   const missingNames = newElements.filter((name) => !approvedNames.has(name.toLowerCase().replace(/[^a-z0-9]/g, '')));
-  const flagRemoval = ticket.type === 'REFACTOR' && removedEveryone.length > 0 &&
-    removedEveryone.every((key) => /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(key) && files.some((file) =>
-      file.filename === `src/lib/flags/definitions/${key}.ts` && file.status === 'removed')) &&
-    removalOnly(ui, files, removedEveryone);
   const exempt = ticket.type === 'BUGFIX' || ticket.prefix === 'YPER4';
   const details = [];
-  if (!exempt && !flagRemoval && (!wireframe || !approved)) {
+  if (!exempt && (!wireframe || !approved)) {
     details.push(`UI change needs Valentin's yes on a wireframe on ${ticket.key}`);
   }
   if (missingNames.length) {
     details.push(`New element ${missingNames.join(', ')} needs Valentin's yes by name on ${ticket.key}`);
   }
   if (details.length) return { state: 'failure', description: details[0].slice(0, 140), details };
-  if (flagRemoval && !exempt) return success('Flag removal of an Everyone flag; no new UI');
   return success(exempt ? 'Wireframe exempt; new elements approved' : 'Wireframe and new elements have UX signoff');
 }
 
@@ -376,15 +214,6 @@ async function readVerdict(pr, { github, repo, env, fetchImpl, commentCache, bud
   const preliminary = evaluate(input);
   const ticket = ticketFromTitle(pr.title);
   if (preliminary.state === 'success' || !ticket) return preliminary;
-  const deletesDefinition = files.some((file) => file.status === 'removed' && file.filename.startsWith('src/lib/flags/definitions/'));
-  const statuses = ticket.type === 'REFACTOR' && deletesDefinition
-    ? await githubPages(github, `repos/${repo}/commits/${pr.head.sha}/statuses`) : [];
-  const status = statuses.find((item) => item.context === 'premerge-evidence');
-  const keys = status?.state === 'success' && status.creator?.login === PREMERGE_CREATOR &&
-    / \| removed-everyone: ([a-z0-9]+(?:-[a-z0-9]+)*(?:,[a-z0-9]+(?:-[a-z0-9]+)*)*)$/.exec(status.description ?? '');
-  input.removedEveryone = keys ? keys[1].split(',') : [];
-  const removal = evaluate(input);
-  if (removal.state === 'success') return removal;
   if (!commentCache.has(ticket.key)) {
     commentCache.set(ticket.key, readComments(ticket.key, { env, fetchImpl, budget }));
   }
