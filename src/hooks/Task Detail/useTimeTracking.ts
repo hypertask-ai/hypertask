@@ -1,3 +1,4 @@
+import { useHydrated } from "@/hooks/General/useHydrated";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -106,16 +107,16 @@ export const taskTimeQueryKey = (taskId: number | null) => ["time", "task", task
 export const taskTimeEntriesQueryKey = (taskId: number) =>
   ["time", "entries", taskId] as const;
 
-export function useTimerNow(running: boolean) {
+export function useTimerNow(running: boolean, initialNow?: number, intervalMs = 1000) {
   const snapshot = useFirstScreenSurface();
-  const [now, setNow] = useState(() => snapshot ? Date.parse(snapshot.now) : Date.now());
+  const [now, setNow] = useState(() => initialNow ?? (snapshot ? Date.parse(snapshot.now) : Date.now()));
 
   useEffect(() => {
     if (!running) return;
     setNow(Date.now());
-    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    const interval = window.setInterval(() => setNow(Date.now()), intervalMs);
     return () => window.clearInterval(interval);
-  }, [running]);
+  }, [running, intervalMs]);
 
   return now;
 }
@@ -204,6 +205,7 @@ export function useTaskTime(taskId: number | null) {
       ),
     enabled: taskId !== null && taskId > 0,
     refetchOnWindowFocus: true,
+    ...(useHydrated() ? {} : { queryKey: [...taskTimeQueryKey(taskId), "hydrating"], enabled: false }),
   });
 
   const invalidate = async () => {

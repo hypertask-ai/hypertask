@@ -185,7 +185,7 @@ const rail = load("src/components/PageComponents/TaskDetail/TaskInfoColumn/TaskI
   "@/components/Labels/DueDateLabel": { default: marker("date") },
   "@/lib/constants/constants": { EstimateConstants: [] },
   "@/lib/configs/taskDetail.config": { default: {} },
-  "./TaskTime": { default: () => null },
+  "./TaskTime": { default: () => null, useTimerNow: () => 0 },
   "@/lib/staleness": { daysSince: () => 0, stalenessLevel: () => "none" },
   "@/store": { showCommandsAtom: {} },
   "@/models/enums": { CommandMode: {} },
