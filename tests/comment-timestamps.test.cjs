@@ -204,7 +204,11 @@ test('non-text mutation paths do not set comment edit metadata', () => {
 test('reaction writes select original creation times and the HTTP handler returns them without editing the comment', async () => {
   const { writeCommentReaction } = load('src/lib/mcp/comments/reactionStore.ts')
   const { mapReactionWriteResult, commentReactionInclude } = load('src/lib/mcp/comments/reactionResponse.ts')
-  const { createCommentReactionHandler } = load('src/lib/mcp/comments/reactionHandler.ts', { 'next/server': { NextResponse: { json } } })
+  const { createCommentReactionHandler } = load('src/lib/mcp/comments/reactionHandler.ts', {
+    'next/server': { NextResponse: { json } },
+    '@/lib/mcp/listParams': { findIdParamOutOfRange: () => null, idOutOfRangeMessage: (field) => field },
+    '@/lib/mcp/tasks/resolveTask': { taskIdentifierErrorResponse: () => null },
+  })
   assert.equal(commentReactionInclude.select.createdAt, true)
   const row = { id: 'reaction-1', emoji: '👍', userId: 6, createdAt, agentId: null, agentDisplayName: null }
   const tx = { reaction: {
