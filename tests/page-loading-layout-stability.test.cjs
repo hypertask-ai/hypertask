@@ -138,7 +138,7 @@ function renderWorkspace({ pathname, mobile = false, topBar = false, dock = fals
     shouldMountChatRuntime: true, Suspense: React.Suspense,
     AIChatPanels: () => panels,
     CachedTaskDetailNavigation: ({ children }) => children,
-    authenticatedUserId: 985, secondaryStartupEnabled: true, phoneBoardWarmsTicket: true, children: React.createElement("div", { "data-page": true }, "Page content"),
+    authenticatedUserId: 985, children: React.createElement("div", { "data-page": true }, "Page content"),
   }, "<AIChatClosedLayout>");
 }
 
