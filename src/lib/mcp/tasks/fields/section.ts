@@ -13,6 +13,7 @@ export async function updateTaskSection(context: TaskUpdateFieldContext, task: T
         const moveTaskUrl = `${baseUrl}/api/tasks/moveTask`
         const moveResponse = await fetch(moveTaskUrl, {
             method: 'PUT',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 taskId: task.id,

@@ -25,6 +25,8 @@ function load(file, stubs = {}) {
     if (request === "@/lib/api/task-writes/route") return loadSharedRoute(stubs["@/lib/auth/getSessionUser"]?.getSessionUser);
     if (request === "@/lib/tasks/sameBoardRelations") return load("src/lib/tasks/sameBoardRelations.ts");
     if (Object.hasOwn(stubs, request)) return stubs[request];
+    if (request === "@/lib/auth/agentCookieBridgeRoutes") return load("src/lib/auth/agentCookieBridgeRoutes.ts");
+    if (request === "@/lib/telemetry/signupAnalytics") return { recordServerCapture: () => {} };
     if (request === "@/lib/mcp/listParams") return load("src/lib/mcp/listParams.ts", {});
     if (["@prisma/client", "react", "react/jsx-runtime", "next/server", "zod"].includes(request)) return require(request);
     throw new Error(`Unexpected import ${request} in ${file}`);

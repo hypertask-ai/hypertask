@@ -567,6 +567,7 @@ export async function createTask(data: {
 
     const response = await fetch(apiUrl, {
         method: 'POST',
+        redirect: 'manual',
         headers: {
             'Content-Type': 'application/json',
             'Cookie': authCookieHeader,

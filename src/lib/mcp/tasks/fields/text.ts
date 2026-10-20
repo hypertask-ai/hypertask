@@ -23,6 +23,7 @@ export async function updateTaskText(context: TaskUpdateFieldContext, task: Task
         const singleUrl = `${baseUrl}/api/tasks/single`
         const singleResponse = await fetch(singleUrl, {
             method: 'PUT',
+            redirect: 'manual',
             ...fetchOpts,
             body: JSON.stringify({
                 newTask,

@@ -160,6 +160,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ draf
 
       const singleResponse = await fetch(`${baseUrl}/api/tasks/single`, {
         method: 'PUT',
+        redirect: 'manual',
         headers: {
           'Content-Type': 'application/json',
           Cookie: authCookieHeader
