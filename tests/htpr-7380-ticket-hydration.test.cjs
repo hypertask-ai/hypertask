@@ -14,6 +14,9 @@ const serverNow = Date.parse("2026-01-20T23:59:59.900Z");
 const taskId = 42;
 const userId = 985;
 
+const REACT_MARKERS = ["<!-- -->", "<!--$-->", "<!--/$-->", "<!--$?-->", "<!--$!-->"];
+const withoutReactMarkers = html => REACT_MARKERS.reduce((text, marker) => text.split(marker).join(""), html);
+
 function load(relative, mocks = {}) {
   const compiled = ts.transpileModule(fs.readFileSync(path.join(process.env.HTPR_7380_SOURCE_ROOT || root, relative), "utf8"), {
     compilerOptions: { jsx: ts.JsxEmit.ReactJSX, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
@@ -145,7 +148,7 @@ async function hydration(t, { Component, cache = [], advance = 0, before, after,
   serverClient = new QueryClient(options);
   const tree = client => React.createElement(QueryClientProvider, { client }, React.createElement(Shell));
   const html = renderToString(tree(serverClient));
-  assert.match(html.replace(/<!--.*?-->/g, ""), before);
+  assert.match(withoutReactMarkers(html), before);
   if (beforeNot) assert.doesNotMatch(html, beforeNot);
   dom = new JSDOM(`<div id="root">${html}</div>`, { url: "https://app.hypertask.ai/detail/project-15/7380" });
   global.window = dom.window;
