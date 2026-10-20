@@ -146,15 +146,19 @@ export async function resolveChatTeamContext({
       findProject(requestedProjectId),
       findTeam(teamId),
     ]);
-    const context = project ? projectContext(project) : null;
-    if (!context || !team || context.teamId !== team.id) return null;
-    return context;
+    if (!project || !team) return null;
+    return projectContext(project) ?? {
+      ...teamContext(team),
+      projectId: project.id,
+    };
   }
 
+  let projectId: number | null = null;
   if (requestedProjectId != null) {
     const project = await findProject(requestedProjectId);
     const context = project ? projectContext(project) : null;
     if (context) return context;
+    projectId = project?.id ?? null;
   }
 
   if (teamId) {
@@ -192,9 +196,9 @@ export async function resolveChatTeamContext({
     }
   }
 
-  if (requestedProjectId != null || teamId) return null;
+  if ((requestedProjectId != null && projectId == null) || teamId) return null;
 
-  if (session?.projectId != null) {
+  if (projectId == null && session?.projectId != null) {
     const project = await findProject(session.projectId);
     const context = project ? projectContext(project) : null;
     if (context) return context;
@@ -211,5 +215,5 @@ export async function resolveChatTeamContext({
     select: accountTeamSelect,
   });
   const accountTeam = selectAccountTeam(accountTeams);
-  return accountTeam ? teamContext(accountTeam) : null;
+  return accountTeam ? { ...teamContext(accountTeam), projectId } : null;
 }
