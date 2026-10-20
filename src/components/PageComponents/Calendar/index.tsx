@@ -52,6 +52,25 @@ const checkboxColors = [
   "#14b8a6",
 ];
 
+export function CalendarLoadingShell({ currentUser }: { currentUser: IUser }) {
+  const isMbl = useContext(MobileViewContext);
+  const appShellRailOn = useRecoilValue(appShellRailAtom) && !isMbl;
+
+  return (
+    <>
+      {appShellRailOn && (
+        <AppShellRail variant="global" currentUser={currentUser} />
+      )}
+      <div
+        className={cn(appShellRailOn && "pl-[var(--app-shell-rail-w,48px)]")}
+        aria-busy="true"
+      >
+        <p className="px-6 py-4 text-content text-muted-foreground">Loading calendar…</p>
+      </div>
+    </>
+  );
+}
+
 const CalenderView = ({ currentUser }: { currentUser: IUser }) => {
   const { toggleShowCommands } = useHypertasksRecoilStates();
   const [showCommands] = useRecoilState(showCommandsAtom);
