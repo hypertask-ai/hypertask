@@ -589,3 +589,25 @@ test("real Redis Lua: concurrent lanes, all scopes, seeding, refusal atomicity, 
   }
 
 });
+
+
+test("real Redis sliding windows: boundary burst, exact rolling expiry, concurrent admission and TTL", async (t) => {
+  redis = await realRedis(t); if (!redis) return;
+  const { consumeDemoWindow } = load(path.join(root, "src/lib/demo/slidingWindow.ts"));
+  const hour = 60 * 60 * 1000;
+  const key = "demo:chat:ip:test";
+  const beforeEdge = 10 * hour - 1;
+  const burst = await Promise.all(Array.from({ length: 40 }, () => consumeDemoWindow(key, 20, beforeEdge)));
+  assert.equal(burst.filter((r) => r.allowed).length, 20);
+  assert.equal(await redis.zcard(key), 20);
+  assert.equal((await consumeDemoWindow(key, 20, beforeEdge + 2)).allowed, false, "calendar hour boundary must not reset rolling window");
+  assert.deepEqual(await consumeDemoWindow(key, 20, beforeEdge + hour - 1), { allowed: false, retryAfter: 1 });
+  assert.equal((await consumeDemoWindow(key, 20, beforeEdge + hour)).allowed, true);
+  assert.equal(await redis.zcard(key), 1);
+  assert.ok(await redis.pttl(key) > hour - 5000);
+  for (const [scope, limit] of [["creation", 5], ["regeneration", 3]]) {
+    const results = await Promise.all(Array.from({ length: limit * 3 }, () => consumeDemoWindow(`demo:${scope}`, limit, beforeEdge)));
+    assert.equal(results.filter((r) => r.allowed).length, limit);
+    assert.equal(await redis.zcard(`demo:${scope}`), limit);
+  }
+});
