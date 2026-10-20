@@ -324,15 +324,15 @@
   {
     "file": "src/app/api/ai/_lib/editorAiPrompts.ts",
     "id": "task-authoring-web-style",
-    "version": "2",
-    "partsHash": "c42eeb47023620e8d2365e9e4c00baf42586c4f6858df463b32a38cb743f3699",
+    "version": "3",
+    "partsHash": "ead72cb11838c4e21c95c4dd11be6a7ab936e9db0eee85db79e87836176fe738",
     "expressionsHash": "624812f6beb14e2e573fe546cdae7e709b56aca27234029abbf7de98dff2f854"
   },
   {
     "file": "src/app/api/ai/_lib/taskWriterBoardResearch.ts",
     "id": "task-writer-board-research-web-rules",
-    "version": "2",
-    "partsHash": "36266a8c3a0be5646da12990a9e1263a0c75c4073b024124f205d5273312405a",
+    "version": "3",
+    "partsHash": "cf72bc1102e777032ef19bdcc62508e58ff417b8e3039bf3d3d9d2f9c6eb4bd1",
     "expressionsHash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
   },
   {

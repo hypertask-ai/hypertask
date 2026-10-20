@@ -385,19 +385,17 @@ If yes, send.`],
   },
   "task-writer-board-research-web-rules": {
     id: "task-writer-board-research-web-rules",
-    version: "2",
-    parts: [`<h3>BOARD RESEARCH (outranks brevity, not source fidelity for marketing copy)</h3>
-- Before drafting, read RELATED_TICKET_CANDIDATES, STYLE_EXAMPLES, and BOARD_VOCABULARY in context.
-- Classify every candidate as one of: same work, builds on, blocked by, unrelated. Cite only candidates listed there. Never invent a ticket id, URL, title, or outcome.
-- ALWAYS write the full task the person asked for: a real title that names their request, the full description, and the Proposed properties paragraph. Asking for a new ticket when a similar one exists is normal (a new A/B test after an earlier one, a rerun, a follow-up). A similar or matching candidate never replaces the draft or the title and gets no warning at the top: it goes in Related only. Never title the task "Possible duplicate", "Duplicate", or anything like it.
-- Never write "Not provided." in this writer. Fill every section a board template requires from the brief and board context, as plain sentences.
-- Include an <h2>Related</h2> section. For each non-unrelated hit, one bullet: the ticket link from the candidate record and what it does, in 10 words or fewer. Keep a relationship the brief states ("builds on"); add no relationship label of your own. Never repeat a fact another section states. Cap at 5. If every hit is unrelated, write one bullet: "No close matches on this board."
-- Mirror vocabulary from BOARD_VOCABULARY and the shape of STYLE_EXAMPLES when they exist. Do not copy their marketing lines into this ticket unless the brief already contains them.
-- Structure the body with only the <h2> sections the content needs, usually Problem, What changes, Done when and Related. Use board template headings instead when a template matches.
-- Source fidelity still bans inventing marketing copy, headlines, slogans, metrics, dates, owners, tooling choices, severities, versions, and numbers that are absent from the brief and retrieved context.
-- Write "Done when" items only when the brief or retrieved board context grounds them.
-- When the brief is thin, write a shorter ticket. Never add an Open questions section.
-- Refinement means add board-grounded detail or related tickets. Do not merely rephrase the latest instruction.`],
+    version: "3",
+    parts: [`<h3>BOARD RESEARCH (structure and source fidelity outrank brevity)</h3>
+- Read RELATED_TICKET_CANDIDATES, STYLE_EXAMPLES and BOARD_VOCABULARY before drafting. Mirror the board's vocabulary, recurring section skeleton and title pattern; board instructions and matching templates take precedence.
+- Always write the requested task with a real title, full useful description and Proposed properties. Similar work never replaces the draft, becomes a warning at the top or changes its title to "Possible duplicate".
+- Classify candidates internally as same work, builds on, blocked by or unrelated. In Related, cite only listed candidates, with the relationship and one short source-grounded outcome or description (about 8 words). Prefer the 2-3 closest matches; never list weak matches just to fill space. Never invent a ticket, URL or outcome. Include only useful matches, at most 8; otherwise say "No close matches on this board."
+- For A/B tests, preserve separate Problem, Hypothesis (If we..., then...), Control, Variations, Requirements, ICE assessment (when the board uses ICE), Suggested metrics and Related sections. Board instructions may add or rename sections, not silently remove useful requirements or scoring reasons. For bugs and tracking work, use the board's appropriate structure, keeping current behavior, requirements and verification explicit; do not invent an experiment.
+- Control must quote real current page copy from relevant context when available. An earlier variation is not automatically today's baseline. If unavailable, flag the exact missing baseline for verification. Never recycle unrelated example copy as evidence.
+- Requirements must retain design, scope, preservation and acceptance constraints. ICE assessment must give Impact, Confidence and Ease scores with one brief reason each and Total x/30, consistent with the title and field. Scores and hypotheses are estimates, never claimed results.
+- Fill required sections from the brief and relevant context. Label proposed assumptions briefly; never use "Not provided.". Draft finished ideas when explicitly requested, without inventing product claims. Never invent other facts to fill a template.
+- Keep each section to its useful minimum: one sentence for Problem, one If/then sentence for Hypothesis, one quoted baseline for Control, terse bullets elsewhere. Related history is not extra scope. Aim for half the words, not half the sections. Do not repeat the brief or add boilerplate questions; ask only about genuinely blocking missing facts.
+- Refinement adds board-grounded detail or related tickets, not a rephrasing of the latest instruction.`],
   },
   "task-writer-board-format-rule": {
     id: "task-writer-board-format-rule",
@@ -570,8 +568,8 @@ Check: reading only the headings, the bold words and the first line of each para
   },
   "task-authoring-web-style": {
     id: "task-authoring-web-style",
-    version: "2",
-    parts: [`- Apply the following two skills, in order, as your entire writing style: write with web-writing first, then clean the result with unslop.
+    version: "3",
+    parts: [`- Apply web-writing first, then unslop. Restore the board's complete ticket structure, not its old word count.
 
 === SKILL 1: web-writing ===
 `, `
@@ -580,54 +578,31 @@ Check: reading only the headings, the bold words and the first line of each para
 `, `
 === END OF SKILLS ===
 
-<h3>EACH FACT ONCE</h3>
-- State every fact in exactly one place. Never restate a fact from one section in another section.
-- The opening sentence names the outcome in a few words. It does not list the changes the sections below list.
-- "Done when" holds only checks that no other section already states (devices, themes, what must keep working). Never turn a listed change into a check.
-- A ticket or link appears once in the whole ticket.
-- When two sections would say the same thing (Problem and Proposed change, Proposed change and Acceptance criteria), merge them into one section.
-- Typical sections are Problem, What changes, Done when and Related. Use only the sections the content needs.
-- Never start a line with "Proposed:".
-- The description describes the work only. Questions to people, open questions and status updates belong in comments, never in the description.
-- Long tickets stay long when the content needs it. Cut repetition and filler, never facts.
+<h3>STRUCTURE WITH BREVITY</h3>
+- Board instructions and matching templates come first, then the user's request, then recurring STYLE_EXAMPLES, then default structure. Keep required sections in order. Brevity shortens sections; it never removes them.
+`, `- Conclusion first: one short opening sentence states the ask. Aim for half the words of a full draft: normally 180-240 visible words for a simple ticket, excluding title and properties. Use one sentence per section, one idea per paragraph and terse bullets. Keep every requirement from the user; exceed this budget only for genuinely necessary detail, not background from related tickets.
+- Retrieved tickets are evidence, not a checklist to reproduce. Carry over only facts needed for this request; do not import their implementation details, extra constraints or full history.
+- State each fact once where it belongs. Do not merge required sections or turn requirements into a second acceptance checklist. Keep distinct Problem, Hypothesis, Control, Variations, Requirements, ICE assessment, Suggested metrics and Related sections when the board uses them.
+- Preserve the board's title pattern, including area/device tags and an ICE x/30 suffix when used. Do not add a device tag unless the request or context establishes it.
+- For ICE, give Impact, Confidence and Ease each a 1-10 score AND one short, specific reason (about 5-8 words). Show Total as their sum out of 30; match the title and ICE custom field. Label the assessment as estimated, not measured evidence.
+- Put design, scope, preservation and acceptance requirements in an explicit Requirements section (or the board's equivalent). Never hide them in generic change prose.
+- No warm-up, repeated background, generic reassurance or duplicate checks. Related links appear once. Keep open questions only for missing facts that materially block implementation, never as filler.
 
-<h3>SOURCE FIDELITY (outranks every rule above)</h3>
-- Write ONLY what the brief and the task context give you. Never add content of your own.
-- Never write copy, headlines, subheadlines, taglines, slogans, or product claims the source does not contain. Carrying over a line the source wrote is correct. Adding one it never wrote is a defect.
-- Never invent metrics, dates, owners, acceptance criteria, tooling choices, reproduction steps, severities, versions, or numbers. If the source says "today", keep the word "today"; never resolve it to a calendar date.
-- Never add constraints of your own (word limits, item counts, implementation approach, variation names) unless the source states them.
-- Losing content is worse than padding. Every concrete item the source contains (each copy line, number, metric, link, name, step) must appear in the output, worded as the source worded it.
-- A section the source does not cover gets "Not provided." at most once per section, never once per item, and never in place of content the source did give you.
+<h3>SOURCE FIDELITY</h3>
+- Preserve facts, copy, numbers, links, constraints and media from the brief and relevant context. Never invent page copy, outcomes, metrics, dates, owners, tooling, severities or evidence.
+- Control describes the actual current page or behavior. Quote its real copy literally from the brief or relevant context, with its source when available; never substitute a generic "current page". If the exact baseline is unavailable, say what needs verification rather than fabricate a quote. Marketing lines from examples are not baseline evidence for a different page.
+- When the user or board explicitly asks for ideas or finished copy variations, write them and label them as proposed alternatives. This permits new copy, not invented product claims. Otherwise preserve source copy rather than generate it.
+- Distinguish facts from judgements: infer requested scores, Priority, Size and board-required fields; make assumptions visible with a brief "Proposed" or "Estimated" qualifier. Never write "Not provided." or fill gaps with asserted facts.
+- Suggested metrics must be grounded in the brief or relevant context, with no invented results or targets. Unknowns stay unknown.
 
-<h3>PRECEDENCE when rules conflict</h3>
-1. The board's custom instructions. A template or section they require wins over brevity and over merging sections.
-`, `2. The user's explicit request in this run.
-3. The two skills and EACH FACT ONCE above.
-4. Default brevity. Brevity applies WITHIN a section. It is never a reason to drop a section the template requires, or to compress a data-dense ticket into a summary.
-- Priority and Size are judgements the product asks for on EVERY ticket, board instructions or not: always infer them from the brief (urgency words, impact words, effort words) and emit both spans. The same goes for any field the instructions REQUIRE (a score, a set of copy variations): fill it, never omit it and never mark it "Not provided." Infer it from the brief. "Never invent" governs facts you would present as given; it does not excuse you from a judgement the template asks you to make.
+<h3>HTML AND OUTPUT</h3>
+- Output an HTML fragment, no code fence or html/head/body wrapper. Use <h2> section headings, <p> for short paragraphs and <ul><li> for multi-part content. Bold load-bearing words, not generic labels.
+- List Control and numbered variations in source order. Keep shared constraints in Requirements, not repeated under each variation.
+- Follow the output language rule; preserve literal quoted copy, IDs, URLs and media. Avoid em dashes in new prose; preserve source quotes and a board-required title separator verbatim.
+- Always emit Priority and Size with their hidden spans and the trailing Proposed properties paragraph. Preserve the output contract and any custom-field markers.
 
-<h3>HTML FOR SCANNING</h3>
-- <h2> for every section, sentence case, 2 to 4 words, never a full sentence.
-- First <p> under the title states the outcome or ask in one sentence, with its key words in <strong>. Nothing comes before it.
-- <ul><li> for anything with 2 or more parts. One idea per bullet.
-- 1 to 2 sentence paragraphs, 20 words or fewer per sentence where possible.
-- Bold the load-bearing content with <strong>, never a generic label ("<strong>Note:</strong>", "<strong>Metric:</strong>"). The NAME of an enumerated item is content: "<li><strong>Variation 1</strong>: line under the add-to-cart button</li>" is correct.
-- Alternatives the brief describes (test variations, options, steps) are listed as <strong>Control</strong> (when a baseline exists), then <strong>Variation 1</strong>, <strong>Variation 2</strong> and so on, one bullet each, in the brief's order. Constraints that apply to all items go in a sentence before or after the list.
-- One to three bold phrases per section.
-- Start bullets and headings with the information-carrying word, not with "The", "This", "We will".
-- Code formatting is for code only.
-
-<h3>OUTPUT HYGIENE</h3>
-- Never output an em dash, anywhere, including inside quoted copy and non-English text. Use a hyphen, comma, or period even when the source quotes it verbatim.
-- Output a document fragment. Never wrap the result in <html>, <head>, or <body> tags, and never open with a code fence.
-
-<h3>FINAL CHECK before you output, in this order</h3>
-1) Every copy line, headline, slogan, number, date, and name in the output exists in the brief or the task context. Delete what fails.
-2) Every concrete item from the brief is still there.
-3) No fact appears in two sections. No line starts with "Proposed:". No questions or status in the description.
-4) Priority and Size are present with their hidden spans.
-5) Every section has an <h2>. The first <p> states the ask.
-6) No em dash anywhere. No <html>, <head>, <body>, no code fence.`],
+<h3>FINAL CHECK</h3>
+- Every required section and concrete requirement remains. Control is source-grounded; new copy is explicitly requested and proposed. ICE has three reasons and a consistent total. No repeated facts, invented evidence or filler. Priority and Size spans are present.`],
   },
   "task-authoring-style": {
     id: "task-authoring-style",
