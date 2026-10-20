@@ -1,3 +1,4 @@
+import { resolveAiFallbackCredential } from "@/app/api/ai/_lib/byokKeys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 import { NextResponse } from "next/server";
 
@@ -192,6 +193,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       selection.provider === "custom" &&
       !isCustomEndpointConfig(byokApiKey)
     ) {
+      await resolveAiFallbackCredential(keyLookupContext, async () => undefined, new Error("This team's custom AI key is unavailable."));
       selection = defaultModelSelection(
         teamProviderSettings,
         body.aiFeature,
@@ -214,6 +216,7 @@ export async function loadTurnModel(body: ChatRequest, dbUser: AuthedUser) {
       haiku55Enabled,
         );
       } else if (!byokApiKey) {
+        await resolveAiFallbackCredential(keyLookupContext, async () => undefined, new Error("This team's OpenRouter key is unavailable."));
         selection = defaultModelSelection(
           teamProviderSettings,
           body.aiFeature,

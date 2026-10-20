@@ -21,8 +21,8 @@ export const BATCH_MAX_REQUESTS = 1000;
 export const BATCH_STALE_MS = 25 * 60 * 60 * 1000;
 export const BATCH_USAGE_PROVIDER = "gateway-batch";
 
-export function batchEligibleFunding(source: "customer" | "managed" | "shared"): boolean {
-  return source === "managed";
+export function batchEligibleFunding(source: "customer" | "managed" | "shared", planMode = false): boolean {
+  return !planMode && source === "managed";
 }
 
 export type BatchKind = "slack-summary" | "smart-label";

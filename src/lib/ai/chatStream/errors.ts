@@ -47,7 +47,7 @@ export function includedAllowanceError(error: unknown) {
     visited.add(current);
     if (current instanceof Error) {
       if (current.name === "SharedAiAllowanceExceededError") {
-        return current as Error & { periodKey?: string };
+        return current as Error & { periodKey?: string; reason?: "month" | "day" | "demo" };
       }
       const wrapped = current as Error & {
         cause?: unknown;

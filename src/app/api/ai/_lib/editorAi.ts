@@ -1,3 +1,4 @@
+import { resolveAiFallbackCredential } from "@/app/api/ai/_lib/byokKeys";
 import { ensureHtpr7038ModelReset } from "@/lib/ai/htpr7038ModelReset";
 export { escapeHtml } from "./editorAiPrompts";
 
@@ -729,6 +730,7 @@ export async function selectTaskWriterModel(args: {
   let byokApiKey = await getSelectionApiKey(selection);
 
   if (selection.provider === "custom" && !isCustomEndpointConfig(byokApiKey)) {
+    await resolveAiFallbackCredential(keyLookup, async () => undefined, new Error("This team's custom AI key is unavailable."));
     selection = defaultModelSelection(
       teamContext.settings,
       args.aiFeature ?? "taskWriter",
@@ -751,6 +753,7 @@ export async function selectTaskWriterModel(args: {
         haiku55Enabled,
       );
     } else if (!byokApiKey) {
+      await resolveAiFallbackCredential(keyLookup, async () => undefined, new Error("This team's OpenRouter key is unavailable."));
       selection = defaultModelSelection(
         teamContext.settings,
         args.aiFeature ?? "taskWriter",
@@ -830,11 +833,12 @@ export async function selectTaskWriterModel(args: {
     console.warn(
       `[ai-model-fallback] ${selected.modelId} -> ${previous.model}: ${previous.status}`,
     );
-    const fallbackCredential = previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
-      ? await getByokOrTeamGatewayApiKeyForModelOption(
-          getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
-        )
-      : byokApiKey;
+    const fallbackCredential = await resolveAiFallbackCredential(keyLookup, async () =>
+      previous.model === "gpt-6-luna" && !isVercelAiGatewayKey(byokApiKey)
+        ? getByokOrTeamGatewayApiKeyForModelOption(
+            getAiModelOptionById(previous.model)!, args.byokProviderFlags, keyLookup,
+          )
+        : byokApiKey, error);
     const fallback = selectEditorModel(
       previous.model === "gpt-6-luna" ? "openai" : selection.provider,
       previous.model,

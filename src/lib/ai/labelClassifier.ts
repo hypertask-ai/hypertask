@@ -1,3 +1,4 @@
+import { teamPlanAllowanceEnabled } from "@/app/api/ai/_lib/planAllowancePolicy";
 import { configureAiModelUsage } from "@/app/api/ai/_lib/modelProvider";
 import { waitUntil } from "@vercel/functions";
 import { generateText } from "ai";
@@ -448,7 +449,7 @@ async function trySmartLabelBatch(
     const teamId = tasks[0]?.project.teamId;
     if (!teamId) return false;
     const gatewayKey = await getTeamGatewayApiKey({ trustedTeamId: teamId });
-    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey))) return false;
+    if (!gatewayKey || !batchEligibleFunding(gatewayFundingSourceForApiKey(gatewayKey), await teamPlanAllowanceEnabled(teamId))) return false;
     const haikuDefaultEnabled = await haikuDefaultModelEnabled(userId);
     const model = gatewayCatalogModelSlug(haikuDefaultEnabled ? "anthropic/claude-haiku-5.5" : MODEL);
     if (!batchEligibleModel(model)) return false;

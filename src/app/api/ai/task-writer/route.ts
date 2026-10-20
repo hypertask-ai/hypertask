@@ -1,3 +1,4 @@
+import { sharedAiAllowanceErrorMessage } from "@/app/api/ai/_lib/sharedAllowance";
 import { applyTaskWriterDueDate, validateTaskWriterDueDate } from "@/lib/ai/taskWriterDueDate";
 import { normalizeTaskWriterTicketType, readTaskWriterTicketType, ticketTypeSafeCut, TICKET_TYPE_HEADER } from "@/lib/ai/taskWriterTicketType";
 import { reportError as reportErrorToBoard } from "@/lib/errors/reportError";
@@ -33,20 +34,14 @@ async function isRealErrorEnabled(userId: number) {
   return isFeatureEnabled(HTPR_7077_TASK_WRITER_REAL_ERROR_FLAG, userId);
 }
 
-async function isAllowanceLimitMessage(message: string) {
-  if (!message.includes("AI allowance")) return false;
-  const { SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE } = await import("@/lib/aiAllowancePolicy");
-  return message === SHARED_AI_ALLOWANCE_EXCEEDED_MESSAGE;
-}
-
 export async function POST(request: NextRequest) {
   const requestUser = await getAiRequestUser(request);
   if (!requestUser?.id) {
     return createSseErrorResponse("Unauthorized", 401);
   }
   const userId = requestUser.id;
-  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0]) => {
-    if (await isAllowanceLimitMessage(payload.message)) {
+  const reportError = async (payload: Parameters<typeof reportErrorToBoard>[0], error: unknown) => {
+    if (sharedAiAllowanceErrorMessage(error)) {
       const { HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, isFeatureEnabled } = await import("@/lib/flags");
       if (await isFeatureEnabled(HTPR_7086_SKIP_ALLOWANCE_REPORT_FLAG, userId)) return;
     }
@@ -174,7 +169,7 @@ export async function POST(request: NextRequest) {
               url: "/api/ai/task-writer",
               source: "handled",
               extra: { stage: "stream-empty" },
-            });
+            }, error);
             console.error("[ai/task-writer] stream ended empty after error", error);
             enqueueError("error", errorMessage(error), "task-writer-stream-error");
             return;
@@ -200,7 +195,7 @@ export async function POST(request: NextRequest) {
             url: "/api/ai/task-writer",
             source: "handled",
             extra: { stage: "stream" },
-          });
+          }, error);
           console.error("[ai/task-writer] stream error", error);
           enqueueError("error", errorMessage(error));
         } finally {
@@ -234,7 +229,7 @@ export async function POST(request: NextRequest) {
       url: "/api/ai/task-writer",
       source: "handled",
       extra: { stage: "request" },
-    });
+    }, error);
     console.error("[ai/task-writer] fatal error", error);
     return NextResponse.json({ error: errorMessage(error) }, { status: 500 });
   }
