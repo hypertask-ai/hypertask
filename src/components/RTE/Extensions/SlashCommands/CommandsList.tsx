@@ -1,5 +1,8 @@
 
 import { currentProjectAtom } from "@/store";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7480_COMMENT_SKILL_RUN_FLAG, HTPR_7393_COMMENT_INLINE_AI_FLAG } from "@/lib/flags/keys";
+import { AI_TASK_WRITER_EVENT } from "@/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton";
 import type { SuggestionOptions, SuggestionProps } from "@tiptap/suggestion";
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { useRecoilState } from "@/lib/state";
@@ -31,9 +34,14 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
     const mode = (props.editor?.storage as any)?.slashCommands?.mode as
       | string
       | undefined;
+    const commentSkillRun = useFlag(HTPR_7480_COMMENT_SKILL_RUN_FLAG);
+    const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+    const runCommentSkill = commentSkillRun && commentInlineAi &&
+      (mode === COMMENT_SKILL_MODE || mode === "read-edit-comments");
     const skillsEnabled =
       mode === COMMENT_SKILL_MODE ||
-      mode === AGENT_CHAT_SKILL_MODE;
+      mode === AGENT_CHAT_SKILL_MODE ||
+      runCommentSkill;
     const everHadBase = useRef(false);
     const lastBase = useRef<any[]>([]);
     if ((props.items?.length ?? 0) > 0) everHadBase.current = true;
@@ -63,6 +71,16 @@ const CommandsList = forwardRef<SuggestionListRef, SuggestionListProps>(
         currentProjectId: currentProject?.id,
       };
 
+      if (runCommentSkill && command.type === "SKILL") {
+        const targetId = (props.editor.storage as any)?.slashCommands?.editorId as string | undefined;
+        if (targetId) {
+          props.editor.chain().focus().deleteRange(props.range).run();
+          window.dispatchEvent(new window.CustomEvent(AI_TASK_WRITER_EVENT, {
+            detail: { targetId, prompt: `${command.title} ` },
+          }));
+          return;
+        }
+      }
       props.command(command );
     };
 
