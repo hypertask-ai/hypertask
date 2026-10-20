@@ -29,6 +29,7 @@ Source inventory, read 2026-10-10: `gh pr list --repo hypertask-ai/hypertask --s
 - https://app.hypertask.ai/detail/project-15/6047: [#384](https://github.com/hypertask-ai/hypertask/pull/384) found the readiness rAF path dropped across tab freeze/resume; about half hard-load desktop rows had timeouts. Prior p75 excluded those rows and understated the tail. Count timeout/error rates alongside completed samples; a faster failure is not a gain.
 - Shared `speed-check/measure.md` records immediate post-deploy 3x3 runs falsely reporting regressions on three of five changes. Wait at least ten minutes, retain five cold/five warm samples, use matched conditions and alternate where safe. High load, browser-version changes and different fixture/data invalidate causal conclusions.
 - https://app.hypertask.ai/detail/project-4060/513: HTPR-7367 made the cold ticket visible before its code loaded, so the harness left mid-download and ticket-warm jumped from about 3 s to 11 s with no app regression. A win on one path can silently redefine the next path's cohort; check cache hits in the waterfall.
+- https://app.hypertask.ai/detail/project-15/7395: warming ticket code after the phone board paints cut bytes after the tap from 936 to 250 KB but not the 10 s wait: the tap is CPU-bound (1.2 s idle of 10.8 s). A request list without query strings made the previous/current/next prefetches look like a triple fetch.
 
 ## Dated entries
 
@@ -134,7 +135,25 @@ Description top never moved after first paint (one value in every frame, phone 5
 
 **Follow-up (same day).** The first full run still failed phone page navigation: on a phone the address first commits as a bare `/project` and the board id is added a moment later, so the recorded `landed` was empty and readiness looked for cards of no board. The harness now waits for the `id` in the address before reading `landed`, and scrolls the first card of the landed board into view when none is on screen. Two phone checks then passed (5558 and 3747 ms, load 22).
 
+**Complete run.** After PR 1671 the 2026-10-20 03:53 UTC run completed all 70 samples (first since 2026-10-18): phone ticket-cold 2791 ms median (was 14234 ms), phone ticket-warm 1933 ms. Every other path read 36 to 148% slower with long tasks up about 2x across the board at load 18 to 30, a host-load signature, not a regression to chase. The run before it failed once more on phone ticket-warm: the tap on task 43 left the page on /project for 60 s at load about 50; watch whether that repeats at normal load.
+
 **Measurement trap.** A speed win upstream can change what a downstream cohort measures. When a path suddenly moves several times its range, compare its waterfall's cache hits with the previous week before blaming the app.
+
+### 2026-10-20: phone first tap from the board stays at about 10 s; warming the ticket code is not the limiter (HTPR-7395)
+
+https://app.hypertask.ai/detail/project-15/7395, PR 1670 (shipped Owner + QA), reverted in PR 1677.
+
+**Question.** A fresh phone board, wait 2 s, tap the first ticket: 10.0 / 10.3 / 10.0 s (N=3, load 13). HTPR-7008 skips `warmTaskDetail` on phone /project until pointerdown, so the hypothesis was that downloading the ticket code after the tap is the wait.
+
+**Tried.** Warm the ticket code once the board has painted (`secondaryStartupEnabled`), behind `htpr-7395-phone-board-warms-ticket`. Local PR build: tap 0.72 to 0.80 s, unthrottled, so not evidence.
+
+**Result: no measurable difference.** Live ABAB, QA 2343, board 6859, phone profile, `/api/flags` rewritten per sample, 5 interleaved pairs, same deploy, load 14 to 30: tap 10057 ms off vs 9814 ms on (paired differences -3.5 to +3.0 s), board 13418 vs 14842 ms (+10.6%), bytes after tap 936 KB vs 250 KB. Two earlier runs at load 45 to 60 were discarded (one spanned a deploy). Reverted.
+
+**What actually limits the tap.** CPU profile of the tap window (500 us sampling, flag off, load 9): 10.8 s wall, only 1.2 s idle. React render and commit 5.4 s, native and compile 1.5 s, webpack module evaluation 1.4 s (chunks 49986, 14096, 3cb99d79). React time is spread over many components, some of them in the board route chunk, so the board is still rendering 2 s after its first card shows. A network-only view (requests after tap) looked like getTask, detailMeta, comments and drafts each fetched three times; those are the prefetches for the previous, current and next tickets, not duplicates.
+
+**Lessons.** Moving bytes off the tap is not a win on a CPU-bound path; check idle time in a profile before warming code. Read request query strings before calling a fetch a duplicate. On this host, an ABAB above load 30 is noise.
+
+**Next probe.** Local production build with source maps, same phone profile, profile the tap to name the components behind the 5.4 s React time and the board work still running at tap time; then test deferring the pointerdown ancillary warm (Firebase, emoji) until the ticket paints.
 
 ## Milliseconds saved scoreboard
 
@@ -155,6 +174,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7110 | Cold phone, app-saved descriptions, PR 1341, live N=5, load 8 to 10 | 14.2 s → 11.7 s | about 2,500 ms | flag `htpr-7110-app-saved-static-description` |
 | https://app.hypertask.ai/detail/project-15/7116 | Phone ticket blanking after open, PR 1360 | 5 of 30 cold, 2 of 20 warm blank → fix pending live proof | n/a (correctness, not ms) | flag `htpr-7116-ticket-stays-open` |
 | https://app.hypertask.ai/detail/project-15/7367 | Cold phone ticket, description visible, PR 1657, local ABAB N=10, load 18 to 58 | 18.3 / 20.2 s → 2.3 / 3.7 s; controls 18.3 / 20.2 s → 21.4 s | unproven live; local about 16,000 ms to text, about -1,000 ms to controls | flag `htpr-7367-server-description-first`; live 5 cold run after deploy decides |
+| https://app.hypertask.ai/detail/project-15/7395 | Phone first tap after fresh board, live ABAB N=5, load 14 to 30 | 10057 ms (OFF) → 9814 ms (ON) | 0, within noise | reverted in PR 1677; board +10.6% with flag on |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
@@ -172,6 +192,7 @@ Confirmed, comparable saved-ms total in this seed: **not established**. Future e
 | Re-baseline phone daily read | Profile fixed 2026-10-11; older phone days not comparable | Run the daily harness at host load below 12, record as the new phone baseline |
 | Live description sooner after a server description (HTPR-7367) | Controls arrive about 1 s later with the server description | Time the editor chunk against the live swap; if it gates the transition, nest a Suspense with the static frame as fallback; ABAB phone N=5 |
 | Account-based flag A/B on a shared board | HTPR-6934 verdict pending | Seed inboxes for both accounts, run desktop and inbox when load is low |
+| Name the React work in a phone tap from the board (HTPR-7395) | Tap window is 5.4 s React, 1.4 s module eval, 1.2 s idle of 10.8 s | Local production build with source maps, phone profile, CPU profile the tap; then defer the pointerdown Firebase and emoji warm until the ticket paints, ABAB N=5 at load under 20 |
 
 ## Weekly research seed and experiment queue
 
