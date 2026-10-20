@@ -280,12 +280,25 @@ test("money-policy Redis failure after rate admission still refuses inference", 
   assert.match(await (await chat(request())).text(), /status.*error/);
   assert.equal(modelCalls.length, 0);
 });
-test("Gateway policy bootstrap failure refuses chat and board inference", async () => {
-  global.fetch = async () => new Response(null, { status: 503 });
-  assert.match(await (await chat(request())).text(), /status.*error/);
-  await assert.rejects(generateDemoBoard("Launch a project"), DemoBoardGenerationUnavailableError);
-  assert.equal(modelCalls.length, 0);
-});
+for (const entryPoint of ["chat", "board"]) {
+  test(`Gateway policy bootstrap failure refuses ${entryPoint} inference`, async () => {
+    const fetchPricing = global.fetch;
+    global.fetch = async (url, options) => {
+      const parsed = new URL(String(url));
+      if (parsed.pathname.endsWith("/models")) return fetchPricing(url, options);
+      assert.equal(parsed.pathname, "/v1/report");
+      reports.push(parsed);
+      return new Response(null, { status: 503 });
+    };
+    if (entryPoint === "chat") {
+      assert.match(await (await chat(request())).text(), /status.*error/);
+    } else {
+      await assert.rejects(generateDemoBoard("Launch a project"), DemoBoardGenerationUnavailableError);
+    }
+    assert.ok(reports.length > 0, "allowance bootstrap must request /report");
+    assert.equal(modelCalls.length, 0);
+  });
+}
 test("flag lookup error fails closed for chat, guest creation and board generation", async () => {
   flag = new Error("flag unavailable");
   assert.equal((await chat(request())).status, 503);
