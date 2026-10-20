@@ -5,6 +5,7 @@ export const RELEASE_RISK_REQUIRED_FROM = "2026-10-11";
 export type FeatureFlagReleaseRisk = {
   risk: "none" | "small" | "new";
   reason: string;
+  highRisk?: "money" | "access" | "data-deletion" | "customer-email";
 };
 
 export const RELEASE_RISK_LABELS: Record<FeatureFlagReleaseRisk["risk"], string> = {

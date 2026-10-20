@@ -14,6 +14,7 @@ const stub = (file, exports) => {
 let redis;
 let flag = true;
 let ownerFailure = false;
+let identityFailure = false;
 let ownerUid = "owner";
 let plan = "Pro";
 let seats = 3;
@@ -55,7 +56,7 @@ stub("src/lib/prisma.ts", { default: {
       ...teamOverride,
     };
   } },
-  user: { findUnique: async () => { prismaCalls.user++; return { uid: ownerUid }; } },
+  user: { findUnique: async () => { prismaCalls.user++; if (identityFailure) throw new Error("owner identity lookup unavailable"); return ownerUid === null ? null : { uid: ownerUid }; } },
   teamByokApiKey: { findUnique: async ({ where }) => {
     const provider = where.teamId_provider.provider;
     keyReads.push(provider);
@@ -176,7 +177,7 @@ function mockFetch() {
 
 test.beforeEach(() => {
   prismaCalls = { team: 0, user: 0 }; highWaterWrites = 0; projectReads = 0;
-  redis = fakeRedis(); flag = true; ownerFailure = false; ownerUid = "owner"; plan = "Pro"; seats = 3;
+  redis = fakeRedis(); flag = true; ownerFailure = false; identityFailure = false; ownerUid = "owner"; plan = "Pro"; seats = 3;
   teamOverride = {}; flagCalls = []; reports = []; daySpend = 0; monthSpend = 0; demoSpend = 0;
   keyRows = {}; keyReads = []; providerCalls = []; managed.clear();
   customerFailure = Object.assign(new Error("customer model unavailable"), { statusCode: 404 });
@@ -200,8 +201,18 @@ test("feature flag inherits Owner + QA and declares the registry's highest relea
   const value = definition.default ?? definition;
   assert.equal(value.key, planFlag); assert.equal(value.kind, "feature");
   assert.equal(value.defaultMode, undefined); assert.equal(value.releaseRisk.risk, "new");
+  assert.equal(value.releaseRisk.highRisk, "money");
   assert.match(value.releaseRisk.reason, /High risk/);
   assert.match(fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8"), /DEFAULT_FEATURE_FLAG_MODE: FeatureFlagMode = "OWNER_AND_QA"/);
+});
+
+test("flag parser accepts money classification but rejects invalid or default-Everyone money flags", async () => {
+  const { parseFlagFiles } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const file = "src/lib/flags/definitions/htpr-7324-plan-ai-caps.ts";
+  const source = fs.readFileSync(path.join(root, file), "utf8");
+  assert.equal(parseFlagFiles([file], () => source)[0].definition.releaseRisk.highRisk, "money");
+  assert.throws(() => parseFlagFiles([file], () => source.replace('highRisk: "money"', 'highRisk: "unknown"')), /releaseRisk.highRisk must be/);
+  assert.throws(() => parseFlagFiles([file], () => source.replace('kind: "feature",', 'kind: "feature", defaultMode: "EVERYONE",')), /may not default to Everyone|only bugfix flags/);
 });
 
 test("owner flag is read each call; accepted cached owner, not caller, controls mode", async () => {
@@ -305,6 +316,30 @@ test("owner/seat/Redis lookup failures are strict at every policy entry point", 
   assert.equal(strict.mode, "plan"); assert.equal(strict.monthlyUsd, 5);
 });
 
+test("unknown owner identity uses strict team-only monthly and daily limits", async () => {
+  for (const failure of ["owner", "identity", "missing-user"]) {
+    ownerFailure = failure === "owner";
+    identityFailure = failure === "identity";
+    ownerUid = failure === "missing-user" ? null : "owner";
+    for (const funding of ["shared", "managed"]) {
+      assert.deepEqual(await policy.resolveTeamAllowancePolicy(`unknown-${failure}-${funding}`, funding), free);
+    }
+  }
+});
+
+test("unknown ordinary owner does not consume an exhausted demo pool; confirmed guests still do", async () => {
+  identityFailure = true;
+  const strict = await policy.resolveTeamAllowancePolicy("unknown-owner-pool", "managed");
+  process.env.DEMO_AI_GATEWAY_API_KEY = "vck_demo_test";
+  demoSpend = 15;
+  const reservation = await reserve({ teamId: "unknown-owner-pool", policy: strict });
+  assert.equal(reservation.scopes.length, 2);
+  assert.ok(reservation.scopes.every((scope) => !scope.committedKey.includes(":demo:")));
+  identityFailure = false; ownerUid = "guest_confirmed";
+  const guestPolicy = await policy.resolveTeamAllowancePolicy("confirmed-guest-pool", "shared");
+  await assert.rejects(reserve({ teamId: "confirmed-guest-pool", policy: guestPolicy }), refusal("demo"));
+});
+
 test("guest team policy adds the demo global scope even on ordinary team AI calls", async () => {
   ownerUid = "guest_7324";
   assert.deepEqual(await policy.resolveTeamAllowancePolicy("guest-team", "shared"), { ...free, demoGlobal: true });
@@ -389,6 +424,18 @@ test("BYOK broken key preserves original failure and never uses shared or manage
   flag = new Error("flag unavailable"); keyRows = {};
   assert.equal(await byok.getTeamGatewayApiKey(lookup), undefined);
   await assert.rejects(byok.resolveAiFallbackCredential(lookup, async () => "vck_shared_test", original), (error) => error === original);
+});
+
+test("fallback credential lookup failures never escape with credential-bearing diagnostics", async () => {
+  for (const enabled of [true, false]) {
+    flag = enabled; plan = "BYOK";
+    const original = new Error("customer model unavailable");
+    const sensitiveValue = require("node:crypto").randomUUID();
+    const sensitiveFailure = Object.assign(new Error(`credential lookup failed: ${sensitiveValue}`), { apiKey: sensitiveValue });
+    await assert.rejects(byok.resolveAiFallbackCredential({ trustedTeamId: `lookup-failure-${enabled}` }, async () => {
+      throw sensitiveFailure;
+    }, original), (error) => error === original && !("apiKey" in error) && !error.message.includes(sensitiveValue));
+  }
 });
 
 test("broken BYOK automatic model call rethrows the actual customer error without platform inference", async () => {

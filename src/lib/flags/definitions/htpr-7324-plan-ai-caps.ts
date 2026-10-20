@@ -10,6 +10,7 @@ export default {
     "Caps included AI across foreground and background work at $5 per paid seat monthly, or $1 monthly and $0.25 daily for Free teams. BYOK never falls back to Hypertask-funded keys.",
   releaseRisk: {
     risk: "new",
+    highRisk: "money",
     reason:
       "High risk: changes spending authorization, paid seat allowances and BYOK fallback behavior across every platform-funded AI call.",
   },

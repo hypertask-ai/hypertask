@@ -112,7 +112,8 @@ export async function resolveTeamAllowancePolicy(
   const legacyMonthly = fundingSource === "managed" ? PAID_TEAM_AI_ALLOWANCE_USD : FREE_TEAM_AI_ALLOWANCE_USD;
   if (mode === "legacy") return { mode, monthlyUsd: legacyMonthly, dailyUsd: null, demoGlobal: false };
   let monthlyUsd = FREE_TEAM_AI_ALLOWANCE_USD;
-  let demoGlobal = true;
+  let demoGlobal = false;
+  let ownerIdentityConfirmed = false;
   try {
     const owner = await teamOwner(teamId);
     if (owner.uid === undefined) {
@@ -121,6 +122,7 @@ export async function resolveTeamAllowancePolicy(
       owner.uid = user.uid;
     }
     demoGlobal = owner.uid.startsWith("guest_");
+    ownerIdentityConfirmed = true;
     if (fundingSource === "managed" && !demoGlobal) {
       const month = aiAllowancePeriod();
       const seats = await cachedPaidSeats(teamId, month.key);
@@ -142,8 +144,11 @@ export async function resolveTeamAllowancePolicy(
       const highWater = cached.highWater;
       monthlyUsd = PLAN_PAID_SEAT_AI_ALLOWANCE_USD * highWater;
     }
-  } catch (error) {
-    console.warn("[ai-allowance] Policy lookup failed; using strict allowance", { teamId, error });
+  } catch {
+    console.warn("[ai-allowance] Policy lookup failed; using strict allowance", { teamId });
+    if (!ownerIdentityConfirmed) {
+      return { mode: "plan", monthlyUsd: FREE_TEAM_AI_ALLOWANCE_USD, dailyUsd: FREE_TEAM_DAILY_AI_ALLOWANCE_USD, demoGlobal: false };
+    }
     return {
       mode: "plan",
       monthlyUsd: Math.min(fundingSource === "managed" && !demoGlobal ? PLAN_PAID_SEAT_AI_ALLOWANCE_USD : FREE_TEAM_AI_ALLOWANCE_USD, legacyMonthly),

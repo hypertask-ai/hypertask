@@ -214,8 +214,8 @@ export async function resolveAiFallbackCredential(
     if (strict && (!credential || (typeof credential === "string" &&
       gatewayFundingSourceForApiKey(credential) !== "customer"))) throw originalError;
     return credential;
-  } catch (error) {
-    throw strict ? originalError : error;
+  } catch {
+    throw originalError;
   }
 }
 

@@ -245,13 +245,20 @@ export function parseFlagFile(source, path) {
   }
   if (fields.has("releaseRisk")) {
     const risk = fields.get("releaseRisk");
-    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length !== 2 || risk.properties.some((entry) =>
+    if (!typescript.isObjectLiteralExpression(risk) || risk.properties.length < 2 || risk.properties.length > 3 || risk.properties.some((entry) =>
       !typescript.isPropertyAssignment(entry) || !(typescript.isIdentifier(entry.name) || typescript.isStringLiteral(entry.name)))) fail("releaseRisk needs literal risk and reason fields");
     const values = new Map(risk.properties.map((entry) => [entry.name.text, unwrapExpr(entry.initializer)]));
+    if (values.size !== risk.properties.length || [...values.keys()].some((name) => !["risk", "reason", "highRisk"].includes(name))) fail("releaseRisk needs literal risk, reason and optional highRisk fields");
     const level = values.get("risk"), reason = values.get("reason");
     if (!level || !typescript.isStringLiteral(level) || !["none", "small", "new"].includes(level.text) ||
         !reason || !typescript.isStringLiteral(reason) || !reason.text.trim() || /[\r\n\u2014]/.test(reason.text)) fail("releaseRisk needs risk none, small or new and a nonempty one-line reason");
     definition.releaseRisk = { risk: level.text, reason: reason.text };
+    if (values.has("highRisk")) {
+      const highRisk = values.get("highRisk");
+      if (!typescript.isStringLiteral(highRisk) || !["money", "access", "data-deletion", "customer-email"].includes(highRisk.text)) fail("releaseRisk.highRisk must be money, access, data-deletion or customer-email");
+      definition.releaseRisk.highRisk = highRisk.text;
+    }
+    if (definition.releaseRisk.highRisk && (definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA")) === "EVERYONE") fail("a flag with releaseRisk.highRisk may not default to Everyone");
   }
   return { identifier: declaration.name.text, definition, path };
 }
