@@ -1,4 +1,4 @@
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6929_COMPOSE_TASK_WRITER_FLAG, HTPR_6937_NEW_TASK_WINDOW_FLAG } from "@/lib/flags/keys";
 import { Dispatch, SetStateAction, useState, useRef } from "react";
 import { IAttachment, IEditorAttachmentFile, IUser, RedirectAPIParams, RedirectMode } from "@/models/model";
 import { useQueryClient } from "@tanstack/react-query";
@@ -136,6 +136,8 @@ export function useTaskDetailEditorState({
   const [trigger, setTrigger] = useState(false);
   const [filesDropped, setFilesDropped] = useState<File[]>([]);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
   const composeEnabled = useFlag(HTPR_6929_COMPOSE_TASK_WRITER_FLAG);
   const newTaskWindowFlag = useFlag(HTPR_6937_NEW_TASK_WINDOW_FLAG);
   const [writerOpen, setShouldShowAITaskWriter] = useState(shouldTriggerAiTaskWriter);
@@ -145,7 +147,7 @@ export function useTaskDetailEditorState({
     initialPrompt: ''
   });
   let shouldShowAiTaskWriter = writerOpen;
-  if (editWithAiEnabled) shouldShowAiTaskWriter = false;
+  if (sidebarEditWithAi) shouldShowAiTaskWriter = false;
   if (mode === "read-edit-description" && composeEnabled && newTaskWindowFlag && !(aiTriggerData.autoTrigger && aiTriggerData.initialPrompt)) shouldShowAiTaskWriter = false;
   const suggestReplyAbortRef = useRef<AbortController | null>(null);
   const shouldShowInlineDraftAiRef = useRef(false);

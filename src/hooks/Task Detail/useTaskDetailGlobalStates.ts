@@ -66,7 +66,7 @@ import { isCommentCreatedByUser } from "@/lib/htc/isCommentCreatedByUser";
 import { useCommentToAiChat } from "@/hooks/MultiPages/AIChat/useCommentToAiChat";
 import { useFlag } from "@/hooks/useFlag";
 import { useHydrated } from "@/hooks/General/useHydrated";
-import { HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG, HTPR_6752_INSTANT_TICKET_OPEN_FLAG, HTPR_6899_STABLE_LAYOUT_FLAG, HTPR_6551_QUIET_RUN_ACTIVITY_FLAG, HTPR_7116_TICKET_STAYS_OPEN_FLAG } from "@/lib/flags/keys";
 
 export type TReturnFocusedEl =
   | "Description"
@@ -93,6 +93,7 @@ const useTaskDetailGlobalStates = (
 
   const [editMode, setEditMode] = useState<ITaskDetailEditMode>(null);
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
   const { editTicketWithAi } = useCommentToAiChat();
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const stableLayout = useFlag(HTPR_6899_STABLE_LAYOUT_FLAG);
@@ -421,7 +422,8 @@ const useTaskDetailGlobalStates = (
   };
 
   const refocusAndOpenTaskWriter = (prevActive: string) => {
-    if (editWithAiEnabled) {
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (prevActive === "comment" || prevActive.startsWith("comment-")));
+    if (sidebarEditWithAi) {
       void editTicketWithAi(currentTask!.id);
       return;
     }
@@ -430,11 +432,12 @@ const useTaskDetailGlobalStates = (
   };
 
   const CTRL_J_ENTER_Handler = (shouldTriggerAi: boolean = false) => {
-    if (shouldTriggerAi && editWithAiEnabled) {
+    const currentFocusedType = returnCurrentFocusedType();
+    const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (currentFocusedType === "Edit-Comment" || currentFocusedType === "New-Comment"));
+    if (shouldTriggerAi && sidebarEditWithAi) {
       setShowCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       return;
     }
-    const currentFocusedType = returnCurrentFocusedType();
     if (currentFocusedType === "Description")
       editDescriptionHandler(shouldTriggerAi);
     else if (currentFocusedType === "Edit-Comment") {

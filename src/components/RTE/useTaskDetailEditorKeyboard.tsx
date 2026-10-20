@@ -1,6 +1,6 @@
 
 import { useFlag } from "@/hooks/useFlag";
-import { HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
+import { HTPR_7393_COMMENT_INLINE_AI_FLAG, HTPR_7337_EDIT_WITH_AI_FLAG } from "@/lib/flags/keys";
 import { useSetRecoilState } from "@/lib/state";
 import { showCommandsAtom } from "@/store";
 import { CommandMode } from "@/models/enums";
@@ -17,6 +17,8 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
   const editWithAiEnabled = useFlag(HTPR_7337_EDIT_WITH_AI_FLAG);
   const setCommands = useSetRecoilState(showCommandsAtom);
   const { isInboxFlow, isApple, isRecording, isReadOnlyContent, mode, shouldShowInlineDraftAiRef, editor, mobileExistingEditOpen, discardDraft, inInbox, setFilesDropped, allowEdit, shouldShowAiTaskWriter, isMbl, handleTaskOptions, editMode, scrollVirtualize } = getContext();
+  const commentInlineAi = useFlag(HTPR_7393_COMMENT_INLINE_AI_FLAG);
+  const sidebarEditWithAi = editWithAiEnabled && !(commentInlineAi && (mode === "create-comment" || mode === "read-edit-comments"));
 
 
   const handleKeydown = (e: any) => {
@@ -153,7 +155,7 @@ export function useTaskDetailEditorKeyboard(getContext: () => TaskDetailEditorCo
 
     if (e.key === "j" && cmdControl) {
       e.preventDefault();
-      if (editWithAiEnabled) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
+      if (sidebarEditWithAi) setCommands({ show: true, mode: CommandMode.Command, paletteTab: "compose" });
       else toggleAiTaskWriter();
     }
     keyHandlers[e.key]?.();
