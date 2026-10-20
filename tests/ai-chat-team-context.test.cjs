@@ -373,3 +373,235 @@ test("native agent board survives invalid page context without account fallback"
     { teamId: "agent-team", projectId: null, aiProviderSettings: null },
   );
 });
+
+test("accessible mismatched team does not override the project team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async () => ({
+        id: 42,
+        teamId: "project-team",
+        team: { aiProviderSettings: { openai: true } },
+      }),
+    },
+    team: {
+      findFirst: async () => ({
+        id: "last-used-team",
+        aiProviderSettings: { openai: false },
+      }),
+    },
+  });
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      requestedProjectId: 42,
+      requestedTeamId: "last-used-team",
+    }),
+    {
+      teamId: "project-team",
+      projectId: 42,
+      aiProviderSettings: { openai: true },
+    },
+  );
+});
+
+test("accessible teamless project uses the accessible requested team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async () => ({ id: 42, teamId: null, team: null }),
+    },
+    team: {
+      findFirst: async () => ({
+        id: "requested-team",
+        aiProviderSettings: { openai: true },
+      }),
+    },
+  });
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      requestedProjectId: 42,
+      requestedTeamId: "requested-team",
+    }),
+    {
+      teamId: "requested-team",
+      projectId: 42,
+      aiProviderSettings: { openai: true },
+    },
+  );
+});
+
+test("accessible teamless project uses the strongest accessible account team", async () => {
+  const resolveChatTeamContext = loadResolver(
+    {
+      project: {
+        findFirst: async ({ where }) => {
+          assert.equal(where.id, 42);
+          assert.equal(where.accessFor, 6);
+          return { id: 42, teamId: null, team: null };
+        },
+      },
+      team: {
+        findMany: async ({ where, orderBy }) => {
+          assert.deepEqual(where, {
+            OR: [
+              { googleAccount: { userId: 6 } },
+              { members: { some: { userId: 6, status: "Accepted" } } },
+            ],
+          });
+          assert.deepEqual(orderBy, { createdAt: "desc" });
+          return [
+            {
+              id: "newest-free-owned-team",
+              aiProviderSettings: { aiChat: "free" },
+              activeSubscriptionPlanId: null,
+              compedUntil: null,
+              subscriptionPlan: [],
+            },
+            {
+              id: "paid-member-team",
+              aiProviderSettings: { aiChat: "paid" },
+              activeSubscriptionPlanId: "sub-paid",
+              compedUntil: null,
+              subscriptionPlan: [
+                {
+                  subscriptionId: "sub-paid",
+                  subscriptionStatus: "active",
+                  priceId: "price_1TMlqDIhmcH60VccRZGW1xK3",
+                },
+              ],
+            },
+          ];
+        },
+      },
+    },
+    (userId) => ({ accessFor: userId }),
+  );
+
+  assert.deepEqual(
+    await resolveChatTeamContext({ userId: 6, requestedProjectId: 42 }),
+    {
+      teamId: "paid-member-team",
+      projectId: 42,
+      aiProviderSettings: { aiChat: "paid" },
+    },
+  );
+});
+
+test("accessible teamless project cannot hide an inaccessible requested team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async () => ({ id: 42, teamId: null, team: null }),
+    },
+    team: { findFirst: async () => null },
+  });
+
+  assert.equal(
+    await resolveChatTeamContext({
+      userId: 6,
+      requestedProjectId: 42,
+      requestedTeamId: "foreign-team",
+    }),
+    null,
+  );
+});
+
+test("inaccessible teamless project cannot use account fallback", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: { findFirst: async () => null },
+    team: {
+      findMany: async () => assert.fail("inaccessible project cannot use account fallback"),
+    },
+  });
+
+  assert.equal(
+    await resolveChatTeamContext({ userId: 6, requestedProjectId: 42 }),
+    null,
+  );
+});
+
+test("accessible teamless project without an account team remains unavailable", async () => {
+  let accountQueries = 0;
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async () => ({ id: 42, teamId: null, team: null }),
+    },
+    team: {
+      findMany: async () => {
+        accountQueries += 1;
+        return [];
+      },
+    },
+  });
+
+  assert.equal(
+    await resolveChatTeamContext({ userId: 6, requestedProjectId: 42 }),
+    null,
+  );
+  assert.equal(accountQueries, 1);
+});
+
+test("accessible teamless project ignores an older chat's board and uses the account team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async ({ where }) => {
+        assert.equal(where.id, 42);
+        return { id: 42, teamId: null, team: null };
+      },
+    },
+    chatSession: {
+      findFirst: async () => ({ projectId: 77, agentId: null }),
+    },
+    team: {
+      findMany: async () => [
+        {
+          id: "account-team",
+          aiProviderSettings: { openai: true },
+          activeSubscriptionPlanId: null,
+          compedUntil: null,
+          subscriptionPlan: [],
+        },
+      ],
+    },
+  });
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      requestedProjectId: 42,
+      sessionId: "old-session",
+    }),
+    {
+      teamId: "account-team",
+      projectId: 42,
+      aiProviderSettings: { openai: true },
+    },
+  );
+});
+
+test("agent chat on an accessible teamless project still uses the agent board team", async () => {
+  const resolveChatTeamContext = loadResolver({
+    project: {
+      findFirst: async ({ where }) =>
+        where.id === 42
+          ? { id: 42, teamId: null, team: null }
+          : { teamId: "agent-team", team: { aiProviderSettings: null } },
+    },
+    chatSession: {
+      findFirst: async () => ({ projectId: null, agentId: "agent-1" }),
+    },
+    team: {
+      findMany: async () => assert.fail("agent board team must win"),
+    },
+  });
+
+  assert.deepEqual(
+    await resolveChatTeamContext({
+      userId: 6,
+      requestedProjectId: 42,
+      sessionId: "agent-session",
+    }),
+    { teamId: "agent-team", projectId: null, aiProviderSettings: null },
+  );
+});
