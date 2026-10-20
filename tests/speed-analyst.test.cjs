@@ -378,3 +378,24 @@ test('a cold ticket whose code never settles fails the run instead of measuring 
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /if \(settled\.pendingScripts\) throw new Error\(`Ticket code did not settle/);
 });
+
+test('phone page navigation scrolls a below-the-fold card of the landed board into view', async () => {
+  const { ready } = await analyst;
+  const { JSDOM } = await import('jsdom');
+  const dom = new JSDOM('<a href="/detail/project-6859/51">Card</a>', { runScripts: 'outside-only' });
+  let clock = 0, top = 1447;
+  dom.window.innerHeight = 844;
+  dom.window.performance.now = () => ++clock * 1000;
+  dom.window.requestAnimationFrame = callback => queueMicrotask(callback);
+  dom.window.getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' });
+  dom.window.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 90, top, bottom: top + 90 });
+  dom.window.Element.prototype.scrollIntoView = () => { top = 300; };
+  const page = { evaluate: (fn, args) => dom.window.eval(`(${fn.toString()})(${JSON.stringify(args)})`) };
+  try { assert.ok(await ready(page, 'page-navigation', '6859') > 0); } finally { dom.window.close(); }
+  assert.equal(top, 300);
+});
+
+test('page navigation reads the landed board only once the board id is in the address', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /waitForURL\(url => url\.pathname === '\/project' && url\.searchParams\.has\('id'\), \{ waitUntil: 'commit' \}\);\n\s+landed = safeSearch/);
+});

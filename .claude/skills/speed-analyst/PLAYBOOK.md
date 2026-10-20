@@ -132,6 +132,8 @@ Description top never moved after first paint (one value in every frame, phone 5
 
 **Phone page navigation cause.** With the step error saved, two runs showed it: `g` then `b` follows the `previousBoard` cookie and the board's saved view on the shared QA account 2343. One failure landed on board 8778, a read-only probe landed 3 of 3 on 6859 under view `qa7098-control` (another session's saved view), where task 43 was present but never visible. Shared fixture state, not an app slowdown. Page navigation now completes on any visible card of the board it opened and records `landed` (board id and view); not comparable before 2026-10-20.
 
+**Follow-up (same day).** The first full run still failed phone page navigation: on a phone the address first commits as a bare `/project` and the board id is added a moment later, so the recorded `landed` was empty and readiness looked for cards of no board. The harness now waits for the `id` in the address before reading `landed`, and scrolls the first card of the landed board into view when none is on screen. Two phone checks then passed (5558 and 3747 ms, load 22).
+
 **Measurement trap.** A speed win upstream can change what a downstream cohort measures. When a path suddenly moves several times its range, compare its waterfall's cache hits with the previous week before blaming the app.
 
 ## Milliseconds saved scoreboard
