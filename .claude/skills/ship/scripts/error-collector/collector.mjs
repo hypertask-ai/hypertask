@@ -203,13 +203,20 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   if (!Number.isSafeInteger(cap) || cap < 0) throw new Error('invalid hourly cap');
   const noiseLimit = Number(env.ERROR_COLLECTOR_NOISE_HOURLY_LIMIT ?? 50);
   if (!Number.isSafeInteger(noiseLimit) || noiseLimit < 0) throw new Error('invalid noise hourly limit');
+  const staleHours = Number(env.ERROR_COLLECTOR_STALE_HOURS ?? 2);
+  const staleWindow = (Number.isFinite(staleHours) && staleHours > 0 ? staleHours : 2) * HOUR;
   state.noiseWindows ??= {};
   const stats = (date, service) => {
     state.days[date] ??= {};
     return state.days[date][service] ??= { errors: 0, noise: 0, newGroups: 0, complete: false };
   };
   const absorb = (fp, group, observed = true) => {
-    const known = state.fingerprints[fp];
+    let known = state.fingerprints[fp];
+    if (known?.stale) {
+      if (group.lastSeen <= known.lastSeen) return;
+      delete state.fingerprints[fp];
+      known = undefined;
+    }
     if (known) {
       const newRoutes = group.routes.filter(route => route && !known.routes?.includes(route));
       known.routes = [...new Set([...(known.routes ?? []), ...group.routes])];
@@ -350,6 +357,26 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
   for (const [fp, group] of Object.entries(state.pending)) {
     if (signal.aborted) break;
     try {
+      if (now - Date.parse(group.lastSeen) > staleWindow) {
+        const target = Object.values(state.fingerprints).find(record => record.ticket && !record.deleted && record.board === group.board && group.routes.some(route => route && record.routes?.includes(route)));
+        state.fingerprints[fp] = { stale: true, board: group.board, firstSeen: group.firstSeen, lastSeen: group.lastSeen, total: group.count, routes: group.routes, ...(target ? { ticket: target.ticket, lastActivityAt: target.lastActivityAt } : {}) };
+        if (target) {
+          const activity = state.activities[target.ticket] ??= { count: 0, since: group.firstSeen, at: target.lastActivityAt };
+          activity.count += group.count;
+          activity.since = activity.since < group.firstSeen ? activity.since : group.firstSeen;
+          const stale = activity.stale ??= { count: 0, firstSeen: group.firstSeen, lastSeen: group.lastSeen };
+          stale.count += group.count;
+          stale.firstSeen = stale.firstSeen < group.firstSeen ? stale.firstSeen : group.firstSeen;
+          stale.lastSeen = stale.lastSeen > group.lastSeen ? stale.lastSeen : group.lastSeen;
+        } else {
+          const counts = stats(day(group.firstSeen), group.service);
+          counts.stale = (counts.stale ?? 0) + 1;
+        }
+        if (dryRun) console.log(`DRY-RUN stale ${JSON.stringify({ fingerprint: fp, lastSeen: group.lastSeen, outcome: target ? 'stale sighting' : 'stale, not filed', ticket: target?.ticket })}`);
+        delete state.pending[fp];
+        await checkpoint();
+        continue;
+      }
       let found = search(fp, group.board, env);
       for (const alias of group.aliases ?? []) found ??= search(alias, group.board, env);
       if (!found) {
@@ -390,7 +417,9 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
     const lastSeen = records.map(record => record.lastSeen).sort().at(-1);
     try {
       const routes = (activity.routes ?? []).slice(0, 3).map(route => route.trim().slice(0, 120)).join(', ');
-      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}${routes ? `; new routes: ${routes}` : ''}`]);
+      const stale = activity.stale ? `; stale sighting: ${activity.stale.count} occurrences, first seen ${activity.stale.firstSeen}, last seen ${activity.stale.lastSeen}` : '';
+      write('vcc', ['activity', 'add', ticket, `${activity.count} more since ${activity.since}, ${total} total, last seen ${lastSeen}${routes ? `; new routes: ${routes}` : ''}${stale}`]);
+      delete activity.stale;
       activity.count = 0;
       activity.routes = [];
       activity.since = iso(now);
@@ -420,9 +449,9 @@ async function run({ env = process.env, now = Date.now(), sources, dryRun = fals
         if (!due(date, service)) continue;
         const counts = stats(date, service);
         const previous = covered(previousDate, service) ? state.days[previousDate][service].errors : null;
-        const text = covered(date, service)
+        const text = (covered(date, service)
           ? `${service} on ${date}: ${counts.errors} errors (${previousDate}: ${previous ?? 'no complete data'}), ${counts.newGroups} new kinds, ${counts.noise} noise`
-          : `${service} on ${date}: no complete data, ${finalized(date, service) ? 'collection did not cover the full day' : 'the source kept failing'} (partial count ${counts.errors})`;
+          : `${service} on ${date}: no complete data, ${finalized(date, service) ? 'collection did not cover the full day' : 'the source kept failing'} (partial count ${counts.errors})`) + (counts.stale ? `, ${counts.stale} stale, not filed` : '');
         try {
           write('vcc', ['activity', 'add', CONTROL, text]);
           if (covered(date, service) && previous !== null && counts.errors > 3 * previous && counts.errors >= 50) {

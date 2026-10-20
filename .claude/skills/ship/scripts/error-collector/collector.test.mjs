@@ -408,9 +408,9 @@ check('tickets', 'real CLI runs are serialized and concurrent ticks create one t
 check('tickets', 'negative control rejects a known-group data-loss mutation', () => withHarness(async h => {
   const directory = join(h.home, 'mutant'); mkdirSync(directory);
   const source = readFileSync(SCRIPT, 'utf8');
-  const old = 'const known = state.fingerprints[fp];';
+  const old = 'let known = state.fingerprints[fp];';
   assert.equal(source.split(old).length - 1, 1);
-  writeFileSync(join(directory, 'collector.mjs'), source.replace(old, 'const known = undefined;'));
+  writeFileSync(join(directory, 'collector.mjs'), source.replace(old, 'let known = undefined;'));
   writeFileSync(join(directory, 'io.mjs'), readFileSync(join(HERE, 'io.mjs')));
   writeFileSync(join(directory, 'noise.json'), readFileSync(join(HERE, 'noise.json')));
   const mutant = await import(pathToFileURL(join(directory, 'collector.mjs')));
@@ -743,7 +743,7 @@ check('reporting', 'dry-run plans create/activity/summary/spike and never change
   h.env.NODE_OPTIONS = `--import=${clock}`;
   h.seed({ version: 1, sources: { fixture: '2026-10-13T05:00:00.000Z' }, coverage: { fixture: { since: '2026-10-12T00:00:00.000Z', until: '2026-10-13T05:00:00.000Z', services: ['fixture', 'web'] } }, fingerprints: {}, pending: {}, activities: {}, created: [], summaries: {}, days: { '2026-10-12': { web: { errors: 0, noise: 0, newGroups: 0, complete: true } } } });
   const initial = readFileSync(h.statePath);
-  h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() })]);
+  h.events([event({ count: 50, ts: new Date(NOW - DAY + HOUR).toISOString() }), event({ message: 'Fresh dry-run failure' })]);
   const result = h.cli('--once', '--sources', 'fixture', '--dry-run', '--summary');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /DRY-RUN.*"vcc".*"create"/);
@@ -1201,4 +1201,143 @@ check('sources', 'Neon collector advances snapshots atomically, failures leave b
     assert.ok(!readFileSync(h.statePath, 'utf8').includes('fixture-password'));
     assert.equal(Object.values(h.state().fingerprints).find(record => record.total === 2).board, 4060);
   } finally { globalThis.fetch = original; }
+}));
+
+check('tickets', 'stale replay: cap-held HTPR-7481..7490 groups never file at 10:30 or 13:30', () => withHarness(async h => {
+  // Timings, totals and routes from the 2026-10-20 state copy; messages are shortened.
+  const rows = JSON.parse(readFileSync(join(HERE, 'fixtures/stale-replay.json'), 'utf8'));
+  const filling = Array.from({ length: 5 }, (_, i) => event({ service: 'vercel', message: `Active failure ${String.fromCharCode(65 + i)}`, route: '/cap-fixture', ts: '2026-10-20T08:00:00Z' }));
+  h.events([...filling, ...rows.filter(row => row.message !== 'MCP context task id out of range')]);
+  await h.run({ now: Date.parse('2026-10-20T08:01:00Z') });
+  assert.equal(creates(h).length, 5);
+  assert.equal(Object.keys(h.state().pending).length, 12);
+  await h.run({ now: Date.parse('2026-10-20T08:02:00Z') });
+  assert.equal(creates(h).length, 5);
+  await h.run({ now: Date.parse('2026-10-20T10:30:00Z') });
+  const at1030 = creates(h).length;
+  await h.run({ now: Date.parse('2026-10-20T13:30:00Z') });
+  console.log(`stale replay creates: 10:30=${at1030 - 5}, 13:30=${creates(h).length - at1030}`);
+  assert.equal(creates(h).length, 5, 'cap-held stale groups must not create tickets');
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  assert.equal(Object.values(h.state().fingerprints).filter(record => record.stale).length, 12);
+  assert.equal(h.state().days['2026-10-20'].vercel.stale, 12);
+}));
+
+check('tickets', 'stale replay: the later context pending group also expires before 13:30', () => withHarness(async h => {
+  const rows = JSON.parse(readFileSync(join(HERE, 'fixtures/stale-replay.json'), 'utf8'));
+  h.events(rows.filter(row => row.message === 'MCP context task id out of range'));
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  await h.run({ now: Date.parse('2026-10-20T09:54:00Z') });
+  assert.equal(Object.keys(h.state().pending).length, 1);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  await h.run({ now: Date.parse('2026-10-20T13:30:00Z') });
+  assert.equal(creates(h).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+}));
+
+check('tickets', 'stale records ignore old sightings but a newer recurrence files normally under the cap', () => withHarness(async h => {
+  const old = event({ ts: new Date(NOW - 3 * HOUR).toISOString(), count: 7 });
+  const fp = fingerprint(old.service, old.message);
+  h.events([old]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp].stale, true);
+  assert.equal(h.state().fingerprints[fp].lastSeen, old.ts);
+  assert.equal(h.state().fingerprints[fp].total, 7);
+  const retry = h.state();
+  delete retry.sources.fixture;
+  h.seed(retry);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+  h.events([event({ ts: new Date(NOW + 2000).toISOString(), count: 2 })]);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '0';
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 0);
+  assert.equal(h.state().fingerprints[fp], undefined);
+  assert.equal(h.state().pending[fp].count, 2);
+  h.env.ERROR_COLLECTOR_HOURLY_CAP = '5';
+  await h.run({ now: NOW + 3000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().fingerprints[fp].stale, undefined);
+  assert.equal(h.state().fingerprints[fp].total, 2);
+}));
+
+check('tickets', 'stale same-route sightings share one activity, retry and respect the six-hour throttle', () => withHarness(async h => {
+  h.events([event()]);
+  await h.run();
+  const ticket = Object.values(h.state().fingerprints)[0].ticket;
+  h.events([event({ message: 'Different checkout failure', ts: new Date(NOW - 3 * HOUR).toISOString(), count: 4 })]);
+  const rewind = h.state();
+  delete rewind.sources.fixture;
+  h.seed(rewind);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, ticket).length, 0);
+  assert.deepEqual(Object.keys(h.state().pending), []);
+  h.config({ activityFail: true });
+  await h.run({ now: NOW + 6 * HOUR });
+  assert.equal(activities(h, ticket).length, 1);
+  h.config({});
+  await h.run({ now: NOW + 6 * HOUR + 1000 });
+  assert.equal(activities(h, ticket).length, 2);
+  assert.match(activities(h, ticket)[1].args[3], /stale sighting.*4.*first seen 2026-10-14T02:00:00.000Z.*last seen 2026-10-14T02:00:00.000Z/);
+  await h.run({ now: NOW + 7 * HOUR });
+  assert.equal(activities(h, ticket).length, 2);
+}));
+
+for (const kind of ['deleted', 'other-board', 'other-route', 'empty-route']) check('tickets', `stale route adoption excludes ${kind} records`, () => withHarness(async h => {
+  h.events([event({ route: kind === 'empty-route' ? '' : '/checkout/123' })]);
+  await h.run();
+  const state = h.state();
+  const record = Object.values(state.fingerprints)[0];
+  if (kind === 'deleted') record.deleted = true;
+  if (kind === 'other-board') record.board = 4060;
+  if (kind === 'other-route') record.routes = ['/unrelated'];
+  delete state.sources.fixture;
+  h.seed(state);
+  h.events([event({ message: 'Different checkout failure', route: kind === 'empty-route' ? '' : '/checkout/123', ts: new Date(NOW - 3 * HOUR).toISOString() })]);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(creates(h).length, 1);
+  assert.equal(activities(h, record.ticket).length, 0);
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+}));
+
+for (const setting of [undefined, '0', 'invalid', '-1', 'Infinity', '1', '2.5']) check('tickets', `stale window setting ${setting} uses a positive finite value or defaults to two hours`, () => withHarness(async h => {
+  if (setting !== undefined) h.env.ERROR_COLLECTOR_STALE_HOURS = setting;
+  h.events([event({ message: 'Fresh failure' }), event({ message: 'Boundary failure', ts: new Date(NOW - 2 * HOUR).toISOString() }), event({ message: 'Older failure', ts: new Date(NOW - 2 * HOUR - 1).toISOString() })]);
+  await h.run();
+  assert.equal(creates(h).length, setting === '1' ? 1 : setting === '2.5' ? 3 : 2);
+  assert.equal(Object.values(h.state().fingerprints).filter(record => record.stale).length, setting === '1' ? 2 : setting === '2.5' ? 0 : 1);
+}));
+
+check('reporting', 'stale unfiled groups count once in daily summaries without ticket references', () => withHarness(async h => {
+  h.events([event({ ts: new Date(NOW - 3 * HOUR).toISOString(), count: 9 })]);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  h.events([]);
+  await h.run({ now: NOW + DAY, summary: true });
+  const summary = activities(h, 'YPER4-354').find(call => /web on 2026-10-14/.test(call.args[3]));
+  assert.match(summary.args[3], /9 errors.*1 stale, not filed/);
+  assert.doesNotMatch(summary.args[3], /HTPR-/);
+  await h.run({ now: NOW + DAY + 1000, summary: true });
+  assert.equal(h.state().days['2026-10-14'].web.stale, 1);
+  assert.equal(activities(h, 'YPER4-354').filter(call => /web on 2026-10-14/.test(call.args[3])).length, 1);
+}));
+
+check('tickets', 'stale same-route groups emit one due activity and newer events can file their own tickets', () => withHarness(async h => {
+  const prior = new Date(NOW - 7 * HOUR).toISOString();
+  h.seed({ version: 1, sources: {}, fingerprints: { existing: { ticket: 'HTPR-777', board: 15, firstSeen: prior, lastSeen: prior, total: 3, routes: ['/checkout/123'], lastActivityAt: prior } }, pending: {}, days: {}, summaries: {}, activities: {}, created: [] });
+  const rows = ['Checkout connection failed', 'Checkout transaction failed'].map(message => event({ message, ts: new Date(NOW - 3 * HOUR).toISOString(), count: 4 }));
+  h.events(rows);
+  await h.run();
+  assert.equal(creates(h).length, 0);
+  assert.equal(activities(h, 'HTPR-777').length, 1);
+  assert.match(activities(h, 'HTPR-777')[0].args[3], /stale sighting: 8 occurrences, first seen .*last seen /);
+  assert.equal(h.state().days['2026-10-14'].web.stale, undefined);
+  await h.run({ now: NOW + 1000 });
+  assert.equal(activities(h, 'HTPR-777').length, 1);
+  h.events(rows.map(row => ({ ...row, ts: new Date(NOW + 2000).toISOString(), count: 1 })));
+  await h.run({ now: NOW + 2000 });
+  assert.equal(creates(h).length, 2);
 }));
