@@ -18,6 +18,9 @@ type ActiveTaskLeaseRow = {
 }
 
 export class AgentMutationLeaseConflictError extends Error {
+  readonly status = 409
+  readonly code: string = 'agent_mutation_lease_conflict'
+
   constructor(message?: string) {
     super(
       message ??
@@ -28,6 +31,8 @@ export class AgentMutationLeaseConflictError extends Error {
 }
 
 export class AgentMutationLeaseMissingError extends AgentMutationLeaseConflictError {
+  readonly code = 'agent_mutation_lease_missing'
+
   constructor() {
     super(
       'Caller holds no agent mutation lease for this task. Claim one with POST /mcp/tasks/lease/claim before this write.'
