@@ -718,7 +718,10 @@ test('an agent-edited refusal still blocks an earlier yes or thumbs up until a f
 
 const removedKey = 'htpr-6873-quick-entry-grow';
 const removalTitle = 'HTPR-7357 [REFACTOR] Remove released flag';
-const removedDefinition = { filename: `src/lib/flags/definitions/${removedKey}.ts`, status: 'removed' };
+const removedDefinition = {
+  filename: `src/lib/flags/definitions/${removedKey}.ts`, status: 'removed',
+  patch: `-export const HTPR_6873_QUICK_ENTRY_GROW_FLAG = "${removedKey}";\n-  key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,`,
+};
 const removalFile = {
   filename: 'src/components/Common/newTask.tsx', status: 'modified',
   patch: readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1696.patch'), 'utf8'),
@@ -837,4 +840,119 @@ test('removed-everyone: BUGFIX and YPER4 exemptions and named-element rules rema
     assert.equal(addedResult.state, 'failure');
     assert.match(addedResult.description, /yes by name/);
   }
+});
+
+test('still blocked: single-line ternary keeping the Off branch, including negation', async () => {
+  for (const [condition, branch] of [['enabled', 'Old'], ['!enabled', 'New']]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n-return ${condition} ? <New /> : <Old />;\n+return <${branch} />;`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure', condition);
+  }
+});
+
+test('removed-everyone: single-line ternary keeping the On branch, including negation', async () => {
+  for (const [condition, branch] of [['enabled', 'New'], ['!enabled', 'Old']]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n-return ${condition} ? <New /> : <Old />;\n+return <${branch} />;`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success', condition);
+  }
+});
+
+test('still blocked: multi-line ternary keeping the Off branch from the 1696 fixture', async () => {
+  const [before, branches] = removalFile.patch.split('-  return quickEntryGrow ? (');
+  const [on, off] = branches.split('-  ) : (');
+  const patch = `${before}-  return quickEntryGrow ? (${on.replace(/^ (.*)$/gm, '-$1')}-  ) : (${off.replace(/^-(.*)$/gm, '$&\n+$1')}`;
+  assert.notEqual(patch, removalFile.patch);
+  assert.match(patch, /^\+\s*<input$/m);
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure');
+});
+
+test('removed-everyone: multi-line ternaries and logical regions keep only the On branch', async () => {
+  for (const [condition, first, second] of [['enabled', 'New', 'Old'], ['!enabled', 'Old', 'New']]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n-return ${condition} ? (\n+return (\n-  <${first} />\n${first === 'New' ? '+  <New />\n' : ''}- ) : (\n-  <${second} />\n${second === 'New' ? '+  <New />\n' : ''}- );\n+ );`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success', condition);
+  }
+  for (const [condition, state] of [['enabled', 'success'], ['!enabled', 'failure']]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n-return ${condition} && (\n+return (\n-  <New />\n+  <New />\n- );\n+ );`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, state, condition);
+  }
+});
+
+test('still blocked: negative flag return becomes an unconditional Off return', async () => {
+  for (const value of [' <Old />;', ';', '']) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n-if (!enabled) return${value}\n+return${value}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure', value);
+  }
+});
+
+test('removed-everyone: positive flag return becomes unconditional, or negative return is deleted', async () => {
+  for (const change of [
+    '-if (enabled) return <New />;\n+return <New />;',
+    '-if (!enabled) return <Old />;',
+    '-if (!enabled) return <Old />;\n-return <New />;\n+return <New />;',
+  ]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n${change}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
+  }
+});
+
+test('still blocked: a pure-deletion hunk without a flag reference outside tracked regions', async () => {
+  const patch = `@@ -1 +1 @@\n-const enabled = useFlag("${removedKey}");\n@@ -20 +19 @@\n-<Unrelated />`;
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure');
+});
+
+test('still blocked: unclassifiable flag use in a hunk that adds lines', async () => {
+  for (const change of [
+    '-const item = useMemo(() => enabled ? <New /> : <Old />);\n+const item = useMemo(() => <New />);',
+    '-<Panel prop={enabled ? (\n+<Panel prop={(\n-  <New />\n+  <New />\n- ) : (\n-  <Old />\n- )} />\n+ )} />',
+    '-return enabled || <Old />;\n+return <Old />;',
+  ]) {
+    const patch = `-const enabled = useFlag("${removedKey}");\n${change}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure', change);
+  }
+});
+
+test('removed-everyone: unclassifiable flag use can be purely deleted', async () => {
+  const patch = `-const enabled = useFlag("${removedKey}");\n-const item = useMemo(() => enabled ? <New /> : <Old />);`;
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
+});
+
+test('removed-everyone: type-only narrowing in a hunk without a flag reference', async () => {
+  const patch = `@@ -1 +1 @@\n-const enabled = useFlag("${removedKey}");\n@@ -20 +19 @@\n-const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {`;
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
+});
+
+test('still blocked: narrowing without a flag reference drops a JSX prop, lowercase identifier, string, tag or punctuation', async () => {
+  for (const change of [
+    '-<Box visible={Visible} />\n+<Box />',
+    '-type Event = Lower | lower;\n+type Event = Lower;',
+    '-type Event = EventType | "old";\n+type Event = EventType;',
+    '-<Box><Other /></Box>\n+<Box></Box>',
+    '-type Event = [First, Second];\n+type Event = [First];',
+    '-type Event = First | Second;\n+type Event = First | Third;',
+    '-const item = lower(lower);\n+const item = lower();',
+    '-type Event = First | Second;\n+type Event = First | First;',
+  ]) {
+    const patch = `@@ -1 +1 @@\n-const enabled = useFlag("${removedKey}");\n@@ -20 +19 @@\n${change}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure', change);
+  }
+});
+
+test('removed-everyone: Off-branch continuation in a later hunk is deleted, never re-added', async () => {
+  for (const [condition, opening, continuation, state] of [
+    ['enabled', '-return enabled ? (\n+return (', '- ) : (\n-  <Old />', 'success'],
+    ['enabled', '-return enabled ? (\n+return (', '-  <New />\n+  <New />\n- ) : (\n-  <Old />', 'success'],
+    ['!enabled', '-return !enabled ? (\n+return (', '-  <Old />\n- ) : (\n-  <New />\n+  <New />', 'success'],
+    ['enabled', '-return enabled ? (\n+return (', '- ) : (\n-  <Old />\n+  <Old />', 'failure'],
+    ['!enabled', '-return !enabled && (', '-  <Old />', 'success'],
+    ['!enabled', '-return !enabled && (', '-  <Old />\n+  <Old />', 'failure'],
+  ]) {
+    const patch = `@@ -1,3 +1 @@\n-const enabled = useFlag("${removedKey}");\n${opening}\n@@ -20,3 +18 @@\n${continuation}\n );`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, state, condition + continuation);
+  }
+});
+
+test('still blocked: later-hunk changes outside a closed region or in another file', async () => {
+  const patch = `@@ -1,4 +1,3 @@\n-const enabled = useFlag("${removedKey}");\n-return enabled && (\n+return (\n   <New />\n );\n@@ -20 +19 @@\n-<Unrelated />`;
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure');
+  const open = { ...removalFile, patch: `-const enabled = useFlag("${removedKey}");\n-return enabled ? (\n+return (` };
+  assert.equal((await removalVerdict({ files: [removedDefinition, open, { ...modified, patch: '-<Unrelated />' }] })).state, 'failure');
 });

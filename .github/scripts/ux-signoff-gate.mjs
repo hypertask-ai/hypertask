@@ -63,21 +63,23 @@ function elementNames(comment) {
 }
 
 function tokens(line) {
-  return new Set(line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s\w$]/g) ?? []);
+  return line.match(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`|[\w$]+|[^\s\w$]/g) ?? [];
 }
 
 const NOT_FLAG_NAMES = new Set(['const', 'let', 'var', 'import', 'from', 'export', 'default', 'useFlag', 'isFeatureEnabled', 'await', 'return', 'true', 'false', 'null', 'undefined']);
 
 function patchLines(patch, sign) {
   return (patch ?? '').split('\n').filter((line) => line.startsWith(sign) && !line.startsWith(sign.repeat(3)))
-    .map((line) => tokens(line.slice(1)));
+    .map((line) => new Set(tokens(line.slice(1))));
 }
 
 function flagReferences(files, keys) {
   const direct = new Set(keys.flatMap((key) => [key, `"${key}"`, `'${key}'`, `${key.toUpperCase().replaceAll('-', '_')}_FLAG`]));
   const references = new Set(direct);
   for (const { filename, patch } of files) {
-    if (!filename.startsWith('src/') || /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
+    // Registry properties such as `key` are metadata, not runtime flag aliases.
+    if (!filename.startsWith('src/') || filename.startsWith('src/lib/flags/definitions/') ||
+      /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
     for (const line of patchLines(patch, '-')) {
       if (![...line].some((token) => direct.has(token))) continue;
       for (const token of line) if (/^[A-Za-z_$][\w$]{2,}$/.test(token) && !NOT_FLAG_NAMES.has(token)) references.add(token);
@@ -86,14 +88,95 @@ function flagReferences(files, keys) {
   return references;
 }
 
+function typeNarrowing(line, source) {
+  const remaining = tokens(source);
+  for (const token of tokens(line)) {
+    const index = remaining.indexOf(token);
+    if (index === -1) return false;
+    remaining.splice(index, 1);
+  }
+  return remaining.length > 0 && remaining.every((token) => token === '|' || /^[A-Z][\w$]*$/.test(token));
+}
+
 function removalOnly(ui, files, keys) {
   const references = flagReferences(files, keys);
   const mentionsFlag = (line) => [...line].some((token) => references.has(token));
   return ui.every(({ status, patch }) => {
     if (status !== 'modified' || typeof patch !== 'string') return false;
-    const removed = patchLines(patch, '-');
-    return removed.some(mentionsFlag) && patchLines(patch, '+').every((line) => removed.some((source) =>
-      [...line].every((token) => source.has(token) || ((token === 'true' || token === 'false') && mentionsFlag(source)))));
+    if (!patchLines(patch, '-').some(mentionsFlag)) return false;
+    // Only old-side lines advance branch state; keep it across hunks of this file.
+    const regions = [];
+    let depth = 0;
+    return patch.split(/^@@[^\n]*(?:\n|$)/m).every((hunk) => {
+      const removed = [];
+      const added = [];
+      const offTokens = new Set();
+      let related = false;
+      let tracked = true;
+      let classified = true;
+      for (const raw of hunk.split('\n')) {
+        if (!/^[ +\-]/.test(raw) || /^(?:---|\+\+\+)/.test(raw)) continue;
+        const sign = raw[0];
+        const text = raw.slice(1);
+        const line = tokens(text);
+        if (sign !== ' ') tracked &&= regions.length > 0;
+        if (sign === '+') {
+          added.push(text);
+          continue;
+        }
+        let off = regions.some((region) => region.off);
+        const region = regions.at(-1);
+        if (region?.ternary && /^\s*\)\s*:\s*\(/.test(text) && depth === region.depth + 1) {
+          if (region.other) classified = false;
+          region.other = true;
+          region.off = !region.negated;
+          off = regions.some((item) => item.off);
+        }
+        if (sign === '-' && mentionsFlag(line)) related = true;
+        if (mentionsFlag(line)) {
+          const flag = line.findIndex((token) => references.has(token));
+          const start = flag > 0 && line[flag - 1] === '!' ? flag - 1 : flag;
+          const negated = start !== flag;
+          const prefix = line.slice(0, start);
+          const tail = line.slice(flag + 1);
+          const simplePrefix = /^(?:return|(?:const|let|var) [\w$]+ =|\{)?$/.test(prefix.join(' '));
+          if (simplePrefix && (tail[0] === '?' || (tail[0] === '&' && tail[1] === '&'))) {
+            const offset = tail[0] === '?' ? 1 : 2;
+            if (tail[offset] === '(' && tail.length === offset + 1) {
+              regions.push({ depth, off: negated, negated, ternary: tail[0] === '?' });
+            } else if (tail[0] === '?' && tail.filter((token) => token === '?').length === 1 && tail.filter((token) => token === ':').length === 1) {
+              const colon = tail.indexOf(':');
+              const first = tail.slice(1, colon);
+              const second = tail.slice(colon + 1);
+              if (second.at(-1) === ';') second.pop();
+              const on = new Set([...prefix, ...(negated ? second : first)]);
+              for (const token of negated ? first : second) if (!on.has(token)) offTokens.add(token);
+            } else classified = false;
+          } else {
+            const guard = /^\s*if\s*\(\s*(!?)\s*([A-Za-z_$][\w$]*)\s*(\|\|[^()]*)?\)\s*return\b(.*)$/.exec(text);
+            if (guard && references.has(guard[2]) && (!guard[3] || guard[1])) {
+              if (guard[1] && !guard[3]) off = true;
+              if (guard[3] && tokens(guard[4]).some((token) => token !== ';')) classified = false;
+            } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
+          }
+        }
+        if (sign === '-') removed.push({ text, line: new Set(line), off });
+        for (const token of line) {
+          if (token === '(') depth++;
+          if (token === ')') depth--;
+        }
+        if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
+      }
+      if (!removed.length && !added.length) return true;
+      const sources = removed.filter((source) => !source.off);
+      if (!related && !tracked && !(added.length && added.every((line) => sources.some((source) => typeNarrowing(line, source.text))))) return false;
+      if (!classified && added.length) return false;
+      return added.every((text) => {
+        const line = tokens(text);
+        return !line.some((token) => offTokens.has(token)) && sources.some((source) =>
+          line.every((token) => source.line.has(token) || ((token === 'true' || token === 'false') && mentionsFlag(source.line))));
+      });
+    });
   });
 }
 
