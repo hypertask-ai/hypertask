@@ -66,7 +66,7 @@ Then use `.claude/skills/ship/scripts/ht-flag set KEY MODE --reason <ticket URL>
 The reason must be exactly `https://app.hypertask.ai/detail/project-<projectId>/<number>#comment-<id>` for that comment. Ticket links without the comment anchor, page links and trailing junk are refused.
 Modes: `off`, `everyone`, `owner-qa`, `only-me`, or the real enum names; add `--dry-run` to inspect without sending.
 Only agents owned by the flag owner can use this API; plain user tokens and management keys are refused.
-The auto-Off-on-failed-QA exception is NOT approved yet; even Off needs Valentin's own thumbs up on a comment naming the flag key and Off.
+The one-hour release watch (HTPR-7389, Valentin's "yes run this" on 2026-10-20) is the one approved automatic Off: every 10 minutes `.github/workflows/flag-release-watch.yml` compares production `$exception` counts before and after each release in its first hour and, when errors more than double and reach at least 10, switches every flag released in that window Off and comments on its ticket. Any other Off still needs Valentin's own thumbs up on a comment naming the flag key and Off.
 
 ## Local premerge board click
 
