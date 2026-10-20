@@ -303,16 +303,32 @@ test('opened-before waits until the cold ticket code finishes downloading, and g
   const chunk = { type: 'Script', blocked: false };
   const requests = new Map([['a', { ...chunk }], ['b', { ...chunk }], ['flags', { type: 'Fetch', blocked: false }], ['blocked', { ...chunk, blocked: true }]]);
   assert.equal(pendingScripts(requests.values()), 2);
+  const options = { quietMs: 500, capMs: 10000, pollMs: 250 };
   let clock = 0;
   const result = await settleScripts(requests, async ms => {
     clock += ms;
     if (clock === 1000) requests.get('a').durationMs = 900;
     if (clock === 2000) requests.get('b').durationMs = 1900;
-  }, { quietMs: 500, capMs: 10000, pollMs: 250 });
+  }, async () => 0, options);
   assert.deepEqual(result, { settleMs: 2250, pendingScripts: 0 });
 
+  // 2026-10-20 phone: network quiet mid-hydration, then the lazy ticket chunks start once the main thread frees up.
+  const hydrating = new Map([['route', { ...chunk, durationMs: 100 }]]);
+  let idleCalls = 0;
+  const lazy = await settleScripts(hydrating, async ms => {
+    clock += ms;
+    if (hydrating.has('lazy') && clock >= 4000) hydrating.get('lazy').durationMs = 300;
+  }, async () => {
+    idleCalls++;
+    if (idleCalls === 1) hydrating.set('lazy', { ...chunk });
+    return 1000;
+  }, options);
+  assert.equal(idleCalls, 2, 'a script requested during the idle wait restarts the quiet window');
+  assert.equal(hydrating.get('lazy').durationMs, 300);
+  assert.equal(lazy.pendingScripts, 0);
+
   const stuck = new Map([['c', { ...chunk }]]);
-  assert.deepEqual(await settleScripts(stuck, async () => {}, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
+  assert.deepEqual(await settleScripts(stuck, async () => {}, async () => 0, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
 
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);

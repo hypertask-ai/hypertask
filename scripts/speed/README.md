@@ -21,7 +21,7 @@ Default: five samples of each of seven paths on each profile, run serially. Sear
 |---|---|
 | Board | Fresh context hard navigation to QA Sandbox, actual fixture card visible and board identity present |
 | Ticket cold | Separate fresh context hard navigation, exact title, description container and primary actions present |
-| Ticket warm | Same context: after the cold sample, wait (untimed, 30 s cap) until its script downloads finish, then return to board, actual card click, same ticket completion; board setup and the wait excluded. The cold sample records `settleMs` and `pendingScripts` |
+| Ticket warm | Same context: after the cold sample, wait (untimed, 30 s cap) until no script download is pending or new for 1.5 s after an idle main thread, then return to board, actual card click, same ticket completion; board setup and the wait excluded. The cold sample records `settleMs` and `pendingScripts` |
 | Search | Hard navigation to the existing search URL with the exact fixture title, to the visible matching result; includes real search fetching |
 | My Tasks | Hard navigation, SSR-seeded title and actual table header visible; server loading fallback cannot pass; empty list allowed |
 | Ctrl+J | Keydown on the selected QA board column to the visible existing AI Task Writer field; no text entered or submitted; Escape closes it |

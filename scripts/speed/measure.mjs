@@ -122,7 +122,12 @@ export async function ready(page, surface) {
       return true;
     };
     const test = () => {
-      if (surface === 'board' || surface === 'page-navigation') return visible(document.querySelector(`a[href="${task}"]`)) && document.body.textContent.includes('QA Sandbox');
+      if (surface === 'board' || surface === 'page-navigation') {
+        const card = document.querySelector(`a[href="${task}"]`);
+        // Late board reflows can push the already-scrolled card below the viewport again.
+        if (card && !visible(card)) card.scrollIntoView({ block: 'center' });
+        return visible(card) && document.body.textContent.includes('QA Sandbox');
+      }
       if (surface.startsWith('ticket-')) return [...document.querySelectorAll('textarea')].some(element => visible(element) && element.value === title) && visible(document.querySelector('[data-testid="ticket-description"]')) && !!document.querySelector('[data-task-detail-primary-actions="true"]');
       if (surface === 'search') return [...document.querySelectorAll('#tasks-list li')].some(element => visible(element) && element.textContent.includes('QASA-43') && [...element.querySelectorAll('span')].some(span => span.textContent.trim() === title));
       if (surface === 'my-tasks') return visible(document.querySelector('[data-testid="my-tasks-title"]')) && visible(document.querySelector('[data-testid="my-tasks-list"] .table-view-header'));
@@ -183,20 +188,38 @@ export function collectNetwork(cdp, permitted, safePath, blocked) {
 
 export const SCRIPT_SETTLE = { quietMs: 1500, capMs: 30000, pollMs: 250 };
 
+const scripts = requests => [...requests].filter(row => row.type === 'Script' && !row.blocked);
+
 export function pendingScripts(requests) {
-  return [...requests].filter(row => row.type === 'Script' && !row.blocked && row.durationMs === undefined).length;
+  return scripts(requests).filter(row => row.durationMs === undefined).length;
 }
 
-// A server-rendered page can be visible while its code still downloads; leaving then cancels the download.
-export async function settleScripts(requests, wait, { quietMs, capMs, pollMs } = SCRIPT_SETTLE) {
+// A server-rendered page can be visible while its code still downloads, and a throttled phone can sit
+// network-quiet mid-hydration before requesting lazy code. Settled means quiet scripts after an idle main thread.
+export async function settleScripts(requests, wait, idle, { quietMs, capMs, pollMs } = SCRIPT_SETTLE) {
   let waited = 0;
   let quiet = 0;
-  while (waited < capMs && quiet < quietMs) {
+  let seen = scripts(requests.values()).length;
+  const unchanged = () => pendingScripts(requests.values()) === 0 && scripts(requests.values()).length === seen;
+  while (waited < capMs) {
     await wait(pollMs);
     waited += pollMs;
-    quiet = pendingScripts(requests.values()) === 0 ? quiet + pollMs : 0;
+    quiet = unchanged() ? quiet + pollMs : 0;
+    seen = scripts(requests.values()).length;
+    if (quiet < quietMs) continue;
+    waited += await idle(capMs - waited);
+    if (unchanged()) break;
+    quiet = 0;
+    seen = scripts(requests.values()).length;
   }
-  return { settleMs: waited, pendingScripts: pendingScripts(requests.values()) };
+  return { settleMs: Math.round(waited), pendingScripts: pendingScripts(requests.values()) };
+}
+
+export function idleMs(page, timeoutMs) {
+  return page.evaluate(timeout => new Promise(resolve => {
+    const start = performance.now();
+    requestIdleCallback(() => resolve(performance.now() - start), { timeout: Math.max(1, timeout) });
+  }), timeoutMs);
 }
 
 export function failureDetail(error) {
@@ -287,7 +310,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     // Direct ticket is cold in a fresh context; the board primes only the warm click below.
     await sample('ticket-cold', () => navigate(TASK));
     // Outside timing: "opened before" means the ticket code already arrived, as it has for a user who stayed on it.
-    Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms)));
+    Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout)));
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
@@ -309,6 +332,14 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     const dom = await page.evaluate(task => ({
       searchRows: [...document.querySelectorAll('#tasks-list li')].map(element => ({ fixture: element.textContent.includes('QASA-43'), top: element.getBoundingClientRect().top, height: element.getBoundingClientRect().height })),
       fixtureLink: !!document.querySelector(`a[href="${task}"]`),
+      fixtureBox: (box => box && { top: Math.round(box.top), height: Math.round(box.height), viewport: innerHeight })(document.querySelector(`a[href="${task}"]`)?.getBoundingClientRect()),
+      fixtureHiddenBy: (() => {
+        for (let parent = document.querySelector(`a[href="${task}"]`); parent; parent = parent.parentElement) {
+          const style = getComputedStyle(parent);
+          if (style.display === 'none' || style.visibility === 'hidden' || Number(style.opacity) === 0) return parent.tagName.toLowerCase() + (parent.hidden ? '[hidden]' : '');
+        }
+        return null;
+      })(),
       qaBoard: document.body.textContent.includes('QA Sandbox'),
     }), TASK).catch(() => null);
     run.failure = { profile, surface, index, error: failureDetail(error), dom, route: new URL(page.url()).pathname, search: safeSearch(page.url()), requests: [...net.requests.values()].map(({ wall, start, ...row }) => row), blocked: [...blocked] };
