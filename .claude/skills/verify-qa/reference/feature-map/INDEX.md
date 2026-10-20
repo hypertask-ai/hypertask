@@ -22,6 +22,7 @@ each ticket only needs the one or two areas it touches.
 | Task detail and description | [task-detail-and-description.md](task-detail-and-description.md) | `open-task`, `edit-description` (write); `view-task-detail` (load-only) |
 | Create task attachments | [create-task-attachments.md](create-task-attachments.md) | `create-task` covers save only; attachments verify by hand |
 | Quick entry cards | [quick-entry-cards.md](quick-entry-cards.md) | `create-task` (column + inline box); N and table New task verify by hand |
+| Figma connect | [figma-connect.md](figma-connect.md) | none; verify by hand on Settings > Accounts |
 | Comments and mentions | [comments-and-mentions.md](comments-and-mentions.md) | `add-comment` (write journey) |
 | Drag and drop | [drag-and-drop.md](drag-and-drop.md) | `drag-card` (write journey) |
 | AI chat | [ai-chat.md](ai-chat.md) | `ai-chat` (write journey) |
