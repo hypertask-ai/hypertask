@@ -172,7 +172,6 @@ const Commands = (props: Props) => {
     : "";
   const googleCalendarSettingsEnabled = useFlag(GOOGLE_CALENDAR_FLAG);
   const autoTaskDescriptionsEnabled = useFlag("htpr-6177-auto-task-descriptions");
-  const copyCurrentUrlEnabled = useFlag("htpr-6112-copy-current-url");
   const myTasksViewsEnabled = useFlag(MY_TASKS_VIEWS_FLAG);
   const kanbanReuseEnabled = useFlag(HTPR_6930_MY_TASKS_KANBAN_REUSE_FLAG);
   const commandScopePickerFlag = useFlag(HTPR_6567_COMMAND_SCOPE_PICKER_FLAG);
@@ -262,8 +261,6 @@ const Commands = (props: Props) => {
               showByokApiKeys) &&
             (command.key !== "settingsCalendarKeepTasksUpdated" || googleCalendarSettingsEnabled) &&
             (command.key !== "settingsTaskPageSuggestDescriptionsFromTaskTitles" || autoTaskDescriptionsEnabled) &&
-            (command.commandMode !== CommandMode.CopyViewURL ||
-              copyCurrentUrlEnabled) &&
             isTicketPrefixCommandVisible(command) &&
             (command.commandMode !== CommandMode.ToggleBoardTimeTracking ||
               !!currentProject) &&
@@ -406,7 +403,6 @@ const Commands = (props: Props) => {
     getCommands,
     pinCommentActions,
     pageActions,
-    copyCurrentUrlEnabled,
     googleCalendarSettingsEnabled,
     autoTaskDescriptionsEnabled,
     currentProject,

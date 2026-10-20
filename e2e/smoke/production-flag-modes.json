@@ -12,7 +12,6 @@
     "htpr-6002-shared-agent-chat": "EVERYONE",
     "htpr-6006-chat-confirm-ticket": "EVERYONE",
     "htpr-6094-agent-activity-rows": "EVERYONE",
-    "htpr-6112-copy-current-url": "EVERYONE",
     "htpr-6115-agent-sdk": "EVERYONE",
     "htpr-6122-agent-run-activities": "EVERYONE",
     "htpr-6141-ai-first-task-writer": "OFF",
