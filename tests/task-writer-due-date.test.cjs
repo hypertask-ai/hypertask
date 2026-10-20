@@ -156,6 +156,7 @@ function writerHarness(enabled, output = html, fail = false) {
   });
   const calls = [];
   const route = moduleWithStubs("src/app/api/ai/task-writer/route.ts", {
+    "@/app/api/ai/_lib/sharedAllowance": { sharedAiAllowanceErrorMessage: () => null },
     "@/lib/ai/taskWriterDueDate": dates, "@/lib/ai/taskWriterTicketType": ticketTypes,
     "@/utils/htmlEscape": load(path.join(root, "src/utils/htmlEscape.ts")),
     "@/lib/errors/reportError": { reportError: async () => {} },

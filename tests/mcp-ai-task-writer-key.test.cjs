@@ -63,6 +63,7 @@ stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
   projectContentAccessWhere: (id) => ({ ownerId: id }),
 });
 stubModule("src/lib/flags.ts", { isFeatureEnabled: async () => false });
+stubModule("src/app/api/ai/_lib/planAllowancePolicy.ts", { teamPlanAllowanceEnabled: async () => false });
 stubModule("src/lib/errors/reportError.ts", { reportError: async (report) => reports.push(report) });
 stubModule("src/app/api/ai/_lib/aiUsage.ts", { logAiUsage: async () => {} });
 stubModule("src/lib/telemetry/aiChatObservability.ts", {});
