@@ -294,8 +294,8 @@ test("table: flags toggle N and Shift+C with every context dependency stable", a
 }));
 
 for (const nEnabled of [true, false]) {
-  test(`mobile AI writer: N stays inline or does nothing (${nEnabled})`, async () => fixture(async ({ dom, reactRoot }) => {
-    const flags = { [nFlag]: nEnabled, "htpr-6141-ai-first-task-writer": true };
+  test(`mobile classic form: N stays inline or does nothing (${nEnabled})`, async () => fixture(async ({ dom, reactRoot }) => {
+    const flags = { [nFlag]: nEnabled };
     const calls = [];
     const atoms = { activeItemAtom: {}, currentProjectAtom: {} };
     const useSections = load(sectionPath, {
@@ -306,7 +306,6 @@ for (const nEnabled of [true, false]) {
       "next/navigation": { useRouter: () => ({}) },
       "../MultiPages/Route/useHypertasksNavigate": { default: () => ({ navigate: () => {} }) },
       "@/lib/contexts/mobileContext": { MobileViewContext: React.createContext(true) },
-      "@/models/CreateTaskModalModels/model": { MOBILE_AI_TASK_WRITER_FOCUS: "AI_TASK_WRITER" },
     }).default;
     let state;
     const Harness = () => {
@@ -320,8 +319,9 @@ for (const nEnabled of [true, false]) {
     assert.equal(calls.length, 0, "N must never open the full mobile editor");
     if (nEnabled) assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
     await React.act(async () => state.createTaskAt("bottom", { sectionId: 10 }, undefined, true));
-    assert.equal(calls.length, 1, "the plus-button mobile behavior stays unchanged");
-    assert.equal(calls[0][1], "AI_TASK_WRITER");
+    assert.equal(calls.length, 0, "the plus button keeps the classic inline entry");
+    assert.equal(Boolean(document.querySelector("[data-quick]")), true);
+    assert.equal(document.querySelector("[data-quick]").dataset.position, "bottom");
   }));
 }
 
