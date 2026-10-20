@@ -223,7 +223,7 @@ test('a host network change remeasures that phase once from scratch; a second ch
 test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty shells or a different ticket', async () => {
   const { ready } = await analyst;
   const { JSDOM } = await import('jsdom');
-  const check = async (surface, html) => {
+  const check = async (surface, html, board) => {
     const dom = new JSDOM(html, { runScripts: 'outside-only' });
     let clock = 0;
     dom.window.performance.now = () => ++clock * 1000;
@@ -231,13 +231,18 @@ test('readiness accepts actual search rows and SSR-seeded My Tasks, not empty sh
     dom.window.getComputedStyle = () => ({ display: 'block', visibility: 'visible', opacity: '1' });
     dom.window.Element.prototype.getBoundingClientRect = () => ({ width: 100, height: 20, top: 0, bottom: 20 });
     const page = { evaluate: (fn, args) => dom.window.eval(`(${fn.toString()})(${JSON.stringify(args)})`) };
-    try { return await ready(page, surface); } finally { dom.window.close(); }
+    try { return await ready(page, surface, board); } finally { dom.window.close(); }
   };
   assert.ok(await check('search', '<ul id="tasks-list"><li>QASA-43 <span>QA 6667 Enter verification</span></li></ul>') > 0);
   await assert.rejects(check('search', '<ul id="tasks-list"><li>QASA-50 <span>QA 6667 Enter verification</span></li></ul>'));
   await assert.rejects(check('search', '<ul id="tasks-list"><li>Ask AI</li></ul>'));
   assert.ok(await check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"><div class="table-view-header">Title</div></div>') > 0);
   await assert.rejects(check('my-tasks', '<p data-testid="my-tasks-title">My Tasks</p><div data-testid="my-tasks-list"></div>'));
+  // 2026-10-20: g then b opened board 8778, or 6859 under another session's saved view without task 43.
+  assert.ok(await check('page-navigation', '<a href="/detail/project-8778/2">Card</a>', '8778') > 0);
+  assert.ok(await check('page-navigation', '<a href="/detail/project-6859/51">Card</a>', '6859') > 0);
+  await assert.rejects(check('page-navigation', '<a href="/detail/project-6859/43">Card</a>', '8778'));
+  await assert.rejects(check('page-navigation', '<p>Loading board</p>', '6859'));
 });
 
 test('early-failure summary prints the saved reason without requiring browser conditions', async () => {
@@ -296,4 +301,80 @@ test('phone profile is a real phone: mobile user agent and device scale factor 3
   const { PHONE_PROFILE_KEY } = await analyst;
   assert.notEqual(PHONE_PROFILE_KEY, 'phone-4g-4x-390x844');
   assert.match(source, /profiles: \['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY\]/);
+});
+
+test('opened-before waits until the cold ticket code finishes downloading, and gives up at the cap', async () => {
+  const { settleScripts, pendingScripts } = await analyst;
+  const chunk = { type: 'Script', blocked: false };
+  const requests = new Map([['a', { ...chunk }], ['b', { ...chunk }], ['flags', { type: 'Fetch', blocked: false }], ['blocked', { ...chunk, blocked: true }]]);
+  assert.equal(pendingScripts(requests.values()), 2);
+  const options = { quietMs: 500, capMs: 10000, pollMs: 250 };
+  let clock = 0;
+  const result = await settleScripts(requests, async ms => {
+    clock += ms;
+    if (clock === 1000) requests.get('a').durationMs = 900;
+    if (clock === 2000) requests.get('b').durationMs = 1900;
+  }, async () => 0, options);
+  assert.deepEqual(result, { settleMs: 2250, pendingScripts: 0 });
+
+  // 2026-10-20 phone: network quiet mid-hydration, then the lazy ticket chunks start once the main thread frees up.
+  const hydrating = new Map([['route', { ...chunk, durationMs: 100 }]]);
+  let idleCalls = 0;
+  const lazy = await settleScripts(hydrating, async ms => {
+    clock += ms;
+    if (hydrating.has('lazy') && clock >= 4000) hydrating.get('lazy').durationMs = 300;
+  }, async () => {
+    idleCalls++;
+    if (idleCalls === 1) hydrating.set('lazy', { ...chunk });
+    return 1000;
+  }, options);
+  assert.equal(idleCalls, 2, 'a script requested during the idle wait restarts the quiet window');
+  assert.equal(hydrating.get('lazy').durationMs, 300);
+  assert.equal(lazy.pendingScripts, 0);
+
+  const stuck = new Map([['c', { ...chunk }]]);
+  assert.deepEqual(await settleScripts(stuck, async () => {}, async () => 0, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
+
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*const settled = Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
+});
+
+test('a failed path records the step and a safe one-line error, never full URLs or other query values', async () => {
+  const { failureDetail, safeSearch, printSummary } = await analyst;
+  assert.equal(failureDetail(new Error('locator.scrollIntoViewIfNeeded: Timeout 60000ms exceeded.\nCall log:\n  - waiting for locator')), 'locator.scrollIntoViewIfNeeded: Timeout 60000ms exceeded.');
+  assert.equal(failureDetail(new Error('page.goto: net::ERR_ABORTED at https://app.hypertask.ai/project?id=6859&token=x')), 'page.goto: net::ERR_ABORTED at <url>');
+  assert.equal(failureDetail(undefined), 'unknown');
+  assert.deepEqual(safeSearch('https://app.hypertask.ai/project?id=6859&view=default&code=secret'), { id: '6859', view: 'default' });
+  assert.deepEqual(safeSearch('https://app.hypertask.ai/project'), {});
+
+  const lines = [];
+  const original = console.log;
+  console.log = line => lines.push(line);
+  try {
+    printSummary({ started: '2026-10-20T04:30:00Z', status: 'failed', failure: { reason: 'Path unavailable', profile: 'phone', surface: 'page-navigation', index: 4, error: 'Timeout 60000ms exceeded.' } }, []);
+  } finally { console.log = original; }
+  assert.match(lines[0], /Path unavailable at phone:page-navigation 4 \(Timeout 60000ms exceeded\.\)/);
+});
+
+test('changed paths only compare with same-version history; page navigation also needs the same landed boards', async () => {
+  const { compare, PATH_VERSIONS } = await analyst;
+  const landedOn = (run, id, view) => ({ ...run, samples: run.samples.map(sample => sample.path === 'page-navigation' ? { ...sample, landed: { id, view } } : sample) });
+  const current = landedOn({ ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } }, '6859', 'default');
+  const beforeVersions = { ...await fixture(), started: '2026-10-09T12:00:00Z' };
+  const baselineFor = (history, cohort) => compare(current, history).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
+  assert.equal(baselineFor([beforeVersions], 'phone:board'), 100, 'unchanged paths keep their history');
+  assert.equal(baselineFor([beforeVersions], 'phone:ticket-warm'), null);
+  assert.equal(baselineFor([beforeVersions], 'desktop:page-navigation'), null);
+
+  const sameVersion = landedOn({ ...current, started: '2026-10-09T12:00:00Z' }, '6859', 'default');
+  assert.equal(baselineFor([sameVersion], 'phone:ticket-warm'), 100);
+  assert.equal(baselineFor([sameVersion], 'phone:page-navigation'), 100);
+  assert.equal(baselineFor([landedOn(sameVersion, '8778', undefined)], 'phone:page-navigation'), null);
+  const mixed = { ...sameVersion, samples: [...sameVersion.samples, { ...sameVersion.samples.find(sample => sample.profile === 'phone' && sample.path === 'page-navigation'), landed: { id: '8778' } }] };
+  assert.equal(baselineFor([mixed], 'phone:page-navigation'), null, 'a different mix of landed boards is a different cohort');
+});
+
+test('a cold ticket whose code never settles fails the run instead of measuring a partly cold warm tap', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /if \(settled\.pendingScripts\) throw new Error\(`Ticket code did not settle/);
 });

@@ -21,17 +21,23 @@ Default: five samples of each of seven paths on each profile, run serially. Sear
 |---|---|
 | Board | Fresh context hard navigation to QA Sandbox, actual fixture card visible and board identity present |
 | Ticket cold | Separate fresh context hard navigation, exact title, description container and primary actions present |
-| Ticket warm | Same context, return to board, actual card click, same ticket completion; board setup excluded |
+| Ticket warm | Same context: after the cold sample, wait (untimed, 30 s cap) until no script download is pending or new for 1.5 s after an idle main thread, then return to board, actual card click, same ticket completion; board setup and the wait excluded. The cold sample records `settleMs` and `pendingScripts` |
 | Search | Hard navigation to the existing search URL with the exact fixture title, to the visible matching result; includes real search fetching |
 | My Tasks | Hard navigation, SSR-seeded title and actual table header visible; server loading fallback cannot pass; empty list allowed |
 | Ctrl+J | Keydown on the selected QA board column to the visible existing AI Task Writer field; no text entered or submitted; Escape closes it |
-| Page navigation | My Tasks `g` then `b` to the actual QA board card, not a document reload |
+| Page navigation | My Tasks `g` then `b` to any visible card of the board it opened (recorded as `landed`), not a document reload |
 
 Two animation frames confirm completion. The same two-second observation tail as speed-check captures late traffic and long tasks, but is excluded from content timing. Counts include all allowed requests started in the measured window, including pending requests. Browser-canceled requests (including superseded board reads during navigation) remain recorded as failed/canceled but do not invalidate verified visible content; other read failures and HTTP errors invalidate the run. When every failed read is `net::ERR_NETWORK_CHANGED` (the VPS network changed, for example a Docker container starting), that phase's samples are dropped and the phase is measured once more in a fresh context; the run records it under `networkRetries`, and a second change fails the run as `Host network changed`. CDP `encodedDataLength` is actual transferred response bytes, including protocol overhead, with cache hits costing zero; pending or canceled requests keep CDP encoded bytes received so far, excluding not-yet-reported overhead. Per-request method, safe pathname (never query), relative start, TTFB, total duration, status/failure, bytes and sanitized Server-Timing numeric durations form a private waterfall. No headers, request/response bodies, cookies, raw traces or credentials are stored. Long tasks keep start/duration and summed milliseconds.
 
 All app writes and unknown API reads are blocked by the shared CDP policy. Reviewed extensions only: app-shell bootstrap POST, My Tasks GET, keyword search document POST, search values GET. Blocked analytics, read receipts, AI prompts, share creation and activity are listed separately, never counted as successful requests. These timings describe the read-only harness, not unguarded customer traffic.
 
 ## History and interpretation
+
+**Path versions.** `conditions.pathVersions` gives ticket-warm and page navigation version 2 (2026-10-20). The seven-day baseline for a path uses only history with the same path version (older runs count as version 1); page navigation also needs the same set of landed board and view. Other paths keep their full history. A cold ticket whose scripts are still pending at the 30 s settle cap fails the run instead of measuring a partly cold warm tap.
+
+**Page navigation before 2026-10-20 is not comparable.** `g` then `b` opens the shared QA account's previous board under its saved view, which other QA sessions change (2026-10-20: board 8778, and 6859 under another session's saved view). It now completes on any visible card of the board it opened and records that board's `id` and `view` as `landed`; it no longer waits for task 43.
+
+**Ticket-warm before 2026-10-20 is not comparable.** Since HTPR-7367 (2026-10-19) a cold ticket is visible from server HTML while most of its code is still downloading. The old harness left 2 s after content, cancelling those downloads, so the warm click downloaded the ticket code again: phone about 11 s instead of about 2 s. Runs from 2026-10-19 on 2edd39cbc or later measured a first open, not an opened-before ticket. A failed path now records `index`, a one-line `error` with URLs removed, the `id`/`view` query values, and whether the fixture link and QA board were on the page.
 
 **Phone numbers before 2026-10-11 are not comparable.** Until then the shared context had only viewport, isMobile and hasTouch, which laid the ticket page out desktop-like (innerWidth 780, document width 834 on the live ticket page; board was fine at 390). Ticket-cold, ticket-warm, search and later phone paths on ticket or search pages may carry that wider layout. Treat the first run with the real phone profile as a new phone baseline; the 15% regression flag against older phone days is not meaningful for those paths.
 
