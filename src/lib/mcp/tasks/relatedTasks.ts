@@ -2,7 +2,7 @@ import type { NextRequest } from 'next/server'
 import { NextResponse } from 'next/server'
 import type { McpAuthContext } from '@/lib/mcp/auth'
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
 import {
   convertToPlain,
@@ -68,7 +68,7 @@ export async function handleRelatedTasksGet(
   ctx: McpAuthContext,
   input: RelatedTasksGetInput,
   dependencies: RelatedTasksDependencies = { searchTasks }
-): Promise<NextResponse> {
+): Promise<Response> {
   if (
     input.taskId === null ||
     !Number.isInteger(input.taskId) ||
@@ -131,6 +131,8 @@ export async function handleRelatedTasksGet(
 
     return NextResponse.json({ success: true, related })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Related Tasks] GET failed:', error)
     return errorResponse('Internal server error', 500)
   }

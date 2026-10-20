@@ -15,7 +15,7 @@ import {
   mapTaskToMcpGetResponse,
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { mapVisibleMcpAgent, mcpVisibleAgentSelect } from '@/lib/mcp/agents';
 import { resolvePublicAgentDisplayName } from '@/lib/agents/publicAgent';
 import { HTPR_6516_AGENT_ATTRIBUTION_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -315,6 +315,8 @@ export async function GET(request: NextRequest) {
       truncated: commentCount > commentLimit,
     });
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Context] Error:', error);
     reportMcpOperationCrash(request, error);
     return NextResponse.json(
