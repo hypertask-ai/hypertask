@@ -14,10 +14,7 @@ export const metadata: Metadata = {
 
 export default async function Page() {
   const userObj = await requireServerCookieUser();
-  const keepShell = await isFeatureEnabled(
-    HTPR_7397_CALENDAR_LOADING_SHELL_FLAG,
-    userObj.id,
-  ).catch(() => true);
+  const keepShell = await isFeatureEnabled(HTPR_7397_CALENDAR_LOADING_SHELL_FLAG, userObj.id);
   const loading = keepShell ? <CalendarLoadingShell currentUser={userObj} /> : undefined;
 
   return (
