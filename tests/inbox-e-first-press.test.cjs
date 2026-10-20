@@ -454,7 +454,7 @@ for (const enabled of [false, true]) {
       return children;
     }
     const env = {
-      React, AIChatClosedLayout: Frame, CachedTaskDetailNavigation: Navigation, authenticatedUserId: 2343, secondaryStartupEnabled: true, phoneBoardWarmsTicket: true,
+      React, AIChatClosedLayout: Frame, CachedTaskDetailNavigation: Navigation, authenticatedUserId: 2343,
       showMobileTabBar: false, mobileBottomInsetVisible: false, mobilePullCommandVisible: false,
       openAIChatInterface: () => {}, showAiChatInterface: false, sidebarWidthPx: 0,
       shouldMountChatRuntime: false, Suspense: React.Suspense, AIChatPanels: () => null,
