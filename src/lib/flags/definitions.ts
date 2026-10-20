@@ -2,7 +2,7 @@ import type { FeatureFlagMode } from "@prisma/client";
 import type { FeatureFlagReleaseRisk } from "./releaseRisk";
 import { FLAG_DEFINITIONS } from "./definitions/index.generated";
 
-export type FeatureFlagKind = "feature" | "bugfix" | "improvement";
+export type FeatureFlagKind = "feature" | "bugfix" | "improvement" | "internal";
 export type FeatureFlagDefinition = {
   key: string;
   kind?: FeatureFlagKind;
