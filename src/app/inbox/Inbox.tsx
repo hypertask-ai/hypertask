@@ -30,7 +30,6 @@ import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 import FirstScreenMobileChrome from "@/components/Global/FirstScreenMobileChrome";
 
 import Link from "next/link";
-import DecisionInboxPanel from "@/components/notifications/DecisionInboxPanel";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   inboxDataQueryKey,
@@ -792,7 +791,6 @@ const Inbox = ({
                 : "bg-containerBackground"
             }`}
           >
-            <DecisionInboxPanel userId={currentUser.id} />
             <SplitTitlesContainer
               contentGap={appShellRailOn && !isInboxZero}
               SelectedCount={showSelectedCount ? InboxSelectedCount : null}

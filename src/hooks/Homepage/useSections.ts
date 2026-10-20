@@ -1,5 +1,5 @@
 
-import { useCallback, useContext, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useMemo, useState } from "react";
 
 import axios from "axios";
 import { activeItemAtom, currentProjectAtom } from "@/store";
@@ -9,14 +9,13 @@ import { useStore } from "jotai";
 import { ITask } from "@/models/model";
 import { useRouter } from "next/navigation";
 import useAddDeleteTaskInBoards from "../MultiPages/useAddDeleteTaskInBoards";
-import { MOBILE_AI_TASK_WRITER_FOCUS, TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
+import { TDefaultEditFocus, TSectionPayload } from "@/models/CreateTaskModalModels/model";
 import useHypertasksRecoilStates from "../RecoilRoot/useHypertasksRecoilStates";
 import globalConstants from "@/lib/constants";
 import { useDeviceContext } from "@/lib/contexts/deviceContext";
 import { returnIfModalOrInputActive } from "@/utils/helperFunctions/helperFunctions";
 import { KeyCodes } from "@/lib/constants/keyboard-handler";
 import useHypertasksNavigate from "../MultiPages/Route/useHypertasksNavigate";
-import { MobileViewContext } from "@/lib/contexts/mobileContext";
 import { useFlag } from "@/hooks/useFlag";
 import { HTPR_6914_SHIFT_C_QUICK_ADD_FLAG, HTPR_6902_N_QUICK_ADD_FLAG } from "@/lib/flags/keys";
 
@@ -73,8 +72,6 @@ const useSections = ({
   const [newTaskDraftTitle, setNewTaskDraftTitle] = useState("");
   const [keyPressed, setKeypressed] = useState<any>({});
   const isApple = useDeviceContext()
-  const isMbl = useContext(MobileViewContext);
-  const aiFirstTaskWriterEnabled = useFlag("htpr-6141-ai-first-task-writer");
   const nQuickAddEnabled = useFlag(HTPR_6902_N_QUICK_ADD_FLAG);
   const shiftCQuickAddEnabled = useFlag(HTPR_6914_SHIFT_C_QUICK_ADD_FLAG);
   const { navigate } = useHypertasksNavigate();
@@ -97,15 +94,12 @@ const useSections = ({
     defaultEditFocus?: TDefaultEditFocus,
     useQuickEntry = false,
   ) => {
-    const editFocus =
-      defaultEditFocus ??
-      (isMbl && aiFirstTaskWriterEnabled ? MOBILE_AI_TASK_WRITER_FOCUS : undefined);
-    if (useQuickEntry && !editFocus) {
+    if (useQuickEntry && !defaultEditFocus) {
       setShowAddItem(true);
       setPosition(position);
       return;
     }
-    toggleCreateTaskGlobally(sectionPayload, editFocus)
+    toggleCreateTaskGlobally(sectionPayload, defaultEditFocus)
   };
 
   useEffect(nQuickAddEnabled ? () => {
