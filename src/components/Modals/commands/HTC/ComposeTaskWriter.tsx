@@ -1,4 +1,3 @@
-import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { Suspense, useContext, useEffect, useRef, useState } from "react";
 import { useRecoilValue, useSetRecoilState } from "@/lib/state";
 import { currentProjectAtom, currentUserAtom, lastUsedBoardsAtom, composeTaskChatIntroAtom, showAIChatInterfaceAtom, isAiChatSidebarModeAtom, aiChatAutoOpenSuppressedAtom, aiChatExplicitOpenAtAtom, dockedChatScopeAtom, inViewObjectAtom } from "@/store";
@@ -50,7 +49,6 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
   const splitTasksEnabled = useFlag(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG);
   const writerReasonEnabled = useFlag(HTPR_7085_CTRLJ_WRITER_REASON_FLAG);
   const unfurlImageUrls = useFlag(HTPR_7051_TASK_WRITER_IMAGE_UNFURL_FLAG);
-  const applyBoardFormat = useFlag(HTPR_7471_WRITER_BOARD_FORMAT_FLAG);
   const applyWriterProperties = useFlag(HTPR_7343_CTRLJ_WRITER_PROPERTIES_FLAG);
   const boardChipEnabled = useFlag(HTPR_7053_COMPOSE_BOARD_CHIP_FLAG);
   const [selectedBoardId, setSelectedBoardId] = useState<number>();
@@ -250,7 +248,7 @@ export default function ComposeTaskWriter({ active, destinationProject, onCreate
       if (!mounted.current) return;
       if (!project) throw new Error("Your last board is unavailable. Open a board and try again.");
       const { task: savedTask, writerFailed, writerFailureReason, tasks: splitResult, failedTitles } = await createComposedTask({
-        text, files, project, userId: user.id, ...(applyBoardFormat ? { applyBoardFormat } : {}), explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
+        text, files, project, userId: user.id, explainWriterFailure: writerReasonEnabled, unfurlImageUrls, ...(applyWriterProperties ? { applyWriterProperties } : {}), ...(existingTaskId ? { existingTaskId } : {}),
         ...(viewContextEnabled && currentProject?.id === projectId && !existingTaskId &&
           /^\/project(?:\/|$)/.test(window.location.pathname) ? { viewProject: currentProject } : {}),
         ...(showProgress ? { onProgress: (next: ComposeTaskStage) => { if (mounted.current) setStage(next); } } : {}),

@@ -245,11 +245,11 @@ function harness(options = {}) {
     } },
   });
   return { tool, saved, calls, usage, selections, confirmations, retrieval, reports, run, instructionLoads, fieldLoads, fieldSaves, checks,
-    compose: async (customInstructions = "", enabled = options.format !== false) => {
+    compose: async (customInstructions = "") => {
       const previousFetch = global.fetch, previousParser = global.DOMParser;
       global.DOMParser = new (require("jsdom").JSDOM)("").window.DOMParser;
       global.fetch = async (_url, args) => webRoute.POST({ json: async () => JSON.parse(args.body) });
-      try { return await composer.createComposedTask({ text: "Make this change", files: [], project: { id: 15, ai_custom_instructions: [{ customInstruction: customInstructions }] }, userId: 985, applyBoardFormat: enabled }); }
+      try { return await composer.createComposedTask({ text: "Make this change", files: [], project: { id: 15, ai_custom_instructions: [{ customInstruction: customInstructions }] }, userId: 985 }); }
       finally { global.fetch = previousFetch; global.DOMParser = previousParser; }
     },
     save: (body) => saveRoute.POST({ headers: new Headers(), json: async () => ({ projectId: 15, userId: 985, title: "T", description: "<p>B</p>", requestKind: "compose-task", ...body }) }, { userId: 985 }),
@@ -423,12 +423,15 @@ test("structured compose carries each task's own validated fields through the re
   assert.doesNotMatch(JSON.stringify(h.saved), /customFields|foreign-field/);
 });
 
-test("client flag off does not forward writer fields even when the server flag is on", async () => {
-  const h = harness({ output: output + marker([{ fieldId: "score-field", value: 19 }]) });
-  assert.equal((await h.compose("", false)).writerFailed, false);
-  assert.match(promptText(h), /OWN_INSTRUCTIONS_SENTINEL/);
-  assert.deepEqual(h.fieldSaves, []);
-  assert.equal(h.saved.length, 1);
+test("compose without a field marker saves the same description as flag off", async () => {
+  const on = harness({ output });
+  const off = harness({ output, format: false });
+  assert.equal((await on.compose()).writerFailed, false);
+  assert.equal((await off.compose()).writerFailed, false);
+  assert.match(on.saved[0].description_.create.content, /\S/);
+  assert.equal(on.saved[0].description_.create.content, off.saved[0].description_.create.content);
+  assert.deepEqual(on.fieldSaves, []);
+  assert.doesNotMatch(JSON.stringify(off.saved), /customFields/);
 });
 
 test("one feature definition defaults to Everyone with a registry-supported low release risk", () => {

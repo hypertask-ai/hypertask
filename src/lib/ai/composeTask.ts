@@ -60,12 +60,11 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
-  applyWriterProperties = false, applyBoardFormat = false,
+  applyWriterProperties = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   unfurlImageUrls?: boolean;
   applyWriterProperties?: boolean;
-  applyBoardFormat?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
@@ -164,14 +163,14 @@ export async function createComposedTask({
         const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
         const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
         return { title: draft.title, description: body,
-          ...(applyBoardFormat && draft.customFields?.length ? { customFields: draft.customFields } : {}),
+          ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
           ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const fieldDraft = applyBoardFormat
+      const fieldDraft = html.includes("ai-generated-task-custom-fields")
         ? (await import("@/lib/ai/taskWriterCustomFields")).readTaskWriterCustomFields(html) : null;
       const fieldHtml = fieldDraft?.html ?? html;
       const typed = typedWriter ? readTaskWriterTicketType(fieldHtml) : null;
@@ -243,7 +242,7 @@ export async function createComposedTask({
         sectionId: placement?.sectionId, section_title: placement?.section,
         ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
         ...(fillsExistingTask ? { existingTaskId } : {}),
-        ...(applyBoardFormat && draft.customFields?.length ? { customFields: draft.customFields } : {}),
+        ...(draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;
