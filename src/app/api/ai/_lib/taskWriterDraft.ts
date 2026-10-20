@@ -19,6 +19,7 @@ export async function generateTaskWriterDraft(
     skills,
     usageTaskId,
     validateDraft,
+    customFieldDefinitions,
   } = await prepareTaskWriterRun(body, userId, agentId);
 
   configureAiModelUsage(selected.model, {
@@ -44,13 +45,16 @@ export async function generateTaskWriterDraft(
   const filtered = allowedImgSrcs
     ? filterOneImagePass(text, allowedImgSrcs).emit
     : text;
+  const fieldTools = customFieldDefinitions ? await import("@/lib/ai/taskWriterCustomFields") : null;
+  const fieldDraft = fieldTools?.readTaskWriterCustomFields(filtered);
+  const draftHtml = fieldDraft?.html ?? filtered;
   const properties =
     body.aiMode === "AiTaskWriter"
-      ? extractTaskWriterProperties(filtered, {
+      ? extractTaskWriterProperties(draftHtml, {
           fallbackTitle:
             body.taskTitle.trim() || taskTitleFromBrief(body.PROMPT),
         })
-      : { title: null, description: filtered };
+      : { title: null, description: draftHtml };
 
   if (validateDraft && !hasUsableTaskWriterDraft(properties.description)) {
     return { success: false as const, error: TASK_WRITER_EMPTY_DRAFT_MESSAGE };
@@ -58,6 +62,7 @@ export async function generateTaskWriterDraft(
 
   return {
     success: true as const,
+    ...(fieldDraft && customFieldDefinitions?.length ? { customFields: fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, fieldDraft.customFields) } : {}),
     html: properties.description,
     title: properties.title,
     priority: "priority" in properties ? properties.priority : undefined,

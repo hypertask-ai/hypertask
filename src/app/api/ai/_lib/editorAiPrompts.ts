@@ -7,9 +7,16 @@ export const NVC_STYLE_RULE = renderPrompt("nvc-style-rule");
 
 export const HOUSE_OUTPUT_STYLE = renderPrompt("house-output-style", (NVC_STYLE_RULE));
 
-export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL));
+export const TASK_AUTHORING_STYLE = renderPrompt("task-authoring-style", (UNSLOP_SKILL), (I_HAVE_ADHD_SKILL), "");
 
-export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL));
+export const TASK_AUTHORING_WEB_STYLE = renderPrompt("task-authoring-web-style", (WEB_WRITING_SKILL), (UNSLOP_SKILL), "");
+
+export function createTaskAuthoringStyle(webWriting: boolean, boardFormat: boolean) {
+  const rule = boardFormat ? renderPrompt("task-writer-board-format-rule") : "";
+  return webWriting
+    ? renderPrompt("task-authoring-web-style", WEB_WRITING_SKILL, UNSLOP_SKILL, rule)
+    : renderPrompt("task-authoring-style", UNSLOP_SKILL, I_HAVE_ADHD_SKILL, rule);
+}
 
 export function createPromptForTiptapForwardSlash(
   mode = "FixSpellingAndGrammar",

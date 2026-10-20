@@ -1,3 +1,4 @@
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { tool } from "ai";
 import { z } from "zod";
 import { buildBulkOperationKey } from "@/app/api/ai/chat/stream/bulkTools";
@@ -101,6 +102,7 @@ export function createCreateTaskTool(context: ToolContext) {
             return { success: false, error: parsed.error.issues[0]?.message ?? "Invalid task" };
           }
           const input = parsed.data;
+          let customFields: TaskWriterCustomFieldValue[] | undefined;
           let title = "title" in input ? input.title : "";
           let description = "description" in input ? input.description : undefined;
           let estimateIndex = 0;
@@ -188,6 +190,7 @@ export function createCreateTaskTool(context: ToolContext) {
               }), user.id, actingAgentId, abortSignal);
               if (!draft.success) return { success: false, error: draft.error };
               if (!draft.title?.trim()) return { success: false, error: "Task Writer returned an empty title. Try again." };
+              customFields = draft.customFields;
               title = draft.title;
               description = draft.html;
               priorityIndex = draft.priority ?? 0;
@@ -212,6 +215,13 @@ export function createCreateTaskTool(context: ToolContext) {
               parentTaskId: input.parent_task_id ?? undefined,
               agentId: actingAgentId,
             });
+
+            if (customFields?.length) {
+              const { upsertCustomFieldValue } = await import("@/utils/controllers/customFields");
+              for (const { fieldId, value } of customFields) {
+                await upsertCustomFieldValue(fieldId, task.id, value);
+              }
+            }
 
             return sanitizeForJson({
               success: true,

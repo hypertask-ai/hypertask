@@ -1,4 +1,6 @@
 import { taskWriterDateContext, taskWriterDueDateInstructions } from "@/lib/ai/taskWriterDueDate";
+import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
+import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { HTPR_7054_CTRLJ_DUE_DATE_FLAG } from "@/lib/flags/keys";
 import { taskWriteAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { isEmptyComposeTarget } from "@/lib/ai/composeTaskTarget";
@@ -7,6 +9,7 @@ import { z } from "zod";
 
 import {
   createDocumentAttachmentSummary,
+  createTaskAuthoringStyle,
   createTaskWriterPromptParts,
   createTaskWriterUserContent,
   extractImgSrcs,
@@ -99,6 +102,12 @@ export const tasksOutputSchema = z.object({
   })).min(1).max(10),
 });
 
+export const boardFormatTasksOutputSchema = tasksOutputSchema.extend({
+  tasks: z.array(tasksOutputSchema.shape.tasks.element.extend({
+    customFields: z.array(z.object({ fieldId: z.string(), value: z.union([z.string(), z.number()]) })).max(50).optional(),
+  })).min(1).max(10),
+});
+
 export type TaskWriterRequest = z.infer<typeof taskWriterRequestSchema>;
 
 export class AiFeatureDisabledError extends Error {
@@ -186,6 +195,20 @@ export async function prepareTaskWriterRun(
     teamContext,
     taskWriterAgentId: agentId,
   });
+  const boardFormatEnabled = body.aiMode === "AiTaskWriter" &&
+    await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId);
+  const customInstructions = boardFormatEnabled && !body.customInstructions.trim()
+    ? await (await import("@/app/api/ai/_lib/customInstructions")).loadCustomInstructionText(body.projectId)
+    : body.customInstructions;
+  const customFieldDefinitions: TaskWriterCustomFieldDefinition[] | undefined = boardFormatEnabled
+    ? await prisma.customField.findMany({
+        where: { projectId: body.projectId },
+        orderBy: { ranking: "asc" },
+        take: 50,
+        select: { id: true, name: true, type: true, options: true },
+      })
+    : undefined;
+
   const skillResolution = await resolveSkills(body.PROMPT, {
     userId,
     projectId: body.projectId,
@@ -256,7 +279,7 @@ export async function prepareTaskWriterRun(
         })
       : Promise.resolve(""),
     boardResearchEnabled
-      ? loadTaskWriterBoardVocabulary(body.projectId).catch((error) => {
+      ? loadTaskWriterBoardVocabulary(body.projectId, customFieldDefinitions).catch((error) => {
           console.error("[ai/task-writer] board vocabulary failed", error);
           return "";
         })
@@ -287,11 +310,13 @@ export async function prepareTaskWriterRun(
     boardVocabulary,
   });
   const webWriting = await isFeatureEnabled(HTPR_7342_WEB_WRITING_TASK_WRITER_FLAG, userId);
-  const authoringStyle = webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
+  const authoringStyle = boardFormatEnabled
+    ? createTaskAuthoringStyle(webWriting, true)
+    : webWriting ? TASK_AUTHORING_WEB_STYLE : TASK_AUTHORING_STYLE;
   const boardResearchRules = webWriting ? TASK_WRITER_BOARD_RESEARCH_WEB_RULES : TASK_WRITER_BOARD_RESEARCH_RULES;
   const { instructions: baseInstructions, input } = createTaskWriterPromptParts({
     aiMode: body.aiMode,
-    customInstructions: body.customInstructions,
+    customInstructions,
     boardTemplates,
     modelSelected: selected.modelId,
     taskIds: body.taskIds,
@@ -312,6 +337,9 @@ export async function prepareTaskWriterRun(
     await isFeatureEnabled(HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG, userId);
   const fixedInstructions = researchInstructions ?? baseInstructions;
   let suffix = skillResolution.systemPromptAddition ? `\n\n${skillResolution.systemPromptAddition}` : "";
+  if (customFieldDefinitions?.length) {
+    suffix += `\n\n${renderPrompt("task-writer-custom-fields-output")}`;
+  }
   if (splitTasks) {
     suffix += "\n\nFor this New Task request, replace the single HTML output contract with the structured tasks object. Return 1 to 10 tasks, each with a plain-text title and HTML description. Split only when the user's note clearly requests several separate, independently deliverable tasks (for example search focus, CSV export, and a typo fix). Keep sub-steps, acceptance criteria, and implementation details of one deliverable together in exactly one task, even for a long note. If uncertain, return one task. If more than 10 independent tasks are requested, return only the first 10 in request order. Preserve the board's style and all source details within each task; do not invent tasks. Do not include the title in the description.";
   }
@@ -365,10 +393,12 @@ export async function prepareTaskWriterRun(
     usageTaskId,
     dueDateContext,
     ticketTypeEnabled,
+    customFieldDefinitions,
+    tasksSchema: customFieldDefinitions?.length ? boardFormatTasksOutputSchema : tasksOutputSchema,
   };
 }
 
-async function loadTaskWriterBoardVocabulary(projectId: number) {
+async function loadTaskWriterBoardVocabulary(projectId: number, customFields?: TaskWriterCustomFieldDefinition[]) {
   const project = await prisma.project.findFirst({
     where: { id: projectId },
     select: {
@@ -384,6 +414,7 @@ async function loadTaskWriterBoardVocabulary(projectId: number) {
   });
   if (!project) return "";
   return formatBoardVocabulary({
+    customFields,
     projectTitle: project.title,
     projectDescription: project.description,
     sectionTitles: project.section.map((row) => row.section_title),

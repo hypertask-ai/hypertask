@@ -1,3 +1,4 @@
+import type { TaskWriterCustomFieldDefinition } from "@/lib/ai/taskWriterCustomFields";
 import { renderPrompt } from "@/lib/ai/prompts/registry";
 
 import type {
@@ -130,10 +131,19 @@ export function formatBoardVocabulary(args: {
   projectDescription?: string | null;
   sectionTitles?: string[];
   labelNames?: string[];
+  customFields?: TaskWriterCustomFieldDefinition[];
 }) {
   const sectionTitles = (args.sectionTitles ?? []).slice(0, 40);
   const labelNames = (args.labelNames ?? []).slice(0, 40);
+  const customFields = (args.customFields ?? []).slice(0, 50).map(({ id, name, type, options }) => ({
+    id, name, type,
+    ...(type === "Select" && Array.isArray(options) ? { options: options.map((option) => {
+      if (!option || typeof option !== "object") return null;
+      return { id: option.id, label: option.label };
+    }).filter(Boolean) } : {}),
+  }));
   const parts = [
+    customFields.length ? `customFields:${escapePlain(JSON.stringify(customFields))}` : "",
     args.projectTitle ? `projectTitle:${escapePlain(args.projectTitle)}` : "",
     args.projectDescription
       ? `projectDescription:${escapePlain(args.projectDescription.slice(0, 1000))}`

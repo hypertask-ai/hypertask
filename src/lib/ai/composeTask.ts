@@ -1,3 +1,4 @@
+import type { TaskWriterCustomFieldValue } from "@/lib/ai/taskWriterCustomFields";
 import { isBrowserRenderableImage } from "@/lib/media/browserRenderableImage";
 import type { IProject, ITask } from "@/models/model";
 import axios from "axios";
@@ -59,11 +60,12 @@ export type ComposeTaskStage = "Reading past tickets" | "Understanding the conte
 
 export async function createComposedTask({
   text, files, project, userId, existingTaskId, onProgress, viewProject, fields, explainWriterFailure, unfurlImageUrls = false,
-  applyWriterProperties = false,
+  applyWriterProperties = false, applyBoardFormat = false,
 }: {
   text: string; files: File[]; project: IProject; userId: number; existingTaskId?: number;
   unfurlImageUrls?: boolean;
   applyWriterProperties?: boolean;
+  applyBoardFormat?: boolean;
   onProgress?: (stage: ComposeTaskStage) => void;
   viewProject?: IProject;
   explainWriterFailure?: boolean;
@@ -95,7 +97,7 @@ export async function createComposedTask({
   let description = rawDescription;
   let writerFailed = false;
   let writerFailureReason: string | undefined;
-  let drafts: ({ title: string; description: string; writerDueDate?: string; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
+  let drafts: ({ title: string; description: string; writerDueDate?: string; customFields?: TaskWriterCustomFieldValue[]; ticketType?: TaskWriterTicketType } & Partial<ReturnType<typeof writerProperties>>)[] = [];
   const writerTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   try {
     onProgress?.("Reading past tickets");
@@ -153,7 +155,7 @@ export async function createComposedTask({
     if (response.headers?.get("content-type")?.includes("application/json")) {
       const output = JSON.parse(html);
       if (!Array.isArray(output.tasks) || !output.tasks.length) throw new Error("Task writer returned no tickets");
-      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string }) => {
+      drafts = output.tasks.slice(0, 10).map((draft: { title: string; description: string; dueDate?: string; customFields?: TaskWriterCustomFieldValue[] }) => {
         if (typeof draft?.title !== "string" || !draft.title.trim() ||
             typeof draft.description !== "string" || !draft.description.trim()) {
           throw new Error("Task writer returned an incomplete ticket");
@@ -162,19 +164,24 @@ export async function createComposedTask({
         const written = applyWriterProperties ? extractTaskProperties(typed ? typed.html : draft.description) : null;
         const body = written ? written.description : typed ? stripWriterMarkers(typed.html) : draft.description;
         return { title: draft.title, description: body,
+          ...(applyBoardFormat && draft.customFields?.length ? { customFields: draft.customFields } : {}),
           ...(written ? writerProperties(written) : {}),
           ...(typed?.type ? { ticketType: typed.type } : {}),
           ...(response.headers?.get("X-Task-Writer-Due-Date") === "enabled" && draft.dueDate ? { writerDueDate: draft.dueDate } : {}),
         };
       });
     } else {
-      const typed = typedWriter ? readTaskWriterTicketType(html) : null;
-      const written = extractTitleAndDescription(typed ? typed.html : html);
+      const fieldDraft = applyBoardFormat
+        ? (await import("@/lib/ai/taskWriterCustomFields")).readTaskWriterCustomFields(html) : null;
+      const fieldHtml = fieldDraft?.html ?? html;
+      const typed = typedWriter ? readTaskWriterTicketType(fieldHtml) : null;
+      const written = extractTitleAndDescription(typed ? typed.html : fieldHtml);
       if (!written.title || !written.description.trim()) throw new Error("Task writer returned an incomplete ticket");
       const writerDueDate = response.headers?.get("X-Task-Writer-Due-Date") === "enabled"
         ? new DOMParser().parseFromString(html, "text/html").getElementById("ai-generated-task-due-date")?.textContent?.trim() || undefined
         : undefined;
-      drafts = [{ title: written.title, description: written.description, ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
+      drafts = [{ title: written.title, description: written.description,
+        ...(Array.isArray(fieldDraft?.customFields) && fieldDraft.customFields.length ? { customFields: fieldDraft.customFields } : {}), ...(writerDueDate ? { writerDueDate } : {}), ...(typed?.type ? { ticketType: typed.type } : {}),
         ...(applyWriterProperties ? writerProperties(extractTaskProperties(html)) : {}) }];
     }
     drafts = drafts.map((draft) => {
@@ -236,6 +243,7 @@ export async function createComposedTask({
         sectionId: placement?.sectionId, section_title: placement?.section,
         ranking: placement?.ranking, ...taskFields, ...writerFields, requestKind: "compose-task",
         ...(fillsExistingTask ? { existingTaskId } : {}),
+        ...(applyBoardFormat && draft.customFields?.length ? { customFields: draft.customFields } : {}),
         ...(draft.writerDueDate ? { writerDueDate: draft.writerDueDate, writerTimeZone } : {}),
       });
       const task = created?.resposne?.newTask;

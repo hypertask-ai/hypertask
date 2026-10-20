@@ -93,7 +93,7 @@ async function send(api, { flag = true, currentProject = project(), destinationP
   const mounted = { current: true };
   const calls = [];
   const context = {
-    enabled: true, boardChipEnabled: false, targetBoardId: undefined, writerReasonEnabled: false, applyWriterProperties: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
+    enabled: true, boardChipEnabled: false, targetBoardId: undefined, writerReasonEnabled: false, applyWriterProperties: false, applyBoardFormat: false, sending: { current: false }, pendingImages: { current: 0 }, dictating: false,
     text: "Describe this task", files: [], showProgress: false, composer: { current: null },
     setWritingHeight() {}, setWriting() {}, setStage() {}, onBusyChange() {}, setError(error) { if (error) throw new Error(error); },
     taskContextRef: { current: null }, newTaskWindow: Boolean(existingTaskId), destinationProject,

@@ -21,7 +21,6 @@ import {
   missingRequiredFields,
   prepareTaskWriterRun,
   taskWriterRequestSchema,
-  tasksOutputSchema,
   type TaskWriterRequest,
 } from "@/app/api/ai/_lib/taskWriterRun";
 
@@ -71,7 +70,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled } =
+    const { selected, instructions, messages, allowedImgSrcs, usageTaskId, splitTasks, validateDraft, dueDateContext, ticketTypeEnabled, customFieldDefinitions, tasksSchema } =
       await prepareTaskWriterRun(body, userId);
     const typeHeaders: Record<string, string> = ticketTypeEnabled ? { [TICKET_TYPE_HEADER]: "enabled" } : {};
     if (splitTasks) {
@@ -82,15 +81,20 @@ export async function POST(request: NextRequest) {
       const result = await generateText({
         model: selected.model, instructions, messages, tools: selected.tools,
         maxRetries: 2, providerOptions: selected.providerOptions, ...selected.settings,
-        output: Output.object({ schema: tasksOutputSchema }),
+        output: Output.object({ schema: tasksSchema }),
       });
-      const { tasks } = tasksOutputSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
-      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...task }) => {
+      const fieldTools = customFieldDefinitions?.length ? await import("@/lib/ai/taskWriterCustomFields") : null;
+      const { tasks } = tasksSchema.parse({ tasks: result.output.tasks.slice(0, 10) });
+      return NextResponse.json({ tasks: tasks.map(({ dueDate: modelDueDate, ...draft }) => {
+        const { customFields: modelCustomFields, ...task } = draft as typeof draft & { customFields?: unknown };
+        const customFields = customFieldDefinitions?.length
+          ? fieldTools!.validateTaskWriterCustomFields(customFieldDefinitions, modelCustomFields) : [];
+        const fieldValues = customFields.length ? { customFields } : {};
         const filtered = allowedImgSrcs ? filterOneImagePass(task.description, allowedImgSrcs).emit : task.description;
         const description = ticketTypeEnabled ? normalizeTaskWriterTicketType(filtered) : filtered;
-        if (!dueDateContext) return { ...task, description };
+        if (!dueDateContext) return { ...task, description, ...fieldValues };
         const dueDate = validateTaskWriterDueDate(modelDueDate, dueDateContext.today);
-        return { ...task, description, ...(dueDate ? { dueDate } : {}) };
+        return { ...task, description, ...fieldValues, ...(dueDate ? { dueDate } : {}) };
       }) }, dueDateContext || ticketTypeEnabled
         ? { headers: { ...(dueDateContext ? { "X-Task-Writer-Due-Date": "enabled" } : {}), ...typeHeaders } }
         : undefined);
