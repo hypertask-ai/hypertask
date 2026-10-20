@@ -9,6 +9,7 @@ Not directly. A production error reaches PostHog, PostHog calls the signed webho
 - Refusal: an unsigned `curl -X POST https://app.hypertask.ai/api/integrations/posthog/error-alert --data '{}'` must return 401 (404 means the flag is off).
 - End to end: run `gh workflow run posthog-error-nightly.yml --ref production`. It raises a marked canary error on production, waits up to 15 minutes for the matching board 15 ticket, then resolves the PostHog issue and closes the ticket. The run log must say "Nightly PostHog canary passed", and `gh run list --workflow posthog-error-alert.yml` must show new `workflow_dispatch` runs after the deploy time.
 - GitHub retry and failure paths cannot be forced live: cover them with `tests/posthog-error-dispatch.test.cjs`.
+- Browser noise filters (HTPR-7399): headless Chromium with QA 985, a normal Chrome user agent and `navigator.webdriver` false, `context.route('**/api/errors')` answered 204 locally so nothing reaches PostHog. On a board, `Promise.reject` an AxiosError-shaped error (`isAxiosError`, `code: 'ECONNABORTED'`, `config.url`). `Request aborted` must send no beacon; `timeout of 1000ms exceeded` with the same code and a plain `Error('Request aborted')` must each send one.
 
 ## What usually breaks
 
