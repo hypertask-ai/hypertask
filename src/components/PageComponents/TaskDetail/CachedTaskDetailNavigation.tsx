@@ -3,7 +3,7 @@
 import { usePathname, useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Suspense, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import { HTPR_7008_PHONE_FIRST_PAINT_FLAG } from "@/lib/flags/keys";
+import { HTPR_7008_PHONE_FIRST_PAINT_FLAG, HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG } from "@/lib/flags/keys";
 import { flushSync } from "react-dom";
 import type { ITask } from "@/models/model";
 import { useRecoilValue } from "@/lib/state";
@@ -42,12 +42,14 @@ const warmTaskDetail = () => Promise.all([
   import("@/components/RTE/Extensions/lazyEmojiData").then(({ ensureEmojiData }) => ensureEmojiData()),
 ]);
 
-export default function CachedTaskDetailNavigation({ children, accountId }: {
+export default function CachedTaskDetailNavigation({ children, accountId, boardPainted = false }: {
   children: ReactNode;
   accountId: number | null;
+  boardPainted?: boolean;
 }) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const phoneFirstPaint = useFlag(HTPR_7008_PHONE_FIRST_PAINT_FLAG);
+  const paintedBoardWarmsTicket = useFlag(HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG) ? boardPainted : false;
   const subtaskLink = useFlag(HTPR_6972_SUBTASK_LINK_FLAG);
   const inboxNextOpen = useFlag(HTPR_7000_INBOX_NEXT_OPEN_FLAG);
   const backFirstOpen = useFlag(HTPR_6991_BACK_FIRST_OPEN_FLAG);
@@ -141,7 +143,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       void warmTaskDetail().catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
+    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname) &&
+      !(pathname === "/project" && paintedBoardWarmsTicket);
     if (!deferPhoneWarm && !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
@@ -156,7 +159,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (idle !== undefined) window.cancelIdleCallback(idle);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [instantTicketOpen, accountId, currentUser?.id, pathname, phoneFirstPaint]);
+  }, [instantTicketOpen, accountId, currentUser?.id, pathname, phoneFirstPaint, paintedBoardWarmsTicket]);
   const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
   );

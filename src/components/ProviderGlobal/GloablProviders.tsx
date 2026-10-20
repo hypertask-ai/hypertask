@@ -1346,7 +1346,7 @@ export default function GlobalProvider({
                 ) : undefined
               }
             >
-              <CachedTaskDetailNavigation accountId={authenticatedUserId}>
+              <CachedTaskDetailNavigation accountId={authenticatedUserId} boardPainted={secondaryStartupEnabled}>
                 {children}
               </CachedTaskDetailNavigation>
             </AIChatClosedLayout>
