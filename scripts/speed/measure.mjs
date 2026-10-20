@@ -50,7 +50,7 @@ const pathVersion = (conditions, cohort) => conditions.pathVersions?.[cohort.spl
 const sharedConditions = ({ pathVersions, ...conditions }) => conditions;
 
 export function landedBoards(run, profile) {
-  return [...new Set(run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`))].sort();
+  return run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`).sort();
 }
 
 const sameCohort = (old, run, cohort) => pathVersion(old.conditions, cohort) === pathVersion(run.conditions, cohort) &&

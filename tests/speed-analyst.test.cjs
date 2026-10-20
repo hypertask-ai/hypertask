@@ -370,6 +370,8 @@ test('changed paths only compare with same-version history; page navigation also
   assert.equal(baselineFor([sameVersion], 'phone:ticket-warm'), 100);
   assert.equal(baselineFor([sameVersion], 'phone:page-navigation'), 100);
   assert.equal(baselineFor([landedOn(sameVersion, '8778', undefined)], 'phone:page-navigation'), null);
+  const mixed = { ...sameVersion, samples: [...sameVersion.samples, { ...sameVersion.samples.find(sample => sample.profile === 'phone' && sample.path === 'page-navigation'), landed: { id: '8778' } }] };
+  assert.equal(baselineFor([mixed], 'phone:page-navigation'), null, 'a different mix of landed boards is a different cohort');
 });
 
 test('a cold ticket whose code never settles fails the run instead of measuring a partly cold warm tap', () => {
