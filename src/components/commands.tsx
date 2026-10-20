@@ -72,7 +72,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   if (typedWrites) createSectionWriter = createSection;
   const ticketPrefixEnabled = useFlag(HTPR_6868_TICKET_PREFIX_FLAG);
   const {
-  queryClient, copyCurrentUrlEnabled, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
+  queryClient, rowShortcutsEnabled, myTasksViewsEnabled, myTasksTableColumnsEnabled,
   myTasksSnoozeEnabled, myTasksBulkSelectionEnabled, activeSectionId, updateTaskInCache, moveItem,
   removeFromListWithStatus, renameBoard, getProjectIdxAndAllData, updateProjectView, removeMemberFromBoard,
   addAgentToBoard, removeAgentFromBoard, inviteNewMembersToBoard, reSendInvite, cancelInvite,
@@ -140,7 +140,7 @@ const HypertasksCommands = ({ callbackHandler, contextOptions, focusProxy }: IHT
   handleAction,
   } = createCommandDispatcher({
     newTaskWindow,
-    copyCurrentUrlEnabled, boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
+    boardCloseHandler, setShowCommands, setCommandMode, undoLatest,
     _currentProject, setBoardZoomedOutByProject, currentUser, openSettings, setShowShortcuts,
     switchToTheme: switchCommandTheme,
     followTaskHandler, unFollowTaskHandler, hasBulkSelection, bulkSelection,
