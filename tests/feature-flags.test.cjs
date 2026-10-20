@@ -1472,3 +1472,20 @@ test("listing skips audit queries unless lastChange is explicitly requested", as
     assert.equal(listed.some((row) => Object.hasOwn(row, "lastChange")), false);
   }
 });
+
+test("stored modes override registry defaults for declared and legacy keys in every reader", async () => {
+  for (const key of ["htpr-6136-figma-connect", "legacy-stored"]) {
+    for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
+      row = { key, mode };
+      listedRows = [row];
+      assert.equal((await flags.listFeatureFlagModes()).find(entry => entry.key === key).mode, mode);
+      assert.deepEqual(await flags.featureFlagCandidateUserIds(key),
+        mode === "EVERYONE" ? null : mode === "OFF" ? [] : mode === "OWNER_ONLY" ? [6] : [6, 985]);
+      for (const id of [6, 985, 7]) {
+        const expected = flags.featureFlagModeEnabled(mode, id === 6, id === 985);
+        assert.equal(await flags.isFeatureEnabled(key, id), expected, `${key}: ${mode}: ${id}`);
+        assert.equal((await flags.featureFlagsForUser(id))[key], expected, `${key}: ${mode}: ${id}`);
+      }
+    }
+  }
+});

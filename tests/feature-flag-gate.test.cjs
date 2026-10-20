@@ -1592,7 +1592,9 @@ test("per-flag registry handles legacy inline and extracted base refs without a 
     }
     const base = commit(git, "old layout");
     perFlagLayout(dir);
-    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+    const existingFile = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existingFile, fs.readFileSync(path.join(dir, existingFile), "utf8").replace("key: OTHER_FLAG", 'key: OTHER_FLAG, defaultMode: "EVERYONE"'));
+    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
     writeFile(dir, "src/components/Widget.tsx", 'import { WIDGET_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div>Widget</div> : null;\n');
     const head = commit(git, "new layout and widget");
     const result = await evaluate("HTPR-5 [FEATURE] Widget", base, head, dir);
@@ -1606,13 +1608,13 @@ test("per-flag additions enforce the release-risk cutoff and registry defaults e
   const base = commit(git, "per flag base");
   const filename = "src/lib/flags/definitions/htpr-2-new.ts";
   const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "New flag" EXTRA } as const;`;
-  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
+  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', false], [', defaultMode: "EVERYONE", releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
     writeFile(dir, filename, source.replace(" EXTRA", extra));
     const head = commit(git, "add flag " + extra);
     const result = await evaluate("YPER4-2 [INFRA] Fixture", base, head, dir);
     assert.equal(result.pass, pass, result.reason);
   }
-  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ""));
+  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ', defaultMode: "EVERYONE"'));
   assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "pre cutoff"), dir)).pass, true);
 });
 
@@ -1953,4 +1955,39 @@ test("first placement of an existing local component needs a flag", async (t) =>
   const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "place local banner"), dir);
   assert.equal(result.pass, false);
   assert.match(result.reason, /Providers.tsx:Banner rendered 1 more times/);
+});
+
+
+test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
+  const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  for (const [extra, pass, message] of [
+    [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
+    [`kind: "feature", ${risk}`, false],
+    [`kind: "improvement", ${risk}`, false],
+    [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "bugfix", ${risk}`, true],
+    [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
+    [`kind: "bugfix", ${sensitive}`, false],
+    [`kind: "bugfix", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "internal", ${risk}`, true],
+    [`kind: "internal", defaultMode: "EVERYONE", ${risk}`, false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "existing feature without defaultMode");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture", ${extra} } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "added definition"), dir);
+    assert.equal(result.pass, pass, extra + ": " + result.reason);
+    if (message) assert.match(result.reason, message);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "existing feature without defaultMode");
+  writeFile(dir, "src/components/Widget.tsx", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
+  assert.equal(result.pass, true, result.reason);
 });

@@ -752,18 +752,33 @@ try:
         definitions = re.search(definitions_pattern, source('src/lib/flags/definitions.ts', base))
     if not default or not (definitions or flag_rows):
         raise ValueError('cannot resolve flag registry defaults; record premerge evidence before merging')
+    def definition_properties(block):
+        # Comments and strings are consumed whole, so "highRisk:" inside a reason or a comment never counts as a property.
+        pattern = r'//[^\n]*|/\*[\s\S]*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'|`(?:\\.|[^`\\])*`|[A-Za-z_$][\w$]*|:'
+        tokens = [token[0] for token in re.finditer(pattern, block) if not token[0].startswith(('//', '/*'))]
+        properties = {}
+        for index in range(len(tokens) - 1):
+            name, colon = tokens[index], tokens[index + 1]
+            if colon != ':' or name == ':':
+                continue
+            name = name[1:-1] if name[0] in '"\'`' else name
+            value = tokens[index + 2] if index + 2 < len(tokens) else ''
+            properties.setdefault(name, value[1:-1] if value[:1] in ('"', "'", '`') else None)
+        return properties
+    def registry_default(block, fallback):
+        properties = definition_properties(block)
+        if properties.get('defaultMode'):
+            return properties['defaultMode']
+        return 'EVERYONE' if properties.get('kind') == 'bugfix' else fallback
     defaults = {}
     for block in (flag_rows or re.findall(r'\{([^{}]*)\}', definitions[1])):
         key = re.search(r'\bkey:\s*([\'\"][^\'\"]+[\'\"]|\w+)', block)
         if key:
-            kind = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
-            explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
-            defaults[resolve(key[1], keys)] = explicit[1] if explicit else ('EVERYONE' if kind else default[1])
+            defaults[resolve(key[1], keys)] = registry_default(block, default[1])
     live = modes is not None
     if not live:
         print('note: live flag modes unavailable; registry defaults cannot prove a flag is not released')
         modes = defaults
-    # A flag this PR defines (in head keys.ts, not in base keys.ts or registry, not read before) starts at Owner + QA.
     base_values = set(keys.values()) | set(defaults)
     head_keys, head_rows = flag_registry(sha)
     head_values = set(head_keys.values())
@@ -771,13 +786,23 @@ try:
     # a current-head click when released; only their recorded mode is exempt, unless the key survives.
     recorded_flags = touched - (deleted_definitions - head_values)
     added = {key for key in touched if key in head_values and key not in base_values and key not in base_touched}
+    added_files = {f['filename'] for f in files if f['status'] == 'added' and
+                   f['filename'].startswith('src/lib/flags/definitions/') and f['filename'].endswith('.ts')}
+    for path in added_files:
+        block = source(path, sha)
+        properties = definition_properties(block)
+        key = next(iter(constants(block).values()), path)
+        mode = registry_default(block, 'OWNER_AND_QA')
+        if properties.get('kind') == 'internal' or 'highRisk' in properties:
+            if mode == 'EVERYONE':
+                raise ValueError(f'new flag {key} with highRisk or internal kind may not default to Everyone')
+        elif properties.get('kind') != 'bugfix' and properties.get('defaultMode') != 'EVERYONE':
+            raise ValueError(f'new flag {key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email)')
     for block in head_rows:
         key = re.search(r'\bkey:\s*(\w+)', block)
-        explicit = re.search(r'\bdefaultMode:\s*[\'"](\w+)[\'"]', block)
-        bugfix = re.search(r'\bkind:\s*[\'"]bugfix[\'"]', block)
         key = key and resolve(key[1], head_keys)
         # A new flag that defaults to Everyone is released on merge, so it needs its own click state.
-        if key in added and (explicit[1] if explicit else ('EVERYONE' if bugfix else 'OWNER_AND_QA')) == 'EVERYONE':
+        if key in added and registry_default(block, 'OWNER_AND_QA') == 'EVERYONE':
             added.discard(key)
             modes[key] = 'EVERYONE'
     released = {key for key in touched if modes.get(key) == 'EVERYONE'}
