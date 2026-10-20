@@ -1,6 +1,8 @@
 
 
 import prisma from "@/lib/prisma";
+import { isFeatureEnabled } from "@/lib/flags";
+import { HTPR_7363_CHAT_TASK_WRITER_FLAG } from "@/lib/flags/keys";
 
 import { loadCurrentTaskContext } from "@/app/api/ai/_lib/currentTaskContext";
 import { type ModelMessage } from "ai";
@@ -84,7 +86,9 @@ export async function runModelTurn(state: StreamState, resolvedBody: ChatRequest
         throw error;
       }
     },
-    heartbeatTurn?.metadata
+    heartbeatTurn?.metadata,
+    await isFeatureEnabled(HTPR_7363_CHAT_TASK_WRITER_FLAG, dbUser.id),
+    state.providerAbort.signal
   );
   if (
     heartbeatExecutionId &&

@@ -202,6 +202,13 @@ function harness({ enabled = false, plan = "Free", saved = null, teamByok = fals
     "@/lib/ai/taskWriterDuplicateGuard": { taskTitleFromBrief: () => "Fixture" },
     "@/lib/errors/reportError": { reportError: async () => {} },
   };
+  routeStubs["@/app/api/ai/_lib/taskWriterDraft"] = moduleWithStubs("src/app/api/ai/_lib/taskWriterDraft.ts", {
+    ...routeStubs,
+    "./modelProvider": modelApi,
+    "./editorAi": editor,
+    "./taskWriterRun": run,
+    "./taskWriterProperties": routeStubs["@/app/api/ai/_lib/taskWriterProperties"],
+  });
   const routes = {
     app: moduleWithStubs("src/app/api/ai/task-writer/route.ts", routeStubs),
     mcp: moduleWithStubs("src/app/api/mcp/ai/task-writer/route.ts", routeStubs),
