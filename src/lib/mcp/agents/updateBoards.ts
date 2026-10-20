@@ -1,3 +1,4 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import type { Prisma } from '@prisma/client'
 
 import { agentWithinTeamWhere } from '@/lib/mcp/managementKeyTeamScope'
@@ -44,7 +45,7 @@ type AgentRead = {
 }
 type MemberWrite = {
   findMany(args: {
-    where: { agentId: string; projectId: { in: number[] } }
+    where: { agentId: string; projectId: { in: number[] }; status?: 'Accepted'; agent?: { userId: number; revokedAt: null } }
     select: { projectId: true }
   }): Promise<Array<{ projectId: number }>>
   deleteMany(args: {
@@ -141,25 +142,6 @@ export async function updateOwnedAgentBoards(
     try {
       return await database.$transaction(
         async ({ agent: agentStore, member }) => {
-          if (actingAgentId) {
-            const touched = [...input.addProjectIds, ...input.removeProjectIds]
-            const inScope = new Set(
-              (
-                await member.findMany({
-                  where: { agentId: actingAgentId, projectId: { in: touched } },
-                  select: { projectId: true },
-                })
-              ).map((row) => row.projectId)
-            )
-            const outside = touched.filter((id) => !inScope.has(id))
-            if (outside.length) {
-              throw new AgentBoardUpdateError(
-                `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
-                403,
-                'project_ids'
-              )
-            }
-          }
           const agent = await agentStore.findFirst({
             where: { ...scopeWhere, id: input.agentId, userId },
             select: {
@@ -178,6 +160,28 @@ export async function updateOwnedAgentBoards(
             )
           }
 
+          let allowedProjects: Set<number> | undefined
+          if (actingAgentId) {
+            const touched = [...input.addProjectIds, ...input.removeProjectIds]
+            const inScope = new Set(
+              (
+                await member.findMany({
+                  where: { agentId: actingAgentId, projectId: { in: [...touched, ...agent.members.map((row) => row.projectId)] }, ...(agentScopeEnforced() ? { status: 'Accepted', agent: { userId, revokedAt: null } } : {}) },
+                  select: { projectId: true },
+                })
+              ).map((row) => row.projectId)
+            )
+            allowedProjects = inScope
+            touched.forEach((id) => recordAgentBoardScopeMiss(id, 'write'))
+            const outside = touched.filter((id) => !inScope.has(id))
+            if (outside.length) {
+              throw new AgentBoardUpdateError(
+                `This agent is not a member of project ${outside.join(', ')}, so it cannot grant or remove access there`,
+                403,
+                'project_ids'
+              )
+            }
+          }
           const existing = new Map(
             agent.members.map((membership) => [membership.projectId, membership])
           )
@@ -232,7 +236,10 @@ export async function updateOwnedAgentBoards(
           const projectIds = [
             ...[...existing.keys()].filter((id) => !removedSet.has(id)),
             ...toAdd,
-          ].sort((a, b) => a - b)
+          ].filter((id) => {
+            if (actingAgentId) recordAgentBoardScopeMiss(id, 'read')
+            return !actingAgentId || !agentScopeEnforced() || allowedProjects?.has(id)
+          }).sort((a, b) => a - b)
           if (!toAdd.length && !toRemove.length) {
             return {
               agentId: agent.id,

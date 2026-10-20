@@ -31,6 +31,7 @@ async function demo() {
   ])
 
   const prismaMock = prisma as any
+  const originalFlagFindUnique = prismaMock.featureFlag.findUnique
   const originalAgentFindFirst = prismaMock.agent.findFirst
   const originalAgentFindUnique = prismaMock.agent.findUnique
   const originalTaskFindMany = prismaMock.task.findMany
@@ -89,6 +90,7 @@ async function demo() {
   )
 
   try {
+    prismaMock.featureFlag.findUnique = async () => ({ mode: 'EVERYONE' })
     let roleLookupCount = 0
     prismaMock.agent.findUnique = async ({
       where,
@@ -165,9 +167,9 @@ async function demo() {
       },
     })
     const humanUpdateBody = await json(humanUpdate.response)
-    assert.equal(humanUpdate.response.status, 200)
+    assert.equal(humanUpdate.response.status, 404)
     assert.equal(humanUpdate.outcome, 'not_found')
-    assert.equal(humanUpdateBody.success, true)
+    assert.equal(humanUpdateBody.success, false)
 
     const humanBatch = await handleBatchBody(
       updateRequest,
@@ -277,6 +279,7 @@ async function demo() {
     assert.equal(humanBoardBody.success, true)
     assert.equal(createBoardCallCount, 2)
   } finally {
+    prismaMock.featureFlag.findUnique = originalFlagFindUnique
     prismaMock.agent.findFirst = originalAgentFindFirst
     prismaMock.agent.findUnique = originalAgentFindUnique
     prismaMock.task.findMany = originalTaskFindMany

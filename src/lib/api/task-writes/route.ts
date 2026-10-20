@@ -62,12 +62,13 @@ export function taskWriteRoute<Body, Actor = SessionUser>(options: {
         return NextResponse.json({ message: "Internal server error" }, { status: 500 });
       }
     }
+    const bodyAgentId = (body as { agentId?: unknown } | null)?.agentId;
     if (session?.agentId) {
-      const bodyAgentId = (body as { agentId?: unknown } | null)?.agentId;
       if (bodyAgentId !== session.agentId) {
         return NextResponse.json({ message: "Agent id must match authenticated session" }, { status: 403 });
       }
     }
+    if (session && typeof bodyAgentId === "string") await prepareAgentScope(session.userId, bodyAgentId);
     return options.operation(body, actor, request);
   });
 }

@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { type ToolSet } from "ai";
 import { withAdoptedAgentMutationLease } from "@/lib/mcp/tasks/agentMutationLeaseAdoption";
 import prisma from "@/lib/prisma";
@@ -19,7 +20,8 @@ export function trackToolSetExecutions(
     if (typeof trackedTool.execute !== "function") continue;
 
     const execute = trackedTool.execute;
-    trackedTool.execute = async (...args: unknown[]) => {
+    trackedTool.execute = (...args: unknown[]) => withAgentScopeRequest({ url: "/api/ai/chat/stream", method: "POST" }, async () => {
+      if (leaseActor) await prepareAgentScope(leaseActor.userId, leaseActor.agentId);
       const release = await recordToolStart?.(name);
       try {
         const result = await withAdoptedAgentMutationLease(
@@ -44,7 +46,7 @@ export function trackToolSetExecutions(
           }
         }
       }
-    };
+    });
   }
   return tools;
 }

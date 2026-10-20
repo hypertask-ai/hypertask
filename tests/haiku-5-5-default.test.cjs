@@ -379,6 +379,7 @@ test("Android maps BYOK sources to catalog provider keys and preserves Free-plan
       for (const provider of ["claude", "gateway", "openrouter"]) {
         let input;
         const api = stubbedModule("src/app/api/android/ai/composer/route.ts", {
+          "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
           "next/server": { NextResponse: { json: (value) => value } },
           "@/lib/prisma": { project: { findFirst: async () => ({ id: 15, teamId: "fixture-team" }) } },
           "@/lib/mcp/auth": { checkMcpRateLimit: async () => null, validateMcpAuth: async () => ({ user: { id: 985 } }) },

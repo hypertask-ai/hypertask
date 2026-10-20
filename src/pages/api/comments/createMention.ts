@@ -1,4 +1,4 @@
-import { withAgentScopeRequest, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { withAgentScopeRequest, prepareAgentScope, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 
 import prisma from "@/lib/prisma";
 import checkReminderAndCreateNotification from "@/utils/controllers/notifications/creation-service/check-reminder_create-notification";
@@ -27,6 +27,7 @@ const handler: NextApiHandler = async (req: NextApiRequest, res: NextApiResponse
 
         const { projectId, taskId, userId, commentId, fromAgentId } = req.body
         const mentionedBy = session.userId;
+        await prepareAgentScope(mentionedBy, fromAgentId);
         if (!projectId || !taskId || !userId) {
             return res.status(400).json({
                 message: "Missing required information!"

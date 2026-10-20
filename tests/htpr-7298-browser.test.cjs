@@ -48,7 +48,7 @@ function project(row, query = {}) {
 function harness(options = {}) {
   const state = {
     projects: [
-      { id: 1, title: 'Page board', status: 'Normal', teamId: 'team', ownerId: 1, members: [{ userId: 3, agentId: null }, { userId: 5, agentId: 'agent-only' }] },
+      { id: 1, title: 'Page board', status: 'Normal', teamId: 'team', ownerId: 1, members: [{ userId: 3, agentId: null }, { userId: 5, agentId: 'agent-only', status: 'Accepted', agent: { userId: 5, revokedAt: null } }] },
       { id: 2, title: 'Ticket board', status: 'Normal', teamId: 'team', ownerId: 2, members: [{ userId: 3, agentId: null }] },
       { id: 3, title: 'Foreign team', status: 'Normal', teamId: 'foreign', ownerId: 3, members: [] },
       { id: 4, title: 'Archived board', status: 'Archive', teamId: 'team', ownerId: 3, members: [] },
@@ -297,7 +297,7 @@ for (const [name, userId, agentId, moveBeforeLock, allowed] of [
     const h = harness({ userId, agentId, moveBeforeLock });
     if (agentId) {
       h.state.projects[0].members.find((member) => member.agentId === agentId).agent = { userId, revokedAt: null };
-      if (allowed) h.state.projects[1].members.push({ userId, agentId, agent: { userId, revokedAt: null } });
+      if (allowed) h.state.projects[1].members.push({ userId, agentId, status: 'Accepted', agent: { userId, revokedAt: null } });
     }
     assert.ok(matches(h.state.projects[0], access.getProjectWhere(userId, agentId)), 'creator has access before the ticket moves');
     const before = plain(h.state);

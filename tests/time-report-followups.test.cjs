@@ -289,6 +289,7 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
     "isFeatureEnabled",
     "HTPR_4228_ADMIN_ONLY_TIME_REPORTS_FLAG",
     "elapsedSeconds",
+    "recordAgentBoardScopeMiss",
     javascript
   )(
     loaded,
@@ -316,7 +317,8 @@ test("time reports limit plain members to their own entries (HTPR-4228)", async 
     async () => false,
     async () => true,
     "htpr-4228-admin-only-time-reports",
-    () => 0
+    () => 0,
+    () => {}
   );
 
   // Flag on: caller 6 is a plain member of board 15 and admin of board 16, so

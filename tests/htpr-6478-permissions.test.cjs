@@ -11,6 +11,7 @@ const context = jiti(path.join(root, 'src/lib/mcp/operationContext.ts'))
 const permissions = jiti(path.join(root, 'src/lib/mcp/managementPermissions.ts'))
 const denied = () => { throw new Error('Unexpected credential or database lookup') }
 function load(file, stubs) {
+  stubs = { "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope, ...stubs }
   const loadedModule = { exports: {} }
   const source = ts.transpileModule(fs.readFileSync(path.join(root, file), 'utf8'), { compilerOptions: { esModuleInterop: true, module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText
   new Function('module', 'exports', 'require', source)(loadedModule, loadedModule.exports, (name) => {

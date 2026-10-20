@@ -108,7 +108,8 @@ export async function createBoardFromManifest(
     sections: sectionTitles,
     section: {
       create: sectionCreates
-    }
+    },
+    ...(creation.agentId ? { members: { create: { userId, agentId: creation.agentId, status: 'Accepted' } } } : {})
   })
 
   const projectId = projectCore.id

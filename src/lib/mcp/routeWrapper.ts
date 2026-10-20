@@ -1,4 +1,4 @@
-import { withAgentScopeRequest } from "@/lib/auth/agentScope";
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { queueRestFailure } from '@/lib/aiFeedback/automatic'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { randomBytes } from 'node:crypto'
@@ -102,7 +102,9 @@ export function wrapMcpRoute<Args extends unknown[], Result>(
 ): (request: NextRequest, ...args: Args) => Promise<Result> {
   return (request, ...args) => withAgentScopeRequest(request, async () => {
     const started = performance.now()
-    if (getMcpOperationContext(request)) {
+    const operationContext = getMcpOperationContext(request)
+    if (operationContext) {
+      await prepareAgentScope(operationContext.auth.user.id, operationContext.auth.agentId)
       const result = await legacy(request, ...args)
       if (result instanceof Response) reportUnexplainedMcpServerError(request, result.status)
       return result
