@@ -30,6 +30,7 @@ const KIND_LABELS: Record<FeatureFlagKind, string> = {
   bugfix: "Bug",
   feature: "Feature",
   improvement: "Improvement",
+  internal: "Internal",
 };
 const OPTIONS: { mode: FeatureFlagMode; label: string }[] = [
   { mode: "OWNER_ONLY", label: "Only me" },
