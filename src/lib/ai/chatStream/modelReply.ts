@@ -1,6 +1,5 @@
-import { resolveAiFallbackCredential } from "@/app/api/ai/_lib/byokKeys";
 import { backgroundClaudeModelEnabled, haiku55ModelEnabled } from "@/app/api/ai/_lib/planGate";
-import { getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
+import { resolveAiFallbackCredential, getByokOrTeamGatewayApiKeyForModelOption } from "@/app/api/ai/_lib/byokKeys";
 import { isVercelAiGatewayKey } from "@/app/api/ai/_lib/modelProvider";
 import { getAiModelOptionById, isHaiku55Model, resolveHaikuModelId } from "@/lib/aiModelOptions";
 import { resolveTeamProviderEnabled } from "@/lib/aiProviders";

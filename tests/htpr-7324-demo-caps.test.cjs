@@ -115,10 +115,6 @@ function fakeRedis() {
     eval: async (script, count, ...all) => {
       const keys = all.slice(0, count);
       const args = all.slice(count);
-      if (script.includes('local previous =')) {
-        const high = Math.max(get(keys[0]), Number(args[0]));
-        values.set(keys[0], String(high)); return high;
-      }
       if (script.includes('local initialized =')) {
         if (values.has(keys[2])) return 0;
         const pending = Math.max(get(keys[0]) - Number(args[0]), 0);

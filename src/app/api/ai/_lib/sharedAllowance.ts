@@ -1046,10 +1046,9 @@ export async function reservePlanAllowance(args: {
     scopes.push({ reason: "demo", cap: usdToMicroUsd(DEMO_GLOBAL_AI_ALLOWANCE_USD), pairs: [pair(prefix)], writeIndex: 1, ttlSeconds: month.ttlSeconds });
   }
   const keys: string[] = [];
-  const keyIndex = (key: string) => keys.push(key);
   const encoded = scopes.map((scope) => ({ ...scope,
-    pairs: scope.pairs.map((value) => [keyIndex(value.committedKey), keyIndex(value.reservationsKey)]),
-    pending: scope.pendingKey ? keyIndex(scope.pendingKey) : undefined,
+    pairs: scope.pairs.map((value) => [keys.push(value.committedKey), keys.push(value.reservationsKey)]),
+    pending: scope.pendingKey ? keys.push(scope.pendingKey) : undefined,
   }));
   const amount = usdToMicroUsd(args.amountUsd);
   const originalScopes = scopes.map((scope) => ({ ...scope.pairs[scope.writeIndex - 1], ttlSeconds: scope.ttlSeconds }));
