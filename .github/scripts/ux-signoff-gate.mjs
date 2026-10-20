@@ -88,31 +88,6 @@ function flagReferences(files, keys) {
   return references;
 }
 
-function typeNarrowing(line, source) {
-  const remaining = tokens(source).map((token) => ({ token, generic: false, used: false }));
-  const angles = [];
-  for (let index = 0; index < remaining.length; index++) {
-    const { token } = remaining[index];
-    if (token === '<') angles.push(index);
-    if (token === '>' && angles.length) {
-      const start = angles.pop();
-      const name = remaining[start - 1]?.token;
-      const next = remaining[index + 1]?.token;
-      if (/^[A-Za-z_$][\w$]*$/.test(name ?? '') && !NOT_FLAG_NAMES.has(name) &&
-        (next == null || ['(', ')', '>', ',', ';', '=', '[', ']', '{', '}', '|', '&', '.', '?'].includes(next))) {
-        for (let inner = start + 1; inner < index; inner++) remaining[inner].generic = true;
-      }
-    }
-  }
-  for (const token of tokens(line)) {
-    const match = remaining.find((item) => !item.used && item.token === token);
-    if (!match) return false;
-    match.used = true;
-  }
-  const dropped = remaining.filter((item) => !item.used);
-  return dropped.length > 0 && dropped.every(({ token, generic }) => generic && (token === '|' || /^[A-Z][\w$]*$/.test(token)));
-}
-
 function removalOnly(ui, files, keys) {
   const references = flagReferences(files, keys);
   const mentionsFlag = (line) => line.some((token) => references.has(token));
@@ -179,7 +154,8 @@ function removalOnly(ui, files, keys) {
           } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
         }
       }
-      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), tracked, import: flagImport(text) });
+      const brackets = line.length > 0 && line.every((token) => /^[(){}[\];,:]$/.test(token));
+      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), deletable: off || (tracked && brackets), import: flagImport(text) });
       for (const token of line) {
         if (token === '(') depth++;
         if (token === ')') depth--;
@@ -187,23 +163,26 @@ function removalOnly(ui, files, keys) {
       if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
     }
     if (!classified && added.length) return false;
-    const candidates = removed.map((item) => added.flatMap((text, index) => {
-      if (item.off) return [];
-      const line = tokens(text);
-      const remaining = item.source.map((token, index) => ({ token, index }));
+    const sourcedBy = (item, line) => {
+      let at = 0;
       for (const token of line) {
-        let position = remaining.findIndex((value) => value.token === token);
-        if (position === -1 && (token === 'true' || token === 'false')) {
-          position = remaining.findIndex((value, at) => references.has(value.token) &&
-            (item.source[value.index - 1] === '!') === (token === 'false') &&
-            (token !== 'false' || remaining[at - 1]?.index === value.index - 1));
-          if (position !== -1 && token === 'false') remaining.splice(--position, 1);
+        while (at < item.source.length) {
+          const value = item.source[at];
+          const negated = item.source[at - 1] === '!';
+          if (value === token || (token === 'true' && references.has(value) && !negated)) break;
+          if (token === 'false' && value === '!' && references.has(item.source[at + 1])) {
+            at++;
+            break;
+          }
+          at++;
         }
-        if (position === -1) return [];
-        remaining.splice(position, 1);
+        if (at === item.source.length) return false;
+        at++;
       }
-      return !remaining.length || item.related || item.tracked || typeNarrowing(text, item.text) ? [index] : [];
-    }));
+      return item.related || line.length === item.source.length;
+    };
+    const candidates = removed.map((item) => item.off ? [] :
+      added.flatMap((text, index) => sourcedBy(item, tokens(text)) ? [index] : []));
     const owners = new Map();
     const match = (source, seen = new Set()) => {
       for (const target of candidates[source]) {
@@ -218,7 +197,7 @@ function removalOnly(ui, files, keys) {
     };
     for (let source = 0; source < removed.length; source++) {
       const item = removed[source];
-      if (!item.related && !item.import && !item.tracked && !match(source)) return false;
+      if (!item.related && !item.import && !item.deletable && !match(source)) return false;
     }
     for (let source = 0; source < removed.length; source++) {
       if (![...owners.values()].includes(source)) match(source);

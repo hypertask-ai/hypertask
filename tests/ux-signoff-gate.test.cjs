@@ -722,9 +722,11 @@ const removedDefinition = {
   filename: `src/lib/flags/definitions/${removedKey}.ts`, status: 'removed',
   patch: `-export const HTPR_6873_QUICK_ENTRY_GROW_FLAG = "${removedKey}";\n-  key: HTPR_6873_QUICK_ENTRY_GROW_FLAG,`,
 };
+const pr1696Patch = readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1696.patch'), 'utf8');
+const typeNarrowingHunk = /@@ -83,7 \+80,7 @@[\s\S]*?(?=@@ )/;
 const removalFile = {
   filename: 'src/components/Common/newTask.tsx', status: 'modified',
-  patch: readFileSync(path.join(__dirname, 'fixtures/ux-signoff/pr-1696.patch'), 'utf8'),
+  patch: pr1696Patch.replace(typeNarrowingHunk, ''),
 };
 const removalStatus = (overrides = {}) => ({
   context: 'premerge-evidence', state: 'success', creator: { login: 'hypertask-runners[bot]' },
@@ -742,7 +744,12 @@ async function removalVerdict({ files = [removedDefinition, removalFile], status
   return { ...results[0], calls: fixture.calls };
 }
 
-test('removed-everyone: trusted status permits the actual PR 1696 flag-removal patch', async () => {
+test('still blocked: the actual PR 1696 patch, because it narrows a type union', async () => {
+  assert.notEqual(removalFile.patch, pr1696Patch);
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch: pr1696Patch }] })).state, 'failure');
+});
+
+test('removed-everyone: trusted status permits PR 1696 without its type-narrowing hunk', async () => {
   assert.equal((await gate).PREMERGE_CREATOR, 'hypertask-runners[bot]');
   const result = await removalVerdict();
   assert.equal(result.state, 'success');
@@ -915,9 +922,9 @@ test('removed-everyone: unclassifiable flag use can be purely deleted', async ()
   assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
 });
 
-test('removed-everyone: type-only narrowing in a hunk without a flag reference', async () => {
+test('still blocked: type-only narrowing in a hunk without a flag reference', async () => {
   const patch = `@@ -1 +1 @@\n-const enabled = useFlag("${removedKey}");\n@@ -20 +19 @@\n-const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {`;
-  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure');
 });
 
 test('still blocked: narrowing without a flag reference drops a JSX prop, lowercase identifier, string, tag or punctuation', async () => {
@@ -971,7 +978,11 @@ for (const [name, change, state] of [
   ['removed-everyone: true replaces an un-negated flag', '-<Box open={enabled} />\n+<Box open={true} />', 'success'],
   ['removed-everyone: false replaces a negated flag', '-<Box closed={!enabled} />\n+<Box closed={false} />', 'success'],
   ['still blocked: bitwise narrowing outside generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const width = First | Second;\n+const width = First;', 'failure'],
-  ['removed-everyone: adversary narrows generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const f = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const f = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {', 'success'],
+  ['still blocked: adversary narrows generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const f = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const f = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {', 'failure'],
+  ['still blocked: comparison operands that look like generics', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const visible = First < Second | Third > (Fourth);\n+const visible = First < Second > (Fourth);', 'failure'],
+  ['still blocked: swapped prop values', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box left={first} right={second} />\n+<Box left={second} right={first} />', 'failure'],
+  ['still blocked: On-branch UI deleted inside a flag && block', '-return enabled && (\n+return (\n   <div>\n-    <Banner />\n   </div>\n-)\n+)', 'failure'],
+  ['removed-everyone: On && block unwrapped and kept', '-{enabled && (\n-  <New />\n-)}\n+<New />', 'success'],
   ['still blocked: single-line Off logical branch is kept', '-{!enabled && <Old />}\n+<Old />', 'failure'],
   ['removed-everyone: single-line On logical branch is kept', '-{enabled && <New />}\n+<New />', 'success'],
 ]) {
@@ -995,7 +1006,7 @@ for (const [name, change, state] of [
   ['still blocked: capitalized tokens outside generics cannot narrow', '-const width: Value<First | Second> = First | Second;\n+const width: Value<First> = First;', 'failure'],
   ['still blocked: angle comparisons are not generic arguments', '-const width = First < Second | Third > Fourth;\n+const width = First < Second > Fourth;', 'failure'],
   ['still blocked: unmatched generic bracket cannot narrow', '-const width: Value<First | Second;\n+const width: Value<First;', 'failure'],
-  ['removed-everyone: nested generic type arguments can narrow', '-const f = (e: Outer<Inner<First | Second>>) => {\n+const f = (e: Outer<Inner<First>>) => {', 'success'],
+  ['still blocked: nested generic type arguments cannot narrow', '-const f = (e: Outer<Inner<First | Second>>) => {\n+const f = (e: Outer<Inner<First>>) => {', 'failure'],
   ['removed-everyone: default flag helper imports can be deleted', '-import useFlag from "@/hooks/useFlag";', 'success'],
   ['removed-everyone: flag-only helper imports can be deleted', '-import { useFlag, isFeatureEnabled } from "@/flags";', 'success'],
   ['still blocked: mixed unrelated helper import cannot be deleted', '-import { useFlag, useMemo } from "@/flags";', 'failure'],
