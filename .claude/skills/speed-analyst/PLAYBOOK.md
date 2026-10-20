@@ -29,6 +29,7 @@ Source inventory, read 2026-10-10: `gh pr list --repo hypertask-ai/hypertask --s
 - https://app.hypertask.ai/detail/project-15/6047: [#384](https://github.com/hypertask-ai/hypertask/pull/384) found the readiness rAF path dropped across tab freeze/resume; about half hard-load desktop rows had timeouts. Prior p75 excluded those rows and understated the tail. Count timeout/error rates alongside completed samples; a faster failure is not a gain.
 - Shared `speed-check/measure.md` records immediate post-deploy 3x3 runs falsely reporting regressions on three of five changes. Wait at least ten minutes, retain five cold/five warm samples, use matched conditions and alternate where safe. High load, browser-version changes and different fixture/data invalidate causal conclusions.
 - https://app.hypertask.ai/detail/project-4060/513: HTPR-7367 made the cold ticket visible before its code loaded, so the harness left mid-download and ticket-warm jumped from about 3 s to 11 s with no app regression. A win on one path can silently redefine the next path's cohort; check cache hits in the waterfall.
+- https://app.hypertask.ai/detail/project-4060/519: the board path dropped the saved board preference cookie, so it only measured a first visit (phone 11.9 s); returning phone users get the server board in 1.9 s. Desktop never saves the preference while AI chat opens by default.
 - https://app.hypertask.ai/detail/project-15/7395: warming ticket code after the phone board paints cut bytes after the tap from 936 to 250 KB but not the 10 s wait: the tap is CPU-bound (1.2 s idle of 10.8 s). A request list without query strings made the previous/current/next prefetches look like a triple fetch.
 
 ## Dated entries
@@ -155,6 +156,30 @@ https://app.hypertask.ai/detail/project-15/7395, PR 1670 (shipped Owner + QA), r
 
 **Next probe.** Local production build with source maps, same phone profile, profile the tap to name the components behind the 5.4 s React time and the board work still running at tap time; then test deferring the pointerdown ancillary warm (Firebase, emoji) until the ticket paints.
 
+### 2026-10-20: the board path only ever measured a first visit; desktop never gets the server board (YPER4-519)
+
+https://app.hypertask.ai/detail/project-4060/519.
+
+**Daily read.** Complete at 06:16 UTC on bb8f47aa1, load 6.0, N=5. Phone board 11945 ms (p90 13223, 11768 to 13223), desktop board 2166 ms. Flags over 15%: phone Ctrl+J +43%, phone My Tasks +39%, phone search +24%, plus long-task totals on six cohorts. The 04:41 run (load 12.4, older deploy) agreed on Ctrl+J (+41%) and search (+36%), not on My Tasks (+0.1%).
+
+**What found the real problem.** The phone board waterfall: the board data arrived at 2.3 s, the last route chunk at 5.5 s, the card at 11.6 s, and `/project` HTML was 8.8 KB with no board in it, although `htpr-6934-server-first-screen` is on for QA 2343. `getServerBoardDocument` returns nothing without the `ht_board_display_v1` preference cookie, and the shared `qaState()` keeps only login cookies. Every board sample since the harness began was a first visit on a new device.
+
+**Experiment.** Phone, live, load 7 to 9, preference primed in an untimed visit then added to a fresh context. Five interleaved pairs: without 11861, 12823, 12332, 12161, 11656 ms; with 1931, 1952, 1883, 1956, then one fallback at 12874 ms (no server board, page fetched it). Then 20 with: median 1926 ms, 1747 to 2223, 20 of 20 served by the server. Fallback 1 of 25: leave it to the new `serverBoard` field to build a rate before filing.
+
+**Desktop never saves the preference.** `BoardDisplayMirror` deletes it on desktop while AI chat opens by default (`openAiChatByDefaultAtom` defaults to true; QA 2343 has it on). So by default no desktop user gets the server board: desktop board 2.1 s against the 1 s milestone 1 target. Filed as its own [SPEED] ticket.
+
+**Ctrl+J is a cohort change, not a code regression.** Phone Cmd+J now opens the Compose writer in the Commands sheet (screenshot private): between 2026-10-19 12:20 and 2026-10-20 00:40 UTC the requests changed from `mcp/token`, `createGlobally`, labels and members to `tasks/single`, two `getAllMinimal` reads and a blocked `invite/generatePublicInvite`. 1.8 s is under milestone 1. Ctrl+J is now path version 2.
+
+**Cold board limiter (trace, phone, load 6).** `react-dom` chunk 93794 4.8 s of script time, Next runtime 4bd1b696 1.4 s, layout 0.5 s, route page 0.3 s. Same shape as the HTPR-7395 tap: React render, not bytes.
+
+**Changed.** New `board-returning` path (both profiles), `serverBoard` on every board sample, `boardPreference` on board-returning, Ctrl+J path version 2. The `board` path is unchanged.
+
+**False leads.** Treating HTPR-6934 as "verdict pending, needs a same-account A/B": the flag works; the harness never sent the cookie. A probe that pressed Cmd+J 4 s after the board card (5989 ms) was mid-hydration; not a Ctrl+J number.
+
+**Lesson.** Before trusting any cohort, list the cookies and storage the server reads for that route and check the harness keeps them. A whitelist built for login safety can silently drop a speed path's input.
+
+**Next probe.** Desktop server board with AI chat on by default (the [SPEED] ticket); phone search +24 to 36% waterfall; watch the `serverBoard` fallback rate on phone board-returning.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -166,7 +191,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/5756 | Task create, #23 | legacy p50 1,155ms → single v2 336ms | unproven | protocol/N mismatch, no subtraction |
 | https://app.hypertask.ai/detail/project-15/5881 | Mobile inbox p75, #150 | 645ms → 824ms | -179ms reported | regression signal, reverted; not a win |
 | https://app.hypertask.ai/detail/project-15/6059 | Initial route bytes, #404 | 514,627 decoded bytes removed | unproven | proven byte reduction, time unavailable |
-| https://app.hypertask.ai/detail/project-15/6934 | Phone board cold, flag A/B, QA 985 vs 2343, N=5 | 8120ms (OFF) → 1745ms (ON) | unproven | different accounts, verdict pending; not a saving yet |
+| https://app.hypertask.ai/detail/project-15/6934 | Phone board cold, flag A/B, QA 985 vs 2343, N=5 | 8120ms (OFF) → 1745ms (ON) | unproven | different accounts, verdict pending; 2026-10-20 same account, live, phone: with the saved preference 1926 ms (N=20) vs without 11945 ms (N=5); the flag works for returning phone users; desktop excluded while AI chat opens by default (YPER4-519) |
 | https://app.hypertask.ai/detail/project-15/7071 | Board tasks TTFB p50, local ABAB | 216ms → 212ms | 4ms, within noise | not slower; no saving claimed |
 | https://app.hypertask.ai/detail/project-15/7074 | Ticket-page CLS (unitless, worst of 5) | phone 0.049 → 0.032, long phone 0.111 → 0.000 | n/a (layout shift, not ms) | shipped PRs 1277, 1299, 1304 |
 | https://app.hypertask.ai/detail/project-15/7091 | Cold phone ticket description, PR 1327, local ABAB N=5 | plain 12.7 s → 10.3 s, lists 12.3 s → 10.5 s | about 2,400 ms local plain, about 1,800 ms lists | flag `htpr-7091-static-description-first`; lazy `node-html-parser` probe (about 200 ms) not shipped |

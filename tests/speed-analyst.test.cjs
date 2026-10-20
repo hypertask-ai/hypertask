@@ -29,10 +29,10 @@ test('statistics retain all samples, even slow ones, with arithmetic median and 
   for (const invalid of [[], [NaN], [-1], [Infinity]]) assert.throws(() => stats(invalid));
 });
 
-test('summary keeps all seven surfaces and both profile cohorts separate', async () => {
+test('summary keeps all eight surfaces and both profile cohorts separate', async () => {
   const { summarize } = await analyst;
   const run = await fixture();
-  assert.equal(Object.keys(run.groups).length, 14);
+  assert.equal(Object.keys(run.groups).length, 16);
   const extra = { ...run.samples[0], contentMs: 1000 };
   const groups = summarize([...run.samples, extra]);
   assert.equal(groups['desktop:board'].contentMs.median, 550);
@@ -200,12 +200,12 @@ test('a host network change remeasures that phase once from scratch; a second ch
     const calls = [];
     await measurePhases(async phase => {
       calls.push(phase);
-      if (phase === 'board') return run.samples.push({ path: 'board' });
-      run.samples.push({ path: 'ticket-cold' }, { path: 'my-tasks', blip: calls.length === 2 });
-      if (calls.length === 2) { run.failure = { surface: 'my-tasks' }; throw new HostNetworkChanged(); }
+      if (phase.startsWith('board')) return run.samples.push({ path: phase });
+      run.samples.push({ path: 'ticket-cold' }, { path: 'my-tasks', blip: calls.length === 3 });
+      if (calls.length === 3) { run.failure = { surface: 'my-tasks' }; throw new HostNetworkChanged(); }
     }, run, 'phone', 1);
-    assert.deepEqual(calls, ['board', 'other', 'other']);
-    assert.deepEqual(run.samples.map(sample => sample.path), ['board', 'ticket-cold', 'my-tasks']);
+    assert.deepEqual(calls, ['board', 'board-returning', 'other', 'other']);
+    assert.deepEqual(run.samples.map(sample => sample.path), ['board', 'board-returning', 'ticket-cold', 'my-tasks']);
     assert.equal(run.samples.some(sample => sample.blip), false);
     assert.equal(run.failure, undefined);
     assert.deepEqual(run.networkRetries, [{ profile: 'phone', phase: 'other', index: 1 }]);
@@ -398,4 +398,34 @@ test('phone page navigation scrolls a below-the-fold card of the landed board in
 test('page navigation reads the landed board only once the board id is in the address', () => {
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
   assert.match(source, /waitForURL\(url => url\.pathname === '\/project' && url\.searchParams\.has\('id'\), \{ waitUntil: 'commit' \}\);\n\s+landed = safeSearch/);
+});
+
+test('a board sample says whether the server sent the board or the page fetched it before showing it', async () => {
+  const { servedBoardFromServer } = await analyst;
+  const fetched = { method: 'POST', path: '/api/projects/boardTasks', startMs: 1827 };
+  assert.equal(servedBoardFromServer([fetched], 11646), false, '2026-10-20 first visit: the page fetched the board at 1.8 s');
+  assert.equal(servedBoardFromServer([{ ...fetched, startMs: 12000 }], 1931), true, 'a refresh after the board showed does not count');
+  assert.equal(servedBoardFromServer([{ method: 'GET', path: '/api/flags', startMs: 300 }], 1931), true);
+});
+
+test('the returning-user board waits for the saved board preference and measures without one when the app declines to save it', async () => {
+  const { savedBoardPreference, BOARD_PREFERENCE_COOKIE } = await analyst;
+  let reads = 0;
+  const preference = { name: BOARD_PREFERENCE_COOKIE, value: '%7B%22version%22%3A1%7D' };
+  const context = { cookies: async () => (++reads < 3 ? [{ name: 'ht_session', value: 'x' }] : [preference]) };
+  const page = { waitForTimeout: async () => {} };
+  assert.equal(await savedBoardPreference(context, page, 1, 10), preference);
+  assert.equal(reads, 3);
+  assert.equal(await savedBoardPreference({ cookies: async () => [{ name: BOARD_PREFERENCE_COOKIE, value: '' }] }, page, 1, 3), null, '2026-10-20 desktop QA 2343: AI chat opens by default, the app deletes the preference');
+});
+
+test('board-returning is a new cohort and Ctrl+J since the Compose writer only compares with its own version', async () => {
+  const { compare, PATH_VERSIONS, PATHS } = await analyst;
+  assert.ok(PATHS.includes('board') && PATHS.includes('board-returning'), 'the first-visit board path stays');
+  const current = { ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } };
+  const before = { ...await fixture(), started: '2026-10-09T12:00:00Z', samples: [], groups: Object.fromEntries(Object.entries((await fixture()).groups).filter(([cohort]) => !cohort.endsWith(':board-returning'))) };
+  const baselineFor = cohort => compare(current, [before]).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
+  assert.equal(baselineFor('phone:board'), 100);
+  assert.equal(baselineFor('phone:board-returning'), null);
+  assert.equal(baselineFor('phone:ctrl-j'), null);
 });
