@@ -68,6 +68,8 @@ function tokens(line) {
 
 const NOT_FLAG_NAMES = new Set(['const', 'let', 'var', 'import', 'from', 'export', 'default', 'useFlag', 'isFeatureEnabled', 'await', 'return', 'true', 'false', 'null', 'undefined']);
 
+const FLAG_SYNTAX = new Set(['!', '&', '|', '?', ':', ',', '{', '}']);
+
 function patchLines(patch, sign) {
   return (patch ?? '').split('\n').filter((line) => line.startsWith(sign) && !line.startsWith(sign.repeat(3)))
     .map((line) => new Set(tokens(line.slice(1))));
@@ -150,20 +152,24 @@ function removalOnly(ui, files, keys) {
           const guard = /^\s*if\s*\(\s*(!?)\s*([A-Za-z_$][\w$]*)\s*(\|\|[^()]*)?\)\s*return\b(.*)$/.exec(text);
           if (guard && references.has(guard[2]) && (!guard[3] || guard[1])) {
             if (guard[1] && !guard[3]) off = true;
+            if (!guard[1] && !guard[3]) source = tokens(`return${guard[4]}`);
             if (guard[3] && tokens(guard[4]).some((token) => token !== ';')) classified = false;
           } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
         }
       }
       const brackets = line.length > 0 && line.every((token) => /^[(){}[\];,:]$/.test(token));
-      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), deletable: off || (tracked && brackets), import: flagImport(text) });
       for (const token of line) {
         if (token === '(') depth++;
         if (token === ')') depth--;
       }
+      const open = regions.length;
       if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
+      if (brackets && regions.length < open) off = regions.some((item) => item.off);
+      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), deletable: off || (tracked && brackets), import: flagImport(text) });
     }
     if (!classified && added.length) return false;
     const sourcedBy = (item, line) => {
+      const dropped = [];
       let at = 0;
       for (const token of line) {
         while (at < item.source.length) {
@@ -174,12 +180,14 @@ function removalOnly(ui, files, keys) {
             at++;
             break;
           }
+          dropped.push(value);
           at++;
         }
         if (at === item.source.length) return false;
         at++;
       }
-      return item.related || line.length === item.source.length;
+      dropped.push(...item.source.slice(at));
+      return !dropped.length || (item.related && dropped.every((token) => references.has(token) || FLAG_SYNTAX.has(token)));
     };
     const candidates = removed.map((item) => item.off ? [] :
       added.flatMap((text, index) => sourcedBy(item, tokens(text)) ? [index] : []));

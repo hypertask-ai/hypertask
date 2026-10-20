@@ -807,10 +807,15 @@ test('still blocked: removed-everyone adding UI, classes, text or unrelated logi
   }
 });
 
-test('removed-everyone: a file dropping a prop read from the flag, or the flag replaced by true, is allowed', async () => {
-  const source = { ...modified, filename: 'src/components/x/Board.tsx', patch: `-const growEnabled = useFlag("${removedKey}");\n-<Foo growEnabled={growEnabled} />\n+<Foo />` };
+test('removed-everyone: a name read from the flag replaced by true in another file is allowed', async () => {
+  const source = { ...modified, filename: 'src/components/x/Board.tsx', patch: `-const growEnabled = useFlag("${removedKey}");\n-<Foo growEnabled={growEnabled} />\n+<Foo growEnabled={true} />` };
   const child = { ...modified, patch: '-const rows = growEnabled ? 8 : 1;\n+const rows = 8;\n-<Box open={growEnabled} />\n+<Box open={true} />' };
   assert.equal((await removalVerdict({ files: [removedDefinition, source, child] })).state, 'success');
+});
+
+test('still blocked: dropping a prop that carried the flag value', async () => {
+  const source = { ...modified, filename: 'src/components/x/Board.tsx', patch: `-const growEnabled = useFlag("${removedKey}");\n-<Foo growEnabled={growEnabled} />\n+<Foo />` };
+  assert.equal((await removalVerdict({ files: [removedDefinition, source] })).state, 'failure');
 });
 
 test('still blocked: removed-everyone with true replacing an unrelated value or names read only in tests', async () => {
@@ -988,6 +993,8 @@ for (const [name, change, state] of [
   ['still blocked: swapped prop values', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box left={first} right={second} />\n+<Box left={second} right={first} />', 'failure'],
   ['still blocked: On-branch UI deleted inside a flag && block', '-return enabled && (\n+return (\n   <div>\n-    <Banner />\n   </div>\n-)\n+)', 'failure'],
   ['removed-everyone: On && block unwrapped and kept', '-{enabled && (\n-  <New />\n-)}\n+<New />', 'success'],
+  ['still blocked: a flag line that drops an unrelated handler', '-<button disabled={!enabled} onClick={save}>Save</button>\n+<button disabled={false}>Save</button>', 'failure'],
+  ['removed-everyone: a flag line that keeps its handler', '-<button disabled={!enabled} onClick={save}>Save</button>\n+<button disabled={false} onClick={save}>Save</button>', 'success'],
   ['still blocked: flag-related live UI deleted without replacement', '-<button disabled={!enabled}>Delete</button>', 'failure'],
   ['removed-everyone: flag-related live UI kept with false for !REF', '-<button disabled={!enabled}>Delete</button>\n+<button disabled={false}>Delete</button>', 'success'],
   ['still blocked: a mixed import does not make another flag a reference', '-import { HTPR_6873_QUICK_ENTRY_GROW_FLAG, OTHER_FLAG } from "@/lib/flags/keys";\n+import { OTHER_FLAG } from "@/lib/flags/keys";\n-const other = useFlag(OTHER_FLAG);\n+const other = true;', 'failure'],
@@ -1005,7 +1012,8 @@ for (const [name, change, state] of [
   ['still blocked: every removed line needs its own accounting', '-<Box open />\n-<Box open />\n+<Box open />', 'failure'],
   ['removed-everyone: identical re-indented lines match one-to-one', '-  <Box open />\n-  <Box open />\n+<Box open />\n+<Box open />', 'success'],
   ['removed-everyone: required sources take priority over optional flag sources', '-<Box open={enabled} />\n-<Box />\n+<Box />\n+<Box open={true} />', 'success'],
-  ['removed-everyone: source matching can reassign overlapping candidates', '-<Box open={enabled} />\n-<Box closed={enabled} />\n+<Box />\n+<Box open={true} />', 'success'],
+  ['removed-everyone: source matching can reassign overlapping candidates', '-<Box open={enabled} />\n-<Box open={enabled} wide />\n+<Box open={true} wide />\n+<Box open={true} />', 'success'],
+  ['still blocked: dropping a flag-valued prop', '-<Box open={enabled} />\n+<Box />', 'failure'],
   ['still blocked: consuming negation cannot turn a negated reference into true', '-<Box closed={!enabled} />\n+<Box closed={!true} />', 'failure'],
   ['still blocked: an Off logical opener cannot source an added wrapper', '-return !enabled && (\n+return (\n   <Old />\n );', 'failure'],
   ['still blocked: true replaces a negated flag', '-<Box closed={!enabled} />\n+<Box closed={true} />', 'failure'],
