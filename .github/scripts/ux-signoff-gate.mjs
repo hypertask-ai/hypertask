@@ -89,94 +89,141 @@ function flagReferences(files, keys) {
 }
 
 function typeNarrowing(line, source) {
-  const remaining = tokens(source);
-  for (const token of tokens(line)) {
-    const index = remaining.indexOf(token);
-    if (index === -1) return false;
-    remaining.splice(index, 1);
+  const remaining = tokens(source).map((token) => ({ token, generic: false, used: false }));
+  const angles = [];
+  for (let index = 0; index < remaining.length; index++) {
+    const { token } = remaining[index];
+    if (token === '<') angles.push(index);
+    if (token === '>' && angles.length) {
+      const start = angles.pop();
+      const name = remaining[start - 1]?.token;
+      const next = remaining[index + 1]?.token;
+      if (/^[A-Za-z_$][\w$]*$/.test(name ?? '') && !NOT_FLAG_NAMES.has(name) &&
+        (next == null || ['(', ')', '>', ',', ';', '=', '[', ']', '{', '}', '|', '&', '.', '?'].includes(next))) {
+        for (let inner = start + 1; inner < index; inner++) remaining[inner].generic = true;
+      }
+    }
   }
-  return remaining.length > 0 && remaining.every((token) => token === '|' || /^[A-Z][\w$]*$/.test(token));
+  for (const token of tokens(line)) {
+    const match = remaining.find((item) => !item.used && item.token === token);
+    if (!match) return false;
+    match.used = true;
+  }
+  const dropped = remaining.filter((item) => !item.used);
+  return dropped.length > 0 && dropped.every(({ token, generic }) => generic && (token === '|' || /^[A-Z][\w$]*$/.test(token)));
 }
 
 function removalOnly(ui, files, keys) {
   const references = flagReferences(files, keys);
-  const mentionsFlag = (line) => [...line].some((token) => references.has(token));
+  const mentionsFlag = (line) => line.some((token) => references.has(token));
+  const flagImport = (text) => {
+    const match = /^\s*import\s+(?:\{([^{}]+)\}|([A-Za-z_$][\w$]*))\s+from\s+["'][^"']+["'];?\s*$/.exec(text);
+    const names = (match?.[1] ?? match?.[2])?.split(',').map((name) => name.trim()).filter(Boolean);
+    return names?.length && names.every((name) => ['useFlag', 'isFeatureEnabled'].includes(name) || references.has(name));
+  };
   return ui.every(({ status, patch }) => {
     if (status !== 'modified' || typeof patch !== 'string') return false;
-    if (!patchLines(patch, '-').some(mentionsFlag)) return false;
+    if (!patchLines(patch, '-').some((line) => mentionsFlag([...line]))) return false;
     // Only old-side lines advance branch state; keep it across hunks of this file.
     const regions = [];
+    const removed = [];
+    const added = [];
     let depth = 0;
-    return patch.split(/^@@[^\n]*(?:\n|$)/m).every((hunk) => {
-      const removed = [];
-      const added = [];
-      const offTokens = new Set();
-      let related = false;
-      let tracked = true;
-      let classified = true;
-      for (const raw of hunk.split('\n')) {
-        if (!/^[ +\-]/.test(raw) || /^(?:---|\+\+\+)/.test(raw)) continue;
-        const sign = raw[0];
-        const text = raw.slice(1);
-        const line = tokens(text);
-        if (sign !== ' ') tracked &&= regions.length > 0;
-        if (sign === '+') {
-          added.push(text);
-          continue;
-        }
-        let off = regions.some((region) => region.off);
-        const region = regions.at(-1);
-        if (region?.ternary && /^\s*\)\s*:\s*\(/.test(text) && depth === region.depth + 1) {
-          if (region.other) classified = false;
-          region.other = true;
-          region.off = !region.negated;
-          off = regions.some((item) => item.off);
-        }
-        if (sign === '-' && mentionsFlag(line)) related = true;
-        if (mentionsFlag(line)) {
-          const flag = line.findIndex((token) => references.has(token));
-          const start = flag > 0 && line[flag - 1] === '!' ? flag - 1 : flag;
-          const negated = start !== flag;
-          const prefix = line.slice(0, start);
-          const tail = line.slice(flag + 1);
-          const simplePrefix = /^(?:return|(?:const|let|var) [\w$]+ =|\{)?$/.test(prefix.join(' '));
-          if (simplePrefix && (tail[0] === '?' || (tail[0] === '&' && tail[1] === '&'))) {
-            const offset = tail[0] === '?' ? 1 : 2;
-            if (tail[offset] === '(' && tail.length === offset + 1) {
-              regions.push({ depth, off: negated, negated, ternary: tail[0] === '?' });
-            } else if (tail[0] === '?' && tail.filter((token) => token === '?').length === 1 && tail.filter((token) => token === ':').length === 1) {
-              const colon = tail.indexOf(':');
-              const first = tail.slice(1, colon);
-              const second = tail.slice(colon + 1);
-              if (second.at(-1) === ';') second.pop();
-              const on = new Set([...prefix, ...(negated ? second : first)]);
-              for (const token of negated ? first : second) if (!on.has(token)) offTokens.add(token);
-            } else classified = false;
-          } else {
-            const guard = /^\s*if\s*\(\s*(!?)\s*([A-Za-z_$][\w$]*)\s*(\|\|[^()]*)?\)\s*return\b(.*)$/.exec(text);
-            if (guard && references.has(guard[2]) && (!guard[3] || guard[1])) {
-              if (guard[1] && !guard[3]) off = true;
-              if (guard[3] && tokens(guard[4]).some((token) => token !== ';')) classified = false;
-            } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
-          }
-        }
-        if (sign === '-') removed.push({ text, line: new Set(line), off });
-        for (const token of line) {
-          if (token === '(') depth++;
-          if (token === ')') depth--;
-        }
-        if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
+    let classified = true;
+    for (const raw of patch.split('\n')) {
+      if (!/^[ +\-]/.test(raw) || /^(?:---|\+\+\+)/.test(raw)) continue;
+      const sign = raw[0];
+      const text = raw.slice(1);
+      const line = tokens(text);
+      if (sign === '+') {
+        added.push(text);
+        continue;
       }
-      if (!removed.length && !added.length) return true;
-      const sources = removed.filter((source) => !source.off);
-      if (!related && !tracked && !(added.length && added.every((line) => sources.some((source) => typeNarrowing(line, source.text))))) return false;
-      if (!classified && added.length) return false;
-      return added.every((text) => {
-        const line = tokens(text);
-        return !line.some((token) => offTokens.has(token)) && sources.some((source) =>
-          line.every((token) => source.line.has(token) || ((token === 'true' || token === 'false') && mentionsFlag(source.line))));
-      });
-    });
+      const tracked = regions.length > 0;
+      let off = regions.some((region) => region.off);
+      let source = line;
+      const region = regions.at(-1);
+      if (region?.ternary && /^\s*\)\s*:\s*\(/.test(text) && depth === region.depth + 1) {
+        if (region.other) classified = false;
+        region.other = true;
+        region.off = !region.negated;
+        off = regions.some((item) => item.off);
+      }
+      if (mentionsFlag(line)) {
+        const flag = line.findIndex((token) => references.has(token));
+        const start = flag > 0 && line[flag - 1] === '!' ? flag - 1 : flag;
+        const negated = start !== flag;
+        const prefix = line.slice(0, start);
+        const tail = line.slice(flag + 1);
+        const simplePrefix = /^(?:return|(?:const|let|var) [\w$]+ =|\{)?$/.test(prefix.join(' '));
+        if (simplePrefix && (tail[0] === '?' || (tail[0] === '&' && tail[1] === '&'))) {
+          const offset = tail[0] === '?' ? 1 : 2;
+          if (tail[offset] === '(' && tail.length === offset + 1) {
+            if (tail[0] === '&') off ||= negated;
+            regions.push({ depth, off: negated, negated, ternary: tail[0] === '?' });
+          } else if (tail[0] === '?' && tail.filter((token) => token === '?').length === 1 && tail.filter((token) => token === ':').length === 1) {
+            const colon = tail.indexOf(':');
+            const first = tail.slice(1, colon);
+            const second = tail.slice(colon + 1);
+            if (second.at(-1) === ';') second.pop();
+            source = [...prefix, ...(negated ? second : first), ...(line.at(-1) === ';' ? [';'] : [])];
+          } else if (tail[0] === '&' && !tail.slice(offset).some((token) => ['?', '&', '|'].includes(token))) {
+            off ||= negated;
+            source = [...prefix, ...tail.slice(offset)];
+          } else classified = false;
+        } else {
+          const guard = /^\s*if\s*\(\s*(!?)\s*([A-Za-z_$][\w$]*)\s*(\|\|[^()]*)?\)\s*return\b(.*)$/.exec(text);
+          if (guard && references.has(guard[2]) && (!guard[3] || guard[1])) {
+            if (guard[1] && !guard[3]) off = true;
+            if (guard[3] && tokens(guard[4]).some((token) => token !== ';')) classified = false;
+          } else if (line.some((token, index) => ['?', '&', '|', 'if'].includes(token) || (token === '=' && line[index + 1] === '>'))) classified = false;
+        }
+      }
+      if (sign === '-') removed.push({ text, source, off, related: mentionsFlag(line), tracked, import: flagImport(text) });
+      for (const token of line) {
+        if (token === '(') depth++;
+        if (token === ')') depth--;
+      }
+      if (/^\s*\)/.test(text)) while (regions.length && depth <= regions.at(-1).depth) regions.pop();
+    }
+    if (!classified && added.length) return false;
+    const candidates = removed.map((item) => added.flatMap((text, index) => {
+      if (item.off) return [];
+      const line = tokens(text);
+      const remaining = item.source.map((token, index) => ({ token, index }));
+      for (const token of line) {
+        let position = remaining.findIndex((value) => value.token === token);
+        if (position === -1 && (token === 'true' || token === 'false')) {
+          position = remaining.findIndex((value, at) => references.has(value.token) &&
+            (item.source[value.index - 1] === '!') === (token === 'false') &&
+            (token !== 'false' || remaining[at - 1]?.index === value.index - 1));
+          if (position !== -1 && token === 'false') remaining.splice(--position, 1);
+        }
+        if (position === -1) return [];
+        remaining.splice(position, 1);
+      }
+      return !remaining.length || item.related || item.tracked || typeNarrowing(text, item.text) ? [index] : [];
+    }));
+    const owners = new Map();
+    const match = (source, seen = new Set()) => {
+      for (const target of candidates[source]) {
+        if (seen.has(target)) continue;
+        seen.add(target);
+        if (!owners.has(target) || match(owners.get(target), seen)) {
+          owners.set(target, source);
+          return true;
+        }
+      }
+      return false;
+    };
+    for (let source = 0; source < removed.length; source++) {
+      const item = removed[source];
+      if (!item.related && !item.import && !item.tracked && !match(source)) return false;
+    }
+    for (let source = 0; source < removed.length; source++) {
+      if (![...owners.values()].includes(source)) match(source);
+    }
+    return owners.size === added.length;
   });
 }
 

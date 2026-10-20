@@ -817,7 +817,7 @@ test('still blocked: removed-everyone with true replacing an unrelated value or 
 
 test('removed-everyone: deletion-only and re-indented existing lines are allowed', async () => {
   for (const patch of [
-    `-const enabled = useFlag("${removedKey}");\n-<input />`,
+    `-const enabled = useFlag("${removedKey}");\n-{!enabled && (\n-  <input />\n-)}`,
     `-const enabled = useFlag("${removedKey}");\n-    <textarea className="old" />\n+  <textarea className="old" />`,
   ]) {
     assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
@@ -956,3 +956,54 @@ test('still blocked: later-hunk changes outside a closed region or in another fi
   const open = { ...removalFile, patch: `-const enabled = useFlag("${removedKey}");\n-return enabled ? (\n+return (` };
   assert.equal((await removalVerdict({ files: [removedDefinition, open, { ...modified, patch: '-<Unrelated />' }] })).state, 'failure');
 });
+
+for (const [name, change, state] of [
+  ['still blocked: reviewer keeps the Off ternary branch', '-return enabled ? <New /> : <Old />\n+return <Old />', 'failure'],
+  ['removed-everyone: adversary keeps the On ternary branch', '-return enabled ? <New /> : <Old />\n+return <New />', 'success'],
+  ['still blocked: adversary keeps the negated Off ternary branch', '-return !enabled ? <Old /> : <New />\n+return <Old />', 'failure'],
+  ['removed-everyone: adversary keeps the negated On ternary branch', '-return !enabled ? <Old /> : <New />\n+return <New />', 'success'],
+  ['still blocked: unrelated deletions in a second hunk', '-x = enabled;\n@@ -40,3 +38,1 @@\n-<Banner />\n-<Footer />', 'failure'],
+  ['still blocked: unrelated JSX prop deletion in another hunk', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box open wide />\n+<Box open />', 'failure'],
+  ['still blocked: adversary introduces a new tag', '-return enabled ? <New /> : <Old />\n+return <Brand />', 'failure'],
+  ['still blocked: Off logical block is kept', '-{!enabled && (\n-  <Old />\n-)}\n+<Old />', 'failure'],
+  ['still blocked: unrelated deletion shares the flag hunk', '-x = enabled;\n-<Banner />', 'failure'],
+  ['still blocked: false replaces an un-negated flag', '-<Box open={enabled} />\n+<Box open={false} />', 'failure'],
+  ['removed-everyone: true replaces an un-negated flag', '-<Box open={enabled} />\n+<Box open={true} />', 'success'],
+  ['removed-everyone: false replaces a negated flag', '-<Box closed={!enabled} />\n+<Box closed={false} />', 'success'],
+  ['still blocked: bitwise narrowing outside generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const width = First | Second;\n+const width = First;', 'failure'],
+  ['removed-everyone: adversary narrows generic arguments', '-x = enabled;\n@@ -40,1 +38,1 @@\n-const f = (e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) => {\n+const f = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {', 'success'],
+  ['still blocked: single-line Off logical branch is kept', '-{!enabled && <Old />}\n+<Old />', 'failure'],
+  ['removed-everyone: single-line On logical branch is kept', '-{enabled && <New />}\n+<New />', 'success'],
+]) {
+  test(name, async () => {
+    const patch = `@@ -1,3 +1,1 @@\n-const enabled = useFlag("${removedKey}");\n${change}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...modified, patch }] })).state, state);
+  });
+}
+
+for (const [name, change, state] of [
+  ['still blocked: one removed line cannot source two added lines', '-<Box open={enabled} />\n+<Box open={true} />\n+<Box open={true} />', 'failure'],
+  ['still blocked: every removed line needs its own accounting', '-<Box open />\n-<Box open />\n+<Box open />', 'failure'],
+  ['removed-everyone: identical re-indented lines match one-to-one', '-  <Box open />\n-  <Box open />\n+<Box open />\n+<Box open />', 'success'],
+  ['removed-everyone: required sources take priority over optional flag sources', '-<Box open={enabled} />\n-<Box />\n+<Box />\n+<Box open={true} />', 'success'],
+  ['removed-everyone: source matching can reassign overlapping candidates', '-<Box open={enabled} />\n-<Box closed={enabled} />\n+<Box />\n+<Box open={true} />', 'success'],
+  ['still blocked: consuming negation cannot turn a negated reference into true', '-<Box closed={!enabled} />\n+<Box closed={!true} />', 'failure'],
+  ['still blocked: an Off logical opener cannot source an added wrapper', '-return !enabled && (\n+return (\n   <Old />\n );', 'failure'],
+  ['still blocked: true replaces a negated flag', '-<Box closed={!enabled} />\n+<Box closed={true} />', 'failure'],
+  ['still blocked: flag booleans cannot be reused within a line', '-<Box open={enabled} />\n+<Box open={true} other={true} />', 'failure'],
+  ['still blocked: JSX capitalized props are not generic type arguments', '-<Box Wide />\n+<Box />', 'failure'],
+  ['still blocked: capitalized tokens outside generics cannot narrow', '-const width: Value<First | Second> = First | Second;\n+const width: Value<First> = First;', 'failure'],
+  ['still blocked: angle comparisons are not generic arguments', '-const width = First < Second | Third > Fourth;\n+const width = First < Second > Fourth;', 'failure'],
+  ['still blocked: unmatched generic bracket cannot narrow', '-const width: Value<First | Second;\n+const width: Value<First;', 'failure'],
+  ['removed-everyone: nested generic type arguments can narrow', '-const f = (e: Outer<Inner<First | Second>>) => {\n+const f = (e: Outer<Inner<First>>) => {', 'success'],
+  ['removed-everyone: default flag helper imports can be deleted', '-import useFlag from "@/hooks/useFlag";', 'success'],
+  ['removed-everyone: flag-only helper imports can be deleted', '-import { useFlag, isFeatureEnabled } from "@/flags";', 'success'],
+  ['still blocked: mixed unrelated helper import cannot be deleted', '-import { useFlag, useMemo } from "@/flags";', 'failure'],
+  ['still blocked: bare helper imports cannot be deleted', '-import "@/hooks/useFlag";', 'failure'],
+  ['still blocked: original deletion-only fixture removes unrelated UI', '-<input />', 'failure'],
+]) {
+  test(name, async () => {
+    const patch = `-const enabled = useFlag("${removedKey}");\n${change}`;
+    assert.equal((await removalVerdict({ files: [removedDefinition, { ...modified, patch }] })).state, state);
+  });
+}
