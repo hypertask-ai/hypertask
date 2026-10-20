@@ -81,7 +81,7 @@ function flagReferences(files, keys) {
     if (!filename.startsWith('src/') || filename.startsWith('src/lib/flags/definitions/') ||
       /(?:\.(?:test|spec|stories)\.|(?:^|\/)__tests__\/)/.test(filename)) continue;
     for (const line of patchLines(patch, '-')) {
-      if (![...line].some((token) => direct.has(token))) continue;
+      if (line.has('import') || ![...line].some((token) => direct.has(token))) continue;
       for (const token of line) if (/^[A-Za-z_$][\w$]{2,}$/.test(token) && !NOT_FLAG_NAMES.has(token)) references.add(token);
     }
   }
@@ -197,7 +197,8 @@ function removalOnly(ui, files, keys) {
     };
     for (let source = 0; source < removed.length; source++) {
       const item = removed[source];
-      if (!item.related && !item.import && !item.deletable && !match(source)) return false;
+      const flagOnly = item.related && !/<\/?[A-Za-z]/.test(item.text);
+      if (!flagOnly && !item.import && !item.deletable && !match(source)) return false;
     }
     for (let source = 0; source < removed.length; source++) {
       if (![...owners.values()].includes(source)) match(source);

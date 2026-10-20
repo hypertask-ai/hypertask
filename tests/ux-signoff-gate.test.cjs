@@ -917,8 +917,13 @@ test('still blocked: unclassifiable flag use in a hunk that adds lines', async (
   }
 });
 
-test('removed-everyone: unclassifiable flag use can be purely deleted', async () => {
+test('still blocked: deleting an unclassifiable flag use that renders UI', async () => {
   const patch = `-const enabled = useFlag("${removedKey}");\n-const item = useMemo(() => enabled ? <New /> : <Old />);`;
+  assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'failure');
+});
+
+test('removed-everyone: an unclassifiable flag use without UI can be purely deleted', async () => {
+  const patch = `-const enabled = useFlag("${removedKey}");\n-const limit = useMemo(() => enabled ? 8 : 1);`;
   assert.equal((await removalVerdict({ files: [removedDefinition, { ...removalFile, patch }] })).state, 'success');
 });
 
@@ -983,6 +988,9 @@ for (const [name, change, state] of [
   ['still blocked: swapped prop values', '-x = enabled;\n@@ -40,1 +38,1 @@\n-<Box left={first} right={second} />\n+<Box left={second} right={first} />', 'failure'],
   ['still blocked: On-branch UI deleted inside a flag && block', '-return enabled && (\n+return (\n   <div>\n-    <Banner />\n   </div>\n-)\n+)', 'failure'],
   ['removed-everyone: On && block unwrapped and kept', '-{enabled && (\n-  <New />\n-)}\n+<New />', 'success'],
+  ['still blocked: flag-related live UI deleted without replacement', '-<button disabled={!enabled}>Delete</button>', 'failure'],
+  ['removed-everyone: flag-related live UI kept with false for !REF', '-<button disabled={!enabled}>Delete</button>\n+<button disabled={false}>Delete</button>', 'success'],
+  ['still blocked: a mixed import does not make another flag a reference', '-import { HTPR_6873_QUICK_ENTRY_GROW_FLAG, OTHER_FLAG } from "@/lib/flags/keys";\n+import { OTHER_FLAG } from "@/lib/flags/keys";\n-const other = useFlag(OTHER_FLAG);\n+const other = true;', 'failure'],
   ['still blocked: single-line Off logical branch is kept', '-{!enabled && <Old />}\n+<Old />', 'failure'],
   ['removed-everyone: single-line On logical branch is kept', '-{enabled && <New />}\n+<New />', 'success'],
 ]) {
