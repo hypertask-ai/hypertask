@@ -139,7 +139,12 @@ export async function ready(page, surface, landedBoard) {
       return true;
     };
     const test = () => {
-      if (surface === 'page-navigation') return [...document.querySelectorAll(`a[href^="${cardPrefix}"]`)].some(visible);
+      if (surface === 'page-navigation') {
+        const cards = [...document.querySelectorAll(`a[href^="${cardPrefix}"]`)];
+        // On a phone the first column's cards can start below the fold, as the board path's card does.
+        if (cards.length && !cards.some(visible)) cards[0].scrollIntoView({ block: 'center' });
+        return cards.some(visible);
+      }
       if (surface === 'board') {
         const card = document.querySelector(`a[href="${task}"]`);
         // Late board reflows can push the already-scrolled card below the viewport again.
@@ -339,7 +344,7 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     await page.evaluate(() => document.activeElement?.blur());
     await sample('page-navigation', () => shared.action(page, async () => {
       await page.keyboard.press('g'); await page.keyboard.press('b');
-      await page.waitForURL(url => url.pathname === '/project', { waitUntil: 'commit' });
+      await page.waitForURL(url => url.pathname === '/project' && url.searchParams.has('id'), { waitUntil: 'commit' });
       landed = safeSearch(page.url());
       await page.evaluate(board => window.history.replaceState(null, '', board), BOARD);
     }, run.actions, 'client', BOARD), false);
