@@ -1,3 +1,5 @@
+import { findIdParamOutOfRange } from '@/lib/mcp/listParams';
+import { TaskIdentifierOutOfRangeError } from '@/lib/mcp/tasks/resolveTask';
 import prisma from '@/lib/prisma';
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
@@ -13,11 +15,15 @@ export async function findTasksByIdentifier(
 ) {
     const { task_id, ticket_number, unique_index, project_id } = options
 
+    const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id })
+    if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange)
+
     const orConditions: any[] = []
 
     if (task_id) {
         const taskIds = Array.isArray(task_id) ? task_id : [task_id]
         const validTaskIds = taskIds.filter(id => id && !isNaN(Number(id))).map(id => Number(id))
+        if (findIdParamOutOfRange({ task_id: validTaskIds })) throw new TaskIdentifierOutOfRangeError('task_id')
         if (validTaskIds.length > 0) {
             orConditions.push({ id: { in: validTaskIds } })
         }

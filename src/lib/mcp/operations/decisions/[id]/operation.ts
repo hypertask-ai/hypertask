@@ -1,10 +1,11 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import type { DecisionRequest } from '@prisma/client'
 import { DecisionRequestStatus } from '@prisma/client'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -78,6 +79,11 @@ async function loadAccessibleDecisionRequest(
     return { response: validationError('id must be a positive integer', 'id') }
   }
 
+  const outOfRange = findIdParamOutOfRange({ id })
+  if (outOfRange) {
+    return { response: validationError(idOutOfRangeMessage(outOfRange), outOfRange) }
+  }
+
   const decisionRequest = await prisma.decisionRequest.findUnique({ where: { id } })
   if (!decisionRequest) {
     return {
@@ -120,6 +126,8 @@ export async function GET(
       decision_request: mapDecisionRequest(loaded.decisionRequest),
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request GET by ID] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(
@@ -275,6 +283,8 @@ export async function PATCH(
       decision_request: mapDecisionRequest(cancelledDecisionRequest),
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Decision Request PATCH] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

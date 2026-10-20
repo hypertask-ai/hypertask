@@ -119,7 +119,8 @@ function harness({ boards = [1, 2], task = hiddenTask, agentId = 'credential-age
     [helperPath]: helpers,
     '@/app/api/mcp/pages/_lib/routeUtils': helpers,
     '@/lib/mcp/tasks/services': access,
-    '@/lib/mcp/tasks/resolveTask': taskResolver,
+    '@/lib/mcp/tasks/resolveTask': { ...taskResolver, taskIdentifierErrorResponse: () => null },
+    '@/lib/mcp/listParams': { findIdParamOutOfRange: () => null },
     '@/lib/mcp/idempotency/idempotencyStore': {
       normalizeIdempotencyKey: () => null,
       withIdempotency: async (_operation, _userId, _key, _body, fn) => fn(),

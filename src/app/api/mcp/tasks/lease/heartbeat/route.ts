@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server';
 
 import prisma from '@/lib/prisma';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import {
   clampLeaseTtlSeconds,
   isValidLeaseToken,
@@ -77,22 +77,22 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const task = await findTaskByIdentifier(
-    ctx.user,
-    { task_id },
-    ctx.agentId
-  );
-  if (!task) {
-    return NextResponse.json(
-      { success: false, error: 'Task not found or access denied' },
-      { status: 404 }
-    );
-  }
-
-  const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
-  const leaseToken = lease_token ?? null;
-
   try {
+    const task = await findTaskByIdentifier(
+      ctx.user,
+      { task_id },
+      ctx.agentId
+    );
+    if (!task) {
+      return NextResponse.json(
+        { success: false, error: 'Task not found or access denied' },
+        { status: 404 }
+      );
+    }
+
+    const ttlSeconds = clampLeaseTtlSeconds(ttl_seconds as number | undefined);
+    const leaseToken = lease_token ?? null;
+
     const leases = await prisma.$queryRaw<LeaseRow[]>`
       UPDATE "TaskLease"
       SET
@@ -131,6 +131,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error('[MCP Task Lease Heartbeat] Error:', error);
     return NextResponse.json(
       { success: false, error: 'Failed to heartbeat task lease' },

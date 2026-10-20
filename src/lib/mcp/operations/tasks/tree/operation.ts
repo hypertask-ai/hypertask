@@ -3,7 +3,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from "next/server";
 
 import prisma from "@/lib/prisma";
-import { findTaskByIdentifier } from "@/lib/mcp/tasks/resolveTask";
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
 import { getProjectWhere } from "@/utils/controllers/projects/getAllIncludes";
 
 export interface TaskTreeNode {
@@ -245,6 +245,8 @@ export async function GET(request: NextRequest) {
     };
     return NextResponse.json(body);
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error);
+    if (identifierResponse) return identifierResponse;
     console.error("Error building task tree:", error);
     reportMcpOperationCrash(request, error);
     return NextResponse.json(

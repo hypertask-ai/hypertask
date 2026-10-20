@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { parseEvidenceInput } from '@/lib/mcp/tasks/evidence'
 
 function unauthorized() {
@@ -80,6 +80,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, evidence }, { status: 201 })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Evidence] POST Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
@@ -125,6 +127,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, taskId: task.id, evidence })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Evidence] GET Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

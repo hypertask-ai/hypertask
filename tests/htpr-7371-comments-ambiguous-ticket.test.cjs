@@ -33,6 +33,9 @@ function setup(findTask) {
     '@/utils/controllers/comments/agentInvocationCorrelation': { AgentInvocationNotPendingError: class extends Error {} },
     '@/lib/mcp/tasks/resolveTask': {
       TaskIdentifierAmbiguityError,
+      taskIdentifierErrorResponse: (error) => error instanceof TaskIdentifierAmbiguityError
+        ? { body: { success: false, error: error.message }, status: 400 }
+        : null,
       validateTaskIdentifier: () => ({ valid: true }),
       findTaskByIdentifier: findTask,
     },

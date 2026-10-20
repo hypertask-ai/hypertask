@@ -17,7 +17,7 @@ import {
 import { convertPlainTextMentionsToHtml, resolveTextMentions } from '@/utils/controllers/comments/processMentions'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { AgentInvocationNotPendingError } from '@/utils/controllers/comments/agentInvocationCorrelation'
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
 import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { broadcastTaskComment } from '@/lib/realtime/server'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
@@ -424,9 +424,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('Error getting comments:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(
@@ -1013,9 +1012,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(mcpResponse, { status: 201 })
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     if (error instanceof AgentInvocationNotPendingError) {
       return NextResponse.json(
         { success: false, error: error.message },

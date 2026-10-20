@@ -8,7 +8,7 @@ import { buildMcpTaskUrl } from '@/lib/mcp/boards/links'
 import { normalizeTaskRelationType } from '@/lib/mcp/tasks/relationType'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes'
@@ -136,9 +136,8 @@ export async function POST(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`source_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -150,9 +149,8 @@ export async function POST(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`target_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -238,9 +236,8 @@ export async function GET(request: NextRequest) {
   try {
     task = await findTaskByIdentifier(ctx.user, identifier, ctx.agentId)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
   if (!task) {
@@ -380,9 +377,8 @@ export async function DELETE(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`source_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'source_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
 
@@ -394,9 +390,8 @@ export async function DELETE(request: NextRequest) {
       ctx.agentId
     )
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return validationError(`target_ticket_number: ${error.message}`)
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error, 'target_ticket_number')
+    if (identifierResponse) return identifierResponse
     throw error
   }
   if (!sourceTask || !targetTask) {
