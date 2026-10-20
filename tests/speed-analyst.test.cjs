@@ -429,3 +429,15 @@ test('board-returning is a new cohort and Ctrl+J since the Compose writer only c
   assert.equal(baselineFor('phone:board-returning'), null);
   assert.equal(baselineFor('phone:ctrl-j'), null);
 });
+
+test('search starts only after the opened-before ticket page is idle, and compares only with its own version', async () => {
+  const { compare, PATH_VERSIONS, SEARCH_IDLE_PAUSE_MS } = await analyst;
+  const current = { ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } };
+  const before = { ...await fixture(), started: '2026-10-09T12:00:00Z', samples: [] };
+  const baselineFor = cohort => compare(current, [before]).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
+  assert.equal(baselineFor('phone:search'), null, '2026-10-20 phone: 3249 ms right after the ticket vs 2520 ms once it was idle (YPER4-525)');
+  assert.equal(baselineFor('phone:board'), 100);
+  assert.ok(SEARCH_IDLE_PAUSE_MS >= 3000);
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /sample\('ticket-warm'[^\n]*\n[^\n]*\n\s*const previousPage = await settleScripts\([^\n]*\n\s*await page\.waitForTimeout\(SEARCH_IDLE_PAUSE_MS\);\n\s*await sample\('search'/);
+});

@@ -180,6 +180,24 @@ https://app.hypertask.ai/detail/project-4060/519.
 
 **Next probe.** Desktop server board with AI chat on by default (the [SPEED] ticket); phone search +24 to 36% waterfall; watch the `serverBoard` fallback rate on phone board-returning.
 
+### 2026-10-20 evening: phone search "regression" is the harness; cold ticket server wait (YPER4-525)
+
+https://app.hypertask.ai/detail/project-4060/525.
+
+**Daily read.** Can't verify twice: 12:23 and 18:28 UTC both had a deploy during the run. The day's complete reference is 06:16 (bb8f47aa1, load 6, N=5); 07:07 was a 1-sample smoke. Every run so far used Node 22.22.2, so the cohorts match each other (the README asks for Node 24).
+
+**Question.** Phone search read 3.2 to 4.1 s since 2026-10-19 against 2.46 s on 2026-10-18, even at load 4. Was it the app?
+
+**What found it.** Per-sample phase timings from the saved waterfall: in the slow samples the first requests were the previous ticket page's own chunks, the search document arrived by about 200 ms, but its styles were only requested at about 1100 ms (about 270 ms in every 2026-10-18 sample). The old ticket page was busy and held the new page back. Since the YPER4-513 fix, ticket-warm is a real fast opened-before ticket, so 2 s after it the page is still loading its deferred parts.
+
+**Experiment.** Scratch copy, phone, production 4fd12478f, load 4.8, 5 interleaved pairs: search as the harness ran it 3249 ms median (2663 to 3549); after waiting until the ticket page was idle (settleScripts plus 3 s) 2520 ms (2412 to 2553). Result: no app regression. Fixed in the harness: search waits for an idle previous page and is path version 2.
+
+**Lesson.** The third time an upstream win changed a downstream cohort (HTPR-7367 to ticket-warm, YPER4-519 board, now search). When a path moves, first look at when its earliest request starts, before the app gets blamed.
+
+**Remaining limiter for phone search (2.5 s, milestone 1 target 2 s).** The search request is the end of a chain: about 1.5 s of app start, then `getAllMinimal` (the search waits for the project list, `useSearch` `projects.length > 0`), then `search/document`. Starting the search on the server, or seeding the project list, is the obvious experiment; the client re-posts if the project ids in `lastSearchKey` differ.
+
+**Cold ticket server wait.** The cold ticket document took over 1 s to its first byte in 36 of 125 samples since 2026-10-19 (29%) and 12 of 50 before (24%): 1.4 to 2.7 s against about 0.2 s. Other pages: board 2%, My Tasks 5%, search 1%. That is the bimodal desktop ticket-cold (about 600 ms vs about 2 s) and the phone ticket-cold over 4 s. HTPR-5820 found the same 1.7 to 1.8 s wait before API handlers run on about 22% of calls. Next probe: spaced document requests to tell a cold server from slow page queries.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
