@@ -297,7 +297,7 @@ test('bounded auth logs cap unverified strings and arrays, throttle identical JW
       assert.equal(output.length, before + 2)
     } finally { Date.now = now }
     h.verify.verifyMcpJwtToken(invalid)
-    assert.ok(output.some(args => args[1]?.sub?.length === 1000), 'legacy logging must remain uncapped')
+    assert.ok(output.some(args => args[0] === '[MCP Auth] Token has an unsupported audience:' && args[1]?.length === 1000), 'legacy logging must remain uncapped')
   } finally { console.log = original }
 })
 
