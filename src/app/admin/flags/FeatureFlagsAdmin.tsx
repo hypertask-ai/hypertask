@@ -25,7 +25,7 @@ import { FLAG_FILTER_KINDS, flagDaysWaiting, matchesFlagKind, matchesFlagRisk, u
 
 import { FEATURE_FLAG_RELEASE_RISKS, RELEASE_RISK_LABELS, RELEASE_RISK_ORDER } from "@/lib/flags/releaseRisk";
 
-import { HTPR_7389_FLAG_RELEASE_POLICY_FLAG } from "@/lib/flags/definitions/htpr-7389-flag-release-policy";
+import { HTPR_7389_FLAG_RELEASE_POLICY_FLAG } from "@/lib/flags/keys";
 
 const ADMIN_FLAGS_ROUTE = "/api/admin/flags";
 const KIND_LABELS: Record<FeatureFlagKind, string> = {
