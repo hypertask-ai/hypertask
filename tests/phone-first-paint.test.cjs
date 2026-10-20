@@ -23,7 +23,7 @@ function load(relative, mocks) {
   return loaded.exports;
 }
 
-async function warming({ mobile, enabled, pathname, saveData = false, boardWarm = false, boardPainted = false }) {
+async function warming({ mobile, enabled, pathname, saveData = false, boardPainted = false }) {
   const effects = [], frames = [], idle = [], timers = [], listeners = new Map(), imports = [];
   const previousWindow = global.window, previousDocument = global.document;
   global.window = { innerWidth: mobile ? 390 : 1440, location: { pathname }, history: { state: {} }, navigator: { connection: { saveData, effectiveType: '4g' } },
@@ -39,7 +39,7 @@ async function warming({ mobile, enabled, pathname, saveData = false, boardWarm 
     'next/navigation': { usePathname: () => pathname, useRouter: () => ({}) },
     '@tanstack/react-query': { useQueryClient: () => ({}) },
     '@/lib/state': { useRecoilValue: () => user }, '@/store': {},
-    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : key === keys.HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG ? boardWarm : key === keys.HTPR_6752_INSTANT_TICKET_OPEN_FLAG },
+    '@/hooks/useFlag': { useFlag: key => key === phoneFlag ? enabled : key === keys.HTPR_6752_INSTANT_TICKET_OPEN_FLAG },
     '@/lib/flags/keys': keys,
     '@/lib/navigation/cachedTaskDetail': { cachedTaskDetailLocation: () => undefined },
     '@/utils/helperFunctions/helperFunctions': {}, '@/lib/constants/constants': {},
@@ -92,11 +92,11 @@ for (const pathname of ['/project', '/inbox']) {
   });
 }
 test('HTPR-7395: a painted phone board warms the ticket code before the first tap; the board start and the inbox still wait', async () => {
-  const phone = { mobile: true, enabled: true, boardWarm: true };
+  const phone = { mobile: true, enabled: true };
   assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: true })).automatic, 10);
   assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: false })).automatic, 0, 'nothing competes with the board first paint');
   assert.equal((await warming({ ...phone, pathname: '/inbox', boardPainted: true })).automatic, 0, 'the inbox start keeps HTPR-7008');
-  assert.equal((await warming({ ...phone, boardWarm: false, pathname: '/project', boardPainted: true })).automatic, 0, 'flag off keeps HTPR-7008');
+  assert.match(fs.readFileSync(path.join(__dirname, '../src/components/ProviderGlobal/GloablProviders.tsx'), 'utf8'), /boardPainted=\{phoneBoardWarmsTicket && secondaryStartupEnabled\}/, 'flag off never reports a painted board, so HTPR-7008 stays');
   assert.equal((await warming({ ...phone, pathname: '/project', boardPainted: true, saveData: true })).automatic, 0, 'data saver still skips warming');
 });
 

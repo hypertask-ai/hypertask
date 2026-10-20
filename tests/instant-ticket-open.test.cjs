@@ -63,6 +63,7 @@ export function Shell({ pathname, children, ChatRuntime }) {
   const shouldMountAgentChatRuntime = false;
   const authenticatedUserId = 2343;
   const secondaryStartupEnabled = true;
+  const phoneBoardWarmsTicket = true;
   const chatRuntimeMounted = false;
   const showAiChatInterface = false;
   const sidebarWidthPx = 0;

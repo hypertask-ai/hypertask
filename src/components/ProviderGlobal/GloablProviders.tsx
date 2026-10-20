@@ -178,7 +178,7 @@ import { useEmojiFrequencyHydration } from "@/hooks/General/useEmojiFrequencyHyd
 import { useFlag } from "@/hooks/useFlag";
 import { useTaskBoxOutlinesFlag } from "@/hooks/useTaskBoxOutlinesFlag";
 import { useInboxLegacyWarm } from "@/hooks/useInboxLegacyWarm";
-import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG } from "@/lib/flags/keys";
+import { MY_TASKS_SHORTCUTS_WIDTH_FLAG, HTPR_6476_MOBILE_AGENT_CHAT_FULLSCREEN_FLAG, HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG } from "@/lib/flags/keys";
 
 import AIChatClosedLayout from "../AI_CHAT/AI_Chat_Closed_Layout";
 import FullScreenChatLoading from "../AI_CHAT/FullScreenChatLoading";
@@ -310,6 +310,7 @@ export default function GlobalProvider({
   const pathname = usePathname();
   const routeOwnsMobileChrome = Boolean(useFirstScreenSurface(authenticatedUserId));
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
+  const phoneBoardWarmsTicket = useFlag(HTPR_7395_PHONE_BOARD_WARMS_TICKET_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
   const currentProject = useRecoilValue(currentProjectAtom);
@@ -1346,7 +1347,7 @@ export default function GlobalProvider({
                 ) : undefined
               }
             >
-              <CachedTaskDetailNavigation accountId={authenticatedUserId} boardPainted={secondaryStartupEnabled}>
+              <CachedTaskDetailNavigation accountId={authenticatedUserId} boardPainted={phoneBoardWarmsTicket && secondaryStartupEnabled}>
                 {children}
               </CachedTaskDetailNavigation>
             </AIChatClosedLayout>
