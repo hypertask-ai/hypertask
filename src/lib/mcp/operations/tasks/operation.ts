@@ -17,7 +17,7 @@ import {
   taskMcpGetInclude,
 } from '@/lib/mcp/tasks/mappers'
 import { mcpTaskUserCommentCount } from '@/lib/mcp/tasks/mappers'
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { decodeCursor, encodeCursor } from '@/lib/mcp/pagination/cursor'
 import prisma from '@/lib/prisma'
 import {
@@ -792,9 +792,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 })
-    }
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     reportMcpOperationCrash(request, error)
     console.error('[MCP] tasks', {
       user: userObj,

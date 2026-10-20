@@ -18,6 +18,7 @@ stub('src/lib/mcp/auth.ts', {
 class TaskIdentifierAmbiguityError extends Error {}
 stub('src/lib/mcp/tasks/resolveTask.ts', {
   TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse: () => null,
   findTaskByIdentifier: async (...args) => { calls.push(args); return task },
 })
 stub('src/lib/prisma.ts', {

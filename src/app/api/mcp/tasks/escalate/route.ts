@@ -2,7 +2,7 @@ import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, validateMcpR
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { createCommentService } from '@/utils/controllers/comments/createCommentService'
 import { sanitizeRichHtml } from '@/utils/helperFunctions/sanitizeRichHtml'
 import { buildEscalationCommentHtml } from '@/lib/mcp/tasks/escalationHtml'
@@ -133,6 +133,8 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     )
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP Task Escalate] Error:', error)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }

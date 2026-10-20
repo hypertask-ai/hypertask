@@ -1,8 +1,9 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 import { validateMcpAuth } from '@/lib/mcp/auth'
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import { validateProjectMemberIds } from '@/lib/mcp/tasks/services'
 import { ensureTaskMovedToInbox } from '@/lib/taskCardActions/inboxState'
 
@@ -64,6 +65,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const outOfRange = findIdParamOutOfRange({ user_id })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      )
+    }
+
     const task = await findTaskByIdentifier(
       ctx.user,
       {
@@ -114,6 +123,8 @@ export async function POST(request: NextRequest) {
       userId: user_id,
     })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP] inbox/move', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

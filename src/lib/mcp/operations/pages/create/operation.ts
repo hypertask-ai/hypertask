@@ -1,3 +1,4 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams'
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -12,7 +13,7 @@ import {
 } from '@/lib/mcp/idempotency/idempotencyStore'
 import {
   findTaskByIdentifier,
-  TaskIdentifierAmbiguityError,
+  taskIdentifierErrorResponse,
   validateTaskIdentifier,
 } from '@/lib/mcp/tasks/resolveTask'
 import {
@@ -190,6 +191,14 @@ export async function POST(request: NextRequest) {
       parentPageId = parsedParentPageId
     }
 
+    const outOfRange = findIdParamOutOfRange({ parent_page_id: parentPageId })
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+        { status: 400 }
+      )
+    }
+
     let idempotencyKey: string | null
     try {
       idempotencyKey = normalizeIdempotencyKey(
@@ -250,15 +259,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error, 'ticket_number')
+    if (identifierResponse) return identifierResponse
     if (error instanceof IdempotencyInProgressError) {
       return NextResponse.json({ error: error.message }, { status: 409 })
-    }
-
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return NextResponse.json(
-        buildFieldError('invalid_field', 'ticket_number', error.message),
-        { status: 400 }
-      )
     }
 
     if (error instanceof Error && error.message.includes('not found')) {

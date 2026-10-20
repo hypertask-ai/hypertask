@@ -1,3 +1,4 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import type { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { HTPR_6868_TICKET_PREFIX_FLAG, isFeatureEnabled } from '@/lib/flags';
@@ -5,10 +6,36 @@ import { findPrefixAliasTasks } from '@/utils/controllers/projects/findPrefixAli
 import { getProjectWhere } from '@/utils/controllers/projects/getAllIncludes';
 
 export class TaskIdentifierAmbiguityError extends Error {
+  readonly status = 400;
+  readonly code = 'ambiguous_ticket_number';
+
   constructor(ticketNumber: string) {
     super(`Ticket number ${ticketNumber} is ambiguous across accessible projects; provide project_id.`);
     this.name = 'TaskIdentifierAmbiguityError';
   }
+}
+
+export class TaskIdentifierOutOfRangeError extends Error {
+  readonly status = 400;
+  readonly code = 'invalid_field';
+
+  constructor(readonly field: string) {
+    super(idOutOfRangeMessage(field));
+    this.name = 'TaskIdentifierOutOfRangeError';
+  }
+}
+
+export function taskIdentifierErrorResponse(error: unknown, field?: string): Response | null {
+  if (!(error instanceof TaskIdentifierAmbiguityError) && !(error instanceof TaskIdentifierOutOfRangeError)) return null;
+  return Response.json(
+    {
+      success: false,
+      error: error.message,
+      code: error.code,
+      ...(field ? { field: error instanceof TaskIdentifierOutOfRangeError ? error.field : field } : {}),
+    },
+    { status: error.status }
+  );
 }
 
 export async function findTaskByIdentifier(
@@ -23,6 +50,8 @@ export async function findTaskByIdentifier(
   projectAccess?: Prisma.ProjectWhereInput,
 ) {
   const { task_id, ticket_number, unique_index, project_id } = options;
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
   const projectFilter = projectAccess ?? getProjectWhere(user.id, agentId);
 
   if (task_id) {
@@ -98,6 +127,8 @@ export async function resolveTaskIdOnly(options: {
   project_id?: number | null;
 }): Promise<number | null> {
   const { task_id, ticket_number, unique_index, project_id } = options;
+  const outOfRange = findIdParamOutOfRange({ task_id, unique_index, project_id });
+  if (outOfRange) throw new TaskIdentifierOutOfRangeError(outOfRange);
 
   if (task_id) {
     if (!project_id) return task_id;
@@ -157,6 +188,7 @@ export async function findTaskByStringIdentifier(
   }
 
   const numericIdentifier = Number(task);
+  if (findIdParamOutOfRange({ task: numericIdentifier })) throw new TaskIdentifierOutOfRangeError('task');
   if (!Number.isInteger(numericIdentifier) || numericIdentifier <= 0) return null;
 
   const matches = await prisma.task.findMany({

@@ -1,10 +1,11 @@
+import { findIdParamOutOfRange, idOutOfRangeMessage } from '@/lib/mcp/listParams';
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport';
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server';
 import { validateMcpAuth, checkMcpRateLimit } from '@/lib/mcp/auth';
 import prisma from '@/lib/prisma';
 import { requireRole } from '@/lib/mcp/agents/scopes';
-import { findTaskByIdentifier } from '@/lib/mcp/tasks/resolveTask';
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask';
 import { parseAndValidateAttachmentsBody } from '@/lib/mcp/attachments/validateBody';
 import {
   McpAttachmentRequestBodyError,
@@ -97,16 +98,31 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const task = await findTaskByIdentifier(
-    user,
-    {
-      task_id: parsed.task_id ?? null,
-      ticket_number: parsed.ticket_number ?? null,
-      unique_index: parsed.unique_index ?? null,
-      project_id: parsed.project_id ?? null,
-    },
-    ctx.agentId
-  );
+  const outOfRange = findIdParamOutOfRange({ comment_id: parsed.comment_id });
+  if (outOfRange) {
+    return NextResponse.json(
+      { success: false, error: idOutOfRangeMessage(outOfRange), code: 'invalid_field' },
+      { status: 400 }
+    );
+  }
+
+  let task;
+  try {
+    task = await findTaskByIdentifier(
+      user,
+      {
+        task_id: parsed.task_id ?? null,
+        ticket_number: parsed.ticket_number ?? null,
+        unique_index: parsed.unique_index ?? null,
+        project_id: parsed.project_id ?? null,
+      },
+      ctx.agentId
+    );
+  } catch (error) {
+    const response = taskIdentifierErrorResponse(error);
+    if (response) return response;
+    throw error;
+  }
 
   if (!task) {
     return NextResponse.json(

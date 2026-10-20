@@ -3,7 +3,7 @@ import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRat
 import { NextRequest, NextResponse } from 'next/server'
 
 import prisma from '@/lib/prisma'
-import { findTaskByIdentifier, validateTaskIdentifier } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, validateTaskIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 
 export interface DraftItem {
   id: number
@@ -176,6 +176,8 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(response, { status: 201 })
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP POST Draft] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(
@@ -256,6 +258,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(response)
   } catch (error) {
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) return identifierResponse
     console.error('[MCP GET Drafts] Error:', error)
     reportMcpOperationCrash(request, error)
     return NextResponse.json(

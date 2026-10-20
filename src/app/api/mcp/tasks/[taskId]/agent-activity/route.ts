@@ -1,7 +1,7 @@
 import { wrapMcpRoute, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, validateMcpRouteAuth as validateMcpAuth } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
-import { findTaskByIdentifier, TaskIdentifierAmbiguityError } from '@/lib/mcp/tasks/resolveTask'
+import { findTaskByIdentifier, taskIdentifierErrorResponse } from '@/lib/mcp/tasks/resolveTask'
 import prisma from '@/lib/prisma'
 
 export const dynamic = 'force-dynamic'
@@ -71,8 +71,10 @@ export async function GET(
       })),
     })
   } catch (error) {
-    if (error instanceof TaskIdentifierAmbiguityError) {
-      return noStore({ success: false, error: error.message }, 400)
+    const identifierResponse = taskIdentifierErrorResponse(error)
+    if (identifierResponse) {
+      identifierResponse.headers.set('Cache-Control', 'private, no-store')
+      return identifierResponse
     }
     console.error('[MCP] task agent activity read failed', error)
     return noStore({ success: false, error: 'Failed to read task agent activity' }, 500)

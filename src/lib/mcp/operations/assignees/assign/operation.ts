@@ -1,3 +1,5 @@
+import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
+import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -132,6 +134,14 @@ export async function POST(request: NextRequest) {
 
     const { task_id, ticket_number, project_id, unique_index, user_id, user_ids, mode, intent, assign_self, agent_id } =
       body;
+    const outOfRange = findIdParamOutOfRange({ task_id, project_id, unique_index, user_id, user_ids });
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: "invalid_field" },
+        { status: 400 }
+      );
+    }
+
     const assignIntent = intent ?? "assign";
     if (assignIntent !== "assign" && assignIntent !== "unassign") {
       return NextResponse.json(
@@ -446,6 +456,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (err) {
+    const identifierResponse = taskIdentifierErrorResponse(err);
+    if (identifierResponse) return identifierResponse;
     console.error("[MCP Assign] Error:", err);
     reportMcpOperationCrash(request, err);
     return NextResponse.json(

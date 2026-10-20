@@ -1,3 +1,5 @@
+import { taskIdentifierErrorResponse } from "@/lib/mcp/tasks/resolveTask";
+import { findIdParamOutOfRange, idOutOfRangeMessage } from "@/lib/mcp/listParams";
 import { reportMcpOperationCrash } from "@/lib/mcp/operationCrashReport";
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit, mcpRouteUnauthorizedResponse as mcpUnauthorizedResponse, withMcpRouteMutationLease as withAdoptedAgentMutationLease } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from "next/server";
@@ -136,6 +138,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const outOfRange = findIdParamOutOfRange({ task_id, project_id, unique_index, target_project_id, target_section_id });
+    if (outOfRange) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage(outOfRange), code: "invalid_field" },
+        { status: 400 }
+      );
+    }
+
     const methodCount = [
       !!task_id,
       !!ticket_number,
@@ -170,6 +180,13 @@ export async function POST(request: NextRequest) {
           success: false,
           error: "project_id is required when using unique_index",
         },
+        { status: 400 }
+      );
+    }
+
+    if (ticket_number && /^\d+$/.test(String(ticket_number).trim()) && findIdParamOutOfRange({ ticket_number: Number(ticket_number) })) {
+      return NextResponse.json(
+        { success: false, error: idOutOfRangeMessage("ticket_number"), code: "invalid_field" },
         { status: 400 }
       );
     }
@@ -304,6 +321,8 @@ export async function POST(request: NextRequest) {
       { status: 200 }
     );
   } catch (err) {
+    const identifierResponse = taskIdentifierErrorResponse(err);
+    if (identifierResponse) return identifierResponse;
     console.error("[MCP Move Task] Error:", err);
     reportMcpOperationCrash(request, err);
     return NextResponse.json(

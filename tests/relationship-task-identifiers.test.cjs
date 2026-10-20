@@ -141,13 +141,13 @@ test("relations preserves shared project_id and not-found/access-denied errors",
 });
 
 test("relations ambiguity responses are 400s naming the exact endpoint field", () => {
-  assert.match(relationsGet, /ticket_number: \$\{error\.message\}/);
+  assert.match(relationsGet, /taskIdentifierErrorResponse\(error, 'ticket_number'\)/);
   for (const route of [relationsPost, relationsDelete]) {
-    assert.match(route, /source_ticket_number: \$\{error\.message\}/);
-    assert.match(route, /target_ticket_number: \$\{error\.message\}/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'source_ticket_number'\)/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'target_ticket_number'\)/);
   }
   assert.ok(
-    (relationsRoute.match(/error instanceof TaskIdentifierAmbiguityError/g) || [])
+    (relationsRoute.match(/taskIdentifierErrorResponse\(error,/g) || [])
       .length >= 5
   );
 });
@@ -170,7 +170,7 @@ test("related GET and POST accept all task identifiers while POST keeps text sea
     );
     assert.match(route, /Task not found or access denied/);
     assert.match(route, /status: 404/);
-    assert.match(route, /ticket_number: \$\{error\.message\}/);
+    assert.match(route, /taskIdentifierErrorResponse\(error, 'ticket_number'\)/);
   }
   assert.match(relatedPost, /return handleRelatedTasksPost\(request, ctx, body\)/);
 });
