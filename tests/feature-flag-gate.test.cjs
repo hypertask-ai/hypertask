@@ -840,7 +840,7 @@ test("the production per-flag default lookup passes but a mutated find alias fai
     const { dir, git } = makeRepo(t);
     const base = commit(git, "base");
     writeFile(dir, "src/lib/flags.ts", flagsSource(["OTHER_FLAG"], "OWNER_AND_QA",
-      `${lookup}\n` +
+      `const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n${lookup}\n` +
       (mutate ? 'const definition = FEATURE_FLAG_DEFINITIONS.find(({ key }) => key === OTHER_FLAG);\nconst alias = definition;\nalias.defaultMode = "EVERYONE";\n' : "")));
     writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
     const head = commit(git, "default lookup");
@@ -1350,39 +1350,53 @@ test('returned callback liveness rejects rebinding without confusing shadowed sy
   assert.equal((await evaluate('HTPR-1 [FEATURE] preview widget',base,commit(fixture.git,'rebound function callback'),fixture.dir)).pass,false);
 });
 
-test("registry kinds do not change the restricted legacy fallback", async (t) => {
+test("bugfix registry kind permits Everyone while feature and improvement defaults stay restricted", async (t) => {
   for (const kind of [undefined, "feature", "improvement", "bugfix"]) {
     const { dir, git } = makeRepo(t);
     const base = commit(git, "base");
     const source = flagsSource(["OTHER_FLAG"])
-      .replace('description: "fixture"', `description: "fixture"${kind ? `, kind: "${kind}"` : ""}`);
+      .replace('description: "fixture"', `description: "fixture"${kind ? `, kind: "${kind}"` : ""}`) +
+      'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n';
     writeFile(dir, "src/lib/flags.ts", source);
     writeFile(dir, "src/components/Widget.tsx", 'import { useFlag } from "@/hooks/useFlag";\nimport { OTHER_FLAG } from "@/lib/flags/keys";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
     const head = commit(git, "kind defaults");
     assert.equal((await evaluate("HTPR-1 [FEATURE] gated widget", base, head, dir)).pass, true, kind);
-    // Title exemptions cannot widen the unknown-key legacy fallback.
+    // Neither a feature nor an exempt bugfix title may widen the feature default.
     writeFile(dir, "src/lib/flags.ts", source.replace('DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA"', 'DEFAULT_FEATURE_FLAG_MODE = "EVERYONE"'));
     const widened = commit(git, "invalid feature default");
     for (const tag of ["FEATURE", "BUGFIX", "INFRA"]) {
       const result = await evaluate(`HTPR-1 [${tag}] gated widget`, base, widened, dir);
       assert.equal(result.pass, false, `${kind}: ${tag}`);
-      assert.match(result.reason, /Legacy flags must default to Owner \+ QA/);
+      assert.match(result.reason, /Feature flags must default to Owner \+ QA/);
     }
   }
 });
 
-test("registry kind must be a valid literal declaration", async (t) => {
+test("bugfix kind and default must be immutable literal declarations", async (t) => {
+  for (const suffix of [
+    'const DEFAULT_BUGFIX_FLAG_MODE = "OWNER_AND_QA";',
+    'let DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";',
+    'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE"; DEFAULT_BUGFIX_FLAG_MODE = "OFF";',
+    '',
+  ]) {
+    const { dir, git } = makeRepo(t);
+    const base = commit(git, "base");
+    writeFile(dir, "src/lib/flags.ts", flagsSource().replace('description: "fixture"', 'description: "fixture", kind: "bugfix"') + suffix);
+    writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
+    const head = commit(git, "invalid bugfix default");
+    assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, head, dir)).pass, false, suffix);
+  }
   for (const kind of ['"bug"', 'someKind', '"bugfix", kind: "feature"']) {
     const { dir, git } = makeRepo(t);
     const base = commit(git, "base");
-    writeFile(dir, "src/lib/flags.ts", flagsSource().replace('description: "fixture"', `description: "fixture", kind: ${kind}`));
+    writeFile(dir, "src/lib/flags.ts", flagsSource().replace('description: "fixture"', `description: "fixture", kind: ${kind}`) + 'const DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";');
     writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
     const head = commit(git, "invalid kind");
     assert.equal((await evaluate("HTPR-1 [BUGFIX] widget", base, head, dir)).pass, false, kind);
   }
 });
 
-test("welcome email registers its ticket-specific feature without an explicit default", () => {
+test("welcome email registers its ticket-specific feature with the restricted default", () => {
   const keys = require("./helpers/flag-files.cjs").source();
   const flags = fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8") + require("./helpers/flag-files.cjs").source();
   assert.match(keys, /export const HTPR_7025_WELCOME_EMAIL_FLAG = "htpr-7025-welcome-email";/);
@@ -1420,10 +1434,10 @@ test("extracted definitions accept new flags for COST UI PRs and legacy rebases"
 });
 
 test("extracted definition policy rejects mutations and unsafe defaults before title exemptions", async (t) => {
-  for (const mutation of ["definition", "imported", "imported-alias", "feature-default"]) {
+  for (const mutation of ["definition", "imported", "imported-alias", "feature-default", "bugfix-default"]) {
     const { dir, git } = makeRepo(t);
     const definitions = flagsSource().replace(/const DEFAULT_FEATURE_FLAG_MODE[^\n]*\n/, "");
-    const runtime = 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\n';
+    const runtime = 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nconst DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\n';
     writeFile(dir, "src/lib/flags/definitions.ts", definitions);
     writeFile(dir, "src/lib/flags.ts", runtime);
     const base = commit(git, "split registry");
@@ -1435,7 +1449,7 @@ test("extracted definition policy rejects mutations and unsafe defaults before t
       writeFile(dir, "src/lib/flags.ts", runtime.replace("{ FEATURE_FLAG_DEFINITIONS }", "{ FEATURE_FLAG_DEFINITIONS as escaped }") + 'escaped.push({ key: "htpr-1-other" });\n');
     } else {
       writeFile(dir, "src/lib/flags/definitions.ts", definitions.replace('description: "fixture"', 'description: "fixture", kind: "bugfix"'));
-      writeFile(dir, "src/lib/flags.ts", runtime.replace('"OWNER_AND_QA"', '"EVERYONE"'));
+      writeFile(dir, "src/lib/flags.ts", mutation === "feature-default" ? runtime.replace('"OWNER_AND_QA"', '"EVERYONE"') : runtime.replace('"EVERYONE"', '"OFF"'));
     }
     writeFile(dir, "src/components/Widget.tsx", "export const Widget = () => <div />;\n");
     const head = commit(git, "invalid split policy");
@@ -1565,7 +1579,7 @@ test("new flag risk entries reject invalid labels, blank reasons and unsafe obje
 function perFlagLayout(dir) {
   writeFile(dir, "src/lib/flags/keys.ts", 'export * from "./definitions/index.generated";\n');
   writeFile(dir, "src/lib/flags/definitions.ts", 'import { FLAG_DEFINITIONS } from "./definitions/index.generated";\nexport const FEATURE_FLAG_DEFINITIONS = FLAG_DEFINITIONS;\n');
-  writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nexport const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);\n');
+  writeFile(dir, "src/lib/flags.ts", 'import { FEATURE_FLAG_DEFINITIONS } from "@/lib/flags/definitions";\nconst DEFAULT_FEATURE_FLAG_MODE = "OWNER_AND_QA";\nconst DEFAULT_BUGFIX_FLAG_MODE = "EVERYONE";\nexport const FEATURE_FLAG_KEYS = FEATURE_FLAG_DEFINITIONS.map(({ key }) => key);\n');
   writeFile(dir, "src/lib/flags/definitions/htpr-1-other.ts", 'export const OTHER_FLAG = "htpr-1-other";\nexport default { key: OTHER_FLAG, description: "Fixture", shippedOn: "2026-10-09" } as const;\n');
 }
 
@@ -1578,7 +1592,9 @@ test("per-flag registry handles legacy inline and extracted base refs without a 
     }
     const base = commit(git, "old layout");
     perFlagLayout(dir);
-    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
+    const existingFile = "src/lib/flags/definitions/htpr-1-other.ts";
+    writeFile(dir, existingFile, fs.readFileSync(path.join(dir, existingFile), "utf8").replace("key: OTHER_FLAG", 'key: OTHER_FLAG, defaultMode: "EVERYONE"'));
+    writeFile(dir, "src/lib/flags/definitions/htpr-5-widget.ts", `export const WIDGET_FLAG = "htpr-5-widget";\nexport default { key: WIDGET_FLAG, defaultMode: "EVERYONE", description: "Widget", shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", releaseRisk: { risk: "new", reason: "Adds a widget." } } as const;\n`);
     writeFile(dir, "src/components/Widget.tsx", 'import { WIDGET_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(WIDGET_FLAG) ? <div>Widget</div> : null;\n');
     const head = commit(git, "new layout and widget");
     const result = await evaluate("HTPR-5 [FEATURE] Widget", base, head, dir);
@@ -1592,13 +1608,13 @@ test("per-flag additions enforce the release-risk cutoff and registry defaults e
   const base = commit(git, "per flag base");
   const filename = "src/lib/flags/definitions/htpr-2-new.ts";
   const source = `export const NEW_FLAG = "htpr-2-new";\nexport default { key: NEW_FLAG, shippedOn: "${RELEASE_RISK_REQUIRED_FROM}", description: "New flag" EXTRA } as const;`;
-  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "New feature." }', true], [', defaultMode: "EVERYONE", releaseRisk: { risk: "new", reason: "Changes access.", highRisk: "access" }', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
+  for (const [extra, pass] of [["", false], [', releaseRisk: { risk: "none", reason: "Records events." }', false], [', defaultMode: "EVERYONE", releaseRisk: { risk: "none", reason: "Records events." }', true], [', defaultMode: "EVERYONE"', false], [', releaseRisk: { risk: "large", reason: "Invalid." }', false]]) {
     writeFile(dir, filename, source.replace(" EXTRA", extra));
     const head = commit(git, "add flag " + extra);
     const result = await evaluate("YPER4-2 [INFRA] Fixture", base, head, dir);
     assert.equal(result.pass, pass, result.reason);
   }
-  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ""));
+  writeFile(dir, filename, source.replace(RELEASE_RISK_REQUIRED_FROM, "2026-10-10").replace(" EXTRA", ', defaultMode: "EVERYONE"'));
   assert.equal((await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "pre cutoff"), dir)).pass, true);
 });
 
@@ -1939,4 +1955,39 @@ test("first placement of an existing local component needs a flag", async (t) =>
   const result = await evaluate("HTPR-7274 [BUGFIX] consent", base, commit(git, "place local banner"), dir);
   assert.equal(result.pass, false);
   assert.match(result.reason, /Providers.tsx:Banner rendered 1 more times/);
+});
+
+
+test("added-file default policy preserves existing flags and requires explicit Everyone only for new eligible definitions", async (t) => {
+  const risk = 'releaseRisk: { risk: "new", reason: "Fixture" }';
+  const sensitive = 'releaseRisk: { risk: "new", reason: "Fixture", highRisk: "access" }';
+  for (const [extra, pass, message] of [
+    [risk, false, /new flag htpr-2-new must set defaultMode: "EVERYONE"/],
+    [`kind: "feature", ${risk}`, false],
+    [`kind: "improvement", ${risk}`, false],
+    [`kind: "feature", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "improvement", defaultMode: "EVERYONE", ${risk}`, true],
+    [`kind: "bugfix", ${risk}`, true],
+    [`kind: "feature", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "feature", defaultMode: "EVERYONE", ${sensitive}`, false],
+    [`kind: "bugfix", ${sensitive}`, false],
+    [`kind: "bugfix", defaultMode: "OWNER_AND_QA", ${sensitive}`, true],
+    [`kind: "internal", ${risk}`, true],
+    [`kind: "internal", defaultMode: "EVERYONE", ${risk}`, false],
+  ]) {
+    const { dir, git } = makeRepo(t);
+    perFlagLayout(dir);
+    const base = commit(git, "existing feature without defaultMode");
+    writeFile(dir, "src/lib/flags/definitions/htpr-2-new.ts", `export const NEW_FLAG = "htpr-2-new";
+export default { key: NEW_FLAG, shippedOn: "2026-10-20", description: "Fixture", ${extra} } as const;`);
+    const result = await evaluate("YPER4-2 [INFRA] Fixture", base, commit(git, "added definition"), dir);
+    assert.equal(result.pass, pass, extra + ": " + result.reason);
+    if (message) assert.match(result.reason, message);
+  }
+  const { dir, git } = makeRepo(t);
+  perFlagLayout(dir);
+  const base = commit(git, "existing feature without defaultMode");
+  writeFile(dir, "src/components/Widget.tsx", 'import { OTHER_FLAG } from "@/lib/flags/keys";\nimport { useFlag } from "@/hooks/useFlag";\nexport const Widget = () => useFlag(OTHER_FLAG) ? <div /> : null;\n');
+  const result = await evaluate("HTPR-1 [FEATURE] Existing flag", base, commit(git, "unchanged definition"), dir);
+  assert.equal(result.pass, true, result.reason);
 });

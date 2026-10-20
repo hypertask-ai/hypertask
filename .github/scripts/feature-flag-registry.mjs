@@ -258,7 +258,7 @@ export function parseFlagFile(source, path) {
       if (!typescript.isStringLiteral(highRisk) || !["money", "access", "data-deletion", "customer-email"].includes(highRisk.text)) fail("releaseRisk.highRisk must be money, access, data-deletion or customer-email");
       definition.releaseRisk.highRisk = highRisk.text;
     }
-    if (definition.releaseRisk.highRisk && definition.defaultMode === "EVERYONE") fail("a flag with releaseRisk.highRisk may not default to Everyone");
+    if (definition.releaseRisk.highRisk && (definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA")) === "EVERYONE") fail("a flag with releaseRisk.highRisk may not default to Everyone");
   }
   return { identifier: declaration.name.text, definition, path };
 }
@@ -559,7 +559,7 @@ function assertPolicyBindingImmutable(sourceFile, name, declaration) {
 
     // Copying a literal string cannot expose a mutable alias to its const binding.
     // Keep assignment detection, including destructuring, but allow normal reads.
-    if (name === "DEFAULT_FEATURE_FLAG_MODE" &&
+    if ((name === "DEFAULT_FEATURE_FLAG_MODE" || name === "DEFAULT_BUGFIX_FLAG_MODE") &&
         typescript.isStringLiteral(unwrapExpr(declaration.initializer))) {
       if (isBindingWrite(target)) mark(target);
       return;
@@ -762,8 +762,10 @@ export function parseDefinitions(ref) {
     throw new Error("FEATURE_FLAG_DEFINITIONS must be an array literal");
   }
 
+  const kinds = [];
   const shippedOn = [];
   const keys = perFlagRows ? perFlagRows.map(({ definition }) => {
+    kinds.push(definition.kind ?? "feature");
     shippedOn.push(definition.shippedOn);
     return definition.key;
   }) : definitions.elements.map((element) => {
@@ -808,6 +810,8 @@ export function parseDefinitions(ref) {
       throw new Error("an internal flag may not default to Everyone");
     }
 
+    kinds.push(kind?.text ?? "feature");
+
     const shippedOnProperties = element.properties.filter((property) =>
       property.name &&
       ((typescript.isIdentifier(property.name) || typescript.isStringLiteral(property.name)) &&
@@ -839,7 +843,18 @@ export function parseDefinitions(ref) {
   if (!mode || !typescript.isStringLiteral(mode)) {
     throw new Error("DEFAULT_FEATURE_FLAG_MODE must be a string literal");
   }
-  if (mode.text !== "OWNER_AND_QA") throw new Error("Legacy flags must default to Owner + QA.");
+  if (mode.text !== "OWNER_AND_QA") throw new Error("Feature flags must default to Owner + QA.");
+  const bugfixModeBinding = declarations.get("DEFAULT_BUGFIX_FLAG_MODE");
+  if (bugfixModeBinding || kinds.includes("bugfix")) {
+    if (!bugfixModeBinding?.isConst) throw new Error("DEFAULT_BUGFIX_FLAG_MODE must be declared const");
+    for (const sourceFile of sourceFiles) {
+      assertPolicyBindingImmutable(sourceFile, "DEFAULT_BUGFIX_FLAG_MODE", bugfixModeBinding.declaration);
+    }
+    const bugfixMode = unwrapExpr(bugfixModeBinding.declaration.initializer);
+    if (!bugfixMode || !typescript.isStringLiteral(bugfixMode) || bugfixMode.text !== "EVERYONE") {
+      throw new Error("Bugfix flags must default to Everyone.");
+    }
+  }
   return { keys, shippedOn: new Map(keys.map((key, index) => [key, shippedOn[index]])) };
 }
 

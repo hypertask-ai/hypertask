@@ -13,11 +13,10 @@ is not done.
 
 ## Flags
 
-New behaviour ships behind a flag named after the ticket, default Everyone unless `releaseRisk.highRisk` is set (HTPR-7389).
-Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. Feature and improvement flags also default to Everyone unless `releaseRisk.highRisk` names money, access, data deletion or customer emails (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint.
+New behaviour ships behind a ticket flag with explicit `defaultMode: "EVERYONE"`, unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`. Existing flags keep their current mode (HTPR-7389).
+Bug fixes ship behind a ticket-named flag with `kind: "bugfix"`, on for Everyone by default (Valentin, 2026-10-06). Fixes to saved data, security and crashes keep shipping with no flag. Bugfix flags get the same cleanup after 14 days on Everyone. New feature and improvement flags set `defaultMode: "EVERYONE"` in their definition file unless `releaseRisk.highRisk` is set (`money`, `access`, `data-deletion`, `customer-email`) or kind is `internal`; existing flags keep their current mode (Valentin, 2026-10-20, HTPR-7389). A `[BUGFIX]` title is only a hint.
 
-Check the mode before judging a flagged feature. `OWNER_AND_QA` is the
-expected feature/improvement mode. Bugfix flags default to `EVERYONE`. `OWNER_ONLY` and an unapproved feature `EVERYONE` are failures.
+Check the declared and stored mode before judging a flagged feature. New eligible flags explicitly use `EVERYONE`; existing flags keep their current mode. High-risk flags explicitly use `OWNER_AND_QA`; bugfix flags otherwise inherit `EVERYONE`.
 User 985 (`~/.config/hypertask-videos/storageState-qa.json`) sees Owner + QA
 flags. User 2343 (`storageState-qa-normal.json`) is the flag-off account.
 Pass the file with `--state`. Never print it. Never use Valentin's account.

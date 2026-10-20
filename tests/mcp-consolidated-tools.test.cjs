@@ -107,11 +107,8 @@ test('catalog flag on advertises 15 to 25 consolidated tools, with no duplicate 
   }
 })
 
-test('server flag defaults to Everyone and Owner + QA evaluates the authenticated user', async () => {
+test('server flag defaults to Owner + QA and evaluates the authenticated user', async () => {
   mode = null
-  authUserId = 7
-  assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, 7), true)
-  mode = 'OWNER_AND_QA'
   for (const [id, enabled] of [[6, true], [985, true], [7, false]]) {
     authUserId = id
     assert.equal(await flags.isFeatureEnabled(flags.HTPR_6804_MCP_TOOLS_FLAG, id), enabled)

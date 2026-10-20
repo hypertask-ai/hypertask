@@ -6,7 +6,8 @@ const test = require("node:test");
 const folder = path.join(__dirname, "..", "src", "lib", "flags", "definitions");
 const files = fs.readdirSync(folder).filter((name) => name.endsWith(".ts") && !name.startsWith("index"));
 
-// Explicit legacy defaults remain overrides of the registry policy.
+// HTPR-7084 changed display-only kinds into real kinds without releasing missing rows.
+// Derive surviving legacy flags from an immutable registry snapshot; removals never edit it.
 const { defaultModes } = require("./fixtures/legacy-flag-defaults.json");
 
 function assertLegacyDefaults(definitions) {
@@ -14,7 +15,8 @@ function assertLegacyDefaults(definitions) {
     const expected = defaultModes[name.replace(/\.ts$/, "")];
     if (!expected) continue;
     const explicit = /defaultMode:\s*"(\w+)"/.exec(source)?.[1];
-    if (explicit) assert.equal(explicit, expected, name);
+    const effective = explicit ?? (/kind:\s*"bugfix"/.test(source) ? "EVERYONE" : "OWNER_AND_QA");
+    assert.equal(effective, expected, name);
   }
 }
 
@@ -24,16 +26,16 @@ test("every flag definition declares its kind", () => {
   assert.deepEqual(missing, []);
 });
 
-test("surviving explicit legacy defaults keep their historical modes", () => {
+test("surviving legacy flags keep their historical Owner and QA default", () => {
   assertLegacyDefaults(files.map((name) => [name, fs.readFileSync(path.join(folder, name), "utf8")]));
 });
 
-test("legacy default protection allows implicit defaults but rejects changed explicit overrides", () => {
+test("legacy default protection ignores removed definitions but rejects accidental releases", () => {
   const name = `${Object.keys(defaultModes)[0]}.ts`;
   assertLegacyDefaults([]);
   assertLegacyDefaults([[name, 'kind: "feature",']]);
   assertLegacyDefaults([[name, 'kind: "bugfix", defaultMode: "OWNER_AND_QA",']]);
-  assertLegacyDefaults([[name, 'kind: "bugfix",']]);
+  assert.throws(() => assertLegacyDefaults([[name, 'kind: "bugfix",']]), assert.AssertionError);
   assert.throws(() => assertLegacyDefaults([[name, 'kind: "feature", defaultMode: "EVERYONE",']]), assert.AssertionError);
 });
 

@@ -28,25 +28,25 @@ function registry(mode = null, fail = false) {
   return { flags, checks, users };
 }
 
-test('REST compatibility flag is declared exactly once with dated metadata and missing-row Everyone', async () => {
+test('REST compatibility flag is declared exactly once with dated metadata and missing-row Owner + QA', async () => {
   const { flags } = registry();
   const keys = load('src/lib/flags/keys.ts', {});
   assert.equal(keys.HTPR_6924_REST_COMPAT_FLAG, key);
   assert.equal(flags.HTPR_6924_REST_COMPAT_FLAG, key);
   assert.equal(flags.FEATURE_FLAG_KEYS.filter((value) => value === key).length, 1);
   const entry = (await flags.listFeatureFlagModes()).find((value) => value.key === key);
-  assert.equal(entry.mode, 'EVERYONE');
+  assert.equal(entry.mode, 'OWNER_AND_QA');
   assert.equal(entry.shippedOn, '2026-10-06');
   assert.equal(entry.ticketUrl, 'https://app.hypertask.ai/detail/project-15/6924');
   assert.match(entry.description, /page REST routes/);
-  assert.deepEqual(await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(key, id))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(key, id))), [true, true, false]);
 });
 test('REST flag honors OFF and isolated Everyone, identity checks and database failure', async () => {
   for (const [mode, expected] of [['OFF', [false, false, false]], ['EVERYONE', [true, true, true]]]) {
     const { flags } = registry(mode);
     assert.deepEqual(await Promise.all([6, 985, 7].map((id) => flags.isFeatureEnabled(key, id))), expected);
   }
-  const { flags, users } = registry('OWNER_AND_QA');
+  const { flags, users } = registry();
   users.set(6, 'forged@example.com');
   users.set(985, 'forged@example.com');
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
@@ -70,7 +70,7 @@ test('each page method gates shared helpers by the signed requesting user, never
     const result = await run(operation, 'ON', { userId, mocks });
     assert.deepEqual(contract(result), contract(await run(operation, 'OFF', { userId })));
     assert.deepEqual(checks, [key]);
-    assert.equal(legacyChecks, 0);
+    assert.equal(legacyChecks, userId === 7 ? 1 : 0);
   }
 });
 test('OFF and flag-store outage use original entry checks for owner and QA on every page method', async () => {

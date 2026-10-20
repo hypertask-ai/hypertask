@@ -564,7 +564,7 @@ test('missing tokens and internally checked calls retain the existing no-increme
   assert.equal(h.stats().flagCalls, 0)
 })
 
-test('flag registry defaults to Everyone (on for this global gate) and the global helper evaluates without a user', async () => {
+test('flag registry defaults to Owner + QA (off for this global gate) and the global helper evaluates without a user', async () => {
   const definition = load('src/lib/flags/definitions/htpr-7133-mcp-ratelimit-fast.ts', {}).default
   const flags = load('src/lib/flags.ts', {
     '@/lib/prisma': {}, react: { cache: run => run },
@@ -575,7 +575,7 @@ test('flag registry defaults to Everyone (on for this global gate) and the globa
   assert.equal(definition.key, flagKey)
   assert.equal(definition.kind, 'feature')
   assert.ok(definition.releaseRisk.reason)
-  assert.equal(flags.defaultFeatureFlagMode(flagKey), 'EVERYONE')
+  assert.equal(flags.defaultFeatureFlagMode(flagKey), 'OWNER_AND_QA')
   for (const mode of ['EVERYONE', 'OFF', 'OWNER_ONLY', 'OWNER_AND_QA']) {
     const db = { featureFlag: { findUnique: async () => ({ mode }) }, user: {
       findUnique: () => { throw new Error('Global mode check must not read a user') },

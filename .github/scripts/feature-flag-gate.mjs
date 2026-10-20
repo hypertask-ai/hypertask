@@ -1,7 +1,7 @@
 import { writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { posix as pathPosix } from "node:path";
-import { git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks } from "./feature-flag-registry.mjs";
+import { git, parseFlagRegistry, parseDefinitions, unwrapExpr, isBindingWrite, assertAddedFlagReleaseRisks, flagDefinitionPaths, parseFlagFile } from "./feature-flag-registry.mjs";
 
 const require = createRequire(import.meta.url);
 const typescript = require(process.env.FEATURE_FLAG_TYPESCRIPT_PATH || "typescript");
@@ -1533,6 +1533,15 @@ export function evaluate({ title, baseSha, headSha, labels = [] }) {
         if (!baseDefinitions.keys.includes(key)) added.add(key);
       }
       if (added.size) assertAddedFlagReleaseRisks(headSha, [...added]);
+      const baseFiles = new Set(flagDefinitionPaths(mergeBase));
+      for (const path of flagDefinitionPaths(headSha)) {
+        if (baseFiles.has(path)) continue;
+        const { definition } = parseFlagFile(git(["show", `${headSha}:${path}`]), path);
+        if (!["bugfix", "internal"].includes(definition.kind) && !definition.releaseRisk?.highRisk &&
+            definition.defaultMode !== "EVERYONE") {
+          throw new Error(`new flag ${definition.key} must set defaultMode: "EVERYONE" (or releaseRisk.highRisk for money, access, data-deletion or customer-email)`);
+        }
+      }
     } catch (error) {
       return failure(`Feature flag files or imports could not be parsed safely, or new flags need release-risk entries: ${error.message}`);
     }

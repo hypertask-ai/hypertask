@@ -72,7 +72,7 @@ require.cache[authPath] = {
 const jiti = createJiti(__filename, { interopDefault: true, alias: { "@": path.join(root, "src"), react: require.resolve("react") } });
 const flags = jiti(path.join(root, "src/lib/flags.ts"));
 const definitions = require("./helpers/flag-files.cjs").definitions();
-const declaredDefault = (definition) => definition.defaultMode ?? (definition.releaseRisk?.highRisk ? "OWNER_AND_QA" : "EVERYONE");
+const declaredDefault = (definition) => definition.defaultMode ?? (definition.kind === "bugfix" ? "EVERYONE" : "OWNER_AND_QA");
 
 test.beforeEach(() => {
   row = null;
@@ -100,13 +100,13 @@ test("Flags dropdown filters default to Owner + QA as a feature and respect OFF"
   assert.equal(await flags.isFeatureEnabled(key, 6), false);
 });
 
-test("Ctrl+J split tasks default to Everyone as a feature and respect OFF", async () => {
+test("Ctrl+J split tasks default to Owner + QA as a feature and respect OFF", async () => {
   const key = flags.HTPR_7056_CTRLJ_SPLIT_TASKS_FLAG;
   assert.equal(key, "htpr-7056-ctrlj-split-tasks");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
   assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   row = { mode: "OFF" };
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
@@ -323,17 +323,17 @@ test("task writer Sonnet pin is an Owner + QA feature and respects OFF", async (
   assert.equal(await flags.isFeatureEnabled(key, 985), false);
 });
 
-test("Haiku default is an Everyone feature, including system ID zero", async () => {
+test("Haiku default is an Owner + QA feature, including system ID zero only after release", async () => {
   const key = flags.HTPR_7038_HAIKU_DEFAULT_FLAG;
   assert.equal(key, "htpr-7038-haiku-default");
   const entry = (await flags.listFeatureFlagModes()).find(entry => entry.key === key);
   assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "EVERYONE");
-  assert.equal(flags.defaultFeatureFlagMode(key), "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
+  assert.equal(flags.defaultFeatureFlagMode(key), "OWNER_AND_QA");
   assert.equal(await flags.isFeatureEnabled(key, 6), true);
   assert.equal(await flags.isFeatureEnabled(key, 985), true);
-  assert.equal(await flags.isFeatureEnabled(key, 7), true);
-  assert.equal(await flags.isFeatureEnabled(key, 0), true);
+  assert.equal(await flags.isFeatureEnabled(key, 7), false);
+  assert.equal(await flags.isFeatureEnabled(key, 0), false);
   row = { mode: "EVERYONE", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(key, 0), true);
   row = { mode: "OFF", updatedAt: new Date() };
@@ -549,7 +549,6 @@ test("owner access requires both the approved id and login identity", async () =
 });
 
 test("QA access requires both the approved id and login identity", async () => {
-  row = { mode: "OWNER_AND_QA" };
   assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
   usersById.set(985, { email: "someone@example.com" });
   assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
@@ -567,7 +566,9 @@ test("feature flag modes enforce owner, QA, everyone, and off access", () => {
   assert.equal(flags.featureFlagModeEnabled("OFF", true, true), false);
 });
 
-test("declared flags use their risk-aware defaults when no row is stored", async () => {
+test("declared flags default to Owner + QA, except Everyone-default bugfix flags", async () => {
+  // HTPR-6192: this is the point of the ticket. A flag whose rollout was never chosen must not be
+  // owner-only, or the QA account cannot verify the feature before Valentin looks at it.
   assert.ok(flags.FEATURE_FLAG_KEYS.length > 0);
   for (const definition of definitions) {
     const mode = declaredDefault(definition);
@@ -689,53 +690,53 @@ test("size-label-click bugfix defaults to Everyone and respects OFF", async () =
 test("server first-screen flag is registered but unused and scoped flag seeds reuse server evaluation", async () => {
   const key = flags.HTPR_6934_SERVER_FIRST_SCREEN_FLAG;
   assert.equal(key, "htpr-6934-server-first-screen");
-  assert.equal((await flags.listFeatureFlagModes()).find(row => row.key === key).mode, "EVERYONE");
+  assert.equal((await flags.listFeatureFlagModes()).find(row => row.key === key).mode, "OWNER_AND_QA");
   const { getFirstScreenFlagSeed } = jiti(path.join(root, "src/lib/firstScreen/serverFlags.ts"));
   const clock = "2026-10-04T00:30:00.000Z";
   assert.deepEqual(await getFirstScreenFlagSeed(985, [key, "missing"], clock), {
     accountId: 985, evaluatedAt: clock, values: { [key]: true, missing: false },
   });
   assert.deepEqual(await getFirstScreenFlagSeed(7, [key], clock), {
-    accountId: 7, evaluatedAt: clock, values: { [key]: true },
+    accountId: 7, evaluatedAt: clock, values: { [key]: false },
   });
   await assert.rejects(getFirstScreenFlagSeed(0, [key], clock), /scope/);
   await assert.rejects(getFirstScreenFlagSeed(985, [key], "bad"), /scope/);
 });
 
-test("stable layout has its own dated Everyone flag and respects OFF", async () => {
+test("stable layout has its own dated Owner + QA flag and respects OFF", async () => {
   assert.equal(flags.HTPR_6899_STABLE_LAYOUT_FLAG, "htpr-6899-stable-layout");
   const listed = await flags.listFeatureFlagModes();
   const stable = listed.find(({ key }) => key === flags.HTPR_6899_STABLE_LAYOUT_FLAG);
   assert.ok(stable);
-  assert.equal(stable.mode, "EVERYONE");
+  assert.equal(stable.mode, "OWNER_AND_QA");
   assert.equal(stable.shippedOn, "2026-10-03");
   assert.equal(stable.ticketUrl, "https://app.hypertask.ai/detail/project-15/6899");
   assert.match(stable.description, /cached tickets/);
-  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map(userId => flags.isFeatureEnabled(stable.key, userId))), [false, false, false]);
 });
 
-test("typed settings API client defaults to Everyone and respects OFF", async () => {
+test("typed settings API client defaults to Owner + QA and respects OFF", async () => {
   const key = flags.HTPR_6925_TYPED_API_CLIENT_FLAG;
   assert.equal(key, "htpr-6925-typed-api-client");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
   assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6925");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("typed task reads have their own dated Everyone flag and respect OFF independently of settings", async () => {
+test("typed task reads have their own dated Owner + QA flag and respect OFF independently of settings", async () => {
   const key = flags.HTPR_6967_TYPED_TASK_READS_FLAG;
   assert.equal(key, "htpr-6967-typed-task-reads");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
   assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6967");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   listedRows = [{ key, mode: "OFF", updatedAt: new Date() }];
   assert.equal((await flags.featureFlagsForUser(985))[key], false);
   assert.equal((await flags.featureFlagsForUser(985))[flags.HTPR_6925_TYPED_API_CLIENT_FLAG], true);
@@ -743,20 +744,19 @@ test("typed task reads have their own dated Everyone flag and respect OFF indepe
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("search Ask AI fullscreen has its own Everyone flag and respects OFF", async () => {
+test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", async () => {
   const key = flags.HTPR_6936_ASK_AI_FULLSCREEN_FLAG;
   assert.equal(key, "htpr-6936-ask-ai-fullscreen");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
   assert.ok(entry);
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.ticketUrl, "https://app.hypertask.ai/detail/project-15/6936");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
 test("per-user flag responses distinguish QA from normal members", async () => {
-  listedRows = [{ key: "htpr-6136-figma-connect", mode: "OWNER_AND_QA" }];
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
   assert.equal(qaFlags["htpr-6136-figma-connect"], true);
@@ -1128,11 +1128,11 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   const seeded = localFlagModes(defaults, { "htpr-6136-figma-connect": false });
   assert.equal(seeded[key], "EVERYONE");
   assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
-  assert.equal(seeded["htpr-6136-figma-connect"], "EVERYONE");
+  assert.equal(seeded["htpr-6136-figma-connect"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
   assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-6136-figma-connect", 2343), true);
+  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-6136-figma-connect", 2343), false);
   row = { key, mode: "OFF" };
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), false);
   assert.deepEqual(await bugfixFlags.featureFlagCandidateUserIds(key), []);
@@ -1198,32 +1198,32 @@ test("every registered flag has a valid kind and only registered explicit relate
   }
   const entry = rows.find(({ key }) => key === flags.HTPR_6964_FLAGS_PAGE_TYPE_SEARCH_FLAG);
   assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.ticketId, "HTPR-6964");
-  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map(id => flags.isFeatureEnabled(entry.key, id))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.equal(await flags.isFeatureEnabled(entry.key, 6), false);
 });
 
-test("typed property writes default Everyone and respect OFF", async () => {
+test("typed property writes default Owner + QA and respect OFF", async () => {
   const key = flags.HTPR_6975_TYPED_WRITES_FLAG;
   assert.equal(key, "htpr-6975-typed-writes");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
 
-test("typed section and notification writes are a feature defaulting Everyone", async () => {
+test("typed section and notification writes are a feature defaulting Owner + QA", async () => {
   const key = flags.HTPR_6979_TYPED_WRITES_FLAG;
   assert.equal(key, "htpr-6979-typed-writes-sections-notifications");
   const entry = (await flags.listFeatureFlagModes()).find((flag) => flag.key === key);
   assert.equal(entry.kind, "feature");
-  assert.equal(entry.mode, "EVERYONE");
+  assert.equal(entry.mode, "OWNER_AND_QA");
   assert.equal(entry.shippedOn, "2026-10-06");
-  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, true]);
+  assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [true, true, false]);
   row = { mode: "OFF", updatedAt: new Date() };
   assert.deepEqual(await Promise.all([6, 985, 7].map((userId) => flags.isFeatureEnabled(key, userId))), [false, false, false]);
 });
@@ -1471,36 +1471,6 @@ test("listing skips audit queries unless lastChange is explicitly requested", as
     assert.equal(changeQueries.length, 0);
     assert.equal(listed.some((row) => Object.hasOwn(row, "lastChange")), false);
   }
-});
-
-test("declared defaults depend on high-risk categories, not kind, and explicit defaults win", async (t) => {
-  const fs = require("node:fs");
-  const os = require("node:os");
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "risk-aware-flags-"));
-  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-  const cases = [];
-  for (const kind of [undefined, "feature", "improvement", "bugfix"]) {
-    for (const highRisk of [undefined, "money", "access", "data-deletion", "customer-email"]) {
-      for (const defaultMode of [undefined, "OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
-        cases.push({
-          key: `htpr-7389-fixture-${cases.length}`, kind, defaultMode,
-          shippedOn: "2026-10-20", description: "Fixture",
-          releaseRisk: { risk: "new", reason: "Fixture", highRisk },
-        });
-      }
-    }
-  }
-  cases.push({ key: "htpr-7389-no-risk", kind: "feature", shippedOn: "2026-10-20", description: "Fixture" });
-  fs.writeFileSync(path.join(dir, "definitions.ts"), `export const FEATURE_FLAG_DEFINITIONS = ${JSON.stringify(cases)};`);
-  const fixture = path.join(dir, "flags.ts");
-  fs.writeFileSync(fixture, fs.readFileSync(path.join(root, "src/lib/flags.ts"), "utf8")
-    .replaceAll("@/lib/flags/definitions", "./definitions.ts"));
-  const fixtureFlags = jiti(fixture);
-  for (const definition of cases) {
-    const expected = definition.defaultMode ?? (definition.releaseRisk?.highRisk ? "OWNER_AND_QA" : "EVERYONE");
-    assert.equal(fixtureFlags.defaultFeatureFlagMode(definition.key), expected, JSON.stringify(definition));
-  }
-  assert.equal(fixtureFlags.defaultFeatureFlagMode("legacy-unknown"), "OWNER_AND_QA");
 });
 
 test("stored modes override registry defaults for declared and legacy keys in every reader", async () => {

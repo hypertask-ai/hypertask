@@ -98,6 +98,8 @@ export default { key: RISK_FLAG, shippedOn: "2026-10-20", description: "Fixture"
   for (const highRisk of ["money", "access", "data-deletion", "customer-email"]) {
     const risk = `{ risk: "new", reason: "Sensitive change.", highRisk: "${highRisk}" }`;
     assert.equal(parseFlagFile(source(risk), filename).definition.releaseRisk.highRisk, highRisk);
+    assert.throws(() => parseFlagFile(source(risk, ', kind: "bugfix"'), filename), /releaseRisk.highRisk may not default to Everyone/);
+    assert.equal(parseFlagFile(source(risk, ', kind: "bugfix", defaultMode: "OWNER_AND_QA"'), filename).definition.defaultMode, "OWNER_AND_QA");
     assert.equal(parseFlagFile(source(risk, ', defaultMode: "OFF"'), filename).definition.defaultMode, "OFF");
     assert.throws(() => parseFlagFile(source(risk, ', defaultMode: "EVERYONE"'), filename),
       /releaseRisk.highRisk may not default to Everyone/);
@@ -115,4 +117,15 @@ export default { key: RISK_FLAG, shippedOn: "2026-10-20", description: "Fixture"
     '{ risk: "new", reason: "Fixture", extra: "access" }',
     '{ risk: "new", reason: "Fixture", ...extra }',
   ]) assert.throws(() => parseFlagFile(source(risk), filename), /releaseRisk/);
+});
+
+
+test("internal kind parses without releasing it and refuses Everyone", async () => {
+  const { parseFlagFile } = await import("../.github/scripts/feature-flag-registry.mjs");
+  const filename = `${folder}/htpr-7389-internal.ts`;
+  const source = (extra = "") => `export const INTERNAL_FLAG = "htpr-7389-internal";
+export default { key: INTERNAL_FLAG, kind: "internal", shippedOn: "2026-10-20", description: "Fixture" ${extra} } as const;`;
+  assert.equal(parseFlagFile(source(), filename).definition.kind, "internal");
+  assert.equal(parseFlagFile(source(', defaultMode: "OWNER_AND_QA"'), filename).definition.defaultMode, "OWNER_AND_QA");
+  assert.throws(() => parseFlagFile(source(', defaultMode: "EVERYONE"'), filename), /internal flag may not default to Everyone/);
 });
