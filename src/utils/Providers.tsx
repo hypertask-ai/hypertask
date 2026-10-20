@@ -11,7 +11,7 @@ import MobileViewFlagBridge from "@/lib/contexts/MobileViewFlagBridge";
 import { globalNotificationFocusAtom, currentUserAtom, currentProjectAtom, boardLayoutAtom, boardLayoutPreferenceAtom, appShellRailAtom,
   appShellRailExpandedAtom, showQuickTipsAtom, showEmptyViewTabsAtom, hiddenViewTabIdsAtom, viewTabsOrderAtom,
   tableVisibleColumnsAtom, tableColumnWidthsAtom, tableTitleWrapAtom, openAiChatByDefaultAtom,
-  aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom } from "@/store";
+  aiChatAutoOpenSuppressedAtom, aiChatPinnedAtom, aiChatSidebarWidthPxAtom, isAiChatSidebarModeAtom } from "@/store";
 import type { StateInitialValues } from "@/lib/state";
 import { usePathname } from "next/navigation";
 import { Toaster } from "react-hot-toast";
@@ -69,13 +69,17 @@ const createQueryBoundary = (accountId: number | null, snapshot: BoardDocument |
 const boardInitialValues = (snapshot: BoardDocument | null): StateInitialValues | undefined => {
   if (!snapshot) return undefined;
   const display = snapshot.display as BoardDisplay;
-  return [[currentUserAtom, snapshot.data.user], [currentProjectAtom, snapshot.data.projects.updatedProjects[0]],
+  const values: StateInitialValues[number][] = [[currentUserAtom, snapshot.data.user], [currentProjectAtom, snapshot.data.projects.updatedProjects[0]],
     [boardLayoutAtom, snapshot.selection.surface], [boardLayoutPreferenceAtom, display.boardLayout],
     [appShellRailAtom, display.board.railOn], [appShellRailExpandedAtom, !display.railCollapsed], [showQuickTipsAtom, display.quickTips],
     [showEmptyViewTabsAtom, display.board.showEmptyViewTabs], [hiddenViewTabIdsAtom, display.board.hiddenViewTabIds],
     [viewTabsOrderAtom, display.board.viewTabsOrder], [tableVisibleColumnsAtom, display.board.tableColumns],
     [tableColumnWidthsAtom, display.board.tableWidths], [tableTitleWrapAtom, display.board.tableTitleWrap],
     [openAiChatByDefaultAtom, display.board.openChat], [aiChatAutoOpenSuppressedAtom, display.board.chatSuppressed], [aiChatPinnedAtom, display.board.chatPinned]];
+  if (display.board.chatWidth !== undefined && display.board.chatSidebarMode !== undefined) {
+    values.push([aiChatSidebarWidthPxAtom, display.board.chatWidth], [isAiChatSidebarModeAtom, display.board.chatSidebarMode]);
+  }
+  return values;
 };
 
 const inboxInitialValues = (snapshot: InboxDocument): StateInitialValues => {

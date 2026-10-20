@@ -33,6 +33,8 @@ import {
   announcementSlideAtom,
   aiChatExplicitOpenAtAtom,
   aiChatAutoOpenSuppressedAtom,
+  aiChatPinnedAtom,
+  openAiChatByDefaultAtom,
   showAIChatInterfaceAtom,
   mobileCommentComposerOpenAtom,
   showAccountSwitcherAtom,
@@ -292,6 +294,7 @@ const NO_CHAT_RESTORE_ROUTES = [
   "/verify-email",
 ];
 
+import { HTPR_7406_DESKTOP_SERVER_BOARD_FLAG } from "@/lib/flags/keys";
 import { useFirstScreenSurface } from "@/lib/firstScreen/SurfaceContext";
 
 export default function GlobalProvider({
@@ -308,7 +311,8 @@ export default function GlobalProvider({
   const isApple = useDeviceContext();
   const mbl = useContext(MobileViewContext);
   const pathname = usePathname();
-  const routeOwnsMobileChrome = Boolean(useFirstScreenSurface(authenticatedUserId));
+  const firstScreen = useFirstScreenSurface(authenticatedUserId);
+  const routeOwnsMobileChrome = Boolean(firstScreen);
   const myTasksShortcutsWidthEnabled = useFlag(MY_TASKS_SHORTCUTS_WIDTH_FLAG);
   useAppShellSurfaceShortcuts();
   const startupUser = useRecoilValue(currentUserAtom);
@@ -386,6 +390,17 @@ export default function GlobalProvider({
   } = useGlobalUIState();
   const [, setAiChatExplicitOpenAt] = useRecoilState(aiChatExplicitOpenAtAtom);
   const aiChatAutoOpenSuppressed = useRecoilValue(aiChatAutoOpenSuppressedAtom);
+  const aiChatPinned = useRecoilValue(aiChatPinnedAtom);
+  const openAiChatByDefault = useRecoilValue(openAiChatByDefaultAtom);
+  const [reserveBoardChat, setReserveBoardChat] = useState(() =>
+    firstScreen?.scope.route === "/project" && pathname?.startsWith("/project") === true &&
+    firstScreen.flags.values[HTPR_7406_DESKTOP_SERVER_BOARD_FLAG] === true &&
+    !mbl && authenticatedUserId !== null &&
+    (aiChatPinned || (openAiChatByDefault && !aiChatAutoOpenSuppressed))
+  );
+  useEffect(() => {
+    if (showAiChatInterface || !pathname?.startsWith("/project")) setReserveBoardChat(false);
+  }, [showAiChatInterface, pathname]);
   const setShowAiChatInterface = useSetRecoilState(showAIChatInterfaceAtom);
   const { openSettings } = useSettingsNavigation();
 
@@ -538,12 +553,15 @@ export default function GlobalProvider({
     (agentChatMobileFullscreenFlag && agentChatMobileFullscreenAtomOn) ||
     (agentChatMobileFullscreenFlag && isAgentChatPath(pathname));
   const commentComposerOpen = useRecoilValue(mobileCommentComposerOpenAtom);
+  let reserveFlaggedBoardChat = false;
+  if (useFlag(HTPR_7406_DESKTOP_SERVER_BOARD_FLAG)) reserveFlaggedBoardChat = reserveBoardChat;
   const { sidebarWidthPx, showMobileShellPath, showMobileTabBar, showMobileBottomInset, showMobileBottomNav } = usePageLoadReservations({
     mbl,
     pathname,
     authenticatedUserId,
     currentUserId: currentUser?.id,
     showAiChatInterface,
+    reserveBoardChat: reserveFlaggedBoardChat,
     aiChatAutoOpenSuppressed,
     commentComposerOpen,
     agentChatHidesMobileShell,
