@@ -10,7 +10,7 @@ const { createJiti } = require("jiti");
 const root = path.resolve(__dirname, "..");
 const modulePath = (relativePath) => path.join(root, relativePath);
 
-test("Agent Chat skill UI stays available with typed transport OFF and slash skills never read flags", async () => {
+test("Agent Chat skill UI stays available with typed transport and comment skill execution OFF", async () => {
   const stubs = new Map();
   const globals = ["window", "document", "HTMLElement", "IS_REACT_ACT_ENVIRONMENT"];
   const previousGlobals = new Map(
@@ -33,7 +33,7 @@ test("Agent Chat skill UI stays available with typed transport OFF and slash ski
     stubModule("src/hooks/useFlag.tsx", {
       useFlag: (key) => {
         flagChecks += 1;
-        assert.equal(key, "htpr-6925-typed-api-client", "Only the settings read transport may be flagged");
+        assert.ok(["htpr-6925-typed-api-client", "htpr-7480-comment-skill-run", "htpr-7393-comment-inline-ai"].includes(key), "Skill availability is not flag-gated");
         return false;
       },
     });
@@ -52,6 +52,7 @@ test("Agent Chat skill UI stays available with typed transport OFF and slash ski
     });
     stubModule("src/store/index.ts", { currentProjectAtom: {} });
     stubModule("src/assets/AILogo.png", { default: { src: "/ai-logo.png" } });
+    stubModule("src/components/PageComponents/TaskDetail/TopRow/CreateSummaryButton.tsx", { AI_TASK_WRITER_EVENT: "ai-task-writer-trigger" });
     stubModule("src/lib/skills/slashSkills.ts", {
       SLASH_MENU_DOM_ID: "slash-command-list",
       fetchSlashSkills: async () => {
@@ -128,7 +129,7 @@ test("Agent Chat skill UI stays available with typed transport OFF and slash ski
     });
     assert.match(container.textContent, /Unslop/);
     assert.equal(fetches, 1);
-    assert.equal(flagChecks, 0);
+    assert.ok(flagChecks > 0, "Execution flags are read without hiding slash skills");
   } finally {
     if (reactRoot) await React.act(async () => reactRoot.unmount());
     dom?.window.close();
