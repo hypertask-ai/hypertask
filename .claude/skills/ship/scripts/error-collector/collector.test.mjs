@@ -120,6 +120,23 @@ check('sources', 'normalization strips every dynamic value and hash matches inde
   assert.notEqual(fingerprint('web', 'failed 42', '/users/1'), fingerprint('api', 'failed 42', '/users/1'));
 });
 
+check('sources', 'PowerShell cancellation sessions count as one new kind across transient scopes', () => withHarness(async h => {
+  const messages = [
+    ['run-u2003472.scope', '7.6.7:B:80', 2169841],
+    ['run-u2003644.scope', '7.6.7:C:80', 2863890],
+    ['run-r1b66062f07d0426abf597f7579b30ec8.scope', '7.6.7:C:80', 3021000],
+    ['run-r536fa8835f1f416693556a3156812a26.scope', '7.4.6:C:99', 3051000],
+  ].map(([unit, session, pid]) => `${unit}: (${session}) [NamedPipeIPC_ServerListenerError:NamedPipe.Exception.Error] An error has occurred in PowerShell IPC listening thread on process: ${pid} in AppDomain: None. Error Message: Operation canceled.`);
+  assert.equal(new Set(messages.map(message => fingerprint('vps-journal', message))).size, 1);
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vps-journal', messages[0].replace('Operation canceled.', 'Access denied.')));
+  assert.notEqual(fingerprint('vps-journal', messages[0]), fingerprint('vercel', messages[0]));
+  h.events(messages.map(message => event({ service: 'vps-journal', board: 4060, message })));
+  assert.equal(await h.run(), 0);
+  assert.equal(creates(h).length, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].newGroups, 1);
+  assert.equal(h.state().days['2026-10-14']['vps-journal'].errors, messages.length);
+}));
+
 check('sources', 'leading ISO timestamps and rejected Better Auth origins do not split one error into many tickets', () => withHarness(async h => {
   const host = 'https://hypertask-git-yper4-399-guest-demo-hypertask.vercel.app';
   const lines = [
