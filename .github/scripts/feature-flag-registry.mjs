@@ -232,7 +232,8 @@ export function parseFlagFile(source, path) {
     if (!typescript.isStringLiteral(value)) fail(`${name} must be a string literal`);
     definition[name] = value.text;
   }
-  if (definition.kind && !["feature", "bugfix", "improvement"].includes(definition.kind)) fail("kind must be feature, bugfix or improvement");
+  if (definition.kind && !["feature", "bugfix", "improvement", "internal"].includes(definition.kind)) fail("kind must be feature, bugfix, improvement or internal");
+  if (definition.kind === "internal" && definition.defaultMode === "EVERYONE") fail("an internal flag may not default to Everyone");
   if (definition.defaultMode && !["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"].includes(definition.defaultMode)) fail("invalid defaultMode");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(definition.shippedOn) || !Number.isFinite(Date.parse(definition.shippedOn)) ||
       new Date(definition.shippedOn).toISOString().slice(0, 10) !== definition.shippedOn) fail("shippedOn must be a calendar date");
@@ -797,8 +798,14 @@ export function parseDefinitions(ref) {
     }
     const kind = kindProperties.length ? unwrapExpr(kindProperties[0].initializer) : null;
     if (kind && (!typescript.isStringLiteral(kind) ||
-        !["feature", "bugfix", "improvement"].includes(kind.text))) {
-      throw new Error("feature flag kind must be feature, bugfix or improvement");
+        !["feature", "bugfix", "improvement", "internal"].includes(kind.text))) {
+      throw new Error("feature flag kind must be feature, bugfix, improvement or internal");
+    }
+
+    if (kind?.text === "internal" && element.properties.some((property) =>
+      typescript.isPropertyAssignment(property) && property.name?.text === "defaultMode" &&
+      unwrapExpr(property.initializer)?.text === "EVERYONE")) {
+      throw new Error("an internal flag may not default to Everyone");
     }
 
     const shippedOnProperties = element.properties.filter((property) =>
