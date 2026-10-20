@@ -25,7 +25,7 @@ let lockQueries;
 let batchFlagOn;
 class FeatureFlagInputError extends Error {}
 class FeatureFlagApprovalError extends Error {}
-const key = "htpr-6136-figma-connect";
+const key = "htpr-3533-google-calendar";
 const reason = "https://app.hypertask.ai/detail/project-4060/215#comment-123";
 const rows = [{ key, mode: "OWNER_AND_QA" }, { key: "legacy-rollout", mode: "OFF" }];
 stubModule("src/lib/mcp/auth.ts", {

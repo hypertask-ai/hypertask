@@ -41,7 +41,7 @@ const prisma = {
       return row;
     },
     findMany: async () =>
-      listedRows ?? (row ? [{ key: "htpr-6136-figma-connect", ...row }] : []),
+      listedRows ?? (row ? [{ key: "htpr-3533-google-calendar", ...row }] : []),
     upsert: async ({ where, create, update }) => {
       const data = row ? update : create;
       row = { ...(row ?? {}), ...data, key: where.key, updatedAt: new Date() };
@@ -549,11 +549,11 @@ test("owner access requires both the approved id and login identity", async () =
 });
 
 test("QA access requires both the approved id and login identity", async () => {
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), true);
   usersById.set(985, { email: "someone@example.com" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), false);
   usersById.set(7, { email: "valentin@hypertask.ai" });
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), false);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 7), false);
 });
 
 test("feature flag modes enforce owner, QA, everyone, and off access", () => {
@@ -759,21 +759,21 @@ test("search Ask AI fullscreen has its own Owner + QA flag and respects OFF", as
 test("per-user flag responses distinguish QA from normal members", async () => {
   const qaFlags = await flags.featureFlagsForUser(985);
   const normalFlags = await flags.featureFlagsForUser(7);
-  assert.equal(qaFlags["htpr-6136-figma-connect"], true);
-  assert.equal(normalFlags["htpr-6136-figma-connect"], false);
+  assert.equal(qaFlags["htpr-3533-google-calendar"], true);
+  assert.equal(normalFlags["htpr-3533-google-calendar"], false);
 });
 
 test("stored owner-only flags stay unavailable to QA until changed", async () => {
   row = { mode: "OWNER_ONLY", updatedAt: new Date() };
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 6), true);
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), false);
-  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_AND_QA");
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 985), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 6), true);
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), false);
+  await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OWNER_AND_QA");
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 985), true);
 });
 
 test("database failures fail closed instead of becoming the default", async () => {
   readError = new Error("database unavailable");
-  await assert.rejects(flags.isFeatureEnabled("htpr-6136-figma-connect", 6), /database unavailable/);
+  await assert.rejects(flags.isFeatureEnabled("htpr-3533-google-calendar", 6), /database unavailable/);
 });
 
 test("declared flags remain listed with ticket details and can be changed", async () => {
@@ -794,41 +794,41 @@ test("declared flags remain listed with ticket details and can be changed", asyn
     );
   });
 
-  const changed = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const changed = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.equal(changed.mode, "EVERYONE");
-  assert.match(changed.description, /Figma/);
-  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/6136");
-  assert.equal(await flags.isFeatureEnabled("htpr-6136-figma-connect", 7), true);
+  assert.match(changed.description, /Google Calendar/);
+  assert.equal(changed.ticketUrl, "https://app.hypertask.ai/detail/project-15/3533");
+  assert.equal(await flags.isFeatureEnabled("htpr-3533-google-calendar", 7), true);
 });
 
 test("switching to Everyone starts a fresh removal countdown", async () => {
   const before = Date.now();
-  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const released = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   // The countdown has to start from the switch, not from whenever the row was last written.
   assert.ok(released.releasedAt.getTime() >= before);
 
   // Re-pressing Everyone must not extend the deadline of a flag already released.
   row.releasedAt = new Date("2026-01-01T00:00:00.000Z");
   row.removalTaskId = 4242;
-  const again = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  const again = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.equal(again.releasedAt.toISOString(), "2026-01-01T00:00:00.000Z");
   assert.equal(again.removalTaskId, 4242);
 
   // Leaving Everyone and coming back is a new release, so it earns its own countdown and ticket.
-  await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OWNER_ONLY");
-  const rereleased = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
+  await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OWNER_ONLY");
+  const rereleased = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
   assert.ok(rereleased.releasedAt.getTime() >= before);
   assert.equal(rereleased.removalTaskId, null);
 });
 
 test("Keep pauses removal without moving the release date", async () => {
-  const released = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE");
-  const kept = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", true);
+  const released = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE");
+  const kept = await flags.setFeatureFlagKeep("htpr-3533-google-calendar", true);
   assert.equal(kept.keep, true);
   assert.equal(kept.mode, "EVERYONE");
   assert.equal(kept.releasedAt.toISOString(), released.releasedAt.toISOString());
 
-  const resumed = await flags.setFeatureFlagKeep("htpr-6136-figma-connect", false);
+  const resumed = await flags.setFeatureFlagKeep("htpr-3533-google-calendar", false);
   assert.equal(resumed.keep, false);
   assert.equal(resumed.releasedAt.toISOString(), released.releasedAt.toISOString());
 
@@ -1002,7 +1002,7 @@ test("the retired comment shortcuts flag is hidden, immutable and enabled for ol
 test("ticket titles are only fetched when requested, and cover undeclared stored keys too", async () => {
   listedRows = [{ key: "htpr-1111-aaa", mode: "OFF", updatedAt: null }];
   taskRows = [
-    { uniqueIndex: 6136, title: "Connect Figma" },
+    { uniqueIndex: 3533, title: "Google Calendar" },
     { uniqueIndex: 1111, title: "Some legacy ticket" },
   ];
 
@@ -1010,8 +1010,8 @@ test("ticket titles are only fetched when requested, and cover undeclared stored
   withoutTitles.forEach(({ ticketTitle }) => assert.equal(ticketTitle, null));
 
   const withTitles = await flags.listFeatureFlagModes({ includeTicketTitles: true });
-  const declared = withTitles.find(({ key }) => key === "htpr-6136-figma-connect");
-  assert.equal(declared.ticketTitle, "Connect Figma");
+  const declared = withTitles.find(({ key }) => key === "htpr-3533-google-calendar");
+  assert.equal(declared.ticketTitle, "Google Calendar");
   const undeclaredStored = withTitles.find(({ key }) => key === "htpr-1111-aaa");
   assert.equal(undeclaredStored.ticketTitle, "Some legacy ticket");
 });
@@ -1125,14 +1125,14 @@ test("bugfix defaults enable everyone, respect stored Off and list the same runt
   assert.equal(bugfixFlags.defaultFeatureFlagMode(key), "EVERYONE");
   const { localFlagModes } = await import("../scripts/premerge-local-flags.mjs");
   const defaults = Object.fromEntries(bugfixFlags.FEATURE_FLAG_KEYS.map(key => [key, bugfixFlags.defaultFeatureFlagMode(key)]));
-  const seeded = localFlagModes(defaults, { "htpr-6136-figma-connect": false });
+  const seeded = localFlagModes(defaults, { "htpr-3533-google-calendar": false });
   assert.equal(seeded[key], "EVERYONE");
   assert.equal(seeded["htpr-6926-mcp-route-wrapper"], "OFF");
-  assert.equal(seeded["htpr-6136-figma-connect"], "OWNER_AND_QA");
+  assert.equal(seeded["htpr-3533-google-calendar"], "OWNER_AND_QA");
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), true);
   assert.equal(await bugfixFlags.featureFlagCandidateUserIds(key), null);
   assert.equal((await bugfixFlags.listFeatureFlagModes()).find(entry => entry.key === key).mode, "EVERYONE");
-  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-6136-figma-connect", 2343), false);
+  assert.equal(await bugfixFlags.isFeatureEnabled("htpr-3533-google-calendar", 2343), false);
   row = { key, mode: "OFF" };
   assert.equal(await bugfixFlags.isFeatureEnabled(key, 2343), false);
   assert.deepEqual(await bugfixFlags.featureFlagCandidateUserIds(key), []);
@@ -1358,7 +1358,7 @@ test("owner userId check requires both the owner id and registered email", async
 });
 
 test("actor mode changes are audited inside the locked transaction, including an unstored default", async () => {
-  const key = "htpr-6136-figma-connect";
+  const key = "htpr-3533-google-calendar";
   const actor = { userId: 6, agentId: "runner-3", agentName: "Runner 3", reason: "https://app.hypertask.ai/detail/project-4060/215", source: "api" };
   const order = [];
   const originalLock = prisma.$executeRaw;
@@ -1387,7 +1387,7 @@ test("actor mode changes are audited inside the locked transaction, including an
 test("page audits use the user display name and retain the release countdown semantics", async () => {
   usersById.set(6, { displayName: "Valentin", email: "valentin.yeo@gmail.com" });
   const actor = { userId: 6, source: "page" };
-  const key = "htpr-6136-figma-connect";
+  const key = "htpr-3533-google-calendar";
   const released = await flags.setFeatureFlagMode(key, "EVERYONE", actor);
   assert.equal(released.lastChange.actorName, "Valentin");
   row.removalTaskId = 123;
@@ -1409,7 +1409,7 @@ test("a throwing verifier prevents flag reads, audits and upsert after the advis
   const read = t.mock.method(prisma.featureFlag, "findUnique");
   const audit = t.mock.method(prisma.featureFlagChange, "create");
   const upsert = t.mock.method(prisma.featureFlag, "upsert");
-  await assert.rejects(flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE", { userId: 6, source: "api" }, async (tx) => {
+  await assert.rejects(flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE", { userId: 6, source: "api" }, async (tx) => {
     assert.equal(tx, prisma);
     order.push("verify");
     throw failure;
@@ -1428,7 +1428,7 @@ test("a successful verifier runs before the flag read and upsert", async (t) => 
   t.mock.method(prisma, "$executeRaw", async () => { order.push("lock"); return 0; });
   t.mock.method(prisma.featureFlag, "findUnique", async (args) => { order.push("read"); return originalRead(args); });
   t.mock.method(prisma.featureFlag, "upsert", async (args) => { order.push("upsert"); return originalUpsert(args); });
-  const changed = await flags.setFeatureFlagMode("htpr-6136-figma-connect", "OFF", undefined, async (tx) => {
+  const changed = await flags.setFeatureFlagMode("htpr-3533-google-calendar", "OFF", undefined, async (tx) => {
     assert.equal(tx, prisma);
     order.push("verify");
   });
@@ -1439,12 +1439,12 @@ test("a successful verifier runs before the flag read and upsert", async (t) => 
 test("audit failure prevents the mode write", async () => {
   row = { mode: "OFF" };
   auditFails = true;
-  await assert.rejects(flags.setFeatureFlagMode("htpr-6136-figma-connect", "EVERYONE", { userId: 6, source: "page" }), /audit unavailable/);
+  await assert.rejects(flags.setFeatureFlagMode("htpr-3533-google-calendar", "EVERYONE", { userId: 6, source: "page" }), /audit unavailable/);
   assert.equal(row.mode, "OFF");
 });
 
 test("listing uses one latest-per-key audit query with agent, display name and email fallback", async () => {
-  const keys = ["htpr-6136-figma-connect", "legacy-second", "legacy-third"];
+  const keys = ["htpr-3533-google-calendar", "legacy-second", "legacy-third"];
   listedRows = keys.map((key) => ({ key, mode: "OFF" }));
   usersById.set(7, { displayName: "Page owner", email: "page@example.test" });
   changes = [
@@ -1474,7 +1474,7 @@ test("listing skips audit queries unless lastChange is explicitly requested", as
 });
 
 test("stored modes override registry defaults for declared and legacy keys in every reader", async () => {
-  for (const key of ["htpr-6136-figma-connect", "legacy-stored"]) {
+  for (const key of ["htpr-3533-google-calendar", "legacy-stored"]) {
     for (const mode of ["OFF", "OWNER_ONLY", "OWNER_AND_QA", "EVERYONE"]) {
       row = { key, mode };
       listedRows = [row];
