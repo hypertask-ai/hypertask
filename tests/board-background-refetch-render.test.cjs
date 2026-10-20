@@ -214,6 +214,7 @@ const shellSource = `
   const releaseSecondaryStartup = () => {};
   const markBoardUsable = () => {};
   const secondaryStartupEnabled = false;
+  const phoneBoardWarmsTicket = false;
   const isFullScreenChat = false;
   const shouldMountAgentChatRuntime = false;
   const showMobileTabBar = false;

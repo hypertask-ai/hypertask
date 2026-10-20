@@ -42,9 +42,10 @@ const warmTaskDetail = () => Promise.all([
   import("@/components/RTE/Extensions/lazyEmojiData").then(({ ensureEmojiData }) => ensureEmojiData()),
 ]);
 
-export default function CachedTaskDetailNavigation({ children, accountId }: {
+export default function CachedTaskDetailNavigation({ children, accountId, boardPainted = false }: {
   children: ReactNode;
   accountId: number | null;
+  boardPainted?: boolean;
 }) {
   const instantTicketOpen = useFlag(HTPR_6752_INSTANT_TICKET_OPEN_FLAG);
   const phoneFirstPaint = useFlag(HTPR_7008_PHONE_FIRST_PAINT_FLAG);
@@ -141,7 +142,8 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       void warmTaskDetail().catch(() => { warming = false; });
     };
     document.addEventListener("pointerdown", warm, { capture: true, passive: true });
-    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname);
+    const deferPhoneWarm = phoneFirstPaint && window.innerWidth < 768 && ["/project", "/inbox"].includes(pathname) &&
+      !(pathname === "/project" && boardPainted);
     if (!deferPhoneWarm && !connection?.saveData && !["slow-2g", "2g", "3g"].includes(connection?.effectiveType ?? "")) {
       frame = window.requestAnimationFrame(() => {
         frame = window.requestAnimationFrame(() => {
@@ -156,7 +158,7 @@ export default function CachedTaskDetailNavigation({ children, accountId }: {
       if (idle !== undefined) window.cancelIdleCallback(idle);
       if (timer !== undefined) window.clearTimeout(timer);
     };
-  }, [instantTicketOpen, accountId, currentUser?.id, pathname, phoneFirstPaint]);
+  }, [instantTicketOpen, accountId, currentUser?.id, pathname, phoneFirstPaint, boardPainted]);
   const task = location && queryClient.getQueryData<ITask>(
     cachedTaskDetailKey(location.accountId, location.taskId),
   );
