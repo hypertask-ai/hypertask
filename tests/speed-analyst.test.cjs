@@ -336,7 +336,7 @@ test('opened-before waits until the cold ticket code finishes downloading, and g
   assert.deepEqual(await settleScripts(stuck, async () => {}, async () => 0, { quietMs: 500, capMs: 1000, pollMs: 250 }), { settleMs: 1000, pendingScripts: 1 });
 
   const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
-  assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
+  assert.match(source, /sample\('ticket-cold'[^\n]*\n[^\n]*\n\s*const settled = Object\.assign\(run\.samples\.at\(-1\), await settleScripts\(/);
 });
 
 test('a failed path records the step and a safe one-line error, never full URLs or other query values', async () => {
@@ -354,4 +354,25 @@ test('a failed path records the step and a safe one-line error, never full URLs 
     printSummary({ started: '2026-10-20T04:30:00Z', status: 'failed', failure: { reason: 'Path unavailable', profile: 'phone', surface: 'page-navigation', index: 4, error: 'Timeout 60000ms exceeded.' } }, []);
   } finally { console.log = original; }
   assert.match(lines[0], /Path unavailable at phone:page-navigation 4 \(Timeout 60000ms exceeded\.\)/);
+});
+
+test('changed paths only compare with same-version history; page navigation also needs the same landed boards', async () => {
+  const { compare, PATH_VERSIONS } = await analyst;
+  const landedOn = (run, id, view) => ({ ...run, samples: run.samples.map(sample => sample.path === 'page-navigation' ? { ...sample, landed: { id, view } } : sample) });
+  const current = landedOn({ ...await fixture(), conditions: { ...(await fixture()).conditions, pathVersions: PATH_VERSIONS } }, '6859', 'default');
+  const beforeVersions = { ...await fixture(), started: '2026-10-09T12:00:00Z' };
+  const baselineFor = (history, cohort) => compare(current, history).find(row => row.cohort === cohort && row.metric === 'contentMs').baseline;
+  assert.equal(baselineFor([beforeVersions], 'phone:board'), 100, 'unchanged paths keep their history');
+  assert.equal(baselineFor([beforeVersions], 'phone:ticket-warm'), null);
+  assert.equal(baselineFor([beforeVersions], 'desktop:page-navigation'), null);
+
+  const sameVersion = landedOn({ ...current, started: '2026-10-09T12:00:00Z' }, '6859', 'default');
+  assert.equal(baselineFor([sameVersion], 'phone:ticket-warm'), 100);
+  assert.equal(baselineFor([sameVersion], 'phone:page-navigation'), 100);
+  assert.equal(baselineFor([landedOn(sameVersion, '8778', undefined)], 'phone:page-navigation'), null);
+});
+
+test('a cold ticket whose code never settles fails the run instead of measuring a partly cold warm tap', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../scripts/speed/measure.mjs'), 'utf8');
+  assert.match(source, /if \(settled\.pendingScripts\) throw new Error\(`Ticket code did not settle/);
 });

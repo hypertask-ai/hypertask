@@ -42,14 +42,28 @@ export function summarize(samples) {
   }]));
 }
 
+// A path whose measurement changed gets a new version; only same-version history is its baseline.
+export const PATH_VERSIONS = { 'ticket-warm': 2, 'page-navigation': 2 };
+
+const pathVersion = (conditions, cohort) => conditions.pathVersions?.[cohort.split(':')[1]] ?? 1;
+
+const sharedConditions = ({ pathVersions, ...conditions }) => conditions;
+
+export function landedBoards(run, profile) {
+  return [...new Set(run.samples.filter(sample => sample.profile === profile && sample.path === 'page-navigation').map(sample => `${sample.landed?.id}|${sample.landed?.view ?? ''}`))].sort();
+}
+
+const sameCohort = (old, run, cohort) => pathVersion(old.conditions, cohort) === pathVersion(run.conditions, cohort) &&
+  (!cohort.endsWith(':page-navigation') || isDeepStrictEqual(landedBoards(old, cohort.split(':')[0]), landedBoards(run, cohort.split(':')[0])));
+
 export function compare(run, history) {
   const start = Date.parse(`${run.started.slice(0, 10)}T00:00:00Z`);
-  const previous = history.filter(old => old.status === 'complete' && Date.parse(old.started) < start && Date.parse(old.started) >= start - 7 * 86400000 && isDeepStrictEqual(old.conditions, run.conditions));
+  const previous = history.filter(old => old.status === 'complete' && Date.parse(old.started) < start && Date.parse(old.started) >= start - 7 * 86400000 && isDeepStrictEqual(sharedConditions(old.conditions), sharedConditions(run.conditions)));
   return Object.entries(run.groups).flatMap(([cohort, group]) => METRICS.map(metric => {
     // One vote per UTC day, so an investigator's repeat runs do not outweigh the daily timer.
     const days = new Map();
     for (const old of [...previous].sort((a, b) => Date.parse(a.started) - Date.parse(b.started))) {
-      if (old.groups[cohort]) days.set(old.started.slice(0, 10), old.groups[cohort][metric].median);
+      if (old.groups[cohort] && sameCohort(old, run, cohort)) days.set(old.started.slice(0, 10), old.groups[cohort][metric].median);
     }
     const baseline = days.size ? stats([...days.values()]).median : null;
     const current = group[metric].median;
@@ -315,7 +329,8 @@ async function measurePhase(shared, browser, profile, index, run, phase) {
     // Direct ticket is cold in a fresh context; the board primes only the warm click below.
     await sample('ticket-cold', () => navigate(TASK));
     // Outside timing: "opened before" means the ticket code already arrived, as it has for a user who stayed on it.
-    Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout)));
+    const settled = Object.assign(run.samples.at(-1), await settleScripts(net.requests, ms => page.waitForTimeout(ms), timeout => idleMs(page, timeout)));
+    if (settled.pendingScripts) throw new Error(`Ticket code did not settle: ${settled.pendingScripts} scripts pending`);
     await navigate(BOARD);
     await ready(page, 'board');
     await sample('ticket-warm', () => shared.action(page, () => page.locator(`a[href="${TASK}"]`).first().click(), run.actions, 'client', TASK), false);
@@ -381,7 +396,7 @@ async function main() {
     shared.readPosts.add('/api/search/document');
     shared.readGets.add('/api/search/values');
     browser = await shared.playwright().chromium.launch({ headless: true });
-    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked' };
+    run.conditions = { protocol: PROTOCOL, node: process.version, browser: browser.version(), samples, fixture: 'qa-normal-2343-project-6859-task-43', profiles: ['desktop-unthrottled-1440x900', PHONE_PROFILE_KEY], observationTailMs: 2000, serviceWorkers: 'blocked', pathVersions: PATH_VERSIONS };
     const doctor = await shared.setup(browser, false);
     try {
       const identity = await doctor.request.post(BASE + '/api/app-shell/bootstrap');
