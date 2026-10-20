@@ -22,7 +22,7 @@ function stub(file, exports) {
   require.cache[filename] = { id: filename, filename, loaded: true, exports };
 }
 stub("src/app/api/figma/_lib.ts", {
-  getFigmaRequestUser: async () => {
+  getFigmaAuthenticatedUser: async () => {
     if (!authenticated) return { status: "unauthorized" };
     if (principalError) return { status: "error" };
     return enabled

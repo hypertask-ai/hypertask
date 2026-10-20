@@ -6,7 +6,7 @@ const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
 const protectedKey = "htpr-6072-shallow-board-switch";
-const registeredKey = "htpr-6136-figma-connect";
+const registeredKey = "htpr-3533-google-calendar";
 const removedKey = "htpr-6561-preserve-ai-edited-description-structure";
 let dueFlags = [];
 let candidates = [];

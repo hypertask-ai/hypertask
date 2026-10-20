@@ -119,16 +119,6 @@ require.cache[prismaPath] = {
   loaded: true,
   exports: { __esModule: true, default: prisma },
 };
-const flagsPath = path.join(root, "src/lib/flags.ts");
-require.cache[flagsPath] = {
-  id: flagsPath,
-  filename: flagsPath,
-  loaded: true,
-  exports: {
-    FIGMA_CONNECT_FLAG: "htpr-6136-figma-connect",
-    isFeatureEnabled: async () => true,
-  },
-};
 const jiti = createJiti(__filename, {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },

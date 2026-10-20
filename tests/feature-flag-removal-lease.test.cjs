@@ -5,7 +5,7 @@ const { createJiti } = require("jiti");
 const { NextRequest } = require("next/server");
 
 const root = path.resolve(__dirname, "..");
-const key = "htpr-6136-figma-connect";
+const key = "htpr-3533-google-calendar";
 let state;
 const prisma = {
   featureFlag: {
