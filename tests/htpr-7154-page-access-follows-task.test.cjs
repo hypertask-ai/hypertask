@@ -278,7 +278,7 @@ test('page mentions filter on the owning page board without ticket metadata', as
     '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
     '../search/document': { turbopufferFetchMentionTasks: async () => [] },
     '@/utils/controllers/pages/standalonePagesEnabled': { standalonePagesEnabled: async () => true },
-    '@/lib/flags': { isFeatureEnabled: async () => true, PAGE_MENTIONS_FLAG: 'pages' },
+    '@/lib/flags': { isFeatureEnabled: async () => true },
     '@/utils/helperFunctions/mentionSearch': { matchesMentionName: () => true, selectMentionAgents: () => [] },
   });
   const result = await loaded.default('', 7, 2);

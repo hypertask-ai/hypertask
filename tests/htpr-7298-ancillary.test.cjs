@@ -266,7 +266,7 @@ for (const userId of [1, 2, 3]) {
       "@/utils/controllers/agents/boardMembers": { getBoardAgentMembers: async () => [] },
       "../search/document": { turbopufferFetchMentionTasks: async () => [] },
       "@/utils/controllers/pages/standalonePagesEnabled": { standalonePagesEnabled: async () => true },
-      "@/lib/flags": { isFeatureEnabled: async () => true, PAGE_MENTIONS_FLAG: "pages" },
+      "@/lib/flags": { isFeatureEnabled: async () => true },
       "@/utils/helperFunctions/mentionSearch": { matchesMentionName: () => true, selectMentionAgents: () => [] },
     }).default;
     const result = await mentions("Page", userId, 10);

@@ -136,7 +136,7 @@ for (const query of ['all', 'Page']) {
       const mentions = load('src/utils/controllers/tasks/taskSearchByParam.ts', {
         '@/lib/prisma': { default: h.prisma },
         '@/app/api/ai/_lib/planGate': { haiku55ModelEnabled: async () => false },
-        '@/lib/flags': { PAGE_MENTIONS_FLAG: 'mentions', isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); return key === flag ? enabled : true; } },
+        '@/lib/flags': { isFeatureEnabled: async (key, userId) => { assert.equal(userId, 3); return key === flag ? enabled : true; } },
         '@/lib/aiModelOptions': { aiImageModelDefinitions: [], aiModelDefinitions: [] },
         '@/utils/controllers/agents/boardMembers': { getBoardAgentMembers: async () => [] },
         '../search/document': { turbopufferFetchMentionTasks: async () => [] },
