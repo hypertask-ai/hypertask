@@ -1,3 +1,4 @@
+import { prepareAgentScope } from "@/lib/auth/agentScope";
 import { enqueueOutsideSaveAndProcessSoon } from "@/lib/telemetry/analyticsIntents";
 import { enqueueAuthenticatedConnection } from "@/lib/telemetry/activationOccurrences";
 import { NextRequest } from 'next/server';
@@ -20,7 +21,13 @@ export function extractBearerToken(authHeader: string | null): string | null {
   return authHeader?.match(/^Bearer\s+(.+)$/i)?.[1] ?? null
 }
 
-export async function validateMcpAuth(
+export async function validateMcpAuth(request: NextRequest, options: ValidateMcpAuthOptions = {}): Promise<McpAuthContext | null> {
+  const ctx = await readMcpAuth(request, options);
+  if (ctx) await prepareAgentScope(ctx.user.id, ctx.agentId);
+  return ctx;
+}
+
+async function readMcpAuth(
   request: NextRequest,
   options: ValidateMcpAuthOptions = {}
 ): Promise<McpAuthContext | null> {

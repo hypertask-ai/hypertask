@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { HTPR_7471_WRITER_BOARD_FORMAT_FLAG } from "@/lib/flags/keys";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
 import { taskWriterDueDateForSave } from "@/lib/ai/taskWriterDueDate";
@@ -111,6 +112,7 @@ const route = (requestStartedAt: number) => taskWriteRoute({
     if (!authorizedProject) {
       return NextResponse.json({ message: "Forbidden" }, { status: 403, headers: responseHeaders });
     }
+    recordAgentBoardScopeMiss(authorizedProject.id, "write");
     let customFields: import("@/lib/ai/taskWriterCustomFields").TaskWriterCustomFieldValue[] = [];
     if (body.requestKind === "compose-task" && Array.isArray(body.customFields) && body.customFields.length &&
         await isFeatureEnabled(HTPR_7471_WRITER_BOARD_FORMAT_FLAG, userId)) {

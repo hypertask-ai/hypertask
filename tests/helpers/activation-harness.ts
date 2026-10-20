@@ -142,6 +142,7 @@ export function activationHarness() {
   const flagChecks: { key: string; userId: number }[] = [];
   const noop = async () => undefined;
   const mocks: Record<string, any> = {
+    "@/lib/auth/agentScope": nativeRequire("./agent-board-scope.cjs").enforcedScope,
     "server-only": {},
     "@/lib/prisma": { default: prisma },
     "@/lib/flags": { FEATURE_FLAG_QA_USER_ID: 985, FEATURE_FLAG_OWNER_USER_ID: 6, HTPR_7034_ACTIVATION_ANALYTICS_FLAG: "htpr-7034-activation-analytics", HTPR_7268_INVITE_SEAT_ANALYTICS_FLAG: "htpr-7268-invite-seat-analytics", HTPR_7271_SAVED_WORK_EVENTS_FLAG: "htpr-7271-saved-work-events", HTPR_7272_PAYMENT_LOGIN_AGENT_EVENTS_FLAG: "htpr-7272-payment-login-agent-events", HTPR_7273_COLUMN_EVENTS_FLAG: "htpr-7273-column-events", HTPR_7292_SHARED_ACCOUNT_CATEGORY_FLAG: "htpr-7292-shared-account-category", isFeatureEnabled: async (key: string, userId: number) => { flagChecks.push({ key, userId }); return enabled && !disabledFlags.has(key); } },

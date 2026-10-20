@@ -7,6 +7,7 @@ const { NextRequest, NextResponse } = require('next/server')
 const cookieHelpers = require('better-auth/cookies')
 
 function load(relativePath, imports = {}) {
+  imports = { '@/lib/auth/agentScope': require('./helpers/agent-board-scope.cjs').enforcedScope, ...imports }
   const javascript = ts.transpileModule(readFileSync(path.join(__dirname, '..', relativePath), 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020, esModuleInterop: true },
   }).outputText

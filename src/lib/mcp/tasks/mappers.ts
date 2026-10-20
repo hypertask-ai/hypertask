@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import {
     mapVisibleMcpAgent,
     mcpVisibleAgentSelect,
@@ -164,7 +166,7 @@ export function taskDetailInclude(userId: number) {
     };
 }
 
-export function taskMcpGetInclude(userId: number) {
+export function taskMcpGetInclude(userId: number, agentId?: string | null) {
     return {
     ...taskDetailInclude(userId),
     attachments: {
@@ -176,6 +178,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     subTasks: {
+        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -185,6 +188,7 @@ export function taskMcpGetInclude(userId: number) {
         },
     },
     parentTask: {
+        ...(agentId && agentScopeEnforced() ? { where: { project: projectContentAccessWhere(userId, agentId) } } : {}),
         select: {
             id: true,
             ticketNumber: true,
@@ -207,7 +211,8 @@ export function taskMcpGetInclude(userId: number) {
     };
 }
 
-export function mapTaskToMcpGetResponse(task: any, userId: number) {
+export function mapTaskToMcpGetResponse(task: any, userId: number, agentId?: string | null) {
+    recordAgentBoardScopeMiss(task.projectId);
     task = stripForeignTaskRelations(task);
     const subTasks = Array.isArray(task.subTasks)
         ? task.subTasks.map(
@@ -236,7 +241,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
         description: mapTaskDescriptionContent(task),
         boardId: task.projectId,
         boardTitle: task.project.title || '',
-        parent_id: task.parentTaskId || undefined,
+        parent_id: agentId && agentScopeEnforced() && !task.parentTask ? undefined : task.parentTaskId || undefined,
         parent_task: task.parentTask
             ? {
                   id: task.parentTask.id,
@@ -330,6 +335,7 @@ export function mapTaskToMcpGetResponse(task: any, userId: number) {
 }
 
 export function mapTaskToDetail(task: any, userId: number): TaskDetail {
+    recordAgentBoardScopeMiss(task.projectId);
     const descriptionContent = mapTaskDescriptionContent(task);
     const taskAgent = mapVisibleMcpAgent(task.agent, userId, task.projectId);
 

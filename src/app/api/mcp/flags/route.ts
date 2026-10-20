@@ -1,3 +1,5 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { wrapMcpRoute } from '@/lib/mcp/routeWrapper'
 import { NextRequest } from "next/server";
 import { parse } from "node-html-parser";
@@ -19,6 +21,7 @@ import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
 import prisma from "@/lib/prisma";
 import { broadcastFeatureFlagsChange } from "@/lib/realtime/server";
 
+const APPROVAL_REQUIRED_MESSAGE = "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?";
 const MODE_APPROVAL_WORDS: Record<FeatureFlagMode, string> = {
   OWNER_ONLY: "Only me",
   OWNER_AND_QA: "Owner + QA",
@@ -65,7 +68,7 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await authorize(request);
     if (ctx instanceof Response) return ctx;
-    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true });
+    const flags = await listFeatureFlagModes({ includeTicketTitles: true, includeLastChange: true, principal: { userId: ctx.user.id, agentId: ctx.agentId } });
     const key = request.nextUrl.searchParams.get("key");
     if (key !== null) {
       const flag = flags.find((flag) => flag.key === key);
@@ -114,13 +117,20 @@ export async function PATCH(request: NextRequest) {
       source: "api",
     }, async (tx) => {
       const commentId = Number(link[3]);
-      await tx.$queryRaw`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} FOR UPDATE`;
+      const approval = await tx.comment.findFirst({
+        where: { id: commentId, task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) } },
+        select: { taskId: true },
+      });
+      if (!approval) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
+      recordAgentBoardScopeMiss(Number(link[1]), "write");
+      const locked = await tx.$queryRaw<Array<{ id: number }>>`SELECT c.id FROM "Comment" c JOIN "Task" t ON t.id = c."taskId" WHERE c.id = ${commentId} AND t.id = ${approval.taskId} AND t."projectId" = ${Number(link[1])} FOR UPDATE`;
+      if (!locked.length) throw new FeatureFlagApprovalError(APPROVAL_REQUIRED_MESSAGE);
       await tx.$queryRaw`SELECT id FROM "Reaction" WHERE "commentId" = ${commentId} FOR UPDATE`;
       const comment = await tx.comment.findFirst({
         where: {
           id: commentId,
           editedAt: null,
-          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" } },
+          task: { projectId: Number(link[1]), uniqueIndex: Number(link[2]), status: { not: "Deleted" }, project: projectContentAccessWhere(ctx.user.id, ctx.agentId) },
           reactions: { some: {
             userId: FEATURE_FLAG_OWNER_USER_ID, agentId: null, agentDisplayName: null, isDeleted: false,
             unified: { startsWith: "1f44d" },
@@ -133,7 +143,7 @@ export async function PATCH(request: NextRequest) {
       const switches = comment ? approvedSwitches(words, batchAllowed) : null;
       if (!switches || switches.get(body.key as string) !== MODE_APPROVAL_WORDS[body.mode as FeatureFlagMode]) {
         throw new FeatureFlagApprovalError(
-          "Valentin must thumbs-up that comment within 7 days, the comment must be unedited, and the whole comment must be: Question: Switch <flag-key> to <mode>?",
+          APPROVAL_REQUIRED_MESSAGE,
         );
       }
     });

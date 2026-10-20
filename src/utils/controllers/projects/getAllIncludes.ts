@@ -1,3 +1,4 @@
+import { agentScopeEnforced } from "@/lib/auth/agentScope";
 import { Prisma, Status, ViewVisibility } from "@prisma/client";
 import { publicAgentSelect } from "@/lib/agents/publicAgent";
 import { CYCLE_WINDOW_SIZE, utcDate } from "@/lib/cycles";
@@ -22,6 +23,9 @@ const humanProjectAccessBranches = (
     ];
   }
 
+  if (agentScopeEnforced()) {
+    return [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }];
+  }
   const activeAgent = { id: agentId, userId, revokedAt: null };
   return [
     {
@@ -48,7 +52,7 @@ export const projectContentAccessWhere = (
 ): Prisma.ProjectWhereInput => ({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -66,7 +70,7 @@ export const taskWriteAccessWhere = (
 ): Prisma.ProjectWhereInput => ({
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -85,7 +89,7 @@ export const getProjectWhere = (
   teamId: { not: null },
   OR: [
     ...humanProjectAccessBranches(userId, agentId),
-    ...(agentId
+    ...(agentId && !agentScopeEnforced()
       ? [
           {
             members: {
@@ -102,7 +106,7 @@ export const getProjectListingWhere = (
   agentId?: string | null
 ): Prisma.ProjectWhereInput =>
   agentId
-    ? {
+    ? agentScopeEnforced() ? getProjectWhere(userId, agentId) : {
         teamId: { not: null },
         members: {
           some: { agentId, agent: { userId, revokedAt: null } },
@@ -360,6 +364,7 @@ export const savedViewBoardAccessWhere = (
   userId: number,
   agentId?: string | null,
 ): Prisma.ProjectWhereInput => {
+  if (agentId && agentScopeEnforced()) return { OR: [{ members: { some: { agentId, status: "Accepted", agent: { userId, revokedAt: null } } } }] };
   const activeAgent = { id: agentId!, userId, revokedAt: null };
   return {
     OR: [

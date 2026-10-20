@@ -1,4 +1,6 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess"
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -188,8 +190,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
 
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -201,6 +204,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ com
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
     if (comment.creatorId !== user.id) {
       return NextResponse.json(
@@ -432,8 +436,9 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
 
     const project = comment.task.project
     const hasAccess =
-      project.ownerId === user.id ||
-      project.members.some((m) => m.userId === user.id)
+      ctx.agentId && agentScopeEnforced()
+        ? await userCanAccessTask(user.id, comment.task.id, ctx.agentId)
+        : project.ownerId === user.id || project.members.some((m) => m.userId === user.id)
 
     if (!hasAccess) {
       return NextResponse.json(
@@ -445,6 +450,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ co
         { status: 403 }
       )
     }
+    recordAgentBoardScopeMiss(comment.task.projectId, "write");
 
     const hyperAiId = parseInt(
       process.env.NEXT_PUBLIC_HYPERAI_ID || '332',

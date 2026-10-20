@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/getSessionUser";
 import { NextRequest, NextResponse } from "next/server";
@@ -17,7 +18,7 @@ export const runtime = "nodejs";
 
 const CONFIRM_LEASE_MS = 60_000;
 
-export async function POST(
+async function confirmProposal(
   request: NextRequest,
   { params }: { params: Promise<{ sessionId: string; proposalId: string }> }
 ) {
@@ -63,6 +64,7 @@ export async function POST(
       );
     }
     const agentId = access.agentId;
+    await prepareAgentScope(userId, agentId);
 
     const proposal = await prisma.chatTicketProposal.findFirst({
       where: { id: proposalId, message: { sessionId: session.id } },
@@ -231,3 +233,6 @@ export async function POST(
     );
   }
 }
+
+export const POST = (request: NextRequest, props: Parameters<typeof confirmProposal>[1]) =>
+  withAgentScopeRequest(request, () => confirmProposal(request, props));

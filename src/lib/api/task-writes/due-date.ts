@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 import prisma from "@/lib/prisma";
 import createTaskDueDateActivity from "@/utils/controllers/activities/createTaskDueDateActivity";
 import sendNotificationForTask from "@/utils/controllers/notifications/creation-service/createAndSendNotificationTaskMove";
@@ -14,11 +15,17 @@ export const POST = taskWriteRoute({
   schema: z.custom<Record<string, any>>(() => true),
   validationMessage: "Invalid request",
   allowNullBody: true,
-  prepare: (session) => loadSessionUserRecord(session.userId),
-  operation: async (body, userObj) => {
+  prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
+  operation: async (body, { user: userObj, session }) => {
     const req = { body };
     try {
-      const { taskId, dueDate, agentId } = req.body;
+      const { taskId, dueDate, agentId: requestedAgentId } = req.body;
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
+      }
+      const agentId = actingAgent.agentId;
+
       if (!taskId) {
         return NextResponse.json({ message: "Missing required field" }, { status: 400 });
       }

@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 
 
@@ -59,6 +60,7 @@ const projectDetail = async (projectId:number, userId:number, agentId?:string) =
                 })
             }
             
+            recordAgentBoardScopeMiss(project.id, "read");
             return({
                 status:200,
                 json:project

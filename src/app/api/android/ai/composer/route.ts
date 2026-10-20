@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { NextRequest, NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { checkMcpRateLimit, validateMcpAuth } from "@/lib/mcp/auth";
@@ -15,7 +16,11 @@ function error(message: string, status: number) {
   return NextResponse.json({ success: false, error: message }, { status });
 }
 
-export async function GET(request: NextRequest) {
+export function GET(request: NextRequest) {
+  return withAgentScopeRequest(request, () => getComposer(request));
+}
+
+async function getComposer(request: NextRequest) {
   try {
     const rateLimited = await checkMcpRateLimit(request);
     if (rateLimited) return rateLimited;
@@ -31,6 +36,7 @@ export async function GET(request: NextRequest) {
       select: { id: true, teamId: true },
     });
     if (!project) return error("Project not found or access denied", 404);
+    recordAgentBoardScopeMiss(project.id, "read");
     if (!project.teamId) return error("This board has no team AI settings", 409);
 
     const lookup = await getTeamAiSettingsForViewer(

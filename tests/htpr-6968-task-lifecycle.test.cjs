@@ -91,6 +91,7 @@ function fixture(kind, scenario) {
     cancelDueDateJob: record("cancel-due", undefined, scenario.queueThrows ? "Queue unavailable" : null),
   };
   const mocks = {
+    "@/lib/auth/agentScope": require("./helpers/agent-board-scope.cjs").enforcedScope,
     "@prisma/client": { Prisma: { PrismaClientKnownRequestError: KnownError } },
     "@vercel/functions": { waitUntil: (promise) => { effects.push(["waitUntil"]); background.push(promise); } },
     "@/lib/prisma": { default: db },

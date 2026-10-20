@@ -1,3 +1,5 @@
+import { agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { projectContentAccessWhere } from "@/utils/controllers/projects/getAllIncludes";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { getMcpOperationContext } from '@/lib/mcp/operationContext'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
@@ -215,7 +217,8 @@ export async function POST(
         user.id,
         clientIdempotencyKey,
         { teamId: team.id, manifest: validated.data },
-        produceResponseBody
+        produceResponseBody,
+        ctx.agentId && agentScopeEnforced() ? ctx.agentId : undefined
       )
     } catch (error) {
       if (error instanceof IdempotencyInProgressError) {
@@ -243,6 +246,14 @@ export async function POST(
       throw error
     }
 
+    if (responseBody.idempotent_replayed) {
+      const board = await prisma.project.findFirst({
+        where: { id: responseBody.board.id, teamId: team.id, ...projectContentAccessWhere(user.id, ctx.agentId) },
+        select: { id: true },
+      })
+      if (!board) return NextResponse.json({ success: false, error: 'Board not accessible' }, { status: 403 })
+      if (ctx.agentId) recordAgentBoardScopeMiss(board.id, 'read')
+    }
     return NextResponse.json(
       {
         ...responseBody,

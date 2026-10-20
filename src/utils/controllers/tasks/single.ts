@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { processAnalyticsIntentSoon } from "@/lib/telemetry/analyticsIntents";
 import { stripForeignTaskRelations } from "@/lib/tasks/sameBoardRelations";
 import { assertParentTaskOnBoard, ParentTaskNotFoundError } from "@/utils/controllers/tasks/parentTaskAccess";
@@ -152,6 +153,7 @@ export async function updateTaskSingle(
       }
     }
 
+    recordAgentBoardScopeMiss(oldTask.projectId, "write");
     let taskBeforeWrite = oldTask;
     let sectionChanged = false;
     let sectionIdChanged = false;

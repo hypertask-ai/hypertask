@@ -7,6 +7,7 @@ import { broadcastBoardChange } from "@/lib/realtime/server";
 import { loadSessionUserRecord } from "@/lib/auth/sessionUserRecord";
 import { createFullScreenTaskAndReturn } from "./create-fullscreen";
 import { taskWriteRoute } from "./route";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
 
 const schema = z.custom<Record<string, any>>(
   (body) => !!((body as any)?.fullScreenTask || ((body as any)?.title && (body as any)?.projectId)),
@@ -15,10 +16,16 @@ const schema = z.custom<Record<string, any>>(
 export const POST = taskWriteRoute({
   schema,
   validationMessage: "Missing Required Information",
-  prepare: (session) => loadSessionUserRecord(session.userId),
-  operation: async (body, userObj) => {
+  prepare: async (session) => ({ user: await loadSessionUserRecord(session.userId), session }),
+  operation: async (body, { user: userObj, session }) => {
     try {
-      const { title, description, section, userId, ranking, projectId, sectionId, index, fullScreenTask, projectIdentifier, agentId } = body;
+      const { title, description, section, userId, ranking, projectId, sectionId, index, fullScreenTask, projectIdentifier, agentId: requestedAgentId } = body;
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) {
+        return NextResponse.json({ message: actingAgent.message }, { status: actingAgent.status });
+      }
+      const agentId = actingAgent.agentId ?? undefined;
+
       if (fullScreenTask) {
         const newTask = await createFullScreenTaskAndReturn(projectId, userId, projectIdentifier, title, userObj, agentId);
         if (newTask.error && newTask.status) return NextResponse.json({ message: newTask.message }, { status: newTask.status });

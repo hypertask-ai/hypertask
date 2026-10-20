@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import prisma from '@/lib/prisma';
 import { CREATION_AGENT_HEADER, CREATION_CHANNEL_HEADER, type CreationChannel } from '@/lib/telemetry/savedWork';
 import type { Prisma } from '@prisma/client';
@@ -90,6 +91,7 @@ export async function validateProjectAccess(
         };
     }
 
+    recordAgentBoardScopeMiss(project.id);
     return { project, error: null };
 }
 

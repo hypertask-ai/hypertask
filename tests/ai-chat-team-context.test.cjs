@@ -19,6 +19,7 @@ function stubModule(relativePath, exports) {
 function loadContextModule(prisma, getProjectWhere = () => ({})) {
   const helperPath = "src/app/api/ai/_lib/chatTeamContext.ts";
   delete require.cache[path.join(root, helperPath)];
+  stubModule("src/lib/auth/agentScope.ts", require("./helpers/agent-board-scope.cjs").enforcedScope);
   stubModule("src/lib/prisma.ts", { default: prisma });
   stubModule("src/utils/controllers/projects/getAllIncludes.ts", {
     getProjectWhere,

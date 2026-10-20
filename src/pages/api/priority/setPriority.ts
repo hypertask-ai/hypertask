@@ -1,3 +1,6 @@
+import { withAgentScopeRequest, prepareAgentScope, agentScopeEnforced, recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
+import { resolveActingAgent } from "@/lib/auth/resolveActingAgent";
+import { userCanAccessTask } from "@/utils/controllers/tasks/assertTaskAccess";
 import prisma from "@/lib/prisma";
 import createPriorityActivity from "@/utils/controllers/activities/CreatePriorityActivity";
 import { NextApiHandler } from "next";
@@ -19,9 +22,22 @@ const handler: NextApiHandler = async (req, res) => {
   const user = await loadSessionUserRecord(session.userId);
 
   try {
-    const { taskId, priority_index, Priority_Value, agentId } = req.body;
+    const { taskId, priority_index, Priority_Value, agentId: requestedAgentId } = req.body;
     if (!taskId || !Priority_Value)
       return res.status(400).json({ message: "Missing Required Task ID" });
+
+    if (session.agentId && requestedAgentId !== session.agentId) {
+      return res.status(403).json({ message: "Agent id must match authenticated session" });
+    }
+    const agentId = typeof requestedAgentId === "string" ? requestedAgentId : null;
+    await prepareAgentScope(session.userId, agentId);
+    if (agentId && agentScopeEnforced()) {
+      const actingAgent = resolveActingAgent({ sessionAgentId: session.agentId, bodyAgentId: requestedAgentId });
+      if (!actingAgent.ok) return res.status(actingAgent.status).json({ message: actingAgent.message });
+      if (!(await userCanAccessTask(session.userId, taskId, agentId))) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
 
     const agent = agentId
       ? await prisma.agent.findUnique({ where: { id: agentId } })
@@ -39,6 +55,7 @@ const handler: NextApiHandler = async (req, res) => {
     });
 
     if (!task) return res.status(404).json({ message: "Task not found" });
+    recordAgentBoardScopeMiss(task.projectId, "write");
 
     if (priority_index === 0) {
       await prisma.priority.deleteMany({ where: { taskId: task.id } });
@@ -111,4 +128,4 @@ const handler: NextApiHandler = async (req, res) => {
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

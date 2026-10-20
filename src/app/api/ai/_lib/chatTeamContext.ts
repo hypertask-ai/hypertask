@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import prisma from "@/lib/prisma";
 import {
   storePlanIdForTeam,
@@ -112,7 +113,11 @@ function selectAccountTeam(teams: readonly AccountTeam[]) {
   }, null);
 }
 
-export async function resolveChatTeamContext({
+export function resolveChatTeamContext(input: ResolveChatTeamContextInput): Promise<ChatTeamContext | null> {
+  return withAgentScopeRequest({ url: "/api/ai/chat/stream", method: "POST" }, () => readChatTeamContext(input));
+}
+
+async function readChatTeamContext({
   userId,
   requestedProjectId,
   requestedTeamId,
@@ -174,6 +179,7 @@ export async function resolveChatTeamContext({
     : null;
 
   if (session?.agentId) {
+    await prepareAgentScope(userId, session.agentId);
     const project = await prisma.project.findFirst({
       where: {
         status: "Normal",

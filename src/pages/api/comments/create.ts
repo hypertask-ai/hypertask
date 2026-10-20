@@ -1,3 +1,4 @@
+import { withAgentScopeRequest, prepareAgentScope } from "@/lib/auth/agentScope";
 import { NextApiHandler, NextApiRequest, NextApiResponse } from "next";
 import { createCommentService } from "@/utils/controllers/comments/createCommentService";
 import { broadcastTaskComment } from "@/lib/realtime/server";
@@ -24,6 +25,7 @@ const handler: NextApiHandler = async (
     }
     try {
       const { text, creatorId, taskId, ownerId, agentId } = req.body;
+      await prepareAgentScope(session.userId, agentId);
 
       if (Number(creatorId) !== Number(currentUser.id)) {
         return res.status(403).json({ message: "Forbidden" });
@@ -56,4 +58,4 @@ const handler: NextApiHandler = async (
   }
 };
 
-export default handler;
+export default ((req, res) => withAgentScopeRequest(req, () => handler(req, res))) satisfies NextApiHandler;

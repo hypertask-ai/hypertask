@@ -1,3 +1,4 @@
+import { recordAgentBoardScopeMiss } from "@/lib/auth/agentScope";
 import { reportMcpOperationCrash } from '@/lib/mcp/operationCrashReport'
 import { wrapMcpRoute, validateMcpRouteAuth as validateMcpAuth, checkMcpRouteRateLimit as checkMcpRateLimit } from '@/lib/mcp/routeWrapper'
 import { NextRequest, NextResponse } from 'next/server'
@@ -93,10 +94,11 @@ export async function GET(request: NextRequest) {
 
         if (ctx.agentId) {
             const [userInboxResult, agentInbox] = await Promise.all([
-                notificationGetAll(user.id.toString(), { withCachedDescription }),
+                notificationGetAll(user.id.toString(), { withCachedDescription }, ctx.agentId),
                 getStructuredInboxForAgent({
                     userId: user.id,
                     agentId: ctx.agentId,
+                    scopeToAgentBoards: true,
                 }),
             ])
 
@@ -133,6 +135,7 @@ export async function GET(request: NextRequest) {
                 )
             }
 
+            for (const notification of [...json.notifications, ...agentInbox.notifications]) recordAgentBoardScopeMiss(notification.projectId, "read");
             return NextResponse.json({
                 success: true,
                 user_structured_data: json.structuredData,
