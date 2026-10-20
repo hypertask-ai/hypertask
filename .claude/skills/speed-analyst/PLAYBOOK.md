@@ -198,6 +198,28 @@ https://app.hypertask.ai/detail/project-4060/525.
 
 **Cold ticket server wait.** The cold ticket document took over 1 s to its first byte in 36 of 125 samples since 2026-10-19 (29%) and 12 of 50 before (24%): 1.4 to 2.7 s against about 0.2 s. Other pages: board 2%, My Tasks 5%, search 1%. That is the bimodal desktop ticket-cold (about 600 ms vs about 2 s) and the phone ticket-cold over 4 s. HTPR-5820 found the same 1.7 to 1.8 s wait before API handlers run on about 22% of calls. Next probe: spaced document requests to tell a cold server from slow page queries.
 
+### 2026-10-20 night: the cold ticket server wait is jsdom start-up (HTPR-7497)
+
+https://app.hypertask.ai/detail/project-15/7497.
+
+**Daily read after YPER4-525.** Complete at 19:48 UTC on 154b2203a, load 4.9, N=5: phone search 2809 ms with no late-starting sample (search version 2), desktop ticket-cold 656 ms median (p90 1699). New flags to watch: phone My Tasks +30% (bytes 133 vs 89 KB, long tasks +21%) and phone first-visit board +15.9% (12351 vs 10653 ms).
+
+**Question.** Why does about 1 in 4 cold ticket documents wait 1.4 to 2.7 s for the first byte, when the board almost never does?
+
+**What found it.**
+- Document first byte per sample from the saved waterfalls, split by path: ticket-cold over 1 s in 29% of samples, board 2%, My Tasks 5%, search 1%.
+- A spaced probe on one connection (24 cycles, gaps 15/60/180 s): ticket first request slow 3 of 24, the immediate repeat 0 of 24, board 0 of 24. A per-instance cold path, not slow queries.
+- A Codex helper walked the static import graph of the ticket route against the board route: `InnerHTMLComment` imports `sanitizeHtml`, which imports `isomorphic-dompurify`; its Node entry builds a JSDOM window at module load. Loading it alone takes about 700 ms (5 of 5 runs, 682 to 724 ms) against 70 to 90 ms for the next suspect (`@upstash/qstash`).
+- All routes ship as one 13.7 MB Vercel function, so an instance warmed by the board still pays the ticket-only modules on its first ticket request.
+
+**False leads.** A fresh local `next start` is 6.5 to 8 s for any first request, which hides the route-specific cost; warm the server with the board first, then time the first ticket request. Vercel request logs carry no durations, and the deployment API is behind the preview guard.
+
+**Fix.** `sanitizeAiHtml` loads the sanitizer on its first call instead of at import (`require` in a memoized getter, the `src/lib/flags.ts` pattern). Same library, same options; a test proves byte-identical output on a corpus and that importing the module loads no jsdom.
+
+**Result (local production build, premerge-local data, load 5, interleaved base/fix N=5+5).** First ticket request on a board-warm server: base 1352 ms median (1197 to 1521), fix 654 ms (619 to 704). Repeat request unchanged (about 150 ms). Visible markup identical; only the streamed data chunk order differs.
+
+**Next probe.** Live: rerun the daily harness after deploy and count ticket-cold first bytes over 1 s across at least 50 samples (gate: under 10%, board at 5% or less). Remaining ticket-only start-up: `agentRuns/service` pulls marked, node-html-parser and qstash at import.
+
 ## Milliseconds saved scoreboard
 
 Only matched end-to-end before/after evidence earns saved milliseconds; `unproven` is not zero. Do not sum different cohorts or claim forecasts as savings.
@@ -218,6 +240,7 @@ Only matched end-to-end before/after evidence earns saved milliseconds; `unprove
 | https://app.hypertask.ai/detail/project-15/7116 | Phone ticket blanking after open, PR 1360 | 5 of 30 cold, 2 of 20 warm blank → fix pending live proof | n/a (correctness, not ms) | flag `htpr-7116-ticket-stays-open` |
 | https://app.hypertask.ai/detail/project-15/7367 | Cold phone ticket, description visible, PR 1657, local ABAB N=10, load 18 to 58 | 18.3 / 20.2 s → 2.3 / 3.7 s; controls 18.3 / 20.2 s → 21.4 s | unproven live; local about 16,000 ms to text, about -1,000 ms to controls | flag `htpr-7367-server-description-first`; live 5 cold run after deploy decides |
 | https://app.hypertask.ai/detail/project-15/7395 | Phone first tap after fresh board, live ABAB N=5, load 14 to 30 | 10057 ms (OFF) → 9814 ms (ON) | 0, within noise | reverted in PR 1677; board +10.6% with flag on |
+| https://app.hypertask.ai/detail/project-15/7497 | First ticket request on a board-warm server, local production build, interleaved N=5+5, load 5 | 1352 ms → 654 ms | about 700 ms local | lazy sanitizer; live first-byte rate after deploy decides |
 
 Confirmed, comparable saved-ms total in this seed: **not established**. Future entries must link private before/after summaries, commits, N, median/p90/range and QA proof. This deliberately avoids inventing savings absent from the history.
 
