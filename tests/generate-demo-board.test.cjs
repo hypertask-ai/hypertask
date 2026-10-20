@@ -56,6 +56,8 @@ require.cache[aiPath].exports = {
     };
   },
 };
+const flagsPath = path.join(root, "src/lib/flags.ts");
+require.cache[flagsPath] = { id: flagsPath, filename: flagsPath, loaded: true, exports: { isFeatureEnabled: async () => false } };
 const jiti = require("jiti")(path.join(root, "tests/generate-demo-board-jiti.cjs"), {
   interopDefault: true,
   alias: { "@": path.join(root, "src") },

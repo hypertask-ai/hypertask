@@ -498,14 +498,14 @@ const LEARN_BOARD: DemoBoard = {
   ],
 };
 
-const boardFor = (purpose: string) =>
-  purpose ? generateDemoBoard(purpose) : Promise.resolve(EMPTY_BOARD);
+const boardFor = (purpose: string, teamId?: string) =>
+  purpose ? generateDemoBoard(purpose, teamId) : Promise.resolve(EMPTY_BOARD);
 
 export async function provisionGuestBoard(
   purpose: string,
   owner: GuestBoardOwner,
 ): Promise<ProvisionedGuestBoard> {
-  return provisionGeneratedBoard(await boardFor(purpose), owner, {
+  return provisionGeneratedBoard(await boardFor(purpose, owner.teamId), owner, {
     boardKind: purpose ? "generated" : "skeleton",
   });
 }
