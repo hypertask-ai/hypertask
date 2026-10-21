@@ -4,10 +4,15 @@ const React = require("react");
 const { JSDOM } = require("jsdom");
 const { load } = require("./helpers/agent-connection.cjs");
 const FLAG = "htpr-7026-agent-connect-check";
+const planFlag = load("src/lib/flags/definitions/htpr-7511-signup-straight-to-board.ts");
 
-function loadScreen(enabled = true) {
+function loadScreen(enabled = true, startPlanEnabled = false, planFlagReady = true) {
   return load("src/components/PageComponents/Onboarding/Screens/ConnectAIOnboardingScreen.tsx", {
-    "@/hooks/useFlag": { useFlag: (key) => { assert.equal(key, FLAG); return enabled; } },
+    "@/hooks/useFlag": {
+      useFlag: (key) => key === planFlag.HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG ? startPlanEnabled : (assert.equal(key, FLAG), enabled),
+      useFlagReady: () => planFlagReady,
+    },
+    "@/lib/flags/definitions/htpr-7511-signup-straight-to-board": planFlag,
     "@/lib/flags/keys": { HTPR_7026_AGENT_CONNECT_CHECK_FLAG: FLAG },
     "@/components/Modals/CliInstall/constants": { INSTALL_COMMAND: "install fixture", LOGIN_COMMAND: "hypertask login" },
     "@/components/Modals/McpToken/components": {
@@ -217,4 +222,17 @@ test("connected email shares the current layout, escapes the client and has exac
   assert.ok(email.html.includes(".cta { background-color: #4455BB !important; color: #ffffff !important; }"));
   assert.doesNotMatch(email.html, /\u2014/);
   dom.window.close();
+});
+
+
+test("signup checkout rollout never promises fourteen days or no card to flagged users; OFF keeps the original onboarding offer", async () => {
+  for (const [enabled, ready] of [[true, true], [false, true], [false, false]]) {
+    await withDOM(async ({ container, reactRoot, act }) => {
+      const Screen = loadScreen(false, enabled, ready);
+      await act(async () => reactRoot.render(React.createElement(Screen, { onNextScreen() {} })));
+      if (ready && !enabled) assert.match(container.textContent, /Full access free for 14 days. No credit card needed/);
+      else assert.doesNotMatch(container.textContent, /14 days|No credit card needed/);
+      if (enabled) assert.match(container.textContent, /Start on Free/);
+    });
+  }
 });

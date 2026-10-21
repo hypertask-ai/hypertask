@@ -1,5 +1,8 @@
 
 import dynamic from "next/dynamic";
+import { useFlag } from "@/hooks/useFlag";
+import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
+import { StartPlanButton } from "./StartPlanButton";
 import { IMember, IProject, IUser } from "@/models/model";
 import React, { Suspense, useCallback, useContext, useEffect } from "react";
 import { PanelLeft, Circle, Timer } from "lucide-react";
@@ -79,6 +82,7 @@ const Header = ({
     void prefetchInboxQuery(queryClient, currentUser.id);
   }, [currentUser.id, queryClient]);
 
+  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
   const isTrialUser = !currentUser.UserSetting.trialStatus;
 
   useEffect(() => {
@@ -123,6 +127,7 @@ const Header = ({
           </div>
 
           {project && <TitleKanbanHeader project={project} />}
+          {startPlanEnabled && <StartPlanButton project={currentProject} compact />}
 
           <Suspense
             fallback={<div className="hidden text-white md:block"> loading header...</div>}

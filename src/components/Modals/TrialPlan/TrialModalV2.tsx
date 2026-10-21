@@ -1,3 +1,6 @@
+import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
 import { ModalContainerCustom } from "@/components/Common/CommonModalComponents";
 import "@/styles/AttachmentView.scss";
 import { Carousel, CarouselItem, ModalHeader } from "reactstrap";
@@ -127,6 +130,8 @@ const TrialBody = ({
   team: ITeam | undefined;
   callback: () => void;
 }) => {
+  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
   const [selectedPlan, setSelectedPlan] = useState<TPlan>("Year");
   const [selectedTier, setSelectedTier] = useState<TTier>("Pro");
   const router = useRouter();
@@ -162,6 +167,9 @@ const TrialBody = ({
     router.push(url.data.url);
     callback();
   };
+
+  if (!flagReady) return null;
+  if (startPlanEnabled) return team?.id ? <StartPlanButton teamId={team.id} /> : null;
 
   const onSelected = (selected: TPlan) => {
     setSelectedPlan(selected);

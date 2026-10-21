@@ -43,6 +43,9 @@ export type CheckoutMode = "Trial" | "Normal";
 export type CheckoutAttemptDesired = {
   cancelUrl: string;
   checkoutMode: CheckoutMode;
+  trialDays?: number;
+  checkoutIntent?: "signup-straight-to-board";
+  ownerUserId?: number;
   customerId: string;
   googleAccountId: string;
   priceId: string;
@@ -50,6 +53,44 @@ export type CheckoutAttemptDesired = {
   returnUrl: string;
   teamId: string;
 };
+
+export function effectiveTrialDays(desired: CheckoutAttemptDesired): number {
+  return desired.checkoutMode === "Trial" ? desired.trialDays ?? 14 : 0;
+}
+
+export function desiredMatches(
+  left: CheckoutAttemptDesired,
+  right: CheckoutAttemptDesired,
+): boolean {
+  return (
+    left.cancelUrl === right.cancelUrl &&
+    left.checkoutMode === right.checkoutMode &&
+    effectiveTrialDays(left) === effectiveTrialDays(right) &&
+    left.checkoutIntent === right.checkoutIntent &&
+    left.customerId === right.customerId &&
+    left.googleAccountId === right.googleAccountId &&
+    left.priceId === right.priceId &&
+    left.quantity === right.quantity &&
+    left.returnUrl === right.returnUrl &&
+    left.teamId === right.teamId
+  );
+}
+
+export function billingDesiredMatches(
+  left: CheckoutAttemptDesired,
+  right: CheckoutAttemptDesired,
+): boolean {
+  return (
+    left.checkoutMode === right.checkoutMode &&
+    effectiveTrialDays(left) === effectiveTrialDays(right) &&
+    left.checkoutIntent === right.checkoutIntent &&
+    left.customerId === right.customerId &&
+    left.googleAccountId === right.googleAccountId &&
+    left.priceId === right.priceId &&
+    left.quantity === right.quantity &&
+    left.teamId === right.teamId
+  );
+}
 
 export type CheckoutAttemptState = "prepared" | "in_flight" | "settled";
 

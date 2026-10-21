@@ -1,3 +1,6 @@
+import { StartPlanButton } from "@/components/PageComponents/Kanban/HeaderComponents/StartPlanButton";
+import { useFlag, useFlagReady } from "@/hooks/useFlag";
+import { HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG } from "@/lib/flags/definitions/htpr-7511-signup-straight-to-board";
 import useTrial from "@/hooks/General/useTrial";
 import { ISubscriptionPlan } from "@/lib/subscriptionPlans";
 import { IHasSubscriptionCheck, IPricingSearchParams } from "@/models/model";
@@ -12,12 +15,17 @@ interface IProps {
 }
 
 const TrialCard = ({ teamInfo, manageLink, plan, hasSubscription }: IProps) => {
+  const startPlanEnabled = useFlag(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
+  const flagReady = useFlagReady(HTPR_7511_SIGNUP_STRAIGHT_TO_BOARD_FLAG);
   const { selectedTime, createCheckout, handleDurationChange } = useTrial({
     teamInfo,
     manageLink,
     plan,
     hasSubscription,
   });
+
+  if (!flagReady) return null;
+  if (startPlanEnabled) return <StartPlanButton teamId={teamInfo.teamId} />;
 
   return (
     <>
