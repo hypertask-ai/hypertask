@@ -2,6 +2,17 @@ export const BOARD_OVERVIEW_SCALE = 0.6;
 export const BOARD_PINCH_THRESHOLD = 0.15;
 export const MOBILE_TASK_DRAG_DELAY_MS = 900;
 export const MOBILE_COLUMN_DRAG_DELAY_MS = 120;
+export const MOBILE_TASK_DRAG_TOLERANCE_PX = 5;
+
+export const decidePhoneCardGesture = (
+  holdMs: number,
+  movedPx: number,
+  hasSelection: boolean,
+): "select" | "drag" | "open" | "toggle" => {
+  if (movedPx > MOBILE_TASK_DRAG_TOLERANCE_PX) return "drag";
+  if (holdMs >= MOBILE_TASK_DRAG_DELAY_MS) return "select";
+  return hasSelection ? "toggle" : "open";
+};
 
 export const getMobileDragDelay = (draggableId: string) =>
   draggableId.startsWith("task-")
