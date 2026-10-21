@@ -1,3 +1,5 @@
+import { getSessionUser } from "@/lib/auth/getSessionUser";
+import { withAgentScopeRequest } from "@/lib/auth/agentScope";
 import { resolveAiModel as resolveLegacyAiModel } from "@/app/api/ai/_lib/modelProvider";
 import { getAiDefaultModelContext, resolveAutomaticAiModel } from "@/app/api/ai/_lib/byokKeys";
 import { reportError } from "@/lib/errors/reportError";
@@ -49,10 +51,16 @@ type TaskComment = {
 };
 
 export async function POST(request: NextRequest) {
+  return withAgentScopeRequest(request, () => taskQuestions(request));
+}
+
+async function taskQuestions(request: NextRequest) {
   const viewer = await getCurrentUserFromCookies();
   if (!viewer?.id) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  const actingAgentId = (await getSessionUser(request.headers))?.agentId;
 
   const parsedBody = taskQuestionsRequestSchema.safeParse(
     await request.json().catch(() => null)
@@ -65,7 +73,10 @@ export async function POST(request: NextRequest) {
     const task = await prisma.task.findFirst({
       where: {
         id: parsedBody.data.taskId,
-        project: getProjectWhere(viewer.id),
+        project: {
+          ...getProjectWhere(viewer.id),
+          AND: [getProjectWhere(viewer.id, actingAgentId)],
+        },
       },
       select: {
         id: true,
@@ -130,7 +141,11 @@ export async function POST(request: NextRequest) {
     );
     if (!viewerLastComment) {
       const olderViewerComments = await prisma.comment.findMany({
-        where: { taskId: task.id, creatorId: viewer.id },
+        where: {
+          taskId: task.id,
+          creatorId: viewer.id,
+          task: { project: getProjectWhere(viewer.id, actingAgentId) },
+        },
         orderBy: { createdAt: "desc" },
         take: MAX_COMMENTS,
         select: {
@@ -159,6 +174,7 @@ export async function POST(request: NextRequest) {
           where: {
             taskId: task.id,
             createdAt: { gt: viewerLastComment.createdAt },
+            task: { project: getProjectWhere(viewer.id, actingAgentId) },
           },
         })
       : 0;
