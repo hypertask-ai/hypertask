@@ -372,7 +372,6 @@ test('three rendered examples match the exact plain title and description', t =>
         `<p><strong>Is it a real bug?</strong> ${escape(reading)}</p>` +
         `<p><strong>What to do</strong>: ${escape(action)}</p><h2>Details for engineers</h2>` + legacyDescription(input, fingerprint, ''),
     })
-    const text = rendered.description.replace(/<\/(?:p|h2)>/g, '\n').replace(/<[^>]*>/g, '').replace(/&#39;/g, "'")
-    t.diagnostic(`${rendered.title}\n${text}`)
+    t.diagnostic(`${rendered.title}\n${rendered.description}`)
   }
 })
