@@ -1299,7 +1299,6 @@ const help: CommandGroup = {
 
 export const getAllCommands = (
   commandOptions: IAllCommands = { context: "Others" },
-  agentLogNameEnabled = false,
   kanbanSelectAllEnabled = commandOptions.kanbanSelectAllEnabled,
   roundedEnabled = false,
 ): CommandGroup[] => {
@@ -1307,7 +1306,7 @@ export const getAllCommands = (
   const time = getTimeCommands(commandOptions);
   const bulk = getBulkTaskCommands({ ...commandOptions, kanbanSelectAllEnabled });
   const comment = getCommentCommands(commandOptions);
-  const task = getTaskCommands(commandOptions, agentLogNameEnabled);
+  const task = getTaskCommands(commandOptions);
   const board = getBoardCommands(commandOptions);
   const appShell = getAppShellCommands();
   const agentChat = getAgentChatCommands();
