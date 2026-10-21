@@ -16,6 +16,7 @@ each ticket only needs the one or two areas it touches.
 |---|---|---|
 | CI Node-version guard | [ci-node-version.md](ci-node-version.md) | throwaway PR negative control, no app writes |
 | Agent board scope guard | [agent-scope-guard.md](agent-scope-guard.md) | throwaway PR negative control, no app writes |
+| Secret scan workflow installer | [secret-scan-workflow.md](secret-scan-workflow.md) | temp checkouts from merged production, no app writes |
 | PostHog error alerts | [posthog-error-alerts.md](posthog-error-alerts.md) | nightly canary workflow, closes its own ticket |
 | Signup check (hypertask.app) | [signup-check.md](signup-check.md) | Access service identity, read-only, daily counts snapshot |
 | Login | [login.md](login.md) | `login` (write journey) |
