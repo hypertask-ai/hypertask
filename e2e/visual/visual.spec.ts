@@ -40,15 +40,17 @@ async function taskDetail(page: Page) {
   await expect(page).toHaveURL(url => url.pathname === fixture.detailPath)
   await expect(page.locator('#title-input')).toHaveValue(fixture.title)
   await expect(page.getByTestId('ticket-description')).toContainText(fixture.description)
-  const comments = page.getByTestId('ticket-comment')
-  await expect(comments).toHaveCount(2)
+  const thread = page.getByTestId('ticket-thread')
+  await expect(thread, 'one seeded ticket thread').toHaveCount(1)
+  const comments = thread.getByTestId('ticket-comment')
+  await expect(comments, 'both seeded comments must be mounted').toHaveCount(2)
   await expect(comments.first()).toContainText('First layout lock comment')
   await expect(comments.last()).toContainText('Last layout lock comment')
-  await expect(page.getByTestId('comment-composer')).toHaveCount(1)
-  await expect(page.getByTestId('comment-composer')).toBeVisible()
+  await expect(page.getByTestId('comment-composer'), 'one desktop or phone composer').toHaveCount(1)
+  await expect(page.getByTestId('comment-composer'), 'seeded ticket composer must be visible').toBeVisible()
   if (page.viewportSize()!.width === 1440) {
     for (const comment of await comments.all()) {
-      if (await comment.locator('.comment-body').count() === 0) await comment.click()
+      if (await comment.locator('.comment-body').count() === 0) await comment.click({ timeout: 15_000 })
     }
     await expect(page.locator('[data-testid="ticket-comment"] .comment-body')).toHaveCount(2)
   }
@@ -87,25 +89,28 @@ test.beforeEach(async ({ page, context }) => {
 for (const screen of screens) {
   test(screen, async ({ page }, testInfo) => {
     let landmarks: Locator[]
+    const lastComment = page.getByTestId('ticket-thread').getByTestId('ticket-comment').filter({ hasText: 'Last layout lock comment' })
+    const composer = page.getByTestId('comment-composer')
     if (screen === 'board') {
       await board(page)
       landmarks = [page.locator('[data-title="To do"] .kanban-column-title'), page.locator('[data-title="Done"] .kanban-column-title'), page.locator(`#task-${fixture.taskId}`)]
     } else if (screen === 'task-detail' || screen === 'comment-box') {
-      await taskDetail(page)
-      const composer = page.getByTestId('comment-composer')
+      await test.step('open seeded ticket and expand desktop comments', async () => {
+        await taskDetail(page)
+        await expect(lastComment, 'exactly one last seeded comment in the ticket thread').toHaveCount(1)
+        await expect(lastComment, 'last seeded comment must be visible').toBeVisible()
+      }, { timeout: 15_000 })
       if (screen === 'comment-box') {
-        await composer.scrollIntoViewIfNeeded()
-        await page.getByTestId('ticket-thread').evaluate(thread => {
-          for (let parent = thread.parentElement; parent; parent = parent.parentElement) {
-            if (/auto|scroll/.test(getComputedStyle(parent).overflowY)) parent.scrollTop = parent.scrollHeight
+        await test.step('scroll last seeded comment and composer into view', async () => {
+          await lastComment.evaluate(comment => comment.scrollIntoView({ behavior: 'instant', block: 'center' }), undefined, { timeout: 15_000 })
+          if (testInfo.project.name === 'desktop') {
+            await composer.evaluate(element => element.scrollIntoView({ behavior: 'instant', block: 'nearest' }), undefined, { timeout: 15_000 })
           }
-          document.scrollingElement?.scrollTo(0, document.scrollingElement.scrollHeight)
-        })
-        await composer.scrollIntoViewIfNeeded()
-        await expect(page.getByTestId('ticket-comment').last()).toBeInViewport()
-        await expect(composer).toBeInViewport()
+          await expect(lastComment, 'last seeded comment must remain in viewport after scrolling').toBeInViewport({ timeout: 15_000 })
+          await expect(composer, 'comment composer must be in viewport after scrolling').toBeInViewport({ timeout: 15_000 })
+        }, { timeout: 15_000 })
       }
-      landmarks = [page.locator('#title-input'), page.getByTestId('ticket-comment').last(), composer]
+      landmarks = [page.locator('#title-input'), lastComment, composer]
     } else if (screen === 'ctrl-j') {
       await board(page)
       await page.evaluate(() => (document.activeElement as HTMLElement)?.blur())
@@ -119,14 +124,18 @@ for (const screen of screens) {
       await expect(page.locator('[data-tutorial-inbox-loaded="true"]')).toBeAttached()
       landmarks = [page.getByTestId('inbox-panel'), page.locator('[data-testid="inbox-list"]:visible')]
     }
-    await settled(page, landmarks)
+    await test.step('assets loaded and landmark geometry settled', async () => {
+      await settled(page, landmarks)
+    }, { timeout: 15_000 })
     await expect(page).toHaveScreenshot(`${screen}.png`)
     if (testInfo.project.name === 'desktop' && (screen === 'task-detail' || screen === 'comment-box')) {
-      const lastComment = await page.getByTestId('ticket-comment').last().boundingBox()
-      const composer = await page.getByTestId('comment-composer').boundingBox()
-      expect(lastComment).not.toBeNull()
-      expect(composer).not.toBeNull()
-      expect(composer!.y, 'desktop composer must follow the last comment').toBeGreaterThanOrEqual(lastComment!.y + lastComment!.height)
+      await test.step('desktop composer follows the last seeded comment', async () => {
+        const lastCommentBox = await lastComment.boundingBox({ timeout: 15_000 })
+        const composerBox = await composer.boundingBox({ timeout: 15_000 })
+        expect(lastCommentBox, 'last seeded comment must have a bounding box').not.toBeNull()
+        expect(composerBox, 'desktop composer must have a bounding box').not.toBeNull()
+        expect(composerBox!.y, 'desktop composer must follow the last comment').toBeGreaterThanOrEqual(lastCommentBox!.y + lastCommentBox!.height)
+      }, { timeout: 15_000 })
     }
   })
 }
